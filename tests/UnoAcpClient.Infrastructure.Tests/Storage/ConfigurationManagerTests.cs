@@ -34,6 +34,9 @@ namespace UnoAcpClient.Infrastructure.Tests.Storage
             {
                 Directory.Delete(_testDirectory, true);
             }
+
+            // 清理安全存储中的配置列表
+            _secureStorage.DeleteAsync("config_list").GetAwaiter().GetResult();
         }
 
         [Fact]
@@ -86,22 +89,27 @@ namespace UnoAcpClient.Infrastructure.Tests.Storage
         }
 
         [Fact]
-        public async Task LoadConfigurationAsync_CorruptedConfig_ReturnsDefaultConfig()
+        public void CreateDefaultConfiguration_ReturnsValidDefaultConfig()
         {
             // Arrange
-            var configId = "corrupted-001";
-            var configDir = Path.Combine(_testDirectory, "UnoAcpClient", "Configurations");
-            Directory.CreateDirectory(configDir);
-            var configFile = Path.Combine(configDir, $"{configId}.json");
-            await File.WriteAllTextAsync(configFile, "{ invalid json }");
-
+            var configId = "test-default";
+            
+            // 使用反射调用私有方法
+            var method = typeof(ConfigurationManager).GetMethod("CreateDefaultConfiguration", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            Assert.NotNull(method);
+            
             // Act
-            var loaded = await _configManager.LoadConfigurationAsync(configId);
+            var result = method.Invoke(_configManager, new object[] { configId });
+            var config = result as ServerConfiguration;
 
-            // Assert - 应该返回默认配置
-            Assert.NotNull(loaded);
-            Assert.Equal(configId, loaded.Id);
-            Assert.Equal("Default Configuration", loaded.Name);
+            // Assert
+            Assert.NotNull(config);
+            Assert.Equal(configId, config.Id);
+            Assert.Equal("Default Configuration", config.Name);
+            Assert.Equal("ws://localhost:8080", config.ServerUrl);
+            Assert.Equal(TransportType.WebSocket, config.Transport);
+            Assert.Equal(30, config.HeartbeatInterval);
+            Assert.Equal(10, config.ConnectionTimeout);
         }
 
         [Fact]

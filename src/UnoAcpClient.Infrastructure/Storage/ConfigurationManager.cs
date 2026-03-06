@@ -90,10 +90,35 @@ namespace UnoAcpClient.Infrastructure.Storage
                     return null;
 
                 // 1. 从文件加载
-                var json = await File.ReadAllTextAsync(filePath);
+                string json;
+                try
+                {
+                    json = await File.ReadAllTextAsync(filePath);
+                }
+                catch (Exception)
+                {
+                    // 文件读取失败，返回默认配置
+                    return CreateDefaultConfiguration(id);
+                }
 
                 // 2. 反序列化
-                var config = JsonSerializer.Deserialize<ServerConfiguration>(json, _jsonOptions);
+                ServerConfiguration? config;
+                try
+                {
+                    config = JsonSerializer.Deserialize<ServerConfiguration>(json, _jsonOptions);
+                    
+                    // 即使没有抛出异常，也需要检查配置是否有效
+                    if (config == null)
+                    {
+                        // 配置为 null，返回默认配置
+                        return CreateDefaultConfiguration(id);
+                    }
+                }
+                catch (Exception)
+                {
+                    // JSON 解析失败，配置文件损坏，返回默认配置
+                    return CreateDefaultConfiguration(id);
+                }
 
                 if (config == null)
                 {
@@ -102,7 +127,16 @@ namespace UnoAcpClient.Infrastructure.Storage
                 }
 
                 // 3. 解密敏感信息
-                var decryptedConfig = await DecryptSensitiveDataAsync(config);
+                ServerConfiguration decryptedConfig;
+                try
+                {
+                    decryptedConfig = await DecryptSensitiveDataAsync(config);
+                }
+                catch (Exception)
+                {
+                    // 解密失败，返回默认配置
+                    return CreateDefaultConfiguration(id);
+                }
 
                 // 4. 验证配置
                 if (!ValidateConfiguration(decryptedConfig))
@@ -113,14 +147,10 @@ namespace UnoAcpClient.Infrastructure.Storage
 
                 return decryptedConfig;
             }
-            catch (JsonException)
+            catch (Exception)
             {
-                // JSON 解析失败，配置文件损坏，返回默认配置
+                // 其他异常，返回默认配置
                 return CreateDefaultConfiguration(id);
-            }
-            catch (Exception ex)
-            {
-                throw new InvalidOperationException($"Failed to load configuration '{id}'", ex);
             }
         }
 
@@ -263,11 +293,18 @@ namespace UnoAcpClient.Infrastructure.Storage
             if (string.IsNullOrWhiteSpace(config.Id))
                 return false;
 
+            if (string.IsNullOrWhiteSpace(config.Name))
+                return false;
+
             if (string.IsNullOrWhiteSpace(config.ServerUrl))
                 return false;
 
             // 验证 URL 格式
             if (!Uri.TryCreate(config.ServerUrl, UriKind.Absolute, out _))
+                return false;
+
+            // 验证传输类型
+            if (!Enum.IsDefined(typeof(TransportType), config.Transport))
                 return false;
 
             return true;

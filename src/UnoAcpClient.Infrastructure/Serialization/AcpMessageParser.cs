@@ -56,6 +56,9 @@ namespace UnoAcpClient.Infrastructure.Serialization
                 
                 // 验证消息类型
                 ValidateMessageType(message);
+                
+                // 验证消息类型特定的字段
+                ValidateMessageTypeSpecificFields(message);
 
                 return message;
             }
