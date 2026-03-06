@@ -86,7 +86,7 @@ namespace UnoAcpClient.Application.UseCases
                 {
                     // 连接失败时返回具体的错误原因 (Requirement 3.2)
                     _logger.Error("连接到服务器失败: {Error}", connectionResult.Error);
-                    return Result.Failure(connectionResult.Error);
+                    return Result.Failure(connectionResult.Error ?? "Connection failed");
                 }
 
                 // 4. 记录日志 (Requirement 6.1)

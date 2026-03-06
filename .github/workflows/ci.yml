@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  DOTNET_VERSION: '9.0.x'
+  CONFIGURATION: 'Release'
+
+jobs:
+  build:
+    name: Build and Test
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Restore dependencies
+      run: dotnet restore UnoAcpClient.sln
+
+    - name: Build
+      run: dotnet build UnoAcpClient.sln --configuration ${{ env.CONFIGURATION }} --no-restore
+
+    - name: Test
+      run: dotnet test UnoAcpClient.sln --configuration ${{ env.CONFIGURATION }} --no-build --verbosity normal
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-results
+        path: '**/TestResults/*.trx'
+
+  package:
+    name: Package Applications
+    needs: build
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Publish WebAssembly
+      run: |
+        cd UnoAcpClient/UnoAcpClient
+        dotnet publish -f net9.0-browserwasm -c ${{ env.CONFIGURATION }} -o ../../publish/wasm
+
+    - name: Upload WebAssembly artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: wasm-build
+        path: publish/wasm
+
+    - name: Publish Desktop
+      run: |
+        cd UnoAcpClient/UnoAcpClient
+        dotnet publish -f net9.0-desktop -c ${{ env.CONFIGURATION }} -o ../../publish/desktop
+
+    - name: Upload Desktop artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: desktop-build
+        path: publish/desktop
+
+  code-quality:
+    name: Code Quality Checks
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Restore dependencies
+      run: dotnet restore UnoAcpClient.sln
+
+    - name: Check formatting
+      run: dotnet format UnoAcpClient.sln --verify-no-changes --no-restore
+
+    - name: Build with analyzers
+      run: dotnet build UnoAcpClient.sln --configuration ${{ env.CONFIGURATION }} --no-restore /p:EnforceCodeStyleInBuild=true

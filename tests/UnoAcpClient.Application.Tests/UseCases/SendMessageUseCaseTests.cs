@@ -95,7 +95,7 @@ namespace UnoAcpClient.Application.Tests.UseCases
 
             // Assert
             Assert.False(result.IsSuccess);
-            Assert.Contains("未连接到服务器", result.Error);
+            Assert.Contains("Not connected to server", result.Error);
         }
 
         [Fact]

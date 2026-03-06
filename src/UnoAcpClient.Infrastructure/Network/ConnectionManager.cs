@@ -24,14 +24,14 @@ namespace UnoAcpClient.Infrastructure.Network
         private readonly Func<TransportType, ITransport> _transportFactory;
         private readonly AsyncRetryPolicy _retryPolicy;
         
-        private ITransport _transport;
+        private ITransport? _transport;
         private readonly Subject<AcpMessage> _incomingMessages;
         private readonly BehaviorSubject<ConnectionState> _connectionStateChanges;
         private readonly Dictionary<string, TaskCompletionSource<AcpMessage>> _pendingRequests;
-        private IDisposable _messageSubscription;
-        private IDisposable _stateSubscription;
-        private ServerConfiguration _currentConfig;
-        private System.Timers.Timer _heartbeatTimer;
+        private IDisposable? _messageSubscription;
+        private IDisposable? _stateSubscription;
+        private ServerConfiguration? _currentConfig;
+        private System.Timers.Timer? _heartbeatTimer;
         private bool _disposed;
         private bool _isReconnecting;
         private bool _isManualDisconnect;

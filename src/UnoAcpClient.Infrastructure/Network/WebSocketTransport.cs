@@ -14,7 +14,7 @@ namespace UnoAcpClient.Infrastructure.Network
     public class WebSocketTransport : ITransport, IDisposable
     {
         private readonly ILogger _logger;
-        private IWebsocketClient _client;
+        private IWebsocketClient? _client;
         private readonly Subject<string> _messagesSubject;
         private readonly BehaviorSubject<TransportState> _stateSubject;
         private bool _disposed;

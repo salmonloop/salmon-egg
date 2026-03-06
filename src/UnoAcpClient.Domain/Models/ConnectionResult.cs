@@ -13,14 +13,14 @@ namespace UnoAcpClient.Domain.Models
         /// <summary>
         /// 错误消息（如果操作失败）
         /// </summary>
-        public string Error { get; }
+        public string? Error { get; }
 
         /// <summary>
-        /// 连接状态
+        /// 连接状态（如果操作成功）
         /// </summary>
-        public ConnectionState State { get; }
+        public ConnectionState? State { get; }
 
-        private ConnectionResult(bool isSuccess, string error, ConnectionState state)
+        private ConnectionResult(bool isSuccess, string? error, ConnectionState? state)
         {
             IsSuccess = isSuccess;
             Error = error;

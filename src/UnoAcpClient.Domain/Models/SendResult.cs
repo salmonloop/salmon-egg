@@ -13,14 +13,14 @@ namespace UnoAcpClient.Domain.Models
         /// <summary>
         /// 错误消息（如果操作失败）
         /// </summary>
-        public string Error { get; }
+        public string? Error { get; }
 
         /// <summary>
-        /// 发送的消息 ID
+        /// 发送的消息 ID（如果操作成功）
         /// </summary>
-        public string MessageId { get; }
+        public string? MessageId { get; }
 
-        private SendResult(bool isSuccess, string error, string messageId)
+        private SendResult(bool isSuccess, string? error, string? messageId)
         {
             IsSuccess = isSuccess;
             Error = error;

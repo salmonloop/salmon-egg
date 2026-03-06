@@ -52,21 +52,21 @@ namespace UnoAcpClient.Application.Validators
             // Validate authentication configuration (if present)
             When(x => x.Authentication != null, () =>
             {
-                RuleFor(x => x.Authentication.Token)
+                RuleFor(x => x.Authentication!.Token)
                     .NotEmpty()
-                    .When(x => string.IsNullOrEmpty(x.Authentication.ApiKey))
+                    .When(x => string.IsNullOrEmpty(x.Authentication!.ApiKey))
                     .WithMessage("Either Token or ApiKey must be provided");
 
-                RuleFor(x => x.Authentication.ApiKey)
+                RuleFor(x => x.Authentication!.ApiKey)
                     .NotEmpty()
-                    .When(x => string.IsNullOrEmpty(x.Authentication.Token))
+                    .When(x => string.IsNullOrEmpty(x.Authentication!.Token))
                     .WithMessage("Either Token or ApiKey must be provided");
             });
 
             // Validate proxy configuration (if enabled)
             When(x => x.Proxy != null && x.Proxy.Enabled, () =>
             {
-                RuleFor(x => x.Proxy.ProxyUrl)
+                RuleFor(x => x.Proxy!.ProxyUrl)
                     .NotEmpty()
                     .WithMessage("Proxy URL must be provided when proxy is enabled")
                     .Must(BeValidProxyUrl)
@@ -77,7 +77,7 @@ namespace UnoAcpClient.Application.Validators
         /// <summary>
         /// Validates if the URL is valid
         /// </summary>
-        private bool BeValidUrl(string url)
+        private bool BeValidUrl(string? url)
         {
             if (string.IsNullOrWhiteSpace(url))
                 return false;
@@ -93,7 +93,7 @@ namespace UnoAcpClient.Application.Validators
         /// <summary>
         /// Validates if the proxy URL is valid
         /// </summary>
-        private bool BeValidProxyUrl(string url)
+        private bool BeValidProxyUrl(string? url)
         {
             if (string.IsNullOrWhiteSpace(url))
                 return false;

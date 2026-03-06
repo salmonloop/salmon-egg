@@ -14,14 +14,14 @@ namespace UnoAcpClient.Application.Common
     /// <summary>
     /// Gets the error message if the operation failed.
     /// </summary>
-    public string Error { get; }
+    public string? Error { get; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Result"/> class.
     /// </summary>
     /// <param name="isSuccess">Whether the operation was successful.</param>
     /// <param name="error">The error message if the operation failed.</param>
-    protected Result(bool isSuccess, string error)
+    protected Result(bool isSuccess, string? error)
     {
         IsSuccess = isSuccess;
         Error = error;
@@ -58,7 +58,7 @@ public class Result<T> : Result
     /// <param name="isSuccess">Whether the operation was successful.</param>
     /// <param name="value">The value if the operation was successful.</param>
     /// <param name="error">The error message if the operation failed.</param>
-    private Result(bool isSuccess, T value, string error)
+    private Result(bool isSuccess, T value, string? error)
         : base(isSuccess, error)
     {
         Value = value;
@@ -76,6 +76,6 @@ public class Result<T> : Result
     /// </summary>
     /// <param name="error">The error message.</param>
     /// <returns>A failed result.</returns>
-    public static new Result<T> Failure(string error) => new Result<T>(false, default, error);
+    public static new Result<T> Failure(string error) => new Result<T>(false, default!, error);
 }
 }

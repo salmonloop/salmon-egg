@@ -19,9 +19,9 @@ namespace UnoAcpClient.Infrastructure.Network
         private readonly HttpClient _httpClient;
         private readonly Subject<string> _messagesSubject;
         private readonly BehaviorSubject<TransportState> _stateSubject;
-        private CancellationTokenSource _connectionCts;
-        private Task _receiveTask;
-        private string _serverUrl;
+        private CancellationTokenSource? _connectionCts;
+        private Task? _receiveTask;
+        private string? _serverUrl;
         private bool _disposed;
 
         /// <summary>
@@ -29,7 +29,7 @@ namespace UnoAcpClient.Infrastructure.Network
         /// </summary>
         /// <param name="logger">Logger instance for logging transport events.</param>
         /// <param name="httpClient">Optional HttpClient instance. If not provided, a new one will be created.</param>
-        public HttpSseTransport(ILogger logger, HttpClient httpClient = null)
+        public HttpSseTransport(ILogger logger, HttpClient? httpClient = null)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _httpClient = httpClient ?? new HttpClient { Timeout = Timeout.InfiniteTimeSpan };

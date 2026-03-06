@@ -1,17 +1,23 @@
+using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
+using UnoAcpClient.Application.Services;
+using UnoAcpClient.Application.UseCases;
+using UnoAcpClient.Application.Validators;
+using UnoAcpClient.Domain.Models;
 using UnoAcpClient.Domain.Services;
+using UnoAcpClient.Infrastructure.Logging;
 using UnoAcpClient.Infrastructure.Network;
 using UnoAcpClient.Infrastructure.Serialization;
 using UnoAcpClient.Infrastructure.Storage;
-using UnoAcpClient.Infrastructure.Logging;
-using UnoAcpClient.Application.Services;
+using UnoAcpClient.Presentation.ViewModels;
 
 namespace UnoAcpClient;
 
 /// <summary>
 /// 依赖注入容器配置
+/// Requirements: 7.5
 /// </summary>
 public static class DependencyInjection
 {
@@ -20,81 +26,87 @@ public static class DependencyInjection
     /// </summary>
     public static IServiceCollection AddUnoAcpClient(this IServiceCollection services)
     {
-        // 配置 Serilog 日志
         ConfigureLogging(services);
-
-        // 注册领域服务
         RegisterDomainServices(services);
-
-        // 注册基础设施服务
         RegisterInfrastructureServices(services);
-
-        // 注册应用服务
         RegisterApplicationServices(services);
-
-        // 注册 ViewModels
         RegisterViewModels(services);
-
         return services;
     }
 
     private static void ConfigureLogging(IServiceCollection services)
     {
-        // 获取平台特定的应用数据路径
         var appDataPath = GetAppDataPath();
-
-        // 配置 Serilog
         var logger = LoggingConfiguration.ConfigureLogging(appDataPath);
         Log.Logger = logger;
 
-        // 添加 Serilog 到 Microsoft.Extensions.Logging
         services.AddLogging(builder =>
         {
             builder.ClearProviders();
             builder.AddSerilog(logger, dispose: true);
         });
 
-        // 注册 Serilog ILogger
         services.AddSingleton(logger);
     }
 
     private static void RegisterDomainServices(IServiceCollection services)
     {
-        // 领域服务接口将在后续任务中实现
-        // services.AddSingleton<IAcpProtocolService, AcpMessageParser>();
-        // services.AddSingleton<IConnectionManager, ConnectionManager>();
+        // ACP 协议服务
+        services.AddSingleton<IAcpProtocolService, AcpMessageParser>();
+
+        // 连接管理器（使用工厂方法支持动态传输选择）
+        services.AddSingleton<IConnectionManager>(sp =>
+        {
+            var protocolService = sp.GetRequiredService<IAcpProtocolService>();
+            var logger = sp.GetRequiredService<Serilog.ILogger>();
+            ITransport TransportFactory(TransportType type)
+            {
+                var l = sp.GetRequiredService<Serilog.ILogger>();
+                return type switch
+                {
+                    TransportType.HttpSse => new HttpSseTransport(l),
+                    _ => new WebSocketTransport(l)
+                };
+            }
+            return new ConnectionManager(protocolService, logger, TransportFactory);
+        });
     }
 
     private static void RegisterInfrastructureServices(IServiceCollection services)
     {
-        // 基础设施服务将在后续任务中实现
-        // services.AddSingleton<IConfigurationService, ConfigurationManager>();
-        // services.AddTransient<ITransport, WebSocketTransport>();
+        // 安全存储
+        services.AddSingleton<ISecureStorage, SecureStorage>();
+
+        // 配置管理器
+        services.AddSingleton<IConfigurationService, ConfigurationManager>();
+
+        // Validator
+        services.AddSingleton<IValidator<ServerConfiguration>, ServerConfigurationValidator>();
     }
 
     private static void RegisterApplicationServices(IServiceCollection services)
     {
-        // 注册用例
-        services.AddTransient<UnoAcpClient.Application.UseCases.ConnectToServerUseCase>();
-        services.AddTransient<UnoAcpClient.Application.UseCases.DisconnectUseCase>();
-        services.AddTransient<UnoAcpClient.Application.UseCases.SendMessageUseCase>();
+        // 用例
+        services.AddTransient<ConnectToServerUseCase>();
+        services.AddTransient<DisconnectUseCase>();
+        services.AddTransient<SendMessageUseCase>();
 
-        // 注册应用服务
+        // 应用服务
         services.AddSingleton<IConnectionService, ConnectionService>();
         services.AddSingleton<IMessageService, MessageService>();
     }
 
     private static void RegisterViewModels(IServiceCollection services)
     {
-        // ViewModels 将在后续任务中实现
-        // services.AddTransient<MainViewModel>();
-        // services.AddTransient<SettingsViewModel>();
+        services.AddTransient<MainViewModel>();
+        services.AddTransient<SettingsViewModel>();
+        services.AddTransient<ConfigurationEditorViewModel>();
     }
 
     private static string GetAppDataPath()
     {
 #if __ANDROID__
-        return Android.App.Application.Context.FilesDir?.AbsolutePath 
+        return Android.App.Application.Context.FilesDir?.AbsolutePath
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "UnoAcpClient");
 #elif __IOS__
         return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "..", "Library", "Application Support", "UnoAcpClient");
@@ -103,7 +115,6 @@ public static class DependencyInjection
 #elif WINDOWS || WINDOWS_UWP
         return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "UnoAcpClient");
 #elif __WASM__
-        // WebAssembly 使用浏览器存储，这里返回一个虚拟路径
         return "/local/UnoAcpClient";
 #else
         return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "UnoAcpClient");

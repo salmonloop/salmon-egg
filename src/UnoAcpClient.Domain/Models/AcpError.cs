@@ -13,12 +13,12 @@ namespace UnoAcpClient.Domain.Models
         /// <summary>
         /// Human-readable error message.
         /// </summary>
-        public string Message { get; set; }
+        public string Message { get; set; } = string.Empty;
 
         /// <summary>
         /// Additional error data (optional).
         /// Can contain any additional information about the error.
         /// </summary>
-        public object Data { get; set; }
+        public object? Data { get; set; }
     }
 }

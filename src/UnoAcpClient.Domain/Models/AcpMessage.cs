@@ -13,19 +13,19 @@ namespace UnoAcpClient.Domain.Models
         /// Unique identifier for the message.
         /// Required for all message types.
         /// </summary>
-        public string Id { get; set; }
+        public string Id { get; set; } = string.Empty;
 
         /// <summary>
         /// Type of the message: "request", "response", "notification", or "initialize".
         /// Required for all message types.
         /// </summary>
-        public string Type { get; set; }
+        public string Type { get; set; } = string.Empty;
 
         /// <summary>
         /// Method name for request and notification messages.
-        /// Required for "request" and "notification" types.
+        /// Required for "request" and "notification" types; null for others.
         /// </summary>
-        public string Method { get; set; }
+        public string? Method { get; set; }
 
         /// <summary>
         /// Parameters for request messages.
@@ -41,14 +41,15 @@ namespace UnoAcpClient.Domain.Models
 
         /// <summary>
         /// Error information for response messages.
-        /// Used with "response" type when the request failed.
+        /// Used with "response" type when the request failed; null on success.
         /// </summary>
-        public AcpError Error { get; set; }
+        public AcpError? Error { get; set; }
 
         /// <summary>
         /// Protocol version string (e.g., "1.0", "1.1", "2.0").
+        /// Optional; may be null for messages that do not carry version info.
         /// </summary>
-        public string ProtocolVersion { get; set; }
+        public string? ProtocolVersion { get; set; }
 
         /// <summary>
         /// Timestamp when the message was created.
