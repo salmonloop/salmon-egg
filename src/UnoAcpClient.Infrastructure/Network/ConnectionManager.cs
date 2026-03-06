@@ -4,6 +4,7 @@ using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Timers;
 using Serilog;
 using UnoAcpClient.Domain.Exceptions;
 using UnoAcpClient.Domain.Models;
@@ -27,6 +28,7 @@ namespace UnoAcpClient.Infrastructure.Network
         private IDisposable _messageSubscription;
         private IDisposable _stateSubscription;
         private ServerConfiguration _currentConfig;
+        private System.Timers.Timer _heartbeatTimer;
         private bool _disposed;
 
         /// <summary>
@@ -102,6 +104,9 @@ namespace UnoAcpClient.Infrastructure.Network
                 // 发送初始化消息
                 await SendInitializeMessageAsync(ct);
 
+                // 启动心跳定时器
+                StartHeartbeat(config.HeartbeatInterval);
+
                 // 更新状态为已连接
                 var connectedState = new ConnectionState
                 {
@@ -142,6 +147,9 @@ namespace UnoAcpClient.Infrastructure.Network
             try
             {
                 _logger.Information("开始断开连接");
+
+                // 停止心跳定时器
+                StopHeartbeat();
 
                 if (_transport != null)
                 {
@@ -421,6 +429,73 @@ namespace UnoAcpClient.Infrastructure.Network
         }
 
         /// <summary>
+        /// 启动心跳定时器
+        /// </summary>
+        private void StartHeartbeat(int intervalSeconds)
+        {
+            // 停止现有的心跳定时器（如果有）
+            StopHeartbeat();
+
+            _logger.Debug("启动心跳定时器，间隔: {Interval} 秒", intervalSeconds);
+
+            _heartbeatTimer = new System.Timers.Timer(intervalSeconds * 1000);
+            _heartbeatTimer.Elapsed += OnHeartbeatTimerElapsed;
+            _heartbeatTimer.AutoReset = true;
+            _heartbeatTimer.Start();
+        }
+
+        /// <summary>
+        /// 停止心跳定时器
+        /// </summary>
+        private void StopHeartbeat()
+        {
+            if (_heartbeatTimer != null)
+            {
+                _logger.Debug("停止心跳定时器");
+                _heartbeatTimer.Stop();
+                _heartbeatTimer.Elapsed -= OnHeartbeatTimerElapsed;
+                _heartbeatTimer.Dispose();
+                _heartbeatTimer = null;
+            }
+        }
+
+        /// <summary>
+        /// 心跳定时器触发事件处理
+        /// </summary>
+        private async void OnHeartbeatTimerElapsed(object sender, ElapsedEventArgs e)
+        {
+            try
+            {
+                // 检查连接状态
+                var currentState = _connectionStateChanges.Value;
+                if (currentState.Status != ConnectionStatus.Connected || _transport == null)
+                {
+                    _logger.Debug("跳过心跳：未连接");
+                    return;
+                }
+
+                // 创建心跳消息
+                var heartbeatMessage = new AcpMessage
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    Type = "notification",
+                    Method = "heartbeat",
+                    Timestamp = DateTime.UtcNow
+                };
+
+                // 序列化并发送心跳消息
+                var json = _protocolService.SerializeMessage(heartbeatMessage);
+                await _transport.SendAsync(json, CancellationToken.None);
+
+                _logger.Debug("已发送心跳消息: {MessageId}", heartbeatMessage.Id);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "发送心跳消息失败");
+            }
+        }
+
+        /// <summary>
         /// 释放资源
         /// </summary>
         public void Dispose()
@@ -430,6 +505,7 @@ namespace UnoAcpClient.Infrastructure.Network
                 return;
             }
 
+            StopHeartbeat();
             UnsubscribeFromTransport();
             _incomingMessages?.Dispose();
             _connectionStateChanges?.Dispose();
