@@ -1,10 +1,13 @@
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.Threading;
 using UnoAcpClient.Domain.Models.Content;
 using UnoAcpClient.Domain.Models.Plan;
 using UnoAcpClient.Domain.Models.Protocol;
 using UnoAcpClient.Domain.Models.Session;
 using UnoAcpClient.Domain.Models.Tool;
+using UnoAcpClient.Domain.Services.Security;
 
 namespace UnoAcpClient.Domain.Services
 {
@@ -250,54 +253,6 @@ namespace UnoAcpClient.Domain.Services
             ToolCall = toolCall;
             Options = options;
             Respond = respond;
-        }
-    }
-
-    /// <summary>
-    /// 权限选项类。
-    /// </summary>
-    public class PermissionOption
-    {
-        /// <summary>
-        /// 选项 ID。
-        /// </summary>
-        public string OptionId { get; set; } = string.Empty;
-
-        /// <summary>
-        /// 选项显示名称。
-        /// </summary>
-        public string Name { get; set; } = string.Empty;
-
-        /// <summary>
-        /// 选项类型（例如 "allow", "deny", "ask_always", "ask_never"）。
-        /// </summary>
-        public string Kind { get; set; } = string.Empty;
-
-        /// <summary>
-        /// 选项描述。
-        /// </summary>
-        public string? Description { get; set; }
-
-        /// <summary>
-        /// 创建新的权限选项。
-        /// </summary>
-        public PermissionOption()
-        {
-        }
-
-        /// <summary>
-        /// 创建新的权限选项。
-        /// </summary>
-        /// <param name="optionId">选项 ID</param>
-        /// <param name="name">显示名称</param>
-        /// <param name="kind">类型</param>
-        /// <param name="description">描述</param>
-        public PermissionOption(string optionId, string name, string kind, string? description = null)
-        {
-            OptionId = optionId;
-            Name = name;
-            Kind = kind;
-            Description = description;
         }
     }
 

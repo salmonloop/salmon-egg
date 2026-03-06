@@ -1,7 +1,9 @@
+using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using UnoAcpClient.Domain.Models.Content;
+using UnoAcpClient.Domain.Models.Plan;
 using UnoAcpClient.Domain.Models.Session;
 using UnoAcpClient.Domain.Models.Tool;
 
@@ -186,10 +188,10 @@ namespace UnoAcpClient.Domain.Models.Protocol
         public override string SessionUpdateType => "plan";
 
         /// <summary>
-        /// 计划条目列表。
-        /// </summary>
-        [JsonPropertyName("entries")]
-        public List<PlanEntry>? Entries { get; set; }
+       /// 计划条目列表（用于 plan 类型的更新）。
+       /// </summary>
+       [JsonPropertyName("entries")]
+       public List<UnoAcpClient.Domain.Models.Plan.PlanEntry>? Entries { get; set; }
 
         /// <summary>
         /// 标题（可选）。

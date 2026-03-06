@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using UnoAcpClient.Domain.Models.Content;
 using UnoAcpClient.Domain.Models.Tool;
+using UnoAcpClient.Domain.Models.Plan;
 
 namespace UnoAcpClient.Domain.Models.Session
 {
@@ -127,8 +128,8 @@ namespace UnoAcpClient.Domain.Models.Session
         /// 判断会话是否已完成或终止。
         /// </summary>
         public bool IsTerminated => State == SessionState.Completed ||
-                                     State == SessionState.Cancelled ||
-                                     State == SessionState.Error;
+                                    State == SessionState.Cancelled ||
+                                    State == SessionState.Error;
     }
 
     /// <summary>

@@ -2,6 +2,7 @@ using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using UnoAcpClient.Domain.Interfaces;
+using System.Linq;
 using UnoAcpClient.Domain.Models.JsonRpc;
 
 namespace UnoAcpClient.Infrastructure.Serialization

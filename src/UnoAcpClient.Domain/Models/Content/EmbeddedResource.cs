@@ -60,11 +60,35 @@ namespace UnoAcpClient.Domain.Models.Content
         /// <param name="uri">资源 URI</param>
         /// <param name="blob">Base64 编码的二进制数据</param>
         /// <param name="mimeType">MIME 类型</param>
-        public EmbeddedResource(string uri, string blob, string mimeType)
+        public EmbeddedResource(string uri, string blob, string mimeType, bool isBinary)
         {
             Uri = uri;
             Blob = blob;
             MimeType = mimeType;
+        }
+
+        /// <summary>
+        /// 静态辅助方法：创建文本资源。
+        /// </summary>
+        /// <param name="uri">资源 URI</param>
+        /// <param name="text">文本内容</param>
+        /// <param name="mimeType">MIME 类型</param>
+        /// <returns>EmbeddedResource 实例</returns>
+        public static EmbeddedResource CreateText(string uri, string text, string mimeType = "text/plain")
+        {
+            return new EmbeddedResource(uri, text, mimeType);
+        }
+
+        /// <summary>
+        /// 静态辅助方法：创建二进制资源。
+        /// </summary>
+        /// <param name="uri">资源 URI</param>
+        /// <param name="blob">Base64 编码的二进制数据</param>
+        /// <param name="mimeType">MIME 类型</param>
+        /// <returns>EmbeddedResource 实例</returns>
+        public static EmbeddedResource CreateBinary(string uri, string blob, string mimeType)
+        {
+            return new EmbeddedResource(uri, blob, mimeType, true);
         }
 
         /// <summary>
