@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using UnoAcpClient.Domain.Models;
 
-namespace UnoAcpClient.Application.Services
+namespace UnoAcpClient.Domain.Services
 {
     /// <summary>
     /// 配置管理服务接口
