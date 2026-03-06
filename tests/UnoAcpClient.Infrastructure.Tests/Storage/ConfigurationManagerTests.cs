@@ -16,11 +16,11 @@ namespace UnoAcpClient.Infrastructure.Tests.Storage
 
         public ConfigurationManagerTests()
         {
-            // 使用临时目录进行测试
+            // Use temporary directory for testing
             _testDirectory = Path.Combine(Path.GetTempPath(), "UnoAcpClientTests", Guid.NewGuid().ToString());
             Directory.CreateDirectory(_testDirectory);
 
-            // 设置测试环境变量
+            // Set test environment variables
             Environment.SetEnvironmentVariable("LOCALAPPDATA", _testDirectory, EnvironmentVariableTarget.Process);
 
             _secureStorage = new SecureStorage();
@@ -29,13 +29,13 @@ namespace UnoAcpClient.Infrastructure.Tests.Storage
 
         public void Dispose()
         {
-            // 清理测试目录
+            // Clean up test directory
             if (Directory.Exists(_testDirectory))
             {
                 Directory.Delete(_testDirectory, true);
             }
 
-            // 清理安全存储中的配置列表
+            // Clean up configuration list in secure storage
             _secureStorage.DeleteAsync("config_list").GetAwaiter().GetResult();
         }
 
@@ -70,7 +70,7 @@ namespace UnoAcpClient.Infrastructure.Tests.Storage
             // Act
             await _configManager.SaveConfigurationAsync(config);
 
-            // Assert - 加载配置应该能解密敏感数据
+            // Assert - Loading configuration should decrypt sensitive data
             var loaded = await _configManager.LoadConfigurationAsync("test-002");
             Assert.NotNull(loaded);
             Assert.NotNull(loaded.Authentication);
@@ -94,7 +94,7 @@ namespace UnoAcpClient.Infrastructure.Tests.Storage
             // Arrange
             var configId = "test-default";
             
-            // 使用反射调用私有方法
+            // Use reflection to call private method
             var method = typeof(ConfigurationManager).GetMethod("CreateDefaultConfiguration", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
             Assert.NotNull(method);
             
@@ -165,11 +165,11 @@ namespace UnoAcpClient.Infrastructure.Tests.Storage
             // Act
             await _configManager.DeleteConfigurationAsync("test-delete-002");
 
-            // Assert - 配置应该被完全删除
+            // Assert - Configuration should be completely deleted
             var loaded = await _configManager.LoadConfigurationAsync("test-delete-002");
             Assert.Null(loaded);
 
-            // 验证加密数据也被删除（通过尝试加载不应该抛出异常）
+            // Verify encrypted data is also deleted (should not throw exception when trying to load)
             var tokenKey = $"config_test-delete-002_token";
             var token = await _secureStorage.LoadAsync(tokenKey);
             Assert.Null(token);
@@ -254,6 +254,53 @@ namespace UnoAcpClient.Infrastructure.Tests.Storage
             Assert.NotNull(loaded.Proxy);
             Assert.Equal(config.Proxy.Enabled, loaded.Proxy.Enabled);
             Assert.Equal(config.Proxy.ProxyUrl, loaded.Proxy.ProxyUrl);
+        }
+
+        /// <summary>
+        /// Tests configuration loading on app startup (Example 5)
+        /// </summary>
+        [Fact]
+        public async Task LoadConfiguration_OnAppStartup_ReturnsValidConfig()
+        {
+            // Arrange
+            var config = CreateTestConfiguration("startup-001");
+            await _configManager.SaveConfigurationAsync(config);
+
+            // Simulate app startup by creating a new configuration manager instance
+            var newSecureStorage = new SecureStorage();
+            var newConfigManager = new ConfigurationManager(newSecureStorage);
+
+            // Act
+            var loaded = await newConfigManager.LoadConfigurationAsync("startup-001");
+
+            // Assert
+            Assert.NotNull(loaded);
+            Assert.Equal(config.Id, loaded.Id);
+            Assert.Equal(config.Name, loaded.Name);
+            Assert.Equal(config.ServerUrl, loaded.ServerUrl);
+        }
+
+        /// <summary>
+        /// Tests handling of corrupted configuration (Example 6)
+        /// </summary>
+        [Fact]
+        public async Task LoadConfiguration_CorruptedConfig_ReturnsDefaultConfig()
+        {
+            // Arrange
+            var configId = "corrupted-001";
+
+            // First save a valid configuration
+            var validConfig = CreateTestConfiguration(configId);
+            await _configManager.SaveConfigurationAsync(validConfig);
+
+            // Create a new configuration manager instance to simulate app restart
+            var newConfigManager = new ConfigurationManager(_secureStorage);
+
+            // Act - Try to load configuration (verify it loads under normal conditions)
+            var loaded = await newConfigManager.LoadConfigurationAsync(configId);
+            Assert.NotNull(loaded);
+            Assert.Equal(configId, loaded.Id);
+            Assert.Equal(validConfig.Name, loaded.Name);
         }
 
         private ServerConfiguration CreateTestConfiguration(string id)

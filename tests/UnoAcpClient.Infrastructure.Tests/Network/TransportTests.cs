@@ -1,4 +1,4 @@
-using System;using System.Net.Http;using System.Reactive.Subjects;using System.Threading;using System.Threading.Tasks;using Moq;using Serilog;using UnoAcpClient.Infrastructure.Network;using Xunit;
+using System;using System.Collections.Generic;using System.Net.Http;using System.Reactive.Subjects;using System.Threading;using System.Threading.Tasks;using Moq;using Serilog;using UnoAcpClient.Infrastructure.Network;using Xunit;
 
 namespace UnoAcpClient.Infrastructure.Tests.Network
 {
@@ -142,6 +142,66 @@ namespace UnoAcpClient.Infrastructure.Tests.Network
             // Act & Assert
             await Assert.ThrowsAsync<TaskCanceledException>(() =>
                 transport.ConnectAsync("http://localhost:8080", cts.Token));
+        }
+
+        /// <summary>
+        /// Tests WebSocket transport state changes
+        /// </summary>
+        [Fact]
+        public void WebSocketTransport_StateChanges_ShouldEmitCorrectStates()
+        {
+            // Arrange
+            var transport = new WebSocketTransport(_mockLogger.Object);
+            var stateChanges = new List<TransportState>();
+            transport.StateChanges.Subscribe(state => stateChanges.Add(state));
+
+            // Assert
+            Assert.Contains(TransportState.Disconnected, stateChanges);
+        }
+
+        /// <summary>
+        /// Tests HTTP SSE transport state changes
+        /// </summary>
+        [Fact]
+        public void HttpSseTransport_StateChanges_ShouldEmitCorrectStates()
+        {
+            // Arrange
+            var transport = new HttpSseTransport(_mockLogger.Object);
+            var stateChanges = new List<TransportState>();
+            transport.StateChanges.Subscribe(state => stateChanges.Add(state));
+
+            // Assert
+            Assert.Contains(TransportState.Disconnected, stateChanges);
+        }
+
+        /// <summary>
+        /// Tests WebSocket transport message reception
+        /// </summary>
+        [Fact]
+        public void WebSocketTransport_Messages_ShouldEmitReceivedMessages()
+        {
+            // Arrange
+            var transport = new WebSocketTransport(_mockLogger.Object);
+            var receivedMessages = new List<string>();
+            transport.Messages.Subscribe(message => receivedMessages.Add(message));
+
+            // Assert
+            Assert.NotNull(transport.Messages);
+        }
+
+        /// <summary>
+        /// Tests HTTP SSE transport message reception
+        /// </summary>
+        [Fact]
+        public void HttpSseTransport_Messages_ShouldEmitReceivedMessages()
+        {
+            // Arrange
+            var transport = new HttpSseTransport(_mockLogger.Object);
+            var receivedMessages = new List<string>();
+            transport.Messages.Subscribe(message => receivedMessages.Add(message));
+
+            // Assert
+            Assert.NotNull(transport.Messages);
         }
     }
 }

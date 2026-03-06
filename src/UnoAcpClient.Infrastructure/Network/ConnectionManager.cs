@@ -171,7 +171,7 @@ namespace UnoAcpClient.Infrastructure.Network
         {
             try
             {
-                _logger.Information("开始断开连接");
+                _logger.Information("Disconnecting from server");
                 
                 // 设置手动断开标志，防止自动重连
                 _isManualDisconnect = true;
@@ -190,7 +190,7 @@ namespace UnoAcpClient.Infrastructure.Network
                 }
 
                 // 清理待处理的请求
-                ClearPendingRequests("连接已断开");
+                ClearPendingRequests("Connection disconnected manually");
 
                 // 更新状态
                 UpdateConnectionState(ConnectionStatus.Disconnected, _currentConfig?.ServerUrl ?? string.Empty);
@@ -198,11 +198,11 @@ namespace UnoAcpClient.Infrastructure.Network
                 // 清除配置信息
                 _currentConfig = null;
 
-                _logger.Information("已断开连接");
+                _logger.Information("Connection disconnected successfully");
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "断开连接时发生错误");
+                _logger.Error(ex, "Connection disconnect failed");
                 throw;
             }
             finally
@@ -227,16 +227,16 @@ namespace UnoAcpClient.Infrastructure.Network
                 var currentState = _connectionStateChanges.Value;
                 if (currentState.Status != ConnectionStatus.Connected)
                 {
-                    var error = "未连接到服务器";
-                    _logger.Warning("尝试发送消息但未连接: {MessageId}", message.Id);
+                    var error = "Not connected to server";
+                    _logger.Warning("Attempt to send message but not connected");
                     return SendResult.Failure(error);
                 }
 
                 // 验证消息
                 if (!_protocolService.ValidateMessage(message))
                 {
-                    var error = "消息验证失败";
-                    _logger.Warning("消息验证失败: {MessageId}", message.Id);
+                    var error = "Message validation failed";
+                    _logger.Warning("Message validation failed: {MessageId}", message.Id);
                     return SendResult.Failure(error);
                 }
 
@@ -246,23 +246,23 @@ namespace UnoAcpClient.Infrastructure.Network
                 // 发送消息
                 await _transport.SendAsync(json, ct);
 
-                _logger.Debug("已发送消息: {MessageId}, 类型: {Type}", message.Id, message.Type);
+                _logger.Debug("Message sent successfully: {MessageId}, Type: {Type}", message.Id, message.Type);
                 return SendResult.Success(message.Id);
             }
             catch (AcpProtocolException ex)
             {
-                _logger.Error(ex, "协议错误: {ErrorCode}", ex.ErrorCode);
-                return SendResult.Failure($"协议错误: {ex.Message}");
+                _logger.Error(ex, "Protocol error: {ErrorCode}", ex.ErrorCode);
+                return SendResult.Failure($"Protocol error: {ex.Message}");
             }
             catch (OperationCanceledException)
             {
-                _logger.Information("发送消息操作被取消: {MessageId}", message.Id);
-                return SendResult.Failure("发送操作被取消");
+                _logger.Information("Operation to send message canceled");
+                return SendResult.Failure("Operation canceled by user");
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "发送消息时发生错误: {MessageId}", message.Id);
-                return SendResult.Failure($"发送失败: {ex.Message}");
+                _logger.Error(ex, "Send message failed");
+                return SendResult.Failure($"Send message failed with error: {ex.Message}");
             }
         }
 
@@ -273,12 +273,12 @@ namespace UnoAcpClient.Infrastructure.Network
         {
             if (string.IsNullOrWhiteSpace(config.ServerUrl))
             {
-                return "服务器 URL 不能为空";
+                return "Server URL is required";
             }
 
             if (!Uri.TryCreate(config.ServerUrl, UriKind.Absolute, out var uri))
             {
-                return "服务器 URL 格式无效";
+                return "Server URL format is invalid";
             }
 
             // 验证传输类型对应的 URL 协议
@@ -286,14 +286,14 @@ namespace UnoAcpClient.Infrastructure.Network
             {
                 if (uri.Scheme != "ws" && uri.Scheme != "wss")
                 {
-                    return "WebSocket 传输需要 ws:// 或 wss:// 协议";
+                    return "WebSocket transport requires ws:// or wss:// protocol";
                 }
             }
             else if (config.Transport == TransportType.HttpSse)
             {
                 if (uri.Scheme != "http" && uri.Scheme != "https")
                 {
-                    return "HTTP SSE 传输需要 http:// 或 https:// 协议";
+                    return "HTTP SSE transport requires http:// or https:// protocol";
                 }
             }
 
@@ -321,7 +321,7 @@ namespace UnoAcpClient.Infrastructure.Network
             _stateSubscription = _transport.StateChanges
                 .Subscribe(
                     onNext: OnTransportStateChanged,
-                    onError: ex => _logger.Error(ex, "传输层状态流发生错误"));
+                    onError: ex => _logger.Error(ex, "Transport state change stream error"));
         }
 
         /// <summary>
@@ -343,7 +343,7 @@ namespace UnoAcpClient.Infrastructure.Network
         {
             try
             {
-                _logger.Debug("收到消息: {Json}", json);
+                _logger.Debug("Received message from server: {Json}", json);
 
                 // 解析消息
                 var message = _protocolService.ParseMessage(json);
@@ -360,11 +360,11 @@ namespace UnoAcpClient.Infrastructure.Network
             }
             catch (AcpProtocolException ex)
             {
-                _logger.Error(ex, "解析消息失败: {ErrorCode}", ex.ErrorCode);
+                _logger.Error(ex, "Protocol error: {ErrorCode}", ex.ErrorCode);
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "处理消息时发生错误");
+                _logger.Error(ex, "Message processing error");
             }
         }
 
@@ -373,7 +373,7 @@ namespace UnoAcpClient.Infrastructure.Network
         /// </summary>
         private void OnMessageError(Exception ex)
         {
-            _logger.Error(ex, "消息流发生错误");
+            _logger.Error(ex, "Message stream error");
             UpdateConnectionState(ConnectionStatus.Error, _currentConfig?.ServerUrl ?? string.Empty, ex.Message);
         }
 
@@ -382,7 +382,7 @@ namespace UnoAcpClient.Infrastructure.Network
         /// </summary>
         private void OnMessageCompleted()
         {
-            _logger.Information("消息流已完成");
+            _logger.Information("Message stream completed");
             UpdateConnectionState(ConnectionStatus.Disconnected, _currentConfig?.ServerUrl ?? string.Empty);
         }
 
@@ -391,7 +391,7 @@ namespace UnoAcpClient.Infrastructure.Network
         /// </summary>
         private void OnTransportStateChanged(TransportState state)
         {
-            _logger.Debug("传输层状态变化: {State}", state);
+            _logger.Debug("Transport state change: {State}", state);
 
             // 将传输层状态映射到连接状态
             ConnectionStatus connectionStatus;
@@ -408,7 +408,7 @@ namespace UnoAcpClient.Infrastructure.Network
                     // 如果是意外断开（有配置信息且不是手动断开或正在重连），尝试自动重连
                     if (_currentConfig != null && !_isManualDisconnect && !_isReconnecting)
                     {
-                        _logger.Information("检测到连接意外断开，准备自动重连");
+                        _logger.Information("Connection disconnected unexpectedly, preparing to reconnect");
                         _ = AutoReconnectAsync();
                     }
                     break;
@@ -429,12 +429,13 @@ namespace UnoAcpClient.Infrastructure.Network
         {
             if (_currentConfig == null)
             {
-                _logger.Warning("无法自动重连：缺少配置信息");
+                _logger.Warning("No configuration information available to reconnect automatically");
                 return;
             }
 
             if (_isReconnecting)
             {
+                _logger.Debug("Already reconnecting, skipping this reconnect request");
                 _logger.Debug("已经在重连中，跳过此次重连请求");
                 return;
             }
@@ -442,7 +443,7 @@ namespace UnoAcpClient.Infrastructure.Network
             try
             {
                 _isReconnecting = true;
-                _logger.Information("开始自动重连到服务器: {ServerUrl}", _currentConfig.ServerUrl);
+                _logger.Information("Reconnecting to server automatically: {ServerUrl}", _currentConfig.ServerUrl);
                 
                 // 更新状态为重连中
                 UpdateConnectionState(ConnectionStatus.Reconnecting, _currentConfig.ServerUrl, "正在自动重连");
@@ -457,7 +458,7 @@ namespace UnoAcpClient.Infrastructure.Network
                     }
                     catch (Exception ex)
                     {
-                        _logger.Warning(ex, "清理旧连接时发生错误");
+                        _logger.Warning(ex, "Error cleaning up existing connection");
                     }
                 }
 
@@ -482,15 +483,15 @@ namespace UnoAcpClient.Infrastructure.Network
                 // 更新状态为已连接
                 UpdateConnectionState(ConnectionStatus.Connected, _currentConfig.ServerUrl);
 
-                _logger.Information("自动重连成功: {ServerUrl}", _currentConfig.ServerUrl);
+                _logger.Information("Reconnection successful to server: {ServerUrl}", _currentConfig.ServerUrl);
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "自动重连失败，已达到最大重试次数");
+                _logger.Error(ex, "Reconnection failed");
                 UpdateConnectionState(
                     ConnectionStatus.Error, 
                     _currentConfig.ServerUrl, 
-                    "自动重连失败，已达到最大重试次数");
+                    "Reconnection failed");
             }
             finally
             {
@@ -531,7 +532,7 @@ namespace UnoAcpClient.Infrastructure.Network
             var json = _protocolService.SerializeMessage(initMessage);
             await _transport.SendAsync(json, ct);
 
-            _logger.Information("已发送初始化消息: {MessageId}", initMessage.Id);
+            _logger.Information("Initialize message sent successfully to server: {MessageId}", initMessage.Id);
         }
 
         /// <summary>
@@ -554,7 +555,7 @@ namespace UnoAcpClient.Infrastructure.Network
             // 停止现有的心跳定时器（如果有）
             StopHeartbeat();
 
-            _logger.Debug("启动心跳定时器，间隔: {Interval} 秒", intervalSeconds);
+            _logger.Debug("Heartbeat timer started with interval of: {Interval} seconds", intervalSeconds);
 
             _heartbeatTimer = new System.Timers.Timer(intervalSeconds * 1000);
             _heartbeatTimer.Elapsed += OnHeartbeatTimerElapsed;
@@ -569,7 +570,7 @@ namespace UnoAcpClient.Infrastructure.Network
         {
             if (_heartbeatTimer != null)
             {
-                _logger.Debug("停止心跳定时器");
+                _logger.Debug("Heartbeat timer stopped");
                 _heartbeatTimer.Stop();
                 _heartbeatTimer.Elapsed -= OnHeartbeatTimerElapsed;
                 _heartbeatTimer.Dispose();
@@ -588,7 +589,7 @@ namespace UnoAcpClient.Infrastructure.Network
                 var currentState = _connectionStateChanges.Value;
                 if (currentState.Status != ConnectionStatus.Connected || _transport == null)
                 {
-                    _logger.Debug("跳过心跳：未连接");
+                    _logger.Debug("Skip heartbeat: Not connected");
                     return;
                 }
 
@@ -605,11 +606,11 @@ namespace UnoAcpClient.Infrastructure.Network
                 var json = _protocolService.SerializeMessage(heartbeatMessage);
                 await _transport.SendAsync(json, CancellationToken.None);
 
-                _logger.Debug("已发送心跳消息: {MessageId}", heartbeatMessage.Id);
+                _logger.Debug("Heartbeat message sent successfully to server: {MessageId}", heartbeatMessage.Id);
             }
             catch (Exception ex)
             {
-                _logger.Warning(ex, "发送心跳消息失败");
+                _logger.Warning(ex, "Heartbeat message send failed");
             }
         }
 
@@ -627,7 +628,7 @@ namespace UnoAcpClient.Infrastructure.Network
             UnsubscribeFromTransport();
             _incomingMessages?.Dispose();
             _connectionStateChanges?.Dispose();
-            ClearPendingRequests("ConnectionManager 已释放");
+            ClearPendingRequests("ConnectionManager disposed");
 
             _disposed = true;
         }

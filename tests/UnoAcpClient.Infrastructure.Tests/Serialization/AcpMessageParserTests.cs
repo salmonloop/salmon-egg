@@ -1,3 +1,4 @@
+using System;
 using System.Text.Json;
 using UnoAcpClient.Domain.Exceptions;
 using UnoAcpClient.Domain.Models;
@@ -15,13 +16,13 @@ namespace UnoAcpClient.Infrastructure.Tests.Serialization
         }
 
         /// <summary>
-        /// 测试 ACP 消息序列化的 Round-Trip 特性
-        /// 验证序列化后再解析产生等价对象
+        /// Tests ACP message serialization Round-Trip
+        /// Verifies that serialization followed by parsing produces equivalent objects
         /// </summary>
         [Fact]
         public void SerializeThenParseShouldReturnEquivalentMessage()
         {
-            // 创建测试消息
+            // Arrange
             var originalMessage = new AcpMessage
             {
                 Id = "test-123",
@@ -31,31 +32,52 @@ namespace UnoAcpClient.Infrastructure.Tests.Serialization
                 ProtocolVersion = "1.0"
             };
 
-            // 序列化消息
+            // Act
             var json = _parser.SerializeMessage(originalMessage);
-            
-            // 解析序列化后的 JSON
             var parsedMessage = _parser.ParseMessage(json);
             
-            // 验证解析后的消息与原始消息等价
+            // Assert
             AssertEquivalentMessages(originalMessage, parsedMessage);
         }
 
         /// <summary>
-        /// 测试无效消息的错误处理
-        /// 验证解析无效 JSON 时返回描述性错误
+        /// Tests ACP message serialization Round-Trip for different message types
+        /// Verifies that serialization followed by parsing produces equivalent objects
+        /// </summary>
+        [Theory]
+        [InlineData("request")]
+        [InlineData("response")]
+        [InlineData("notification")]
+        [InlineData("initialize")]
+        public void SerializeThenParseShouldReturnEquivalentMessageForDifferentTypes(string messageType)
+        {
+            // Arrange
+            var originalMessage = CreateTestMessage(messageType);
+
+            // Act
+            var json = _parser.SerializeMessage(originalMessage);
+            var parsedMessage = _parser.ParseMessage(json);
+            
+            // Assert
+            AssertEquivalentMessages(originalMessage, parsedMessage);
+        }
+
+        /// <summary>
+        /// Tests error handling for invalid messages
+        /// Verifies that parsing invalid JSON returns descriptive errors
         /// </summary>
         [Fact]
         public void ParseInvalidJsonShouldThrowAcpProtocolException()
         {
-            // 无效的 JSON 字符串
+            // Arrange
             string[] invalidJsonStrings = {
                 "",
                 "{}",
                 "{invalid json}",
-                "{\"id\": \"1\"}" // 缺少 type
+                "{\"id\": \"1\"}" // Missing type
             };
 
+            // Act & Assert
             foreach (var invalidJson in invalidJsonStrings)
             {
                 Assert.Throws<AcpProtocolException>(() =>
@@ -66,14 +88,36 @@ namespace UnoAcpClient.Infrastructure.Tests.Serialization
         }
 
         /// <summary>
-        /// 测试各种消息类型的解析
+        /// Tests error handling for invalid JSON formats (extended test cases)
+        /// </summary>
+        [Theory]
+        [InlineData("")]
+        [InlineData("{}")]
+        [InlineData("{invalid json}")]
+        [InlineData("{\"id\": \"1\"}")]
+        [InlineData("{\"type\": \"request\"}")]
+        [InlineData("{\"id\": \"1\", \"type\": \"request\"}")]
+        public void ParseInvalidJsonShouldThrowAcpProtocolExceptionWithDifferentCases(string invalidJson)
+        {
+            Assert.Throws<AcpProtocolException>(() =>
+            {
+                _parser.ParseMessage(invalidJson);
+            });
+        }
+
+        /// <summary>
+        /// Tests parsing of various message types
         /// </summary>
         [Fact]
         public void ParseRequestMessageShouldSucceed()
         {
+            // Arrange
             var json = "{\"id\":\"1\",\"type\":\"request\",\"method\":\"test\",\"params\":{\"key\":\"value\"}}";
+            
+            // Act
             var message = _parser.ParseMessage(json);
             
+            // Assert
             Assert.Equal("1", message.Id);
             Assert.Equal("request", message.Type);
             Assert.Equal("test", message.Method);
@@ -82,9 +126,13 @@ namespace UnoAcpClient.Infrastructure.Tests.Serialization
         [Fact]
         public void ParseResponseMessageShouldSucceed()
         {
+            // Arrange
             var json = "{\"id\":\"1\",\"type\":\"response\",\"result\":\"success\"}";
+            
+            // Act
             var message = _parser.ParseMessage(json);
             
+            // Assert
             Assert.Equal("1", message.Id);
             Assert.Equal("response", message.Type);
         }
@@ -92,9 +140,13 @@ namespace UnoAcpClient.Infrastructure.Tests.Serialization
         [Fact]
         public void ParseNotificationMessageShouldSucceed()
         {
+            // Arrange
             var json = "{\"id\":\"1\",\"type\":\"notification\",\"method\":\"test\",\"params\":{\"key\":\"value\"}}";
+            
+            // Act
             var message = _parser.ParseMessage(json);
             
+            // Assert
             Assert.Equal("1", message.Id);
             Assert.Equal("notification", message.Type);
             Assert.Equal("test", message.Method);
@@ -103,9 +155,13 @@ namespace UnoAcpClient.Infrastructure.Tests.Serialization
         [Fact]
         public void ParseInitializeMessageShouldSucceed()
         {
+            // Arrange
             var json = "{\"id\":\"1\",\"type\":\"initialize\",\"params\":{\"version\":\"1.0\"}}";
+            
+            // Act
             var message = _parser.ParseMessage(json);
             
+            // Assert
             Assert.Equal("1", message.Id);
             Assert.Equal("initialize", message.Type);
         }
@@ -113,21 +169,21 @@ namespace UnoAcpClient.Infrastructure.Tests.Serialization
         [Fact]
         public void ParseMessageWithMissingRequiredFieldsShouldThrowException()
         {
-            // 缺少 ID
+            // Arrange - Missing ID
             var jsonWithoutId = "{\"type\":\"request\",\"method\":\"test\"}";
             Assert.Throws<AcpProtocolException>(() =>
             {
                 _parser.ParseMessage(jsonWithoutId);
             });
 
-            // 缺少 Type
+            // Arrange - Missing Type
             var jsonWithoutType = "{\"id\":\"1\",\"method\":\"test\"}";
             Assert.Throws<AcpProtocolException>(() =>
             {
                 _parser.ParseMessage(jsonWithoutType);
             });
 
-            // 缺少 Method（request 类型）
+            // Arrange - Missing Method (request type)
             var jsonWithoutMethod = "{\"id\":\"1\",\"type\":\"request\"}";
             Assert.Throws<AcpProtocolException>(() =>
             {
@@ -136,7 +192,37 @@ namespace UnoAcpClient.Infrastructure.Tests.Serialization
         }
 
         /// <summary>
-        /// 辅助方法：验证两个消息是否等价
+        /// Creates a test message for different message types
+        /// </summary>
+        private AcpMessage CreateTestMessage(string messageType)
+        {
+            var message = new AcpMessage
+            {
+                Id = Guid.NewGuid().ToString(),
+                Type = messageType,
+                ProtocolVersion = "1.0"
+            };
+
+            switch (messageType)
+            {
+                case "request":
+                case "notification":
+                    message.Method = "test.method";
+                    message.Params = JsonDocument.Parse("{\"key\":\"value\",\"number\":42}").RootElement;
+                    break;
+                case "response":
+                    message.Result = JsonDocument.Parse("\"success\"").RootElement;
+                    break;
+                case "initialize":
+                    message.Params = JsonDocument.Parse("{\"version\":\"1.0\"}").RootElement;
+                    break;
+            }
+
+            return message;
+        }
+
+        /// <summary>
+        /// Helper method: Verifies that two messages are equivalent
         /// </summary>
         private void AssertEquivalentMessages(AcpMessage expected, AcpMessage actual)
         {
@@ -144,7 +230,7 @@ namespace UnoAcpClient.Infrastructure.Tests.Serialization
             Assert.Equal(expected.Type, actual.Type);
             Assert.Equal(expected.Method, actual.Method);
             
-            // 比较 Params
+            // Compare Params
             if (expected.Params.HasValue && actual.Params.HasValue)
             {
                 var expectedParams = JsonSerializer.Serialize(expected.Params.Value);
@@ -156,7 +242,7 @@ namespace UnoAcpClient.Infrastructure.Tests.Serialization
                 Assert.Equal(expected.Params.HasValue, actual.Params.HasValue);
             }
             
-            // 比较 Result
+            // Compare Result
             if (expected.Result.HasValue && actual.Result.HasValue)
             {
                 var expectedResult = JsonSerializer.Serialize(expected.Result.Value);
@@ -168,7 +254,7 @@ namespace UnoAcpClient.Infrastructure.Tests.Serialization
                 Assert.Equal(expected.Result.HasValue, actual.Result.HasValue);
             }
             
-            // 比较 Error
+            // Compare Error
             if (expected.Error != null && actual.Error != null)
             {
                 Assert.Equal(expected.Error.Code, actual.Error.Code);

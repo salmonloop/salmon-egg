@@ -4,78 +4,78 @@ using UnoAcpClient.Domain.Models;
 namespace UnoAcpClient.Application.Validators
 {
     /// <summary>
-    /// 服务器配置验证器
-    /// 使用 FluentValidation 验证 ServerConfiguration 对象
+    /// Server configuration validator
+    /// Validates ServerConfiguration objects using FluentValidation
     /// </summary>
     public class ServerConfigurationValidator : AbstractValidator<ServerConfiguration>
     {
         public ServerConfigurationValidator()
         {
-            // 验证 ID
+            // Validate ID
             RuleFor(x => x.Id)
                 .NotEmpty()
-                .WithMessage("配置 ID 不能为空");
+                .WithMessage("Configuration ID cannot be empty");
 
-            // 验证名称
+            // Validate name
             RuleFor(x => x.Name)
                 .NotEmpty()
-                .WithMessage("配置名称不能为空")
+                .WithMessage("Configuration name cannot be empty")
                 .MaximumLength(100)
-                .WithMessage("配置名称不能超过 100 个字符");
+                .WithMessage("Configuration name cannot exceed 100 characters");
 
-            // 验证服务器 URL
+            // Validate server URL
             RuleFor(x => x.ServerUrl)
                 .NotEmpty()
-                .WithMessage("服务器 URL 不能为空")
+                .WithMessage("Server URL cannot be empty")
                 .Must(BeValidUrl)
-                .WithMessage("服务器 URL 格式无效，必须是有效的 WebSocket (ws:// 或 wss://) 或 HTTP (http:// 或 https://) URL");
+                .WithMessage("Server URL format is invalid, must be a valid WebSocket (ws:// or wss://) or HTTP (http:// or https://) URL");
 
-            // 验证传输类型
+            // Validate transport type
             RuleFor(x => x.Transport)
                 .IsInEnum()
-                .WithMessage("传输类型无效");
+                .WithMessage("Invalid transport type");
 
-            // 验证心跳间隔
+            // Validate heartbeat interval
             RuleFor(x => x.HeartbeatInterval)
                 .GreaterThan(0)
-                .WithMessage("心跳间隔必须大于 0 秒")
+                .WithMessage("Heartbeat interval must be greater than 0 seconds")
                 .LessThanOrEqualTo(300)
-                .WithMessage("心跳间隔不能超过 300 秒（5 分钟）");
+                .WithMessage("Heartbeat interval cannot exceed 300 seconds (5 minutes)");
 
-            // 验证连接超时
+            // Validate connection timeout
             RuleFor(x => x.ConnectionTimeout)
                 .GreaterThan(0)
-                .WithMessage("连接超时必须大于 0 秒")
+                .WithMessage("Connection timeout must be greater than 0 seconds")
                 .LessThanOrEqualTo(60)
-                .WithMessage("连接超时不能超过 60 秒");
+                .WithMessage("Connection timeout cannot exceed 60 seconds");
 
-            // 验证认证配置（如果存在）
+            // Validate authentication configuration (if present)
             When(x => x.Authentication != null, () =>
             {
                 RuleFor(x => x.Authentication.Token)
                     .NotEmpty()
                     .When(x => string.IsNullOrEmpty(x.Authentication.ApiKey))
-                    .WithMessage("必须提供 Token 或 ApiKey 之一");
+                    .WithMessage("Either Token or ApiKey must be provided");
 
                 RuleFor(x => x.Authentication.ApiKey)
                     .NotEmpty()
                     .When(x => string.IsNullOrEmpty(x.Authentication.Token))
-                    .WithMessage("必须提供 Token 或 ApiKey 之一");
+                    .WithMessage("Either Token or ApiKey must be provided");
             });
 
-            // 验证代理配置（如果启用）
+            // Validate proxy configuration (if enabled)
             When(x => x.Proxy != null && x.Proxy.Enabled, () =>
             {
                 RuleFor(x => x.Proxy.ProxyUrl)
                     .NotEmpty()
-                    .WithMessage("启用代理时必须提供代理 URL")
+                    .WithMessage("Proxy URL must be provided when proxy is enabled")
                     .Must(BeValidProxyUrl)
-                    .WithMessage("代理 URL 格式无效");
+                    .WithMessage("Invalid proxy URL format");
             });
         }
 
         /// <summary>
-        /// 验证 URL 是否有效
+        /// Validates if the URL is valid
         /// </summary>
         private bool BeValidUrl(string url)
         {
@@ -91,7 +91,7 @@ namespace UnoAcpClient.Application.Validators
         }
 
         /// <summary>
-        /// 验证代理 URL 是否有效
+        /// Validates if the proxy URL is valid
         /// </summary>
         private bool BeValidProxyUrl(string url)
         {

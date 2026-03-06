@@ -111,7 +111,7 @@ namespace UnoAcpClient.Infrastructure.Tests.Network
 
             // Assert
             Assert.False(result.IsSuccess);
-            Assert.Equal("未连接到服务器", result.Error);
+            Assert.Equal("Not connected to server", result.Error);
         }
 
         [Fact]
@@ -152,7 +152,7 @@ namespace UnoAcpClient.Infrastructure.Tests.Network
 
             // Assert
             Assert.False(result.IsSuccess);
-            Assert.Equal("消息验证失败", result.Error);
+            Assert.Equal("Message validation failed", result.Error);
         }
 
         [Fact]
@@ -179,7 +179,7 @@ namespace UnoAcpClient.Infrastructure.Tests.Network
 
             // Assert
             Assert.False(result.IsSuccess);
-            Assert.Equal("服务器 URL 格式无效", result.Error);
+            Assert.Equal("Server URL format is invalid", result.Error);
         }
 
         [Fact]
@@ -206,7 +206,7 @@ namespace UnoAcpClient.Infrastructure.Tests.Network
 
             // Assert
             Assert.False(result.IsSuccess);
-            Assert.Equal("WebSocket 传输需要 ws:// 或 wss:// 协议", result.Error);
+            Assert.Equal("WebSocket transport requires ws:// or wss:// protocol", result.Error);
         }
 
         [Fact]
@@ -233,7 +233,7 @@ namespace UnoAcpClient.Infrastructure.Tests.Network
 
             // Assert
             Assert.False(result.IsSuccess);
-            Assert.Equal("HTTP SSE 传输需要 http:// 或 https:// 协议", result.Error);
+            Assert.Equal("HTTP SSE transport requires http:// or https:// protocol", result.Error);
         }
 
         [Fact]
@@ -252,6 +252,182 @@ namespace UnoAcpClient.Infrastructure.Tests.Network
             // Assert
             // Verify that resources were cleaned up (no specific verification since heartbeat wasn't started)
             Assert.True(true);
+        }
+
+        /// <summary>
+        /// Tests the heartbeat mechanism
+        /// Verifies that heartbeats are sent continuously while connected
+        /// </summary>
+        [Fact]
+        public async Task Heartbeat_ShouldContinueSending_WhileConnected()
+        {
+            // Arrange
+            var config = new ServerConfiguration
+            {
+                Id = "test",
+                Name = "Test Server",
+                ServerUrl = "ws://localhost:8080",
+                Transport = TransportType.WebSocket,
+                HeartbeatInterval = 1 // 1 second interval for testing
+            };
+
+            var transportFactory = new Func<TransportType, ITransport>(_ => _mockTransport.Object);
+            var connectionManager = new ConnectionManager(
+                _mockProtocolService.Object,
+                _mockLogger.Object,
+                transportFactory);
+
+            // Act
+            var connectTask = connectionManager.ConnectAsync(config, CancellationToken.None);
+            _mockStateSubject.OnNext(TransportState.Connected);
+            await connectTask;
+
+            // Wait for heartbeat timer to trigger
+            await Task.Delay(1500); // Wait 1.5 seconds, should trigger at least one heartbeat
+
+            // Simulate heartbeat response
+            _mockMessagesSubject.OnNext("{\"id\":\"heartbeat-response\",\"type\":\"response\",\"result\":\"ok\"}");
+
+            // Wait more time to ensure heartbeats continue
+            await Task.Delay(1500);
+
+            // Disconnect
+            await connectionManager.DisconnectAsync();
+
+            // Assert
+            // Verify heartbeat messages were sent at least once
+            _mockTransport.Verify(x => x.SendAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.AtLeast(2)); // Init message + at least one heartbeat
+        }
+
+        /// <summary>
+        /// Tests connection establishment with valid configuration
+        /// </summary>
+        [Fact]
+        public async Task ConnectAsync_ShouldSucceed_WithValidConfiguration()
+        {
+            // Arrange
+            var config = new ServerConfiguration
+            {
+                Id = "test",
+                Name = "Test Server",
+                ServerUrl = "ws://localhost:8080",
+                Transport = TransportType.WebSocket,
+                HeartbeatInterval = 5
+            };
+
+            var transportFactory = new Func<TransportType, ITransport>(_ => _mockTransport.Object);
+            var connectionManager = new ConnectionManager(
+                _mockProtocolService.Object,
+                _mockLogger.Object,
+                transportFactory);
+
+            // Act
+            var result = await connectionManager.ConnectAsync(config, CancellationToken.None);
+
+            // Assert
+            Assert.True(result.IsSuccess);
+            _mockTransport.Verify(x => x.ConnectAsync(config.ServerUrl, It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        /// <summary>
+        /// Tests error handling for invalid URL
+        /// </summary>
+        [Fact]
+        public async Task ConnectAsync_ShouldFail_WithInvalidUrl()
+        {
+            // Arrange
+            var config = new ServerConfiguration
+            {
+                Id = "test",
+                Name = "Test Server",
+                ServerUrl = "invalid-url",
+                Transport = TransportType.WebSocket,
+                HeartbeatInterval = 5
+            };
+
+            var transportFactory = new Func<TransportType, ITransport>(_ => _mockTransport.Object);
+            var connectionManager = new ConnectionManager(
+                _mockProtocolService.Object,
+                _mockLogger.Object,
+                transportFactory);
+
+            // Act
+            var result = await connectionManager.ConnectAsync(config, CancellationToken.None);
+
+            // Assert
+            Assert.False(result.IsSuccess);
+            Assert.Equal("Server URL format is invalid", result.Error);
+        }
+
+        /// <summary>
+        /// Tests auto-reconnect retry limit
+        /// </summary>
+        [Fact]
+        public async Task AutoReconnect_ShouldRespectRetryLimit()
+        {
+            // Arrange
+            var config = new ServerConfiguration
+            {
+                Id = "test",
+                Name = "Test Server",
+                ServerUrl = "ws://localhost:8080",
+                Transport = TransportType.WebSocket,
+                HeartbeatInterval = 5
+            };
+
+            // Mock connection failure
+            _mockTransport.Setup(x => x.ConnectAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new Exception("Connection failed"));
+
+            var transportFactory = new Func<TransportType, ITransport>(_ => _mockTransport.Object);
+            var connectionManager = new ConnectionManager(
+                _mockProtocolService.Object,
+                _mockLogger.Object,
+                transportFactory);
+
+            // Act
+            var result = await connectionManager.ConnectAsync(config, CancellationToken.None);
+
+            // Assert
+            Assert.False(result.IsSuccess);
+            // Verify connection was attempted 4 times (1 initial + 3 retries)
+            _mockTransport.Verify(x => x.ConnectAsync(config.ServerUrl, It.IsAny<CancellationToken>()), Times.Exactly(4));
+        }
+
+        /// <summary>
+        /// Tests proxy connection configuration
+        /// </summary>
+        [Fact]
+        public async Task ConnectAsync_ShouldHandleProxyConfiguration()
+        {
+            // Arrange
+            var config = new ServerConfiguration
+            {
+                Id = "test",
+                Name = "Test Server",
+                ServerUrl = "ws://localhost:8080",
+                Transport = TransportType.WebSocket,
+                HeartbeatInterval = 5,
+                Proxy = new ProxyConfig
+                {
+                    Enabled = true,
+                    ProxyUrl = "http://proxy.example.com:8080"
+                }
+            };
+
+            var transportFactory = new Func<TransportType, ITransport>(_ => _mockTransport.Object);
+            var connectionManager = new ConnectionManager(
+                _mockProtocolService.Object,
+                _mockLogger.Object,
+                transportFactory);
+
+            // Act
+            var result = await connectionManager.ConnectAsync(config, CancellationToken.None);
+
+            // Assert
+            Assert.True(result.IsSuccess);
+            // Verify connection attempt was made
+            _mockTransport.Verify(x => x.ConnectAsync(config.ServerUrl, It.IsAny<CancellationToken>()), Times.Once);
         }
     }
 }

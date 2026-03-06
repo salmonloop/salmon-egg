@@ -76,8 +76,8 @@ namespace UnoAcpClient.Application.UseCases
 
                 if (currentState.Status != ConnectionStatus.Connected)
                 {
-                    _logger.Warning("发送消息失败：未连接到服务器，当前状态: {Status}", currentState.Status);
-                    return Result<AcpMessage>.Failure($"未连接到服务器，当前状态: {currentState.Status}");
+                    _logger.Warning("Failed to send message: Not connected to server, current status: {Status}", currentState.Status);
+                    return Result<AcpMessage>.Failure($"Not connected to server, current status: {currentState.Status}");
                 }
 
                 _logger.Debug("连接状态检查通过，服务器: {ServerUrl}", currentState.ServerUrl);
