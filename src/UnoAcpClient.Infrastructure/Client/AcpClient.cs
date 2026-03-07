@@ -135,11 +135,14 @@ namespace UnoAcpClient.Infrastructure.Client
               }
 
                // 发送 initialize 请求
+               _errorLogger.LogError(new ErrorLogEntry("DEBUG", "[AcpClient] 开始创建 initialize 请求", ErrorSeverity.Info, nameof(InitializeAsync)));
                var request = new JsonRpcRequest(
                    Interlocked.Increment(ref _nextMessageId),
                    "initialize",
-                   JsonSerializer.SerializeToElement(@params, typeof(InitializeParams), _parser.GetType().Assembly.GetType("System.Text.Json.JsonSerializerOptions") != null ? new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase } : null));
+                   JsonSerializer.SerializeToElement(@params, _parser.Options));
+               _errorLogger.LogError(new ErrorLogEntry("DEBUG", $"[AcpClient] initialize 请求已创建，id={request.Id}", ErrorSeverity.Info, nameof(InitializeAsync)));
                var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
+               _errorLogger.LogError(new ErrorLogEntry("DEBUG", $"[AcpClient] 收到 initialize 响应，id={response.Id}", ErrorSeverity.Info, nameof(InitializeAsync)));
 
             // 验证响应
             var validationResult = _validator.ValidateResponse(response);
@@ -154,7 +157,7 @@ namespace UnoAcpClient.Infrastructure.Client
             }
 
             // 解析响应
-            var initializeResponse = JsonSerializer.Deserialize<InitializeResponse>(response.Result!.Value.GetRawText(), _parser.GetType().Assembly.GetType("System.Text.Json.JsonSerializerOptions") != null ? new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase } : null);
+            var initializeResponse = JsonSerializer.Deserialize<InitializeResponse>(response.Result!.Value.GetRawText(), _parser.Options);
             if (initializeResponse == null)
             {
                 throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse initialize response");
@@ -177,6 +180,15 @@ namespace UnoAcpClient.Infrastructure.Client
             // 启动消息接收循环
             _messageLoopCts = new CancellationTokenSource();
             _ = ProcessMessageLoopAsync(_messageLoopCts.Token);
+
+            // 发送 notifications/initialized 通知（MCP 协议要求）
+            var initializedNotification = new JsonRpcNotification(
+                "notifications/initialized",
+                JsonSerializer.SerializeToElement(new { }, _parser.Options));
+
+            await _transport.SendMessageAsync(
+                _parser.SerializeMessage(initializedNotification),
+                CancellationToken.None).ConfigureAwait(false);
 
             // 触发事件
             Initialized?.Invoke(this, initializeResponse);
@@ -211,6 +223,15 @@ namespace UnoAcpClient.Infrastructure.Client
 
             // 创建会话记录
             await _sessionManager.CreateSessionAsync(sessionNewResponse.SessionId, @params.Cwd).ConfigureAwait(false);
+
+            // 发送 session/initialized 通知（MCP 协议要求）
+            var sessionInitializedNotification = new JsonRpcNotification(
+                "notifications/session/initialized",
+                JsonSerializer.SerializeToElement(new { sessionId = sessionNewResponse.SessionId }, _parser.Options));
+
+            await _transport.SendMessageAsync(
+                _parser.SerializeMessage(sessionInitializedNotification),
+                CancellationToken.None).ConfigureAwait(false);
 
             return sessionNewResponse;
         }
@@ -435,19 +456,25 @@ namespace UnoAcpClient.Infrastructure.Client
         /// </summary>
         private async Task<JsonRpcResponse> SendRequestAsync(JsonRpcRequest request, CancellationToken cancellationToken)
         {
+            _errorLogger.LogError(new ErrorLogEntry("DEBUG", $"[AcpClient.SendRequestAsync] 开始处理请求 id={request.Id}, method={request.Method}", ErrorSeverity.Info, nameof(SendRequestAsync)));
             var tcs = new TaskCompletionSource<JsonRpcResponse>();
             _pendingRequests[request.Id] = tcs;
 
             try
             {
                 var json = _parser.SerializeMessage(request);
-               await _transport.SendMessageAsync(json, cancellationToken).ConfigureAwait(false);
+                _errorLogger.LogError(new ErrorLogEntry("DEBUG", $"[AcpClient.SendRequestAsync] 请求已序列化，长度={json.Length}, json={json.Substring(0, Math.Min(200, json.Length))}...", ErrorSeverity.Info, nameof(SendRequestAsync)));
+               _errorLogger.LogError(new ErrorLogEntry("DEBUG", "[AcpClient.SendRequestAsync] 准备调用 transport.SendMessageAsync...", ErrorSeverity.Info, nameof(SendRequestAsync)));
+               var sendResult = await _transport.SendMessageAsync(json, cancellationToken).ConfigureAwait(false);
+               _errorLogger.LogError(new ErrorLogEntry("DEBUG", $"[AcpClient.SendRequestAsync] transport.SendMessageAsync 返回: {sendResult}", ErrorSeverity.Info, nameof(SendRequestAsync)));
 
-                // 等待响应或超时
-                using (var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
-                {
-                    cts.CancelAfter(TimeSpan.FromSeconds(30));
-                    var completedTask = await Task.WhenAny(tcs.Task, Task.Delay(Timeout.Infinite, cts.Token)).ConfigureAwait(false);
+               // 等待响应或超时
+               using (var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+               {
+                   cts.CancelAfter(TimeSpan.FromSeconds(30));
+                   _errorLogger.LogError(new ErrorLogEntry("DEBUG", "[AcpClient.SendRequestAsync] 开始等待响应（30秒超时）...", ErrorSeverity.Info, nameof(SendRequestAsync)));
+                   var completedTask = await Task.WhenAny(tcs.Task, Task.Delay(Timeout.Infinite, cts.Token)).ConfigureAwait(false);
+                   _errorLogger.LogError(new ErrorLogEntry("DEBUG", $"[AcpClient.SendRequestAsync] 等待完成，完成的任务: {(completedTask == tcs.Task ? "tcs.Task" : "timeout")}", ErrorSeverity.Info, nameof(SendRequestAsync)));
                     if (completedTask == tcs.Task)
                     {
                         return await tcs.Task.ConfigureAwait(false);
@@ -461,7 +488,7 @@ namespace UnoAcpClient.Infrastructure.Client
             }
             catch (Exception ex)
             {
-                _errorLogger.LogError(new ErrorLogEntry("REQ_ERROR", $"Request {request.Id} failed: {ex.Message}", ErrorSeverity.Error, "SendRequestAsync", null, ex));
+                _errorLogger.LogError(new ErrorLogEntry("REQ_ERROR", $"[AcpClient.SendRequestAsync] Request {request.Id} failed: {ex.Message}", ErrorSeverity.Error, "SendRequestAsync", null, ex));
                 _pendingRequests.TryRemove(request.Id, out _);
                 throw;
             }
@@ -490,16 +517,25 @@ namespace UnoAcpClient.Infrastructure.Client
         /// </summary>
         private void OnMessageReceived(object? sender, MessageReceivedEventArgs e)
         {
+            _errorLogger.LogError(new ErrorLogEntry("DEBUG", $"[AcpClient.OnMessageReceived] 收到原始消息: {e.Message.Substring(0, Math.Min(200, e.Message.Length))}...", ErrorSeverity.Info, nameof(OnMessageReceived)));
             try
             {
                 var message = _parser.ParseMessage(e.Message);
+                _errorLogger.LogError(new ErrorLogEntry("DEBUG", $"[AcpClient.OnMessageReceived] 消息解析成功，类型: {message.GetType().Name}", ErrorSeverity.Info, nameof(OnMessageReceived)));
 
                 if (message is JsonRpcResponse response)
                 {
+                    _errorLogger.LogError(new ErrorLogEntry("DEBUG", $"[AcpClient.OnMessageReceived] 收到响应，id={response.Id}, 是否有错误: {response.IsError}", ErrorSeverity.Info, nameof(OnMessageReceived)));
                     // 匹配 pending 请求
                     if (_pendingRequests.TryRemove(response.Id, out var tcs))
                     {
+                        _errorLogger.LogError(new ErrorLogEntry("DEBUG", $"[AcpClient.OnMessageReceived] 找到匹配的 pending 请求，设置结果...", ErrorSeverity.Info, nameof(OnMessageReceived)));
                         tcs.TrySetResult(response);
+                        _errorLogger.LogError(new ErrorLogEntry("DEBUG", $"[AcpClient.OnMessageReceived] TaskCompletionSource 已设置结果", ErrorSeverity.Info, nameof(OnMessageReceived)));
+                    }
+                    else
+                    {
+                        _errorLogger.LogError(new ErrorLogEntry("DEBUG", $"[AcpClient.OnMessageReceived] 未找到匹配的 pending 请求 id={response.Id}", ErrorSeverity.Warning, nameof(OnMessageReceived)));
                     }
                 }
                 else if (message is JsonRpcNotification notification)

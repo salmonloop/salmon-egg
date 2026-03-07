@@ -12,10 +12,10 @@ namespace UnoAcpClient.Domain.Models.Protocol
     public class InitializeParams
     {
         /// <summary>
-        /// 协议版本号。当前版本为 1。
+        /// 协议版本号。可以是整数(1)或字符串("2024-11-05")。
         /// </summary>
         [JsonPropertyName("protocolVersion")]
-        public int ProtocolVersion { get; set; } = 1;
+        public object ProtocolVersion { get; set; } = "2024-11-05";
 
         /// <summary>
         /// 客户端信息。
@@ -173,10 +173,10 @@ namespace UnoAcpClient.Domain.Models.Protocol
     public class InitializeResponse
     {
         /// <summary>
-        /// 协议版本号。
+        /// 协议版本号。可以是整数或字符串。
         /// </summary>
         [JsonPropertyName("protocolVersion")]
-        public int ProtocolVersion { get; set; }
+        public object ProtocolVersion { get; set; } = "2024-11-05";
 
         /// <summary>
         /// Agent 信息。

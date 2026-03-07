@@ -48,5 +48,10 @@ namespace UnoAcpClient.Domain.Interfaces
         /// <param name="message">要序列化的消息</param>
         /// <returns>JSON 字符串</returns>
         string SerializeMessage(JsonRpcMessage message);
-    }
-}
+
+       /// <summary>
+       /// 获取 JsonSerializerOptions 实例供外部使用。
+       /// </summary>
+       JsonSerializerOptions Options { get; }
+       }
+   }

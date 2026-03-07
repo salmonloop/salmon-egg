@@ -16,6 +16,11 @@ namespace UnoAcpClient.Infrastructure.Serialization
         private readonly JsonSerializerOptions _options;
 
         /// <summary>
+        /// 获取 JsonSerializerOptions 实例供外部使用。
+        /// </summary>
+        public JsonSerializerOptions Options => _options;
+
+        /// <summary>
         /// 创建新的 MessageParser 实例。
         /// </summary>
         public MessageParser()

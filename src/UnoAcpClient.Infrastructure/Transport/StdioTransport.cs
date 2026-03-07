@@ -46,6 +46,9 @@ namespace UnoAcpClient.Infrastructure.Transport
         /// </summary>
         public bool IsConnected { get; private set; }
 
+        // 调试文件追踪器
+        private StreamWriter? _debugFileWriter;
+
         /// <summary>
         /// 创建新的 StdioTransport 实例。
         /// </summary>
@@ -91,6 +94,20 @@ namespace UnoAcpClient.Infrastructure.Transport
             {
                 _readCts = new CancellationTokenSource();
 
+                // 初始化调试文件写入器
+                try
+                {
+                    var debugFilePath = Path.Combine(Path.GetTempPath(), $"acp_transport_{DateTime.Now:yyyyMMdd_HHmmss}.log");
+                    _debugFileWriter = new StreamWriter(debugFilePath, false, Encoding.UTF8);
+                    _debugFileWriter.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] === ACP Transport Debug Log Started ===");
+                    _debugFileWriter.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] Command: {_command} {string.Join(" ", _args)}");
+                    _debugFileWriter.Flush();
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warning(ex, "[StdioTransport.Connect] 无法创建调试文件");
+                }
+
                 var processInfo = new ProcessStartInfo
                 {
                     FileName = _command,
@@ -111,6 +128,8 @@ namespace UnoAcpClient.Infrastructure.Transport
                 _process.Exited += OnProcessExited;
 
                 _logger.Information("[StdioTransport.Connect] 准备启动进程：{Command} {Args}", _command, processInfo.Arguments);
+                _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] CONNECT: Starting process {_command} {processInfo.Arguments}");
+                _debugFileWriter?.Flush();
 
                 // 在后台启动进程，避免阻塞 UI 线程
                 await Task.Run(() =>
@@ -131,18 +150,27 @@ namespace UnoAcpClient.Infrastructure.Transport
                     _stdout = _process.StandardOutput;
                     _stderr = _process.StandardError;
 
+                    _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] CONNECT: Process started PID={_process.Id}");
+                    _debugFileWriter?.Flush();
+
                     _logger.Information("[StdioTransport.Connect] 启动读取循环");
+
                     // 启动读取循环
                     _ = ReadLoopAsync(_readCts.Token);
                     _ = ReadErrorLoopAsync(_readCts.Token);
 
                     IsConnected = true;
+
                     _logger.Information("[StdioTransport.Connect] 连接成功，PID={Pid}", _process.Id);
+                    _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] CONNECT: Connection established");
+                    _debugFileWriter?.Flush();
                     return true;
                 }
                 else
                 {
                     _logger.Warning("[StdioTransport.Connect] 进程已退出，退出码={ExitCode}", _process.ExitCode);
+                    _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] CONNECT: Process exited immediately with code {_process.ExitCode}");
+                    _debugFileWriter?.Flush();
                     OnErrorOccurred(new TransportErrorEventArgs($"进程启动后立即退出，退出码={_process.ExitCode}"));
                     return false;
                 }
@@ -150,6 +178,8 @@ namespace UnoAcpClient.Infrastructure.Transport
             catch (Exception ex)
             {
                 _logger.Error(ex, "[StdioTransport.Connect] 启动失败");
+                _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] CONNECT-ERROR: {ex.Message}");
+                _debugFileWriter?.Flush();
                 OnErrorOccurred(new TransportErrorEventArgs($"无法启动进程：{ex.Message}", ex));
                 return false;
             }
@@ -166,40 +196,48 @@ namespace UnoAcpClient.Infrastructure.Transport
                 {
                     return true;
                 }
-
                 try
                 {
+                    // 记录断开
+                    _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] DISCONNECT");
+                    _debugFileWriter?.Flush();
+
                     // 取消读取操作
                     _readCts?.Cancel();
-
                     // 关闭标准输入
                     _stdin?.Flush();
                     _stdin?.Close();
                     _stdin?.Dispose();
-
                     // 等待进程退出
                     if (_process != null && !_process.HasExited)
-                   {
-                       try
-                       {
-                           _process.Kill();
-                           _process.WaitForExit();
-                       }
-                       catch
-                       {
-                           // 如果进程无法终止，继续执行
-                       }
-                   }
-
+                    {
+                        try
+                        {
+                            _process.Kill();
+                            _process.WaitForExit();
+                        }
+                        catch
+                        {
+                            // 如果进程无法终止，继续执行
+                        }
+                    }
                     _stdout?.Dispose();
                     _stderr?.Dispose();
                     _process?.Dispose();
+
+                    // 关闭调试文件
+                    _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] CLOSED");
+                    _debugFileWriter?.Close();
+                    _debugFileWriter?.Dispose();
+                    _debugFileWriter = null;
 
                     IsConnected = false;
                     return true;
                 }
                 catch (Exception ex)
                 {
+                    _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] DISCONNECT-ERROR: {ex.Message}");
+                    _debugFileWriter?.Flush();
                     OnErrorOccurred(new TransportErrorEventArgs($"断开连接时出错：{ex.Message}", ex));
                     return false;
                 }
@@ -219,22 +257,47 @@ namespace UnoAcpClient.Infrastructure.Transport
                 return false;
             }
 
+            // 检查进程是否已退出
+            if (_process != null && _process.HasExited)
+            {
+                _logger.Error("[StdioTransport.SendMessage] 失败：进程已退出，退出码={ExitCode}", _process.ExitCode);
+                OnErrorOccurred(new TransportErrorEventArgs($"Agent 进程已退出，退出码={_process.ExitCode}"));
+                IsConnected = false;
+                return false;
+            }
+
             try
             {
-                _logger.Verbose("[StdioTransport.SendMessage] 发送消息：{Message}", message);
+                _logger.Information("[StdioTransport.SendMessage] 发送消息：{Message}", message);
+
+                // 写入调试文件 - 绝对记录
+                _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] TX: {message}");
+                _debugFileWriter?.Flush();
 
                 // 发送消息后添加换行符
                 await _stdin.WriteAsync(message + Environment.NewLine).ConfigureAwait(false);
-                _logger.Verbose("[StdioTransport.SendMessage] 已写入，正在 Flush...");
+                _logger.Debug("[StdioTransport.SendMessage] 已写入 stdin，正在 Flush...");
+
+                // 再次记录到调试文件
+                _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] TX-WRITTEN");
+                _debugFileWriter?.Flush();
+
                 await _stdin.FlushAsync().ConfigureAwait(false);
-                _logger.Verbose("[StdioTransport.SendMessage] Flush 完成");
+                _logger.Debug("[StdioTransport.SendMessage] Flush 完成");
+
+                // 记录成功
+                _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] TX-FLUSHED");
+                _debugFileWriter?.Flush();
 
                 return true;
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "[StdioTransport.SendMessage] 发送失败");
+                _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] TX-ERROR: {ex.Message}");
+                _debugFileWriter?.Flush();
                 OnErrorOccurred(new TransportErrorEventArgs($"发送消息失败：{ex.Message}", ex));
+                IsConnected = false;
                 return false;
             }
         }
@@ -247,24 +310,36 @@ namespace UnoAcpClient.Infrastructure.Transport
             try
             {
                 _logger.Information("[StdioTransport.ReadLoop] 启动读取循环，PID={Pid}", _process?.Id);
-
-                while (!cancellationToken.IsCancellationRequested && _stdout != null && !_stdout.EndOfStream)
+                int lineCount = 0;
+                // 移除 _stdout.EndOfStream 检查，因为它是一个同步阻塞属性，会导致 ConnectAsync 被阻塞
+                while (!cancellationToken.IsCancellationRequested && _stdout != null)
                 {
                     var line = await _stdout.ReadLineAsync().ConfigureAwait(false);
-                    _logger.Verbose("[StdioTransport.ReadLoop] 收到原始行：'{Line}'", line);
+                    if (line == null)
+                    {
+                        _logger.Warning("[StdioTransport.ReadLoop] ReadLine 返回 null，流可能已结束");
+                        break;
+                    }
+                    lineCount++;
+                    _logger.Debug("[StdioTransport.ReadLoop] 第{Count}行：{Line}", lineCount, line);
 
                     if (!string.IsNullOrWhiteSpace(line))
                     {
-                        _logger.Verbose("[StdioTransport.ReadLoop] 触发 OnMessageReceived: {Line}", line);
+                        _logger.Information("[StdioTransport.ReadLoop] 触发 OnMessageReceived: {Line}", line);
+                        // 记录接收到的数据到调试文件
+                        _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] RX: {line}");
+                        _debugFileWriter?.Flush();
                         OnMessageReceived(new MessageReceivedEventArgs(line));
                     }
                     else
                     {
-                        _logger.Verbose("[StdioTransport.ReadLoop] 忽略空行");
+                        _logger.Debug("[StdioTransport.ReadLoop] 忽略空行");
                     }
                 }
-
-                _logger.Warning("[StdioTransport.ReadLoop] 读取循环结束 - EOF 或取消");
+                _logger.Warning("[StdioTransport.ReadLoop] 读取循环结束 - 共读取{Count}行，取消={Cancelled}",
+                    lineCount, cancellationToken.IsCancellationRequested);
+                _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] READ-LOOP-END: 共{lineCount}行");
+                _debugFileWriter?.Flush();
             }
             catch (OperationCanceledException)
             {
@@ -289,6 +364,7 @@ namespace UnoAcpClient.Infrastructure.Transport
                 while (!cancellationToken.IsCancellationRequested && _stderr != null)
                 {
                     var line = await _stderr.ReadLineAsync().ConfigureAwait(false);
+                    if (line == null) break;
                     _logger.Verbose("[StdioTransport.ReadError] 收到 stderr 原始行：'{Line}'", line);
 
                     if (!string.IsNullOrWhiteSpace(line))
