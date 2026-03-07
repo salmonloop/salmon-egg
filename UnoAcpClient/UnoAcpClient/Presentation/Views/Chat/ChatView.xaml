@@ -15,14 +15,14 @@
    <converters:PlanStatusToColorConverter x:Key="PlanStatusToColorConverter"/>
    <converters:TimeFormatConverter x:Key="TimeFormatConverter"/>
    </Page.Resources>
-   <Grid RowDefinitions="Auto,Auto,*,Auto">
+   <Grid RowDefinitions="Auto,Auto,*,Auto,Auto">
    <!-- 传输配置面板 (Row 0) -->
    <Border Grid.Row="0"
            Background="{ThemeResource CardBackgroundFillColorDefault}"
            BorderBrush="{ThemeResource CardBorderBrush}"
            BorderThickness="0,0,0,1"
            Padding="16"
-           Visibility="{x:Bind ViewModel.ShowTransportConfigPanel, Converter={StaticResource BoolToVisibilityConverter}}">
+           Visibility="{x:Bind ViewModel.ShowTransportConfigPanel, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
     <StackPanel Spacing="12">
      <StackPanel Orientation="Horizontal" Spacing="8">
       <TextBlock Text="连接配置" FontSize="16" FontWeight="Bold" VerticalAlignment="Center"/>
@@ -49,7 +49,7 @@
      </StackPanel>
 
      <!-- Stdio 配置 -->
-     <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.TransportConfig.IsStdio, Converter={StaticResource BoolToVisibilityConverter}}">
+     <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.TransportConfig.IsStdio, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
       <StackPanel Orientation="Horizontal" Spacing="8">
        <TextBlock Text="命令:" Width="60" VerticalAlignment="Center"/>
        <TextBox Text="{x:Bind ViewModel.TransportConfig.StdioCommand, Mode=TwoWay}"
@@ -64,7 +64,7 @@
      </StackPanel>
 
      <!-- 远程配置 (WebSocket/HTTP SSE) -->
-     <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.TransportConfig.IsWebSocket, Converter={StaticResource BoolToVisibilityConverter}}">
+     <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.TransportConfig.IsWebSocket, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
       <StackPanel Orientation="Horizontal" Spacing="8">
        <TextBlock Text="URL:" Width="60" VerticalAlignment="Center"/>
        <TextBox Text="{x:Bind ViewModel.TransportConfig.RemoteUrl, Mode=TwoWay}"
@@ -73,7 +73,7 @@
       </StackPanel>
      </StackPanel>
 
-     <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.TransportConfig.IsHttpSse, Converter={StaticResource BoolToVisibilityConverter}}">
+     <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.TransportConfig.IsHttpSse, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
       <StackPanel Orientation="Horizontal" Spacing="8">
        <TextBlock Text="URL:" Width="60" VerticalAlignment="Center"/>
        <TextBox Text="{x:Bind ViewModel.TransportConfig.RemoteUrl, Mode=TwoWay}"
@@ -83,14 +83,14 @@
      </StackPanel>
 
      <!-- 错误信息 -->
-     <TextBlock Text="{x:Bind ViewModel.ConnectionErrorMessage}"
+     <TextBlock Text="{x:Bind ViewModel.ConnectionErrorMessage, Mode=OneWay}"
                 Foreground="Red"
-                Visibility="{x:Bind ViewModel.ConnectionErrorMessage, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                Visibility="{x:Bind ViewModel.ConnectionErrorMessage, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
 
      <!-- 应用配置按钮 -->
      <Button Content="应用配置"
              Command="{x:Bind ViewModel.ApplyTransportConfigCommand}"
-             IsEnabled="{x:Bind ViewModel.IsConnecting, Converter={StaticResource InverseBooleanConverter}}"
+             IsEnabled="{x:Bind ViewModel.IsConnecting, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"
              HorizontalAlignment="Left"
              Padding="16,8"/>
     </StackPanel>
@@ -114,7 +114,7 @@
 
             <!-- 会话模式选择 -->
             <StackPanel Orientation="Horizontal" Spacing="8"
-                Visibility="{x:Bind ViewModel.IsSessionActive, Converter={StaticResource BoolToVisibilityConverter}}">
+                Visibility="{x:Bind ViewModel.IsSessionActive, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                 <TextBlock Text="当前模式:" VerticalAlignment="Center" Width="60"/>
                 <ComboBox ItemsSource="{x:Bind ViewModel.AvailableModes, Mode=OneWay}"
                     SelectedItem="{x:Bind ViewModel.SelectedMode, Mode=TwoWay}"
@@ -128,40 +128,40 @@
 
             <!-- 配置选项面板 -->
             <StackPanel Spacing="8"
-                Visibility="{x:Bind ViewModel.ShowConfigOptionsPanel, Converter={StaticResource BoolToVisibilityConverter}}">
+                Visibility="{x:Bind ViewModel.ShowConfigOptionsPanel, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                 <TextBlock Text="配置选项" FontWeight="Bold" FontSize="14"/>
                 <ItemsControl ItemsSource="{x:Bind ViewModel.ConfigOptions, Mode=OneWay}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:ConfigOptionViewModel">
                             <StackPanel Margin="0,4" Spacing="4">
-                                <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold"/>
-                                <TextBlock Text="{x:Bind Description}" FontSize="11" Foreground="Gray"
-                                    Visibility="{x:Bind Description, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                <TextBlock Text="{x:Bind Name, Mode=OneWay}" FontWeight="SemiBold"/>
+                                <TextBlock Text="{x:Bind Description, Mode=OneWay}" FontSize="11" Foreground="Gray"
+                                    Visibility="{x:Bind Description, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
 
                                 <!-- 布尔类型 - ToggleSwitch -->
-                                <ToggleSwitch Header="{x:Bind Name}"
+                                <ToggleSwitch Header="{x:Bind Name, Mode=OneWay}"
                                     IsOn="{x:Bind BoolValue, Mode=TwoWay}"
-                                    Visibility="{x:Bind IsBoolType, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                    Visibility="{x:Bind IsBoolType, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
 
                                 <!-- 选择类型 - ComboBox -->
                                 <ComboBox ItemsSource="{x:Bind Options, Mode=OneWay}"
                                     SelectedItem="{x:Bind SelectedOption, Mode=TwoWay}"
                                     DisplayMemberPath="Name"
                                     Width="200"
-                                    Visibility="{x:Bind IsSelectType, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                    Visibility="{x:Bind IsSelectType, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
 
                                 <!-- 数字类型 - NumberBox -->
                                 <NumberBox Value="{x:Bind NumberValue, Mode=TwoWay}"
-                                    Header="{x:Bind Name}"
+                                    Header="{x:Bind Name, Mode=OneWay}"
                                     Width="200"
-                                    Visibility="{x:Bind IsNumberType, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                    Visibility="{x:Bind IsNumberType, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
 
                                 <!-- 字符串类型 - TextBox -->
                                 <TextBox Text="{x:Bind TextValue, Mode=TwoWay}"
-                                    Header="{x:Bind Name}"
+                                    Header="{x:Bind Name, Mode=OneWay}"
                                     PlaceholderText="输入值..."
                                     Width="300"
-                                    Visibility="{x:Bind IsStringType, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                    Visibility="{x:Bind IsStringType, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
                             </StackPanel>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -171,11 +171,11 @@
             <!-- 错误信息 -->
             <TextBlock Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
                 Foreground="Red"
-                Visibility="{x:Bind ViewModel.ErrorMessage, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                Visibility="{x:Bind ViewModel.ErrorMessage, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
         </StackPanel>
 
         <!-- 消息历史 -->
-        <ScrollViewer Grid.Row="1" Padding="16" VerticalScrollBarVisibility="Auto">
+        <ScrollViewer Grid.Row="2" Padding="16" VerticalScrollBarVisibility="Auto">
             <ItemsControl ItemsSource="{x:Bind ViewModel.MessageHistory, Mode=OneWay}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:ChatMessageViewModel">
@@ -186,37 +186,37 @@
                                 CornerRadius="8"
                                 Padding="12">
                                 <StackPanel>
-                                    <TextBlock Text="{x:Bind Title}"
+                                    <TextBlock Text="{x:Bind Title, Mode=OneWay}"
                                         FontWeight="Bold"
                                         FontSize="12"
-                                        Visibility="{x:Bind Title, Converter={StaticResource BoolToVisibilityConverter}}"
+                                        Visibility="{x:Bind Title, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                         Margin="0,0,0,8"/>
 
                                     <!-- 文本内容 -->
-                                    <TextBlock Text="{x:Bind TextContent}"
+                                    <TextBlock Text="{x:Bind TextContent, Mode=OneWay}"
                                         TextWrapping="Wrap"
-                                        Visibility="{x:Bind HasTextContent, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                        Visibility="{x:Bind HasTextContent, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
 
                                     <!-- 工具调用信息 -->
-                                    <StackPanel Visibility="{x:Bind HasToolCall, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <StackPanel Visibility="{x:Bind HasToolCall, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                                         <StackPanel Orientation="Horizontal" Spacing="8">
                                             <TextBlock Text="工具:" FontWeight="Bold"/>
-                                            <TextBlock Text="{x:Bind ToolCallId}"/>
+                                            <TextBlock Text="{x:Bind ToolCallId, Mode=OneWay}"/>
                                         </StackPanel>
                                         <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
                                             <TextBlock Text="类型:" FontWeight="Bold"/>
-                                            <TextBlock Text="{x:Bind ToolCallKind}"/>
+                                            <TextBlock Text="{x:Bind ToolCallKind, Mode=OneWay}"/>
                                         </StackPanel>
                                         <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
                                             <TextBlock Text="状态:" FontWeight="Bold"/>
-                                            <TextBlock Text="{x:Bind ToolCallStatus}"/>
+                                            <TextBlock Text="{x:Bind ToolCallStatus, Mode=OneWay}"/>
                                         </StackPanel>
                                     </StackPanel>
 
                                     <!-- 计划条目信息 -->
-                                    <StackPanel Visibility="{x:Bind HasPlanEntry, Converter={StaticResource BoolToVisibilityConverter}}">
-                                    <TextBlock Text="{x:Bind PlanEntry.StatusDisplayName}" Foreground="Blue"/>
-                                    <TextBlock Text="{x:Bind PlanEntry.Content}" Margin="0,4,0,0"/>
+                                    <StackPanel Visibility="{x:Bind HasPlanEntry, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <TextBlock Text="{x:Bind PlanEntry.StatusDisplayName, Mode=OneWay}" Foreground="Blue"/>
+                                    <TextBlock Text="{x:Bind PlanEntry.Content, Mode=OneWay}" Margin="0,4,0,0"/>
                                     </StackPanel>
 
                                     <!-- 资源内容块 -->
@@ -224,11 +224,11 @@
                                     CornerRadius="4"
                                     Padding="8"
                                     Margin="0,4,0,0"
-                                    Visibility="{x:Bind HasResourceContent, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    Visibility="{x:Bind HasResourceContent, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                                     <StackPanel Spacing="4">
-                                    <TextBlock Text="{x:Bind ResourceViewModel.DisplayTitle}" FontWeight="Bold" FontSize="12"/>
-                                    <TextBlock Text="{x:Bind ResourceViewModel.Uri}" FontSize="9" Foreground="Gray" TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock Text="{x:Bind ResourceViewModel.Content}" TextWrapping="Wrap" FontFamily="Consolas" FontSize="10" MaxHeight="150"/>
+                                    <TextBlock Text="{x:Bind ResourceViewModel.DisplayTitle, Mode=OneWay}" FontWeight="Bold" FontSize="12"/>
+                                    <TextBlock Text="{x:Bind ResourceViewModel.Uri, Mode=OneWay}" FontSize="9" Foreground="Gray" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{x:Bind ResourceViewModel.Content, Mode=OneWay}" TextWrapping="Wrap" FontFamily="Consolas" FontSize="10" MaxHeight="150"/>
                                     </StackPanel>
                                     </Border>
 
@@ -237,17 +237,17 @@
                                     CornerRadius="4"
                                     Padding="8"
                                     Margin="0,4,0,0"
-                                    Visibility="{x:Bind HasResourceLink, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    Visibility="{x:Bind HasResourceLink, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                                     <StackPanel Spacing="4">
-                                    <TextBlock Text="{x:Bind ResourceViewModel.DisplayTitle}" FontWeight="Bold" FontSize="12"/>
-                                    <TextBlock Text="{x:Bind ResourceViewModel.Uri}" FontSize="9" Foreground="Gray" TextTrimming="CharacterEllipsis"/>
-                                    <HyperlinkButton Content="{x:Bind ResourceViewModel.LinkText}" NavigateUri="{x:Bind ResourceViewModel.Uri}"/>
+                                    <TextBlock Text="{x:Bind ResourceViewModel.DisplayTitle, Mode=OneWay}" FontWeight="Bold" FontSize="12"/>
+                                    <TextBlock Text="{x:Bind ResourceViewModel.Uri, Mode=OneWay}" FontSize="9" Foreground="Gray" TextTrimming="CharacterEllipsis"/>
+                                    <HyperlinkButton Content="{x:Bind ResourceViewModel.LinkText, Mode=OneWay}" NavigateUri="{x:Bind ResourceViewModel.Uri, Mode=OneWay}"/>
                                     </StackPanel>
                                     </Border>
 
-                                    <TextBlock Text="{x:Bind Timestamp, Converter={StaticResource TimeFormatConverter}}" FontSize="10" Opacity="0.6" Margin="0,8,0,0" HorizontalAlignment="Right"/>
+                                    <TextBlock Text="{x:Bind Timestamp, Mode=OneWay, Converter={StaticResource TimeFormatConverter}}" FontSize="10" Opacity="0.6" Margin="0,8,0,0" HorizontalAlignment="Right"/>
 
-                                    <TextBlock Text="{x:Bind Timestamp, Converter={StaticResource TimeFormatConverter}}"
+                                    <TextBlock Text="{x:Bind Timestamp, Mode=OneWay, Converter={StaticResource TimeFormatConverter}}"
                                         FontSize="10"
                                         Opacity="0.6"
                                         Margin="0,8,0,0"
@@ -261,12 +261,12 @@
         </ScrollViewer>
 
         <!-- 计划面板 -->
-        <Border Grid.Row="2"
+        <Border Grid.Row="3"
             Background="{ThemeResource CardBackgroundFillColorDefault}"
             BorderBrush="{ThemeResource CardBorderBrush}"
             BorderThickness="0,1,0,0"
             Padding="16"
-            Visibility="{x:Bind ViewModel.ShowPlanPanel, Converter={StaticResource BoolToVisibilityConverter}}">
+            Visibility="{x:Bind ViewModel.ShowPlanPanel, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
             <StackPanel Spacing="8">
                 <TextBlock Text="Agent 计划" FontWeight="Bold" FontSize="16"/>
                 <ItemsControl ItemsSource="{x:Bind ViewModel.CurrentPlan, Mode=OneWay}">
@@ -274,10 +274,10 @@
                         <DataTemplate x:DataType="vm:PlanEntryViewModel">
                             <StackPanel Margin="0,4" Spacing="4">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Text="{x:Bind StatusDisplayName}"
-                                        Foreground="{x:Bind Status, Converter={StaticResource PlanStatusToColorConverter}}"/>
-                                    <TextBlock Text="{x:Bind PriorityDisplayName}" FontStyle="Italic"/>
-                                    <TextBlock Text="{x:Bind Content}" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{x:Bind StatusDisplayName, Mode=OneWay}"
+                                        Foreground="{x:Bind Status, Mode=OneWay, Converter={StaticResource PlanStatusToColorConverter}}"/>
+                                    <TextBlock Text="{x:Bind PriorityDisplayName, Mode=OneWay}" FontStyle="Italic"/>
+                                    <TextBlock Text="{x:Bind Content, Mode=OneWay}" TextWrapping="Wrap"/>
                                 </StackPanel>
                             </StackPanel>
                         </DataTemplate>
@@ -287,11 +287,11 @@
         </Border>
 
         <!-- 消息输入 -->
-        <StackPanel Grid.Row="2"
+        <StackPanel Grid.Row="4"
             Padding="16"
             Orientation="Vertical"
             Spacing="8"
-            Visibility="{x:Bind ViewModel.IsSessionActive, Converter={StaticResource BoolToVisibilityConverter}}"
+            Visibility="{x:Bind ViewModel.IsSessionActive, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
             Margin="0,16,0,0">
             <TextBox PlaceholderText="输入消息..."
                 Text="{x:Bind ViewModel.CurrentPrompt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -308,15 +308,15 @@
         </StackPanel>
 
         <!-- 初始化和连接按钮 -->
-        <StackPanel Grid.Row="2"
+        <StackPanel Grid.Row="4"
             Padding="16"
             Orientation="Horizontal"
             Spacing="8"
-            Visibility="{x:Bind ViewModel.IsSessionActive, Converter={StaticResource InverseBoolConverter}}"
+            Visibility="{x:Bind ViewModel.IsSessionActive, Mode=OneWay, Converter={StaticResource InverseBoolConverter}}"
             Margin="0,16,0,0">
             <Button Content="创建新会话"
                 Command="{x:Bind ViewModel.CreateNewSessionCommand}"
-                IsEnabled="{x:Bind ViewModel.IsConnecting, Converter={StaticResource InverseBooleanConverter}}"/>
+                IsEnabled="{x:Bind ViewModel.IsConnecting, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"/>
         </StackPanel>
     </Grid>
 </Page>
