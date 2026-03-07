@@ -8,14 +8,12 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
-
-    mc:Ignorable="d" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
    <Page.Resources>
    <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
    <converters:InverseBoolConverter x:Key="InverseBoolConverter"/>
+   <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
    <converters:PlanStatusToColorConverter x:Key="PlanStatusToColorConverter"/>
    <converters:TimeFormatConverter x:Key="TimeFormatConverter"/>
-   <converters:InverseBoolConverter x:Key="InverseBoolConverter"/>
    </Page.Resources>
    <Grid RowDefinitions="Auto,Auto,*,Auto">
    <!-- 传输配置面板 (Row 0) -->
@@ -89,10 +87,10 @@
                 Foreground="Red"
                 Visibility="{x:Bind ViewModel.ConnectionErrorMessage, Converter={StaticResource BoolToVisibilityConverter}}"/>
 
-     <!-- 连接按钮 -->
-     <Button Content="{x:Bind ViewModel.IsConnecting, Converter={StaticResource InverseBoolConverter}, FallbackValue='连接中...'}"
+     <!-- 应用配置按钮 -->
+     <Button Content="应用配置"
              Command="{x:Bind ViewModel.ApplyTransportConfigCommand}"
-             IsEnabled="{x:Bind ViewModel.IsConnecting, Converter={StaticResource InverseBoolConverter}}"
+             IsEnabled="{x:Bind ViewModel.IsConnecting, Converter={StaticResource InverseBooleanConverter}}"
              HorizontalAlignment="Left"
              Padding="16,8"/>
     </StackPanel>
@@ -126,6 +124,48 @@
                 <Button Content="应用模式"
                     Command="{x:Bind ViewModel.SetModeCommand}"
                     CommandParameter="{x:Bind ViewModel.SelectedMode, Mode=OneWay}"/>
+            </StackPanel>
+
+            <!-- 配置选项面板 -->
+            <StackPanel Spacing="8"
+                Visibility="{x:Bind ViewModel.ShowConfigOptionsPanel, Converter={StaticResource BoolToVisibilityConverter}}">
+                <TextBlock Text="配置选项" FontWeight="Bold" FontSize="14"/>
+                <ItemsControl ItemsSource="{x:Bind ViewModel.ConfigOptions, Mode=OneWay}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ConfigOptionViewModel">
+                            <StackPanel Margin="0,4" Spacing="4">
+                                <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold"/>
+                                <TextBlock Text="{x:Bind Description}" FontSize="11" Foreground="Gray"
+                                    Visibility="{x:Bind Description, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                                <!-- 布尔类型 - ToggleSwitch -->
+                                <ToggleSwitch Header="{x:Bind Name}"
+                                    IsOn="{x:Bind BoolValue, Mode=TwoWay}"
+                                    Visibility="{x:Bind IsBoolType, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                                <!-- 选择类型 - ComboBox -->
+                                <ComboBox ItemsSource="{x:Bind Options, Mode=OneWay}"
+                                    SelectedItem="{x:Bind SelectedOption, Mode=TwoWay}"
+                                    DisplayMemberPath="Name"
+                                    Width="200"
+                                    Visibility="{x:Bind IsSelectType, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                                <!-- 数字类型 - NumberBox -->
+                                <NumberBox Value="{x:Bind NumberValue, Mode=TwoWay}"
+                                    Header="{x:Bind Name}"
+                                    Width="200"
+                                    Visibility="{x:Bind IsNumberType, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                                <!-- 字符串类型 - TextBox -->
+                                <TextBox Text="{x:Bind TextValue, Mode=TwoWay}"
+                                    Header="{x:Bind Name}"
+                                    PlaceholderText="输入值..."
+                                    Width="300"
+                                    Visibility="{x:Bind IsStringType, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </StackPanel>
 
             <!-- 错误信息 -->
@@ -274,12 +314,9 @@
             Spacing="8"
             Visibility="{x:Bind ViewModel.IsSessionActive, Converter={StaticResource InverseBoolConverter}}"
             Margin="0,16,0,0">
-            <Button Content="初始化并连接"
-                Command="{x:Bind ViewModel.InitializeAndConnectCommand}"
-                IsEnabled="{x:Bind ViewModel.IsInitializing, Converter={StaticResource InverseBoolConverter}}"/>
             <Button Content="创建新会话"
                 Command="{x:Bind ViewModel.CreateNewSessionCommand}"
-                IsEnabled="{x:Bind ViewModel.IsConnecting, Converter={StaticResource InverseBoolConverter}}"/>
+                IsEnabled="{x:Bind ViewModel.IsConnecting, Converter={StaticResource InverseBooleanConverter}}"/>
         </StackPanel>
     </Grid>
 </Page>

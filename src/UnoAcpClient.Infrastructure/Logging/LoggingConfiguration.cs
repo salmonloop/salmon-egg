@@ -17,7 +17,7 @@ public static class LoggingConfiguration
     /// <param name="appDataPath">应用数据目录路径（平台特定）</param>
     /// <param name="enableDebugMode">是否启用调试模式（记录详细的网络通信）</param>
     /// <returns>配置好的 ILogger 实例</returns>
-    public static ILogger ConfigureLogging(string appDataPath, bool enableDebugMode = false)
+    public static ILogger ConfigureLogging(string appDataPath, bool enableDebugMode = true)
     {
         // 确保日志目录存在 (Requirement 6.4)
         var logDirectory = Path.Combine(appDataPath, "logs");
@@ -29,13 +29,14 @@ public static class LoggingConfiguration
         var logPath = Path.Combine(logDirectory, "app-.log");
 
         // 根据调试模式设置日志级别 (Requirement 6.2, 6.3)
-        var minimumLevel = enableDebugMode ? LogEventLevel.Debug : LogEventLevel.Information;
+        // 默认启用 Verbose 级别以查看完整的传输层调试信息
+        var minimumLevel = enableDebugMode ? LogEventLevel.Verbose : LogEventLevel.Information;
 
         return new LoggerConfiguration()
             // 配置日志级别 (Requirement 6.2)
             .MinimumLevel.Is(minimumLevel)
-            .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
-            .MinimumLevel.Override("System", LogEventLevel.Information)
+            .MinimumLevel.Override("Microsoft", LogEventLevel.Debug)
+            .MinimumLevel.Override("System", LogEventLevel.Debug)
             // 添加上下文信息 (Requirement 6.1)
             .Enrich.FromLogContext()
             .Enrich.WithThreadId()
@@ -64,9 +65,9 @@ public static class LoggingConfiguration
         // Android: /data/data/com.example.unoacpclient/files
         // macOS: ~/Library/Application Support/UnoAcpClient
         // WebAssembly: 使用浏览器的 LocalStorage（不适用于文件日志）
-        
+
         var appName = "UnoAcpClient";
-        
+
 #if WINDOWS
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         return Path.Combine(localAppData, appName);

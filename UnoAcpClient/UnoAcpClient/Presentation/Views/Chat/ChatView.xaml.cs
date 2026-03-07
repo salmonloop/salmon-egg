@@ -8,11 +8,14 @@ namespace UnoAcpClient.Presentation.Views.Chat
     {
         public ChatViewModel ViewModel { get; }
 
-        public ChatView()
+        public ChatView() : this(null)
+        {
+        }
+
+        public ChatView(ChatViewModel? viewModel)
         {
             InitializeComponent();
-            // 注意：在 Uno Platform 中使用 x:Bind 时，ViewModel 通常在 XAML 中设置
-            // 或者在依赖注入容器中注册并在 App.xaml.cs 中注入
+            ViewModel = viewModel ?? App.ServiceProvider.GetRequiredService<ChatViewModel>();
         }
 
         private void OnTransportTypeChanged(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)

@@ -1,11 +1,9 @@
 using FluentValidation;
-using UnoAcpClient.Infrastructure.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using UnoAcpClient.Application.Services;
 using UnoAcpClient.Application.Services.Chat;
-using UnoAcpClient.Domain.Interfaces;
 using UnoAcpClient.Application.UseCases;
 using UnoAcpClient.Application.Validators;
 using UnoAcpClient.Domain.Interfaces;
@@ -13,7 +11,6 @@ using UnoAcpClient.Domain.Interfaces.Transport;
 using UnoAcpClient.Domain.Models;
 using UnoAcpClient.Domain.Services;
 using UnoAcpClient.Domain.Services.Security;
-using UnoAcpClient.Infrastructure.Client;
 using UnoAcpClient.Infrastructure.Logging;
 using UnoAcpClient.Infrastructure.Network;
 using UnoAcpClient.Infrastructure.Serialization;
@@ -21,6 +18,7 @@ using UnoAcpClient.Infrastructure.Services;
 using UnoAcpClient.Infrastructure.Services.Security;
 using UnoAcpClient.Infrastructure.Storage;
 using UnoAcpClient.Infrastructure.Transport;
+using UnoAcpClient.Infrastructure.Client;
 using UnoAcpClient.Presentation.ViewModels;
 using UnoAcpClient.Presentation.ViewModels.Chat;
 
@@ -117,13 +115,7 @@ public static class DependencyInjection
         // 传输层工厂
         services.AddSingleton<UnoAcpClient.Domain.Interfaces.ITransportFactory, TransportFactory>();
 
-        // Stdio 传输层 (默认，使用 Infrastructure.Transport 命名空间中的 StdioTransport)
-        // 注意：此单例主要用于向后兼容，实际运行时应通过 ITransportFactory 创建
-        services.AddSingleton<Domain.Interfaces.Transport.ITransport>(sp =>
-        {
-            var logger = sp.GetRequiredService<Serilog.ILogger>();
-            return new StdioTransport("agent-command", Array.Empty<string>(), logger);
-        });
+
         }
 
     private static void RegisterApplicationServices(IServiceCollection services)

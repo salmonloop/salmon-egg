@@ -15,7 +15,6 @@ using UnoAcpClient.Domain.Models.Tool;
 using UnoAcpClient.Domain.Services;
 using UnoAcpClient.Domain.Services.Security;
 using UnoAcpClient.Infrastructure.Serialization;
-using UnoAcpClient.Domain.Services;
 using UnoAcpClient.Infrastructure.Logging;
 namespace UnoAcpClient.Infrastructure.Client
 {
@@ -118,20 +117,29 @@ namespace UnoAcpClient.Infrastructure.Client
         /// <summary>
         /// 初始化与 Agent 的连接。
         /// </summary>
-        public async Task<InitializeResponse> InitializeAsync(InitializeParams @params, CancellationToken cancellationToken = default)
-        {
-            if (_isInitialized)
-            {
-                throw new InvalidOperationException("客户端已初始化");
-            }
+       public async Task<InitializeResponse> InitializeAsync(InitializeParams @params, CancellationToken cancellationToken = default)
+           {
+               if (_isInitialized)
+               {
+                   throw new InvalidOperationException("客户端已初始化");
+               }
 
-            // 发送 initialize 请求
-            var request = new JsonRpcRequest(
-                Interlocked.Increment(ref _nextMessageId),
-                "initialize",
-                JsonSerializer.SerializeToElement(@params, typeof(InitializeParams), _parser.GetType().Assembly.GetType("System.Text.Json.JsonSerializerOptions") != null ? new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase } : null));
+               // 确保传输层已连接
+              if (!_transport.IsConnected)
+              {
+                  var connected = await _transport.ConnectAsync(cancellationToken).ConfigureAwait(false);
+                  if (!connected)
+                  {
+                      throw new InvalidOperationException("无法连接到传输层");
+                  }
+              }
 
-            var response = await SendRequestAsync(request, cancellationToken);
+               // 发送 initialize 请求
+               var request = new JsonRpcRequest(
+                   Interlocked.Increment(ref _nextMessageId),
+                   "initialize",
+                   JsonSerializer.SerializeToElement(@params, typeof(InitializeParams), _parser.GetType().Assembly.GetType("System.Text.Json.JsonSerializerOptions") != null ? new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase } : null));
+               var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
 
             // 验证响应
             var validationResult = _validator.ValidateResponse(response);
@@ -146,7 +154,7 @@ namespace UnoAcpClient.Infrastructure.Client
             }
 
             // 解析响应
-            var initializeResponse = JsonSerializer.Deserialize<InitializeResponse>(response.Result!.Value.GetRawText());
+            var initializeResponse = JsonSerializer.Deserialize<InitializeResponse>(response.Result!.Value.GetRawText(), _parser.GetType().Assembly.GetType("System.Text.Json.JsonSerializerOptions") != null ? new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase } : null);
             if (initializeResponse == null)
             {
                 throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse initialize response");
@@ -188,7 +196,7 @@ namespace UnoAcpClient.Infrastructure.Client
                 "session/new",
                 JsonSerializer.SerializeToElement(@params, typeof(SessionNewParams)));
 
-            var response = await SendRequestAsync(request, cancellationToken);
+            var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
 
             if (response.IsError)
             {
@@ -202,7 +210,7 @@ namespace UnoAcpClient.Infrastructure.Client
             }
 
             // 创建会话记录
-            await _sessionManager.CreateSessionAsync(sessionNewResponse.SessionId, @params.Cwd);
+            await _sessionManager.CreateSessionAsync(sessionNewResponse.SessionId, @params.Cwd).ConfigureAwait(false);
 
             return sessionNewResponse;
         }
@@ -219,7 +227,7 @@ namespace UnoAcpClient.Infrastructure.Client
                 "session/load",
                 JsonSerializer.SerializeToElement(@params, typeof(SessionLoadParams)));
 
-            var response = await SendRequestAsync(request, cancellationToken);
+            var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
 
             if (response.IsError)
             {
@@ -249,7 +257,7 @@ namespace UnoAcpClient.Infrastructure.Client
                 "session/prompt",
                 JsonSerializer.SerializeToElement(@params, typeof(SessionPromptParams)));
 
-            var response = await SendRequestAsync(request, cancellationToken);
+            var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
 
             if (response.IsError)
             {
@@ -277,7 +285,7 @@ namespace UnoAcpClient.Infrastructure.Client
                 "session/set_mode",
                 JsonSerializer.SerializeToElement(@params, typeof(SessionSetModeParams)));
 
-            var response = await SendRequestAsync(request, cancellationToken);
+            var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
 
             if (response.IsError)
             {
@@ -311,7 +319,7 @@ namespace UnoAcpClient.Infrastructure.Client
                 "session/set_config_option",
                 JsonSerializer.SerializeToElement(@params, typeof(SessionSetConfigOptionParams)));
 
-            var response = await SendRequestAsync(request, cancellationToken);
+            var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
 
             if (response.IsError)
             {
@@ -353,7 +361,7 @@ namespace UnoAcpClient.Infrastructure.Client
             }
 
             // 更新会话状态
-            await _sessionManager.CancelSessionAsync(@params.SessionId, @params.Reason);
+            await _sessionManager.CancelSessionAsync(@params.SessionId, @params.Reason).ConfigureAwait(false);
 
             return cancelResponse;
         }
@@ -392,7 +400,7 @@ namespace UnoAcpClient.Infrastructure.Client
         public async Task<bool> RespondToPermissionRequestAsync(object messageId, string outcome, string? optionId = null)
         {
             var response = new JsonRpcResponse(messageId, JsonSerializer.SerializeToElement(new { outcome, optionId }));
-            return await SendResponseAsync(response);
+            return await SendResponseAsync(response).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -408,7 +416,7 @@ namespace UnoAcpClient.Infrastructure.Client
             };
 
             var response = new JsonRpcResponse(messageId, JsonSerializer.SerializeToElement(result));
-            return await SendResponseAsync(response);
+            return await SendResponseAsync(response).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -433,16 +441,16 @@ namespace UnoAcpClient.Infrastructure.Client
             try
             {
                 var json = _parser.SerializeMessage(request);
-                await _transport.SendMessageAsync(json, cancellationToken);
+               await _transport.SendMessageAsync(json, cancellationToken).ConfigureAwait(false);
 
                 // 等待响应或超时
                 using (var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
                 {
                     cts.CancelAfter(TimeSpan.FromSeconds(30));
-                    var completedTask = await Task.WhenAny(tcs.Task, Task.Delay(Timeout.Infinite, cts.Token));
+                    var completedTask = await Task.WhenAny(tcs.Task, Task.Delay(Timeout.Infinite, cts.Token)).ConfigureAwait(false);
                     if (completedTask == tcs.Task)
                     {
-                        return await tcs.Task;
+                        return await tcs.Task.ConfigureAwait(false);
                     }
                     else
                     {
@@ -467,7 +475,7 @@ namespace UnoAcpClient.Infrastructure.Client
             try
             {
                 var json = _parser.SerializeMessage(response);
-                await _transport.SendMessageAsync(json);
+                await _transport.SendMessageAsync(json).ConfigureAwait(false);
                 return true;
             }
             catch (Exception ex)

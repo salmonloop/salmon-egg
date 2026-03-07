@@ -52,6 +52,24 @@ public partial class ResourceViewModel : ObservableObject
     private string? _description;
 
     /// <summary>
+    /// 资源大小（字节）
+    /// </summary>
+    [ObservableProperty]
+    private long? _size;
+
+    /// <summary>
+    /// 是否为文本类型资源
+    /// </summary>
+    [ObservableProperty]
+    private bool _isTextResource;
+
+    /// <summary>
+    /// 是否为二进制类型资源
+    /// </summary>
+    [ObservableProperty]
+    private bool _isBinaryResource;
+
+    /// <summary>
     /// 获取资源的显示标题
     /// </summary>
     public string DisplayTitle => !string.IsNullOrEmpty(Title) ? Title : (!string.IsNullOrEmpty(Name) ? Name : Uri);
@@ -71,20 +89,84 @@ public partial class ResourceViewModel : ObservableObject
     /// </summary>
     public string GetDisplayContent() => IsResourceContent ? Content : LinkText;
 
+    /// <summary>
+    /// 获取资源大小的显示文本
+    /// </summary>
+    public string SizeDisplay => Size.HasValue ? FormatSize(Size.Value) : string.Empty;
+
+    /// <summary>
+    /// 获取资源类型的图标
+    /// </summary>
+    public string TypeIcon => MimeType switch
+    {
+        var m when m.StartsWith("image/") => "🖼️",
+        var m when m.StartsWith("video/") => "🎬",
+        var m when m.StartsWith("audio/") => "🎵",
+        var m when m.StartsWith("text/") => "📄",
+        var m when m.Contains("json") => "📋",
+        var m when m.Contains("pdf") => "📕",
+        _ => "📎"
+    };
+
+    /// <summary>
+    /// 格式化文件大小
+    /// </summary>
+    private static string FormatSize(long bytes)
+    {
+        string[] suffixes = { "B", "KB", "MB", "GB", "TB" };
+        int i = 0;
+        double size = bytes;
+        while (size >= 1024 && i < suffixes.Length - 1)
+        {
+            size /= 1024;
+            i++;
+        }
+        return $"{size:F2} {suffixes[i]}";
+    }
+
    /// <summary>
    /// 从 ResourceContentBlock 创建 ResourceViewModel
    /// </summary>
    public static ResourceViewModel CreateFromContent(ResourceContentBlock block)
    {
+       var resource = block.Resource;
+       var isText = resource.IsText;
+       var content = resource.Text ?? resource.Blob ?? string.Empty;
+
        return new ResourceViewModel
        {
-           Uri = block.Resource.Uri,
-           Name = "Unknown Resource",
-           MimeType = block.Resource.MimeType ?? "text/plain",
-           Content = block.Resource.Text ?? block.Resource.Blob ?? string.Empty,
-           Title = "Resource Content",
-           Description = null
+           Uri = resource.Uri,
+           Name = ExtractNameFromUri(resource.Uri),
+           MimeType = resource.MimeType ?? "text/plain",
+           Content = content,
+           Title = "资源内容",
+           Description = null,
+           IsTextResource = isText,
+           IsBinaryResource = resource.IsBinary,
+           Size = content.Length
        };
+   }
+
+   /// <summary>
+   /// 从 URI 中提取名称
+   /// </summary>
+   private static string ExtractNameFromUri(string uri)
+   {
+       if (string.IsNullOrEmpty(uri)) return "Unknown Resource";
+
+       try
+       {
+           var lastSlash = uri.LastIndexOf('/');
+           if (lastSlash >= 0 && lastSlash < uri.Length - 1)
+           {
+               return uri.Substring(lastSlash + 1);
+           }
+           return uri;
+       }
+       catch
+       {
+           return "Unknown Resource";
+       }
    }
 
    /// <summary>
@@ -95,11 +177,14 @@ public partial class ResourceViewModel : ObservableObject
        return new ResourceViewModel
        {
            Uri = block.Uri,
-           Name = block.Name ?? "Resource Link",
+           Name = block.Name ?? ExtractNameFromUri(block.Uri),
            MimeType = block.MimeType ?? string.Empty,
            LinkText = block.Name ?? block.Uri,
-           Title = block.Title ?? "Link",
-           Description = block.Description
+           Title = block.Title ?? "资源链接",
+           Description = block.Description,
+           Size = block.Size,
+           IsTextResource = false,
+           IsBinaryResource = false
        };
    }
 }

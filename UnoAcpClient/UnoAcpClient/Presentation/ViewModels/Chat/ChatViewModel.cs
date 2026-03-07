@@ -6,27 +6,26 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using UnoAcpClient.Application.Services.Chat;
+using UnoAcpClient.Domain.Interfaces;
+using UnoAcpClient.Domain.Interfaces.Transport;
 using UnoAcpClient.Domain.Models;
 using UnoAcpClient.Domain.Models.Content;
 using UnoAcpClient.Domain.Models.Protocol;
 using UnoAcpClient.Domain.Models.Session;
 using UnoAcpClient.Domain.Services;
 
-   namespace UnoAcpClient.Presentation.ViewModels.Chat
-   {
-       /// <summary>
-       /// Chat ViewModel，管理会话、消息显示、权限请求等 UI 逻辑
-       /// 这是重构后的主要 ViewModel，使用新的 ACP 协议 API
-       /// </summary>
-       public partial class ChatViewModel : ViewModelBase, IDisposable
-       {
-           private readonly IChatService _chatService;
-           private readonly ICapabilityManager _capabilityManager;
-           private readonly IMessageParser _messageParser;
-           private readonly IMessageValidator _messageValidator;
-           private readonly IErrorLogger _errorLogger;
-           private readonly SynchronizationContext _syncContext;
-           private bool _disposed;
+namespace UnoAcpClient.Presentation.ViewModels.Chat
+{
+    /// <summary>
+    /// Chat ViewModel，管理会话、消息显示、权限请求等 UI 逻辑
+    /// 这是重构后的主要 ViewModel，使用新的 ACP 协议 API
+    /// </summary>
+    public partial class ChatViewModel : ViewModelBase, IDisposable
+    {
+        private readonly ChatServiceFactory _chatServiceFactory;
+        private IChatService _chatService;
+        private readonly SynchronizationContext _syncContext;
+        private bool _disposed;
 
         [ObservableProperty]
         private ObservableCollection<ChatMessageViewModel> _messageHistory = new();
@@ -49,27 +48,34 @@ using UnoAcpClient.Domain.Services;
         [ObservableProperty]
         private bool _isInitializing;
 
-       [ObservableProperty]
-       private bool _isConnecting;
+        [ObservableProperty]
+        private bool _isConnecting;
 
-       // 传输配置
-       [ObservableProperty]
-       private TransportConfigViewModel _transportConfig = new();
+        // 传输配置
+        [ObservableProperty]
+        private TransportConfigViewModel _transportConfig = new();
 
-       [ObservableProperty]
-       private bool _showTransportConfigPanel = true;
+        [ObservableProperty]
+        private bool _showTransportConfigPanel = true;
 
-       [ObservableProperty]
-       private string? _connectionErrorMessage;
+        [ObservableProperty]
+        private string? _connectionErrorMessage;
 
-       [ObservableProperty]
-       private bool _isConnected;
+        [ObservableProperty]
+        private bool _isConnected;
 
-       [ObservableProperty]
-       private ObservableCollection<SessionModeViewModel> _availableModes = new();
+        [ObservableProperty]
+        private ObservableCollection<SessionModeViewModel> _availableModes = new();
 
         [ObservableProperty]
         private SessionModeViewModel? _selectedMode;
+
+        // 配置选项
+        [ObservableProperty]
+        private ObservableCollection<ConfigOptionViewModel> _configOptions = new();
+
+        [ObservableProperty]
+        private bool _showConfigOptionsPanel;
 
         [ObservableProperty]
         private ObservableCollection<PlanEntryViewModel> _currentPlan = new();
@@ -91,189 +97,129 @@ using UnoAcpClient.Domain.Services;
 
         public string? CurrentConnectionStatus { get; private set; }
 
-                  public ChatViewModel(
-                      IChatService chatService,
-                      ICapabilityManager capabilityManager,
-                      IMessageParser messageParser,
-                      IMessageValidator messageValidator,
-                      IErrorLogger errorLogger,
-                      ILogger<ChatViewModel> logger) : base(logger)
-                  {
-                      _chatService = chatService ?? throw new ArgumentNullException(nameof(chatService));
-                      _capabilityManager = capabilityManager ?? throw new ArgumentNullException(nameof(capabilityManager));
-                      _messageParser = messageParser ?? throw new ArgumentNullException(nameof(messageParser));
-                      _messageValidator = messageValidator ?? throw new ArgumentNullException(nameof(messageValidator));
-                      _errorLogger = errorLogger ?? throw new ArgumentNullException(nameof(errorLogger));
-                      _syncContext = SynchronizationContext.Current ?? new SynchronizationContext();
+        public ChatViewModel(
+            ChatServiceFactory chatServiceFactory,
+            ILogger<ChatViewModel> logger)
+            : base(logger)
+        {
+            _chatServiceFactory = chatServiceFactory ?? throw new ArgumentNullException(nameof(chatServiceFactory));
+            _syncContext = SynchronizationContext.Current ?? new SynchronizationContext();
 
-                      // 订阅事件
-                      SubscribeToEvents();
-                  }
+            // 创建默认 ChatService 实例
+            // 延迟创建 ChatService，等待用户配置
+        // _chatService = _chatServiceFactory.CreateDefaultChatService();
 
-       [RelayCommand]
-       private async Task ApplyTransportConfigAsync()
-       {
-           var (isValid, errorMessage) = TransportConfig.Validate();
+            // 订阅事件
+            SubscribeToEvents();
+        }
 
-           if (!isValid)
-           {
-               ConnectionErrorMessage = errorMessage;
-               return;
-           }
+        [RelayCommand]
+            private async Task ApplyTransportConfigAsync()
+            {
+                var (isValid, errorMessage) = TransportConfig.Validate();
+                if (!isValid)
+                {
+                    ConnectionErrorMessage = errorMessage;
+                    return;
+                }
 
-           ConnectionErrorMessage = null;
-           IsConnecting = true;
-
-           try
-           {
-               Logger.LogInformation("应用传输配置：{TransportType}", TransportConfig.SelectedTransportType);
-
-               // 断开当前连接
-               if (_chatService.IsConnected || _chatService.IsInitialized)
-               {
-                   try
-                   {
-                       await _chatService.DisconnectAsync();
-                   }
-                   catch (Exception ex)
-                   {
-                       Logger.LogWarning(ex, "断开旧连接时出错");
-                   }
-               }
-
-               Logger.LogInformation("正在创建新的传输层：{TransportType}", TransportConfig.SelectedTransportType);
-
+                ConnectionErrorMessage = null;
+                IsConnecting = true;
                try
                {
-                   // 创建传输层
-                   ITransport transport = TransportConfig.SelectedTransportType switch
+                   Logger.LogInformation("应用传输配置：{TransportType}", TransportConfig.SelectedTransportType);
+                   Logger.LogInformation("TransportConfig 当前值 - StdioCommand: '{StdioCommand}', StdioArgs: '{StdioArgs}', RemoteUrl: '{RemoteUrl}'",
+                       TransportConfig.StdioCommand, TransportConfig.StdioArgs, TransportConfig.RemoteUrl);
+
+                   // 使用 ChatServiceFactory 根据用户配置重新创建 ChatService
+                   // 1. 根据传输类型创建新的 ChatService 实例
+                   IChatService newChatService;
+                   switch (TransportConfig.SelectedTransportType)
                    {
-                       TransportType.Stdio => CreateStdioTransport(),
-                       TransportType.WebSocket => CreateWebSocketTransport(),
-                       TransportType.HttpSse => CreateHttpSseTransport(),
-                       _ => throw new NotSupportedException($"不支持的传输类型：{TransportConfig.SelectedTransportType}")
+                       case TransportType.Stdio:
+                           Logger.LogInformation("Stdio 配置 - 命令：{Command}, 参数：{Args}", TransportConfig.StdioCommand, TransportConfig.StdioArgs);
+                           newChatService = _chatServiceFactory.CreateChatService(
+                               TransportType.Stdio,
+                               TransportConfig.StdioCommand,
+                               TransportConfig.StdioArgs,
+                               null);
+                           break;
+                       case TransportType.WebSocket:
+                           newChatService = _chatServiceFactory.CreateChatService(
+                               TransportType.WebSocket,
+                               null,
+                               null,
+                               TransportConfig.RemoteUrl);
+                           break;
+                       case TransportType.HttpSse:
+                           newChatService = _chatServiceFactory.CreateChatService(
+                               TransportType.HttpSse,
+                               null,
+                               null,
+                               TransportConfig.RemoteUrl);
+                           break;
+                       default:
+                           throw new InvalidOperationException($"不支持的传输类型：{TransportConfig.SelectedTransportType}");
+                   }
+
+                   // 2. 先取消订阅旧服务的事件（如果存在）
+                   if (_chatService != null)
+                   {
+                       UnsubscribeFromChatService(_chatService);
+                   }
+
+                   // 3. 订阅新服务的事件
+                   SubscribeToChatService(newChatService);
+
+                   // 4. 替换旧的 ChatService 实例
+                   _chatService = newChatService;
+
+                   // 4. 初始化 ACP 协议 (带超时)
+                   Logger.LogInformation("正在初始化 ACP 协议...");
+                   var initParams = new InitializeParams
+                   {
+                       ProtocolVersion = 1,
+                       ClientInfo = new ClientInfo
+                       {
+                           Name = "UnoAcpClient",
+                           Title = "Uno Acp Client",
+                           Version = "1.0.0"
+                       },
+                       ClientCapabilities = new ClientCapabilities
+                       {
+                           Fs = new FsCapability
+                           {
+                               ReadTextFile = true,
+                               WriteTextFile = true
+                           }
+                       }
                    };
 
-                   Logger.LogInformation("传输层创建成功");
+                   // 使用 Task.WhenAny 实现超时，避免 UI 卡死
+                   var initTask = _chatService.InitializeAsync(initParams);
+                   var timeoutTask = Task.Delay(TimeSpan.FromSeconds(30));
+                   var completedTask = await Task.WhenAny(initTask, timeoutTask);
 
-                   // 注意：由于 ChatService 内部绑定了 AcpClient，而 AcpClient 又绑定了 ITransport，
-                   // 我们需要重新创建整个服务链。
-                   // 在当前架构下，最简单的方案是记录配置，并在下次启动时使用新配置。
-                   // 长期方案：重构 ChatService 以支持运行时切换 ITransport。
+                   if (completedTask == timeoutTask)
+                   {
+                       throw new TimeoutException("初始化超时：Agent 未在规定时间内响应。请检查命令和参数是否正确。");
+                   }
 
-                   // 对于当前实现，我们保存配置并提示用户
-                   ConnectionErrorMessage = "传输配置已保存。当前架构暂不支持运行时切换传输，请重启应用后生效。";
-                   Logger.LogInformation("传输配置已保存，等待重启");
+                   await initTask;
+                   UpdateAgentInfo();
+                   Logger.LogInformation("ACP 协议初始化完成，Agent: {Name} v{Version}", AgentName, AgentVersion);
 
-                   await Task.Delay(2000);
-                   ShowTransportConfigPanel = false;
-               }
-               catch (Exception ex)
-               {
-                   ConnectionErrorMessage = $"创建传输层失败：{ex.Message}";
-                   Logger.LogError(ex, "创建传输层时出错");
-                   IsConnecting = false;
-                   return;
-               }
+                   // 初始化成功后，自动创建新会话（ACP 标准流程）
+                   // 参考：https://agentclientprotocol.com/protocol/session-setup
+                   Logger.LogInformation("正在创建新会话...");
+                   var sessionParams = new UnoAcpClient.Domain.Models.Protocol.SessionNewParams
+                   {
+                       Cwd = Environment.CurrentDirectory
+                   };
+                   await _chatService.CreateSessionAsync(sessionParams);
+                   Logger.LogInformation("会话创建成功，SessionId={SessionId}", _chatService.CurrentSessionId);
 
-               IsConnecting = false;
-           }
-
-           private ITransport CreateStdioTransport()
-           {
-               if (string.IsNullOrWhiteSpace(TransportConfig.StdioCommand))
-               {
-                   throw new InvalidOperationException("Stdio 命令不能为空");
-               }
-
-               var args = string.IsNullOrWhiteSpace(TransportConfig.StdioArgs)
-                   ? Array.Empty<string>()
-                   : TransportConfig.StdioArgs.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-
-               Logger.LogInformation("创建 Stdio 传输：{Command} {Args}", TransportConfig.StdioCommand, TransportConfig.StdioArgs);
-
-               // 注意：这里需要注入 Serilog.ILogger，但 ChatViewModel 中不可用
-               // 实际实现中，应该在 DependencyInjection 中通过工厂方法创建
-               throw new NotImplementedException("Stdio 传输创建逻辑需要重构依赖注入");
-           }
-
-           private ITransport CreateWebSocketTransport()
-           {
-               if (string.IsNullOrWhiteSpace(TransportConfig.RemoteUrl))
-               {
-                   throw new InvalidOperationException("WebSocket URL 不能为空");
-               }
-
-               Logger.LogInformation("创建 WebSocket 传输：{Url}", TransportConfig.RemoteUrl);
-               throw new NotImplementedException("WebSocket 传输创建逻辑需要重构依赖注入");
-           }
-
-           private ITransport CreateHttpSseTransport()
-           {
-               if (string.IsNullOrWhiteSpace(TransportConfig.RemoteUrl))
-               {
-                   throw new InvalidOperationException("HTTP SSE URL 不能为空");
-               }
-
-               Logger.LogInformation("创建 HTTP SSE 传输：{Url}", TransportConfig.RemoteUrl);
-               throw new NotImplementedException("HTTP SSE 传输创建逻辑需要重构依赖注入");
-           }
-           }
-           catch (Exception ex)
-           {
-               ConnectionErrorMessage = $"配置应用失败：{ex.Message}";
-               Logger.LogError(ex, "应用传输配置时出错");
-           }
-           finally
-           {
-               IsConnecting = false;
-           }
-       }
-
-       [RelayCommand]
-       private async Task ConnectAsync()
-       {
-           if (TransportConfig.SelectedTransportType == TransportType.Stdio &&
-               string.IsNullOrWhiteSpace(TransportConfig.StdioCommand))
-           {
-               ConnectionErrorMessage = "Stdio 传输必须指定命令";
-               return;
-           }
-
-           IsConnecting = true;
-           ConnectionErrorMessage = null;
-
-           try
-           {
-               Logger.LogInformation("开始连接...");
-
-               // 验证配置
-               var (isValid, errorMessage) = TransportConfig.Validate();
-               if (!isValid)
-               {
-                   ConnectionErrorMessage = errorMessage;
-                   IsConnecting = false;
-                   return;
-               }
-
-               ConnectionErrorMessage = null;
-               IsConnecting = true;
-
-               try
-               {
-                   Logger.LogInformation("开始连接...");
-
-                   // 注意：由于当前架构限制，我们暂时无法在运行时动态切换传输
-                   // 这里我们模拟连接过程，实际连接需要在应用启动时配置
-                   await Task.Delay(1000);
-
-                   // 在实际实现中，这里应该：
-                   // 1. 创建新的 ITransport 实例
-                   // 2. 创建新的 AcpClient 实例
-                   // 3. 创建新的 ChatService 实例
-                   // 4. 替换当前的 _chatService 引用
-
-                   IsConnected = true;
+                   IsConnected = _chatService.IsConnected && _chatService.IsInitialized;
                    ShowTransportConfigPanel = false;
                    Logger.LogInformation("连接成功");
                }
@@ -281,51 +227,73 @@ using UnoAcpClient.Domain.Services;
                {
                    ConnectionErrorMessage = $"连接失败：{ex.Message}";
                    Logger.LogError(ex, "连接时出错");
+                   IsConnected = false;
                }
                finally
                {
                    IsConnecting = false;
                }
-           }
-           }
-           catch (Exception ex)
-           {
-               ConnectionErrorMessage = $"连接失败：{ex.Message}";
-               Logger.LogError(ex, "连接时出错");
-           }
-           finally
-           {
-               IsConnecting = false;
-           }
-       }
+            }
 
-       [RelayCommand]
-       private void ToggleTransportConfigPanel()
-       {
-           ShowTransportConfigPanel = !ShowTransportConfigPanel;
-       }
-
-        private void SubscribeToEvents()
+        [RelayCommand]
+        private void ToggleTransportConfigPanel()
         {
-            _chatService.SessionUpdateReceived += OnSessionUpdateReceived;
-            _chatService.PermissionRequestReceived += OnPermissionRequestReceived;
-            _chatService.FileSystemRequestReceived += OnFileSystemRequestReceived;
-            _chatService.ErrorOccurred += OnErrorOccurred;
-
-            // 监听初始化状态变化
-            if (_chatService.IsInitialized)
-            {
-                UpdateAgentInfo();
-            }
-
-            // 监听会话状态
-            if (_chatService.CurrentSessionId != null)
-            {
-                CurrentSessionId = _chatService.CurrentSessionId;
-                IsSessionActive = true;
-                LoadSessionHistory();
-            }
+            ShowTransportConfigPanel = !ShowTransportConfigPanel;
         }
+
+           private void SubscribeToChatService(IChatService chatService)
+           {
+               chatService.SessionUpdateReceived += OnSessionUpdateReceived;
+               chatService.PermissionRequestReceived += OnPermissionRequestReceived;
+               chatService.FileSystemRequestReceived += OnFileSystemRequestReceived;
+               chatService.ErrorOccurred += OnErrorOccurred;
+
+               // 监听初始化状态变化
+               if (chatService.IsInitialized)
+               {
+                   UpdateAgentInfo();
+               }
+
+               // 监听会话状态
+               if (chatService.CurrentSessionId != null)
+               {
+                   CurrentSessionId = chatService.CurrentSessionId;
+                   IsSessionActive = true;
+                   LoadSessionHistory();
+               }
+           }
+
+           private void UnsubscribeFromChatService(IChatService chatService)
+           {
+               chatService.SessionUpdateReceived -= OnSessionUpdateReceived;
+               chatService.PermissionRequestReceived -= OnPermissionRequestReceived;
+               chatService.FileSystemRequestReceived -= OnFileSystemRequestReceived;
+               chatService.ErrorOccurred -= OnErrorOccurred;
+           }
+
+           private void SubscribeToEvents()
+          {
+              // 只有当 _chatService 不为 null 时才订阅事件
+              // 在构造函数中 _chatService 可能为 null，将在 ApplyTransportConfigAsync 中创建
+              if (_chatService != null)
+              {
+                  SubscribeToChatService(_chatService);
+
+                  // 监听初始化状态变化
+                  if (_chatService.IsInitialized)
+                  {
+                      UpdateAgentInfo();
+                  }
+
+                  // 监听会话状态
+                  if (_chatService.CurrentSessionId != null)
+                  {
+                      CurrentSessionId = _chatService.CurrentSessionId;
+                      IsSessionActive = true;
+                      LoadSessionHistory();
+                  }
+              }
+          }
 
         private void OnSessionUpdateReceived(object? sender, SessionUpdateEventArgs e)
         {
@@ -348,6 +316,10 @@ using UnoAcpClient.Domain.Services;
                     else if (e.Update is ModeChangeUpdate modeChange)
                     {
                         OnModeChanged(modeChange);
+                    }
+                    else if (e.Update is ConfigUpdateUpdate configUpdate)
+                    {
+                        UpdateConfigOptions(configUpdate);
                     }
                 }
                 catch (Exception ex)
@@ -500,6 +472,12 @@ using UnoAcpClient.Domain.Services;
                 case AudioContentBlock audio:
                     message = ChatMessageViewModel.CreateFromAudioContent(id, content, isOutgoing);
                     break;
+                case ResourceContentBlock resourceContent:
+                    message = ChatMessageViewModel.CreateFromResourceContent(id, resourceContent, isOutgoing);
+                    break;
+                case ResourceLinkContentBlock resourceLink:
+                    message = ChatMessageViewModel.CreateFromResourceLink(id, resourceLink, isOutgoing);
+                    break;
                 default:
                     message = ChatMessageViewModel.CreateFromTextContent(id, content, isOutgoing);
                     break;
@@ -553,50 +531,71 @@ using UnoAcpClient.Domain.Services;
             }
         }
 
-        [RelayCommand]
-        private async Task InitializeAndConnectAsync()
+        private void UpdateConfigOptions(ConfigUpdateUpdate configUpdate)
         {
-            if (IsInitializing || IsConnecting)
-                return;
-
-            try
+            if (configUpdate.ConfigOptions != null)
             {
-                IsInitializing = true;
-                ClearError();
-
-                // 初始化 ACP 客户端
-                var initParams = new InitializeParams
+                ConfigOptions.Clear();
+                foreach (var kvp in configUpdate.ConfigOptions)
                 {
-                    ProtocolVersion = 1,
-                    ClientInfo = new ClientInfo
-                    {
-                        Name = "UnoAcpClient",
-                        Title = "Uno ACP Client",
-                        Version = "1.0.0"
-                    },
-                    ClientCapabilities = new ClientCapabilities
-                    {
-                        Fs = new FsCapability
-                        {
-                            ReadTextFile = true,
-                            WriteTextFile = true
-                        }
-                    }
-                };
-
-                var response = await _chatService.InitializeAsync(initParams);
-                UpdateAgentInfo();
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "初始化失败");
-                SetError($"初始化失败：{ex.Message}");
-            }
-            finally
-            {
-                IsInitializing = false;
+                    ConfigOptions.Add(ConfigOptionViewModel.CreateFromJson(kvp.Key, kvp.Value));
+                }
+                ShowConfigOptionsPanel = ConfigOptions.Count > 0;
             }
         }
+
+       [RelayCommand]
+       private async Task InitializeAndConnectAsync()
+       {
+           if (IsInitializing || IsConnecting)
+               return;
+
+           // 如果还没有创建 ChatService，先应用配置
+           if (_chatService == null)
+           {
+               Logger.LogInformation("ChatService 尚未创建，调用 ApplyTransportConfigAsync");
+               await ApplyTransportConfigCommand.ExecuteAsync(null);
+               return;
+           }
+
+           try
+           {
+               IsInitializing = true;
+               ClearError();
+
+               // 初始化 ACP 客户端
+               var initParams = new InitializeParams
+               {
+                   ProtocolVersion = 1,
+                   ClientInfo = new ClientInfo
+                   {
+                       Name = "UnoAcpClient",
+                       Title = "Uno ACP Client",
+                       Version = "1.0.0"
+                   },
+                   ClientCapabilities = new ClientCapabilities
+                   {
+                       Fs = new FsCapability
+                       {
+                           ReadTextFile = true,
+                           WriteTextFile = true
+                       }
+                   }
+               };
+
+               var response = await _chatService.InitializeAsync(initParams);
+               UpdateAgentInfo();
+           }
+           catch (Exception ex)
+           {
+               Logger.LogError(ex, "初始化失败");
+               SetError($"初始化失败：{ex.Message}");
+           }
+           finally
+           {
+               IsInitializing = false;
+           }
+       }
 
         [RelayCommand]
         private async Task CreateNewSessionAsync()
@@ -638,6 +637,17 @@ using UnoAcpClient.Domain.Services;
                     {
                         SelectedMode = AvailableModes[0];
                     }
+                }
+
+                // 加载配置选项
+                if (response.ConfigOptions != null)
+                {
+                    ConfigOptions.Clear();
+                    foreach (var kvp in response.ConfigOptions)
+                    {
+                        ConfigOptions.Add(ConfigOptionViewModel.CreateFromJson(kvp.Key, kvp.Value));
+                    }
+                    ShowConfigOptionsPanel = ConfigOptions.Count > 0;
                 }
 
                 MessageHistory.Clear();
@@ -802,20 +812,18 @@ using UnoAcpClient.Domain.Services;
             GC.SuppressFinalize(this);
         }
 
-        protected virtual void Dispose(bool disposing)
-        {
-            if (!_disposed)
-            {
-                if (disposing)
-                {
-                    _chatService.SessionUpdateReceived -= OnSessionUpdateReceived;
-                    _chatService.PermissionRequestReceived -= OnPermissionRequestReceived;
-                    _chatService.FileSystemRequestReceived -= OnFileSystemRequestReceived;
-                    _chatService.ErrorOccurred -= OnErrorOccurred;
-                }
-                _disposed = true;
-            }
-        }
+           protected virtual void Dispose(bool disposing)
+           {
+               if (!_disposed)
+               {
+                   if (disposing)
+                   {
+                       UnsubscribeFromChatService(_chatService);
+                   }
+
+                   _disposed = true;
+               }
+           }
     }
 
     /// <summary>
