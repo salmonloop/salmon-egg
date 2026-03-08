@@ -1,0 +1,10 @@
+{
+  "background_color": "#ffffff",
+  "description": "SalmonEgg",
+  "display": "standalone",
+  "name": "SalmonEgg",
+  "short_name": "SalmonEgg",
+  "start_url": "/index.html",
+  "theme_color": "#ffffff",
+  "scope": "/"
+}

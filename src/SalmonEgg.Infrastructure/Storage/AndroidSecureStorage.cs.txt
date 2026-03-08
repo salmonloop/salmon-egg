@@ -1,0 +1,164 @@
+// 此文件应该在 Android 平台项目中实现
+// 文件路径: SalmonEgg.Android/Storage/AndroidSecureStorage.cs
+
+using System;
+using System.Text;
+using System.Threading.Tasks;
+using Android.Content;
+using Android.Security.Keystore;
+using Java.Security;
+using Javax.Crypto;
+using Javax.Crypto.Spec;
+using SalmonEgg.Infrastructure.Storage;
+
+namespace SalmonEgg.Android.Storage
+{
+    /// <summary>
+    /// Android 平台安全存储实现，使用 KeyStore
+    /// </summary>
+    public class AndroidSecureStorage : ISecureStorage
+    {
+        private const string KeyStoreAlias = "SalmonEggKeyStore";
+        private const string AndroidKeyStore = "AndroidKeyStore";
+        private const string TransformationAlgorithm = "AES/GCM/NoPadding";
+        private readonly Context _context;
+
+        public AndroidSecureStorage(Context context)
+        {
+            _context = context ?? throw new ArgumentNullException(nameof(context));
+        }
+
+        public async Task SaveAsync(string key, string value)
+        {
+            if (string.IsNullOrEmpty(key))
+                throw new ArgumentNullException(nameof(key));
+            if (value == null)
+                throw new ArgumentNullException(nameof(value));
+
+            await Task.Run(() =>
+            {
+                try
+                {
+                    // 确保密钥存在
+                    EnsureKeyExists();
+
+                    // 加密数据
+                    var cipher = Cipher.GetInstance(TransformationAlgorithm);
+                    var keyStore = KeyStore.GetInstance(AndroidKeyStore);
+                    keyStore.Load(null);
+                    
+                    var secretKey = keyStore.GetKey(KeyStoreAlias, null);
+                    cipher.Init(CipherMode.EncryptMode, secretKey);
+                    
+                    var iv = cipher.GetIV();
+                    var encryptedBytes = cipher.DoFinal(Encoding.UTF8.GetBytes(value));
+                    
+                    // 保存 IV 和加密数据
+                    var prefs = _context.GetSharedPreferences("SalmonEgg_SecureStorage", FileCreationMode.Private);
+                    var editor = prefs.Edit();
+                    editor.PutString($"{key}_iv", Convert.ToBase64String(iv));
+                    editor.PutString($"{key}_data", Convert.ToBase64String(encryptedBytes));
+                    editor.Apply();
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException($"Failed to save secure data for key '{key}'", ex);
+                }
+            });
+        }
+
+        public async Task<string> LoadAsync(string key)
+        {
+            if (string.IsNullOrEmpty(key))
+                throw new ArgumentNullException(nameof(key));
+
+            return await Task.Run(() =>
+            {
+                try
+                {
+                    var prefs = _context.GetSharedPreferences("SalmonEgg_SecureStorage", FileCreationMode.Private);
+                    var ivBase64 = prefs.GetString($"{key}_iv", null);
+                    var dataBase64 = prefs.GetString($"{key}_data", null);
+                    
+                    if (string.IsNullOrEmpty(ivBase64) || string.IsNullOrEmpty(dataBase64))
+                        return null;
+                    
+                    var iv = Convert.FromBase64String(ivBase64);
+                    var encryptedBytes = Convert.FromBase64String(dataBase64);
+                    
+                    // 解密数据
+                    var cipher = Cipher.GetInstance(TransformationAlgorithm);
+                    var keyStore = KeyStore.GetInstance(AndroidKeyStore);
+                    keyStore.Load(null);
+                    
+                    var secretKey = keyStore.GetKey(KeyStoreAlias, null);
+                    var spec = new GCMParameterSpec(128, iv);
+                    cipher.Init(CipherMode.DecryptMode, secretKey, spec);
+                    
+                    var decryptedBytes = cipher.DoFinal(encryptedBytes);
+                    return Encoding.UTF8.GetString(decryptedBytes);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException($"Failed to load secure data for key '{key}'", ex);
+                }
+            });
+        }
+
+        public async Task DeleteAsync(string key)
+        {
+            if (string.IsNullOrEmpty(key))
+                throw new ArgumentNullException(nameof(key));
+
+            await Task.Run(() =>
+            {
+                try
+                {
+                    var prefs = _context.GetSharedPreferences("SalmonEgg_SecureStorage", FileCreationMode.Private);
+                    var editor = prefs.Edit();
+                    editor.Remove($"{key}_iv");
+                    editor.Remove($"{key}_data");
+                    editor.Apply();
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException($"Failed to delete secure data for key '{key}'", ex);
+                }
+            });
+        }
+
+        private void EnsureKeyExists()
+        {
+            try
+            {
+                var keyStore = KeyStore.GetInstance(AndroidKeyStore);
+                keyStore.Load(null);
+                
+                if (!keyStore.ContainsAlias(KeyStoreAlias))
+                {
+                    var keyGenerator = KeyGenerator.GetInstance(
+                        KeyProperties.KeyAlgorithmAes,
+                        AndroidKeyStore);
+                    
+                    var builder = new KeyGenParameterSpec.Builder(
+                        KeyStoreAlias,
+                        KeyStorePurpose.Encrypt | KeyStorePurpose.Decrypt)
+                        .SetBlockModes(KeyProperties.BlockModeGcm)
+                        .SetEncryptionPaddings(KeyProperties.EncryptionPaddingNone)
+                        .SetKeySize(256);
+                    
+                    keyGenerator.Init(builder.Build());
+                    keyGenerator.GenerateKey();
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("Failed to ensure Android KeyStore key exists", ex);
+            }
+        }
+    }
+}
+
+// 在 Android 项目的依赖注入配置中注册:
+// services.AddSingleton<ISecureStorage>(sp => 
+//     new AndroidSecureStorage(Android.App.Application.Context));

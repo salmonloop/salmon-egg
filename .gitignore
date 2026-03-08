@@ -6,7 +6,8 @@
 .run/
 .vs/
 .idea/
-.tools/
+.tools/*
+!.tools/run-winui3-msix.ps1
 *.user
 *.suo
 *.userosscache
@@ -91,6 +92,7 @@ TestResults/
 # Logs
 logs/
 *.log
+/.dotnet-cli-home/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

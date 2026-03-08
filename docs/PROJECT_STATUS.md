@@ -5,10 +5,10 @@
 ### 已完成项
 
 ✅ **四层架构项目结构**
-- `src/UnoAcpClient.Domain` - 领域层 (.NET Standard 2.1)
-- `src/UnoAcpClient.Application` - 应用层 (.NET Standard 2.1)
-- `src/UnoAcpClient.Infrastructure` - 基础设施层 (.NET Standard 2.1)
-- `UnoAcpClient/UnoAcpClient` - Uno Platform 主项目
+- `src/SalmonEgg.Domain` - 领域层 (.NET Standard 2.1)
+- `src/SalmonEgg.Application` - 应用层 (.NET Standard 2.1)
+- `src/SalmonEgg.Infrastructure` - 基础设施层 (.NET Standard 2.1)
+- `SalmonEgg/SalmonEgg` - Uno Platform 主项目
 
 ✅ **NuGet 包依赖配置**
 
@@ -35,30 +35,30 @@ Presentation 层 (Uno Platform):
 ✅ **目录结构**
 ```
 src/
-├── UnoAcpClient.Domain/
+├── SalmonEgg.Domain/
 │   ├── Models/
 │   ├── Services/
 │   └── Exceptions/
-├── UnoAcpClient.Application/
+├── SalmonEgg.Application/
 │   ├── Services/
 │   ├── UseCases/
 │   └── Common/
-└── UnoAcpClient.Infrastructure/
+└── SalmonEgg.Infrastructure/
     ├── Network/
     ├── Serialization/
     ├── Storage/
     └── Logging/
 
-UnoAcpClient/UnoAcpClient/
+SalmonEgg/SalmonEgg/
 └── Presentation/
     ├── Views/
     ├── ViewModels/
     └── Converters/
 
 tests/
-├── UnoAcpClient.Domain.Tests/
-├── UnoAcpClient.Application.Tests/
-└── UnoAcpClient.Infrastructure.Tests/
+├── SalmonEgg.Domain.Tests/
+├── SalmonEgg.Application.Tests/
+└── SalmonEgg.Infrastructure.Tests/
 ```
 
 ✅ **依赖注入配置**
@@ -94,12 +94,12 @@ tests/
 
 **选项 1: 升级到 .NET 9.0 SDK（推荐）**
 1. 从 https://dotnet.microsoft.com/download/dotnet/9.0 下载并安装 .NET 9.0 SDK
-2. 运行 `dotnet restore UnoAcpClient.sln`
-3. 运行 `dotnet build UnoAcpClient.sln`
+2. 运行 `dotnet restore SalmonEgg.sln`
+3. 运行 `dotnet build SalmonEgg.sln`
 
 **选项 2: 降级 Uno Platform 版本**
-1. 修改 `UnoAcpClient/global.json`，将 Uno.Sdk 版本降级到支持 .NET 8.0 的版本
-2. 修改 `UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj`，将目标框架改回 `net8.0-browserwasm;net8.0-desktop`
+1. 修改 `SalmonEgg/global.json`，将 Uno.Sdk 版本降级到支持 .NET 8.0 的版本
+2. 修改 `SalmonEgg/SalmonEgg/SalmonEgg.csproj`，将目标框架改回 `net8.0-browserwasm;net8.0-desktop`
 3. 注意：可能会失去一些新功能
 
 ### 验证步骤
@@ -111,16 +111,16 @@ tests/
 dotnet --version
 
 # 恢复依赖
-dotnet restore UnoAcpClient.sln
+dotnet restore SalmonEgg.sln
 
 # 构建解决方案
-dotnet build UnoAcpClient.sln --configuration Debug
+dotnet build SalmonEgg.sln --configuration Debug
 
 # 运行测试
 dotnet test
 
 # 运行 Uno Platform 应用（Desktop）
-dotnet run --project UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj --framework net9.0-windows10.0.19041.0
+dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj --framework net9.0-windows10.0.19041.0
 ```
 
 ### 下一步

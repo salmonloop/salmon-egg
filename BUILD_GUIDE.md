@@ -1,4 +1,4 @@
-# Uno ACP Client 构建指南
+# SalmonEgg 构建指南
 
 ## 快速开始
 
@@ -57,16 +57,16 @@ cd salmon-acp
 #### 完整构建（推荐）
 ```bash
 # 恢复依赖
-dotnet restore UnoAcpClient.sln
+dotnet restore SalmonEgg.sln
 
 # 构建项目
-dotnet build UnoAcpClient.sln --configuration Release
+dotnet build SalmonEgg.sln --configuration Release
 
 # 运行测试
-dotnet test UnoAcpClient.sln
+dotnet test SalmonEgg.sln
 
 # 发布应用
-dotnet publish UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj \
+dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj \
   --configuration Release \
   --framework net9.0-windows10.0.19041.0 \
   --output publish/windows
@@ -75,7 +75,7 @@ dotnet publish UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj \
 #### 快速构建（开发时）
 ```bash
 # 构建并运行
-dotnet run --project UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj \
+dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj \
   --framework net9.0-windows10.0.19041.0
 ```
 
@@ -91,7 +91,7 @@ run.bat
 
 #### WebAssembly (浏览器)
 ```bash
-dotnet run --project UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj \
+dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj \
   --framework net9.0-browserwasm
 ```
 
@@ -99,7 +99,7 @@ dotnet run --project UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj \
 
 #### Windows Desktop (独立应用)
 ```bash
-dotnet publish UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj \
+dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj \
   --configuration Release \
   --framework net9.0-windows10.0.19041.0 \
   --runtime win-x64 \
@@ -109,7 +109,7 @@ dotnet publish UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj \
 
 #### WebAssembly (静态网站)
 ```bash
-dotnet publish UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj \
+dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj \
   --configuration Release \
   --framework net9.0-browserwasm \
   --output publish/wasm
@@ -160,7 +160,7 @@ dotnet build
 
 构建成功后，您会在以下目录找到输出：
 
-- **Windows Desktop**: `publish/desktop/UnoAcpClient.exe`
+- **Windows Desktop**: `publish/desktop/SalmonEgg.exe`
 - **WebAssembly**: `publish/wasm/wwwroot/`
 
 ## 开发工作流
@@ -178,7 +178,7 @@ dotnet restore
 ./run.sh   # Linux/macOS
 
 # 或直接
-dotnet run --project UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj \
+dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj \
   --framework net9.0-windows10.0.19041.0
 ```
 
@@ -234,7 +234,7 @@ dotnet publish \
 
 如果遇到问题：
 1. 查看本文档的"常见问题"部分
-2. 检查日志文件: `%LOCALAPPDATA%\UnoAcpClient\logs\`
+2. 检查日志文件: `%LOCALAPPDATA%\SalmonEgg\logs\`
 3. 提交 Issue: [GitHub Issues]
 
 ---

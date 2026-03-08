@@ -1,0 +1,118 @@
+// 此文件应该在 Windows 平台项目中实现
+// 文件路径: SalmonEgg.Windows/Storage/WindowsSecureStorage.cs
+
+using System;
+using System.IO;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading.Tasks;
+using SalmonEgg.Infrastructure.Storage;
+
+namespace SalmonEgg.Windows.Storage
+{
+    /// <summary>
+    /// Windows 平台安全存储实现，使用 DPAPI (Data Protection API)
+    /// </summary>
+    public class WindowsSecureStorage : ISecureStorage
+    {
+        private readonly string _storageDirectory;
+
+        public WindowsSecureStorage()
+        {
+            var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            _storageDirectory = Path.Combine(appData, "SalmonEgg", "SecureStorage");
+            
+            if (!Directory.Exists(_storageDirectory))
+                Directory.CreateDirectory(_storageDirectory);
+        }
+
+        public async Task SaveAsync(string key, string value)
+        {
+            if (string.IsNullOrEmpty(key))
+                throw new ArgumentNullException(nameof(key));
+            if (value == null)
+                throw new ArgumentNullException(nameof(value));
+
+            await Task.Run(() =>
+            {
+                try
+                {
+                    var data = Encoding.UTF8.GetBytes(value);
+                    var encrypted = ProtectedData.Protect(
+                        data,
+                        null,
+                        DataProtectionScope.CurrentUser);
+                    
+                    var base64 = Convert.ToBase64String(encrypted);
+                    var filePath = GetFilePath(key);
+                    File.WriteAllText(filePath, base64);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException($"Failed to save secure data for key '{key}'", ex);
+                }
+            });
+        }
+
+        public async Task<string> LoadAsync(string key)
+        {
+            if (string.IsNullOrEmpty(key))
+                throw new ArgumentNullException(nameof(key));
+
+            return await Task.Run(() =>
+            {
+                try
+                {
+                    var filePath = GetFilePath(key);
+                    if (!File.Exists(filePath))
+                        return null;
+
+                    var base64 = File.ReadAllText(filePath);
+                    var encrypted = Convert.FromBase64String(base64);
+                    var decrypted = ProtectedData.Unprotect(
+                        encrypted,
+                        null,
+                        DataProtectionScope.CurrentUser);
+                    
+                    return Encoding.UTF8.GetString(decrypted);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException($"Failed to load secure data for key '{key}'", ex);
+                }
+            });
+        }
+
+        public async Task DeleteAsync(string key)
+        {
+            if (string.IsNullOrEmpty(key))
+                throw new ArgumentNullException(nameof(key));
+
+            await Task.Run(() =>
+            {
+                try
+                {
+                    var filePath = GetFilePath(key);
+                    if (File.Exists(filePath))
+                        File.Delete(filePath);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException($"Failed to delete secure data for key '{key}'", ex);
+                }
+            });
+        }
+
+        private string GetFilePath(string key)
+        {
+            var fileName = Convert.ToBase64String(
+                Encoding.UTF8.GetBytes(key))
+                .Replace("/", "_")
+                .Replace("+", "-") + ".dat";
+            return Path.Combine(_storageDirectory, fileName);
+        }
+    }
+}
+
+// 在 Windows 项目的依赖注入配置中注册:
+// services.AddSingleton<ISecureStorage, WindowsSecureStorage>();

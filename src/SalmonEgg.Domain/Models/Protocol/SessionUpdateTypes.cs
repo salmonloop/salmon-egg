@@ -1,0 +1,320 @@
+using System;
+using System.Collections.Generic;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using SalmonEgg.Domain.Models.Content;
+using SalmonEgg.Domain.Models.Plan;
+using SalmonEgg.Domain.Models.Session;
+using SalmonEgg.Domain.Models.Tool;
+
+namespace SalmonEgg.Domain.Models.Protocol
+{
+    /// <summary>
+    /// Session/Update 通知的参数。
+    /// 用于 Agent 向客户端发送会话更新。
+    /// </summary>
+    public class SessionUpdateParams
+    {
+        /// <summary>
+        /// 会话 ID（必填）。
+        /// </summary>
+        [JsonPropertyName("sessionId")]
+        public string SessionId { get; set; } = string.Empty;
+
+        /// <summary>
+        /// 更新内容（多态类型）。
+        /// 可以是文本、工具调用、计划、模式切换等。
+        /// </summary>
+        [JsonPropertyName("update")]
+        public SessionUpdate? Update { get; set; }
+
+        /// <summary>
+        /// 创建新的 SessionUpdateParams 实例。
+        /// </summary>
+        public SessionUpdateParams()
+        {
+        }
+
+        /// <summary>
+        /// 创建新的 SessionUpdateParams 实例。
+        /// </summary>
+        /// <param name="sessionId">会话 ID</param>
+        /// <param name="update">更新内容</param>
+        public SessionUpdateParams(string sessionId, SessionUpdate? update = null)
+        {
+            SessionId = sessionId;
+            Update = update;
+        }
+    }
+
+    /// <summary>
+    /// 会话更新的基类/多态类型。
+    /// 使用 JsonPolymorphic 特性支持不同类型的更新。
+    /// </summary>
+    [JsonPolymorphic(
+        TypeDiscriminatorPropertyName = "sessionUpdate",
+        UnknownDerivedTypeHandling = JsonUnknownDerivedTypeHandling.FallBackToBaseType,
+        IgnoreUnrecognizedTypeDiscriminators = true)]
+    [JsonDerivedType(typeof(AgentMessageUpdate), "agent_message_chunk")]
+    [JsonDerivedType(typeof(AgentThoughtUpdate), "agent_thought_chunk")]
+    [JsonDerivedType(typeof(ToolCallUpdate), "tool_call")]
+    [JsonDerivedType(typeof(ToolCallStatusUpdate), "tool_call_update")]
+    [JsonDerivedType(typeof(PlanUpdate), "plan")]
+    [JsonDerivedType(typeof(ModeChangeUpdate), "mode_change")]
+    [JsonDerivedType(typeof(ConfigUpdateUpdate), "config_update")]
+    [JsonDerivedType(typeof(ConfigOptionUpdate), "config_option_update")]
+    public class SessionUpdate
+    {
+        // Keep unknown fields so we can safely ignore newer protocol updates without crashing.
+        [JsonExtensionData]
+        public Dictionary<string, JsonElement>? ExtensionData { get; set; }
+    }
+
+    /// <summary>
+    /// Agent 消息片段更新。
+    /// 用于流式传输 Agent 的文本响应。
+    /// </summary>
+    public class AgentMessageUpdate : SessionUpdate
+    {
+        /// <summary>
+        /// 消息内容块。
+        /// </summary>
+        [JsonPropertyName("content")]
+        public ContentBlock? Content { get; set; }
+
+        /// <summary>
+        /// 创建新的 AgentMessageUpdate 实例。
+        /// </summary>
+        public AgentMessageUpdate()
+        {
+        }
+
+        /// <summary>
+        /// 创建新的 AgentMessageUpdate 实例。
+        /// </summary>
+        /// <param name="content">内容块</param>
+        public AgentMessageUpdate(ContentBlock? content)
+        {
+            Content = content;
+        }
+    }
+
+    /// <summary>
+    /// Agent 思考片段更新（通常不直接展示给用户，但必须可解析/可跳过）。
+    /// </summary>
+    public class AgentThoughtUpdate : SessionUpdate
+    {
+        /// <summary>
+        /// 消息内容块。
+        /// </summary>
+        [JsonPropertyName("content")]
+        public ContentBlock? Content { get; set; }
+    }
+
+    /// <summary>
+    /// 工具调用更新。
+    /// 用于通知客户端工具调用的状态变化。
+    /// </summary>
+    public class ToolCallUpdate : SessionUpdate
+    {
+        /// <summary>
+        /// 工具调用 ID。
+        /// </summary>
+        [JsonPropertyName("toolCallId")]
+        public string? ToolCallId { get; set; }
+
+        /// <summary>
+        /// 工具调用数据。
+        /// 可以是任何 JSON 结构，表示工具的具体参数。
+        /// </summary>
+        [JsonPropertyName("toolCall")]
+        public JsonElement? ToolCall { get; set; }
+
+        /// <summary>
+        /// 工具调用类型。
+        /// </summary>
+        [JsonPropertyName("kind")]
+        public ToolCallKind? Kind { get; set; }
+
+        /// <summary>
+        /// 工具调用状态。
+        /// </summary>
+        [JsonPropertyName("status")]
+        public ToolCallStatus? Status { get; set; }
+
+        /// <summary>
+        /// 标题（可选）。
+        /// </summary>
+        [JsonPropertyName("title")]
+        public string? Title { get; set; }
+
+        /// <summary>
+        /// 创建新的 ToolCallUpdate 实例。
+        /// </summary>
+        public ToolCallUpdate()
+        {
+        }
+
+        /// <summary>
+        /// 创建新的 ToolCallUpdate 实例。
+        /// </summary>
+        /// <param name="toolCallId">工具调用 ID</param>
+        /// <param name="toolCall">工具调用数据</param>
+        /// <param name="kind">工具调用类型</param>
+        /// <param name="status">工具调用状态</param>
+        /// <param name="title">标题</param>
+        public ToolCallUpdate(
+            string? toolCallId = null,
+            JsonElement? toolCall = null,
+            ToolCallKind? kind = null,
+            ToolCallStatus? status = null,
+            string? title = null)
+        {
+            ToolCallId = toolCallId;
+            ToolCall = toolCall;
+            Kind = kind;
+            Status = status;
+            Title = title;
+        }
+    }
+
+    /// <summary>
+    /// 计划更新。
+    /// 用于通知客户端 Agent 的行动计划变化。
+    /// </summary>
+    public class PlanUpdate : SessionUpdate
+    {
+        /// <summary>
+       /// 计划条目列表（用于 plan 类型的更新）。
+       /// </summary>
+       [JsonPropertyName("entries")]
+       public List<SalmonEgg.Domain.Models.Plan.PlanEntry>? Entries { get; set; }
+
+        /// <summary>
+        /// 标题（可选）。
+        /// </summary>
+        [JsonPropertyName("title")]
+        public string? Title { get; set; }
+
+        /// <summary>
+        /// 创建新的 PlanUpdate 实例。
+        /// </summary>
+        public PlanUpdate()
+        {
+        }
+
+        /// <summary>
+        /// 创建新的 PlanUpdate 实例。
+        /// </summary>
+        /// <param name="entries">计划条目列表</param>
+        /// <param name="title">标题</param>
+        public PlanUpdate(List<PlanEntry>? entries = null, string? title = null)
+        {
+            Entries = entries;
+            Title = title;
+        }
+    }
+
+    /// <summary>
+    /// 模式切换更新。
+    /// 用于通知客户端会话模式的变化。
+    /// </summary>
+    public class ModeChangeUpdate : SessionUpdate
+    {
+        /// <summary>
+        /// 新的模式 ID。
+        /// </summary>
+        [JsonPropertyName("modeId")]
+        public string? ModeId { get; set; }
+
+        /// <summary>
+        /// 标题（可选）。
+        /// </summary>
+        [JsonPropertyName("title")]
+        public string? Title { get; set; }
+
+        /// <summary>
+        /// 创建新的 ModeChangeUpdate 实例。
+        /// </summary>
+        public ModeChangeUpdate()
+        {
+        }
+
+        /// <summary>
+        /// 创建新的 ModeChangeUpdate 实例。
+        /// </summary>
+        /// <param name="modeId">新的模式 ID</param>
+        /// <param name="title">标题</param>
+        public ModeChangeUpdate(string? modeId = null, string? title = null)
+        {
+            ModeId = modeId;
+            Title = title;
+        }
+    }
+
+    /// <summary>
+    /// 配置更新。
+    /// 用于通知客户端会话配置选项的变化。
+        /// </summary>
+    public class ConfigUpdateUpdate : SessionUpdate
+    {
+        /// <summary>
+        /// 配置选项列表。
+        /// </summary>
+        [JsonPropertyName("configOptions")]
+        public object? ConfigOptions { get; set; }
+
+        /// <summary>
+        /// 创建新的 ConfigUpdateUpdate 实例。
+        /// </summary>
+        public ConfigUpdateUpdate()
+        {
+        }
+
+        /// <summary>
+        /// 创建新的 ConfigUpdateUpdate 实例。
+        /// </summary>
+        /// <param name="configOptions">配置选项</param>
+        public ConfigUpdateUpdate(object? configOptions = null)
+        {
+            ConfigOptions = configOptions;
+        }
+    }
+
+    /// <summary>
+    /// 工具调用状态更新（tool_call_update）。
+    /// 某些 Agent 不会在 tool_call update 中发送完整 toolCall 对象，只会推送状态与输出内容。
+    /// </summary>
+    public class ToolCallStatusUpdate : SessionUpdate
+    {
+        /// <summary>
+        /// 工具调用 ID。
+        /// </summary>
+        [JsonPropertyName("toolCallId")]
+        public string? ToolCallId { get; set; }
+
+        /// <summary>
+        /// 工具调用状态。
+        /// </summary>
+        [JsonPropertyName("status")]
+        public ToolCallStatus? Status { get; set; }
+
+        /// <summary>
+        /// 工具返回内容（可能是内容块数组或任意 JSON）。
+        /// </summary>
+        [JsonPropertyName("content")]
+        public JsonElement? Content { get; set; }
+    }
+
+    /// <summary>
+    /// 配置选项更新（config_option_update）。
+    /// </summary>
+    public class ConfigOptionUpdate : SessionUpdate
+    {
+        /// <summary>
+        /// 配置选项列表。
+        /// </summary>
+        [JsonPropertyName("configOptions")]
+        public object? ConfigOptions { get; set; }
+    }
+}

@@ -1,0 +1,134 @@
+<Project Sdk="Uno.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\SalmonEgg.Domain\SalmonEgg.Domain.csproj" />
+    <ProjectReference Include="..\..\src\SalmonEgg.Application\SalmonEgg.Application.csproj" />
+    <ProjectReference Include="..\..\src\SalmonEgg.Infrastructure\SalmonEgg.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+    <PackageReference Include="Serilog.Extensions.Logging" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFrameworks>net9.0-browserwasm;net10.0-desktop;net10.0-windows10.0.26100.0</TargetFrameworks>
+
+    <OutputType>Exe</OutputType>
+    <UnoSingleProject>true</UnoSingleProject>
+
+    <!-- Display name -->
+    <ApplicationTitle>SalmonEgg</ApplicationTitle>
+    <!-- App Identifier -->
+    <ApplicationId>com.companyname.salmonegg</ApplicationId>
+    <!-- Versions -->
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+    <!-- Package Publisher -->
+    <ApplicationPublisher>SalmonEgg</ApplicationPublisher>
+    <!-- Package Description -->
+    <Description>SalmonEgg powered by Uno Platform.</Description>
+
+    <!--
+      UnoFeatures are used to quickly add and manage features enabled for your app.
+      https://aka.platform.uno/singleproject-features
+    -->
+    <UnoFeatures>
+    </UnoFeatures>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-desktop'">
+    <UnoFeatures>SkiaRenderer;</UnoFeatures>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.26100.0'">
+    <!-- Keep runtime compatibility wide while targeting an installed Windows SDK toolset -->
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <WindowsPackageType>MSIX</WindowsPackageType>
+
+    <!-- Allow building the WinUI 3 target without MSVC/CL.exe being installed -->
+    <EnableWin32Codegen>false</EnableWin32Codegen>
+
+    <!-- dotnet build (MSBuild Core) does not always populate WindowsSdkPath for the WinUI XamlCompiler -->
+    <WindowsSdkPath>$(MSBuildProgramFiles32)\Windows Kits\10\</WindowsSdkPath>
+
+    <!-- Ensure 'dotnet run' launches the WinUI 3 apphost (which bootstraps Windows App SDK), not the DLL. -->
+    <UseAppHost>true</UseAppHost>
+
+    <!-- Prevent pulling in the WPF/WinForms host stack on the WinUI 3 target. -->
+    <UseWPF>false</UseWPF>
+    <UseWindowsForms>false</UseWindowsForms>
+
+    <!-- MSIX-packaged WinUI 3 should rely on the Windows App SDK framework package (do not bundle WinAppSDK runtime DLLs). -->
+    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
+    <WindowsAppSdkBootstrapInitialize>false</WindowsAppSdkBootstrapInitialize>
+    <WindowsAppSdkUndockedRegFreeWinRTInitialize>false</WindowsAppSdkUndockedRegFreeWinRTInitialize>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.26100.0'">
+    <PackageReference Include="System.Security.Permissions" />
+  </ItemGroup>
+
+  <!-- Ensure each target has the appropriate entry point -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.26100.0'">
+    <Compile Remove="Platforms/Desktop/Program.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' != 'net10.0-windows10.0.26100.0'">
+    <Compile Remove="Platforms/Windows/**/*.cs" />
+  </ItemGroup>
+
+  <Target Name="ResolveWinUI3Toolchain"
+          BeforeTargets="GetVCInstallPath"
+          Condition="'$(TargetFramework)' == 'net10.0-windows10.0.26100.0'">
+    <Message Importance="High" Text="Resolving WinUI 3 build toolchain..." />
+
+    <PropertyGroup>
+      <VsWhereExe>$(MSBuildProgramFiles32)\Microsoft Visual Studio\Installer\vswhere.exe</VsWhereExe>
+      <VsInstallDirFile>$(IntermediateOutputPath)vs-install-dir.txt</VsInstallDirFile>
+      <MsvcToolsDirFile>$(IntermediateOutputPath)msvc-tools-dir.txt</MsvcToolsDirFile>
+    </PropertyGroup>
+
+    <MakeDir Directories="$(IntermediateOutputPath)" />
+
+    <Error Condition="!Exists('$(WindowsSdkPath)')"
+           Text="WinUI 3 build prerequisites missing: Windows SDK not found. Install Windows 10/11 SDK (10.0.19041+), then rebuild." />
+
+    <Error Condition="!Exists('$(VsWhereExe)')"
+           Text="WinUI 3 build prerequisites missing: Visual Studio Installer not found (vswhere.exe missing). Install Visual Studio with workload 'Desktop development with C++', then rebuild." />
+
+    <Exec Command="&quot;$(VsWhereExe)&quot; -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath &gt; &quot;$(VsInstallDirFile)&quot;"
+          IgnoreExitCode="false" />
+
+    <ReadLinesFromFile File="$(VsInstallDirFile)">
+      <Output TaskParameter="Lines" ItemName="_VsInstallDirLines" />
+    </ReadLinesFromFile>
+
+    <PropertyGroup>
+      <_ResolvedVsInstallDir>@(_VsInstallDirLines)</_ResolvedVsInstallDir>
+    </PropertyGroup>
+
+    <Error Condition="'$(_ResolvedVsInstallDir)' == ''"
+           Text="WinUI 3 build prerequisites missing: Unable to locate Visual Studio installation with MSVC tools." />
+
+    <!-- Pick latest MSVC toolset directory -->
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -Command &quot;$d = Get-ChildItem -Directory (Join-Path '$(_ResolvedVsInstallDir)' 'VC\\Tools\\MSVC') -ErrorAction Stop | Sort-Object Name -Descending | Select-Object -First 1 -ExpandProperty FullName; [Console]::WriteLine($d)&quot; &gt; &quot;$(MsvcToolsDirFile)&quot;"
+          IgnoreExitCode="false" />
+
+    <ReadLinesFromFile File="$(MsvcToolsDirFile)">
+      <Output TaskParameter="Lines" ItemName="_MsvcToolsDirLines" />
+    </ReadLinesFromFile>
+
+    <PropertyGroup>
+      <_ResolvedMsvcToolsDir>@(_MsvcToolsDirLines)</_ResolvedMsvcToolsDir>
+      <!-- Feed values expected by Microsoft.UI.Xaml.Markup.Compiler.interop.targets -->
+      <VsInstallRoot Condition="'$(VsInstallRoot)' == ''">$(_ResolvedVsInstallDir)</VsInstallRoot>
+      <VCToolsInstallDir Condition="'$(VCToolsInstallDir)' == ''">$(_ResolvedMsvcToolsDir)\</VCToolsInstallDir>
+      <VCInstallDir Condition="'$(VCInstallDir)' == ''">$(_ResolvedVsInstallDir)\VC\</VCInstallDir>
+    </PropertyGroup>
+
+    <Error Condition="!Exists('$(VCToolsInstallDir)bin\\HostX64\\x64\\vcmeta.dll') AND !Exists('$(VCToolsInstallDir)bin\\HostX86\\x64\\vcmeta.dll')"
+           Text="WinUI 3 build prerequisites missing: vcmeta.dll not found. Ensure MSVC x64/x86 build tools are installed." />
+  </Target>
+
+</Project>

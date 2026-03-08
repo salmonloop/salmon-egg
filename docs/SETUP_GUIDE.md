@@ -1,8 +1,8 @@
-# Uno ACP Client 项目设置指南
+# SalmonEgg 项目设置指南
 
 ## 概述
 
-本文档提供了 Uno ACP Client 项目的详细设置说明。该项目采用四层架构（Clean Architecture），使用 Uno Platform 构建跨平台原生应用。
+本文档提供了 SalmonEgg 项目的详细设置说明。该项目采用四层架构（Clean Architecture），使用 Uno Platform 构建跨平台原生应用。
 
 ## 系统要求
 
@@ -45,7 +45,7 @@ dotnet new list | grep -i uno
 如果从现有仓库克隆：
 ```bash
 git clone <repository-url>
-cd UnoAcpClient
+cd SalmonEgg
 ```
 
 如果从头创建，请按照以下步骤操作。
@@ -54,21 +54,21 @@ cd UnoAcpClient
 
 ```bash
 # 创建根目录
-mkdir UnoAcpClient
-cd UnoAcpClient
+mkdir SalmonEgg
+cd SalmonEgg
 
 # 创建解决方案文件
-dotnet new sln -n UnoAcpClient
+dotnet new sln -n SalmonEgg
 ```
 
 ### 4. 创建 Uno Platform 主项目
 
 ```bash
 # 创建 Uno Platform 应用（需要 .NET 9.0）
-dotnet new unoapp -o UnoAcpClient
+dotnet new unoapp -o SalmonEgg
 
 # 添加到解决方案
-dotnet sln add UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj
+dotnet sln add SalmonEgg/SalmonEgg/SalmonEgg.csproj
 ```
 
 ### 5. 创建层项目
@@ -76,72 +76,72 @@ dotnet sln add UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj
 #### Domain 层（领域层）
 
 ```bash
-dotnet new classlib -n UnoAcpClient.Domain -f netstandard2.1 -o src/UnoAcpClient.Domain
-dotnet sln add src/UnoAcpClient.Domain/UnoAcpClient.Domain.csproj
+dotnet new classlib -n SalmonEgg.Domain -f netstandard2.1 -o src/SalmonEgg.Domain
+dotnet sln add src/SalmonEgg.Domain/SalmonEgg.Domain.csproj
 
 # 创建目录结构
-mkdir -p src/UnoAcpClient.Domain/Models
-mkdir -p src/UnoAcpClient.Domain/Services
-mkdir -p src/UnoAcpClient.Domain/Exceptions
+mkdir -p src/SalmonEgg.Domain/Models
+mkdir -p src/SalmonEgg.Domain/Services
+mkdir -p src/SalmonEgg.Domain/Exceptions
 ```
 
 #### Application 层（应用层）
 
 ```bash
-dotnet new classlib -n UnoAcpClient.Application -f netstandard2.1 -o src/UnoAcpClient.Application
-dotnet sln add src/UnoAcpClient.Application/UnoAcpClient.Application.csproj
+dotnet new classlib -n SalmonEgg.Application -f netstandard2.1 -o src/SalmonEgg.Application
+dotnet sln add src/SalmonEgg.Application/SalmonEgg.Application.csproj
 
 # 创建目录结构
-mkdir -p src/UnoAcpClient.Application/Services
-mkdir -p src/UnoAcpClient.Application/UseCases
-mkdir -p src/UnoAcpClient.Application/Common
+mkdir -p src/SalmonEgg.Application/Services
+mkdir -p src/SalmonEgg.Application/UseCases
+mkdir -p src/SalmonEgg.Application/Common
 
 # 添加项目引用
-dotnet add src/UnoAcpClient.Application/UnoAcpClient.Application.csproj reference src/UnoAcpClient.Domain/UnoAcpClient.Domain.csproj
+dotnet add src/SalmonEgg.Application/SalmonEgg.Application.csproj reference src/SalmonEgg.Domain/SalmonEgg.Domain.csproj
 ```
 
 #### Infrastructure 层（基础设施层）
 
 ```bash
-dotnet new classlib -n UnoAcpClient.Infrastructure -f netstandard2.1 -o src/UnoAcpClient.Infrastructure
-dotnet sln add src/UnoAcpClient.Infrastructure/UnoAcpClient.Infrastructure.csproj
+dotnet new classlib -n SalmonEgg.Infrastructure -f netstandard2.1 -o src/SalmonEgg.Infrastructure
+dotnet sln add src/SalmonEgg.Infrastructure/SalmonEgg.Infrastructure.csproj
 
 # 创建目录结构
-mkdir -p src/UnoAcpClient.Infrastructure/Network
-mkdir -p src/UnoAcpClient.Infrastructure/Serialization
-mkdir -p src/UnoAcpClient.Infrastructure/Storage
-mkdir -p src/UnoAcpClient.Infrastructure/Logging
+mkdir -p src/SalmonEgg.Infrastructure/Network
+mkdir -p src/SalmonEgg.Infrastructure/Serialization
+mkdir -p src/SalmonEgg.Infrastructure/Storage
+mkdir -p src/SalmonEgg.Infrastructure/Logging
 
 # 添加项目引用
-dotnet add src/UnoAcpClient.Infrastructure/UnoAcpClient.Infrastructure.csproj reference src/UnoAcpClient.Domain/UnoAcpClient.Domain.csproj
+dotnet add src/SalmonEgg.Infrastructure/SalmonEgg.Infrastructure.csproj reference src/SalmonEgg.Domain/SalmonEgg.Domain.csproj
 ```
 
 #### Presentation 层（主项目）
 
 ```bash
 # 添加项目引用
-dotnet add UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj reference src/UnoAcpClient.Domain/UnoAcpClient.Domain.csproj
-dotnet add UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj reference src/UnoAcpClient.Application/UnoAcpClient.Application.csproj
-dotnet add UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj reference src/UnoAcpClient.Infrastructure/UnoAcpClient.Infrastructure.csproj
+dotnet add SalmonEgg/SalmonEgg/SalmonEgg.csproj reference src/SalmonEgg.Domain/SalmonEgg.Domain.csproj
+dotnet add SalmonEgg/SalmonEgg/SalmonEgg.csproj reference src/SalmonEgg.Application/SalmonEgg.Application.csproj
+dotnet add SalmonEgg/SalmonEgg/SalmonEgg.csproj reference src/SalmonEgg.Infrastructure/SalmonEgg.Infrastructure.csproj
 ```
 
 ### 6. 创建测试项目
 
 ```bash
 # Domain 测试
-dotnet new xunit -n UnoAcpClient.Domain.Tests -o tests/UnoAcpClient.Domain.Tests
-dotnet sln add tests/UnoAcpClient.Domain.Tests/UnoAcpClient.Domain.Tests.csproj
-dotnet add tests/UnoAcpClient.Domain.Tests/UnoAcpClient.Domain.Tests.csproj reference src/UnoAcpClient.Domain/UnoAcpClient.Domain.csproj
+dotnet new xunit -n SalmonEgg.Domain.Tests -o tests/SalmonEgg.Domain.Tests
+dotnet sln add tests/SalmonEgg.Domain.Tests/SalmonEgg.Domain.Tests.csproj
+dotnet add tests/SalmonEgg.Domain.Tests/SalmonEgg.Domain.Tests.csproj reference src/SalmonEgg.Domain/SalmonEgg.Domain.csproj
 
 # Infrastructure 测试
-dotnet new xunit -n UnoAcpClient.Infrastructure.Tests -o tests/UnoAcpClient.Infrastructure.Tests
-dotnet sln add tests/UnoAcpClient.Infrastructure.Tests/UnoAcpClient.Infrastructure.Tests.csproj
-dotnet add tests/UnoAcpClient.Infrastructure.Tests/UnoAcpClient.Infrastructure.Tests.csproj reference src/UnoAcpClient.Infrastructure/UnoAcpClient.Infrastructure.csproj
+dotnet new xunit -n SalmonEgg.Infrastructure.Tests -o tests/SalmonEgg.Infrastructure.Tests
+dotnet sln add tests/SalmonEgg.Infrastructure.Tests/SalmonEgg.Infrastructure.Tests.csproj
+dotnet add tests/SalmonEgg.Infrastructure.Tests/SalmonEgg.Infrastructure.Tests.csproj reference src/SalmonEgg.Infrastructure/SalmonEgg.Infrastructure.csproj
 
 # Application 测试
-dotnet new xunit -n UnoAcpClient.Application.Tests -o tests/UnoAcpClient.Application.Tests
-dotnet sln add tests/UnoAcpClient.Application.Tests/UnoAcpClient.Application.Tests.csproj
-dotnet add tests/UnoAcpClient.Application.Tests/UnoAcpClient.Application.Tests.csproj reference src/UnoAcpClient.Application/UnoAcpClient.Application.csproj
+dotnet new xunit -n SalmonEgg.Application.Tests -o tests/SalmonEgg.Application.Tests
+dotnet sln add tests/SalmonEgg.Application.Tests/SalmonEgg.Application.Tests.csproj
+dotnet add tests/SalmonEgg.Application.Tests/SalmonEgg.Application.Tests.csproj reference src/SalmonEgg.Application/SalmonEgg.Application.csproj
 ```
 
 ### 7. 安装 NuGet 包
@@ -149,7 +149,7 @@ dotnet add tests/UnoAcpClient.Application.Tests/UnoAcpClient.Application.Tests.c
 #### Infrastructure 层
 
 ```bash
-cd src/UnoAcpClient.Infrastructure
+cd src/SalmonEgg.Infrastructure
 dotnet add package System.Text.Json --version 10.0.3
 dotnet add package Websocket.Client --version 5.3.0
 dotnet add package Polly --version 8.6.6
@@ -163,7 +163,7 @@ cd ../..
 #### Application 层
 
 ```bash
-cd src/UnoAcpClient.Application
+cd src/SalmonEgg.Application
 dotnet add package FluentValidation --version 11.9.2
 dotnet add package Microsoft.Extensions.DependencyInjection.Abstractions --version 10.0.3
 dotnet add package System.Reactive --version 6.1.0
@@ -173,7 +173,7 @@ cd ../..
 #### Presentation 层
 
 ```bash
-cd UnoAcpClient/UnoAcpClient
+cd SalmonEgg/SalmonEgg
 dotnet add package CommunityToolkit.Mvvm
 dotnet add package Microsoft.Extensions.DependencyInjection
 dotnet add package Microsoft.Extensions.Logging
@@ -184,7 +184,7 @@ cd ../..
 
 ```bash
 # 为每个测试项目添加测试包
-cd tests/UnoAcpClient.Domain.Tests
+cd tests/SalmonEgg.Domain.Tests
 dotnet add package xunit
 dotnet add package xunit.runner.visualstudio
 dotnet add package FsCheck
@@ -194,7 +194,7 @@ dotnet add package FluentAssertions
 cd ../..
 
 # 对其他测试项目重复相同操作
-cd tests/UnoAcpClient.Infrastructure.Tests
+cd tests/SalmonEgg.Infrastructure.Tests
 dotnet add package xunit
 dotnet add package xunit.runner.visualstudio
 dotnet add package FsCheck
@@ -203,7 +203,7 @@ dotnet add package Moq
 dotnet add package FluentAssertions
 cd ../..
 
-cd tests/UnoAcpClient.Application.Tests
+cd tests/SalmonEgg.Application.Tests
 dotnet add package xunit
 dotnet add package xunit.runner.visualstudio
 dotnet add package FsCheck
@@ -283,7 +283,7 @@ dotnet build
 dotnet test
 
 # 5. 运行应用（Windows）
-cd UnoAcpClient/UnoAcpClient
+cd SalmonEgg/SalmonEgg
 dotnet run
 ```
 
@@ -299,10 +299,10 @@ dotnet run
 
 ```bash
 # Windows
-dotnet run --project UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj
+dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj
 
 # WebAssembly
-cd UnoAcpClient/UnoAcpClient
+cd SalmonEgg/SalmonEgg
 dotnet run
 # 浏览器会自动打开 http://localhost:5000
 ```

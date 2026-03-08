@@ -1,0 +1,68 @@
+<ContentDialog
+    x:Class="SalmonEgg.Presentation.Views.ConfigurationEditorDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="编辑服务器配置"
+    PrimaryButtonText="保存"
+    SecondaryButtonText="取消"
+    PrimaryButtonClick="OnSaveClick"
+    SecondaryButtonClick="OnCancelClick">
+
+    <ScrollViewer>
+        <StackPanel Spacing="8" MinWidth="400" Padding="4">
+            <!-- 错误信息 -->
+            <TextBlock x:Name="ErrorTextBlock" Foreground="Red" TextWrapping="Wrap"
+                       Visibility="Collapsed"/>
+
+            <!-- 基本配置 -->
+            <TextBlock Text="基本配置" FontWeight="Bold" Margin="0,8,0,4"/>
+            <StackPanel Spacing="4">
+                <TextBlock Text="配置名称"/>
+                <TextBox x:Name="NameTextBox" PlaceholderText="例如：本地开发服务器"/>
+            </StackPanel>
+            <StackPanel Spacing="4">
+                <TextBlock Text="服务器 URL"/>
+                <TextBox x:Name="ServerUrlTextBox" PlaceholderText="ws://localhost:8080"/>
+            </StackPanel>
+            <StackPanel Spacing="4">
+                <TextBlock Text="传输类型"/>
+                <ComboBox x:Name="TransportComboBox" Width="200">
+                    <ComboBoxItem Content="WebSocket" Tag="0"/>
+                    <ComboBoxItem Content="HTTP SSE" Tag="1"/>
+                </ComboBox>
+            </StackPanel>
+            <StackPanel Spacing="4">
+                <TextBlock Text="心跳间隔（秒）"/>
+                <NumberBox x:Name="HeartbeatBox" Minimum="5" Maximum="300" SpinButtonPlacementMode="Inline" Value="30"/>
+            </StackPanel>
+            <StackPanel Spacing="4">
+                <TextBlock Text="连接超时（秒）"/>
+                <NumberBox x:Name="TimeoutBox" Minimum="5" Maximum="60" SpinButtonPlacementMode="Inline" Value="10"/>
+            </StackPanel>
+
+            <!-- 认证配置 -->
+            <TextBlock Text="认证配置" FontWeight="Bold" Margin="0,8,0,4"/>
+            <StackPanel Spacing="4">
+                <TextBlock Text="Token"/>
+                <PasswordBox x:Name="TokenBox" PlaceholderText="认证令牌（可选）"/>
+            </StackPanel>
+            <StackPanel Spacing="4">
+                <TextBlock Text="API Key"/>
+                <PasswordBox x:Name="ApiKeyBox" PlaceholderText="API 密钥（可选）"/>
+            </StackPanel>
+
+            <!-- 代理配置 -->
+            <TextBlock Text="代理配置" FontWeight="Bold" Margin="0,8,0,4"/>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <ToggleSwitch x:Name="ProxyEnabledSwitch" Header="启用代理"/>
+            </StackPanel>
+            <StackPanel x:Name="ProxyPanel" Spacing="4">
+                <TextBlock Text="代理 URL"/>
+                <TextBox x:Name="ProxyUrlBox" PlaceholderText="http://proxy:8080"/>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</ContentDialog>

@@ -1,3 +1,3 @@
 #!/bin/bash
-echo "Starting Uno ACP Client..."
-dotnet run --project UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj --framework net10.0-desktop
+echo "Starting SalmonEgg..."
+dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj --framework net10.0-desktop

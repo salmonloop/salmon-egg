@@ -1,4 +1,4 @@
-# Uno ACP Client 构建和运行指南
+# SalmonEgg 构建和运行指南
 
 ## 系统要求
 
@@ -52,26 +52,26 @@ cd salmon-acp
 
 ```bash
 # 还原所有 NuGet 包
-dotnet restore UnoAcpClient.sln
+dotnet restore SalmonEgg.sln
 ```
 
 ### 3. 构建项目
 
 ```bash
 # 构建整个解决方案
-dotnet build UnoAcpClient.sln --configuration Release
+dotnet build SalmonEgg.sln --configuration Release
 ```
 
 ### 4. 运行应用
 
 #### Windows (Desktop)
 ```bash
-dotnet run --project UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj --framework net9.0-windows10.0.19041.0
+dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj --framework net9.0-windows10.0.19041.0
 ```
 
 #### WebAssembly
 ```bash
-cd UnoAcpClient/UnoAcpClient
+cd SalmonEgg/SalmonEgg
 dotnet run --framework net9.0-browserwasm
 ```
 浏览器会自动打开 http://localhost:5000
@@ -84,10 +84,10 @@ dotnet run --framework net9.0-browserwasm
 
 ```bash
 # 运行
-dotnet run --project UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj --framework net9.0-windows10.0.19041.0
+dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj --framework net9.0-windows10.0.19041.0
 
 # 发布为独立应用
-dotnet publish UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj \
+dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj \
   -f net9.0-windows10.0.19041.0 \
   -c Release \
   -o ./publish
@@ -97,11 +97,11 @@ dotnet publish UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj \
 
 ```bash
 # 运行开发服务器
-cd UnoAcpClient/UnoAcpClient
+cd SalmonEgg/SalmonEgg
 dotnet run --framework net9.0-browserwasm
 
 # 发布为静态网站
-dotnet publish UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj \
+dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj \
   -f net9.0-browserwasm \
   -c Release \
   -o ./dist
@@ -116,11 +116,11 @@ dotnet publish UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj \
 dotnet workload install android
 
 # 运行在 Android 模拟器
-dotnet run --project UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj \
+dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj \
   -f net9.0-android
 
 # 发布 APK
-dotnet publish UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj \
+dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj \
   -f net9.0-android \
   -c Release \
   -o ./publish-android
@@ -133,7 +133,7 @@ dotnet publish UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj \
 dotnet workload install ios
 
 # 运行在 iOS 模拟器
-dotnet run --project UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj \
+dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj \
   -f net9.0-ios \
   -t:RunSimulator
 ```
@@ -143,20 +143,20 @@ dotnet run --project UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj \
 ### 运行所有测试
 
 ```bash
-dotnet test UnoAcpClient.sln
+dotnet test SalmonEgg.sln
 ```
 
 ### 运行特定项目测试
 
 ```bash
 # 基础设施测试
-dotnet test tests/UnoAcpClient.Infrastructure.Tests
+dotnet test tests/SalmonEgg.Infrastructure.Tests
 
 # 应用层测试
-dotnet test tests/UnoAcpClient.Application.Tests
+dotnet test tests/SalmonEgg.Application.Tests
 
 # 领域层测试
-dotnet test tests/UnoAcpClient.Domain.Tests
+dotnet test tests/SalmonEgg.Domain.Tests
 ```
 
 ### 运行特定测试
@@ -180,8 +180,8 @@ dotnet test /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura
 
 ### Visual Studio 2022
 
-1. 打开 `UnoAcpClient.sln`
-2. 设置启动项目为 `UnoAcpClient`
+1. 打开 `SalmonEgg.sln`
+2. 设置启动项目为 `SalmonEgg`
 3. 选择目标框架（如 `net9.0-windows10.0.19041.0`）
 4. 按 F5 开始调试
 
@@ -199,13 +199,13 @@ dotnet test /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura
 - **发布模式**：日志级别为 Information
 
 日志文件位置：
-- **Windows**: `%LOCALAPPDATA%\UnoAcpClient\logs\`
+- **Windows**: `%LOCALAPPDATA%\SalmonEgg\logs\`
 - **WebAssembly**: 浏览器开发者工具 Console
-- **macOS/Linux**: `~/.local/share/UnoAcpClient/logs/`
+- **macOS/Linux**: `~/.local/share/SalmonEgg/logs/`
 
 ## 常见问题
 
-### 问题 1: "UnoAcpClient" 项目无法构建
+### 问题 1: "SalmonEgg" 项目无法构建
 
 **症状**: 编译错误提到找不到类型或命名空间
 

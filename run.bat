@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-echo Starting Uno ACP Client...
+echo Starting SalmonEgg...
 
 set "REPO_ROOT=%~dp0"
 pushd "%REPO_ROOT%" >nul
@@ -48,7 +48,7 @@ popd >nul
 exit /b %EC%
 
 :desktop
-dotnet run --project UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj --framework net10.0-desktop
+dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj --framework net10.0-desktop
 set "EC=%errorlevel%"
 popd >nul
 exit /b %EC%

@@ -1,6 +1,6 @@
-# Uno ACP Client 发布指南
+# SalmonEgg 发布指南
 
-本指南说明如何为不同平台构建和发布 Uno ACP Client 应用程序。
+本指南说明如何为不同平台构建和发布 SalmonEgg 应用程序。
 
 ## 目录
 
@@ -39,7 +39,7 @@
 ### 发布为独立应用
 
 ```bash
-cd UnoAcpClient/UnoAcpClient
+cd SalmonEgg/SalmonEgg
 
 # 发布为 Windows 独立应用（包含 .NET 运行时）
 dotnet publish -f net9.0-windows10.0.19041.0 -c Release \
@@ -69,7 +69,7 @@ iscc windows-installer.iss
 
 ```bash
 # 运行发布的应用
-./publish/windows-x64/UnoAcpClient.exe
+./publish/windows-x64/SalmonEgg.exe
 ```
 
 ---
@@ -79,7 +79,7 @@ iscc windows-installer.iss
 ### 发布 WebAssembly 应用
 
 ```bash
-cd UnoAcpClient/UnoAcpClient
+cd SalmonEgg/SalmonEgg
 
 # 发布为 WebAssembly（优化后）
 dotnet publish -f net9.0-browserwasm -c Release \
@@ -141,7 +141,7 @@ server {
 ```bash
 # 使用 .NET HTTP 服务器
 cd publish/wasm/wwwroot
-dotnet run --project ../../../UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj \
+dotnet run --project ../../../SalmonEgg/SalmonEgg/SalmonEgg.csproj \
   -f net9.0-browserwasm
 
 # 或使用任意 HTTP 服务器
@@ -166,7 +166,7 @@ keytool -genkey -v -keystore uno-acp-client.keystore -alias uno-acp -keyalg RSA 
 ### 发布 APK
 
 ```bash
-cd UnoAcpClient/UnoAcpClient
+cd SalmonEgg/SalmonEgg
 
 # 发布未签名的 APK
 dotnet publish -f net9.0-android -c Release \
@@ -199,7 +199,7 @@ dotnet publish -f net9.0-android -c Release \
 
 ```bash
 # 在模拟器上安装
-adb install publish/android/UnoAcpClient.apk
+adb install publish/android/SalmonEgg.apk
 
 # 或在设备上调试
 dotnet build -t:Run -f net9.0-android -c Release
@@ -218,14 +218,14 @@ dotnet build -t:Run -f net9.0-android -c Release
 ### 创建 IPA
 
 ```bash
-cd UnoAcpClient/UnoAcpClient
+cd SalmonEgg/SalmonEgg
 
 # 发布为 IPA
 dotnet publish -f net9.0-ios -c Release \
   -p:ArchiveOnBuild=true \
   -p:CreateIpa=true \
   -p:CodesignKey="iPhone Distribution: Your Company" \
-  -p:IpaPackageName=UnoAcpClient \
+  -p:IpaPackageName=SalmonEgg \
   -o ../../publish/ios
 ```
 
@@ -234,7 +234,7 @@ dotnet publish -f net9.0-ios -c Release \
 ```bash
 # 使用 Xcode 上传
 cd publish/ios
-xcrun altool --upload-app --type ios -f UnoAcpClient.ipa \
+xcrun altool --upload-app --type ios -f SalmonEgg.ipa \
   -u your.apple.id@apple.com -p your-app-specific-password
 ```
 
@@ -245,7 +245,7 @@ xcrun altool --upload-app --type ios -f UnoAcpClient.ipa \
 ### 发布为独立应用
 
 ```bash
-cd UnoAcpClient/UnoAcpClient
+cd SalmonEgg/SalmonEgg
 
 # 发布 macOS 应用
 dotnet publish -f net9.0-maccatalyst -c Release \
@@ -266,13 +266,13 @@ dotnet publish -f net9.0-maccatalyst -c Release \
 # 使用 create-dmg（需要安装）
 cd publish/macos-x64
 create-dmg \
-  --volname "Uno ACP Client" \
+  --volname "SalmonEgg" \
   --window-pos 200,120 \
   --window-size 600,400 \
   --icon-size 100 \
   --app-drop-link 400,200 \
-  "UnoAcpClient.dmg" \
-  "UnoAcpClient.app"
+  "SalmonEgg.dmg" \
+  "SalmonEgg.app"
 ```
 
 ---
@@ -315,7 +315,7 @@ steps:
   displayName: 'Test'
 
 - script: |
-    cd UnoAcpClient/UnoAcpClient
+    cd SalmonEgg/SalmonEgg
     dotnet publish -f net9.0-browserwasm -c Release -o ../../publish/wasm
   displayName: 'Publish WebAssembly'
 
@@ -384,4 +384,4 @@ dotnet publish -p:PublishTrimmed=true -p:TrimMode=link
 
 - [Uno Platform 文档](https://platform.uno/docs/)
 - [.NET 发布指南](https://docs.microsoft.com/dotnet/core/deploying/)
-- [GitHub Issues](https://github.com/your-org/UnoAcpClient/issues)
+- [GitHub Issues](https://github.com/your-org/SalmonEgg/issues)

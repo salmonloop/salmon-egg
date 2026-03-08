@@ -1,4 +1,4 @@
-# Uno ACP Client 使用指南
+# SalmonEgg 使用指南
 
 ## 如何配置 ACP Server
 
@@ -34,7 +34,7 @@
 ### 方法 2: 直接编辑配置文件
 
 配置文件存储位置：
-- Windows: `%LOCALAPPDATA%\UnoAcpClient\configurations\`
+- Windows: `%LOCALAPPDATA%\SalmonEgg\configurations\`
 - 每个配置都是一个 JSON 文件
 
 配置文件格式示例：
@@ -92,7 +92,7 @@
 - 检查服务器 URL 是否正确
 - 确认服务器已启动
 - 检查防火墙设置
-- 查看日志文件（位于 `%LOCALAPPDATA%\UnoAcpClient\logs\`）
+- 查看日志文件（位于 `%LOCALAPPDATA%\SalmonEgg\logs\`）
 
 ### 连接后立即断开
 - 检查认证信息是否正确
@@ -108,7 +108,7 @@
 
 ### 启用调试日志
 在应用启动时会自动创建日志文件，位于：
-- Windows: `%LOCALAPPDATA%\UnoAcpClient\logs\`
+- Windows: `%LOCALAPPDATA%\SalmonEgg\logs\`
 
 ### 运行测试
 ```bash

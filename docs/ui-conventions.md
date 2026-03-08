@@ -54,7 +54,7 @@ Platform conditional compilation is acceptable for truly platform-specific integ
 
 ## 5) Automated guardrails
 
-Unit tests under `tests/UnoAcpClient.Application.Tests/UiConventionsTests.cs` enforce:
+Unit tests under `tests/SalmonEgg.Application.Tests/UiConventionsTests.cs` enforce:
 
 - DI-resolved VMs occur before `InitializeComponent()` in `*.xaml.cs`
 - `ChatViewModel` is registered as singleton

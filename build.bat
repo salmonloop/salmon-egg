@@ -1,12 +1,12 @@
 @echo off
 chcp 65001 >nul
 echo ========================================
-echo Uno ACP Client Build Script
+echo SalmonEgg Build Script
 echo ========================================
 echo.
 
 echo [1/4] Restoring dependencies...
-dotnet restore UnoAcpClient.sln
+dotnet restore SalmonEgg.sln
 if %errorlevel% neq 0 exit /b %errorlevel%
 
 set "WINSDK_BIN=%ProgramFiles(x86)%\Windows Kits\10\bin"
@@ -39,17 +39,17 @@ exit /b 1
 :build
 echo.
 echo [2/4] Building project...
-dotnet build UnoAcpClient.sln --configuration Release --no-restore
+dotnet build SalmonEgg.sln --configuration Release --no-restore
 if %errorlevel% neq 0 exit /b %errorlevel%
 
 echo.
 echo [3/4] Running tests...
-dotnet test UnoAcpClient.sln --configuration Release --no-build
+dotnet test SalmonEgg.sln --configuration Release --no-build
 if %errorlevel% neq 0 exit /b %errorlevel%
 
 echo.
 echo [4/4] Publishing application...
-dotnet publish UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj ^
+dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj ^
   --configuration Release ^
   --framework net10.0-windows10.0.26100.0 ^
   --output publish/windows-desktop ^

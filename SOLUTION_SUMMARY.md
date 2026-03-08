@@ -21,19 +21,19 @@
 简化对话框打开逻辑，使用 ContentDialog 的返回值来处理保存/取消操作。
 
 **修改文件**:
-- `UnoAcpClient/UnoAcpClient/Presentation/Views/SettingsPage.xaml.cs`
+- `SalmonEgg/SalmonEgg/Presentation/Views/SettingsPage.xaml.cs`
 
 ### 3. 修复 ConfigurationEditorDialog.xaml.cs
 修复 Transport 类型绑定和空值处理。
 
 **修改文件**:
-- `UnoAcpClient/UnoAcpClient/Presentation/Views/ConfigurationEditorDialog.xaml.cs`
+- `SalmonEgg/SalmonEgg/Presentation/Views/ConfigurationEditorDialog.xaml.cs`
 
 ### 4. 修复 MainViewModel 初始化
 在 MainViewModel 构造函数中自动加载服务器列表。
 
 **修改文件**:
-- `UnoAcpClient/UnoAcpClient/Presentation/ViewModels/MainViewModel.cs`
+- `SalmonEgg/SalmonEgg/Presentation/ViewModels/MainViewModel.cs`
 
 ## 使用方法
 
@@ -42,7 +42,7 @@
 1. **运行应用**
    ```bash
    cd salmon-acp
-   dotnet run --project UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj
+   dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj
    ```
 
 2. **配置服务器**

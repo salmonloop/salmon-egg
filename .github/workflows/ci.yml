@@ -11,7 +11,7 @@ on:
 env:
   DOTNET_VERSION: '9.0.x'
   CONFIGURATION: 'Release'
-  PROJECT_NAME: 'UnoAcpClient'
+  PROJECT_NAME: 'SalmonEgg'
 
 jobs:
   build:
@@ -30,13 +30,13 @@ jobs:
         dotnet-version: ${{ env.DOTNET_VERSION }}
 
     - name: Restore dependencies
-      run: dotnet restore UnoAcpClient.sln
+      run: dotnet restore SalmonEgg.sln
 
     - name: Build
-      run: dotnet build UnoAcpClient.sln --configuration ${{ env.CONFIGURATION }} --no-restore
+      run: dotnet build SalmonEgg.sln --configuration ${{ env.CONFIGURATION }} --no-restore
 
     - name: Test
-      run: dotnet test UnoAcpClient.sln --configuration ${{ env.CONFIGURATION }} --no-build --verbosity normal --collect:"XPlat Code Coverage"
+      run: dotnet test SalmonEgg.sln --configuration ${{ env.CONFIGURATION }} --no-build --verbosity normal --collect:"XPlat Code Coverage"
 
     - name: Upload test results
       if: always()
@@ -63,7 +63,7 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
       - name: Publish WebAssembly
         run: |
-          cd UnoAcpClient/UnoAcpClient
+          cd SalmonEgg/SalmonEgg
           dotnet publish -f net9.0-browserwasm -c ${{ env.CONFIGURATION }} -o ../../publish/wasm
       - name: Upload WebAssembly artifact
         uses: actions/upload-artifact@v3
@@ -84,7 +84,7 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
       - name: Publish Desktop (Windows)
         run: |
-          cd UnoAcpClient/UnoAcpClient
+          cd SalmonEgg/SalmonEgg
           dotnet publish -f net9.0-desktop -c ${{ env.CONFIGURATION }} -o ../../publish/desktop-windows
       - name: Upload Desktop artifact
         uses: actions/upload-artifact@v3
@@ -114,8 +114,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./wasm/wwwroot/UnoAcpClient.zip
-          asset_name: UnoAcpClient-wasm.zip
+          asset_path: ./wasm/wwwroot/SalmonEgg.zip
+          asset_name: SalmonEgg-wasm.zip
           asset_content_type: application/zip
       - name: Upload Release Asset (Desktop)
         uses: actions/upload-release-asset@v1
@@ -123,8 +123,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./desktop/UnoAcpClient.zip
-          asset_name: UnoAcpClient-desktop.zip
+          asset_path: ./desktop/SalmonEgg.zip
+          asset_name: SalmonEgg-desktop.zip
           asset_content_type: application/zip
     - name: Checkout
       uses: actions/checkout@v3
@@ -136,7 +136,7 @@ jobs:
 
     - name: Publish WebAssembly
       run: |
-        cd UnoAcpClient/UnoAcpClient
+        cd SalmonEgg/SalmonEgg
         dotnet publish -f net9.0-browserwasm -c ${{ env.CONFIGURATION }} -o ../../publish/wasm
 
     - name: Upload WebAssembly artifact
@@ -159,10 +159,10 @@ jobs:
         dotnet-version: ${{ env.DOTNET_VERSION }}
 
     - name: Restore dependencies
-      run: dotnet restore UnoAcpClient.sln
+      run: dotnet restore SalmonEgg.sln
 
     - name: Check formatting
-      run: dotnet format UnoAcpClient.sln --verify-no-changes --no-restore
+      run: dotnet format SalmonEgg.sln --verify-no-changes --no-restore
 
     - name: Build with analyzers
-      run: dotnet build UnoAcpClient.sln --configuration ${{ env.CONFIGURATION }} --no-restore /p:EnforceCodeStyleInBuild=true
+      run: dotnet build SalmonEgg.sln --configuration ${{ env.CONFIGURATION }} --no-restore /p:EnforceCodeStyleInBuild=true

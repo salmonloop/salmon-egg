@@ -1,8 +1,8 @@
-# Uno ACP Client 架构文档
+# SalmonEgg 架构文档
 
 ## 概述
 
-Uno ACP Client 是一个基于 Uno Platform 的跨平台原生应用程序，实现 Agent Client Protocol (ACP) 以与 AI 代理进行通信。该项目采用现代架构设计原则，强调代码质量、可维护性和可扩展性。
+SalmonEgg 是一个基于 Uno Platform 的跨平台原生应用程序，实现 Agent Client Protocol (ACP) 以与 AI 代理进行通信。该项目采用现代架构设计原则，强调代码质量、可维护性和可扩展性。
 
 ## 架构模式
 
@@ -34,9 +34,9 @@ Infrastructure Layer
 ## 项目结构
 
 ```
-UnoAcpClient/
+SalmonEgg/
 ├── src/
-│   ├── UnoAcpClient/                      # Uno Platform 共享项目（Presentation）
+│   ├── SalmonEgg/                      # Uno Platform 共享项目（Presentation）
 │   │   ├── Presentation/
 │   │   │   ├── ViewModels/                # ViewModel 层
 │   │   │   ├── Views/                     # XAML 视图
@@ -44,34 +44,34 @@ UnoAcpClient/
 │   │   ├── App.xaml                       # 应用程序入口
 │   │   └── DependencyInjection.cs         # DI 容器配置
 │   │
-│   ├── UnoAcpClient.Application/          # 应用层（.NET Standard 2.1）
+│   ├── SalmonEgg.Application/          # 应用层（.NET Standard 2.1）
 │   │   ├── Services/                      # 应用服务接口和实现
 │   │   ├── UseCases/                      # 业务用例
 │   │   ├── Common/                        # 通用组件（Result 模式）
 │   │   └── Validators/                    # FluentValidation 验证器
 │   │
-│   ├── UnoAcpClient.Domain/               # 领域层（.NET Standard 2.1）
+│   ├── SalmonEgg.Domain/               # 领域层（.NET Standard 2.1）
 │   │   ├── Models/                        # 领域模型
 │   │   ├── Services/                      # 领域服务接口
 │   │   └── Exceptions/                    # 领域异常
 │   │
-│   └── UnoAcpClient.Infrastructure/       # 基础设施层（.NET Standard 2.1）
+│   └── SalmonEgg.Infrastructure/       # 基础设施层（.NET Standard 2.1）
 │       ├── Network/                       # 网络传输实现
 │       ├── Serialization/                 # 消息解析和序列化
 │       ├── Storage/                       # 持久化和配置
 │       └── Logging/                       # 日志配置
 │
 ├── tests/
-│   ├── UnoAcpClient.Domain.Tests/
-│   ├── UnoAcpClient.Application.Tests/
-│   └── UnoAcpClient.Infrastructure.Tests/
+│   ├── SalmonEgg.Domain.Tests/
+│   ├── SalmonEgg.Application.Tests/
+│   └── SalmonEgg.Infrastructure.Tests/
 │
 ├── docs/
 │   ├── architecture.md                    # 本文档
 │   ├── build-guide.md                     # 构建指南
 │   └── coding-standards.md                # 代码规范
 │
-└── UnoAcpClient.sln
+└── SalmonEgg.sln
 ```
 
 ## 组件关系图
@@ -235,7 +235,7 @@ UI Updates (message history list)
 ```csharp
 public static class DependencyInjection
 {
-    public static IServiceCollection AddUnoAcpClient(this IServiceCollection services)
+    public static IServiceCollection AddSalmonEgg(this IServiceCollection services)
     {
         ConfigureLogging(services);
         RegisterDomainServices(services);

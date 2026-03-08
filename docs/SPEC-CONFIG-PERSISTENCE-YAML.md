@@ -1,10 +1,6 @@
 # 配置持久化方案 SPEC（YAML + 安全存储 + 版本化）
 
-更新时间：2026-03-08（Asia/Shanghai）
-
-此次本项目正式命名为 Salmon Egg。
-
-本文档钉死 UnoAcpClient 的**配置持久化**最佳实践方案：使用 **YAML** 存储可读/可审计的非敏感配置，敏感字段进入**平台安全存储**（Windows Credential Manager / macOS Keychain / Linux Secret Service / Web 的替代实现），并提供可演进的版本化与迁移策略。
+本文档钉死 Salmon Egg 的**配置持久化**最佳实践方案：使用 **YAML** 存储可读/可审计的非敏感配置，敏感字段进入**平台安全存储**（Windows Credential Manager / macOS Keychain / Linux Secret Service / Web 的替代实现），并提供可演进的版本化与迁移策略。
 
 > 目标：可读、可合并、可迁移、跨平台一致、不会因为新增字段/枚举值/格式差异导致客户端崩溃。
 
@@ -92,8 +88,8 @@ authentication:
 
 ### 4.2 SecureStorage Key 规则
 统一 key 前缀，便于清理与迁移：
-- `unoacpclient/config/<serverId>/token`
-- `unoacpclient/config/<serverId>/apiKey`
+- `salmonegg/config/<serverId>/token`
+- `salmonegg/config/<serverId>/apiKey`
 
 删除 server 配置时必须同时删除对应 secure keys。
 
@@ -134,30 +130,3 @@ authentication:
 启动时检测版本并按序迁移，记录到 `config-migrations/migrations.log`。
 
 ---
-
-## 7. 建议的代码结构（不要求一次性落地，但方向钉死）
-
-### 7.1 抽象层
-- `IConfigurationStore`（Infrastructure）
-  - `Task SaveServerAsync(ServerConfiguration config)`
-  - `Task<ServerConfiguration?> LoadServerAsync(string id)`
-  - `Task<IReadOnlyList<ServerConfiguration>> ListServersAsync()`
-  - `Task DeleteServerAsync(string id)`
-
-### 7.2 实现
-- `YamlConfigurationStore`：YAML 文件读写（依赖 `YamlDotNet`）
-- `SecureConfigurationSecretStore`：封装 `ISecureStorage` 的 secret 读写
-- `ConfigurationService`：组合 store + secret store，对外暴露当前的 `IConfigurationService`
-
-### 7.3 测试（必须）
-- 解析兼容：未知字段/未知 enum 不崩溃
-- 原子写：写入中断不会生成半文件（可用临时文件模拟）
-- round-trip：保存→加载一致（除 secret 字段）
-
----
-
-## 8. 验收标准（Definition of Done）
-
-- 用户可在磁盘上看到可读 YAML 配置，并能手动编辑后被程序读取。
-- 新增字段不破坏旧版本读取（至少忽略并继续运行）。
-- Windows / macOS / Linux / Skia Desktop 行为一致。
