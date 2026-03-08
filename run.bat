@@ -1,6 +1,9 @@
 @echo off
 echo Starting Uno ACP Client...
 
+set "REPO_ROOT=%~dp0"
+pushd "%REPO_ROOT%" >nul
+
 if /I "%1"=="desktop" goto :desktop
 
 set "WINSDK_BIN=%ProgramFiles(x86)%\Windows Kits\10\bin"
@@ -28,8 +31,13 @@ echo Install Visual Studio 2022 (or Build Tools 2022) workload "Desktop developm
 exit /b 1
 
 :runapp
-powershell -NoProfile -ExecutionPolicy Bypass -File .\.tools\run-winui3-msix.ps1 -Configuration Debug
-exit /b %errorlevel%
+powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO_ROOT%.tools\run-winui3-msix.ps1" -Configuration Debug
+set "EC=%errorlevel%"
+popd >nul
+exit /b %EC%
 
 :desktop
 dotnet run --project UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj --framework net10.0-desktop
+set "EC=%errorlevel%"
+popd >nul
+exit /b %EC%
