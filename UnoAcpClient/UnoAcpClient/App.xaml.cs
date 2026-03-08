@@ -120,6 +120,10 @@ public partial class App : global::Microsoft.UI.Xaml.Application
 #endif
             builder.SetMinimumLevel(LogLevel.Information);
             builder.AddFilter("Uno", LogLevel.Warning);
+            // Uno RemoteControl is a development-only feature (hot reload / diagnostics). When the
+            // server isn't running it will emit noisy error logs; suppress it by default.
+            builder.AddFilter("Uno.UI.RemoteControl", LogLevel.None);
+            builder.AddFilter("Uno.UI.RemoteControl.RemoteControlClient", LogLevel.None);
             builder.AddFilter("Uno.UI.Runtime.Skia.Win32.Win32DragDropExtension", LogLevel.None);
             builder.AddFilter("Windows", LogLevel.Warning);
             builder.AddFilter("Microsoft", LogLevel.Warning);

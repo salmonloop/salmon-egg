@@ -58,6 +58,7 @@ namespace UnoAcpClient.Domain.Models.Protocol
     [JsonDerivedType(typeof(AgentMessageUpdate), "agent_message_chunk")]
     [JsonDerivedType(typeof(AgentThoughtUpdate), "agent_thought_chunk")]
     [JsonDerivedType(typeof(ToolCallUpdate), "tool_call")]
+    [JsonDerivedType(typeof(ToolCallStatusUpdate), "tool_call_update")]
     [JsonDerivedType(typeof(PlanUpdate), "plan")]
     [JsonDerivedType(typeof(ModeChangeUpdate), "mode_change")]
     [JsonDerivedType(typeof(ConfigUpdateUpdate), "config_update")]
@@ -278,6 +279,31 @@ namespace UnoAcpClient.Domain.Models.Protocol
         {
             ConfigOptions = configOptions;
         }
+    }
+
+    /// <summary>
+    /// 工具调用状态更新（tool_call_update）。
+    /// 某些 Agent 不会在 tool_call update 中发送完整 toolCall 对象，只会推送状态与输出内容。
+    /// </summary>
+    public class ToolCallStatusUpdate : SessionUpdate
+    {
+        /// <summary>
+        /// 工具调用 ID。
+        /// </summary>
+        [JsonPropertyName("toolCallId")]
+        public string? ToolCallId { get; set; }
+
+        /// <summary>
+        /// 工具调用状态。
+        /// </summary>
+        [JsonPropertyName("status")]
+        public ToolCallStatus? Status { get; set; }
+
+        /// <summary>
+        /// 工具返回内容（可能是内容块数组或任意 JSON）。
+        /// </summary>
+        [JsonPropertyName("content")]
+        public JsonElement? Content { get; set; }
     }
 
     /// <summary>

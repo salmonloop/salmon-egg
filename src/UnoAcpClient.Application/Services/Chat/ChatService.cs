@@ -75,6 +75,9 @@ namespace UnoAcpClient.Application.Services.Chat
                         case ToolCallUpdate toolCallUpdate:
                             // 处理工具调用更新
                             break;
+                        case ToolCallStatusUpdate toolCallStatusUpdate:
+                            // 工具调用状态更新（某些 Agent 使用 tool_call_update）
+                            break;
                         case PlanUpdate planUpdate:
                             // 更新当前计划
                             if (planUpdate.Entries != null)
@@ -144,6 +147,10 @@ namespace UnoAcpClient.Application.Services.Chat
                     entry.Status = toolCallUpdate.Status;
                     entry.Title = toolCallUpdate.Title;
                     break;
+                case ToolCallStatusUpdate toolCallStatusUpdate:
+                    entry.ToolCallId = toolCallStatusUpdate.ToolCallId;
+                    entry.Status = toolCallStatusUpdate.Status;
+                    break;
                 case PlanUpdate planUpdate:
                     entry.Entries = planUpdate.Entries;
                     entry.Title = planUpdate.Title;
@@ -169,6 +176,7 @@ namespace UnoAcpClient.Application.Services.Chat
                 AgentMessageUpdate => "agent_message_chunk",
                 AgentThoughtUpdate => "agent_thought_chunk",
                 ToolCallUpdate => "tool_call",
+                ToolCallStatusUpdate => "tool_call_update",
                 PlanUpdate => "plan",
                 ModeChangeUpdate => "mode_change",
                 ConfigUpdateUpdate => "config_update",

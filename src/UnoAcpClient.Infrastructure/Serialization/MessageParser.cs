@@ -35,7 +35,9 @@ namespace UnoAcpClient.Infrastructure.Serialization
                 Converters =
                 {
                     // 添加 JsonRpcMessage 的多态转换器
-                    new JsonRpcMessageConverter()
+                    new JsonRpcMessageConverter(),
+                    // Allow enums to bind to the JsonPropertyName values used across ACP payloads.
+                    new JsonPropertyNameEnumConverterFactory()
                 }
             };
         }

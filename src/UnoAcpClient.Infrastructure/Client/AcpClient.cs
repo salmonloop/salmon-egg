@@ -44,6 +44,7 @@ namespace UnoAcpClient.Infrastructure.Client
         private AgentInfo? _agentInfo;
         private AgentCapabilities? _agentCapabilities;
         private long _nextMessageId;
+        private long _lastReceivedUnixMs;
 
         /// <summary>
         /// 初始化事件。
@@ -211,7 +212,7 @@ namespace UnoAcpClient.Infrastructure.Client
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),
                 "session/new",
-                JsonSerializer.SerializeToElement(@params, typeof(SessionNewParams)));
+                JsonSerializer.SerializeToElement(@params, typeof(SessionNewParams), _parser.Options));
 
             var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
 
@@ -220,7 +221,7 @@ namespace UnoAcpClient.Infrastructure.Client
                 throw new AcpException(response.Error!.Code, response.Error.Message, response.Error.Data);
             }
 
-            var sessionNewResponse = JsonSerializer.Deserialize<SessionNewResponse>(response.Result!.Value.GetRawText());
+            var sessionNewResponse = JsonSerializer.Deserialize<SessionNewResponse>(response.Result!.Value.GetRawText(), _parser.Options);
             if (sessionNewResponse == null)
             {
                 throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse session/new response");
@@ -251,7 +252,7 @@ namespace UnoAcpClient.Infrastructure.Client
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),
                 "session/load",
-                JsonSerializer.SerializeToElement(@params, typeof(SessionLoadParams)));
+                JsonSerializer.SerializeToElement(@params, typeof(SessionLoadParams), _parser.Options));
 
             var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
 
@@ -278,19 +279,44 @@ namespace UnoAcpClient.Infrastructure.Client
                 throw new AcpException(JsonRpcErrorCode.SessionNotFound, $"Session '{@params.SessionId}' not found");
             }
 
+            var promptStartUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),
                 "session/prompt",
-                JsonSerializer.SerializeToElement(@params, typeof(SessionPromptParams)));
+                JsonSerializer.SerializeToElement(@params, typeof(SessionPromptParams), _parser.Options));
 
-            var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
+            JsonRpcResponse response;
+            try
+            {
+                response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
+            }
+            catch (TimeoutException)
+            {
+                // Some agents stream session/update events but never send a JSON-RPC response for session/prompt.
+                // If we observed any incoming traffic after the prompt started, assume a streaming-only agent
+                // and don't fail the UX.
+                var lastRx = Interlocked.Read(ref _lastReceivedUnixMs);
+                if (lastRx > promptStartUnixMs)
+                {
+                    _errorLogger.LogError(new ErrorLogEntry(
+                        "PROMPT_NO_RESPONSE",
+                        $"No JSON-RPC response for session/prompt (id={request.Id}). Received session traffic after prompt; assuming streaming-only agent.",
+                        ErrorSeverity.Warning,
+                        nameof(SendPromptAsync),
+                        @params.SessionId));
+
+                    return new SessionPromptResponse(StopReason.EndTurn);
+                }
+
+                throw;
+            }
 
             if (response.IsError)
             {
                 throw new AcpException(response.Error!.Code, response.Error.Message, response.Error.Data);
             }
 
-            var promptResponse = JsonSerializer.Deserialize<SessionPromptResponse>(response.Result!.Value.GetRawText());
+            var promptResponse = JsonSerializer.Deserialize<SessionPromptResponse>(response.Result!.Value.GetRawText(), _parser.Options);
             if (promptResponse == null)
             {
                 throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse session/prompt response");
@@ -309,7 +335,7 @@ namespace UnoAcpClient.Infrastructure.Client
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),
                 "session/set_mode",
-                JsonSerializer.SerializeToElement(@params, typeof(SessionSetModeParams)));
+                JsonSerializer.SerializeToElement(@params, typeof(SessionSetModeParams), _parser.Options));
 
             var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
 
@@ -318,7 +344,7 @@ namespace UnoAcpClient.Infrastructure.Client
                 throw new AcpException(response.Error!.Code, response.Error.Message, response.Error.Data);
             }
 
-            var setModeResponse = JsonSerializer.Deserialize<SessionSetModeResponse>(response.Result!.Value.GetRawText());
+            var setModeResponse = JsonSerializer.Deserialize<SessionSetModeResponse>(response.Result!.Value.GetRawText(), _parser.Options);
             if (setModeResponse == null)
             {
                 throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse session/set_mode response");
@@ -343,7 +369,7 @@ namespace UnoAcpClient.Infrastructure.Client
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),
                 "session/set_config_option",
-                JsonSerializer.SerializeToElement(@params, typeof(SessionSetConfigOptionParams)));
+                JsonSerializer.SerializeToElement(@params, typeof(SessionSetConfigOptionParams), _parser.Options));
 
             var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
 
@@ -352,7 +378,7 @@ namespace UnoAcpClient.Infrastructure.Client
                 throw new AcpException(response.Error!.Code, response.Error.Message, response.Error.Data);
             }
 
-            var configResponse = JsonSerializer.Deserialize<SessionSetConfigOptionResponse>(response.Result!.Value.GetRawText());
+            var configResponse = JsonSerializer.Deserialize<SessionSetConfigOptionResponse>(response.Result!.Value.GetRawText(), _parser.Options);
             if (configResponse == null)
             {
                 throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse session/set_config_option response");
@@ -371,7 +397,7 @@ namespace UnoAcpClient.Infrastructure.Client
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),
                 "session/cancel",
-                JsonSerializer.SerializeToElement(@params, typeof(SessionCancelParams)));
+                JsonSerializer.SerializeToElement(@params, typeof(SessionCancelParams), _parser.Options));
 
             var response = await SendRequestAsync(request, cancellationToken);
 
@@ -380,7 +406,7 @@ namespace UnoAcpClient.Infrastructure.Client
                 throw new AcpException(response.Error!.Code, response.Error.Message, response.Error.Data);
             }
 
-            var cancelResponse = JsonSerializer.Deserialize<SessionCancelResponse>(response.Result!.Value.GetRawText());
+            var cancelResponse = JsonSerializer.Deserialize<SessionCancelResponse>(response.Result!.Value.GetRawText(), _parser.Options);
             if (cancelResponse == null)
             {
                 throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse session/cancel response");
@@ -402,7 +428,7 @@ namespace UnoAcpClient.Infrastructure.Client
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),
                 "authenticate",
-                JsonSerializer.SerializeToElement(@params, typeof(AuthenticateParams)));
+                JsonSerializer.SerializeToElement(@params, typeof(AuthenticateParams), _parser.Options));
 
             var response = await SendRequestAsync(request, cancellationToken);
 
@@ -411,7 +437,7 @@ namespace UnoAcpClient.Infrastructure.Client
                 throw new AcpException(response.Error!.Code, response.Error.Message, response.Error.Data);
             }
 
-            var authResponse = JsonSerializer.Deserialize<AuthenticateResponse>(response.Result!.Value.GetRawText());
+            var authResponse = JsonSerializer.Deserialize<AuthenticateResponse>(response.Result!.Value.GetRawText(), _parser.Options);
             if (authResponse == null)
             {
                 throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse authenticate response");
@@ -489,8 +515,17 @@ namespace UnoAcpClient.Infrastructure.Client
                     }
                     else
                     {
-                        _errorLogger.LogError(new ErrorLogEntry("REQ_TIMEOUT", $"Request {request.Id} timed out", ErrorSeverity.Warning, "SendRequestAsync"));
-                        throw new TimeoutException("Request timed out");
+                        var lastRxMs = Interlocked.Read(ref _lastReceivedUnixMs);
+                        var lastRxAge =
+                            lastRxMs <= 0
+                                ? "never"
+                                : $"{TimeSpan.FromMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - lastRxMs).TotalSeconds:0.0}s ago";
+
+                        var msg =
+                            $"Request timed out (id={requestIdStr}, method={request.Method}, lastRx={lastRxAge}). " +
+                            "If the agent process doesn't speak ACP-over-stdio (e.g. it only supports MCP), it may never reply to ACP JSON-RPC requests.";
+                        _errorLogger.LogError(new ErrorLogEntry("REQ_TIMEOUT", msg, ErrorSeverity.Warning, nameof(SendRequestAsync)));
+                        throw new TimeoutException(msg);
                     }
                 }
             }
@@ -529,6 +564,7 @@ namespace UnoAcpClient.Infrastructure.Client
         /// </summary>
         private void OnMessageReceived(object? sender, MessageReceivedEventArgs e)
         {
+            Interlocked.Exchange(ref _lastReceivedUnixMs, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
             _errorLogger.LogError(new ErrorLogEntry("DEBUG", $"[AcpClient.OnMessageReceived] 收到原始消息: {e.Message.Substring(0, Math.Min(200, e.Message.Length))}...", ErrorSeverity.Info, nameof(OnMessageReceived)));
             try
             {
@@ -600,7 +636,7 @@ namespace UnoAcpClient.Infrastructure.Client
                     return;
                 }
 
-                var updateParams = JsonSerializer.Deserialize<SessionUpdateParams>(notification.Params.Value.GetRawText());
+                var updateParams = JsonSerializer.Deserialize<SessionUpdateParams>(notification.Params.Value.GetRawText(), _parser.Options);
                 if (updateParams == null || updateParams.Update == null)
                 {
                     return;
