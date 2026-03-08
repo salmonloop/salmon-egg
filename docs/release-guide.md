@@ -48,7 +48,7 @@ dotnet publish -f net9.0-windows10.0.19041.0 -c Release \
   -o ../../publish/windows-x64
 
 # 或使用依赖框架的发布（需要用户已安装 .NET）
-dotnet publish -f net10.0-desktop -c Release \
+dotnet publish -f net10.0-windows10.0.19041.0 -c Release \
   --self-contained false \
   -o ../../publish/windows-desktop
 ```

@@ -27,6 +27,11 @@ public partial class App : global::Microsoft.UI.Xaml.Application
     {
         MainWindow = new Window();
 
+#if WINDOWS
+        // Native WinUI 3 backdrop (Mica) - requires content backgrounds to be transparent.
+        MainWindow.SystemBackdrop = new Microsoft.UI.Xaml.Media.MicaBackdrop();
+#endif
+
 #if DEBUG
         // MainWindow.UseStudio(); // Requires Uno Studio configuration
 #endif

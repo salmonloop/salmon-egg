@@ -6,7 +6,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vm="using:UnoAcpClient.Presentation.ViewModels"
     mc:Ignorable="d"
-    Background="{ThemeResource AppBackdropBrush}"
+    Background="Transparent"
     AllowDrop="False">
 
     <Page.Resources>

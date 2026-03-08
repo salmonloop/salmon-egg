@@ -66,7 +66,7 @@ dotnet build UnoAcpClient.sln --configuration Release
 
 #### Windows (Desktop)
 ```bash
-dotnet run --project UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj --framework net10.0-desktop
+dotnet run --project UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj --framework net10.0-windows10.0.19041.0
 ```
 
 #### WebAssembly
@@ -82,7 +82,7 @@ dotnet run --framework net9.0-browserwasm
 
 ```bash
 # 运行
-dotnet run --project UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj --framework net10.0-desktop
+dotnet run --project UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj --framework net10.0-windows10.0.19041.0
 
 # 发布为独立应用
 dotnet publish UnoAcpClient/UnoAcpClient/UnoAcpClient.csproj \
@@ -180,7 +180,7 @@ dotnet test /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura
 
 1. 打开 `UnoAcpClient.sln`
 2. 设置启动项目为 `UnoAcpClient`
-3. 选择目标框架（如 `net10.0-desktop`）
+3. 选择目标框架（如 `net10.0-windows10.0.19041.0`）
 4. 按 F5 开始调试
 
 ### Visual Studio Code
