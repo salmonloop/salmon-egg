@@ -9,10 +9,10 @@ namespace UnoAcpClient.Presentation.Views
 
         public DisplaySettingsPage()
         {
-            this.InitializeComponent();
-
             // 从全局 DI 容器获取 SettingsViewModel 以保持状态同步
             SettingsVM = App.ServiceProvider.GetRequiredService<SettingsViewModel>();
+
+            this.InitializeComponent();
         }
     }
 }

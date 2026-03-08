@@ -25,14 +25,14 @@
                                     <VisualState x:Name="Normal"/>
                                     <VisualState x:Name="PointerOver">
                                         <VisualState.Setters>
-                                            <Setter Target="LayoutRoot.Background" Value="{ThemeResource SystemControlHighlightLowBrush}"/>
+                                            <Setter Target="LayoutRoot.Background" Value="{ThemeResource ControlFillColorSecondaryBrush}"/>
                                         </VisualState.Setters>
                                     </VisualState>
                                     <VisualState x:Name="Selected">
                                         <VisualState.Setters>
                                             <Setter Target="SelectionIndicator.Visibility" Value="Visible"/>
-                                            <Setter Target="ContentPanel.Foreground" Value="{ThemeResource SystemControlHighlightAccentBrush}"/>
-                                            <Setter Target="LayoutRoot.Background" Value="{ThemeResource SystemControlHighlightBaseLowBrush}"/>
+                                            <Setter Target="ContentPanel.Foreground" Value="{ThemeResource AccentBrush}"/>
+                                            <Setter Target="LayoutRoot.Background" Value="{ThemeResource ControlFillColorTertiaryBrush}"/>
                                         </VisualState.Setters>
                                     </VisualState>
                                 </VisualStateGroup>
@@ -41,7 +41,7 @@
                             <!-- 选中状态指示条 -->
                             <Rectangle x:Name="SelectionIndicator"
                                        Width="3" Height="24"
-                                       Fill="{ThemeResource SystemControlHighlightAccentBrush}"
+                                       Fill="{ThemeResource AccentBrush}"
                                        HorizontalAlignment="Left"
                                        VerticalAlignment="Center"
                                        Visibility="Collapsed"/>
@@ -49,7 +49,7 @@
                             <ContentPresenter x:Name="ContentPanel"
                                               HorizontalAlignment="Center"
                                               VerticalAlignment="Center"
-                                              Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}"/>
+                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                         </Grid>
                     </ControlTemplate>
                 </Setter.Value>
@@ -76,14 +76,14 @@
                                     <VisualState x:Name="Normal"/>
                                     <VisualState x:Name="PointerOver">
                                         <VisualState.Setters>
-                                            <Setter Target="OuterBorder.Background" Value="{ThemeResource SystemControlHighlightLowBrush}"/>
+                                            <Setter Target="OuterBorder.Background" Value="{ThemeResource ControlFillColorSecondaryBrush}"/>
                                         </VisualState.Setters>
                                     </VisualState>
                                     <VisualState x:Name="Selected">
                                         <VisualState.Setters>
-                                            <Setter Target="OuterBorder.Background" Value="{ThemeResource SystemControlHighlightBaseLowBrush}"/>
-                                            <Setter Target="OuterBorder.BorderBrush" Value="{ThemeResource SystemControlHighlightAccentBrush}"/>
-                                            <Setter Target="SubMenuContentPresenter.Foreground" Value="{ThemeResource SystemControlHighlightAccentBrush}"/>
+                                            <Setter Target="OuterBorder.Background" Value="{ThemeResource ControlFillColorTertiaryBrush}"/>
+                                            <Setter Target="OuterBorder.BorderBrush" Value="{ThemeResource AccentBrush}"/>
+                                            <Setter Target="SubMenuContentPresenter.Foreground" Value="{ThemeResource AccentBrush}"/>
                                         </VisualState.Setters>
                                     </VisualState>
                                 </VisualStateGroup>
@@ -93,7 +93,7 @@
                                               Padding="{TemplateBinding Padding}"
                                               HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                                              Foreground="{ThemeResource SystemControlForegroundBaseHighBrush}"/>
+                                              Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                         </Border>
                     </ControlTemplate>
                 </Setter.Value>
@@ -113,7 +113,7 @@
         <Grid Grid.Column="0"
               Width="72"
               Background="Transparent"
-              BorderBrush="{ThemeResource SystemControlForegroundBaseLowBrush}"
+              BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
               BorderThickness="0,0,1,0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="*"/>
@@ -153,7 +153,7 @@
         <Grid x:Name="SubMenuColumn" Grid.Column="1"
               Width="200"
               Background="Transparent"
-              BorderBrush="{ThemeResource SystemControlForegroundBaseLowBrush}"
+              BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
               BorderThickness="0,0,1,0"
               Visibility="Collapsed">
             <Grid.RowDefinitions>

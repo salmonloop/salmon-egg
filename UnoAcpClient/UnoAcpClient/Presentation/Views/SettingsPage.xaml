@@ -1,5 +1,6 @@
 <Page
     x:Class="UnoAcpClient.Presentation.Views.SettingsPage"
+    x:Name="Root"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:UnoAcpClient.Presentation.Views"
@@ -23,7 +24,7 @@
 
             <!-- 1. 当前活动连接配置 -->
             <StackPanel Spacing="16">
-                <TextBlock Text="活动会话连接" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource SystemAccentColor}"/>
+                <TextBlock Text="活动会话连接" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}"/>
 
                 <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
@@ -69,6 +70,30 @@
                                 Padding="20,8"
                                 Command="{x:Bind ChatViewModel.ApplyTransportConfigCommand}"
                                 IsEnabled="{x:Bind ChatViewModel.IsConnecting, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"/>
+
+                        <!-- 连接状态反馈 -->
+                        <InfoBar IsOpen="{x:Bind ChatViewModel.HasConnectionError, Mode=OneWay}"
+                                 Severity="Error"
+                                 Title="连接失败"
+                                 Message="{x:Bind ChatViewModel.ConnectionErrorMessage, Mode=OneWay}"
+                                 IsClosable="True"/>
+
+                        <InfoBar IsOpen="{x:Bind ChatViewModel.IsSessionActive, Mode=OneWay}"
+                                 Severity="Success"
+                                 Title="连接成功"
+                                 Message="已建立会话，可以开始对话。"
+                                 IsClosable="True"/>
+
+                        <StackPanel Orientation="Horizontal" Spacing="12"
+                                    Visibility="{x:Bind ChatViewModel.IsSessionActive, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Button Content="进入对话"
+                                    Click="OnGoToChatClick"
+                                    Style="{StaticResource AccentButtonStyle}"
+                                    Padding="20,8"/>
+                            <TextBlock Text="{x:Bind ChatViewModel.CurrentSessionId, Mode=OneWay}"
+                                       Opacity="0.6"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
             </StackPanel>
@@ -76,8 +101,9 @@
             <!-- 2. 服务器配置管理 -->
             <StackPanel Spacing="16">
                 <Grid>
-                    <TextBlock Text="预设服务器" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource SystemAccentColor}" VerticalAlignment="Center"/>
-                    <Button HorizontalAlignment="Right" Click="AddConfiguration_Click">
+                    <TextBlock Text="预设服务器" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}" VerticalAlignment="Center"/>
+                    <Button HorizontalAlignment="Right"
+                            Command="{x:Bind ViewModel.AddConfigurationCommand}">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon Glyph="&#xE710;" FontSize="14"/>
                             <TextBlock Text="新建"/>
@@ -107,11 +133,13 @@
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
                                     <Button Content="&#xE70F;" FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                             Style="{StaticResource SubtleButtonStyle}"
+                                            Tag="{x:Bind}"
                                             Click="EditConfiguration_Click"
                                             ToolTipService.ToolTip="编辑"/>
                                     <Button Content="&#xE74D;" FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                             Style="{StaticResource SubtleButtonStyle}"
                                             Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                            Tag="{x:Bind}"
                                             Click="DeleteConfiguration_Click"
                                             ToolTipService.ToolTip="删除"/>
                                 </StackPanel>

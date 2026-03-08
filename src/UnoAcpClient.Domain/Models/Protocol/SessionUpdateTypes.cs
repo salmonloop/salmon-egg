@@ -51,20 +51,22 @@ namespace UnoAcpClient.Domain.Models.Protocol
     /// 会话更新的基类/多态类型。
     /// 使用 JsonPolymorphic 特性支持不同类型的更新。
     /// </summary>
-    [JsonPolymorphic(TypeDiscriminatorPropertyName = "sessionUpdate")]
+    [JsonPolymorphic(
+        TypeDiscriminatorPropertyName = "sessionUpdate",
+        UnknownDerivedTypeHandling = JsonUnknownDerivedTypeHandling.FallBackToBaseType,
+        IgnoreUnrecognizedTypeDiscriminators = true)]
     [JsonDerivedType(typeof(AgentMessageUpdate), "agent_message_chunk")]
+    [JsonDerivedType(typeof(AgentThoughtUpdate), "agent_thought_chunk")]
     [JsonDerivedType(typeof(ToolCallUpdate), "tool_call")]
     [JsonDerivedType(typeof(PlanUpdate), "plan")]
     [JsonDerivedType(typeof(ModeChangeUpdate), "mode_change")]
     [JsonDerivedType(typeof(ConfigUpdateUpdate), "config_update")]
-    public abstract class SessionUpdate
+    [JsonDerivedType(typeof(ConfigOptionUpdate), "config_option_update")]
+    public class SessionUpdate
     {
-        /// <summary>
-        /// 更新类型标识符。
-        /// 用于多态序列化和反序列化。
-        /// </summary>
-        [JsonPropertyName("sessionUpdate")]
-        public abstract string SessionUpdateType { get; }
+        // Keep unknown fields so we can safely ignore newer protocol updates without crashing.
+        [JsonExtensionData]
+        public Dictionary<string, JsonElement>? ExtensionData { get; set; }
     }
 
     /// <summary>
@@ -73,12 +75,6 @@ namespace UnoAcpClient.Domain.Models.Protocol
     /// </summary>
     public class AgentMessageUpdate : SessionUpdate
     {
-        /// <summary>
-        /// 更新类型标识符，固定为 "agent_message_chunk"。
-        /// </summary>
-        [JsonPropertyName("sessionUpdate")]
-        public override string SessionUpdateType => "agent_message_chunk";
-
         /// <summary>
         /// 消息内容块。
         /// </summary>
@@ -103,17 +99,23 @@ namespace UnoAcpClient.Domain.Models.Protocol
     }
 
     /// <summary>
+    /// Agent 思考片段更新（通常不直接展示给用户，但必须可解析/可跳过）。
+    /// </summary>
+    public class AgentThoughtUpdate : SessionUpdate
+    {
+        /// <summary>
+        /// 消息内容块。
+        /// </summary>
+        [JsonPropertyName("content")]
+        public ContentBlock? Content { get; set; }
+    }
+
+    /// <summary>
     /// 工具调用更新。
     /// 用于通知客户端工具调用的状态变化。
     /// </summary>
     public class ToolCallUpdate : SessionUpdate
     {
-        /// <summary>
-        /// 更新类型标识符，固定为 "tool_call"。
-        /// </summary>
-        [JsonPropertyName("sessionUpdate")]
-        public override string SessionUpdateType => "tool_call";
-
         /// <summary>
         /// 工具调用 ID。
         /// </summary>
@@ -182,12 +184,6 @@ namespace UnoAcpClient.Domain.Models.Protocol
     public class PlanUpdate : SessionUpdate
     {
         /// <summary>
-        /// 更新类型标识符，固定为 "plan"。
-        /// </summary>
-        [JsonPropertyName("sessionUpdate")]
-        public override string SessionUpdateType => "plan";
-
-        /// <summary>
        /// 计划条目列表（用于 plan 类型的更新）。
        /// </summary>
        [JsonPropertyName("entries")]
@@ -224,12 +220,6 @@ namespace UnoAcpClient.Domain.Models.Protocol
     /// </summary>
     public class ModeChangeUpdate : SessionUpdate
     {
-        /// <summary>
-        /// 更新类型标识符，固定为 "mode_change"。
-        /// </summary>
-        [JsonPropertyName("sessionUpdate")]
-        public override string SessionUpdateType => "mode_change";
-
         /// <summary>
         /// 新的模式 ID。
         /// </summary>
@@ -268,12 +258,6 @@ namespace UnoAcpClient.Domain.Models.Protocol
     public class ConfigUpdateUpdate : SessionUpdate
     {
         /// <summary>
-        /// 更新类型标识符，固定为 "config_update"。
-        /// </summary>
-        [JsonPropertyName("sessionUpdate")]
-        public override string SessionUpdateType => "config_update";
-
-        /// <summary>
         /// 配置选项列表。
         /// </summary>
         [JsonPropertyName("configOptions")]
@@ -294,5 +278,17 @@ namespace UnoAcpClient.Domain.Models.Protocol
         {
             ConfigOptions = configOptions;
         }
+    }
+
+    /// <summary>
+    /// 配置选项更新（config_option_update）。
+    /// </summary>
+    public class ConfigOptionUpdate : SessionUpdate
+    {
+        /// <summary>
+        /// 配置选项列表。
+        /// </summary>
+        [JsonPropertyName("configOptions")]
+        public object? ConfigOptions { get; set; }
     }
 }

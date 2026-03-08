@@ -15,7 +15,7 @@
 
             <!-- 基础选项组 -->
             <StackPanel Spacing="12">
-                <TextBlock Text="基础选项" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource SystemAccentColor}"/>
+                <TextBlock Text="基础选项" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}"/>
 
                 <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
@@ -40,7 +40,7 @@
 
             <!-- 语言偏好组 -->
             <StackPanel Spacing="12">
-                <TextBlock Text="语言与地区" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource SystemAccentColor}"/>
+                <TextBlock Text="语言与地区" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}"/>
 
                 <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
@@ -63,7 +63,7 @@
 
             <!-- 维护组 -->
             <StackPanel Spacing="12">
-                <TextBlock Text="维护" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource SystemAccentColor}"/>
+                <TextBlock Text="维护" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}"/>
 
                 <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"

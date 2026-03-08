@@ -69,6 +69,9 @@ namespace UnoAcpClient.Application.Services.Chat
                         case AgentMessageUpdate messageUpdate:
                             // 处理消息更新
                             break;
+                        case AgentThoughtUpdate thoughtUpdate:
+                            // 思考片段：可选择忽略或用于调试
+                            break;
                         case ToolCallUpdate toolCallUpdate:
                             // 处理工具调用更新
                             break;
@@ -85,6 +88,9 @@ namespace UnoAcpClient.Application.Services.Chat
                             {
                                 _currentMode = new SessionModeState { CurrentModeId = modeChange.ModeId };
                             }
+                            break;
+                        case ConfigOptionUpdate configOption:
+                            // 配置选项更新（当前实现仅记录到 history）
                             break;
                     }
                 }
@@ -120,13 +126,16 @@ namespace UnoAcpClient.Application.Services.Chat
             var entry = new SessionUpdateEntry
             {
                 Timestamp = DateTime.UtcNow,
-                SessionUpdateType = update.SessionUpdateType
+                SessionUpdateType = GetSessionUpdateType(update)
             };
 
             switch (update)
             {
                 case AgentMessageUpdate messageUpdate:
                     entry.Content = messageUpdate.Content;
+                    break;
+                case AgentThoughtUpdate thoughtUpdate:
+                    entry.Content = thoughtUpdate.Content;
                     break;
                 case ToolCallUpdate toolCallUpdate:
                     entry.ToolCallId = toolCallUpdate.ToolCallId;
@@ -146,10 +155,26 @@ namespace UnoAcpClient.Application.Services.Chat
                 case ConfigUpdateUpdate configUpdate:
                     entry.ConfigOptions = configUpdate.ConfigOptions;
                     break;
+                case ConfigOptionUpdate configOptionUpdate:
+                    entry.ConfigOptions = configOptionUpdate.ConfigOptions;
+                    break;
             }
 
             return entry;
         }
+
+        private static string GetSessionUpdateType(SessionUpdate update) =>
+            update switch
+            {
+                AgentMessageUpdate => "agent_message_chunk",
+                AgentThoughtUpdate => "agent_thought_chunk",
+                ToolCallUpdate => "tool_call",
+                PlanUpdate => "plan",
+                ModeChangeUpdate => "mode_change",
+                ConfigUpdateUpdate => "config_update",
+                ConfigOptionUpdate => "config_option_update",
+                _ => "unknown"
+            };
 
         public async Task<InitializeResponse> InitializeAsync(InitializeParams @params)
         {

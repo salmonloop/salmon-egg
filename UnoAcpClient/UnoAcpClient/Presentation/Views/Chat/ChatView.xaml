@@ -55,7 +55,7 @@
         <Grid Visibility="{x:Bind ViewModel.IsSessionActive, Mode=OneWay, Converter={StaticResource InverseBoolToVisibilityConverter}}">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="24">
                 <Viewbox Width="80" Height="80" Opacity="0.2">
-                    <SymbolIcon Symbol="Message" Foreground="{ThemeResource SystemAccentColor}"/>
+                    <SymbolIcon Symbol="Message" Foreground="{ThemeResource AccentBrush}"/>
                 </Viewbox>
                 <StackPanel Spacing="8">
                     <TextBlock Text="准备好开始了吗？"
@@ -89,7 +89,7 @@
                     Padding="16,8">
                 <Grid>
                     <StackPanel Orientation="Horizontal" Spacing="12">
-                        <FontIcon Glyph="&#xE930;" FontSize="16" Foreground="{ThemeResource SystemAccentColor}" VerticalAlignment="Center"/>
+                        <FontIcon Glyph="&#xE930;" FontSize="16" Foreground="{ThemeResource AccentBrush}" VerticalAlignment="Center"/>
                         <StackPanel VerticalAlignment="Center">
                             <TextBlock Text="{x:Bind ViewModel.AgentName, Mode=OneWay}" FontWeight="SemiBold" FontSize="14"/>
                             <TextBlock Text="在线" FontSize="11" Foreground="Green" Opacity="0.8"/>
@@ -149,7 +149,7 @@
                                     FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                     Width="36" Height="36"
                                     CornerRadius="18"
-                                    Background="{ThemeResource SystemAccentColor}"
+                                    Background="{ThemeResource AccentBrush}"
                                     Foreground="White"
                                     Command="{x:Bind ViewModel.SendPromptCommand}"
                                     VerticalAlignment="Bottom"

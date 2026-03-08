@@ -166,7 +166,8 @@ public static class DependencyInjection
         services.AddTransient<ConfigurationEditorViewModel>();
 
         // 新的 Chat ViewModel（重构后）
-        services.AddTransient<ChatViewModel>();
+        // Must be singleton so connection/session state survives navigation and is shared between Settings and Chat pages.
+        services.AddSingleton<ChatViewModel>();
     }
 
     private static string GetAppDataPath()

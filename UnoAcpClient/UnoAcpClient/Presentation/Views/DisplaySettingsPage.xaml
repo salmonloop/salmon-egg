@@ -16,7 +16,7 @@
 
             <!-- 动画设置组 -->
             <StackPanel Spacing="12">
-                <TextBlock Text="交互体验" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource SystemAccentColor}"/>
+                <TextBlock Text="交互体验" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}"/>
 
                 <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
@@ -47,7 +47,7 @@
 
             <!-- 视觉主题设置组 -->
             <StackPanel Spacing="12">
-                <TextBlock Text="界面主题" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource SystemAccentColor}"/>
+                <TextBlock Text="界面主题" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}"/>
 
                 <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"

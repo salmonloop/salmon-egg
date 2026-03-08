@@ -12,10 +12,10 @@ namespace UnoAcpClient.Presentation.Views.Chat
 
         public ChatView()
         {
-            this.InitializeComponent();
-
             // 从全局服务容器获取 ViewModel 以确保状态在导航间持久化
             ViewModel = App.ServiceProvider.GetRequiredService<ChatViewModel>();
+
+            this.InitializeComponent();
         }
 
         private void OnInputKeyDown(object sender, KeyRoutedEventArgs e)

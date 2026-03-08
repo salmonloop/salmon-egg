@@ -59,7 +59,10 @@ namespace UnoAcpClient.Presentation.ViewModels.Chat
         private bool _showTransportConfigPanel = true;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(HasConnectionError))]
         private string? _connectionErrorMessage;
+
+        public bool HasConnectionError => !string.IsNullOrWhiteSpace(ConnectionErrorMessage);
 
         [ObservableProperty]
         private bool _isConnected;
@@ -216,19 +219,27 @@ namespace UnoAcpClient.Presentation.ViewModels.Chat
                    {
                        Cwd = Environment.CurrentDirectory
                    };
-                   await _chatService.CreateSessionAsync(sessionParams);
-                   Logger.LogInformation("会话创建成功，SessionId={SessionId}", _chatService.CurrentSessionId);
+                    await _chatService.CreateSessionAsync(sessionParams);
+                    Logger.LogInformation("会话创建成功，SessionId={SessionId}", _chatService.CurrentSessionId);
 
-                   IsConnected = _chatService.IsConnected && _chatService.IsInitialized;
-                   ShowTransportConfigPanel = false;
-                   Logger.LogInformation("连接成功");
-               }
-               catch (Exception ex)
-               {
-                   ConnectionErrorMessage = $"连接失败：{ex.Message}";
-                   Logger.LogError(ex, "连接时出错");
-                   IsConnected = false;
-               }
+                    IsConnected = _chatService.IsConnected && _chatService.IsInitialized;
+                    CurrentSessionId = _chatService.CurrentSessionId;
+                    IsSessionActive = !string.IsNullOrWhiteSpace(CurrentSessionId);
+                    if (IsSessionActive)
+                    {
+                        LoadSessionHistory();
+                    }
+                    ShowTransportConfigPanel = false;
+                    Logger.LogInformation("连接成功");
+                }
+                catch (Exception ex)
+                {
+                    ConnectionErrorMessage = $"连接失败：{ex.Message}";
+                    Logger.LogError(ex, "连接时出错");
+                    IsConnected = false;
+                    CurrentSessionId = null;
+                    IsSessionActive = false;
+                }
                finally
                {
                    IsConnecting = false;

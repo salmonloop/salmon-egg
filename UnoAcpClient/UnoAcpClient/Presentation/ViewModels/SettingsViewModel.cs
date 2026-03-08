@@ -93,9 +93,18 @@ namespace UnoAcpClient.Presentation.ViewModels
         public event EventHandler<ServerConfiguration>? OnEditRequested;
 
         [RelayCommand]
-        public async Task DeleteConfigurationAsync()
+        public async Task DeleteConfigurationAsync(ServerConfiguration? config)
         {
-            if (SelectedConfiguration == null) return;
+            if (config is not null)
+            {
+                SelectedConfiguration = config;
+            }
+
+            if (SelectedConfiguration == null)
+            {
+                return;
+            }
+
             try
             {
                 IsBusy = true;

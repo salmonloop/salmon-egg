@@ -12,6 +12,7 @@
 
             <!-- 兼容性资源定义：确保在所有平台上都有回退项 -->
             <SolidColorBrush x:Key="LayerOnAcrylicFillColorDefaultBrush" Color="{ThemeResource SystemAltHighColor}" />
+            <SolidColorBrush x:Key="AccentBrush" Color="{ThemeResource SystemAccentColor}" />
 
             <!-- 定义 SubtleButtonStyle 兼容样式 -->
             <!-- 解决 "Couldn't statically resolve resource SubtleButtonStyle" 警告 -->

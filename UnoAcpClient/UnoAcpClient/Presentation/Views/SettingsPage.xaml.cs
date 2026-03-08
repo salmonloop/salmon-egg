@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using UnoAcpClient.Domain.Models;
 using UnoAcpClient.Presentation.ViewModels;
 using UnoAcpClient.Presentation.ViewModels.Chat;
@@ -13,11 +14,11 @@ namespace UnoAcpClient.Presentation.Views
 
         public SettingsPage()
         {
-            this.InitializeComponent();
-
             // 从全局 DI 容器获取 ViewModel 以保持状态同步
             ViewModel = App.ServiceProvider.GetRequiredService<SettingsViewModel>();
             ChatViewModel = App.ServiceProvider.GetRequiredService<ChatViewModel>();
+
+            this.InitializeComponent();
 
             this.Loaded += SettingsPage_Loaded;
         }
@@ -47,14 +48,9 @@ namespace UnoAcpClient.Presentation.Views
             }
         }
 
-        private void AddConfiguration_Click(object sender, RoutedEventArgs e)
-        {
-            ViewModel.AddConfiguration();
-        }
-
         private void EditConfiguration_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is Button btn && btn.DataContext is ServerConfiguration config)
+            if (sender is Button btn && btn.Tag is ServerConfiguration config)
             {
                 ViewModel.EditConfiguration(config);
             }
@@ -62,16 +58,24 @@ namespace UnoAcpClient.Presentation.Views
 
         private async void DeleteConfiguration_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is Button btn && btn.DataContext is ServerConfiguration config)
+            if (sender is Button btn && btn.Tag is ServerConfiguration config)
             {
-                ViewModel.SelectedConfiguration = config;
-                await ViewModel.DeleteConfigurationAsync();
+                await ViewModel.DeleteConfigurationAsync(config);
             }
         }
 
-        private void SaveConfiguration_Click(object sender, RoutedEventArgs e)
+        private void OnGoToChatClick(object sender, RoutedEventArgs e)
         {
-            // 此处可以添加全局保存逻辑，目前大部分绑定是双向的
+            DependencyObject? current = this;
+            while (current != null && current is not MainPage)
+            {
+                current = VisualTreeHelper.GetParent(current);
+            }
+
+            if (current is MainPage mainPage)
+            {
+                mainPage.MainRailNavList.SelectedIndex = 0;
+            }
         }
     }
 }
