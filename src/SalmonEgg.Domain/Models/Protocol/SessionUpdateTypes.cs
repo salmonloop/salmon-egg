@@ -56,12 +56,15 @@ namespace SalmonEgg.Domain.Models.Protocol
         UnknownDerivedTypeHandling = JsonUnknownDerivedTypeHandling.FallBackToBaseType,
         IgnoreUnrecognizedTypeDiscriminators = true)]
     [JsonDerivedType(typeof(AgentMessageUpdate), "agent_message_chunk")]
+    [JsonDerivedType(typeof(UserMessageUpdate), "user_message_chunk")]
     [JsonDerivedType(typeof(AgentThoughtUpdate), "agent_thought_chunk")]
     [JsonDerivedType(typeof(ToolCallUpdate), "tool_call")]
     [JsonDerivedType(typeof(ToolCallStatusUpdate), "tool_call_update")]
     [JsonDerivedType(typeof(PlanUpdate), "plan")]
     [JsonDerivedType(typeof(ModeChangeUpdate), "mode_change")]
+    [JsonDerivedType(typeof(ModeChangeUpdate), "current_mode_update")]
     [JsonDerivedType(typeof(ConfigUpdateUpdate), "config_update")]
+    [JsonDerivedType(typeof(ConfigUpdateUpdate), "config_options_update")]
     [JsonDerivedType(typeof(ConfigOptionUpdate), "config_option_update")]
     public class SessionUpdate
     {
@@ -94,6 +97,24 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// </summary>
         /// <param name="content">内容块</param>
         public AgentMessageUpdate(ContentBlock? content)
+        {
+            Content = content;
+        }
+    }
+
+    /// <summary>
+    /// 用户消息片段更新（用于 session/load 回放或多端同步）。
+    /// </summary>
+    public class UserMessageUpdate : SessionUpdate
+    {
+        [JsonPropertyName("content")]
+        public ContentBlock? Content { get; set; }
+
+        public UserMessageUpdate()
+        {
+        }
+
+        public UserMessageUpdate(ContentBlock? content)
         {
             Content = content;
         }
@@ -259,10 +280,10 @@ namespace SalmonEgg.Domain.Models.Protocol
     public class ConfigUpdateUpdate : SessionUpdate
     {
         /// <summary>
-        /// 配置选项列表。
+        /// 配置选项列表（完整状态）。
         /// </summary>
         [JsonPropertyName("configOptions")]
-        public object? ConfigOptions { get; set; }
+        public List<ConfigOption>? ConfigOptions { get; set; }
 
         /// <summary>
         /// 创建新的 ConfigUpdateUpdate 实例。
@@ -275,7 +296,7 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// 创建新的 ConfigUpdateUpdate 实例。
         /// </summary>
         /// <param name="configOptions">配置选项</param>
-        public ConfigUpdateUpdate(object? configOptions = null)
+        public ConfigUpdateUpdate(List<ConfigOption>? configOptions = null)
         {
             ConfigOptions = configOptions;
         }

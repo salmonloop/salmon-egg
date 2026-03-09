@@ -258,10 +258,10 @@ namespace SalmonEgg.Domain.Models.Protocol
     public class SessionSetConfigOptionResponse
     {
         /// <summary>
-        /// 更新后的配置选项列表。
+        /// 更新后的配置选项列表（完整状态）。
         /// </summary>
         [JsonPropertyName("configOptions")]
-        public Dictionary<string, object>? ConfigOptions { get; set; }
+        public List<ConfigOption>? ConfigOptions { get; set; }
 
         /// <summary>
         /// 创建新的 SessionSetConfigOptionResponse 实例。
@@ -274,7 +274,7 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// 创建新的 SessionSetConfigOptionResponse 实例。
         /// </summary>
         /// <param name="configOptions">配置选项列表</param>
-        public SessionSetConfigOptionResponse(Dictionary<string, object>? configOptions = null)
+        public SessionSetConfigOptionResponse(List<ConfigOption>? configOptions = null)
         {
             ConfigOptions = configOptions;
         }

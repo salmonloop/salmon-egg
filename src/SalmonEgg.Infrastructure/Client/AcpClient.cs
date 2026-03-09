@@ -187,15 +187,6 @@ namespace SalmonEgg.Infrastructure.Client
             _messageLoopCts = new CancellationTokenSource();
             _ = ProcessMessageLoopAsync(_messageLoopCts.Token);
 
-            // 发送 notifications/initialized 通知（MCP 协议要求）
-            var initializedNotification = new JsonRpcNotification(
-                "notifications/initialized",
-                JsonSerializer.SerializeToElement(new { }, _parser.Options));
-
-            await _transport.SendMessageAsync(
-                _parser.SerializeMessage(initializedNotification),
-                CancellationToken.None).ConfigureAwait(false);
-
             // 触发事件
             Initialized?.Invoke(this, initializeResponse);
 

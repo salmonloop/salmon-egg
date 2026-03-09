@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
+using SalmonEgg.Domain.Models.Protocol;
 
 namespace SalmonEgg.Presentation.ViewModels.Chat;
 
@@ -13,6 +14,9 @@ namespace SalmonEgg.Presentation.ViewModels.Chat;
 /// </summary>
 public partial class ConfigOptionViewModel : ObservableObject
 {
+    [ObservableProperty]
+    private string? _category;
+
     /// <summary>
     /// 配置选项的唯一标识符
     /// </summary>
@@ -188,6 +192,36 @@ public partial class ConfigOptionViewModel : ObservableObject
         {
             viewModel.ValueType = "number";
             viewModel.NumberValue = Convert.ToDouble(value);
+        }
+
+        return viewModel;
+    }
+
+    public static ConfigOptionViewModel CreateFromAcp(ConfigOption option)
+    {
+        var viewModel = new ConfigOptionViewModel
+        {
+            Id = option.Id,
+            Name = option.Name,
+            Description = option.Description,
+            Category = option.Category,
+            ValueType = option.Type,
+            IsRequired = true,
+            Value = option.CurrentValue,
+            TextValue = option.CurrentValue ?? string.Empty
+        };
+
+        if (option.Options is { Count: > 0 })
+        {
+            viewModel.Options = new ObservableCollection<OptionValueViewModel>(
+                option.Options.Select(o => new OptionValueViewModel
+                {
+                    Value = o.Value,
+                    Name = string.IsNullOrWhiteSpace(o.Name) ? o.Value : o.Name,
+                    Description = o.Description
+                }));
+
+            viewModel.SelectedOption = viewModel.Options.FirstOrDefault(o => o.Value == option.CurrentValue);
         }
 
         return viewModel;

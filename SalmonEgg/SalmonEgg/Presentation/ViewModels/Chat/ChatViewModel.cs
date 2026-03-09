@@ -80,6 +80,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     private bool _showConfigOptionsPanel;
 
+    private string? _modeConfigId;
+
     [ObservableProperty]
     private ObservableCollection<PlanEntryViewModel> _currentPlan = new();
 
@@ -226,12 +228,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                 CurrentSessionId = response.SessionId;
                 IsSessionActive = !string.IsNullOrWhiteSpace(response.SessionId);
 
-                // Load modes (some Agents may omit this field)
+                // Load modes (some Agents may omit this field; deprecated in favor of configOptions)
                 AvailableModes.Clear();
                 SelectedMode = null;
-                if (response.Modes != null)
+                if (response.Modes?.AvailableModes != null)
                 {
-                    foreach (var mode in response.Modes)
+                    foreach (var mode in response.Modes.AvailableModes)
                     {
                         if (mode != null)
                         {
@@ -246,7 +248,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
 
                     if (AvailableModes.Count > 0)
                     {
-                        SelectedMode = AvailableModes[0];
+                        var currentModeId = response.Modes.CurrentModeId;
+                        SelectedMode = string.IsNullOrWhiteSpace(currentModeId)
+                            ? AvailableModes[0]
+                            : AvailableModes.FirstOrDefault(m => m.ModeId == currentModeId) ?? AvailableModes[0];
                     }
                 }
 
@@ -255,27 +260,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                 // Load config options
                 ConfigOptions.Clear();
                 ShowConfigOptionsPanel = false;
-                if (response.ConfigOptions is System.Text.Json.JsonElement element && element.ValueKind == System.Text.Json.JsonValueKind.Array)
+                if (response.ConfigOptions != null)
                 {
-                    foreach (var item in element.EnumerateArray())
+                    foreach (var option in response.ConfigOptions)
                     {
-                        if (item.TryGetProperty("id", out var idProp))
-                        {
-                            var id = idProp.GetString() ?? string.Empty;
-                            ConfigOptions.Add(ConfigOptionViewModel.CreateFromJson(id, item));
-                        }
+                        ConfigOptions.Add(ConfigOptionViewModel.CreateFromAcp(option));
                     }
-
                     ShowConfigOptionsPanel = ConfigOptions.Count > 0;
-                }
-                else if (response.ConfigOptions is System.Text.Json.JsonElement objElement && objElement.ValueKind == System.Text.Json.JsonValueKind.Object)
-                {
-                    foreach (var prop in objElement.EnumerateObject())
-                    {
-                        ConfigOptions.Add(ConfigOptionViewModel.CreateFromJson(prop.Name, prop.Value));
-                    }
-
-                    ShowConfigOptionsPanel = ConfigOptions.Count > 0;
+                    SyncModesFromConfigOptions();
                 }
 
                 if (IsSessionActive)
@@ -368,6 +360,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                 if (e.Update is AgentMessageUpdate messageUpdate && messageUpdate.Content != null)
                 {
                     AddMessageToHistory(messageUpdate.Content, isOutgoing: false);
+                }
+                else if (e.Update is UserMessageUpdate userMessageUpdate && userMessageUpdate.Content != null)
+                {
+                    AddMessageToHistory(userMessageUpdate.Content, isOutgoing: true);
                 }
                 else if (e.Update is ToolCallUpdate toolCallUpdate)
                 {
@@ -606,36 +602,49 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
 
     private void UpdateConfigOptions(ConfigUpdateUpdate configUpdate)
     {
-        if (configUpdate.ConfigOptions is System.Text.Json.JsonElement element && element.ValueKind == System.Text.Json.JsonValueKind.Array)
+        if (configUpdate.ConfigOptions != null)
         {
             ConfigOptions.Clear();
-            foreach (var item in element.EnumerateArray())
+            foreach (var option in configUpdate.ConfigOptions)
             {
-                if (item.TryGetProperty("id", out var idProp))
+                ConfigOptions.Add(ConfigOptionViewModel.CreateFromAcp(option));
+            }
+            ShowConfigOptionsPanel = ConfigOptions.Count > 0;
+            SyncModesFromConfigOptions();
+        }
+    }
+
+    private void SyncModesFromConfigOptions()
+    {
+        var modeOption = ConfigOptions.FirstOrDefault(o =>
+            string.Equals(o.Category, "mode", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(o.Id, "mode", StringComparison.OrdinalIgnoreCase));
+
+        if (modeOption == null || modeOption.Options.Count == 0)
+        {
+            _modeConfigId = null;
+            return;
+        }
+
+        _modeConfigId = modeOption.Id;
+
+        if (AvailableModes.Count == 0)
+        {
+            foreach (var opt in modeOption.Options)
+            {
+                AvailableModes.Add(new SessionModeViewModel
                 {
-                    var id = idProp.GetString() ?? string.Empty;
-                    ConfigOptions.Add(ConfigOptionViewModel.CreateFromJson(id, item));
-                }
+                    ModeId = opt.Value,
+                    ModeName = opt.Name,
+                    Description = opt.Description ?? string.Empty
+                });
             }
-            ShowConfigOptionsPanel = ConfigOptions.Count > 0;
         }
-        else if (configUpdate.ConfigOptions is System.Text.Json.JsonElement objElement && objElement.ValueKind == System.Text.Json.JsonValueKind.Object)
+
+        var current = modeOption.SelectedOption?.Value ?? modeOption.TextValue;
+        if (!string.IsNullOrWhiteSpace(current) && AvailableModes.Count > 0)
         {
-            ConfigOptions.Clear();
-            foreach (var prop in objElement.EnumerateObject())
-            {
-                ConfigOptions.Add(ConfigOptionViewModel.CreateFromJson(prop.Name, prop.Value));
-            }
-            ShowConfigOptionsPanel = ConfigOptions.Count > 0;
-        }
-        else if (configUpdate.ConfigOptions is System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, object>> dict)
-        {
-            ConfigOptions.Clear();
-            foreach (var kvp in dict)
-            {
-                ConfigOptions.Add(ConfigOptionViewModel.CreateFromJson(kvp.Key, kvp.Value));
-            }
-            ShowConfigOptionsPanel = ConfigOptions.Count > 0;
+            SelectedMode = AvailableModes.FirstOrDefault(m => m.ModeId == current) ?? SelectedMode ?? AvailableModes[0];
         }
     }
 
@@ -723,11 +732,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             CurrentSessionId = response.SessionId;
             IsSessionActive = true;
 
-            // 加载可用模式
-            if (response.Modes != null)
+            // 加载可用模式（deprecated in favor of configOptions）
+            if (response.Modes?.AvailableModes != null)
             {
                 AvailableModes.Clear();
-                foreach (var mode in response.Modes)
+                foreach (var mode in response.Modes.AvailableModes)
                 {
                     if (mode != null)
                     {
@@ -743,33 +752,24 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                 // 选择第一个模式作为默认
                 if (AvailableModes.Count > 0)
                 {
-                    SelectedMode = AvailableModes[0];
+                    var currentModeId = response.Modes.CurrentModeId;
+                    SelectedMode = string.IsNullOrWhiteSpace(currentModeId)
+                        ? AvailableModes[0]
+                        : AvailableModes.FirstOrDefault(m => m.ModeId == currentModeId) ?? AvailableModes[0];
                 }
             }
 
 
             // 加载配置选项
-            if (response.ConfigOptions is System.Text.Json.JsonElement element && element.ValueKind == System.Text.Json.JsonValueKind.Array)
+            if (response.ConfigOptions != null)
             {
                 ConfigOptions.Clear();
-                foreach (var item in element.EnumerateArray())
+                foreach (var option in response.ConfigOptions)
                 {
-                    if (item.TryGetProperty("id", out var idProp))
-                    {
-                        var id = idProp.GetString() ?? string.Empty;
-                        ConfigOptions.Add(ConfigOptionViewModel.CreateFromJson(id, item));
-                    }
+                    ConfigOptions.Add(ConfigOptionViewModel.CreateFromAcp(option));
                 }
                 ShowConfigOptionsPanel = ConfigOptions.Count > 0;
-            }
-            else if (response.ConfigOptions is System.Text.Json.JsonElement objElement && objElement.ValueKind == System.Text.Json.JsonValueKind.Object)
-            {
-                ConfigOptions.Clear();
-                foreach (var prop in objElement.EnumerateObject())
-                {
-                    ConfigOptions.Add(ConfigOptionViewModel.CreateFromJson(prop.Name, prop.Value));
-                }
-                ShowConfigOptionsPanel = ConfigOptions.Count > 0;
+                SyncModesFromConfigOptions();
             }
 
 
@@ -844,15 +844,25 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             IsBusy = true;
             ClearError();
 
-            var modeParams = new SessionSetModeParams
-            {
-                SessionId = CurrentSessionId!,
-                ModeId = mode.ModeId
-            };
-
             if (_chatService != null)
             {
-                await _chatService.SetSessionModeAsync(modeParams);
+                if (!string.IsNullOrWhiteSpace(_modeConfigId))
+                {
+                    var setParams = new SessionSetConfigOptionParams(
+                        CurrentSessionId!,
+                        _modeConfigId,
+                        System.Text.Json.JsonSerializer.SerializeToElement(mode.ModeId));
+                    await _chatService.SetSessionConfigOptionAsync(setParams);
+                }
+                else
+                {
+                    var modeParams = new SessionSetModeParams
+                    {
+                        SessionId = CurrentSessionId!,
+                        ModeId = mode.ModeId
+                    };
+                    await _chatService.SetSessionModeAsync(modeParams);
+                }
             }
             SelectedMode = mode;
         }

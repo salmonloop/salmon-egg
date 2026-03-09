@@ -178,8 +178,8 @@ namespace SalmonEgg.Application.Services.Chat
                 ToolCallUpdate => "tool_call",
                 ToolCallStatusUpdate => "tool_call_update",
                 PlanUpdate => "plan",
-                ModeChangeUpdate => "mode_change",
-                ConfigUpdateUpdate => "config_update",
+                ModeChangeUpdate => "current_mode_update",
+                ConfigUpdateUpdate => "config_options_update",
                 ConfigOptionUpdate => "config_option_update",
                 _ => "unknown"
             };
@@ -214,7 +214,7 @@ namespace SalmonEgg.Application.Services.Chat
                 _sessionHistory.Clear();
 
                 // 保存会话模式信息
-                if (response.Modes != null && response.Modes.Count > 0)
+                if (response.Modes?.AvailableModes != null && response.Modes.AvailableModes.Count > 0)
                 {
                     // 可以选择默认模式
                 }

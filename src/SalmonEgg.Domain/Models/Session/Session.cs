@@ -193,13 +193,13 @@ namespace SalmonEgg.Domain.Models.Session
         public ToolCallStatus? Status { get; set; }
 
         /// <summary>
-        /// 模式 ID（用于 mode_change 类型的更新）。
+        /// 模式 ID（用于 current_mode_update 类型的更新）。
         /// </summary>
         [JsonPropertyName("modeId")]
         public string? ModeId { get; set; }
 
         /// <summary>
-        /// 配置选项（用于 config_update 类型的更新）。
+        /// 配置选项（用于 config_options_update 类型的更新）。
         /// </summary>
         [JsonPropertyName("configOptions")]
         public object? ConfigOptions { get; set; }
@@ -276,7 +276,7 @@ namespace SalmonEgg.Domain.Models.Session
         {
             return new SessionUpdateEntry
             {
-                SessionUpdateType = "mode_change",
+                SessionUpdateType = "current_mode_update",
                 ModeId = modeId,
                 Timestamp = DateTime.UtcNow
             };
@@ -291,7 +291,7 @@ namespace SalmonEgg.Domain.Models.Session
         {
             return new SessionUpdateEntry
             {
-                SessionUpdateType = "config_update",
+                SessionUpdateType = "config_options_update",
                 ConfigOptions = configOptions,
                 Timestamp = DateTime.UtcNow
             };

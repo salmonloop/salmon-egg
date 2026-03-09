@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -58,18 +59,18 @@ namespace SalmonEgg.Domain.Models.Protocol
         public string SessionId { get; set; } = string.Empty;
 
         /// <summary>
-        /// 可用的会话模式列表（可选）。
+        /// 会话模式状态（可选，兼容旧 Agent 可能直接返回数组）。
         /// </summary>
         [JsonPropertyName("modes")]
-        public List<SessionMode>? Modes { get; set; }
+        [JsonConverter(typeof(SessionModesStateJsonConverter))]
+        public SessionModesState? Modes { get; set; }
 
         
         /// <summary>
         /// 可用的配置选项列表（可选）。
-        /// 根据对端Agent返回的实际数据格式，这里是一个数组。
         /// </summary>
         [JsonPropertyName("configOptions")]
-        public object? ConfigOptions { get; set; }
+        public List<ConfigOption>? ConfigOptions { get; set; }
 
 
         /// <summary>
@@ -85,7 +86,7 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// <param name="sessionId">会话 ID</param>
         /// <param name="modes">可用模式列表</param>
         /// <param name="configOptions">配置选项</param>
-        public SessionNewResponse(string sessionId, List<SessionMode>? modes = null, object? configOptions = null)
+        public SessionNewResponse(string sessionId, SessionModesState? modes = null, List<ConfigOption>? configOptions = null)
         {
             SessionId = sessionId;
             Modes = modes;
@@ -94,46 +95,68 @@ namespace SalmonEgg.Domain.Models.Protocol
     }
 
     /// <summary>
-    /// 会话模式类（用于 Session/New 响应）。
+    /// 会话模式状态（用于 Session/New 响应）。
+    /// https://agentclientprotocol.com/protocol/session-modes
     /// </summary>
-    public class SessionMode
+    public class SessionModesState
     {
         /// <summary>
-        /// 模式的唯一标识符。
+        /// 当前模式 ID。
         /// </summary>
+        [JsonPropertyName("currentModeId")]
+        public string? CurrentModeId { get; set; }
+
+        /// <summary>
+        /// 可用模式列表。
+        /// </summary>
+        [JsonPropertyName("availableModes")]
+        public List<SessionMode> AvailableModes { get; set; } = new();
+    }
+
+    public class SessionMode
+    {
         [JsonPropertyName("id")]
         public string Id { get; set; } = string.Empty;
 
-        /// <summary>
-        /// 模式的显示名称。
-        /// </summary>
         [JsonPropertyName("name")]
         public string Name { get; set; } = string.Empty;
 
-        /// <summary>
-        /// 模式的描述信息。
-        /// </summary>
         [JsonPropertyName("description")]
         public string? Description { get; set; }
+    }
 
-        /// <summary>
-        /// 创建新的会话模式实例。
-        /// </summary>
-        public SessionMode()
+    internal sealed class SessionModesStateJsonConverter : JsonConverter<SessionModesState?>
+    {
+        public override SessionModesState? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
+            if (reader.TokenType == JsonTokenType.Null)
+            {
+                return null;
+            }
+
+            if (reader.TokenType == JsonTokenType.StartArray)
+            {
+                var modes = JsonSerializer.Deserialize<List<SessionMode>>(ref reader, options) ?? new List<SessionMode>();
+                return new SessionModesState { AvailableModes = modes };
+            }
+
+            if (reader.TokenType == JsonTokenType.StartObject)
+            {
+                return JsonSerializer.Deserialize<SessionModesState>(ref reader, options);
+            }
+
+            using var doc = JsonDocument.ParseValue(ref reader);
+            return doc.RootElement.ValueKind switch
+            {
+                JsonValueKind.Array => new SessionModesState { AvailableModes = JsonSerializer.Deserialize<List<SessionMode>>(doc.RootElement.GetRawText(), options) ?? new List<SessionMode>() },
+                JsonValueKind.Object => JsonSerializer.Deserialize<SessionModesState>(doc.RootElement.GetRawText(), options),
+                _ => null
+            };
         }
 
-        /// <summary>
-        /// 创建新的会话模式实例。
-        /// </summary>
-        /// <param name="id">模式 ID</param>
-        /// <param name="name">模式名称</param>
-        /// <param name="description">模式描述</param>
-        public SessionMode(string id, string name, string? description = null)
+        public override void Write(Utf8JsonWriter writer, SessionModesState? value, JsonSerializerOptions options)
         {
-            Id = id;
-            Name = name;
-            Description = description;
+            JsonSerializer.Serialize(writer, value, options);
         }
     }
 }
