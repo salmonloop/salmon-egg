@@ -425,11 +425,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         RefreshSlashCommandFilter();
     }
 
-    partial void OnCurrentPromptChanged(string value)
-    {
-        RefreshSlashCommandFilter();
-    }
-
     private void RefreshSlashCommandFilter()
     {
         var trimmed = (CurrentPrompt ?? string.Empty).TrimStart();
@@ -1089,6 +1084,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
     partial void OnCurrentPromptChanged(string value)
     {
         SendPromptCommand.NotifyCanExecuteChanged();
+        RefreshSlashCommandFilter();
     }
 
     public void Dispose()
