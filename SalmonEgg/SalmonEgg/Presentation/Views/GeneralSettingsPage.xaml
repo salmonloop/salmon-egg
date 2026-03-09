@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:SalmonEgg.Presentation.Views"
+    xmlns:controls="using:SalmonEgg.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:settings="using:SalmonEgg.Presentation.ViewModels.Settings"
@@ -12,9 +13,9 @@
 
     <ScrollViewer Padding="40,24"
                   HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Spacing="32"
-                    MaxWidth="800"
-                    HorizontalAlignment="Center">
+        <controls:ResponsiveSettingsHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
+            <controls:ResponsiveSettingsHost.Child>
+                <StackPanel Spacing="32">
             <TextBlock Text="常规" FontSize="28" FontWeight="Bold" Margin="0,0,0,12"/>
 
             <!-- 基础选项组 -->
@@ -95,6 +96,8 @@
                     </Grid>
                 </Border>
             </StackPanel>
-        </StackPanel>
+                </StackPanel>
+            </controls:ResponsiveSettingsHost.Child>
+        </controls:ResponsiveSettingsHost>
     </ScrollViewer>
 </Page>

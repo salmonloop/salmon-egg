@@ -33,6 +33,9 @@
             </ResourceDictionary.ThemeDictionaries>
             <SolidColorBrush x:Key="AccentBrush" Color="{ThemeResource SystemAccentColor}" />
 
+            <!-- Settings layout (Win11-like): fixed content column on wide windows, fluid on narrow ones -->
+            <x:Double x:Key="SettingsContentMaxWidth">780</x:Double>
+
             <!-- 定义 SubtleButtonStyle 兼容样式 -->
             <!-- 解决 "Couldn't statically resolve resource SubtleButtonStyle" 警告 -->
             <Style x:Key="SubtleButtonStyle" TargetType="Button">
