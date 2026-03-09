@@ -219,12 +219,65 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                {
                    Cwd = Environment.CurrentDirectory
                };
-                await _chatService.CreateSessionAsync(sessionParams);
-                Logger.LogInformation("会话创建成功，SessionId={SessionId}", _chatService.CurrentSessionId);
+                var response = await _chatService.CreateSessionAsync(sessionParams);
+                Logger.LogInformation("会话创建成功，SessionId={SessionId}", response.SessionId);
 
                 IsConnected = _chatService.IsConnected && _chatService.IsInitialized;
-                CurrentSessionId = _chatService.CurrentSessionId;
-                IsSessionActive = !string.IsNullOrWhiteSpace(CurrentSessionId);
+                CurrentSessionId = response.SessionId;
+                IsSessionActive = !string.IsNullOrWhiteSpace(response.SessionId);
+
+                // Load modes (some Agents may omit this field)
+                AvailableModes.Clear();
+                SelectedMode = null;
+                if (response.Modes != null)
+                {
+                    foreach (var mode in response.Modes)
+                    {
+                        if (mode != null)
+                        {
+                            AvailableModes.Add(new SessionModeViewModel
+                            {
+                                ModeId = mode.Id ?? string.Empty,
+                                ModeName = mode.Name ?? string.Empty,
+                                Description = mode.Description ?? string.Empty
+                            });
+                        }
+                    }
+
+                    if (AvailableModes.Count > 0)
+                    {
+                        SelectedMode = AvailableModes[0];
+                    }
+                }
+
+                Logger.LogInformation("Session modes loaded: {Count}", AvailableModes.Count);
+
+                // Load config options
+                ConfigOptions.Clear();
+                ShowConfigOptionsPanel = false;
+                if (response.ConfigOptions is System.Text.Json.JsonElement element && element.ValueKind == System.Text.Json.JsonValueKind.Array)
+                {
+                    foreach (var item in element.EnumerateArray())
+                    {
+                        if (item.TryGetProperty("id", out var idProp))
+                        {
+                            var id = idProp.GetString() ?? string.Empty;
+                            ConfigOptions.Add(ConfigOptionViewModel.CreateFromJson(id, item));
+                        }
+                    }
+
+                    ShowConfigOptionsPanel = ConfigOptions.Count > 0;
+                }
+                else if (response.ConfigOptions is System.Text.Json.JsonElement objElement && objElement.ValueKind == System.Text.Json.JsonValueKind.Object)
+                {
+                    foreach (var prop in objElement.EnumerateObject())
+                    {
+                        ConfigOptions.Add(ConfigOptionViewModel.CreateFromJson(prop.Name, prop.Value));
+                    }
+
+                    ShowConfigOptionsPanel = ConfigOptions.Count > 0;
+                }
+
                 if (IsSessionActive)
                 {
                     LoadSessionHistory();
