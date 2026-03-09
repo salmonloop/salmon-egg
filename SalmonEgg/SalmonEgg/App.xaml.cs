@@ -98,6 +98,30 @@ public partial class App : global::Microsoft.UI.Xaml.Application
             BootLog("OnLaunched: navigated to MainPage");
         }
 
+        // Best-effort cache cleanup based on retention settings.
+        try
+        {
+            var appSettings = ServiceProvider.GetService<SalmonEgg.Domain.Services.IAppSettingsService>();
+            var maintenance = ServiceProvider.GetService<SalmonEgg.Domain.Services.IAppMaintenanceService>();
+            if (appSettings != null && maintenance != null)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var settings = await appSettings.LoadAsync().ConfigureAwait(false);
+                        await maintenance.CleanupCacheAsync(settings.CacheRetentionDays).ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                    }
+                });
+            }
+        }
+        catch
+        {
+        }
+
         // MainWindow.SetWindowIcon();
         MainWindow.Activate();
         BootLog("OnLaunched: window activated");

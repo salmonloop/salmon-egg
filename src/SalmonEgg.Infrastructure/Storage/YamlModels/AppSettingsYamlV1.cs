@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace SalmonEgg.Infrastructure.Storage.YamlModels;
 
@@ -23,5 +24,17 @@ internal sealed class AppSettingsYamlV1
 
     // Appearance
     public string Backdrop { get; set; } = "System";
+
+    // Data & Storage / Privacy
+    public bool SaveLocalHistory { get; set; } = true;
+
+    public int HistoryRetentionDays { get; set; } = 30;
+
+    public bool RememberRecentProjectPaths { get; set; } = true;
+
+    public int CacheRetentionDays { get; set; } = 7;
+
+    // Shortcuts
+    public Dictionary<string, string> KeyBindings { get; set; } = new();
 }
 

@@ -247,15 +247,46 @@ public sealed partial class MainPage : Page
         {
             string content = item.Content?.ToString() ?? "";
 
-            if (content.Contains("外观") || content.Contains("常规"))
+            if (content.Contains("常规"))
             {
-                NavigateTo(content.Contains("常规")
-                    ? typeof(SalmonEgg.Presentation.Views.GeneralSettingsPage)
-                    : typeof(SalmonEgg.Presentation.Views.Settings.AppearanceSettingsPage));
+                NavigateTo(typeof(SalmonEgg.Presentation.Views.GeneralSettingsPage));
+                return;
             }
-            else if (content.Contains("连接"))
+
+            if (content.Contains("外观"))
+            {
+                NavigateTo(typeof(SalmonEgg.Presentation.Views.Settings.AppearanceSettingsPage));
+                return;
+            }
+
+            if (content.Contains("连接"))
             {
                 NavigateTo(typeof(SalmonEgg.Presentation.Views.Settings.AcpConnectionSettingsPage));
+                return;
+            }
+
+            if (content.Contains("数据"))
+            {
+                NavigateTo(typeof(SalmonEgg.Presentation.Views.Settings.DataStorageSettingsPage));
+                return;
+            }
+
+            if (content.Contains("快捷键"))
+            {
+                NavigateTo(typeof(SalmonEgg.Presentation.Views.Settings.ShortcutsSettingsPage));
+                return;
+            }
+
+            if (content.Contains("诊断"))
+            {
+                NavigateTo(typeof(SalmonEgg.Presentation.Views.Settings.DiagnosticsSettingsPage));
+                return;
+            }
+
+            if (content.Contains("关于"))
+            {
+                NavigateTo(typeof(SalmonEgg.Presentation.Views.Settings.AboutPage));
+                return;
             }
         }
     }

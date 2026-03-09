@@ -1,4 +1,8 @@
 using System;
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.ComponentModel;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -37,11 +41,26 @@ public partial class AppPreferencesViewModel : ObservableObject
     [ObservableProperty]
     private string? _lastSelectedServerId;
 
+    [ObservableProperty]
+    private bool _saveLocalHistory = true;
+
+    [ObservableProperty]
+    private int _historyRetentionDays = 30;
+
+    [ObservableProperty]
+    private bool _rememberRecentProjectPaths = true;
+
+    [ObservableProperty]
+    private int _cacheRetentionDays = 7;
+
+    public ObservableCollection<KeyBindingPairViewModel> KeyBindings { get; } = new();
+
     public AppPreferencesViewModel(IAppSettingsService appSettingsService, ILogger<AppPreferencesViewModel> logger)
     {
         _appSettingsService = appSettingsService ?? throw new ArgumentNullException(nameof(appSettingsService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _syncContext = SynchronizationContext.Current ?? new SynchronizationContext();
+        KeyBindings.CollectionChanged += OnKeyBindingsChanged;
         _ = LoadAsync();
     }
 
@@ -60,6 +79,18 @@ public partial class AppPreferencesViewModel : ObservableObject
                 MinimizeToTray = settings.MinimizeToTray;
                 Language = settings.Language;
                 LastSelectedServerId = settings.LastSelectedServerId;
+                SaveLocalHistory = settings.SaveLocalHistory;
+                HistoryRetentionDays = settings.HistoryRetentionDays;
+                RememberRecentProjectPaths = settings.RememberRecentProjectPaths;
+                CacheRetentionDays = settings.CacheRetentionDays;
+
+                KeyBindings.Clear();
+                foreach (var kvp in settings.KeyBindings)
+                {
+                    var pair = new KeyBindingPairViewModel(kvp.Key, kvp.Value);
+                    pair.PropertyChanged += OnKeyBindingPairPropertyChanged;
+                    KeyBindings.Add(pair);
+                }
             }, null);
         }
         catch (Exception ex)
@@ -79,6 +110,97 @@ public partial class AppPreferencesViewModel : ObservableObject
     partial void OnMinimizeToTrayChanged(bool value) => ScheduleSave();
     partial void OnLanguageChanged(string value) => ScheduleSave();
     partial void OnLastSelectedServerIdChanged(string? value) => ScheduleSave();
+    partial void OnSaveLocalHistoryChanged(bool value) => ScheduleSave();
+    partial void OnHistoryRetentionDaysChanged(int value) => ScheduleSave();
+    partial void OnRememberRecentProjectPathsChanged(bool value) => ScheduleSave();
+    partial void OnCacheRetentionDaysChanged(int value) => ScheduleSave();
+
+    private void OnKeyBindingsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.NewItems != null)
+        {
+            foreach (var item in e.NewItems.OfType<KeyBindingPairViewModel>())
+            {
+                item.PropertyChanged += OnKeyBindingPairPropertyChanged;
+            }
+        }
+
+        if (e.OldItems != null)
+        {
+            foreach (var item in e.OldItems.OfType<KeyBindingPairViewModel>())
+            {
+                item.PropertyChanged -= OnKeyBindingPairPropertyChanged;
+            }
+        }
+
+        ScheduleSave();
+    }
+
+    private void OnKeyBindingPairPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(KeyBindingPairViewModel.Gesture) ||
+            e.PropertyName == nameof(KeyBindingPairViewModel.ActionId))
+        {
+            ScheduleSave();
+        }
+    }
+
+    public void SetKeyBinding(string actionId, string gesture)
+    {
+        if (string.IsNullOrWhiteSpace(actionId))
+        {
+            return;
+        }
+
+        var existing = KeyBindings.FirstOrDefault(k => string.Equals(k.ActionId, actionId, StringComparison.OrdinalIgnoreCase));
+        if (existing == null)
+        {
+            KeyBindings.Add(new KeyBindingPairViewModel(actionId.Trim(), gesture.Trim()));
+            return;
+        }
+
+        existing.Gesture = gesture.Trim();
+    }
+
+    public string? GetKeyBinding(string actionId)
+    {
+        return KeyBindings.FirstOrDefault(k => string.Equals(k.ActionId, actionId, StringComparison.OrdinalIgnoreCase))?.Gesture;
+    }
+
+    public void RemoveKeyBinding(string actionId)
+    {
+        var existing = KeyBindings.FirstOrDefault(k => string.Equals(k.ActionId, actionId, StringComparison.OrdinalIgnoreCase));
+        if (existing != null)
+        {
+            KeyBindings.Remove(existing);
+        }
+    }
+
+    public void ResetToDefaults()
+    {
+        _suppressSave = true;
+        try
+        {
+            Theme = "System";
+            IsAnimationEnabled = true;
+            Backdrop = "System";
+            LaunchOnStartup = false;
+            MinimizeToTray = true;
+            Language = "System";
+            LastSelectedServerId = null;
+            SaveLocalHistory = true;
+            HistoryRetentionDays = 30;
+            RememberRecentProjectPaths = true;
+            CacheRetentionDays = 7;
+            KeyBindings.Clear();
+        }
+        finally
+        {
+            _suppressSave = false;
+        }
+
+        ScheduleSave();
+    }
 
     private void ScheduleSave()
     {
@@ -105,7 +227,15 @@ public partial class AppPreferencesViewModel : ObservableObject
                     LaunchOnStartup = LaunchOnStartup,
                     MinimizeToTray = MinimizeToTray,
                     Language = Language,
-                    LastSelectedServerId = LastSelectedServerId
+                    LastSelectedServerId = LastSelectedServerId,
+                    SaveLocalHistory = SaveLocalHistory,
+                    HistoryRetentionDays = HistoryRetentionDays,
+                    RememberRecentProjectPaths = RememberRecentProjectPaths,
+                    CacheRetentionDays = CacheRetentionDays,
+                    KeyBindings = KeyBindings
+                        .Where(k => !string.IsNullOrWhiteSpace(k.ActionId) && !string.IsNullOrWhiteSpace(k.Gesture))
+                        .GroupBy(k => k.ActionId.Trim(), StringComparer.OrdinalIgnoreCase)
+                        .ToDictionary(g => g.Key, g => g.Last().Gesture.Trim(), StringComparer.OrdinalIgnoreCase)
                 }).ConfigureAwait(false);
             }
             catch (TaskCanceledException)

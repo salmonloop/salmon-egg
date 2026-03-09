@@ -109,6 +109,8 @@ public static class DependencyInjection
 
         // App settings (config/app.yaml)
         services.AddSingleton<IAppSettingsService, AppSettingsService>();
+        services.AddSingleton<IAppDataService, AppDataService>();
+        services.AddSingleton<IAppMaintenanceService, AppMaintenanceService>();
 
         // 配置管理器
         services.AddSingleton<IConfigurationService, ConfigurationManager>();
@@ -120,6 +122,10 @@ public static class DependencyInjection
         // 传输层工厂
         services.AddSingleton<SalmonEgg.Domain.Interfaces.ITransportFactory, TransportFactory>();
 
+
+        // Diagnostics & platform shell
+        services.AddSingleton<IDiagnosticsBundleService, SalmonEgg.Infrastructure.Services.DiagnosticsBundleService>();
+        services.AddSingleton<IPlatformShellService, SalmonEgg.Infrastructure.Services.PlatformShellService>();
 
         }
 
@@ -184,6 +190,12 @@ public static class DependencyInjection
 
         // ACP connection settings page view model (wraps Chat + Profiles)
         services.AddSingleton<AcpConnectionSettingsViewModel>();
+
+        // Settings pages (Data/Shortcuts/Diagnostics/About)
+        services.AddSingleton<DataStorageSettingsViewModel>();
+        services.AddSingleton<ShortcutsSettingsViewModel>();
+        services.AddSingleton<DiagnosticsSettingsViewModel>();
+        services.AddSingleton<AboutViewModel>();
     }
 
     private static string GetAppDataPath()

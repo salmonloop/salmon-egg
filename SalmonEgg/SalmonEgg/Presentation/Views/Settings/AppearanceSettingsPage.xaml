@@ -9,8 +9,32 @@
     Background="Transparent"
     AllowDrop="False">
 
-    <ScrollViewer Padding="40,24">
-        <StackPanel Spacing="24" MaxWidth="800" HorizontalAlignment="Left">
+    <ScrollViewer Padding="40,24"
+                  HorizontalScrollBarVisibility="Disabled">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="GutterLeft" Width="0"/>
+                <ColumnDefinition x:Name="ContentColumn" Width="*"/>
+                <ColumnDefinition x:Name="GutterRight" Width="0"/>
+            </Grid.ColumnDefinitions>
+
+            <VisualStateManager.VisualStateGroups>
+                <VisualStateGroup x:Name="LayoutStates">
+                    <VisualState x:Name="Narrow"/>
+                    <VisualState x:Name="Wide">
+                        <VisualState.StateTriggers>
+                            <AdaptiveTrigger MinWindowWidth="900"/>
+                        </VisualState.StateTriggers>
+                        <VisualState.Setters>
+                            <Setter Target="GutterLeft.Width" Value="*"/>
+                            <Setter Target="GutterRight.Width" Value="*"/>
+                            <Setter Target="ContentColumn.Width" Value="800"/>
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateManager.VisualStateGroups>
+
+            <StackPanel Grid.Column="1" Spacing="24" HorizontalAlignment="Stretch">
             <TextBlock Text="外观" FontSize="28" FontWeight="Bold" Margin="0,0,0,12"/>
 
             <StackPanel Spacing="12">
@@ -91,7 +115,7 @@
                      IsOpen="True"
                      IsClosable="False"
                      Severity="Informational" />
-        </StackPanel>
+            </StackPanel>
+        </Grid>
     </ScrollViewer>
 </Page>
-

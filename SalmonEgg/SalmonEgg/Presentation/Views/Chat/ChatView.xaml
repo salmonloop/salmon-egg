@@ -63,7 +63,7 @@
                                FontWeight="Bold"
                                HorizontalAlignment="Center"
                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                    <TextBlock Text="请前往“设置 > 连接状态”配置并连接到您的 Agent 服务器"
+                    <TextBlock Text="请前往“设置 > 连接”配置并连接到您的 Agent 服务器"
                                FontSize="14"
                                Opacity="0.7"
                                HorizontalAlignment="Center"

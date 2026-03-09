@@ -108,7 +108,9 @@
         </Style>
 
         <Style x:Key="SessionSubMenuItemStyle" TargetType="ListViewItem" BasedOn="{StaticResource SubMenuItemStyle}">
-            <Setter Property="Margin" Value="20,2,8,2"/>
+            <!-- Keep the container full-width; indent via Padding instead of Margin -->
+            <Setter Property="Margin" Value="8,2"/>
+            <Setter Property="Padding" Value="24,10"/>
         </Style>
 
         <Style x:Key="SubMenuResizerThumbStyle" TargetType="controls:ResizeGrip">
@@ -289,6 +291,10 @@
                     <ListViewItem Content="常规" />
                     <ListViewItem Content="外观" />
                     <ListViewItem Content="连接" />
+                    <ListViewItem Content="数据与存储" />
+                    <ListViewItem Content="快捷键" />
+                    <ListViewItem Content="诊断与日志" />
+                    <ListViewItem Content="关于" />
                 </ListView>
             </Grid>
 

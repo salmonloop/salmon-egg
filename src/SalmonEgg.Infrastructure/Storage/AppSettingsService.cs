@@ -44,7 +44,12 @@ public sealed class AppSettingsService : IAppSettingsService
                 LaunchOnStartup = model.LaunchOnStartup,
                 MinimizeToTray = model.MinimizeToTray,
                 Language = string.IsNullOrWhiteSpace(model.Language) ? "System" : model.Language,
-                Backdrop = string.IsNullOrWhiteSpace(model.Backdrop) ? "System" : model.Backdrop
+                Backdrop = string.IsNullOrWhiteSpace(model.Backdrop) ? "System" : model.Backdrop,
+                SaveLocalHistory = model.SaveLocalHistory,
+                HistoryRetentionDays = model.HistoryRetentionDays > 0 ? model.HistoryRetentionDays : 30,
+                RememberRecentProjectPaths = model.RememberRecentProjectPaths,
+                CacheRetentionDays = model.CacheRetentionDays > 0 ? model.CacheRetentionDays : 7,
+                KeyBindings = model.KeyBindings ?? new()
             };
         }
         catch (YamlException)
@@ -73,7 +78,12 @@ public sealed class AppSettingsService : IAppSettingsService
             LaunchOnStartup = settings.LaunchOnStartup,
             MinimizeToTray = settings.MinimizeToTray,
             Language = settings.Language ?? "System",
-            Backdrop = settings.Backdrop ?? "System"
+            Backdrop = settings.Backdrop ?? "System",
+            SaveLocalHistory = settings.SaveLocalHistory,
+            HistoryRetentionDays = settings.HistoryRetentionDays > 0 ? settings.HistoryRetentionDays : 30,
+            RememberRecentProjectPaths = settings.RememberRecentProjectPaths,
+            CacheRetentionDays = settings.CacheRetentionDays > 0 ? settings.CacheRetentionDays : 7,
+            KeyBindings = settings.KeyBindings ?? new()
         };
 
         var yaml = YamlSerialization.CreateSerializer().Serialize(model);

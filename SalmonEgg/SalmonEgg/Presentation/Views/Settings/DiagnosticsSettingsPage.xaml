@@ -1,0 +1,114 @@
+<Page
+    x:Class="SalmonEgg.Presentation.Views.Settings.DiagnosticsSettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Background="Transparent"
+    AllowDrop="False">
+
+    <ScrollViewer Padding="40,24"
+                  HorizontalScrollBarVisibility="Disabled">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="GutterLeft" Width="0"/>
+                <ColumnDefinition x:Name="ContentColumn" Width="*"/>
+                <ColumnDefinition x:Name="GutterRight" Width="0"/>
+            </Grid.ColumnDefinitions>
+
+            <VisualStateManager.VisualStateGroups>
+                <VisualStateGroup x:Name="LayoutStates">
+                    <VisualState x:Name="Narrow"/>
+                    <VisualState x:Name="Wide">
+                        <VisualState.StateTriggers>
+                            <AdaptiveTrigger MinWindowWidth="1000"/>
+                        </VisualState.StateTriggers>
+                        <VisualState.Setters>
+                            <Setter Target="GutterLeft.Width" Value="*"/>
+                            <Setter Target="GutterRight.Width" Value="*"/>
+                            <Setter Target="ContentColumn.Width" Value="900"/>
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateManager.VisualStateGroups>
+
+            <StackPanel Grid.Column="1" Spacing="28" HorizontalAlignment="Stretch">
+            <TextBlock Text="诊断与日志" FontSize="28" FontWeight="Bold" Margin="0,0,0,12"/>
+
+            <StackPanel Spacing="12">
+                <TextBlock Text="运行环境" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}"/>
+                <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="{x:Bind ViewModel.OsDescription, Mode=OneWay}" />
+                        <TextBlock Text="{x:Bind ViewModel.FrameworkDescription, Mode=OneWay}" Opacity="0.7"/>
+                        <TextBlock Text="应用版本：" FontWeight="SemiBold" Margin="0,8,0,0"/>
+                        <TextBlock Text="{x:Bind ViewModel.AppVersion, Mode=OneWay}" Opacity="0.7"/>
+                        <TextBlock Text="协议版本：" FontWeight="SemiBold" Margin="0,8,0,0"/>
+                        <TextBlock Text="{x:Bind ViewModel.ProtocolVersion, Mode=OneWay}" Opacity="0.7"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <StackPanel Spacing="12">
+                <TextBlock Text="日志" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}"/>
+                <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="16">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="日志目录：" FontWeight="SemiBold"/>
+                        <TextBlock Text="{x:Bind ViewModel.LogsDirectoryPath, Mode=OneWay}" Opacity="0.7" TextWrapping="Wrap"/>
+                        <TextBlock Text="最新日志文件：" FontWeight="SemiBold"/>
+                        <TextBlock Text="{x:Bind ViewModel.LatestLogFilePath, Mode=OneWay}" Opacity="0.7" TextWrapping="Wrap"/>
+
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Content="打开日志目录" Command="{x:Bind ViewModel.OpenLogsFolderCommand}" />
+                            <Button Content="复制最近日志片段" Command="{x:Bind ViewModel.CopyRecentLogSnippetCommand}" />
+                            <Button Content="刷新" Command="{x:Bind ViewModel.RefreshLatestLogFileCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <StackPanel Spacing="12">
+                <TextBlock Text="连接诊断" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}"/>
+                <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="当前状态：" FontWeight="SemiBold"/>
+                        <TextBlock Text="{x:Bind ViewModel.Chat.IsConnected, Mode=OneWay}" Opacity="0.7"/>
+                        <TextBlock Text="Agent：" FontWeight="SemiBold" Margin="0,8,0,0"/>
+                        <TextBlock Text="{x:Bind ViewModel.Chat.AgentName, Mode=OneWay}" Opacity="0.7"/>
+                        <TextBlock Text="{x:Bind ViewModel.Chat.AgentVersion, Mode=OneWay}" Opacity="0.7"/>
+                        <TextBlock Text="会话：" FontWeight="SemiBold" Margin="0,8,0,0"/>
+                        <TextBlock Text="{x:Bind ViewModel.Chat.CurrentSessionId, Mode=OneWay}" Opacity="0.7"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <StackPanel Spacing="12">
+                <TextBlock Text="诊断包" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}"/>
+                <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="16">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="生成 ZIP 包，包含配置（不含密钥）、日志与环境快照。" Opacity="0.7" TextWrapping="Wrap"/>
+                        <Button Content="生成诊断包（ZIP）" Command="{x:Bind ViewModel.CreateDiagnosticsBundleCommand}" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</Page>
