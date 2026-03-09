@@ -10,30 +10,9 @@
 
     <ScrollViewer Padding="40,24"
                   HorizontalScrollBarVisibility="Disabled">
-        <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition x:Name="GutterLeft" Width="0"/>
-                <ColumnDefinition x:Name="ContentColumn" Width="*"/>
-                <ColumnDefinition x:Name="GutterRight" Width="0"/>
-            </Grid.ColumnDefinitions>
-
-            <VisualStateManager.VisualStateGroups>
-                <VisualStateGroup x:Name="LayoutStates">
-                    <VisualState x:Name="Narrow"/>
-                    <VisualState x:Name="Wide">
-                        <VisualState.StateTriggers>
-                            <AdaptiveTrigger MinWindowWidth="1000"/>
-                        </VisualState.StateTriggers>
-                        <VisualState.Setters>
-                            <Setter Target="GutterLeft.Width" Value="*"/>
-                            <Setter Target="GutterRight.Width" Value="*"/>
-                            <Setter Target="ContentColumn.Width" Value="900"/>
-                        </VisualState.Setters>
-                    </VisualState>
-                </VisualStateGroup>
-            </VisualStateManager.VisualStateGroups>
-
-            <StackPanel Grid.Column="1" Spacing="28" HorizontalAlignment="Stretch">
+        <StackPanel Spacing="28"
+                    MaxWidth="900"
+                    HorizontalAlignment="Center">
             <TextBlock Text="诊断与日志" FontSize="28" FontWeight="Bold" Margin="0,0,0,12"/>
 
             <StackPanel Spacing="12">
@@ -108,7 +87,6 @@
                     </StackPanel>
                 </Border>
             </StackPanel>
-            </StackPanel>
-        </Grid>
+        </StackPanel>
     </ScrollViewer>
 </Page>

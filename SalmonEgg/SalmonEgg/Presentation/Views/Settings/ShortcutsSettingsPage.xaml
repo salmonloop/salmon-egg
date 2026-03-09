@@ -11,11 +11,9 @@
 
     <ScrollViewer Padding="40,24"
                   HorizontalScrollBarVisibility="Disabled">
-        <Grid x:Name="LayoutRoot" HorizontalAlignment="Stretch">
-            <Grid HorizontalAlignment="Center"
-                  MaxWidth="900"
-                  Width="{Binding ElementName=LayoutRoot, Path=ActualWidth}">
-                <StackPanel Spacing="24" HorizontalAlignment="Stretch">
+        <StackPanel Spacing="24"
+                    MaxWidth="900"
+                    HorizontalAlignment="Center">
             <TextBlock Text="快捷键" FontSize="28" FontWeight="Bold" Margin="0,0,0,12"/>
 
             <InfoBar IsOpen="{x:Bind ViewModel.HasConflicts, Mode=OneWay}"
@@ -76,8 +74,6 @@
                     </StackPanel>
                 </Border>
             </StackPanel>
-                </StackPanel>
-            </Grid>
-        </Grid>
+        </StackPanel>
     </ScrollViewer>
 </Page>
