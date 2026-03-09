@@ -35,6 +35,22 @@ namespace SalmonEgg.Domain.Models
         /// </summary>
         public TransportType Transport { get; set; }
 
+        public string TransportDisplayName =>
+            Transport switch
+            {
+                TransportType.Stdio => "Stdio（本地）",
+                TransportType.HttpSse => "HTTP SSE",
+                _ => "WebSocket"
+            };
+
+        public string TransportGlyph =>
+            Transport switch
+            {
+                TransportType.Stdio => "\uE756", // CommandPrompt
+                TransportType.HttpSse => "\uE774", // Cloud
+                _ => "\uE704" // Globe
+            };
+
         /// <summary>
         /// 认证配置
         /// </summary>
@@ -72,6 +88,20 @@ namespace SalmonEgg.Domain.Models
                 }
 
                 return ServerUrl ?? string.Empty;
+            }
+        }
+
+        public string SubtitleDisplay
+        {
+            get
+            {
+                var endpoint = EndpointDisplay;
+                if (string.IsNullOrWhiteSpace(endpoint))
+                {
+                    return TransportDisplayName;
+                }
+
+                return $"{TransportDisplayName} • {endpoint}";
             }
         }
     }

@@ -15,6 +15,12 @@
     <Page.Resources>
         <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
         <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
+
+        <Style x:Key="AgentListItemStyle" TargetType="ListViewItem">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="MinHeight" Value="64"/>
+        </Style>
     </Page.Resources>
 
     <ScrollViewer Padding="40,24"
@@ -29,7 +35,7 @@
 
                     <!-- Overview -->
                     <StackPanel Spacing="12">
-                        <TextBlock Text="概览"
+                        <TextBlock Text="当前连接状态"
                                    FontSize="18"
                                    FontWeight="SemiBold"
                                    Foreground="{ThemeResource AccentBrush}"/>
@@ -39,62 +45,55 @@
                                 BorderThickness="1"
                                 CornerRadius="8"
                                 Padding="16">
-                            <StackPanel Spacing="16">
-                                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
-                                    <StackPanel Grid.Row="0" Grid.Column="0" Spacing="2">
-                                        <TextBlock Text="{x:Bind ViewModel.Chat.AgentName, Mode=OneWay}"
+                            <StackPanel Spacing="12">
+                                <Grid ColumnDefinitions="Auto,*,Auto"
+                                      ColumnSpacing="14"
+                                      VerticalAlignment="Center">
+                                    <Viewbox Width="56" Height="56" VerticalAlignment="Center">
+                                        <SymbolIcon Symbol="World" Foreground="{ThemeResource AccentBrush}"/>
+                                    </Viewbox>
+
+                                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                        <TextBlock Text="{x:Bind ViewModel.AgentDisplayName, Mode=OneWay}"
+                                                   FontSize="18"
                                                    FontWeight="SemiBold"/>
-                                        <TextBlock Text="{x:Bind ViewModel.Chat.AgentVersion, Mode=OneWay}"
-                                                   Opacity="0.65"
+                                        <TextBlock Text="{x:Bind ViewModel.ConnectionStatusText, Mode=OneWay}"
+                                                   Opacity="0.7"
                                                    FontSize="12"/>
                                     </StackPanel>
 
-                                    <StackPanel Grid.Row="0"
-                                                Grid.Column="1"
-                                                Orientation="Horizontal"
-                                                Spacing="8"
-                                                VerticalAlignment="Center">
-                                        <Button Content="连接"
-                                                Style="{StaticResource AccentButtonStyle}"
-                                                Command="{x:Bind ViewModel.Chat.InitializeAndConnectCommand}"
-                                                IsEnabled="{x:Bind ViewModel.Chat.IsConnecting, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"/>
-                                        <Button Content="断开"
-                                                Command="{x:Bind ViewModel.Chat.DisconnectCommand}"
-                                                IsEnabled="{x:Bind ViewModel.Chat.IsConnected, Mode=OneWay}"/>
-                                    </StackPanel>
-
-                                    <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Spacing="8">
-                                        <Grid ColumnDefinitions="Auto,*"
-                                              RowDefinitions="Auto"
-                                              ColumnSpacing="12"
-                                              RowSpacing="6">
-                                            <TextBlock Grid.Row="0" Grid.Column="0"
-                                                       Text="传输协议"
-                                                       Opacity="0.7"/>
-                                            <TextBlock Grid.Row="0" Grid.Column="1"
-                                                       Text="{x:Bind ViewModel.SelectedTransportName, Mode=OneWay}"
-                                                       Opacity="0.9"/>
-                                        </Grid>
-
-                                        <InfoBar IsOpen="{x:Bind ViewModel.Chat.IsConnecting, Mode=OneWay}"
-                                                 Severity="Informational"
-                                                 Title="正在连接"
-                                                 Message="正在尝试与 ACP 服务端建立连接…"
-                                                 IsClosable="False"/>
-
-                                        <InfoBar IsOpen="{x:Bind ViewModel.Chat.IsConnected, Mode=OneWay}"
-                                                 Severity="Success"
-                                                 Title="已连接"
-                                                 Message="已与 ACP 服务端建立连接"
-                                                 IsClosable="True"/>
-
-                                        <InfoBar IsOpen="{x:Bind ViewModel.Chat.HasConnectionError, Mode=OneWay}"
-                                                 Severity="Error"
-                                                 Title="连接失败"
-                                                 Message="{x:Bind ViewModel.Chat.ConnectionErrorMessage, Mode=OneWay}"
-                                                 IsClosable="True"/>
-                                    </StackPanel>
+                                    <ToggleSwitch Grid.Column="2"
+                                                  Header="连接"
+                                                  OnContent="开"
+                                                  OffContent="关"
+                                                  IsOn="{x:Bind ViewModel.Chat.IsConnected, Mode=OneWay}"
+                                                  IsEnabled="{x:Bind ViewModel.Chat.IsConnecting, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"
+                                                  Toggled="OnConnectionToggleToggled"/>
                                 </Grid>
+
+                                <Grid ColumnDefinitions="Auto,*"
+                                      ColumnSpacing="12"
+                                      RowSpacing="6">
+                                    <TextBlock Grid.Row="0" Grid.Column="0"
+                                               Text="传输协议"
+                                               Opacity="0.7"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="1"
+                                               Text="{x:Bind ViewModel.SelectedTransportName, Mode=OneWay}"
+                                               Opacity="0.9"/>
+
+                                    <TextBlock Grid.Row="1" Grid.Column="0"
+                                               Text="端点"
+                                               Opacity="0.7"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="1"
+                                               Text="{x:Bind ViewModel.CurrentEndpointDisplay, Mode=OneWay}"
+                                               Opacity="0.9"
+                                               TextWrapping="Wrap"/>
+                                </Grid>
+
+                                <TextBlock Text="{x:Bind ViewModel.Chat.ConnectionErrorMessage, Mode=OneWay}"
+                                           Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                           Visibility="{x:Bind ViewModel.Chat.HasConnectionError, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                           TextWrapping="Wrap"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>
@@ -185,7 +184,7 @@
                     <!-- Profiles -->
                     <StackPanel Spacing="12">
                         <Grid ColumnDefinitions="*,Auto">
-                            <TextBlock Text="预设服务器"
+                            <TextBlock Text="我的 Agent"
                                        FontSize="18"
                                        FontWeight="SemiBold"
                                        Foreground="{ThemeResource AccentBrush}"
@@ -203,47 +202,68 @@
                             </StackPanel>
                         </Grid>
 
-                        <ListView ItemsSource="{x:Bind ViewModel.Profiles.Profiles, Mode=OneWay}"
-                                  SelectedItem="{x:Bind ViewModel.Profiles.SelectedProfile, Mode=TwoWay}"
-                                  SelectionMode="Single"
-                                  Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                                  BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                                  BorderThickness="1"
-                                  CornerRadius="8"
-                                  MinHeight="140">
-                            <ListView.ItemTemplate>
-                                <DataTemplate x:DataType="models:ServerConfiguration">
-                                    <Grid Padding="12,8">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Spacing="2">
-                                            <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold"/>
-                                            <TextBlock Text="{x:Bind EndpointDisplay}" FontSize="12" Opacity="0.65"/>
-                                        </StackPanel>
-                                        <StackPanel Grid.Column="1"
-                                                    Orientation="Horizontal"
-                                                    Spacing="4"
+                        <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8">
+                            <ListView ItemsSource="{x:Bind ViewModel.Profiles.Profiles, Mode=OneWay}"
+                                      SelectedItem="{x:Bind ViewModel.Profiles.SelectedProfile, Mode=TwoWay}"
+                                      SelectionMode="Single"
+                                      MinHeight="140"
+                                      Background="Transparent"
+                                      ItemContainerStyle="{StaticResource AgentListItemStyle}">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate x:DataType="models:ServerConfiguration">
+                                        <Grid Padding="14,10"
+                                              ColumnDefinitions="Auto,*,Auto"
+                                              ColumnSpacing="12">
+                                            <Border Width="36"
+                                                    Height="36"
+                                                    CornerRadius="8"
+                                                    Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                                    Opacity="0.18"
                                                     VerticalAlignment="Center">
-                                            <Button Content="&#xE70F;"
-                                                    FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                                <Viewbox Width="18" Height="18" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                                              Glyph="{x:Bind TransportGlyph}"
+                                                              Foreground="{ThemeResource AccentBrush}"/>
+                                                </Viewbox>
+                                            </Border>
+
+                                            <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                                <TextBlock Text="{x:Bind Name}"
+                                                           FontWeight="SemiBold"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock Text="{x:Bind SubtitleDisplay}"
+                                                           FontSize="12"
+                                                           Opacity="0.65"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                            </StackPanel>
+
+                                            <Button Grid.Column="2"
                                                     Style="{StaticResource SubtleButtonStyle}"
-                                                    Tag="{x:Bind}"
-                                                    Click="OnEditProfileClick"
-                                                    ToolTipService.ToolTip="编辑"/>
-                                            <Button Content="&#xE74D;"
-                                                    FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                                    Style="{StaticResource SubtleButtonStyle}"
-                                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                                    Tag="{x:Bind}"
-                                                    Click="OnDeleteProfileClick"
-                                                    ToolTipService.ToolTip="删除"/>
-                                        </StackPanel>
-                                    </Grid>
-                                </DataTemplate>
-                            </ListView.ItemTemplate>
-                        </ListView>
+                                                    VerticalAlignment="Center"
+                                                    ToolTipService.ToolTip="更多">
+                                                <Button.Content>
+                                                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE712;"/>
+                                                </Button.Content>
+                                                <Button.Flyout>
+                                                    <MenuFlyout>
+                                                        <MenuFlyoutItem Text="编辑"
+                                                                        Tag="{x:Bind}"
+                                                                        Click="OnEditProfileMenuClick"/>
+                                                        <MenuFlyoutItem Text="删除"
+                                                                        Tag="{x:Bind}"
+                                                                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                                        Click="OnDeleteProfileMenuClick"/>
+                                                    </MenuFlyout>
+                                                </Button.Flyout>
+                                            </Button>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </Border>
                     </StackPanel>
 
                     <!-- Diagnostics -->

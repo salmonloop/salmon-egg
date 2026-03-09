@@ -36,6 +36,53 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
 
     public string SelectedProfileName => Profiles.SelectedProfile?.Name ?? string.Empty;
 
+    public string AgentDisplayName =>
+        string.IsNullOrWhiteSpace(Chat.AgentName) ? "Agent" : Chat.AgentName!;
+
+    public string ConnectionStatusText
+    {
+        get
+        {
+            if (Chat.IsConnecting || Chat.IsInitializing)
+            {
+                return "正在连接…";
+            }
+
+            if (Chat.IsConnected)
+            {
+                return "已连接";
+            }
+
+            if (Chat.HasConnectionError)
+            {
+                return "连接失败";
+            }
+
+            return "未连接";
+        }
+    }
+
+    public string CurrentEndpointDisplay
+    {
+        get
+        {
+            if (Chat.TransportConfig.SelectedTransportType == TransportType.Stdio)
+            {
+                var cmd = (Chat.TransportConfig.StdioCommand ?? string.Empty).Trim();
+                var args = (Chat.TransportConfig.StdioArgs ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(cmd))
+                {
+                    return "—";
+                }
+
+                return string.IsNullOrWhiteSpace(args) ? cmd : $"{cmd} {args}";
+            }
+
+            var url = (Chat.TransportConfig.RemoteUrl ?? string.Empty).Trim();
+            return string.IsNullOrWhiteSpace(url) ? "—" : url;
+        }
+    }
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanUpdateSelectedProfile))]
     private bool _isProfileDirty;
@@ -90,8 +137,25 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
                             ?? TransportOptions.First();
 
         Chat.TransportConfig.PropertyChanged += OnTransportConfigPropertyChanged;
+        Chat.PropertyChanged += OnChatPropertyChanged;
         Profiles.PropertyChanged += OnProfilesPropertyChanged;
         UpdateDirtyState();
+    }
+
+    private void OnChatPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(Chat.AgentName))
+        {
+            OnPropertyChanged(nameof(AgentDisplayName));
+        }
+
+        if (e.PropertyName == nameof(Chat.IsConnected) ||
+            e.PropertyName == nameof(Chat.IsConnecting) ||
+            e.PropertyName == nameof(Chat.IsInitializing) ||
+            e.PropertyName == nameof(Chat.ConnectionErrorMessage))
+        {
+            OnPropertyChanged(nameof(ConnectionStatusText));
+        }
     }
 
     private void OnProfilesPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -149,6 +213,14 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
             {
                 SelectedTransport = current;
             }
+        }
+
+        if (e.PropertyName == nameof(Chat.TransportConfig.SelectedTransportType) ||
+            e.PropertyName == nameof(Chat.TransportConfig.RemoteUrl) ||
+            e.PropertyName == nameof(Chat.TransportConfig.StdioCommand) ||
+            e.PropertyName == nameof(Chat.TransportConfig.StdioArgs))
+        {
+            OnPropertyChanged(nameof(CurrentEndpointDisplay));
         }
 
         if (!_isApplyingProfile)
@@ -317,6 +389,7 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
 
         _disposed = true;
         Chat.TransportConfig.PropertyChanged -= OnTransportConfigPropertyChanged;
+        Chat.PropertyChanged -= OnChatPropertyChanged;
         Profiles.PropertyChanged -= OnProfilesPropertyChanged;
     }
 }
