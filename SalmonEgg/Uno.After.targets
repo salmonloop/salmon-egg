@@ -1,0 +1,12 @@
+<Project>
+  <!--
+    Uno.Sdk 6.5.31 accidentally overwrites TargetFrameworks to net8 mobile TFMs in Uno.Sdk.After.targets.
+    Restore the project's intended TFMs when that happens (keeps VS-selected TFM rewriting intact).
+  -->
+  <PropertyGroup Condition="
+      $(TargetFrameworks.Contains('net8.0-android'))
+      OR $(TargetFrameworks.Contains('net8.0-ios'))
+      OR $(TargetFrameworks.Contains('net8.0-browserwasm'))">
+    <TargetFrameworks>$(SalmonEggAllTargetFrameworks)</TargetFrameworks>
+  </PropertyGroup>
+</Project>

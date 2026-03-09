@@ -11,7 +11,26 @@
             </ResourceDictionary.MergedDictionaries>
 
             <!-- 兼容性资源定义：确保在所有平台上都有回退项 -->
-            <SolidColorBrush x:Key="LayerOnAcrylicFillColorDefaultBrush" Color="{ThemeResource SystemAltHighColor}" />
+            <ResourceDictionary.ThemeDictionaries>
+                <!--
+                  Card/surface fill that still lets the window backdrop (Mica/DesktopAcrylic/AppBackdropBrush) show through.
+                  Using AcrylicBrush keeps the "material" feel instead of a flat solid fill.
+                -->
+                <ResourceDictionary x:Key="Light">
+                    <AcrylicBrush x:Key="LayerOnAcrylicFillColorDefaultBrush"
+                                  BackgroundSource="HostBackdrop"
+                                  TintColor="#FFFFFF"
+                                  TintOpacity="0.55"
+                                  FallbackColor="#F7F7F7" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <AcrylicBrush x:Key="LayerOnAcrylicFillColorDefaultBrush"
+                                  BackgroundSource="HostBackdrop"
+                                  TintColor="#1F1F1F"
+                                  TintOpacity="0.45"
+                                  FallbackColor="#1F1F1F" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
             <SolidColorBrush x:Key="AccentBrush" Color="{ThemeResource SystemAccentColor}" />
 
             <!-- 定义 SubtleButtonStyle 兼容样式 -->

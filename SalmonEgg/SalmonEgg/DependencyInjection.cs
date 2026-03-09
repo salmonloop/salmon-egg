@@ -21,6 +21,7 @@ using SalmonEgg.Infrastructure.Transport;
 using SalmonEgg.Infrastructure.Client;
 using SalmonEgg.Presentation.ViewModels;
 using SalmonEgg.Presentation.ViewModels.Chat;
+using SalmonEgg.Presentation.ViewModels.Navigation;
 
 namespace SalmonEgg;
 
@@ -172,6 +173,9 @@ public static class DependencyInjection
         // 新的 Chat ViewModel（重构后）
         // Must be singleton so connection/session state survives navigation and is shared between Settings and Chat pages.
         services.AddSingleton<ChatViewModel>();
+
+        // Sidebar navigation state (projects/sessions)
+        services.AddSingleton<SidebarViewModel>();
     }
 
     private static string GetAppDataPath()

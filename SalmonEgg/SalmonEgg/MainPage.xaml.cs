@@ -1,10 +1,13 @@
 using System.ComponentModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Navigation;
 using SalmonEgg.Presentation.ViewModels;
+using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.Views;
 using SalmonEgg.Presentation.Views.Chat;
 
@@ -12,7 +15,14 @@ namespace SalmonEgg;
 
 public sealed partial class MainPage : Page
 {
+    private const double SubMenuMinWidth = 200;
+    private const double SubMenuMaxWidth = 420;
+    private bool _isResizingSubMenu;
+    private double _subMenuResizeStartX;
+    private double _subMenuResizeStartWidth;
+
     public SettingsViewModel SettingsVM { get; }
+    public SidebarViewModel SidebarVM { get; }
 
 
 
@@ -25,6 +35,7 @@ public sealed partial class MainPage : Page
         App.BootLog("MainPage: ctor start");
         // 1. 在初始化组件前获取 ViewModel，确保 x:Bind 绑定正常
         SettingsVM = App.ServiceProvider.GetRequiredService<SettingsViewModel>();
+        SidebarVM = App.ServiceProvider.GetRequiredService<SidebarViewModel>();
 
         this.InitializeComponent();
         App.BootLog("MainPage: InitializeComponent done");
@@ -48,19 +59,23 @@ public sealed partial class MainPage : Page
         // 4. 初始化导航默认选中项（避免 XAML 初始化期间 SelectionChanged 触发导致 NRE）
         MainRailNav.SelectionChanged -= OnMainRailNavSelectionChanged;
         BottomRailNav.SelectionChanged -= OnBottomRailNavSelectionChanged;
-        SubMenuList.SelectionChanged -= OnSubMenuSelectionChanged;
+        SettingsSubMenuList.SelectionChanged -= OnSubMenuSelectionChanged;
         try
         {
             MainRailNav.SelectedItem = ChatNavItem;
             BottomRailNav.SelectedIndex = -1;
-            SubMenuColumn.Visibility = Visibility.Collapsed;
-            SubMenuList.SelectedIndex = -1;
+            SubMenuColumn.Visibility = Visibility.Visible;
+
+            ChatSubNavPanel.Visibility = Visibility.Visible;
+            SettingsSubNavPanel.Visibility = Visibility.Collapsed;
+
+            SettingsSubMenuList.SelectedIndex = -1;
         }
         finally
         {
             MainRailNav.SelectionChanged += OnMainRailNavSelectionChanged;
             BottomRailNav.SelectionChanged += OnBottomRailNavSelectionChanged;
-            SubMenuList.SelectionChanged += OnSubMenuSelectionChanged;
+            SettingsSubMenuList.SelectionChanged += OnSubMenuSelectionChanged;
         }
 
         // 5. 启动后默认进入对话界面
@@ -143,11 +158,14 @@ public sealed partial class MainPage : Page
             BottomRailNav.SelectedIndex = -1;
             BottomRailNav.SelectionChanged += OnBottomRailNavSelectionChanged;
 
-            // 聊天界面不需要二级菜单
-            SubMenuColumn.Visibility = Visibility.Collapsed;
-            SubMenuList.SelectionChanged -= OnSubMenuSelectionChanged;
-            SubMenuList.SelectedIndex = -1;
-            SubMenuList.SelectionChanged += OnSubMenuSelectionChanged;
+            // 聊天界面显示项目/会话子导航
+            SubMenuColumn.Visibility = Visibility.Visible;
+            ChatSubNavPanel.Visibility = Visibility.Visible;
+            SettingsSubNavPanel.Visibility = Visibility.Collapsed;
+
+            SettingsSubMenuList.SelectionChanged -= OnSubMenuSelectionChanged;
+            SettingsSubMenuList.SelectedIndex = -1;
+            SettingsSubMenuList.SelectionChanged += OnSubMenuSelectionChanged;
             NavigateTo(typeof(ChatView));
         }
     }
@@ -163,9 +181,12 @@ public sealed partial class MainPage : Page
 
             // 展开二级导航栏（设置），并默认加载外观设置
             SubMenuColumn.Visibility = Visibility.Visible;
-            SubMenuList.SelectionChanged -= OnSubMenuSelectionChanged;
-            SubMenuList.SelectedIndex = 1; // "外观"
-            SubMenuList.SelectionChanged += OnSubMenuSelectionChanged;
+            ChatSubNavPanel.Visibility = Visibility.Collapsed;
+            SettingsSubNavPanel.Visibility = Visibility.Visible;
+
+            SettingsSubMenuList.SelectionChanged -= OnSubMenuSelectionChanged;
+            SettingsSubMenuList.SelectedIndex = 1; // "外观"
+            SettingsSubMenuList.SelectionChanged += OnSubMenuSelectionChanged;
             NavigateTo(typeof(DisplaySettingsPage));
         }
     }
@@ -173,7 +194,7 @@ public sealed partial class MainPage : Page
     // 处理二级导航的切换逻辑
     private void OnSubMenuSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (ContentFrame is null || SubMenuColumn is null || SubMenuColumn.Visibility != Visibility.Visible)
+        if (ContentFrame is null || SubMenuColumn is null || SubMenuColumn.Visibility != Visibility.Visible || SettingsSubNavPanel.Visibility != Visibility.Visible)
         {
             return;
         }
@@ -192,6 +213,67 @@ public sealed partial class MainPage : Page
                 NavigateTo(typeof(SettingsPage));
             }
         }
+    }
+
+    private void OnSubMenuResizerPointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (SubMenuColumn is null || SubMenuResizer is null)
+        {
+            return;
+        }
+
+        _isResizingSubMenu = true;
+        _subMenuResizeStartX = e.GetCurrentPoint(this).Position.X;
+        _subMenuResizeStartWidth = SubMenuColumn.Width;
+
+        SubMenuResizer.CapturePointer(e.Pointer);
+        e.Handled = true;
+    }
+
+    private void OnSubMenuResizerPointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_isResizingSubMenu || SubMenuColumn is null)
+        {
+            return;
+        }
+
+        var currentX = e.GetCurrentPoint(this).Position.X;
+        var delta = currentX - _subMenuResizeStartX;
+
+        var newWidth = _subMenuResizeStartWidth + delta;
+        if (newWidth < SubMenuMinWidth)
+        {
+            newWidth = SubMenuMinWidth;
+        }
+        else if (newWidth > SubMenuMaxWidth)
+        {
+            newWidth = SubMenuMaxWidth;
+        }
+
+        SubMenuColumn.Width = newWidth;
+        e.Handled = true;
+    }
+
+    private void OnSubMenuResizerPointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        EndSubMenuResize(e.Pointer);
+        e.Handled = true;
+    }
+
+    private void OnSubMenuResizerPointerCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        EndSubMenuResize(e.Pointer);
+    }
+
+    private void EndSubMenuResize(Pointer pointer)
+    {
+        if (!_isResizingSubMenu || SubMenuResizer is null)
+        {
+            return;
+        }
+
+        _isResizingSubMenu = false;
+        SubMenuResizer.ReleasePointerCapture(pointer);
     }
 }
 public sealed partial class MainPage

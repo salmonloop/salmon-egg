@@ -13,7 +13,24 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <TargetFrameworks>net9.0-browserwasm;net10.0-desktop;net10.0-windows10.0.26100.0</TargetFrameworks>
+    <!-- Mobile targets are opt-in to keep `dotnet build` working on dev machines without workloads/toolchains. -->
+    <EnableMobileTargets Condition="'$(EnableMobileTargets)' == ''">false</EnableMobileTargets>
+
+    <SalmonEggTargetFrameworks>net10.0-browserwasm;net10.0-desktop;net10.0-windows10.0.26100.0</SalmonEggTargetFrameworks>
+    <SalmonEggAndroidTargetFrameworks Condition="
+        '$(EnableMobileTargets)' == 'true'
+        AND (
+          '$(AndroidSdkDirectory)' != ''
+          OR '$(ANDROID_SDK_ROOT)' != ''
+          OR '$(ANDROID_HOME)' != ''
+        )">net10.0-android36.0</SalmonEggAndroidTargetFrameworks>
+    <SalmonEggMobileTargetFrameworks>$(SalmonEggAndroidTargetFrameworks)</SalmonEggMobileTargetFrameworks>
+
+    <SalmonEggAllTargetFrameworks>$(SalmonEggTargetFrameworks)</SalmonEggAllTargetFrameworks>
+    <SalmonEggAllTargetFrameworks Condition="'$(SalmonEggMobileTargetFrameworks)' != ''">$(SalmonEggTargetFrameworks);$(SalmonEggMobileTargetFrameworks)</SalmonEggAllTargetFrameworks>
+
+    <TargetFrameworks>$(SalmonEggAllTargetFrameworks)</TargetFrameworks>
+    <AfterUnoSdkTargets>$(MSBuildProjectDirectory)\..\Uno.After.targets</AfterUnoSdkTargets>
 
     <OutputType>Exe</OutputType>
     <UnoSingleProject>true</UnoSingleProject>
