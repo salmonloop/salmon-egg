@@ -134,7 +134,8 @@
                                       SelectionMode="Single"
                                       MinHeight="140"
                                       Background="Transparent"
-                                      ItemContainerStyle="{StaticResource AgentListItemStyle}">
+                                      ItemContainerStyle="{StaticResource AgentListItemStyle}"
+                                      DoubleTapped="OnProfilesDoubleTapped">
                                 <ListView.ItemTemplate>
                                     <DataTemplate x:DataType="models:ServerConfiguration">
                                         <Grid Padding="14,10"
@@ -172,6 +173,10 @@
                                                 </Button.Content>
                                                 <Button.Flyout>
                                                     <MenuFlyout>
+                                                        <MenuFlyoutItem Text="连接"
+                                                                        Tag="{x:Bind}"
+                                                                        Click="OnConnectProfileMenuClick"/>
+                                                        <MenuFlyoutSeparator/>
                                                         <MenuFlyoutItem Text="编辑"
                                                                         Tag="{x:Bind}"
                                                                         Click="OnEditProfileMenuClick"/>

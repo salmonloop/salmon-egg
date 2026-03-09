@@ -739,20 +739,24 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         if (string.IsNullOrWhiteSpace(CurrentPrompt) || !IsSessionActive)
             return;
 
+        var promptText = CurrentPrompt;
+
         try
         {
             IsBusy = true;
             ClearError();
 
             // 添加用户消息到历史
-            var userContent = new TextContentBlock { Text = CurrentPrompt };
+            var userContent = new TextContentBlock { Text = promptText };
             AddMessageToHistory(userContent, isOutgoing: true);
 
+            // Clear input immediately for better UX (even if the send is still in-flight).
+            CurrentPrompt = string.Empty;
 
             var promptParams = new SessionPromptParams
             {
                 SessionId = CurrentSessionId!,
-                Prompt = new[] { new { type = "text", text = CurrentPrompt } },
+                Prompt = new[] { new { type = "text", text = promptText } },
                 MaxTokens = null,
                 StopSequences = null
             };
@@ -762,7 +766,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             {
                 await _chatService.SendPromptAsync(promptParams);
             }
-            CurrentPrompt = string.Empty;
         }
         catch (Exception ex)
         {

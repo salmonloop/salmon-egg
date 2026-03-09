@@ -38,9 +38,9 @@ public partial class AcpProfilesViewModel : ObservableObject
         _syncContext = SynchronizationContext.Current ?? new SynchronizationContext();
     }
 
-    partial void OnSelectedProfileChanged(ServerConfiguration? value)
+    public void MarkLastConnected(ServerConfiguration? profile)
     {
-        _preferences.LastSelectedServerId = value?.Id;
+        _preferences.LastSelectedServerId = profile?.Id;
     }
 
     [RelayCommand]

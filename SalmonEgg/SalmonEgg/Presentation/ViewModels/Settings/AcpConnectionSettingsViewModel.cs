@@ -1,10 +1,10 @@
 using System;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Presentation.ViewModels.Chat;
@@ -14,8 +14,8 @@ namespace SalmonEgg.Presentation.ViewModels.Settings;
 public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, IDisposable
 {
     private readonly ILogger<AcpConnectionSettingsViewModel> _logger;
+    private readonly AppPreferencesViewModel _preferences;
     private bool _disposed;
-    private bool _isApplyingProfile;
 
     public ChatViewModel Chat { get; }
     public AcpProfilesViewModel Profiles { get; }
@@ -32,12 +32,9 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
 
     public string SelectedTransportName => SelectedTransport?.Name ?? string.Empty;
 
-    public bool HasSelectedProfile => Profiles.SelectedProfile != null;
-
-    public string SelectedProfileName => Profiles.SelectedProfile?.Name ?? string.Empty;
-
     public string AgentDisplayName =>
-        string.IsNullOrWhiteSpace(Chat.AgentName) ? "Agent" : Chat.AgentName!;
+        ResolveConnectedProfileName()
+        ?? (string.IsNullOrWhiteSpace(Chat.AgentName) ? "Agent" : Chat.AgentName!);
 
     public string ConnectionStatusText
     {
@@ -83,54 +80,15 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         }
     }
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanUpdateSelectedProfile))]
-    private bool _isProfileDirty;
-
-    public bool CanUpdateSelectedProfile => HasSelectedProfile && IsProfileDirty;
-
-    [RelayCommand]
-    private async Task SaveCurrentAsNewProfileAsync()
-    {
-        try
-        {
-            var profile = CreateProfileFromCurrentConfig(GenerateDefaultProfileName());
-            await Profiles.SaveNewAsync(profile);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to save current config as new profile");
-        }
-    }
-
-    [RelayCommand]
-    private async Task SaveCurrentAsCopyAsync()
-    {
-        try
-        {
-            var baseName = Profiles.SelectedProfile?.Name;
-            if (string.IsNullOrWhiteSpace(baseName))
-            {
-                await SaveCurrentAsNewProfileAsync();
-                return;
-            }
-
-            var profile = CreateProfileFromCurrentConfig(GenerateUniqueName($"复制 - {baseName.Trim()}"));
-            await Profiles.SaveNewAsync(profile);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to save current config as profile copy");
-        }
-    }
-
     public AcpConnectionSettingsViewModel(
         ChatViewModel chatViewModel,
         AcpProfilesViewModel profiles,
+        AppPreferencesViewModel preferences,
         ILogger<AcpConnectionSettingsViewModel> logger)
     {
         Chat = chatViewModel ?? throw new ArgumentNullException(nameof(chatViewModel));
         Profiles = profiles ?? throw new ArgumentNullException(nameof(profiles));
+        _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         SelectedTransport = TransportOptions.FirstOrDefault(o => o.Type == Chat.TransportConfig.SelectedTransportType)
@@ -138,8 +96,21 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
 
         Chat.TransportConfig.PropertyChanged += OnTransportConfigPropertyChanged;
         Chat.PropertyChanged += OnChatPropertyChanged;
-        Profiles.PropertyChanged += OnProfilesPropertyChanged;
-        UpdateDirtyState();
+        Profiles.Profiles.CollectionChanged += OnProfilesCollectionChanged;
+        _preferences.PropertyChanged += OnPreferencesPropertyChanged;
+    }
+
+    private void OnProfilesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(AgentDisplayName));
+    }
+
+    private void OnPreferencesPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(AppPreferencesViewModel.LastSelectedServerId))
+        {
+            OnPropertyChanged(nameof(AgentDisplayName));
+        }
     }
 
     private void OnChatPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -155,52 +126,6 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
             e.PropertyName == nameof(Chat.ConnectionErrorMessage))
         {
             OnPropertyChanged(nameof(ConnectionStatusText));
-        }
-    }
-
-    private void OnProfilesPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == nameof(Profiles.SelectedProfile))
-        {
-            ApplySelectedProfileToConfig();
-        }
-    }
-
-    private void ApplySelectedProfileToConfig()
-    {
-        var profile = Profiles.SelectedProfile;
-        if (profile == null)
-        {
-            UpdateDirtyState();
-            return;
-        }
-
-        _isApplyingProfile = true;
-        try
-        {
-            SelectedTransport = TransportOptions.FirstOrDefault(o => o.Type == profile.Transport) ?? TransportOptions.First();
-            Chat.TransportConfig.SelectedTransportType = profile.Transport;
-
-            if (profile.Transport == TransportType.Stdio)
-            {
-                Chat.TransportConfig.StdioCommand = profile.StdioCommand ?? string.Empty;
-                Chat.TransportConfig.StdioArgs = profile.StdioArgs ?? string.Empty;
-            }
-            else
-            {
-                Chat.TransportConfig.RemoteUrl = profile.ServerUrl ?? string.Empty;
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to apply selected profile to transport config");
-        }
-        finally
-        {
-            _isApplyingProfile = false;
-            UpdateDirtyState();
-            OnPropertyChanged(nameof(HasSelectedProfile));
-            OnPropertyChanged(nameof(SelectedProfileName));
         }
     }
 
@@ -222,11 +147,6 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         {
             OnPropertyChanged(nameof(CurrentEndpointDisplay));
         }
-
-        if (!_isApplyingProfile)
-        {
-            UpdateDirtyState();
-        }
     }
 
     partial void OnSelectedTransportChanged(TransportOptionViewModel? value)
@@ -240,10 +160,6 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
 
             Chat.TransportConfig.SelectedTransportType = value.Type;
             OnPropertyChanged(nameof(SelectedTransportName));
-            if (!_isApplyingProfile)
-            {
-                UpdateDirtyState();
-            }
         }
         catch (Exception ex)
         {
@@ -251,38 +167,8 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         }
     }
 
-    private void UpdateDirtyState()
+    public async Task ConnectToProfileAsync(ServerConfiguration? profile)
     {
-        var profile = Profiles.SelectedProfile;
-        if (profile == null)
-        {
-            IsProfileDirty = false;
-            return;
-        }
-
-        var cfg = Chat.TransportConfig;
-        var sameTransport = profile.Transport == cfg.SelectedTransportType;
-        if (!sameTransport)
-        {
-            IsProfileDirty = true;
-            return;
-        }
-
-        if (profile.Transport == TransportType.Stdio)
-        {
-            IsProfileDirty =
-                !string.Equals((profile.StdioCommand ?? string.Empty).Trim(), (cfg.StdioCommand ?? string.Empty).Trim(), StringComparison.Ordinal) ||
-                !string.Equals((profile.StdioArgs ?? string.Empty).Trim(), (cfg.StdioArgs ?? string.Empty).Trim(), StringComparison.Ordinal);
-            return;
-        }
-
-        IsProfileDirty = !string.Equals((profile.ServerUrl ?? string.Empty).Trim(), (cfg.RemoteUrl ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase);
-    }
-
-    [RelayCommand]
-    private async Task UpdateSelectedProfileFromCurrentAsync()
-    {
-        var profile = Profiles.SelectedProfile;
         if (profile == null)
         {
             return;
@@ -290,94 +176,52 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
 
         try
         {
-            var updated = new ServerConfiguration
-            {
-                Id = profile.Id,
-                Name = profile.Name,
-                Transport = Chat.TransportConfig.SelectedTransportType,
-                ServerUrl = Chat.TransportConfig.SelectedTransportType == TransportType.Stdio ? string.Empty : (Chat.TransportConfig.RemoteUrl ?? string.Empty),
-                StdioCommand = Chat.TransportConfig.SelectedTransportType == TransportType.Stdio ? (Chat.TransportConfig.StdioCommand ?? string.Empty) : string.Empty,
-                StdioArgs = Chat.TransportConfig.SelectedTransportType == TransportType.Stdio ? (Chat.TransportConfig.StdioArgs ?? string.Empty) : string.Empty,
-                Authentication = profile.Authentication,
-                Proxy = profile.Proxy,
-                HeartbeatInterval = profile.HeartbeatInterval,
-                ConnectionTimeout = profile.ConnectionTimeout
-            };
+            Profiles.MarkLastConnected(profile);
+            Profiles.SelectedProfile = profile;
 
-            await Profiles.SaveAsync(updated);
+            if (Chat.IsConnected)
+            {
+                await Chat.DisconnectCommand.ExecuteAsync(null);
+            }
+
+            ApplyProfileToTransportConfig(profile);
+            await Chat.ApplyTransportConfigCommand.ExecuteAsync(null);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to update selected profile from current config");
+            _logger.LogError(ex, "Failed to connect to profile {ProfileId}", profile.Id);
         }
         finally
         {
-            UpdateDirtyState();
+            OnPropertyChanged(nameof(AgentDisplayName));
         }
     }
 
-    private ServerConfiguration CreateProfileFromCurrentConfig(string name)
+    private void ApplyProfileToTransportConfig(ServerConfiguration profile)
     {
-        var cfg = Chat.TransportConfig;
-        var transport = cfg.SelectedTransportType;
+        SelectedTransport = TransportOptions.FirstOrDefault(o => o.Type == profile.Transport) ?? TransportOptions.First();
+        Chat.TransportConfig.SelectedTransportType = profile.Transport;
 
-        return new ServerConfiguration
+        if (profile.Transport == TransportType.Stdio)
         {
-            Id = Guid.NewGuid().ToString(),
-            Name = name,
-            Transport = transport,
-            ServerUrl = transport == TransportType.Stdio ? string.Empty : (cfg.RemoteUrl ?? string.Empty),
-            StdioCommand = transport == TransportType.Stdio ? (cfg.StdioCommand ?? string.Empty) : string.Empty,
-            StdioArgs = transport == TransportType.Stdio ? (cfg.StdioArgs ?? string.Empty) : string.Empty,
-            HeartbeatInterval = 30,
-            ConnectionTimeout = 10
-        };
-    }
-
-    private string GenerateDefaultProfileName()
-    {
-        var cfg = Chat.TransportConfig;
-        var transport = cfg.SelectedTransportType;
-
-        string baseName;
-        if (transport == TransportType.Stdio)
-        {
-            var cmd = (cfg.StdioCommand ?? string.Empty).Trim();
-            baseName = string.IsNullOrWhiteSpace(cmd) ? "本地 Agent" : $"本地 - {cmd}";
+            Chat.TransportConfig.StdioCommand = profile.StdioCommand ?? string.Empty;
+            Chat.TransportConfig.StdioArgs = profile.StdioArgs ?? string.Empty;
         }
         else
         {
-            var url = (cfg.RemoteUrl ?? string.Empty).Trim();
-            if (Uri.TryCreate(url, UriKind.Absolute, out var uri) && !string.IsNullOrWhiteSpace(uri.Host))
-            {
-                baseName = $"远程 - {uri.Host}";
-            }
-            else
-            {
-                baseName = "远程 Agent";
-            }
+            Chat.TransportConfig.RemoteUrl = profile.ServerUrl ?? string.Empty;
         }
-
-        return GenerateUniqueName(baseName);
     }
 
-    private string GenerateUniqueName(string baseName)
+    private string? ResolveConnectedProfileName()
     {
-        baseName = string.IsNullOrWhiteSpace(baseName) ? "新预设" : baseName.Trim();
-        if (Profiles.Profiles.Count == 0)
+        var id = _preferences.LastSelectedServerId;
+        if (string.IsNullOrWhiteSpace(id))
         {
-            return baseName;
+            return null;
         }
 
-        var candidate = baseName;
-        var index = 2;
-        while (Profiles.Profiles.Any(p => string.Equals(p.Name, candidate, StringComparison.OrdinalIgnoreCase)))
-        {
-            candidate = $"{baseName} ({index})";
-            index++;
-        }
-
-        return candidate;
+        return Profiles.Profiles.FirstOrDefault(p => p.Id == id)?.Name;
     }
 
     public void Dispose()
@@ -390,7 +234,8 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         _disposed = true;
         Chat.TransportConfig.PropertyChanged -= OnTransportConfigPropertyChanged;
         Chat.PropertyChanged -= OnChatPropertyChanged;
-        Profiles.PropertyChanged -= OnProfilesPropertyChanged;
+        Profiles.Profiles.CollectionChanged -= OnProfilesCollectionChanged;
+        _preferences.PropertyChanged -= OnPreferencesPropertyChanged;
     }
 }
 
