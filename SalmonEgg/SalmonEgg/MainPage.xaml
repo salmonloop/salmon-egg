@@ -181,18 +181,57 @@
             </Setter>
         </Style>
 
-        <Style x:Key="TopBarButtonStyle" TargetType="ToggleButton">
-            <Setter Property="MinWidth" Value="64"/>
-            <Setter Property="Height" Value="30"/>
-            <Setter Property="CornerRadius" Value="6"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderBrush" Value="{ThemeResource DividerStrokeColorDefaultBrush}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="12,0"/>
-        </Style>
     </Page.Resources>
 
-    <Grid>
+    <Grid x:Name="LayoutRoot">
+        <VisualStateManager.VisualStateGroups>
+            <!-- Responsive shell layout (NavigationView + TitleBar). -->
+            <VisualStateGroup x:Name="WindowWidthStates">
+                <!-- Narrow: keep content usable; menu becomes an overlay (minimal). -->
+                <VisualState x:Name="Narrow">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="0" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="MainNavView.PaneDisplayMode" Value="LeftMinimal" />
+                        <Setter Target="MainNavView.IsPaneOpen" Value="False" />
+                        <Setter Target="TopSearchBox.Visibility" Value="Collapsed" />
+                        <Setter Target="ChatNavRoot.IsExpanded" Value="False" />
+                        <Setter Target="SettingsNavRoot.IsExpanded" Value="False" />
+                    </VisualState.Setters>
+                </VisualState>
+
+                <!-- Medium: fixed compact rail + expanded pane (no dimming overlay). -->
+                <VisualState x:Name="Medium">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="640" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="MainNavView.PaneDisplayMode" Value="LeftCompact" />
+                        <Setter Target="MainNavView.IsPaneOpen" Value="True" />
+                        <Setter Target="TopSearchBox.Visibility" Value="Visible" />
+                        <Setter Target="TopSearchBox.Width" Value="280" />
+                        <Setter Target="ChatNavRoot.IsExpanded" Value="False" />
+                        <Setter Target="SettingsNavRoot.IsExpanded" Value="False" />
+                    </VisualState.Setters>
+                </VisualState>
+
+                <!-- Wide: fully expanded fixed pane; show hierarchy inline. -->
+                <VisualState x:Name="Wide">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="1000" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="MainNavView.PaneDisplayMode" Value="Left" />
+                        <Setter Target="MainNavView.IsPaneOpen" Value="True" />
+                        <Setter Target="TopSearchBox.Visibility" Value="Visible" />
+                        <Setter Target="TopSearchBox.Width" Value="340" />
+                        <Setter Target="ChatNavRoot.IsExpanded" Value="True" />
+                        <Setter Target="SettingsNavRoot.IsExpanded" Value="True" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -225,18 +264,18 @@
                                 Margin="8,0,0,0"
                                 VerticalAlignment="Center"
                                 Visibility="Visible">
-                        <Button x:Name="TitleBarBackButton"
-                                Style="{StaticResource SubtleButtonStyle}"
-                                ToolTipService.ToolTip="返回"
-                                Click="OnTitleBarBackClick">
-                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE72B;"/>
-                        </Button>
-                        <Button x:Name="TitleBarToggleLeftNavButton"
-                                Style="{StaticResource SubtleButtonStyle}"
-                                ToolTipService.ToolTip="折叠左侧边栏"
-                                Click="OnToggleLeftNavClick">
-                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE700;"/>
-                        </Button>
+                    <Button x:Name="TitleBarBackButton"
+                            Style="{StaticResource TitleBarCommandButtonStyle}"
+                            ToolTipService.ToolTip="返回"
+                            Click="OnTitleBarBackClick">
+                        <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE72B;"/>
+                    </Button>
+                    <Button x:Name="TitleBarToggleLeftNavButton"
+                            Style="{StaticResource TitleBarCommandButtonStyle}"
+                            ToolTipService.ToolTip="折叠左侧边栏"
+                            Click="OnToggleLeftNavClick">
+                        <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE700;"/>
+                    </Button>
                     </StackPanel>
 
                     <TextBox x:Name="TopSearchBox"
@@ -253,20 +292,26 @@
                                 Spacing="8"
                                 VerticalAlignment="Center">
                         <ToggleButton x:Name="DiffPanelButton"
-                                      Content="Diff"
                                       Tag="Diff"
-                                      Style="{StaticResource TopBarButtonStyle}"
-                                      Click="OnRightPanelButtonClick" />
+                                      Style="{StaticResource TitleBarToggleButtonStyle}"
+                                      ToolTipService.ToolTip="Diff"
+                                      Click="OnRightPanelButtonClick">
+                            <SymbolIcon Symbol="Sync" />
+                        </ToggleButton>
                         <ToggleButton x:Name="TodoPanelButton"
-                                      Content="Todo"
                                       Tag="Todo"
-                                      Style="{StaticResource TopBarButtonStyle}"
-                                      Click="OnRightPanelButtonClick" />
+                                      Style="{StaticResource TitleBarToggleButtonStyle}"
+                                      ToolTipService.ToolTip="Todo"
+                                      Click="OnRightPanelButtonClick">
+                            <SymbolIcon Symbol="Accept" />
+                        </ToggleButton>
                         <ToggleButton x:Name="FilesPanelButton"
-                                      Content="Files"
                                       Tag="Files"
-                                      Style="{StaticResource TopBarButtonStyle}"
-                                      Click="OnRightPanelButtonClick" />
+                                      Style="{StaticResource TitleBarToggleButtonStyle}"
+                                      ToolTipService.ToolTip="Files"
+                                      Click="OnRightPanelButtonClick">
+                            <SymbolIcon Symbol="Folder" />
+                        </ToggleButton>
                     </StackPanel>
                 </Grid>
             </Grid>
@@ -281,15 +326,18 @@
             <NavigationView x:Name="MainNavView"
                             Grid.Column="0"
                             Background="Transparent"
-                            PaneDisplayMode="LeftCompact"
                             CompactPaneLength="72"
                             OpenPaneLength="240"
+                            IsPaneOpen="True"
                             IsBackButtonVisible="Collapsed"
                             IsPaneToggleButtonVisible="False"
                             IsSettingsVisible="False"
                             AlwaysShowHeader="False"
                             SelectionChanged="OnMainNavSelectionChanged"
-                            ItemInvoked="OnMainNavItemInvoked">
+                            ItemInvoked="OnMainNavItemInvoked"
+                            PaneOpened="OnMainNavPaneOpened"
+                            PaneClosed="OnMainNavPaneClosed"
+                            PaneClosing="OnMainNavPaneClosing">
                 <NavigationView.MenuItems>
                     <NavigationViewItem x:Name="ChatNavRoot"
                                         Content="对话"

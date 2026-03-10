@@ -15,6 +15,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Navigation;
+using SalmonEgg.Application.Common.Shell;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.Views;
@@ -32,10 +33,10 @@ public sealed partial class MainPage : Page
     private double _rightPanelResizeStartX;
     private double _rightPanelResizeStartWidth;
     private string? _activeRightPanel;
-    private bool _isLeftNavCollapsed;
     private bool _suppressNavSelectionChanged;
     private readonly Dictionary<object, NavigationViewItem> _navItemsByTag = new();
     private readonly HashSet<ObservableCollection<SessionNavItemViewModel>> _watchedSessionCollections = new();
+    private readonly ShellPanePolicy _panePolicy = new();
 #if WINDOWS
     private AppWindowTitleBar? _appWindowTitleBar;
 #endif
@@ -115,7 +116,6 @@ public sealed partial class MainPage : Page
         RegisterNavItemByTag(DiagnosticsSettingsNavItem);
         RegisterNavItemByTag(AboutSettingsNavItem);
 
-        ApplyLeftNavVisibility();
         RebuildChatProjectMenu();
     }
 
@@ -485,6 +485,7 @@ public sealed partial class MainPage : Page
         }
 
         UpdateRightPanelAvailability(true);
+        UpdateBackButtonState();
     }
 
     private void EnsureSettingsContent(string key)
@@ -496,6 +497,7 @@ public sealed partial class MainPage : Page
         }
 
         UpdateRightPanelAvailability(false);
+        UpdateBackButtonState();
     }
 
     private void OnRightPanelButtonClick(object sender, RoutedEventArgs e)
@@ -639,14 +641,13 @@ public sealed partial class MainPage : Page
     private void OnMainPageLoaded(object sender, RoutedEventArgs e)
     {
         ConfigureTitleBar();
+        UpdateNavPaneToggleUi();
     }
 
     private void OnContentFrameNavigated(object sender, NavigationEventArgs e)
     {
-        if (TitleBarBackButton != null)
-        {
-            TitleBarBackButton.IsEnabled = ContentFrame.CanGoBack;
-        }
+        UpdateBackButtonState();
+        SyncNavSelectionFromCurrentPage(e.SourcePageType);
     }
 
     private void OnTitleBarBackClick(object sender, RoutedEventArgs e)
@@ -659,28 +660,100 @@ public sealed partial class MainPage : Page
 
     private void OnToggleLeftNavClick(object sender, RoutedEventArgs e)
     {
-        _isLeftNavCollapsed = !_isLeftNavCollapsed;
-        ApplyLeftNavVisibility();
+        ToggleNavPane();
     }
 
-    private void ApplyLeftNavVisibility()
+    private void ToggleNavPane()
     {
         if (MainNavView == null)
         {
             return;
         }
 
-        if (_isLeftNavCollapsed)
+        MainNavView.CompactPaneLength = DefaultCompactPaneLength;
+        MainNavView.OpenPaneLength = DefaultOpenPaneLength;
+        MainNavView.IsPaneOpen = _panePolicy.Toggle(MainNavView.IsPaneOpen);
+        UpdateNavPaneToggleUi();
+    }
+
+    private void UpdateNavPaneToggleUi()
+    {
+        if (MainNavView == null || TitleBarToggleLeftNavButton == null)
         {
-            MainNavView.CompactPaneLength = 0;
-            MainNavView.OpenPaneLength = 0;
-            MainNavView.IsPaneOpen = false;
             return;
         }
 
-        MainNavView.CompactPaneLength = DefaultCompactPaneLength;
-        MainNavView.OpenPaneLength = DefaultOpenPaneLength;
-        MainNavView.IsPaneOpen = true;
+        ToolTipService.SetToolTip(TitleBarToggleLeftNavButton, MainNavView.IsPaneOpen ? "折叠左侧边栏" : "展开左侧边栏");
+    }
+
+    private void UpdateBackButtonState()
+    {
+        if (TitleBarBackButton == null || ContentFrame == null)
+        {
+            return;
+        }
+
+        // Better UX than a permanently-disabled button in the title bar.
+        TitleBarBackButton.Visibility = ContentFrame.CanGoBack ? Visibility.Visible : Visibility.Collapsed;
+        TitleBarBackButton.IsEnabled = ContentFrame.CanGoBack;
+    }
+
+    private void SyncNavSelectionFromCurrentPage(Type? pageType)
+    {
+        if (pageType == null || MainNavView == null)
+        {
+            return;
+        }
+
+        if (pageType == typeof(ChatView))
+        {
+            // Prefer highlighting the currently-selected session/project if available.
+            SyncSelectedNavItemFromViewModel();
+            return;
+        }
+
+        var key = pageType == typeof(SalmonEgg.Presentation.Views.GeneralSettingsPage) ? "General"
+            : pageType == typeof(SalmonEgg.Presentation.Views.Settings.AppearanceSettingsPage) ? "Appearance"
+            : pageType == typeof(SalmonEgg.Presentation.Views.Settings.AcpConnectionSettingsPage) ? "AgentAcp"
+            : pageType == typeof(SalmonEgg.Presentation.Views.Settings.DataStorageSettingsPage) ? "DataStorage"
+            : pageType == typeof(SalmonEgg.Presentation.Views.Settings.ShortcutsSettingsPage) ? "Shortcuts"
+            : pageType == typeof(SalmonEgg.Presentation.Views.Settings.DiagnosticsSettingsPage) ? "Diagnostics"
+            : pageType == typeof(SalmonEgg.Presentation.Views.Settings.AboutPage) ? "About"
+            : null;
+
+        if (key == null || !_navItemsByTag.TryGetValue(key, out var target) || target == null)
+        {
+            return;
+        }
+
+        _suppressNavSelectionChanged = true;
+        try
+        {
+            MainNavView.SelectedItem = target;
+        }
+        finally
+        {
+            _suppressNavSelectionChanged = false;
+        }
+    }
+
+    private void OnMainNavPaneOpened(NavigationView sender, object args)
+    {
+        UpdateNavPaneToggleUi();
+    }
+
+    private void OnMainNavPaneClosed(NavigationView sender, object args)
+    {
+        UpdateNavPaneToggleUi();
+    }
+
+    private void OnMainNavPaneClosing(NavigationView sender, NavigationViewPaneClosingEventArgs args)
+    {
+        var isMinimal = sender.DisplayMode == NavigationViewDisplayMode.Minimal;
+        if (_panePolicy.ShouldCancelClosing(isMinimalMode: isMinimal))
+        {
+            args.Cancel = true;
+        }
     }
 
     private void ConfigureTitleBar()
@@ -724,10 +797,10 @@ public sealed partial class MainPage : Page
         _appWindowTitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
         _appWindowTitleBar.BackgroundColor = Colors.Transparent;
         _appWindowTitleBar.InactiveBackgroundColor = Colors.Transparent;
+        // Keep normal caption buttons transparent so they blend with our title bar,
+        // but preserve system hover/pressed visuals (including the Close button red state).
         _appWindowTitleBar.ButtonBackgroundColor = Colors.Transparent;
         _appWindowTitleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
-        _appWindowTitleBar.ButtonHoverBackgroundColor = Colors.Transparent;
-        _appWindowTitleBar.ButtonPressedBackgroundColor = Colors.Transparent;
         UpdateTitleBarInsets();
 
         // Windows App SDK (current pinned version) does not expose LayoutMetricsChanged/IsVisibleChanged here.
