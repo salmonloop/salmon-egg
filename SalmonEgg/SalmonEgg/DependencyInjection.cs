@@ -23,6 +23,7 @@ using SalmonEgg.Presentation.ViewModels;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Settings;
+using SalmonEgg.Presentation.Services;
 
 namespace SalmonEgg;
 
@@ -196,6 +197,9 @@ public static class DependencyInjection
         services.AddSingleton<ShortcutsSettingsViewModel>();
         services.AddSingleton<DiagnosticsSettingsViewModel>();
         services.AddSingleton<AboutViewModel>();
+
+        // Shell navigation facade (prevents Settings pages from walking the visual tree)
+        services.AddSingleton<IShellNavigationService, ShellNavigationService>();
     }
 
     private static string GetAppDataPath()

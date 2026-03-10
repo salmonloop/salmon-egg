@@ -1,8 +1,9 @@
-<Page
+<views:SettingsPageBase
     x:Class="SalmonEgg.Presentation.Views.Settings.AgentProfileEditorPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:SalmonEgg.Controls"
+    xmlns:views="using:SalmonEgg.Presentation.Views"
     xmlns:converters="using:SalmonEgg.Presentation.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -17,31 +18,11 @@
 
     <ScrollViewer Padding="40,24"
                   HorizontalScrollBarVisibility="Disabled">
-        <controls:ResponsiveSettingsHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
-            <controls:ResponsiveSettingsHost.Child>
+            <controls:ResponsiveSettingsHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
+                <controls:ResponsiveSettingsHost.Child>
                 <StackPanel Spacing="18">
-                    <StackPanel Orientation="Horizontal"
-                                Spacing="10"
-                                Margin="0,0,0,10"
-                                VerticalAlignment="Center">
-                        <HyperlinkButton x:Name="CrumbSettingsButton"
-                                         Content="设置"
-                                         Style="{StaticResource SettingsBreadcrumbLinkStyle}"
-                                         Click="OnCrumbSettingsClick"/>
-                        <TextBlock x:Name="CrumbSep1"
-                                   Text="›"
-                                   Style="{StaticResource SettingsBreadcrumbSeparatorTextStyle}"/>
-                        <HyperlinkButton x:Name="CrumbAgentButton"
-                                         Content="Agent (ACP)"
-                                         Style="{StaticResource SettingsBreadcrumbLinkStyle}"
-                                         Click="OnCrumbAgentClick"/>
-                        <TextBlock x:Name="CrumbSep2"
-                                   Text="›"
-                                   Style="{StaticResource SettingsBreadcrumbSeparatorTextStyle}"/>
-                        <TextBlock x:Name="CrumbCurrentText"
-                                   Text="{x:Bind PageTitle, Mode=OneWay}"
-                                   Style="{StaticResource SettingsBreadcrumbCurrentTextStyle}"/>
-                    </StackPanel>
+                    <controls:SettingsBreadcrumbBar ItemsSource="{x:Bind BreadcrumbItems, Mode=OneWay}"
+                                                   Margin="0,0,0,10" />
 
                     <InfoBar IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
                              Severity="Error"
@@ -152,33 +133,4 @@
             </controls:ResponsiveSettingsHost.Child>
         </controls:ResponsiveSettingsHost>
     </ScrollViewer>
-
-    <VisualStateManager.VisualStateGroups>
-        <VisualStateGroup x:Name="BreadcrumbStates">
-            <VisualState x:Name="BreadcrumbNarrow">
-                <VisualState.StateTriggers>
-                    <AdaptiveTrigger MinWindowWidth="0"/>
-                </VisualState.StateTriggers>
-                <VisualState.Setters>
-                    <Setter Target="CrumbSettingsButton.FontSize" Value="26"/>
-                    <Setter Target="CrumbSep1.FontSize" Value="26"/>
-                    <Setter Target="CrumbAgentButton.FontSize" Value="26"/>
-                    <Setter Target="CrumbSep2.FontSize" Value="26"/>
-                    <Setter Target="CrumbCurrentText.FontSize" Value="26"/>
-                </VisualState.Setters>
-            </VisualState>
-            <VisualState x:Name="BreadcrumbWide">
-                <VisualState.StateTriggers>
-                    <AdaptiveTrigger MinWindowWidth="720"/>
-                </VisualState.StateTriggers>
-                <VisualState.Setters>
-                    <Setter Target="CrumbSettingsButton.FontSize" Value="30"/>
-                    <Setter Target="CrumbSep1.FontSize" Value="30"/>
-                    <Setter Target="CrumbAgentButton.FontSize" Value="30"/>
-                    <Setter Target="CrumbSep2.FontSize" Value="30"/>
-                    <Setter Target="CrumbCurrentText.FontSize" Value="30"/>
-                </VisualState.Setters>
-            </VisualState>
-        </VisualStateGroup>
-    </VisualStateManager.VisualStateGroups>
-</Page>
+</views:SettingsPageBase>

@@ -1,0 +1,22 @@
+<UserControl
+    x:Class="SalmonEgg.Controls.SettingsBreadcrumbBar"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
+    xmlns:nav="using:SalmonEgg.Presentation.Models.Navigation"
+    mc:Ignorable="d"
+    Background="Transparent">
+
+    <muxc:BreadcrumbBar ItemsSource="{x:Bind ItemsSource, Mode=OneWay}"
+                       ItemClicked="OnBreadcrumbItemClicked">
+        <muxc:BreadcrumbBar.ItemTemplate>
+            <DataTemplate x:DataType="nav:SettingsBreadcrumbItem">
+                <TextBlock Text="{x:Bind Text}"
+                           Style="{StaticResource SettingsBreadcrumbBarTextStyle}" />
+            </DataTemplate>
+        </muxc:BreadcrumbBar.ItemTemplate>
+    </muxc:BreadcrumbBar>
+</UserControl>
+

@@ -1,11 +1,9 @@
-using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 using SalmonEgg.Presentation.ViewModels;
 
 namespace SalmonEgg.Presentation.Views
 {
-    public sealed partial class DisplaySettingsPage : Page
+    public sealed partial class DisplaySettingsPage : SettingsPageBase
     {
         public SettingsViewModel SettingsVM { get; }
 
@@ -15,22 +13,7 @@ namespace SalmonEgg.Presentation.Views
             SettingsVM = App.ServiceProvider.GetRequiredService<SettingsViewModel>();
 
             this.InitializeComponent();
-        }
-
-        private void OnCrumbSettingsClick(object sender, RoutedEventArgs e)
-        {
-            FindMainPage()?.NavigateToSettingsSubPage("General");
-        }
-
-        private MainPage? FindMainPage()
-        {
-            DependencyObject? current = this;
-            while (current != null && current is not MainPage)
-            {
-                current = VisualTreeHelper.GetParent(current);
-            }
-
-            return current as MainPage;
+            SetSettingsBreadcrumb("显示与外观");
         }
     }
 }

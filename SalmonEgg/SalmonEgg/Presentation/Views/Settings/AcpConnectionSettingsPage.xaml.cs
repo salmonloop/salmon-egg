@@ -2,13 +2,13 @@ using System.Linq;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Presentation.ViewModels.Settings;
+using SalmonEgg.Presentation.Views;
 
 namespace SalmonEgg.Presentation.Views.Settings;
 
-public sealed partial class AcpConnectionSettingsPage : Page
+public sealed partial class AcpConnectionSettingsPage : SettingsPageBase
 {
     public AcpConnectionSettingsViewModel ViewModel { get; }
 
@@ -17,27 +17,12 @@ public sealed partial class AcpConnectionSettingsPage : Page
         ViewModel = App.ServiceProvider.GetRequiredService<AcpConnectionSettingsViewModel>();
         InitializeComponent();
         Loaded += OnLoaded;
+        SetSettingsBreadcrumb("Agent (ACP)");
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         await ViewModel.Profiles.RefreshCommand.ExecuteAsync(null);
-    }
-
-    private void OnCrumbSettingsClick(object sender, RoutedEventArgs e)
-    {
-        FindMainPage()?.NavigateToSettingsSubPage("General");
-    }
-
-    private MainPage? FindMainPage()
-    {
-        DependencyObject? current = this;
-        while (current != null && current is not MainPage)
-        {
-            current = VisualTreeHelper.GetParent(current);
-        }
-
-        return current as MainPage;
     }
 
     private void OnAddProfileClick(object sender, RoutedEventArgs e)

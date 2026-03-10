@@ -1,11 +1,10 @@
-using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 using SalmonEgg.Presentation.ViewModels.Settings;
+using SalmonEgg.Presentation.Views;
 
 namespace SalmonEgg.Presentation.Views.Settings;
 
-public sealed partial class DataStorageSettingsPage : Page
+public sealed partial class DataStorageSettingsPage : SettingsPageBase
 {
     public DataStorageSettingsViewModel ViewModel { get; }
 
@@ -13,22 +12,7 @@ public sealed partial class DataStorageSettingsPage : Page
     {
         ViewModel = App.ServiceProvider.GetRequiredService<DataStorageSettingsViewModel>();
         InitializeComponent();
-    }
-
-    private void OnCrumbSettingsClick(object sender, RoutedEventArgs e)
-    {
-        FindMainPage()?.NavigateToSettingsSubPage("General");
-    }
-
-    private MainPage? FindMainPage()
-    {
-        DependencyObject? current = this;
-        while (current != null && current is not MainPage)
-        {
-            current = VisualTreeHelper.GetParent(current);
-        }
-
-        return current as MainPage;
+        SetSettingsBreadcrumb("数据与存储");
     }
 
     private async void OnClearCacheClick(object sender, RoutedEventArgs e)

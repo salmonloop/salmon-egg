@@ -1,15 +1,16 @@
 using System.Linq;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.ViewModels;
+using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.ViewModels.Settings;
+using SalmonEgg.Presentation.Views;
 
 namespace SalmonEgg.Presentation.Views.Settings;
 
-public sealed partial class AgentProfileEditorPage : Page
+public sealed partial class AgentProfileEditorPage : SettingsPageBase
 {
     public ConfigurationEditorViewModel ViewModel { get; }
 
@@ -36,6 +37,7 @@ public sealed partial class AgentProfileEditorPage : Page
         _profiles = App.ServiceProvider.GetRequiredService<AcpProfilesViewModel>();
 
         InitializeComponent();
+        UpdateBreadcrumb();
     }
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)
@@ -48,6 +50,7 @@ public sealed partial class AgentProfileEditorPage : Page
             ViewModel.LoadBlankConfiguration();
             PageTitle = "新建";
             BindAdvancedFields();
+            UpdateBreadcrumb();
             return;
         }
 
@@ -65,12 +68,22 @@ public sealed partial class AgentProfileEditorPage : Page
             }
 
             BindAdvancedFields();
+            UpdateBreadcrumb();
             return;
         }
 
         PageTitle = "新建";
         ViewModel.LoadBlankConfiguration();
         BindAdvancedFields();
+        UpdateBreadcrumb();
+    }
+
+    private void UpdateBreadcrumb()
+    {
+        SetBreadcrumb(
+            SettingsBreadcrumbItem.Link("设置", "General"),
+            SettingsBreadcrumbItem.Link("Agent (ACP)", "AgentAcp"),
+            SettingsBreadcrumbItem.Current(PageTitle));
     }
 
     private void BindAdvancedFields()
@@ -117,27 +130,6 @@ public sealed partial class AgentProfileEditorPage : Page
         {
             Frame?.Navigate(typeof(AcpConnectionSettingsPage));
         }
-    }
-
-    private void OnCrumbSettingsClick(object sender, RoutedEventArgs e)
-    {
-        FindMainPage(this)?.NavigateToSettingsSubPage("General");
-    }
-
-    private void OnCrumbAgentClick(object sender, RoutedEventArgs e)
-    {
-        FindMainPage(this)?.NavigateToSettingsSubPage("AgentAcp");
-    }
-
-    private static MainPage? FindMainPage(DependencyObject? start = null)
-    {
-        DependencyObject? current = start;
-        while (current != null && current is not MainPage)
-        {
-            current = VisualTreeHelper.GetParent(current);
-        }
-
-        return current as MainPage;
     }
 
     private void OnCancelClick(object sender, RoutedEventArgs e)

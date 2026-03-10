@@ -1,8 +1,9 @@
-<Page
+<views:SettingsPageBase
     x:Class="SalmonEgg.Presentation.Views.Settings.AppearanceSettingsPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:SalmonEgg.Controls"
+    xmlns:views="using:SalmonEgg.Presentation.Views"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:settings="using:SalmonEgg.Presentation.ViewModels.Settings"
@@ -15,13 +16,8 @@
         <controls:ResponsiveSettingsHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
             <controls:ResponsiveSettingsHost.Child>
                 <StackPanel Spacing="24">
-                    <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,10">
-                        <HyperlinkButton Content="设置"
-                                         Style="{StaticResource SettingsBreadcrumbLinkStyle}"
-                                         Click="OnCrumbSettingsClick"/>
-                        <TextBlock Text="›" Style="{StaticResource SettingsBreadcrumbSeparatorTextStyle}"/>
-                        <TextBlock Text="外观" Style="{StaticResource SettingsBreadcrumbCurrentTextStyle}"/>
-                    </StackPanel>
+                    <controls:SettingsBreadcrumbBar ItemsSource="{x:Bind BreadcrumbItems, Mode=OneWay}"
+                                                   Margin="0,0,0,10" />
 
             <StackPanel Spacing="12">
                 <TextBlock Text="界面主题" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}"/>
@@ -105,4 +101,4 @@
             </controls:ResponsiveSettingsHost.Child>
         </controls:ResponsiveSettingsHost>
     </ScrollViewer>
-</Page>
+</views:SettingsPageBase>
