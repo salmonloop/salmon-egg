@@ -112,6 +112,7 @@ public static class DependencyInjection
         services.AddSingleton<IAppSettingsService, AppSettingsService>();
         services.AddSingleton<IAppDataService, AppDataService>();
         services.AddSingleton<IAppMaintenanceService, AppMaintenanceService>();
+        services.AddSingleton<IConversationStore, ConversationStore>();
 
         // 配置管理器
         services.AddSingleton<IConfigurationService, ConfigurationManager>();

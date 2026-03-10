@@ -16,7 +16,9 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Navigation;
 using SalmonEgg.Application.Common.Shell;
+using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Presentation.ViewModels.Navigation;
+using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.Views;
 using SalmonEgg.Presentation.Views.Chat;
@@ -43,6 +45,7 @@ public sealed partial class MainPage : Page
 
     public AppPreferencesViewModel Preferences { get; }
     public SidebarViewModel SidebarVM { get; }
+    public ChatViewModel ChatVM { get; }
 
     public MainPage()
     {
@@ -50,6 +53,7 @@ public sealed partial class MainPage : Page
         // 1. 在初始化组件前获取 ViewModel，确保 x:Bind 绑定正常
         Preferences = App.ServiceProvider.GetRequiredService<AppPreferencesViewModel>();
         SidebarVM = App.ServiceProvider.GetRequiredService<SidebarViewModel>();
+        ChatVM = App.ServiceProvider.GetRequiredService<ChatViewModel>();
 
         this.InitializeComponent();
         App.BootLog("MainPage: InitializeComponent done");
@@ -184,11 +188,20 @@ public sealed partial class MainPage : Page
             {
                 var sessionItem = new NavigationViewItem
                 {
-                    Content = session.Title,
                     Tag = new NavTag(Project: project, Session: session),
                     HorizontalContentAlignment = HorizontalAlignment.Left,
                     HorizontalAlignment = HorizontalAlignment.Stretch
                 };
+
+                // Keep session label reactive (rename from inline header or context menu should update immediately).
+                sessionItem.SetBinding(ContentControl.ContentProperty, new Binding
+                {
+                    Source = session,
+                    Path = new PropertyPath(nameof(SessionNavItemViewModel.Title)),
+                    Mode = BindingMode.OneWay
+                });
+
+                sessionItem.ContextFlyout = BuildSessionContextFlyout(project, session);
                 projectItem.MenuItems.Add(sessionItem);
             }
 
@@ -196,6 +209,102 @@ public sealed partial class MainPage : Page
         }
 
         SyncSelectedNavItemFromViewModel();
+    }
+
+    private MenuFlyout BuildSessionContextFlyout(ProjectNavItemViewModel project, SessionNavItemViewModel session)
+    {
+        var flyout = new MenuFlyout();
+
+        var rename = new MenuFlyoutItem
+        {
+            Text = "重命名",
+            Icon = new SymbolIcon(Symbol.Edit)
+        };
+        rename.Click += async (_, _) => await PromptRenameSessionAsync(session);
+
+        var delete = new MenuFlyoutItem
+        {
+            Text = "删除",
+            Icon = new SymbolIcon(Symbol.Delete)
+        };
+        delete.Click += async (_, _) => await PromptDeleteSessionAsync(project, session);
+
+        flyout.Items.Add(rename);
+        flyout.Items.Add(new MenuFlyoutSeparator());
+        flyout.Items.Add(delete);
+
+        return flyout;
+    }
+
+    private async Task PromptRenameSessionAsync(SessionNavItemViewModel session)
+    {
+        if (session == null || string.IsNullOrWhiteSpace(session.SessionId))
+        {
+            return;
+        }
+
+        var input = new TextBox
+        {
+            Text = session.Title ?? string.Empty,
+            PlaceholderText = "会话名称",
+            MinWidth = 320
+        };
+
+        var dialog = new ContentDialog
+        {
+            Title = "重命名会话",
+            Content = input,
+            PrimaryButtonText = "确定",
+            CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = XamlRoot
+        };
+
+        var result = await dialog.ShowAsync();
+        if (result != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        var sanitized = SessionNamePolicy.Sanitize(input.Text);
+        var finalName = string.IsNullOrEmpty(sanitized)
+            ? SessionNamePolicy.CreateDefault(session.SessionId)
+            : sanitized;
+
+        session.Title = finalName;
+        ChatVM.RenameConversation(session.SessionId, finalName);
+    }
+
+    private async Task PromptDeleteSessionAsync(ProjectNavItemViewModel project, SessionNavItemViewModel session)
+    {
+        if (project == null || session == null || string.IsNullOrWhiteSpace(session.SessionId))
+        {
+            return;
+        }
+
+        var dialog = new ContentDialog
+        {
+            Title = "删除会话？",
+            Content = "此操作将删除该会话的本地记录（不可恢复）。",
+            PrimaryButtonText = "删除",
+            CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = XamlRoot
+        };
+
+        var result = await dialog.ShowAsync();
+        if (result != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        if (project.SelectedSession == session)
+        {
+            project.SelectedSession = null;
+        }
+
+        project.Sessions.Remove(session);
+        ChatVM.DeleteConversation(session.SessionId);
     }
 
     private void OnSessionsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)

@@ -89,18 +89,45 @@ public partial class SidebarViewModel : ObservableObject, IDisposable
             var sessionId = _chatViewModel.CurrentSessionId;
             var isActive = _chatViewModel.IsSessionActive && !string.IsNullOrWhiteSpace(sessionId);
 
+            var targetProject = SelectedProject ?? Projects.FirstOrDefault();
+            if (targetProject == null)
+            {
+                return;
+            }
+
+            // Always keep the known conversation list visible (even when offline/not connected).
+            var known = _chatViewModel.GetKnownConversationIds();
+            foreach (var id in known)
+            {
+                if (targetProject.Sessions.Any(s => s.SessionId == id))
+                {
+                    continue;
+                }
+
+                targetProject.Sessions.Add(new SessionNavItemViewModel
+                {
+                    SessionId = id,
+                    Title = ResolveSessionTitle(id)
+                });
+            }
+
+            // Best-effort reorder: most recent conversations first (preserve VM object identities).
+            for (var desiredIndex = 0; desiredIndex < known.Length; desiredIndex++)
+            {
+                var id = known[desiredIndex];
+                var currentIndex = targetProject.Sessions.ToList().FindIndex(s => s.SessionId == id);
+                if (currentIndex >= 0 && currentIndex != desiredIndex)
+                {
+                    targetProject.Sessions.Move(currentIndex, desiredIndex);
+                }
+            }
+
             if (!isActive)
             {
                 foreach (var project in Projects)
                 {
                     project.SelectedSession = null;
                 }
-                return;
-            }
-
-            var targetProject = SelectedProject ?? Projects.FirstOrDefault();
-            if (targetProject == null)
-            {
                 return;
             }
 

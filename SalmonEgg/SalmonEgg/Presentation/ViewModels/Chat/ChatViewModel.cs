@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.ComponentModel;
@@ -10,6 +11,7 @@ using Microsoft.Extensions.Logging;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Interfaces;
 using SalmonEgg.Domain.Interfaces.Transport;
+using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Content;
 using SalmonEgg.Domain.Models.Protocol;
@@ -30,6 +32,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
     private readonly AppPreferencesViewModel _preferences;
     private readonly AcpProfilesViewModel _acpProfiles;
     private readonly ISessionManager _sessionManager;
+    private readonly IConversationStore _conversationStore;
     private IChatService? _chatService;
     private readonly SynchronizationContext _syncContext;
     private bool _disposed;
@@ -37,6 +40,32 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
     private bool _suppressSessionUpdatesToUi;
     private bool _autoConnectAttempted;
     private bool _suppressAcpProfileConnect;
+    private bool _conversationsRestored;
+    private CancellationTokenSource? _conversationSaveCts;
+    private string? _currentRemoteSessionId;
+
+    // Local conversation binding: ConversationId (stable for sidebar/UI) -> active remote session id (per ACP) + transcript.
+    private readonly Dictionary<string, ConversationBinding> _conversationBindings = new(StringComparer.Ordinal);
+
+    private sealed class ConversationBinding
+    {
+        public ConversationBinding(string conversationId)
+        {
+            ConversationId = conversationId;
+            CreatedAt = DateTime.UtcNow;
+            LastUpdatedAt = DateTime.UtcNow;
+        }
+
+        public string ConversationId { get; }
+        public string? BoundProfileId { get; set; }
+        public string? RemoteSessionId { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime LastUpdatedAt { get; set; }
+
+        public List<ChatMessageViewModel> Transcript { get; } = new();
+        public List<PlanEntryViewModel> Plan { get; } = new();
+        public bool ShowPlanPanel { get; set; }
+    }
 
     [ObservableProperty]
     private ObservableCollection<ChatMessageViewModel> _messageHistory = new();
@@ -149,6 +178,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         AppPreferencesViewModel preferences,
         AcpProfilesViewModel acpProfiles,
         ISessionManager sessionManager,
+        IConversationStore conversationStore,
         ILogger<ChatViewModel> logger)
         : base(logger)
     {
@@ -157,6 +187,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
         _acpProfiles = acpProfiles ?? throw new ArgumentNullException(nameof(acpProfiles));
         _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
+        _conversationStore = conversationStore ?? throw new ArgumentNullException(nameof(conversationStore));
         _syncContext = SynchronizationContext.Current ?? new SynchronizationContext();
 
         // 创建默认 ChatService 实例
@@ -201,11 +232,276 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         // Keep the header name stable and decouple it from ACP sessionId.
         CurrentSessionDisplayName = ResolveSessionDisplayName(value);
 
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            // Ensure we have a conversation binding for this conversation id.
+            var binding = GetOrCreateConversationBinding(value);
+
+            // Default remote session id to the conversation id (initial connect path).
+            binding.RemoteSessionId ??= value;
+            binding.BoundProfileId ??= _preferences.LastSelectedServerId;
+
+            _currentRemoteSessionId = binding.RemoteSessionId;
+
+            RestoreConversation(binding);
+        }
+        else
+        {
+            _currentRemoteSessionId = null;
+        }
+
         if (IsEditingSessionName)
         {
             IsEditingSessionName = false;
             EditingSessionName = string.Empty;
         }
+
+        // Persist "last active" selection.
+        ScheduleConversationSave();
+    }
+
+    private ConversationBinding GetOrCreateConversationBinding(string conversationId)
+    {
+        if (_conversationBindings.TryGetValue(conversationId, out var existing))
+        {
+            return existing;
+        }
+
+        var created = new ConversationBinding(conversationId);
+        _conversationBindings[conversationId] = created;
+        return created;
+    }
+
+    private ConversationBinding? TryGetConversationBinding(string? conversationId)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return null;
+        }
+
+        return _conversationBindings.TryGetValue(conversationId, out var binding) ? binding : null;
+    }
+
+    private void RestoreConversation(ConversationBinding binding)
+    {
+        // Restore transcript (do not pull from the remote session; conversations are local).
+        MessageHistory.Clear();
+        foreach (var msg in binding.Transcript)
+        {
+            MessageHistory.Add(msg);
+        }
+
+        CurrentPlan.Clear();
+        foreach (var entry in binding.Plan)
+        {
+            CurrentPlan.Add(entry);
+        }
+        ShowPlanPanel = binding.ShowPlanPanel;
+    }
+
+    public async Task RestoreConversationsAsync()
+    {
+        if (_conversationsRestored)
+        {
+            return;
+        }
+
+        _conversationsRestored = true;
+
+        ConversationDocument doc;
+        try
+        {
+            doc = await _conversationStore.LoadAsync().ConfigureAwait(false);
+        }
+        catch
+        {
+            return;
+        }
+
+        _syncContext.Post(_ =>
+        {
+            try
+            {
+                foreach (var convo in doc.Conversations)
+                {
+                    if (string.IsNullOrWhiteSpace(convo.ConversationId))
+                    {
+                        continue;
+                    }
+
+                    var binding = GetOrCreateConversationBinding(convo.ConversationId);
+                    binding.CreatedAt = convo.CreatedAt == default ? DateTime.UtcNow : convo.CreatedAt;
+                    binding.LastUpdatedAt = convo.LastUpdatedAt == default ? DateTime.UtcNow : convo.LastUpdatedAt;
+
+                    // Display name is persisted separately from ACP sessionId.
+                    var displayName = string.IsNullOrWhiteSpace(convo.DisplayName)
+                        ? SessionNamePolicy.CreateDefault(convo.ConversationId)
+                        : convo.DisplayName.Trim();
+
+                    if (_sessionManager.GetSession(convo.ConversationId) == null)
+                    {
+                        try { _sessionManager.CreateSessionAsync(convo.ConversationId).GetAwaiter().GetResult(); } catch { }
+                    }
+                    _sessionManager.UpdateSession(convo.ConversationId, s => s.DisplayName = displayName);
+
+                    binding.Transcript.Clear();
+                    foreach (var msg in convo.Messages)
+                    {
+                        binding.Transcript.Add(FromSnapshot(msg));
+                    }
+                }
+
+                var last = doc.LastActiveConversationId;
+                if (!string.IsNullOrWhiteSpace(last) &&
+                    _conversationBindings.ContainsKey(last))
+                {
+                    CurrentSessionId = last;
+                    IsSessionActive = true;
+                }
+                else if (_conversationBindings.Count > 0)
+                {
+                    // If last-active is missing, default to the most recent conversation for a better UX.
+                    var fallback = _conversationBindings.Values
+                        .OrderByDescending(c => c.LastUpdatedAt)
+                        .Select(c => c.ConversationId)
+                        .FirstOrDefault();
+
+                    if (!string.IsNullOrWhiteSpace(fallback))
+                    {
+                        CurrentSessionId = fallback;
+                        IsSessionActive = true;
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }, null);
+    }
+
+    private static ConversationMessageSnapshot ToSnapshot(ChatMessageViewModel vm)
+    {
+        return new ConversationMessageSnapshot
+        {
+            Id = vm.Id,
+            Timestamp = vm.Timestamp.ToUniversalTime(),
+            IsOutgoing = vm.IsOutgoing,
+            ContentType = vm.ContentType ?? string.Empty,
+            Title = vm.Title ?? string.Empty,
+            TextContent = vm.TextContent ?? string.Empty,
+            ImageData = vm.ImageData ?? string.Empty,
+            ImageMimeType = vm.ImageMimeType ?? string.Empty,
+            AudioData = vm.AudioData ?? string.Empty,
+            AudioMimeType = vm.AudioMimeType ?? string.Empty,
+            ToolCallId = vm.ToolCallId,
+            ToolCallKind = vm.ToolCallKind,
+            ToolCallStatus = vm.ToolCallStatus,
+            ToolCallJson = vm.ToolCallJson,
+            PlanEntry = vm.PlanEntry != null
+                ? new ConversationPlanEntrySnapshot
+                {
+                    Content = vm.PlanEntry.Content,
+                    Status = vm.PlanEntry.Status,
+                    Priority = vm.PlanEntry.Priority
+                }
+                : null,
+            ModeId = vm.ModeId
+        };
+    }
+
+    private static ChatMessageViewModel FromSnapshot(ConversationMessageSnapshot s)
+    {
+        // Minimal, stable restoration for persisted transcripts.
+        var vm = new ChatMessageViewModel
+        {
+            Id = string.IsNullOrWhiteSpace(s.Id) ? Guid.NewGuid().ToString() : s.Id,
+            Timestamp = s.Timestamp.ToLocalTime(),
+            IsOutgoing = s.IsOutgoing,
+            ContentType = s.ContentType ?? string.Empty,
+            Title = s.Title ?? string.Empty,
+            TextContent = s.TextContent ?? string.Empty,
+            ImageData = s.ImageData ?? string.Empty,
+            ImageMimeType = s.ImageMimeType ?? string.Empty,
+            AudioData = s.AudioData ?? string.Empty,
+            AudioMimeType = s.AudioMimeType ?? string.Empty,
+            ToolCallId = s.ToolCallId,
+            ToolCallKind = s.ToolCallKind,
+            ToolCallStatus = s.ToolCallStatus,
+            ToolCallJson = s.ToolCallJson,
+            ModeId = s.ModeId
+        };
+
+        if (s.PlanEntry != null)
+        {
+            vm.PlanEntry = new PlanEntryViewModel
+            {
+                Content = s.PlanEntry.Content ?? string.Empty,
+                Status = s.PlanEntry.Status,
+                Priority = s.PlanEntry.Priority
+            };
+        }
+
+        return vm;
+    }
+
+    private void ScheduleConversationSave()
+    {
+        if (_preferences.SaveLocalHistory == false)
+        {
+            return;
+        }
+
+        _conversationSaveCts?.Cancel();
+        _conversationSaveCts = new CancellationTokenSource();
+        var token = _conversationSaveCts.Token;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                // Debounce to avoid too frequent writes while streaming updates.
+                await Task.Delay(400, token).ConfigureAwait(false);
+                await SaveConversationsAsync(token).ConfigureAwait(false);
+            }
+            catch
+            {
+            }
+        }, token);
+    }
+
+    private async Task SaveConversationsAsync(CancellationToken cancellationToken)
+    {
+        var doc = new ConversationDocument
+        {
+            Version = 1,
+            LastActiveConversationId = CurrentSessionId
+        };
+
+        // Keep most-recent first.
+        var ordered = _conversationBindings.Values
+            .OrderByDescending(c => c.LastUpdatedAt)
+            .ToArray();
+
+        foreach (var binding in ordered)
+        {
+            var name = ResolveSessionDisplayName(binding.ConversationId);
+            var record = new ConversationRecord
+            {
+                ConversationId = binding.ConversationId,
+                DisplayName = name,
+                CreatedAt = binding.CreatedAt,
+                LastUpdatedAt = binding.LastUpdatedAt
+            };
+
+            foreach (var msg in binding.Transcript)
+            {
+                record.Messages.Add(ToSnapshot(msg));
+            }
+
+            doc.Conversations.Add(record);
+        }
+
+        await _conversationStore.SaveAsync(doc, cancellationToken).ConfigureAwait(false);
     }
 
     private string ResolveSessionDisplayName(string? sessionId)
@@ -259,13 +555,69 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             ? SessionNamePolicy.CreateDefault(sessionId)
             : sanitized;
 
-        var updated = _sessionManager.UpdateSession(sessionId, s => s.DisplayName = finalName);
-        if (updated)
+        RenameConversation(sessionId, finalName);
+
+        CancelSessionNameEdit();
+    }
+
+    public void RenameConversation(string conversationId, string newDisplayName)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return;
+        }
+
+        var sanitized = SessionNamePolicy.Sanitize(newDisplayName);
+        var finalName = string.IsNullOrEmpty(sanitized)
+            ? SessionNamePolicy.CreateDefault(conversationId)
+            : sanitized;
+
+        _sessionManager.UpdateSession(conversationId, s => s.DisplayName = finalName);
+
+        if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
         {
             CurrentSessionDisplayName = finalName;
         }
 
-        CancelSessionNameEdit();
+        var binding = TryGetConversationBinding(conversationId);
+        if (binding != null)
+        {
+            binding.LastUpdatedAt = DateTime.UtcNow;
+        }
+
+        ScheduleConversationSave();
+    }
+
+    public void DeleteConversation(string conversationId)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return;
+        }
+
+        _conversationBindings.Remove(conversationId);
+        _sessionManager.RemoveSession(conversationId);
+
+        if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
+        {
+            CurrentSessionId = null;
+            _currentRemoteSessionId = null;
+            IsSessionActive = false;
+            MessageHistory.Clear();
+            CurrentPlan.Clear();
+            ShowPlanPanel = false;
+        }
+
+        ScheduleConversationSave();
+    }
+
+    public string[] GetKnownConversationIds()
+    {
+        return _conversationBindings.Values
+            .OrderByDescending(c => c.LastUpdatedAt)
+            .Select(c => c.ConversationId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .ToArray();
     }
 
     public async Task EnsureAcpProfilesLoadedAsync()
@@ -364,13 +716,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             _acpProfiles.MarkLastConnected(profile);
             _acpProfiles.SelectedProfile = profile;
 
-            if (IsConnected)
-            {
-                await DisconnectCommand.ExecuteAsync(null);
-            }
-
             ApplyProfileToTransportConfig(profile);
-            await ApplyTransportConfigCommand.ExecuteAsync(null);
+
+            // Switching ACP should not reset the current conversation transcript.
+            var preserveConversation = IsSessionActive && !string.IsNullOrWhiteSpace(CurrentSessionId);
+            await ApplyTransportConfigCoreAsync(preserveConversation);
         }
         catch (Exception ex)
         {
@@ -399,6 +749,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
 
     [RelayCommand]
         private async Task ApplyTransportConfigAsync()
+        {
+            await ApplyTransportConfigCoreAsync(preserveConversation: false);
+        }
+
+        private async Task ApplyTransportConfigCoreAsync(bool preserveConversation)
         {
             var (isValid, errorMessage) = TransportConfig.Validate();
             if (!isValid)
@@ -444,6 +799,18 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                        break;
                    default:
                        throw new InvalidOperationException($"不支持的传输类型：{TransportConfig.SelectedTransportType}");
+               }
+
+               // Best-effort: disconnect previous transport to avoid leaks (do not reset local conversation state).
+               if (_chatService != null)
+               {
+                   try
+                   {
+                       await _chatService.DisconnectAsync();
+                   }
+                   catch
+                   {
+                   }
                }
 
                // 2. 先取消订阅旧服务的事件（如果存在）
@@ -504,53 +871,39 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                 Logger.LogInformation("会话创建成功，SessionId={SessionId}", response.SessionId);
 
                 IsConnected = _chatService.IsConnected && _chatService.IsInitialized;
-                CurrentSessionId = response.SessionId;
-                IsSessionActive = !string.IsNullOrWhiteSpace(response.SessionId);
 
-                // Load modes (some Agents may omit this field; deprecated in favor of configOptions)
-                AvailableModes.Clear();
-                SelectedMode = null;
-                if (response.Modes?.AvailableModes != null)
+                var remoteSessionId = response.SessionId;
+                var hasRemoteSession = !string.IsNullOrWhiteSpace(remoteSessionId);
+
+                if (preserveConversation && IsSessionActive && !string.IsNullOrWhiteSpace(CurrentSessionId) && hasRemoteSession)
                 {
-                    foreach (var mode in response.Modes.AvailableModes)
-                    {
-                        if (mode != null)
-                        {
-                            AvailableModes.Add(new SessionModeViewModel
-                            {
-                                ModeId = mode.Id ?? string.Empty,
-                                ModeName = mode.Name ?? string.Empty,
-                                Description = mode.Description ?? string.Empty
-                            });
-                        }
-                    }
+                    var binding = GetOrCreateConversationBinding(CurrentSessionId!);
+                    binding.RemoteSessionId = remoteSessionId;
+                    binding.BoundProfileId = _preferences.LastSelectedServerId;
+                    _currentRemoteSessionId = remoteSessionId;
 
-                    if (AvailableModes.Count > 0)
+                    // Keep the local transcript; just rebind the active remote session.
+                    IsSessionActive = true;
+                }
+                else
+                {
+                    CurrentSessionId = remoteSessionId;
+                    IsSessionActive = hasRemoteSession;
+                    _currentRemoteSessionId = remoteSessionId;
+
+                    if (!string.IsNullOrWhiteSpace(CurrentSessionId))
                     {
-                        var currentModeId = response.Modes.CurrentModeId;
-                        SelectedMode = string.IsNullOrWhiteSpace(currentModeId)
-                            ? AvailableModes[0]
-                            : AvailableModes.FirstOrDefault(m => m.ModeId == currentModeId) ?? AvailableModes[0];
+                        var binding = GetOrCreateConversationBinding(CurrentSessionId);
+                        binding.RemoteSessionId = remoteSessionId;
+                        binding.BoundProfileId = _preferences.LastSelectedServerId;
                     }
                 }
 
-                Logger.LogInformation("Session modes loaded: {Count}", AvailableModes.Count);
-
-                // Load config options
-                ConfigOptions.Clear();
-                ShowConfigOptionsPanel = false;
-                if (response.ConfigOptions != null)
-                {
-                    foreach (var option in response.ConfigOptions)
-                    {
-                        ConfigOptions.Add(ConfigOptionViewModel.CreateFromAcp(option));
-                    }
-                    ShowConfigOptionsPanel = ConfigOptions.Count > 0;
-                    SyncModesFromConfigOptions();
-                }
+                ApplySessionNewResponse(response);
 
                 if (IsSessionActive)
                 {
+                    // Local transcript is restored by conversation switch; keep remote replay separate.
                     LoadSessionHistory();
                 }
                 ShowTransportConfigPanel = false;
@@ -562,6 +915,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                 Logger.LogError(ex, "连接时出错");
                 IsConnected = false;
                 CurrentSessionId = null;
+                _currentRemoteSessionId = null;
                 IsSessionActive = false;
             }
            finally
@@ -569,6 +923,51 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                IsConnecting = false;
            }
         }
+
+    private void ApplySessionNewResponse(SessionNewResponse response)
+    {
+        // Load modes (some Agents may omit this field; deprecated in favor of configOptions)
+        AvailableModes.Clear();
+        SelectedMode = null;
+        if (response.Modes?.AvailableModes != null)
+        {
+            foreach (var mode in response.Modes.AvailableModes)
+            {
+                if (mode != null)
+                {
+                    AvailableModes.Add(new SessionModeViewModel
+                    {
+                        ModeId = mode.Id ?? string.Empty,
+                        ModeName = mode.Name ?? string.Empty,
+                        Description = mode.Description ?? string.Empty
+                    });
+                }
+            }
+
+            if (AvailableModes.Count > 0)
+            {
+                var currentModeId = response.Modes.CurrentModeId;
+                SelectedMode = string.IsNullOrWhiteSpace(currentModeId)
+                    ? AvailableModes[0]
+                    : AvailableModes.FirstOrDefault(m => m.ModeId == currentModeId) ?? AvailableModes[0];
+            }
+        }
+
+        Logger.LogInformation("Session modes loaded: {Count}", AvailableModes.Count);
+
+        // Load config options
+        ConfigOptions.Clear();
+        ShowConfigOptionsPanel = false;
+        if (response.ConfigOptions != null)
+        {
+            foreach (var option in response.ConfigOptions)
+            {
+                ConfigOptions.Add(ConfigOptionViewModel.CreateFromAcp(option));
+            }
+            ShowConfigOptionsPanel = ConfigOptions.Count > 0;
+            SyncModesFromConfigOptions();
+        }
+    }
 
     [RelayCommand]
     private void ToggleTransportConfigPanel()
@@ -641,10 +1040,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                     return;
                 }
 
-                if (!string.IsNullOrWhiteSpace(CurrentSessionId) &&
-                    !string.Equals(e.SessionId, CurrentSessionId, StringComparison.Ordinal))
+                if (!string.IsNullOrWhiteSpace(_currentRemoteSessionId) &&
+                    !string.Equals(e.SessionId, _currentRemoteSessionId, StringComparison.Ordinal))
                 {
-                    // Multi-session: only render updates for the active session.
+                    // Only render updates for the active remote session bound to this conversation.
                     return;
                 }
 
@@ -686,12 +1085,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
 
     public async Task<bool> TrySwitchToSessionAsync(string sessionId)
     {
-        if (string.IsNullOrWhiteSpace(sessionId) || _chatService == null || !_chatService.IsInitialized || !_chatService.IsConnected)
+        if (string.IsNullOrWhiteSpace(sessionId))
         {
             return false;
         }
 
-        if (string.Equals(_chatService.CurrentSessionId, sessionId, StringComparison.Ordinal))
+        if (string.Equals(CurrentSessionId, sessionId, StringComparison.Ordinal))
         {
             return true;
         }
@@ -701,22 +1100,45 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         {
             _suppressSessionUpdatesToUi = true;
 
-            _syncContext.Post(_ =>
-            {
-                MessageHistory.Clear();
-                CurrentPlan.Clear();
-                ShowPlanPanel = false;
-            }, null);
-
-            await _chatService.LoadSessionAsync(new SalmonEgg.Domain.Models.Protocol.SessionLoadParams(
-                sessionId,
-                Environment.CurrentDirectory)).ConfigureAwait(false);
-
+            // Switch local conversation first (UI stays stable even if not connected).
             _syncContext.Post(_ =>
             {
                 CurrentSessionId = sessionId;
                 IsSessionActive = true;
-                LoadSessionHistory();
+            }, null);
+
+            var binding = GetOrCreateConversationBinding(sessionId);
+            binding.RemoteSessionId ??= sessionId;
+            binding.BoundProfileId ??= _preferences.LastSelectedServerId;
+
+            // If the active ACP changed since this conversation was last used, create a fresh remote session and rebind.
+            var currentProfileId = _preferences.LastSelectedServerId;
+            if (_chatService is { IsConnected: true, IsInitialized: true } &&
+                !string.IsNullOrWhiteSpace(currentProfileId) &&
+                !string.Equals(binding.BoundProfileId, currentProfileId, StringComparison.Ordinal))
+            {
+                var response = await _chatService.CreateSessionAsync(new SessionNewParams
+                {
+                    Cwd = Environment.CurrentDirectory
+                }).ConfigureAwait(false);
+
+                binding.BoundProfileId = currentProfileId;
+                binding.RemoteSessionId = response.SessionId;
+                _currentRemoteSessionId = response.SessionId;
+
+                _syncContext.Post(_ =>
+                {
+                    ApplySessionNewResponse(response);
+                }, null);
+            }
+            else
+            {
+                _currentRemoteSessionId = binding.RemoteSessionId;
+            }
+
+            _syncContext.Post(_ =>
+            {
+                RestoreConversation(binding);
             }, null);
 
             return true;
@@ -727,11 +1149,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
 
             _syncContext.Post(_ =>
             {
-                ConnectionErrorMessage = $"加载会话失败：{ex.Message}";
-                // ChatService restores CurrentSessionId/history on failure; resync UI from it.
-                CurrentSessionId = _chatService.CurrentSessionId;
+                ConnectionErrorMessage = $"切换会话失败：{ex.Message}";
                 IsSessionActive = !string.IsNullOrWhiteSpace(CurrentSessionId);
-                LoadSessionHistory();
             }, null);
 
             return false;
@@ -951,13 +1370,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
 
     private void LoadSessionHistory()
     {
-        MessageHistory.Clear();
-        if (_chatService != null)
+        // Conversations are local. When a remote session replays history, it is appended through SessionUpdate events.
+        // We keep transcript per conversation and restore it when switching conversations.
+        var binding = TryGetConversationBinding(CurrentSessionId);
+        if (binding != null)
         {
-            foreach (var entry in _chatService.SessionHistory)
-            {
-                AddEntryToMessageHistory(entry);
-            }
+            RestoreConversation(binding);
         }
     }
 
@@ -975,7 +1393,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                     Guid.NewGuid().ToString(),
                     planEntry,
                     isOutgoing: false);
-                MessageHistory.Add(message);
+                AppendToTranscript(message);
             }
         }
         else if (!string.IsNullOrEmpty(entry.ModeId))
@@ -985,7 +1403,20 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                 entry.ModeId,
                 entry.Title,
                 isOutgoing: false);
-            MessageHistory.Add(message);
+            AppendToTranscript(message);
+        }
+    }
+
+    private void AppendToTranscript(ChatMessageViewModel message)
+    {
+        MessageHistory.Add(message);
+
+        var binding = TryGetConversationBinding(CurrentSessionId);
+        if (binding != null)
+        {
+            binding.Transcript.Add(message);
+            binding.LastUpdatedAt = DateTime.UtcNow;
+            ScheduleConversationSave();
         }
     }
 
@@ -1016,7 +1447,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                 break;
         }
 
-        MessageHistory.Add(message);
+        AppendToTranscript(message);
     }
 
     private void AddToolCallToHistory(ToolCallUpdate toolCall)
@@ -1029,7 +1460,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             toolCall.Status,
             toolCall.Title,
             isOutgoing: false);
-        MessageHistory.Add(message);
+        AppendToTranscript(message);
     }
 
     private void UpdatePlan(PlanUpdate planUpdate)
@@ -1048,6 +1479,19 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                     Priority = entry.Priority
                 });
             }
+        }
+
+        var binding = TryGetConversationBinding(CurrentSessionId);
+        if (binding != null)
+        {
+            binding.Plan.Clear();
+            foreach (var item in CurrentPlan)
+            {
+                binding.Plan.Add(item);
+            }
+            binding.ShowPlanPanel = ShowPlanPanel;
+            binding.LastUpdatedAt = DateTime.UtcNow;
+            ScheduleConversationSave();
         }
     }
 
@@ -1253,7 +1697,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
     [RelayCommand(CanExecute = nameof(CanSendPrompt))]
     private async Task SendPromptAsync()
     {
-        if (string.IsNullOrWhiteSpace(CurrentPrompt) || !IsSessionActive)
+        if (string.IsNullOrWhiteSpace(CurrentPrompt) || !IsSessionActive || string.IsNullOrWhiteSpace(_currentRemoteSessionId))
             return;
 
         var promptText = CurrentPrompt;
@@ -1272,7 +1716,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
 
             var promptParams = new SessionPromptParams
             {
-                SessionId = CurrentSessionId!,
+                SessionId = _currentRemoteSessionId!,
                 Prompt = new[] { new { type = "text", text = promptText } },
                 MaxTokens = null,
                 StopSequences = null
@@ -1295,12 +1739,17 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         }
     }
 
-    private bool CanSendPrompt() => IsSessionActive && !string.IsNullOrWhiteSpace(CurrentPrompt) && !IsBusy;
+    private bool CanSendPrompt() =>
+        IsSessionActive
+        && _chatService is { IsConnected: true, IsInitialized: true }
+        && !string.IsNullOrWhiteSpace(_currentRemoteSessionId)
+        && !string.IsNullOrWhiteSpace(CurrentPrompt)
+        && !IsBusy;
 
     [RelayCommand]
     private async Task SetModeAsync(SessionModeViewModel? mode)
     {
-        if (mode == null || !IsSessionActive)
+        if (mode == null || !IsSessionActive || string.IsNullOrWhiteSpace(_currentRemoteSessionId))
             return;
 
         try
@@ -1313,7 +1762,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                 if (!string.IsNullOrWhiteSpace(_modeConfigId))
                 {
                     var setParams = new SessionSetConfigOptionParams(
-                        CurrentSessionId!,
+                        _currentRemoteSessionId!,
                         _modeConfigId,
                         System.Text.Json.JsonSerializer.SerializeToElement(mode.ModeId));
                     await _chatService.SetSessionConfigOptionAsync(setParams);
@@ -1322,7 +1771,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                 {
                     var modeParams = new SessionSetModeParams
                     {
-                        SessionId = CurrentSessionId!,
+                        SessionId = _currentRemoteSessionId!,
                         ModeId = mode.ModeId
                     };
                     await _chatService.SetSessionModeAsync(modeParams);
@@ -1344,7 +1793,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private async Task CancelSessionAsync()
     {
-        if (!IsSessionActive)
+        if (!IsSessionActive || string.IsNullOrWhiteSpace(_currentRemoteSessionId))
             return;
 
         try
@@ -1354,7 +1803,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
 
             var cancelParams = new SessionCancelParams
             {
-                SessionId = CurrentSessionId!,
+                SessionId = _currentRemoteSessionId!,
                 Reason = "User cancelled"
             };
 
@@ -1380,6 +1829,16 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         MessageHistory.Clear();
         CurrentPlan.Clear();
         ShowPlanPanel = false;
+
+        var binding = TryGetConversationBinding(CurrentSessionId);
+        if (binding != null)
+        {
+            binding.Transcript.Clear();
+            binding.Plan.Clear();
+            binding.ShowPlanPanel = false;
+            binding.LastUpdatedAt = DateTime.UtcNow;
+            ScheduleConversationSave();
+        }
         _chatService?.ClearHistory();
     }
 
@@ -1396,6 +1855,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                 await _chatService.DisconnectAsync();
             }
             CurrentSessionId = null;
+            _currentRemoteSessionId = null;
             IsSessionActive = false;
             MessageHistory.Clear();
             CurrentPlan.Clear();
@@ -1439,6 +1899,16 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                if (disposing)
                {
                    _acpProfiles.PropertyChanged -= OnAcpProfilesPropertyChanged;
+
+                   _conversationSaveCts?.Cancel();
+                   try
+                   {
+                       // Best-effort flush so the latest transcript survives restarts.
+                       SaveConversationsAsync(CancellationToken.None).GetAwaiter().GetResult();
+                   }
+                   catch
+                   {
+                   }
                }
 
                _disposed = true;

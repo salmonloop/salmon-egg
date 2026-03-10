@@ -26,6 +26,7 @@ namespace SalmonEgg.Presentation.Views.Chat
         {
             try
             {
+                await ViewModel.RestoreConversationsAsync();
                 await ViewModel.TryAutoConnectAsync();
                 await ViewModel.EnsureAcpProfilesLoadedAsync();
             }

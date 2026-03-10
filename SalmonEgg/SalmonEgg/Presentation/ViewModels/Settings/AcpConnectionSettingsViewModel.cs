@@ -176,16 +176,8 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
 
         try
         {
-            Profiles.MarkLastConnected(profile);
-            Profiles.SelectedProfile = profile;
-
-            if (Chat.IsConnected)
-            {
-                await Chat.DisconnectCommand.ExecuteAsync(null);
-            }
-
-            ApplyProfileToTransportConfig(profile);
-            await Chat.ApplyTransportConfigCommand.ExecuteAsync(null);
+            // Reuse the same connection path as the chat header selector so behavior stays consistent.
+            await Chat.ConnectToAcpProfileCommand.ExecuteAsync(profile);
         }
         catch (Exception ex)
         {
@@ -194,22 +186,6 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         finally
         {
             OnPropertyChanged(nameof(AgentDisplayName));
-        }
-    }
-
-    private void ApplyProfileToTransportConfig(ServerConfiguration profile)
-    {
-        SelectedTransport = TransportOptions.FirstOrDefault(o => o.Type == profile.Transport) ?? TransportOptions.First();
-        Chat.TransportConfig.SelectedTransportType = profile.Transport;
-
-        if (profile.Transport == TransportType.Stdio)
-        {
-            Chat.TransportConfig.StdioCommand = profile.StdioCommand ?? string.Empty;
-            Chat.TransportConfig.StdioArgs = profile.StdioArgs ?? string.Empty;
-        }
-        else
-        {
-            Chat.TransportConfig.RemoteUrl = profile.ServerUrl ?? string.Empty;
         }
     }
 
