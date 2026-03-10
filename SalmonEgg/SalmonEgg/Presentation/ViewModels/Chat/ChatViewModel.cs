@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.ComponentModel;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -14,6 +15,7 @@ using SalmonEgg.Domain.Models.Content;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Presentation.ViewModels.Settings;
 
 namespace SalmonEgg.Presentation.ViewModels.Chat;
 
@@ -24,11 +26,17 @@ namespace SalmonEgg.Presentation.ViewModels.Chat;
 public partial class ChatViewModel : ViewModelBase, IDisposable
 {
     private readonly ChatServiceFactory _chatServiceFactory;
+    private readonly IConfigurationService _configurationService;
+    private readonly AppPreferencesViewModel _preferences;
+    private readonly AcpProfilesViewModel _acpProfiles;
+    private readonly ISessionManager _sessionManager;
     private IChatService? _chatService;
     private readonly SynchronizationContext _syncContext;
     private bool _disposed;
     private readonly SemaphoreSlim _sessionSwitchGate = new(1, 1);
     private bool _suppressSessionUpdatesToUi;
+    private bool _autoConnectAttempted;
+    private bool _suppressAcpProfileConnect;
 
     [ObservableProperty]
     private ObservableCollection<ChatMessageViewModel> _messageHistory = new();
@@ -41,6 +49,15 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     private bool _isSessionActive;
+
+    [ObservableProperty]
+    private string _currentSessionDisplayName = string.Empty;
+
+    [ObservableProperty]
+    private bool _isEditingSessionName;
+
+    [ObservableProperty]
+    private string _editingSessionName = string.Empty;
 
     [ObservableProperty]
     private string? _agentName;
@@ -75,6 +92,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     private SessionModeViewModel? _selectedMode;
+
+    public ObservableCollection<ServerConfiguration> AcpProfileList => _acpProfiles.Profiles;
+
+    [ObservableProperty]
+    private ServerConfiguration? _selectedAcpProfile;
 
     // 配置选项
     [ObservableProperty]
@@ -123,10 +145,18 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
 
     public ChatViewModel(
         ChatServiceFactory chatServiceFactory,
+        IConfigurationService configurationService,
+        AppPreferencesViewModel preferences,
+        AcpProfilesViewModel acpProfiles,
+        ISessionManager sessionManager,
         ILogger<ChatViewModel> logger)
         : base(logger)
     {
         _chatServiceFactory = chatServiceFactory ?? throw new ArgumentNullException(nameof(chatServiceFactory));
+        _configurationService = configurationService ?? throw new ArgumentNullException(nameof(configurationService));
+        _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
+        _acpProfiles = acpProfiles ?? throw new ArgumentNullException(nameof(acpProfiles));
+        _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
         _syncContext = SynchronizationContext.Current ?? new SynchronizationContext();
 
         // 创建默认 ChatService 实例
@@ -135,6 +165,236 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
 
         // 订阅事件
         SubscribeToEvents();
+        _acpProfiles.PropertyChanged += OnAcpProfilesPropertyChanged;
+    }
+
+    private void OnAcpProfilesPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(AcpProfilesViewModel.SelectedProfile))
+        {
+            // Sync UI selection without triggering another connect attempt.
+            _suppressAcpProfileConnect = true;
+            try
+            {
+                SelectedAcpProfile = _acpProfiles.SelectedProfile;
+            }
+            finally
+            {
+                _suppressAcpProfileConnect = false;
+            }
+        }
+    }
+
+    partial void OnSelectedAcpProfileChanged(ServerConfiguration? value)
+    {
+        if (_suppressAcpProfileConnect || value == null)
+        {
+            return;
+        }
+
+        // Fire-and-forget; errors are surfaced via the existing ConnectionErrorMessage/Logger paths.
+        _ = ConnectToAcpProfileCommand.ExecuteAsync(value);
+    }
+
+    partial void OnCurrentSessionIdChanged(string? value)
+    {
+        // Keep the header name stable and decouple it from ACP sessionId.
+        CurrentSessionDisplayName = ResolveSessionDisplayName(value);
+
+        if (IsEditingSessionName)
+        {
+            IsEditingSessionName = false;
+            EditingSessionName = string.Empty;
+        }
+    }
+
+    private string ResolveSessionDisplayName(string? sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return string.Empty;
+        }
+
+        var session = _sessionManager.GetSession(sessionId);
+        var name = session?.DisplayName;
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            return name.Trim();
+        }
+
+        return SessionNamePolicy.CreateDefault(sessionId);
+    }
+
+    [RelayCommand]
+    private void BeginEditSessionName()
+    {
+        if (!IsSessionActive || string.IsNullOrWhiteSpace(CurrentSessionId))
+        {
+            return;
+        }
+
+        EditingSessionName = CurrentSessionDisplayName;
+        IsEditingSessionName = true;
+    }
+
+    [RelayCommand]
+    private void CancelSessionNameEdit()
+    {
+        IsEditingSessionName = false;
+        EditingSessionName = string.Empty;
+    }
+
+    [RelayCommand]
+    private void CommitSessionNameEdit()
+    {
+        if (!IsSessionActive || string.IsNullOrWhiteSpace(CurrentSessionId))
+        {
+            CancelSessionNameEdit();
+            return;
+        }
+
+        var sessionId = CurrentSessionId;
+        var sanitized = SessionNamePolicy.Sanitize(EditingSessionName);
+        var finalName = string.IsNullOrEmpty(sanitized)
+            ? SessionNamePolicy.CreateDefault(sessionId)
+            : sanitized;
+
+        var updated = _sessionManager.UpdateSession(sessionId, s => s.DisplayName = finalName);
+        if (updated)
+        {
+            CurrentSessionDisplayName = finalName;
+        }
+
+        CancelSessionNameEdit();
+    }
+
+    public async Task EnsureAcpProfilesLoadedAsync()
+    {
+        if (_acpProfiles.IsLoading || _acpProfiles.Profiles.Count > 0)
+        {
+            return;
+        }
+
+        try
+        {
+            await _acpProfiles.RefreshCommand.ExecuteAsync(null);
+            _suppressAcpProfileConnect = true;
+            try
+            {
+                SelectedAcpProfile = _acpProfiles.SelectedProfile;
+            }
+            finally
+            {
+                _suppressAcpProfileConnect = false;
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    public async Task TryAutoConnectAsync()
+    {
+        if (_autoConnectAttempted)
+        {
+            return;
+        }
+
+        _autoConnectAttempted = true;
+
+        var profileId = _preferences.LastSelectedServerId;
+        if (string.IsNullOrWhiteSpace(profileId))
+        {
+            return;
+        }
+
+        if (IsConnected || IsConnecting || IsInitializing)
+        {
+            return;
+        }
+
+        await EnsureAcpProfilesLoadedAsync();
+
+        ServerConfiguration? config;
+        try
+        {
+            // The config may not be loaded into the list yet (e.g. first launch), so we load by id as fallback.
+            config = _acpProfiles.Profiles.FirstOrDefault(p => p.Id == profileId)
+                    ?? await _configurationService.LoadConfigurationAsync(profileId);
+        }
+        catch
+        {
+            return;
+        }
+
+        if (config == null)
+        {
+            return;
+        }
+
+        try
+        {
+            _suppressAcpProfileConnect = true;
+            try
+            {
+                SelectedAcpProfile = config;
+            }
+            finally
+            {
+                _suppressAcpProfileConnect = false;
+            }
+
+            await ConnectToAcpProfileAsync(config);
+        }
+        catch
+        {
+        }
+    }
+
+    [RelayCommand]
+    private async Task ConnectToAcpProfileAsync(ServerConfiguration? profile)
+    {
+        if (profile == null)
+        {
+            return;
+        }
+
+        try
+        {
+            _acpProfiles.MarkLastConnected(profile);
+            _acpProfiles.SelectedProfile = profile;
+
+            if (IsConnected)
+            {
+                await DisconnectCommand.ExecuteAsync(null);
+            }
+
+            ApplyProfileToTransportConfig(profile);
+            await ApplyTransportConfigCommand.ExecuteAsync(null);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to connect to ACP profile {ProfileId}", profile.Id);
+            throw;
+        }
+    }
+
+    private void ApplyProfileToTransportConfig(ServerConfiguration profile)
+    {
+        TransportConfig.SelectedTransportType = profile.Transport;
+
+        if (profile.Transport == TransportType.Stdio)
+        {
+            TransportConfig.StdioCommand = profile.StdioCommand ?? string.Empty;
+            TransportConfig.StdioArgs = profile.StdioArgs ?? string.Empty;
+            TransportConfig.RemoteUrl = string.Empty;
+        }
+        else
+        {
+            TransportConfig.RemoteUrl = profile.ServerUrl ?? string.Empty;
+            TransportConfig.StdioCommand = string.Empty;
+            TransportConfig.StdioArgs = string.Empty;
+        }
     }
 
     [RelayCommand]
@@ -1174,6 +1434,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                if (disposing && _chatService != null)
                {
                    UnsubscribeFromChatService(_chatService);
+               }
+
+               if (disposing)
+               {
+                   _acpProfiles.PropertyChanged -= OnAcpProfilesPropertyChanged;
                }
 
                _disposed = true;

@@ -31,6 +31,7 @@ namespace SalmonEgg.Infrastructure.Services
             }
 
             var session = new Session(sessionId, cwd);
+            session.DisplayName = SessionNamePolicy.CreateDefault(sessionId);
 
             // 如果会话已存在，抛出异常
             if (_sessions.TryAdd(sessionId, session))

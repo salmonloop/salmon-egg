@@ -7,12 +7,15 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using SalmonEgg.Presentation.ViewModels.Chat;
+using SalmonEgg.Domain.Models.Session;
+using SalmonEgg.Domain.Services;
 
 namespace SalmonEgg.Presentation.ViewModels.Navigation;
 
 public partial class SidebarViewModel : ObservableObject, IDisposable
 {
     private readonly ChatViewModel _chatViewModel;
+    private readonly ISessionManager _sessionManager;
     private readonly ILogger<SidebarViewModel> _logger;
     private bool _disposed;
 
@@ -22,9 +25,10 @@ public partial class SidebarViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private ProjectNavItemViewModel? _selectedProject;
 
-    public SidebarViewModel(ChatViewModel chatViewModel, ILogger<SidebarViewModel> logger)
+    public SidebarViewModel(ChatViewModel chatViewModel, ISessionManager sessionManager, ILogger<SidebarViewModel> logger)
     {
         _chatViewModel = chatViewModel ?? throw new ArgumentNullException(nameof(chatViewModel));
+        _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         SeedDefaultProjects();
@@ -71,7 +75,8 @@ public partial class SidebarViewModel : ObservableObject, IDisposable
     private void OnChatViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(ChatViewModel.CurrentSessionId) ||
-            e.PropertyName == nameof(ChatViewModel.IsSessionActive))
+            e.PropertyName == nameof(ChatViewModel.IsSessionActive) ||
+            e.PropertyName == nameof(ChatViewModel.CurrentSessionDisplayName))
         {
             SyncSessionsFromChat();
         }
@@ -105,9 +110,18 @@ public partial class SidebarViewModel : ObservableObject, IDisposable
                 existing = new SessionNavItemViewModel
                 {
                     SessionId = sessionId!,
-                    Title = $"会话 {sessionId!.Substring(0, Math.Min(8, sessionId.Length))}"
+                    Title = ResolveSessionTitle(sessionId!)
                 };
                 targetProject.Sessions.Insert(0, existing);
+            }
+            else
+            {
+                // If the display name changed (inline rename in chat header), keep nav label in sync.
+                var desired = ResolveSessionTitle(sessionId!);
+                if (!string.Equals(existing.Title, desired, StringComparison.Ordinal))
+                {
+                    existing.Title = desired;
+                }
             }
 
             SelectedProject = targetProject;
@@ -118,6 +132,18 @@ public partial class SidebarViewModel : ObservableObject, IDisposable
         {
             _logger.LogWarning(ex, "SyncSessionsFromChat failed");
         }
+    }
+
+    private string ResolveSessionTitle(string sessionId)
+    {
+        var session = _sessionManager.GetSession(sessionId);
+        var name = session?.DisplayName;
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            return name.Trim();
+        }
+
+        return SessionNamePolicy.CreateDefault(sessionId);
     }
 
     public void Dispose()
