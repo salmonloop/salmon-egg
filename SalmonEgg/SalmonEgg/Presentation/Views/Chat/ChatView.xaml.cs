@@ -26,6 +26,7 @@ namespace SalmonEgg.Presentation.Views.Chat
         {
             try
             {
+                // Restore may already be running from the singleton VM; calling again is safe.
                 await ViewModel.RestoreConversationsAsync();
                 await ViewModel.TryAutoConnectAsync();
                 await ViewModel.EnsureAcpProfilesLoadedAsync();
@@ -85,12 +86,21 @@ namespace SalmonEgg.Presentation.Views.Chat
 
         private void OnInputKeyDown(object sender, KeyRoutedEventArgs e)
         {
+            var ctrlPressed = Microsoft.UI.Input.InputKeyboardSource
+                .GetKeyStateForCurrentThread(Windows.System.VirtualKey.Control)
+                .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+
             if (ViewModel.ShowSlashCommands)
             {
                 switch (e.Key)
                 {
                     case Windows.System.VirtualKey.Tab:
                     case Windows.System.VirtualKey.Enter:
+                        if (e.Key == Windows.System.VirtualKey.Enter && ctrlPressed)
+                        {
+                            break;
+                        }
+
                         if (ViewModel.TryAcceptSelectedSlashCommand())
                         {
                             if (sender is TextBox tb)
@@ -118,13 +128,11 @@ namespace SalmonEgg.Presentation.Views.Chat
                 }
             }
 
-            // 支持 Ctrl+Enter 发送消息
+            // Enter sends; Ctrl+Enter inserts newline (TextBox handles it by default when AcceptsReturn=true).
             if (e.Key == Windows.System.VirtualKey.Enter)
             {
-                var ctrlPressed = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Control).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
-                if (ctrlPressed)
+                if (!ctrlPressed)
                 {
-                    // 在 ChatViewModel 中，发送命令是 SendPromptCommand
                     if (ViewModel.SendPromptCommand != null && ViewModel.SendPromptCommand.CanExecute(null))
                     {
                         ViewModel.SendPromptCommand.Execute(null);

@@ -193,15 +193,31 @@ public sealed partial class MainPage : Page
                     HorizontalAlignment = HorizontalAlignment.Stretch
                 };
 
-                // Keep session label reactive (rename from inline header or context menu should update immediately).
-                sessionItem.SetBinding(ContentControl.ContentProperty, new Binding
+                if (string.Equals(session.SessionId, SidebarViewModel.LoadingPlaceholderSessionId, StringComparison.Ordinal))
                 {
-                    Source = session,
-                    Path = new PropertyPath(nameof(SessionNavItemViewModel.Title)),
-                    Mode = BindingMode.OneWay
-                });
+                    sessionItem.IsEnabled = false;
+                    var content = new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal,
+                        Spacing = 8
+                    };
+                    content.Children.Add(new ProgressRing { IsActive = true, Width = 14, Height = 14 });
+                    content.Children.Add(new TextBlock { Text = session.Title, Opacity = 0.8 });
+                    sessionItem.Content = content;
+                }
+                else
+                {
+                    // Keep session label reactive (rename from inline header or context menu should update immediately).
+                    sessionItem.SetBinding(ContentControl.ContentProperty, new Binding
+                    {
+                        Source = session,
+                        Path = new PropertyPath(nameof(SessionNavItemViewModel.Title)),
+                        Mode = BindingMode.OneWay
+                    });
 
-                sessionItem.ContextFlyout = BuildSessionContextFlyout(project, session);
+                    sessionItem.ContextFlyout = BuildSessionContextFlyout(project, session);
+                }
+
                 projectItem.MenuItems.Add(sessionItem);
             }
 
@@ -557,6 +573,12 @@ public sealed partial class MainPage : Page
             SidebarVM.SelectedProject = tag.Project;
             if (tag.Session != null)
             {
+                if (string.Equals(tag.Session.SessionId, SidebarViewModel.LoadingPlaceholderSessionId, StringComparison.Ordinal))
+                {
+                    EnsureChatContent();
+                    return;
+                }
+
                 tag.Project.SelectedSession = tag.Session;
                 _ = SidebarVM.TryActivateSessionAsync(tag.Session);
             }

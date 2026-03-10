@@ -14,6 +14,14 @@ namespace SalmonEgg.Presentation.ViewModels
         [ObservableProperty]
         private bool _isBusy;
 
+        // Expose ObservableProperty-generated changes via a virtual hook so derived VMs can react (e.g., refresh commands)
+        // without needing to re-declare IsBusy in every ViewModel.
+        partial void OnIsBusyChanged(bool value) => OnIsBusyChangedCore(value);
+
+        protected virtual void OnIsBusyChangedCore(bool value)
+        {
+        }
+
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(HasError))]
         private string _errorMessage = string.Empty;

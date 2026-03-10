@@ -10,14 +10,31 @@ namespace SalmonEgg.Application.Tests.Infrastructure;
 
 public sealed class ConversationStoreTests
 {
+    private sealed class TestAppDataService : IAppDataService
+    {
+        public TestAppDataService(string root)
+        {
+            AppDataRootPath = root;
+            ConfigRootPath = Path.Combine(root, "config");
+            LogsDirectoryPath = Path.Combine(root, "logs");
+            CacheRootPath = Path.Combine(root, "cache");
+            ExportsDirectoryPath = Path.Combine(root, "exports");
+        }
+
+        public string AppDataRootPath { get; }
+        public string ConfigRootPath { get; }
+        public string LogsDirectoryPath { get; }
+        public string CacheRootPath { get; }
+        public string ExportsDirectoryPath { get; }
+    }
+
     [Fact]
     public async Task SaveAndLoad_RoundTrips()
     {
         var root = Path.Combine(Path.GetTempPath(), "salmon-egg-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
-        Environment.SetEnvironmentVariable("SALMONEGG_APPDATA_ROOT", root);
 
-        IAppDataService appData = new AppDataService();
+        IAppDataService appData = new TestAppDataService(root);
         IConversationStore store = new ConversationStore(appData);
 
         var doc = new ConversationDocument

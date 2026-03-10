@@ -251,12 +251,13 @@
                                 </TextBlock>
 
                                 <TextBox x:Name="InputBox"
-                                         PlaceholderText="向 Agent 发送消息... (Ctrl+Enter 发送)"
+                                         PlaceholderText="向 Agent 发送消息... (Enter 发送，Ctrl+Enter 换行)"
                                          Text="{x:Bind ViewModel.CurrentPrompt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                          AcceptsReturn="True"
                                          TextWrapping="Wrap"
                                          MinHeight="44"
                                          MaxHeight="120"
+                                         IsEnabled="{x:Bind ViewModel.IsBusy, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"
                                          KeyDown="OnInputKeyDown"/>
                             </Grid>
 

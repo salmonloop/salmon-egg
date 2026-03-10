@@ -14,6 +14,7 @@ namespace SalmonEgg.Presentation.ViewModels.Navigation;
 
 public partial class SidebarViewModel : ObservableObject, IDisposable
 {
+    public const string LoadingPlaceholderSessionId = "__loading__";
     private readonly ChatViewModel _chatViewModel;
     private readonly ISessionManager _sessionManager;
     private readonly ILogger<SidebarViewModel> _logger;
@@ -40,6 +41,11 @@ public partial class SidebarViewModel : ObservableObject, IDisposable
     public async Task TryActivateSessionAsync(SessionNavItemViewModel session)
     {
         if (session == null || string.IsNullOrWhiteSpace(session.SessionId))
+        {
+            return;
+        }
+
+        if (string.Equals(session.SessionId, LoadingPlaceholderSessionId, StringComparison.Ordinal))
         {
             return;
         }
@@ -76,7 +82,8 @@ public partial class SidebarViewModel : ObservableObject, IDisposable
     {
         if (e.PropertyName == nameof(ChatViewModel.CurrentSessionId) ||
             e.PropertyName == nameof(ChatViewModel.IsSessionActive) ||
-            e.PropertyName == nameof(ChatViewModel.CurrentSessionDisplayName))
+            e.PropertyName == nameof(ChatViewModel.CurrentSessionDisplayName) ||
+            e.PropertyName == nameof(ChatViewModel.IsConversationListLoading))
         {
             SyncSessionsFromChat();
         }
@@ -93,6 +100,23 @@ public partial class SidebarViewModel : ObservableObject, IDisposable
             if (targetProject == null)
             {
                 return;
+            }
+
+            if (_chatViewModel.IsConversationListLoading && targetProject.Sessions.Count == 0)
+            {
+                targetProject.Sessions.Add(new SessionNavItemViewModel
+                {
+                    SessionId = LoadingPlaceholderSessionId,
+                    Title = "加载中…"
+                });
+            }
+            else if (!_chatViewModel.IsConversationListLoading)
+            {
+                var placeholder = targetProject.Sessions.FirstOrDefault(s => s.SessionId == LoadingPlaceholderSessionId);
+                if (placeholder != null)
+                {
+                    targetProject.Sessions.Remove(placeholder);
+                }
             }
 
             // Always keep the known conversation list visible (even when offline/not connected).

@@ -80,6 +80,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
     private bool _isSessionActive;
 
     [ObservableProperty]
+    private bool _isConversationListLoading = true;
+
+    [ObservableProperty]
     private string _currentSessionDisplayName = string.Empty;
 
     [ObservableProperty]
@@ -197,6 +200,15 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         // 订阅事件
         SubscribeToEvents();
         _acpProfiles.PropertyChanged += OnAcpProfilesPropertyChanged;
+
+        // Start restoring local conversation list immediately so the sidebar can show it ASAP.
+        _ = RestoreConversationsAsync();
+    }
+
+    protected override void OnIsBusyChangedCore(bool value)
+    {
+        // Keep send button enabled state accurate when IsBusy toggles (we rely on command CanExecute).
+        SendPromptCommand.NotifyCanExecuteChanged();
     }
 
     private void OnAcpProfilesPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -311,10 +323,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         ConversationDocument doc;
         try
         {
+            IsConversationListLoading = true;
             doc = await _conversationStore.LoadAsync().ConfigureAwait(false);
         }
         catch
         {
+            _syncContext.Post(_ => { IsConversationListLoading = false; }, null);
             return;
         }
 
@@ -376,6 +390,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             catch
             {
             }
+
+            IsConversationListLoading = false;
         }, null);
     }
 
@@ -1711,9 +1727,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             var userContent = new TextContentBlock { Text = promptText };
             AddMessageToHistory(userContent, isOutgoing: true);
 
-            // Clear input immediately for better UX (even if the send is still in-flight).
-            CurrentPrompt = string.Empty;
-
             var promptParams = new SessionPromptParams
             {
                 SessionId = _currentRemoteSessionId!,
@@ -1727,6 +1740,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             {
                 await _chatService.SendPromptAsync(promptParams);
             }
+
+            // Clear only after a successful send (keeps text for retry when failing).
+            CurrentPrompt = string.Empty;
         }
         catch (Exception ex)
         {
