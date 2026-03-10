@@ -1,10 +1,12 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using Moq;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Content;
 using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Domain.Services.Security;
 using SalmonEgg.Infrastructure.Services;
@@ -13,6 +15,29 @@ namespace SalmonEgg.Application.Tests.Services.Chat;
 
 public sealed class ChatServiceSessionTests
 {
+    [Fact]
+    public async Task SendPromptAsync_ForwardsCancellationToken()
+    {
+        var acpClient = new Mock<IAcpClient>(MockBehavior.Loose);
+        var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
+        var sessionManager = new SessionManager();
+
+        CancellationToken captured = default;
+        acpClient
+            .Setup(c => c.SendPromptAsync(It.IsAny<SessionPromptParams>(), It.IsAny<CancellationToken>()))
+            .Callback<SessionPromptParams, CancellationToken>((_, ct) => captured = ct)
+            .ReturnsAsync(new SessionPromptResponse(StopReason.EndTurn));
+
+        var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
+
+        using var cts = new CancellationTokenSource();
+        await sut.SendPromptAsync(new SessionPromptParams("s1", prompt: Array.Empty<object>()), cts.Token);
+
+        Assert.Equal(cts.Token, captured);
+
+        sut.Dispose();
+    }
+
     [Fact]
     public void SessionUpdate_IsStoredPerSessionId()
     {

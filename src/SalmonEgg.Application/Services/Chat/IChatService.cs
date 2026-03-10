@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Domain.Models.Content;
 using SalmonEgg.Domain.Models.Plan;
@@ -94,7 +95,7 @@ namespace SalmonEgg.Application.Services.Chat
         /// <summary>
         /// 向会话发送提示消息
         /// </summary>
-        Task<SessionPromptResponse> SendPromptAsync(SessionPromptParams @params);
+        Task<SessionPromptResponse> SendPromptAsync(SessionPromptParams @params, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// 设置会话模式

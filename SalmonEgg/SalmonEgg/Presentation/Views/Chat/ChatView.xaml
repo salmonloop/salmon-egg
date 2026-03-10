@@ -238,8 +238,15 @@
                             </StackPanel>
                         </Border>
 
-                        <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                            <Grid Grid.Column="0">
+                        <StackPanel Grid.Row="1" Spacing="8">
+                            <InfoBar Severity="Error"
+                                     IsClosable="True"
+                                     IsOpen="{x:Bind ViewModel.ShowTransientNotification, Mode=TwoWay}"
+                                     Message="{x:Bind ViewModel.TransientNotificationMessage, Mode=OneWay}"
+                                     Visibility="{x:Bind ViewModel.ShowTransientNotification, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                <Grid Grid.Column="0">
                                 <!-- Ghost completion overlay -->
                                 <TextBlock IsHitTestVisible="False"
                                            Margin="12,10,12,10"
@@ -257,21 +264,40 @@
                                          TextWrapping="Wrap"
                                          MinHeight="44"
                                          MaxHeight="120"
-                                         IsEnabled="{x:Bind ViewModel.IsBusy, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"
-                                         KeyDown="OnInputKeyDown"/>
+                                         IsEnabled="{x:Bind ViewModel.IsInputEnabled, Mode=OneWay}"
+                                         KeyboardAcceleratorPlacementMode="Hidden"
+                                         KeyDown="OnInputKeyDown">
+                                    <TextBox.KeyboardAccelerators>
+                                        <KeyboardAccelerator Key="Enter" Invoked="OnSendAcceleratorInvoked"/>
+                                        <KeyboardAccelerator Key="Enter" Modifiers="Control" Invoked="OnNewLineAcceleratorInvoked"/>
+                                    </TextBox.KeyboardAccelerators>
+                                </TextBox>
                             </Grid>
 
-                            <Button Grid.Column="1"
-                                    Content="&#xE724;"
-                                    FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                    Width="36"
-                                    Height="36"
-                                    CornerRadius="18"
-                                    Background="{ThemeResource AccentBrush}"
-                                    Foreground="White"
-                                    Command="{x:Bind ViewModel.SendPromptCommand}"
-                                    VerticalAlignment="Bottom"/>
-                        </Grid>
+                                <Grid Grid.Column="1" VerticalAlignment="Bottom">
+                                    <Button Content="&#xE724;"
+                                            FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                            Width="36"
+                                            Height="36"
+                                            CornerRadius="18"
+                                            Background="{ThemeResource AccentBrush}"
+                                            Foreground="White"
+                                            Command="{x:Bind ViewModel.SendPromptCommand}"
+                                            IsEnabled="{x:Bind ViewModel.CanSendPromptUi, Mode=OneWay}"
+                                            Visibility="{x:Bind ViewModel.IsPromptInFlight, Mode=OneWay, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+
+                                    <Button Content="&#xE711;"
+                                            FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                            Width="36"
+                                            Height="36"
+                                            CornerRadius="18"
+                                            Background="{ThemeResource AccentBrush}"
+                                            Foreground="White"
+                                            Command="{x:Bind ViewModel.CancelPromptCommand}"
+                                            Visibility="{x:Bind ViewModel.IsPromptInFlight, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                </Grid>
+                            </Grid>
+                        </StackPanel>
 
                         <StackPanel Grid.Row="2"
                                     Orientation="Horizontal"

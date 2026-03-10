@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Domain.Models.Content;
 using SalmonEgg.Domain.Models.Plan;
@@ -334,11 +335,11 @@ namespace SalmonEgg.Application.Services.Chat
             }
         }
 
-        public async Task<SessionPromptResponse> SendPromptAsync(SessionPromptParams @params)
+        public async Task<SessionPromptResponse> SendPromptAsync(SessionPromptParams @params, CancellationToken cancellationToken = default)
         {
             try
             {
-                var response = await _acpClient.SendPromptAsync(@params);
+                var response = await _acpClient.SendPromptAsync(@params, cancellationToken).ConfigureAwait(false);
                 return response;
             }
             catch (Exception ex)

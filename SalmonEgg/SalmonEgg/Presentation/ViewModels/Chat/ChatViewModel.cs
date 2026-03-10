@@ -42,6 +42,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
     private bool _suppressAcpProfileConnect;
     private bool _conversationsRestored;
     private CancellationTokenSource? _conversationSaveCts;
+    private CancellationTokenSource? _sendPromptCts;
+    private CancellationTokenSource? _transientNotificationCts;
     private string? _currentRemoteSessionId;
 
     // Local conversation binding: ConversationId (stable for sidebar/UI) -> active remote session id (per ACP) + transcript.
@@ -77,7 +79,16 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
     private string? _currentSessionId;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanSendPromptUi))]
     private bool _isSessionActive;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsInputEnabled))]
+    [NotifyPropertyChangedFor(nameof(CanSendPromptUi))]
+    private bool _isPromptInFlight;
+
+    [ObservableProperty]
+    private bool _isThinking;
 
     [ObservableProperty]
     private bool _isConversationListLoading = true;
@@ -103,6 +114,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     private bool _isConnecting;
 
+    [ObservableProperty]
+    private bool _showTransientNotification;
+
+    [ObservableProperty]
+    private string _transientNotificationMessage = string.Empty;
+
     // 传输配置
     [ObservableProperty]
     private TransportConfigViewModel _transportConfig = new();
@@ -116,7 +133,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
 
     public bool HasConnectionError => !string.IsNullOrWhiteSpace(ConnectionErrorMessage);
 
+    public bool IsInputEnabled => !IsBusy && !IsPromptInFlight;
+
+    // WinUI/Uno sometimes won't reflect ICommand.CanExecute into IsEnabled consistently across targets,
+    // so expose a stable property for UI bindings.
+    public bool CanSendPromptUi => CanSendPrompt();
+
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanSendPromptUi))]
     private bool _isConnected;
 
     [ObservableProperty]
@@ -209,6 +233,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
     {
         // Keep send button enabled state accurate when IsBusy toggles (we rely on command CanExecute).
         SendPromptCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(IsInputEnabled));
+        OnPropertyChanged(nameof(CanSendPromptUi));
     }
 
     private void OnAcpProfilesPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -1065,7 +1091,13 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
 
                 if (e.Update is AgentMessageUpdate messageUpdate && messageUpdate.Content != null)
                 {
+                    IsThinking = false;
                     AddMessageToHistory(messageUpdate.Content, isOutgoing: false);
+                }
+                else if (e.Update is AgentThoughtUpdate)
+                {
+                    // Agents may stream thought chunks. We don't render them, but can use them as a "thinking" signal.
+                    IsThinking = true;
                 }
                 else if (e.Update is UserMessageUpdate userMessageUpdate && userMessageUpdate.Content != null)
                 {
@@ -1073,6 +1105,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                 }
                 else if (e.Update is ToolCallUpdate toolCallUpdate)
                 {
+                    IsThinking = true;
                     AddToolCallToHistory(toolCallUpdate);
                 }
                 else if (e.Update is PlanUpdate planUpdate)
@@ -1716,12 +1749,20 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         if (string.IsNullOrWhiteSpace(CurrentPrompt) || !IsSessionActive || string.IsNullOrWhiteSpace(_currentRemoteSessionId))
             return;
 
+        if (IsPromptInFlight)
+            return;
+
         var promptText = CurrentPrompt;
 
         try
         {
-            IsBusy = true;
             ClearError();
+            IsPromptInFlight = true;
+            IsThinking = false;
+
+            // Clear input immediately for better UX (agents may stream without returning a response for a while).
+            // We'll restore it on failure so the user can retry.
+            CurrentPrompt = string.Empty;
 
             // 添加用户消息到历史
             var userContent = new TextContentBlock { Text = promptText };
@@ -1738,20 +1779,34 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
 
             if (_chatService != null)
             {
-                await _chatService.SendPromptAsync(promptParams);
+                _sendPromptCts?.Cancel();
+                _sendPromptCts = new CancellationTokenSource();
+                await _chatService.SendPromptAsync(promptParams, _sendPromptCts.Token);
             }
-
-            // Clear only after a successful send (keeps text for retry when failing).
-            CurrentPrompt = string.Empty;
+        }
+        catch (OperationCanceledException)
+        {
+            // User-cancelled; keep input cleared.
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "发送提示失败");
-            SetError($"发送提示失败：{ex.Message}");
+            Logger.LogError(ex, "SendPrompt failed");
+            SetError($"发送失败：{ex.Message}");
+
+            // Restore text so the user can retry quickly.
+            if (string.IsNullOrWhiteSpace(CurrentPrompt))
+            {
+                CurrentPrompt = promptText;
+            }
+
+            ShowTransientNotificationToast("发送失败，请稍后重试。");
         }
         finally
         {
-            IsBusy = false;
+            try { _sendPromptCts?.Dispose(); } catch { }
+            _sendPromptCts = null;
+            IsPromptInFlight = false;
+            IsThinking = false;
         }
     }
 
@@ -1760,7 +1815,88 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         && _chatService is { IsConnected: true, IsInitialized: true }
         && !string.IsNullOrWhiteSpace(_currentRemoteSessionId)
         && !string.IsNullOrWhiteSpace(CurrentPrompt)
-        && !IsBusy;
+        && !IsBusy
+        && !IsPromptInFlight;
+
+    [RelayCommand]
+    private async Task CancelPromptAsync()
+    {
+        if (!IsPromptInFlight)
+        {
+            return;
+        }
+
+        try
+        {
+            _sendPromptCts?.Cancel();
+        }
+        catch
+        {
+        }
+
+        if (!IsSessionActive || string.IsNullOrWhiteSpace(_currentRemoteSessionId))
+        {
+            return;
+        }
+
+        try
+        {
+            var cancelParams = new SessionCancelParams
+            {
+                SessionId = _currentRemoteSessionId!,
+                Reason = "User cancelled"
+            };
+
+            if (_chatService != null)
+            {
+                await _chatService.CancelSessionAsync(cancelParams);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Cancel prompt failed");
+            ShowTransientNotificationToast("取消失败。");
+        }
+    }
+
+    private void ShowTransientNotificationToast(string message, int durationMs = 3000)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return;
+        }
+
+        _transientNotificationCts?.Cancel();
+        try { _transientNotificationCts?.Dispose(); } catch { }
+
+        _transientNotificationCts = new CancellationTokenSource();
+        var token = _transientNotificationCts.Token;
+
+        _syncContext.Post(_ =>
+        {
+            TransientNotificationMessage = message.Trim();
+            ShowTransientNotification = true;
+        }, null);
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(durationMs, token).ConfigureAwait(false);
+            }
+            catch
+            {
+                return;
+            }
+
+            if (token.IsCancellationRequested)
+            {
+                return;
+            }
+
+            _syncContext.Post(_ => { ShowTransientNotification = false; }, null);
+        });
+    }
 
     [RelayCommand]
     private async Task SetModeAsync(SessionModeViewModel? mode)
@@ -1894,7 +2030,27 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
     partial void OnCurrentPromptChanged(string value)
     {
         SendPromptCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(CanSendPromptUi));
         RefreshSlashCommandFilter();
+    }
+
+    partial void OnIsPromptInFlightChanged(bool value)
+    {
+        SendPromptCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(IsInputEnabled));
+        OnPropertyChanged(nameof(CanSendPromptUi));
+    }
+
+    partial void OnIsConnectedChanged(bool value)
+    {
+        SendPromptCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(CanSendPromptUi));
+    }
+
+    partial void OnIsSessionActiveChanged(bool value)
+    {
+        SendPromptCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(CanSendPromptUi));
     }
 
     public void Dispose()
@@ -1917,6 +2073,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                    _acpProfiles.PropertyChanged -= OnAcpProfilesPropertyChanged;
 
                    _conversationSaveCts?.Cancel();
+                   _sendPromptCts?.Cancel();
+                   _transientNotificationCts?.Cancel();
                    try
                    {
                        // Best-effort flush so the latest transcript survives restarts.
@@ -1925,6 +2083,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                    catch
                    {
                    }
+
+                   try { _conversationSaveCts?.Dispose(); } catch { }
+                   try { _sendPromptCts?.Dispose(); } catch { }
+                   try { _transientNotificationCts?.Dispose(); } catch { }
                }
 
                _disposed = true;

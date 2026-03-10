@@ -1,3 +1,4 @@
+using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -86,21 +87,11 @@ namespace SalmonEgg.Presentation.Views.Chat
 
         private void OnInputKeyDown(object sender, KeyRoutedEventArgs e)
         {
-            var ctrlPressed = Microsoft.UI.Input.InputKeyboardSource
-                .GetKeyStateForCurrentThread(Windows.System.VirtualKey.Control)
-                .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
-
             if (ViewModel.ShowSlashCommands)
             {
                 switch (e.Key)
                 {
                     case Windows.System.VirtualKey.Tab:
-                    case Windows.System.VirtualKey.Enter:
-                        if (e.Key == Windows.System.VirtualKey.Enter && ctrlPressed)
-                        {
-                            break;
-                        }
-
                         if (ViewModel.TryAcceptSelectedSlashCommand())
                         {
                             if (sender is TextBox tb)
@@ -127,19 +118,47 @@ namespace SalmonEgg.Presentation.Views.Chat
                         break;
                 }
             }
+        }
 
-            // Enter sends; Ctrl+Enter inserts newline (TextBox handles it by default when AcceptsReturn=true).
-            if (e.Key == Windows.System.VirtualKey.Enter)
+        private void OnSendAcceleratorInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+        {
+            // Enter sends; if slash commands menu is open, accept selection instead.
+            if (ViewModel.ShowSlashCommands)
             {
-                if (!ctrlPressed)
+                if (ViewModel.TryAcceptSelectedSlashCommand())
                 {
-                    if (ViewModel.SendPromptCommand != null && ViewModel.SendPromptCommand.CanExecute(null))
-                    {
-                        ViewModel.SendPromptCommand.Execute(null);
-                        e.Handled = true;
-                    }
+                    InputBox.SelectionStart = InputBox.Text?.Length ?? 0;
+                    args.Handled = true;
+                    return;
                 }
             }
+
+            if (ViewModel.SendPromptCommand != null && ViewModel.SendPromptCommand.CanExecute(null))
+            {
+                ViewModel.SendPromptCommand.Execute(null);
+                args.Handled = true;
+            }
+        }
+
+        private void OnNewLineAcceleratorInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+        {
+            // Ctrl+Enter inserts a newline at the caret (even if IME/target platform behaves differently).
+            var text = InputBox.Text ?? string.Empty;
+            var start = InputBox.SelectionStart;
+            var length = InputBox.SelectionLength;
+
+            var newline = Environment.NewLine;
+            if (length > 0)
+            {
+                text = text.Remove(start, length);
+            }
+            text = text.Insert(start, newline);
+
+            InputBox.Text = text;
+            InputBox.SelectionStart = start + newline.Length;
+            InputBox.SelectionLength = 0;
+
+            args.Handled = true;
         }
 
         private void OnGoToSettingsClick(object sender, RoutedEventArgs e)
