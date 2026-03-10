@@ -15,10 +15,6 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Navigation;
-#if __SKIA__
-using Microsoft.UI.Input;
-using Windows.Graphics;
-#endif
 using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.Views;
@@ -40,7 +36,6 @@ public sealed partial class MainPage : Page
     private bool _suppressNavSelectionChanged;
     private readonly Dictionary<object, NavigationViewItem> _navItemsByTag = new();
     private readonly HashSet<ObservableCollection<SessionNavItemViewModel>> _watchedSessionCollections = new();
-    private bool _hasNonClientDragRegions;
 #if WINDOWS
     private AppWindowTitleBar? _appWindowTitleBar;
 #endif
@@ -61,21 +56,6 @@ public sealed partial class MainPage : Page
         Loaded += OnMainPageLoaded;
         Unloaded += OnMainPageUnloaded;
         ContentFrame.Navigated += OnContentFrameNavigated;
-        if (AppTitleBar != null)
-        {
-            AppTitleBar.Loaded += OnTitleBarLoaded;
-            AppTitleBar.SizeChanged += OnTitleBarSizeChanged;
-        }
-
-        if (TitleBarDragLeft != null)
-        {
-            TitleBarDragLeft.SizeChanged += OnTitleBarSizeChanged;
-        }
-
-        if (TitleBarDragRight != null)
-        {
-            TitleBarDragRight.SizeChanged += OnTitleBarSizeChanged;
-        }
 
 #if !WINDOWS
         // Cross-platform fallback "Mica-like" backdrop.
@@ -661,20 +641,6 @@ public sealed partial class MainPage : Page
         ConfigureTitleBar();
     }
 
-    private void OnTitleBarLoaded(object sender, RoutedEventArgs e)
-    {
-#if __SKIA__
-        UpdateTitleBarDragRegions();
-#endif
-    }
-
-    private void OnTitleBarSizeChanged(object sender, SizeChangedEventArgs e)
-    {
-#if __SKIA__
-        UpdateTitleBarDragRegions();
-#endif
-    }
-
     private void OnContentFrameNavigated(object sender, NavigationEventArgs e)
     {
         if (TitleBarBackButton != null)
@@ -720,38 +686,17 @@ public sealed partial class MainPage : Page
     private void ConfigureTitleBar()
     {
         var window = App.MainWindowInstance;
-        if (window == null || AppTitleBar is null)
+        if (window == null || AppTitleBar is null || TitleBarDragRegion is null)
         {
             return;
         }
-
-#if __SKIA__
-        try
-        {
-            window.ExtendsContentIntoTitleBar = true;
-            window.SetTitleBar(AppTitleBar);
-        }
-        catch
-        {
-            return;
-        }
-
-        if (AppTitleBarContent != null)
-        {
-            AppTitleBarContent.Padding = new Thickness(0, 0, 140, 0);
-        }
-#endif
-
-#if __SKIA__
-        // Use custom caption regions for Skia to keep controls interactive.
-        UpdateTitleBarDragRegions();
-#endif
 
 #if WINDOWS
         try
         {
             window.ExtendsContentIntoTitleBar = true;
-            window.SetTitleBar(AppTitleBar);
+            // Only the dedicated drag region participates in window dragging.
+            window.SetTitleBar(TitleBarDragRegion);
         }
         catch
         {
@@ -785,104 +730,10 @@ public sealed partial class MainPage : Page
         _appWindowTitleBar.ButtonPressedBackgroundColor = Colors.Transparent;
         UpdateTitleBarInsets();
 
+        // Windows App SDK (current pinned version) does not expose LayoutMetricsChanged/IsVisibleChanged here.
+        // We refresh insets on common window lifecycle events instead.
         window.Activated += OnMainWindowActivated;
         window.SizeChanged += OnMainWindowSizeChanged;
-#endif
-    }
-
-#if __SKIA__
-    private void UpdateTitleBarDragRegions()
-    {
-        if (AppTitleBar == null || TitleBarDragLeft == null || TitleBarDragRight == null)
-        {
-            return;
-        }
-
-        var window = App.MainWindowInstance;
-        if (window == null)
-        {
-            return;
-        }
-
-        try
-        {
-            _hasNonClientDragRegions = false;
-            var appWindowProp = window.GetType().GetProperty("AppWindow");
-            var appWindow = appWindowProp?.GetValue(window);
-            var windowIdProp = appWindow?.GetType().GetProperty("Id");
-            var windowId = windowIdProp?.GetValue(appWindow);
-            if (windowId == null)
-            {
-                return;
-            }
-
-            var inputSource = InputNonClientPointerSource.GetForWindowId((Microsoft.UI.WindowId)windowId);
-            var rects = new List<RectInt32>();
-
-            var leftRect = GetDragRect(TitleBarDragLeft);
-            if (leftRect.Width > 0 && leftRect.Height > 0)
-            {
-                rects.Add(leftRect);
-            }
-
-            var rightRect = GetDragRect(TitleBarDragRight);
-            if (rightRect.Width > 0 && rightRect.Height > 0)
-            {
-                rects.Add(rightRect);
-            }
-
-            inputSource.SetRegionRects(NonClientRegionKind.Caption, rects.ToArray());
-            _hasNonClientDragRegions = rects.Count > 0;
-        }
-        catch
-        {
-            _hasNonClientDragRegions = false;
-        }
-    }
-
-    private RectInt32 GetDragRect(FrameworkElement element)
-    {
-        var root = App.MainWindowInstance?.Content as UIElement;
-        var scale = AppTitleBar?.XamlRoot?.RasterizationScale ?? 1.0;
-
-        var transform = root != null
-            ? element.TransformToVisual(root)
-            : element.TransformToVisual(AppTitleBar);
-        var origin = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
-
-        var x = (int)Math.Round(origin.X * scale);
-        var y = (int)Math.Round(origin.Y * scale);
-        var width = (int)Math.Round(element.ActualWidth * scale);
-        var height = (int)Math.Round(element.ActualHeight * scale);
-
-        return new RectInt32(x, y, width, height);
-    }
-
-#endif
-
-    private void OnTitleBarDragPointerPressed(object sender, PointerRoutedEventArgs e)
-    {
-#if __SKIA__
-        if (_hasNonClientDragRegions)
-        {
-            return;
-        }
-
-        var window = App.MainWindowInstance;
-        if (window == null)
-        {
-            return;
-        }
-
-        try
-        {
-            var method = window.GetType().GetMethod("TryDragMove");
-            method?.Invoke(window, null);
-            e.Handled = true;
-        }
-        catch
-        {
-        }
 #endif
     }
 
@@ -899,12 +750,13 @@ public sealed partial class MainPage : Page
 
     private void UpdateTitleBarInsets()
     {
-        if (_appWindowTitleBar == null || AppTitleBar is null)
+        if (_appWindowTitleBar == null || AppTitleBar is null || AppTitleBarContent is null)
         {
             return;
         }
 
-        AppTitleBar.Padding = new Thickness(_appWindowTitleBar.LeftInset, 0, _appWindowTitleBar.RightInset, 0);
+        // Keep interactive content out of the system caption button area.
+        AppTitleBarContent.Padding = new Thickness(_appWindowTitleBar.LeftInset, 0, _appWindowTitleBar.RightInset, 0);
         if (_appWindowTitleBar.Height > 0)
         {
             AppTitleBar.Height = _appWindowTitleBar.Height;
@@ -920,22 +772,8 @@ public sealed partial class MainPage
         Preferences.PropertyChanged -= OnPreferencesPropertyChanged;
 
         Loaded -= OnMainPageLoaded;
+        Unloaded -= OnMainPageUnloaded;
         ContentFrame.Navigated -= OnContentFrameNavigated;
-        if (AppTitleBar != null)
-        {
-            AppTitleBar.Loaded -= OnTitleBarLoaded;
-            AppTitleBar.SizeChanged -= OnTitleBarSizeChanged;
-        }
-
-        if (TitleBarDragLeft != null)
-        {
-            TitleBarDragLeft.SizeChanged -= OnTitleBarSizeChanged;
-        }
-
-        if (TitleBarDragRight != null)
-        {
-            TitleBarDragRight.SizeChanged -= OnTitleBarSizeChanged;
-        }
 #if WINDOWS
         if (App.MainWindowInstance != null)
         {
