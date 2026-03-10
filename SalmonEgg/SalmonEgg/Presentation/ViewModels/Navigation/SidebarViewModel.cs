@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
@@ -30,6 +31,23 @@ public partial class SidebarViewModel : ObservableObject, IDisposable
         SyncSessionsFromChat();
 
         _chatViewModel.PropertyChanged += OnChatViewModelPropertyChanged;
+    }
+
+    public async Task TryActivateSessionAsync(SessionNavItemViewModel session)
+    {
+        if (session == null || string.IsNullOrWhiteSpace(session.SessionId))
+        {
+            return;
+        }
+
+        try
+        {
+            await _chatViewModel.TrySwitchToSessionAsync(session.SessionId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "TryActivateSessionAsync failed");
+        }
     }
 
     private void SeedDefaultProjects()

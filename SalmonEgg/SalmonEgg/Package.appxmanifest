@@ -21,7 +21,8 @@
     <Application Id="App"
       Executable="$targetnametoken$.exe"
       EntryPoint="$targetentrypoint$">
-      <uap:VisualElements  Square44x44Logo="AppIcon.png" DisplayName="Salmon Egg" Description="AI Agent">
+      <!-- Use Uno.Resizetizer-generated assets (from Assets/Icons/icon.svg) to avoid stale AppIcon.* files. -->
+      <uap:VisualElements  Square44x44Logo="Assets\Icons\iconLogo.png" DisplayName="Salmon Egg" Description="AI Agent">
         <uap:DefaultTile/>
         <uap:InitialRotationPreference>
           <uap:Rotation Preference="landscape"/>
@@ -32,7 +33,7 @@
       <Extensions>
         <uap:Extension Category="windows.protocol">
           <uap:Protocol Name="s8p">
-            <uap:Logo>AppIcon.png</uap:Logo>
+            <uap:Logo>Assets\Icons\iconLogo.png</uap:Logo>
             <uap:DisplayName>Salmon Egg</uap:DisplayName>
           </uap:Protocol>
         </uap:Extension>

@@ -149,8 +149,9 @@ public static class DependencyInjection
             var validator = sp.GetRequiredService<IMessageValidator>();
             var errorLogger = sp.GetRequiredService<IErrorLogger>();
             var capabilityManager = sp.GetRequiredService<ICapabilityManager>();
+            var sessionManager = sp.GetRequiredService<ISessionManager>();
             var logger = sp.GetRequiredService<Serilog.ILogger>();
-            return new ChatServiceFactory(transportFactory, parser, validator, errorLogger, capabilityManager, logger);
+            return new ChatServiceFactory(transportFactory, parser, validator, errorLogger, capabilityManager, sessionManager, logger);
         });
 
         // Chat 服务（默认实例，使用默认传输）

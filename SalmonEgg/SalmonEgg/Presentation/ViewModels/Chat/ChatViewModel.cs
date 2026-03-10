@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -26,6 +27,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
     private IChatService? _chatService;
     private readonly SynchronizationContext _syncContext;
     private bool _disposed;
+    private readonly SemaphoreSlim _sessionSwitchGate = new(1, 1);
+    private bool _suppressSessionUpdatesToUi;
 
     [ObservableProperty]
     private ObservableCollection<ChatMessageViewModel> _messageHistory = new();
@@ -373,6 +376,18 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         {
             try
             {
+                if (_suppressSessionUpdatesToUi)
+                {
+                    return;
+                }
+
+                if (!string.IsNullOrWhiteSpace(CurrentSessionId) &&
+                    !string.Equals(e.SessionId, CurrentSessionId, StringComparison.Ordinal))
+                {
+                    // Multi-session: only render updates for the active session.
+                    return;
+                }
+
                 if (e.Update is AgentMessageUpdate messageUpdate && messageUpdate.Content != null)
                 {
                     AddMessageToHistory(messageUpdate.Content, isOutgoing: false);
@@ -407,6 +422,65 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                 Logger.LogError(ex, "处理会话更新时出错");
             }
         }, null);
+    }
+
+    public async Task<bool> TrySwitchToSessionAsync(string sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId) || _chatService == null || !_chatService.IsInitialized || !_chatService.IsConnected)
+        {
+            return false;
+        }
+
+        if (string.Equals(_chatService.CurrentSessionId, sessionId, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        await _sessionSwitchGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            _suppressSessionUpdatesToUi = true;
+
+            _syncContext.Post(_ =>
+            {
+                MessageHistory.Clear();
+                CurrentPlan.Clear();
+                ShowPlanPanel = false;
+            }, null);
+
+            await _chatService.LoadSessionAsync(new SalmonEgg.Domain.Models.Protocol.SessionLoadParams(
+                sessionId,
+                Environment.CurrentDirectory)).ConfigureAwait(false);
+
+            _syncContext.Post(_ =>
+            {
+                CurrentSessionId = sessionId;
+                IsSessionActive = true;
+                LoadSessionHistory();
+            }, null);
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Switching session failed (SessionId={SessionId})", sessionId);
+
+            _syncContext.Post(_ =>
+            {
+                ConnectionErrorMessage = $"加载会话失败：{ex.Message}";
+                // ChatService restores CurrentSessionId/history on failure; resync UI from it.
+                CurrentSessionId = _chatService.CurrentSessionId;
+                IsSessionActive = !string.IsNullOrWhiteSpace(CurrentSessionId);
+                LoadSessionHistory();
+            }, null);
+
+            return false;
+        }
+        finally
+        {
+            _suppressSessionUpdatesToUi = false;
+            _sessionSwitchGate.Release();
+        }
     }
 
     private void UpdateSlashCommands(AvailableCommandsUpdate update)

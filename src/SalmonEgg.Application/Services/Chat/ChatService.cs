@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 using SalmonEgg.Domain.Models.Content;
@@ -21,17 +20,18 @@ namespace SalmonEgg.Application.Services.Chat
     {
         private readonly IAcpClient _acpClient;
         private readonly IErrorLogger _errorLogger;
+        private readonly ISessionManager _sessionManager;
         private string? _currentSessionId;
         private Plan? _currentPlan;
         private SessionModeState? _currentMode;
-        private readonly ObservableCollection<SessionUpdateEntry> _sessionHistory;
 
         public string? CurrentSessionId => _currentSessionId;
         public bool IsInitialized => _acpClient.IsInitialized;
         public bool IsConnected => _acpClient.IsConnected;
         public AgentInfo? AgentInfo => _acpClient.AgentInfo;
         public AgentCapabilities? AgentCapabilities => _acpClient.AgentCapabilities;
-        public IReadOnlyList<SessionUpdateEntry> SessionHistory => _sessionHistory;
+        public IReadOnlyList<SessionUpdateEntry> SessionHistory =>
+            (IReadOnlyList<SessionUpdateEntry>?)GetSession(_currentSessionId)?.History ?? Array.Empty<SessionUpdateEntry>();
         public Plan? CurrentPlan => _currentPlan;
         public SessionModeState? CurrentMode => _currentMode;
 
@@ -40,17 +40,39 @@ namespace SalmonEgg.Application.Services.Chat
         public event EventHandler<FileSystemRequestEventArgs>? FileSystemRequestReceived;
         public event EventHandler<string>? ErrorOccurred;
 
-        public ChatService(IAcpClient acpClient, IErrorLogger errorLogger)
+        public ChatService(IAcpClient acpClient, IErrorLogger errorLogger, ISessionManager sessionManager)
         {
             _acpClient = acpClient ?? throw new ArgumentNullException(nameof(acpClient));
             _errorLogger = errorLogger ?? throw new ArgumentNullException(nameof(errorLogger));
-            _sessionHistory = new ObservableCollection<SessionUpdateEntry>();
+            _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
 
             // 订阅 ACP 客户端事件
             _acpClient.SessionUpdateReceived += OnSessionUpdateReceived;
             _acpClient.PermissionRequestReceived += OnPermissionRequestReceived;
             _acpClient.FileSystemRequestReceived += OnFileSystemRequestReceived;
             _acpClient.ErrorOccurred += OnErrorOccurred;
+        }
+
+        private Session? GetSession(string? sessionId)
+        {
+            if (string.IsNullOrWhiteSpace(sessionId))
+            {
+                return null;
+            }
+
+            return _sessionManager.GetSession(sessionId);
+        }
+
+        private Session GetOrCreateSession(string sessionId, string? cwd = null)
+        {
+            var existing = _sessionManager.GetSession(sessionId);
+            if (existing != null)
+            {
+                return existing;
+            }
+
+            // The session manager API is async; events are sync, so we do a best-effort sync creation.
+            return _sessionManager.CreateSessionAsync(sessionId, cwd).GetAwaiter().GetResult();
         }
 
         private void OnSessionUpdateReceived(object? sender, SessionUpdateEventArgs e)
@@ -61,7 +83,14 @@ namespace SalmonEgg.Application.Services.Chat
                 var entry = CreateSessionUpdateEntry(e.Update, e.SessionId);
                 if (entry != null)
                 {
-                    _sessionHistory.Add(entry);
+                    try
+                    {
+                        GetOrCreateSession(e.SessionId).AddHistoryEntry(entry);
+                    }
+                    catch
+                    {
+                        // Ignore session tracking failures; UI will still receive SessionUpdateReceived.
+                    }
 
                     // 处理不同类型的更新
                     switch (e.Update)
@@ -211,7 +240,15 @@ namespace SalmonEgg.Application.Services.Chat
             {
                 var response = await _acpClient.CreateSessionAsync(@params);
                 _currentSessionId = response.SessionId;
-                _sessionHistory.Clear();
+                _currentPlan = null;
+                _currentMode = null;
+
+                if (!string.IsNullOrWhiteSpace(response.SessionId))
+                {
+                    var session = GetOrCreateSession(response.SessionId, @params.Cwd);
+                    session.History.Clear();
+                    session.State = SessionState.Active;
+                }
 
                 // 保存会话模式信息
                 if (response.Modes?.AvailableModes != null && response.Modes.AvailableModes.Count > 0)
@@ -237,14 +274,54 @@ namespace SalmonEgg.Application.Services.Chat
 
         public async Task<SessionLoadResponse> LoadSessionAsync(SessionLoadParams @params)
         {
+            var previousSessionId = _currentSessionId;
+            List<SessionUpdateEntry>? previousHistory = null;
+            var hadPreviousHistory = false;
+
             try
             {
-                var response = await _acpClient.LoadSessionAsync(@params);
+                // Make the target session current before we start receiving replay updates.
                 _currentSessionId = @params.SessionId;
+                _currentPlan = null;
+                _currentMode = null;
+
+                // Avoid duplicating cached history when loading triggers a replay.
+                var existing = _sessionManager.GetSession(@params.SessionId);
+                if (existing != null && existing.History.Count > 0)
+                {
+                    hadPreviousHistory = true;
+                    previousHistory = existing.History.ToList();
+                }
+                _sessionManager.UpdateSession(@params.SessionId, s => s.History.Clear());
+
+                var response = await _acpClient.LoadSessionAsync(@params);
+                try
+                {
+                    var session = GetOrCreateSession(@params.SessionId, @params.Cwd);
+                    session.Cwd = @params.Cwd;
+                    session.State = SessionState.Active;
+                }
+                catch
+                {
+                }
                 return response;
             }
             catch (Exception ex)
             {
+                if (hadPreviousHistory && previousHistory != null)
+                {
+                    _sessionManager.UpdateSession(@params.SessionId, s =>
+                    {
+                        s.History.Clear();
+                        foreach (var entry in previousHistory)
+                        {
+                            s.History.Add(entry);
+                        }
+                    });
+                }
+
+                _currentSessionId = previousSessionId;
+
                 var entry = new ErrorLogEntry(
                     "LoadSessionAsync failed",
                     ex.Message,
@@ -329,13 +406,10 @@ namespace SalmonEgg.Application.Services.Chat
             try
             {
                 var response = await _acpClient.CancelSessionAsync(@params);
-
-                // 更新会话状态
-                var sessionIndex = _sessionHistory.Count - 1;
-                while (sessionIndex >= 0 && _sessionHistory[sessionIndex].SessionUpdateType != "session_start")
+                _sessionManager.UpdateSession(@params.SessionId, s =>
                 {
-                    sessionIndex--;
-                }
+                    s.State = SessionState.Cancelled;
+                });
 
                 return response;
             }
@@ -400,7 +474,6 @@ namespace SalmonEgg.Application.Services.Chat
                 _currentSessionId = null;
                 _currentPlan = null;
                 _currentMode = null;
-                _sessionHistory.Clear();
 
                 return await _acpClient.DisconnectAsync();
             }
@@ -447,8 +520,12 @@ namespace SalmonEgg.Application.Services.Chat
 
         public void ClearHistory()
         {
-            _sessionHistory.Clear();
+            if (!string.IsNullOrWhiteSpace(_currentSessionId))
+            {
+                _sessionManager.UpdateSession(_currentSessionId, s => s.History.Clear());
+            }
             _currentPlan = null;
+            _currentMode = null;
         }
 
         public void Dispose()

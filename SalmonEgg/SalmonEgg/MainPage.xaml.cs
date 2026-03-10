@@ -167,7 +167,9 @@ public sealed partial class MainPage : Page
             {
                 Content = project.Name,
                 Tag = new NavTag(Project: project),
-                IsExpanded = project.IsExpanded
+                IsExpanded = project.IsExpanded,
+                HorizontalContentAlignment = HorizontalAlignment.Left,
+                HorizontalAlignment = HorizontalAlignment.Stretch
             };
 
             // Keep expand/collapse state in sync with the VM (used by other parts of the app).
@@ -183,7 +185,9 @@ public sealed partial class MainPage : Page
                 var sessionItem = new NavigationViewItem
                 {
                     Content = session.Title,
-                    Tag = new NavTag(Project: project, Session: session)
+                    Tag = new NavTag(Project: project, Session: session),
+                    HorizontalContentAlignment = HorizontalAlignment.Left,
+                    HorizontalAlignment = HorizontalAlignment.Stretch
                 };
                 projectItem.MenuItems.Add(sessionItem);
             }
@@ -445,6 +449,7 @@ public sealed partial class MainPage : Page
             if (tag.Session != null)
             {
                 tag.Project.SelectedSession = tag.Session;
+                _ = SidebarVM.TryActivateSessionAsync(tag.Session);
             }
 
             EnsureChatContent();

@@ -113,6 +113,13 @@
             <Setter Property="Padding" Value="24,10"/>
         </Style>
 
+        <!-- Keep NavigationView text aligned like WinUI official samples.
+             NOTE: Do NOT apply via NavigationView.MenuItemContainerStyle because it also targets separators in Uno. -->
+        <Style x:Key="ShellNavigationViewItemStyle" TargetType="NavigationViewItem">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+        </Style>
+
         <Style x:Key="SubMenuResizerThumbStyle" TargetType="controls:ResizeGrip">
             <Setter Property="IsTabStop" Value="False"/>
             <Setter Property="Template">
@@ -341,7 +348,8 @@
                 <NavigationView.MenuItems>
                     <NavigationViewItem x:Name="ChatNavRoot"
                                         Content="对话"
-                                        Tag="Chat">
+                                        Tag="Chat"
+                                        Style="{StaticResource ShellNavigationViewItemStyle}">
                         <NavigationViewItem.Icon>
                             <FontIcon Glyph="&#xE8BD;" />
                         </NavigationViewItem.Icon>
@@ -351,18 +359,19 @@
 
                     <NavigationViewItem x:Name="SettingsNavRoot"
                                         Content="设置"
-                                        Tag="Settings">
+                                        Tag="Settings"
+                                        Style="{StaticResource ShellNavigationViewItemStyle}">
                         <NavigationViewItem.Icon>
                             <FontIcon Glyph="&#xE713;" />
                         </NavigationViewItem.Icon>
                         <NavigationViewItem.MenuItems>
-                            <NavigationViewItem x:Name="GeneralSettingsNavItem" Content="常规" Tag="General" />
-                            <NavigationViewItem x:Name="AppearanceSettingsNavItem" Content="外观" Tag="Appearance" />
-                            <NavigationViewItem x:Name="AgentAcpSettingsNavItem" Content="Agent (ACP)" Tag="AgentAcp" />
-                            <NavigationViewItem x:Name="DataStorageSettingsNavItem" Content="数据与存储" Tag="DataStorage" />
-                            <NavigationViewItem x:Name="ShortcutsSettingsNavItem" Content="快捷键" Tag="Shortcuts" />
-                            <NavigationViewItem x:Name="DiagnosticsSettingsNavItem" Content="诊断与日志" Tag="Diagnostics" />
-                            <NavigationViewItem x:Name="AboutSettingsNavItem" Content="关于" Tag="About" />
+                            <NavigationViewItem x:Name="GeneralSettingsNavItem" Content="常规" Tag="General" Style="{StaticResource ShellNavigationViewItemStyle}" />
+                            <NavigationViewItem x:Name="AppearanceSettingsNavItem" Content="外观" Tag="Appearance" Style="{StaticResource ShellNavigationViewItemStyle}" />
+                            <NavigationViewItem x:Name="AgentAcpSettingsNavItem" Content="Agent (ACP)" Tag="AgentAcp" Style="{StaticResource ShellNavigationViewItemStyle}" />
+                            <NavigationViewItem x:Name="DataStorageSettingsNavItem" Content="数据与存储" Tag="DataStorage" Style="{StaticResource ShellNavigationViewItemStyle}" />
+                            <NavigationViewItem x:Name="ShortcutsSettingsNavItem" Content="快捷键" Tag="Shortcuts" Style="{StaticResource ShellNavigationViewItemStyle}" />
+                            <NavigationViewItem x:Name="DiagnosticsSettingsNavItem" Content="诊断与日志" Tag="Diagnostics" Style="{StaticResource ShellNavigationViewItemStyle}" />
+                            <NavigationViewItem x:Name="AboutSettingsNavItem" Content="关于" Tag="About" Style="{StaticResource ShellNavigationViewItemStyle}" />
                         </NavigationViewItem.MenuItems>
                     </NavigationViewItem>
                 </NavigationView.MenuItems>

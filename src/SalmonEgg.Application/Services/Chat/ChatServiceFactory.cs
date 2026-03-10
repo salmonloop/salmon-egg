@@ -19,6 +19,7 @@ public class ChatServiceFactory
     private readonly IMessageValidator _messageValidator;
     private readonly IErrorLogger _errorLogger;
     private readonly ICapabilityManager _capabilityManager;
+    private readonly ISessionManager _sessionManager;
     private readonly ILogger _logger;
 
     /// <summary>
@@ -36,6 +37,7 @@ public class ChatServiceFactory
         IMessageValidator messageValidator,
         IErrorLogger errorLogger,
         ICapabilityManager capabilityManager,
+        ISessionManager sessionManager,
         ILogger logger)
     {
         _transportFactory = transportFactory ?? throw new ArgumentNullException(nameof(transportFactory));
@@ -43,6 +45,7 @@ public class ChatServiceFactory
         _messageValidator = messageValidator ?? throw new ArgumentNullException(nameof(messageValidator));
         _errorLogger = errorLogger ?? throw new ArgumentNullException(nameof(errorLogger));
         _capabilityManager = capabilityManager ?? throw new ArgumentNullException(nameof(capabilityManager));
+        _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -73,7 +76,7 @@ public class ChatServiceFactory
             _messageValidator);
 
         // 3. 创建 Chat 服务
-        return new ChatService(acpClient, _errorLogger);
+        return new ChatService(acpClient, _errorLogger, _sessionManager);
     }
 
     /// <summary>

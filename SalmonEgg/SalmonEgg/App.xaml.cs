@@ -127,7 +127,8 @@ public partial class App : global::Microsoft.UI.Xaml.Application
         {
         }
 
-        // MainWindow.SetWindowIcon();
+        // Applies the generated icon.ico (from Assets/Icons/icon.svg) to the native window (Desktop/Windows).
+        MainWindow.SetWindowIcon();
         MainWindow.Activate();
         BootLog("OnLaunched: window activated");
     }
