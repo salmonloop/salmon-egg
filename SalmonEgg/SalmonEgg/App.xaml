@@ -8,6 +8,8 @@
             <ResourceDictionary.MergedDictionaries>
                 <!-- WinUI 3 default control resources (provides TextFillColorPrimaryBrush, etc.) -->
                 <controls:XamlControlsResources />
+                <!-- Skia-only theme tweaks (ignored by other targets) -->
+                <ResourceDictionary Source="ms-appx:///Styles/Skia/SkiaThemeOverrides.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
             <!-- 兼容性资源定义：确保在所有平台上都有回退项 -->

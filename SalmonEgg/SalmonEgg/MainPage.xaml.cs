@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Threading;
 #if WINDOWS
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
@@ -36,6 +37,8 @@ public sealed partial class MainPage : Page
     private double _rightPanelResizeStartWidth;
     private string? _activeRightPanel;
     private bool _suppressNavSelectionChanged;
+    private bool _isRebuildingChatProjectMenu;
+    private long _navSelectionRequestId;
     private readonly Dictionary<object, NavigationViewItem> _navItemsByTag = new();
     private readonly HashSet<ObservableCollection<SessionNavItemViewModel>> _watchedSessionCollections = new();
     private readonly ShellPanePolicy _panePolicy = new();
@@ -151,77 +154,86 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        // Rebuild to keep the hierarchy in sync (projects + sessions are dynamic).
-        ChatNavRoot.MenuItems.Clear();
-
-        foreach (var sessions in _watchedSessionCollections)
+        _isRebuildingChatProjectMenu = true;
+        try
         {
-            sessions.CollectionChanged -= OnSessionsCollectionChanged;
-        }
-        _watchedSessionCollections.Clear();
+            // Rebuild to keep the hierarchy in sync (projects + sessions are dynamic).
+            ChatNavRoot.MenuItems.Clear();
 
-        foreach (var project in SidebarVM.Projects)
-        {
-            if (project?.Sessions != null && _watchedSessionCollections.Add(project.Sessions))
+            foreach (var sessions in _watchedSessionCollections)
             {
-                project.Sessions.CollectionChanged += OnSessionsCollectionChanged;
+                sessions.CollectionChanged -= OnSessionsCollectionChanged;
             }
+            _watchedSessionCollections.Clear();
 
-            var projectItem = new NavigationViewItem
+            foreach (var project in SidebarVM.Projects)
             {
-                Content = project.Name,
-                Tag = new NavTag(Project: project),
-                IsExpanded = project.IsExpanded,
-                HorizontalContentAlignment = HorizontalAlignment.Left,
-                HorizontalAlignment = HorizontalAlignment.Stretch
-            };
-
-            // Keep expand/collapse state in sync with the VM (used by other parts of the app).
-            projectItem.SetBinding(NavigationViewItem.IsExpandedProperty, new Binding
-            {
-                Source = project,
-                Path = new PropertyPath(nameof(ProjectNavItemViewModel.IsExpanded)),
-                Mode = BindingMode.TwoWay
-            });
-
-            foreach (var session in project.Sessions)
-            {
-                var sessionItem = new NavigationViewItem
+                if (project is null || project.Sessions is null)
                 {
-                    Tag = new NavTag(Project: project, Session: session),
-                    HorizontalContentAlignment = HorizontalAlignment.Left,
-                    HorizontalAlignment = HorizontalAlignment.Stretch
+                    continue;
+                }
+
+                if (_watchedSessionCollections.Add(project.Sessions))
+                {
+                    project.Sessions.CollectionChanged += OnSessionsCollectionChanged;
+                }
+
+                var projectItem = new NavigationViewItem
+                {
+                    Content = project.Name,
+                    Tag = new NavTag(Project: project),
+                    IsExpanded = project.IsExpanded
                 };
 
-                if (string.Equals(session.SessionId, SidebarViewModel.LoadingPlaceholderSessionId, StringComparison.Ordinal))
+                // Keep expand/collapse state in sync with the VM (used by other parts of the app).
+                projectItem.SetBinding(NavigationViewItem.IsExpandedProperty, new Binding
                 {
-                    sessionItem.IsEnabled = false;
-                    var content = new StackPanel
+                    Source = project,
+                    Path = new PropertyPath(nameof(ProjectNavItemViewModel.IsExpanded)),
+                    Mode = BindingMode.TwoWay
+                });
+
+                foreach (var session in project.Sessions)
+                {
+                    var sessionItem = new NavigationViewItem
                     {
-                        Orientation = Orientation.Horizontal,
-                        Spacing = 8
+                        Tag = new NavTag(Project: project, Session: session)
                     };
-                    content.Children.Add(new ProgressRing { IsActive = true, Width = 14, Height = 14 });
-                    content.Children.Add(new TextBlock { Text = session.Title, Opacity = 0.8 });
-                    sessionItem.Content = content;
-                }
-                else
-                {
-                    // Keep session label reactive (rename from inline header or context menu should update immediately).
-                    sessionItem.SetBinding(ContentControl.ContentProperty, new Binding
+
+                    if (string.Equals(session.SessionId, SidebarViewModel.LoadingPlaceholderSessionId, StringComparison.Ordinal))
                     {
-                        Source = session,
-                        Path = new PropertyPath(nameof(SessionNavItemViewModel.Title)),
-                        Mode = BindingMode.OneWay
-                    });
+                        sessionItem.IsEnabled = false;
+                        var content = new StackPanel
+                        {
+                            Orientation = Orientation.Horizontal,
+                            Spacing = 8
+                        };
+                        content.Children.Add(new ProgressRing { IsActive = true, Width = 14, Height = 14 });
+                        content.Children.Add(new TextBlock { Text = session.Title, Opacity = 0.8 });
+                        sessionItem.Content = content;
+                    }
+                    else
+                    {
+                        // Keep session label reactive (rename from inline header or context menu should update immediately).
+                        sessionItem.SetBinding(ContentControl.ContentProperty, new Binding
+                        {
+                            Source = session,
+                            Path = new PropertyPath(nameof(SessionNavItemViewModel.Title)),
+                            Mode = BindingMode.OneWay
+                        });
 
-                    sessionItem.ContextFlyout = BuildSessionContextFlyout(project, session);
+                        sessionItem.ContextFlyout = BuildSessionContextFlyout(project, session);
+                    }
+
+                    projectItem.MenuItems.Add(sessionItem);
                 }
 
-                projectItem.MenuItems.Add(sessionItem);
+                ChatNavRoot.MenuItems.Add(projectItem);
             }
-
-            ChatNavRoot.MenuItems.Add(projectItem);
+        }
+        finally
+        {
+            _isRebuildingChatProjectMenu = false;
         }
 
         SyncSelectedNavItemFromViewModel();
@@ -335,6 +347,13 @@ public sealed partial class MainPage : Page
             return;
         }
 
+        if (_isRebuildingChatProjectMenu)
+        {
+            // Avoid re-entrant selection changes while rebuilding menu items (Uno NavigationView selection model is sensitive).
+            _ = DispatcherQueue.TryEnqueue(SyncSelectedNavItemFromViewModel);
+            return;
+        }
+
         var selectedProject = SidebarVM.SelectedProject;
         var selectedSession = selectedProject?.SelectedSession;
 
@@ -354,15 +373,83 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        _suppressNavSelectionChanged = true;
-        try
+        SetSelectedNavItemDeferred(match);
+    }
+
+    private void SetSelectedNavItemDeferred(NavigationViewItem target)
+    {
+        if (MainNavView == null)
         {
-            MainNavView.SelectedItem = match;
+            return;
         }
-        finally
+
+        if (ReferenceEquals(MainNavView.SelectedItem, target))
         {
-            _suppressNavSelectionChanged = false;
+            return;
         }
+
+        var requestId = Interlocked.Increment(ref _navSelectionRequestId);
+
+        // Defer to avoid setting SelectedItem during SelectionChanged/Navigated re-entrancy on Uno Skia.
+        _ = DispatcherQueue.TryEnqueue(() =>
+        {
+            if (MainNavView == null)
+            {
+                return;
+            }
+
+            if (requestId != _navSelectionRequestId)
+            {
+                return;
+            }
+
+            if (_isRebuildingChatProjectMenu)
+            {
+                _ = DispatcherQueue.TryEnqueue(() => SetSelectedNavItemDeferred(target));
+                return;
+            }
+
+            if (!IsNavItemInTree(MainNavView.MenuItems, target))
+            {
+                return;
+            }
+
+            if (ReferenceEquals(MainNavView.SelectedItem, target))
+            {
+                return;
+            }
+
+            _suppressNavSelectionChanged = true;
+            try
+            {
+                MainNavView.SelectedItem = target;
+            }
+            finally
+            {
+                _suppressNavSelectionChanged = false;
+            }
+        });
+    }
+
+    private static bool IsNavItemInTree(IList<object> items, NavigationViewItem target)
+    {
+        foreach (var obj in items)
+        {
+            if (ReferenceEquals(obj, target))
+            {
+                return true;
+            }
+
+            if (obj is NavigationViewItem nvi && nvi.MenuItems is { Count: > 0 })
+            {
+                if (IsNavItemInTree(nvi.MenuItems, target))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private static NavigationViewItem? FindNavItemByTag(IList<object> items, Func<object?, bool> predicate)
@@ -399,15 +486,7 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        _suppressNavSelectionChanged = true;
-        try
-        {
-            MainNavView.SelectedItem = ChatNavRoot;
-        }
-        finally
-        {
-            _suppressNavSelectionChanged = false;
-        }
+        SetSelectedNavItemDeferred(ChatNavRoot);
     }
 
     public void NavigateToSettingsSubPage(string key)
@@ -434,15 +513,7 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        _suppressNavSelectionChanged = true;
-        try
-        {
-            MainNavView.SelectedItem = target;
-        }
-        finally
-        {
-            _suppressNavSelectionChanged = false;
-        }
+        SetSelectedNavItemDeferred(target);
     }
 
     private static Type GetSettingsPageType(string key) => key switch
@@ -862,15 +933,7 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        _suppressNavSelectionChanged = true;
-        try
-        {
-            MainNavView.SelectedItem = target;
-        }
-        finally
-        {
-            _suppressNavSelectionChanged = false;
-        }
+        SetSelectedNavItemDeferred(target);
     }
 
     private void OnMainNavPaneOpened(NavigationView sender, object args)

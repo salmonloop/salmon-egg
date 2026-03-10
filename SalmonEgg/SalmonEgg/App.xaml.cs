@@ -152,12 +152,16 @@ public partial class App : global::Microsoft.UI.Xaml.Application
             builder.AddConsole();
 #endif
             builder.SetMinimumLevel(LogLevel.Information);
-            builder.AddFilter("Uno", LogLevel.Warning);
             // Uno RemoteControl is a development-only feature (hot reload / diagnostics). When the
             // server isn't running it will emit noisy error logs; suppress it by default.
             builder.AddFilter("Uno.UI.RemoteControl", LogLevel.None);
             builder.AddFilter("Uno.UI.RemoteControl.RemoteControlClient", LogLevel.None);
             builder.AddFilter("Uno.UI.Runtime.Skia.Win32.Win32DragDropExtension", LogLevel.None);
+            // Uno WinUI theme may include Reveal-related setters that are not implemented on all hosts.
+            // The runtime safely ignores them, but it can emit noisy "BindingPropertyHelper" errors.
+            builder.AddFilter("Uno.UI.DataBinding.BindingPropertyHelper", LogLevel.None);
+            builder.AddFilter<Microsoft.Extensions.Logging.Console.ConsoleLoggerProvider>("Uno.UI.DataBinding.BindingPropertyHelper", LogLevel.None);
+            builder.AddFilter("Uno", LogLevel.Warning);
             builder.AddFilter("Windows", LogLevel.Warning);
             builder.AddFilter("Microsoft", LogLevel.Warning);
         });

@@ -18,6 +18,10 @@ internal class Program
            .UseWin32()
            .Build();
 
+       // Some hosting configurations may reset the ambient logger factory during Build().
+       // Re-apply our filters before running to suppress known noisy categories (e.g., RevealBrush setters on Skia).
+       App.InitializeLogging();
+
        host.RunAsync().GetAwaiter().GetResult();
    }
 }
