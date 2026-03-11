@@ -39,7 +39,7 @@ public sealed partial class MainPage : Page
     private bool _suppressNavSelectionChanged;
     private bool _isRebuildingChatProjectMenu;
     private long _navSelectionRequestId;
-    private readonly Dictionary<object, NavigationViewItem> _navItemsByTag = new();
+    // We only keep dynamic Chat items in the main NavigationView. Settings is the built-in SettingsItem.
     private readonly HashSet<ObservableCollection<SessionNavItemViewModel>> _watchedSessionCollections = new();
     private readonly ShellPanePolicy _panePolicy = new();
 #if WINDOWS
@@ -105,7 +105,7 @@ public sealed partial class MainPage : Page
 
     private void ConfigureNavigationView()
     {
-        if (MainNavView == null || ChatNavRoot == null || SettingsNavRoot == null)
+        if (MainNavView == null || ChatNavRoot == null)
         {
             return;
         }
@@ -114,24 +114,7 @@ public sealed partial class MainPage : Page
         SidebarVM.Projects.CollectionChanged += OnProjectsCollectionChanged;
         SidebarVM.PropertyChanged += OnSidebarPropertyChanged;
 
-        // Map static settings items by Tag (string key).
-        RegisterNavItemByTag(GeneralSettingsNavItem);
-        RegisterNavItemByTag(AppearanceSettingsNavItem);
-        RegisterNavItemByTag(AgentAcpSettingsNavItem);
-        RegisterNavItemByTag(DataStorageSettingsNavItem);
-        RegisterNavItemByTag(ShortcutsSettingsNavItem);
-        RegisterNavItemByTag(DiagnosticsSettingsNavItem);
-        RegisterNavItemByTag(AboutSettingsNavItem);
-
         RebuildChatProjectMenu();
-    }
-
-    private void RegisterNavItemByTag(NavigationViewItem? item)
-    {
-        if (item?.Tag is string key && !string.IsNullOrWhiteSpace(key))
-        {
-            _navItemsByTag[key] = item;
-        }
     }
 
     private void OnProjectsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -431,6 +414,48 @@ public sealed partial class MainPage : Page
         });
     }
 
+    private void SetSelectedSettingsItemDeferred()
+    {
+        if (MainNavView?.SettingsItem is null)
+        {
+            return;
+        }
+
+        if (ReferenceEquals(MainNavView.SelectedItem, MainNavView.SettingsItem))
+        {
+            return;
+        }
+
+        var requestId = Interlocked.Increment(ref _navSelectionRequestId);
+        _ = DispatcherQueue.TryEnqueue(() =>
+        {
+            if (MainNavView?.SettingsItem is null)
+            {
+                return;
+            }
+
+            if (requestId != _navSelectionRequestId)
+            {
+                return;
+            }
+
+            if (ReferenceEquals(MainNavView.SelectedItem, MainNavView.SettingsItem))
+            {
+                return;
+            }
+
+            _suppressNavSelectionChanged = true;
+            try
+            {
+                MainNavView.SelectedItem = MainNavView.SettingsItem;
+            }
+            finally
+            {
+                _suppressNavSelectionChanged = false;
+            }
+        });
+    }
+
     private static bool IsNavItemInTree(IList<object> items, NavigationViewItem target)
     {
         foreach (var obj in items)
@@ -497,36 +522,10 @@ public sealed partial class MainPage : Page
         }
 
         EnsureSettingsContent(key);
-
-        if (MainNavView == null)
-        {
-            return;
-        }
-
-        if (!_navItemsByTag.TryGetValue(key, out var target))
-        {
-            target = GeneralSettingsNavItem;
-        }
-
-        if (target == null)
-        {
-            return;
-        }
-
-        SetSelectedNavItemDeferred(target);
+        SetSelectedSettingsItemDeferred();
     }
 
-    private static Type GetSettingsPageType(string key) => key switch
-    {
-        "General" => typeof(SalmonEgg.Presentation.Views.GeneralSettingsPage),
-        "Appearance" => typeof(SalmonEgg.Presentation.Views.Settings.AppearanceSettingsPage),
-        "AgentAcp" => typeof(SalmonEgg.Presentation.Views.Settings.AcpConnectionSettingsPage),
-        "DataStorage" => typeof(SalmonEgg.Presentation.Views.Settings.DataStorageSettingsPage),
-        "Shortcuts" => typeof(SalmonEgg.Presentation.Views.Settings.ShortcutsSettingsPage),
-        "Diagnostics" => typeof(SalmonEgg.Presentation.Views.Settings.DiagnosticsSettingsPage),
-        "About" => typeof(SalmonEgg.Presentation.Views.Settings.AboutPage),
-        _ => typeof(SalmonEgg.Presentation.Views.GeneralSettingsPage)
-    };
+    private static Type GetSettingsShellPageType() => typeof(SalmonEgg.Presentation.Views.SettingsShellPage);
 
     private void OnPreferencesPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -632,9 +631,32 @@ public sealed partial class MainPage : Page
 #endif
     }
 
+    private void NavigateTo(Type pageType, object? parameter)
+    {
+#if WINDOWS
+        var transition = Preferences.IsAnimationEnabled
+            ? (NavigationTransitionInfo)new EntranceNavigationTransitionInfo()
+            : new SuppressNavigationTransitionInfo();
+        ContentFrame.Navigate(pageType, parameter, transition);
+#else
+        ContentFrame.Navigate(pageType, parameter);
+#endif
+    }
+
     private void OnMainNavSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
-        if (_suppressNavSelectionChanged || args.SelectedItem is not NavigationViewItem item)
+        if (_suppressNavSelectionChanged)
+        {
+            return;
+        }
+
+        if (args.IsSettingsSelected)
+        {
+            NavigateToSettingsSubPage("General");
+            return;
+        }
+
+        if (args.SelectedItem is not NavigationViewItem item)
         {
             return;
         }
@@ -665,17 +687,6 @@ public sealed partial class MainPage : Page
                 EnsureChatContent();
                 return;
             }
-
-            if (key == "Settings")
-            {
-                NavigateToSettingsSubPage("General");
-                return;
-            }
-
-            if (_navItemsByTag.ContainsKey(key))
-            {
-                EnsureSettingsContent(key);
-            }
         }
     }
 
@@ -697,10 +708,15 @@ public sealed partial class MainPage : Page
 
     private void EnsureSettingsContent(string key)
     {
-        var pageType = GetSettingsPageType(key);
+        var pageType = GetSettingsShellPageType();
         if (ContentFrame?.CurrentSourcePageType != pageType)
         {
-            NavigateTo(pageType);
+            NavigateTo(pageType, key);
+        }
+        else
+        {
+            // SettingsShellPage is already loaded; ask it to switch section without resetting the shell.
+            (ContentFrame.Content as SalmonEgg.Presentation.Views.SettingsShellPage)?.NavigateToSection(key);
         }
 
         UpdateRightPanelAvailability(false);
@@ -913,21 +929,10 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        var key = pageType == typeof(SalmonEgg.Presentation.Views.GeneralSettingsPage) ? "General"
-            : pageType == typeof(SalmonEgg.Presentation.Views.Settings.AppearanceSettingsPage) ? "Appearance"
-            : pageType == typeof(SalmonEgg.Presentation.Views.Settings.AcpConnectionSettingsPage) ? "AgentAcp"
-            : pageType == typeof(SalmonEgg.Presentation.Views.Settings.DataStorageSettingsPage) ? "DataStorage"
-            : pageType == typeof(SalmonEgg.Presentation.Views.Settings.ShortcutsSettingsPage) ? "Shortcuts"
-            : pageType == typeof(SalmonEgg.Presentation.Views.Settings.DiagnosticsSettingsPage) ? "Diagnostics"
-            : pageType == typeof(SalmonEgg.Presentation.Views.Settings.AboutPage) ? "About"
-            : null;
-
-        if (key == null || !_navItemsByTag.TryGetValue(key, out var target) || target == null)
+        if (pageType == typeof(SalmonEgg.Presentation.Views.SettingsShellPage))
         {
-            return;
+            SetSelectedSettingsItemDeferred();
         }
-
-        SetSelectedNavItemDeferred(target);
     }
 
     private void OnMainNavPaneOpened(NavigationView sender, object args)

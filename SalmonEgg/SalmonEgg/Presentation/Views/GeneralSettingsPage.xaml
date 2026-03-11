@@ -11,14 +11,11 @@
     Background="Transparent"
     AllowDrop="False">
 
-    <ScrollViewer Padding="40,24"
+    <ScrollViewer Padding="0"
                   HorizontalScrollBarVisibility="Disabled">
             <controls:ResponsiveSettingsHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
             <controls:ResponsiveSettingsHost.Child>
                 <StackPanel Spacing="32">
-                    <controls:SettingsBreadcrumbBar ItemsSource="{x:Bind BreadcrumbItems, Mode=OneWay}"
-                                                   Margin="0,0,0,10" />
-
             <!-- 基础选项组 -->
             <StackPanel Spacing="12">
                 <TextBlock Text="启动与窗口" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}"/>
