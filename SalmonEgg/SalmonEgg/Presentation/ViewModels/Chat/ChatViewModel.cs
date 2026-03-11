@@ -14,6 +14,7 @@ using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Content;
+using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
@@ -1050,8 +1051,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
        {
            chatService.SessionUpdateReceived += OnSessionUpdateReceived;
            chatService.PermissionRequestReceived += OnPermissionRequestReceived;
-           chatService.FileSystemRequestReceived += OnFileSystemRequestReceived;
-           chatService.ErrorOccurred += OnErrorOccurred;
+            chatService.FileSystemRequestReceived += OnFileSystemRequestReceived;
+            chatService.TerminalRequestReceived += OnTerminalRequestReceived;
+            chatService.ErrorOccurred += OnErrorOccurred;
 
            // 监听初始化状态变化
            if (chatService.IsInitialized)
@@ -1072,11 +1074,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
        {
            chatService.SessionUpdateReceived -= OnSessionUpdateReceived;
            chatService.PermissionRequestReceived -= OnPermissionRequestReceived;
-           chatService.FileSystemRequestReceived -= OnFileSystemRequestReceived;
-           chatService.ErrorOccurred -= OnErrorOccurred;
-       }
+            chatService.FileSystemRequestReceived -= OnFileSystemRequestReceived;
+            chatService.TerminalRequestReceived -= OnTerminalRequestReceived;
+            chatService.ErrorOccurred -= OnErrorOccurred;
+        }
 
-       private void SubscribeToEvents()
+        private void SubscribeToEvents()
       {
           // 只有当 _chatService 不为 null 时才订阅事件
           // 在构造函数中 _chatService 可能为 null，将在 ApplyTransportConfigAsync 中创建
@@ -1478,6 +1481,22 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         }, null);
     }
 
+    private void OnTerminalRequestReceived(object? sender, TerminalRequestEventArgs e)
+    {
+        _syncContext.Post(_ =>
+        {
+            try
+            {
+                Logger.LogInformation("收到终端请求: Method={Method}, TerminalId={TerminalId}", e.Method, e.TerminalId);
+                ShowTransientNotificationToast($"终端请求: {e.Method}");
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "处理终端请求时出错");
+            }
+        }, null);
+    }
+
     private void OnErrorOccurred(object? sender, string error)
     {
         _syncContext.Post(_ =>
@@ -1613,10 +1632,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
 
     private void AddToolCallToHistory(ToolCallUpdate toolCall)
     {
+        var rawInput = toolCall.RawInput?.GetRawText();
+        var rawOutput = toolCall.RawOutput?.GetRawText();
+        
         var message = ChatMessageViewModel.CreateFromToolCall(
             Guid.NewGuid().ToString(),
             toolCall.ToolCallId,
-            toolCall.ToolCall?.GetRawText(),
+            rawInput,
+            rawOutput,
             toolCall.Kind,
             toolCall.Status,
             toolCall.Title,
@@ -1791,7 +1814,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             var sessionParams = new SessionNewParams
             {
                 Cwd = Environment.CurrentDirectory,
-                McpServers = new object[0] // 可以根据配置添加 MCP 服务器
+                McpServers = new List<McpServer>() // 可以根据配置添加 MCP 服务器
             };
 
             if (_chatService == null)
@@ -1898,7 +1921,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                 var promptParams = new SessionPromptParams
                 {
                     SessionId = remoteSessionId,
-                    Prompt = new[] { new { type = "text", text = promptText } },
+                    Prompt = new List<ContentBlock> { new TextContentBlock { Text = promptText } },
                     MaxTokens = null,
                     StopSequences = null
                 };
@@ -2076,7 +2099,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         var sessionParams = new SessionNewParams
         {
             Cwd = Environment.CurrentDirectory,
-            McpServers = new object[0]
+            McpServers = new List<McpServer>()
         };
 
         var response = await _chatService.CreateSessionAsync(sessionParams).ConfigureAwait(false);
@@ -2126,7 +2149,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                     var setParams = new SessionSetConfigOptionParams(
                         _currentRemoteSessionId!,
                         _modeConfigId,
-                        System.Text.Json.JsonSerializer.SerializeToElement(mode.ModeId));
+                        mode.ModeId ?? string.Empty);
                     await _chatService.SetSessionConfigOptionAsync(setParams);
                 }
                 else

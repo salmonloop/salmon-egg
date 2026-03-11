@@ -39,6 +39,7 @@ namespace SalmonEgg.Application.Services.Chat
         public event EventHandler<SessionUpdateEventArgs>? SessionUpdateReceived;
         public event EventHandler<PermissionRequestEventArgs>? PermissionRequestReceived;
         public event EventHandler<FileSystemRequestEventArgs>? FileSystemRequestReceived;
+        public event EventHandler<TerminalRequestEventArgs>? TerminalRequestReceived;
         public event EventHandler<string>? ErrorOccurred;
 
         public ChatService(IAcpClient acpClient, IErrorLogger errorLogger, ISessionManager sessionManager)
@@ -51,6 +52,7 @@ namespace SalmonEgg.Application.Services.Chat
             _acpClient.SessionUpdateReceived += OnSessionUpdateReceived;
             _acpClient.PermissionRequestReceived += OnPermissionRequestReceived;
             _acpClient.FileSystemRequestReceived += OnFileSystemRequestReceived;
+            _acpClient.TerminalRequestReceived += OnTerminalRequestReceived;
             _acpClient.ErrorOccurred += OnErrorOccurred;
         }
 
@@ -172,7 +174,6 @@ namespace SalmonEgg.Application.Services.Chat
                     break;
                 case ToolCallUpdate toolCallUpdate:
                     entry.ToolCallId = toolCallUpdate.ToolCallId;
-                    entry.ToolCall = toolCallUpdate.ToolCall;
                     entry.Kind = toolCallUpdate.Kind;
                     entry.Status = toolCallUpdate.Status;
                     entry.Title = toolCallUpdate.Title;
@@ -554,7 +555,14 @@ namespace SalmonEgg.Application.Services.Chat
             _acpClient.SessionUpdateReceived -= OnSessionUpdateReceived;
             _acpClient.PermissionRequestReceived -= OnPermissionRequestReceived;
             _acpClient.FileSystemRequestReceived -= OnFileSystemRequestReceived;
+            _acpClient.TerminalRequestReceived -= OnTerminalRequestReceived;
             _acpClient.ErrorOccurred -= OnErrorOccurred;
+        }
+
+        private void OnTerminalRequestReceived(object? sender, TerminalRequestEventArgs e)
+        {
+            // 转发终端请求事件给UI层
+            TerminalRequestReceived?.Invoke(this, e);
         }
     }
 }

@@ -38,6 +38,11 @@ namespace SalmonEgg.Domain.Services
         event EventHandler<FileSystemRequestEventArgs>? FileSystemRequestReceived;
 
         /// <summary>
+        /// 终端请求事件。当收到终端操作请求时触发。
+        /// </summary>
+        event EventHandler<TerminalRequestEventArgs>? TerminalRequestReceived;
+
+        /// <summary>
         /// 连接错误事件。当发生连接错误时触发。
         /// </summary>
         event EventHandler<string>? ErrorOccurred;
@@ -133,6 +138,15 @@ namespace SalmonEgg.Domain.Services
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>认证响应</returns>
         Task<AuthenticateResponse> AuthenticateAsync(AuthenticateParams @params, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// 列出已存在的会话。
+        /// 发送 session/list 请求并等待 Agent 响应。
+        /// </summary>
+        /// <param name="params">列表会话参数</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>会话列表响应</returns>
+        Task<ListSessionsResponse> ListSessionsAsync(ListSessionsParams @params, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// 响应权限请求。

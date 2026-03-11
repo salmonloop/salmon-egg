@@ -15,12 +15,6 @@ namespace SalmonEgg.Domain.Models.Mcp
     public abstract class McpServer
     {
         /// <summary>
-        /// 服务器类型标识符。
-        /// </summary>
-        [JsonPropertyName("type")]
-        public abstract string Type { get; }
-
-        /// <summary>
         /// 服务器的显示名称。
         /// </summary>
         [JsonPropertyName("name")]
@@ -33,12 +27,6 @@ namespace SalmonEgg.Domain.Models.Mcp
     /// </summary>
     public class StdioMcpServer : McpServer
     {
-        /// <summary>
-        /// 服务器类型标识符，固定为 "stdio"。
-        /// </summary>
-        [JsonPropertyName("type")]
-        public override string Type => "stdio";
-
         /// <summary>
         /// 服务器可执行文件的命令。
         /// </summary>
@@ -87,12 +75,6 @@ namespace SalmonEgg.Domain.Models.Mcp
     public class HttpMcpServer : McpServer
     {
         /// <summary>
-        /// 服务器类型标识符，固定为 "http"。
-        /// </summary>
-        [JsonPropertyName("type")]
-        public override string Type => "http";
-
-        /// <summary>
         /// 服务器的 URL 地址。
         /// </summary>
         [JsonPropertyName("url")]
@@ -131,12 +113,6 @@ namespace SalmonEgg.Domain.Models.Mcp
         /// </summary>
     public class SseMcpServer : McpServer
     {
-        /// <summary>
-        /// 服务器类型标识符，固定为 "sse"。
-        /// </summary>
-        [JsonPropertyName("type")]
-        public override string Type => "sse";
-
         /// <summary>
         /// SSE 端点的 URL 地址。
         /// </summary>

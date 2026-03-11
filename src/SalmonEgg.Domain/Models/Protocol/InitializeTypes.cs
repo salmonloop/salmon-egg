@@ -5,6 +5,9 @@ using SalmonEgg.Domain.Models.Session;
 
 namespace SalmonEgg.Domain.Models.Protocol
 {
+    // TODO: 实现 _meta 字段支持 (ACP 协议可扩展性特性)
+    // https://agentclientprotocol.com/protocol/extensibility
+
     /// <summary>
     /// Initialize 方法的请求参数。
     /// 用于客户端向 Agent 发起初始化请求。
@@ -12,10 +15,10 @@ namespace SalmonEgg.Domain.Models.Protocol
     public class InitializeParams
     {
         /// <summary>
-        /// 协议版本号。可以是整数(1)或字符串("2024-11-05")。
+        /// 协议版本号。必须是整数。
         /// </summary>
         [JsonPropertyName("protocolVersion")]
-        public object ProtocolVersion { get; set; } = "2024-11-05";
+        public int ProtocolVersion { get; set; } = 1;
 
         /// <summary>
         /// 客户端信息。
@@ -173,10 +176,10 @@ namespace SalmonEgg.Domain.Models.Protocol
     public class InitializeResponse
     {
         /// <summary>
-        /// 协议版本号。可以是整数或字符串。
+        /// 协议版本号。必须是整数。
         /// </summary>
         [JsonPropertyName("protocolVersion")]
-        public object ProtocolVersion { get; set; } = "2024-11-05";
+        public int ProtocolVersion { get; set; } = 1;
 
         /// <summary>
         /// Agent 信息。
@@ -287,6 +290,12 @@ namespace SalmonEgg.Domain.Models.Protocol
         public McpCapabilities? McpCapabilities { get; set; }
 
         /// <summary>
+        /// 会话相关能力。
+        /// </summary>
+        [JsonPropertyName("sessionCapabilities")]
+        public SessionCapabilities? SessionCapabilities { get; set; }
+
+        /// <summary>
         /// 创建新的 AgentCapabilities 实例。
         /// </summary>
         public AgentCapabilities()
@@ -299,14 +308,17 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// <param name="promptCapabilities">提示能力</param>
         /// <param name="loadSession">是否支持会话加载</param>
         /// <param name="mcpCapabilities">MCP 能力</param>
+        /// <param name="sessionCapabilities">会话能力</param>
         public AgentCapabilities(
             PromptCapabilities? promptCapabilities = null,
             bool? loadSession = null,
-            McpCapabilities? mcpCapabilities = null)
+            McpCapabilities? mcpCapabilities = null,
+            SessionCapabilities? sessionCapabilities = null)
         {
             PromptCapabilities = promptCapabilities;
             LoadSession = loadSession;
             McpCapabilities = mcpCapabilities;
+            SessionCapabilities = sessionCapabilities;
         }
 
         /// <summary>
@@ -417,6 +429,38 @@ namespace SalmonEgg.Domain.Models.Protocol
         {
             Http = http;
             Sse = sse;
+        }
+    }
+
+    /// <summary>
+    /// 会话相关能力类。
+    /// </summary>
+    public class SessionCapabilities
+    {
+        /// <summary>
+        /// 是否支持会话列表功能。
+        /// </summary>
+        [JsonPropertyName("list")]
+        public SessionListCapabilities? List { get; set; }
+
+        /// <summary>
+        /// 创建新的 SessionCapabilities 实例。
+        /// </summary>
+        public SessionCapabilities()
+        {
+        }
+    }
+
+    /// <summary>
+    /// 会话列表能力类。
+    /// </summary>
+    public class SessionListCapabilities
+    {
+        /// <summary>
+        /// 创建新的 SessionListCapabilities 实例。
+        /// </summary>
+        public SessionListCapabilities()
+        {
         }
     }
 }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using SalmonEgg.Domain.Models.Content;
 using SalmonEgg.Domain.Models.Session;
 
 namespace SalmonEgg.Domain.Models.Protocol
@@ -18,12 +19,11 @@ namespace SalmonEgg.Domain.Models.Protocol
         [JsonPropertyName("sessionId")]
         public string SessionId { get; set; } = string.Empty;
 
-        
         /// <summary>
-        /// 要发送的提示内容块列表（必填，对端要求为数组）。
+        /// 要发送的提示内容块列表（必填，根据协议要求为数组）。
         /// </summary>
         [JsonPropertyName("prompt")]
-        public object Prompt { get; set; } = new object[0];
+        public List<ContentBlock> Prompt { get; set; } = new List<ContentBlock>();
 
 
         /// <summary>
@@ -54,7 +54,7 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// <param name="prompt">提示内容块数组</param>
         /// <param name="maxTokens">最大令牌数</param>
         /// <param name="stopSequences">停止序列</param>
-        public SessionPromptParams(string sessionId, object prompt, int? maxTokens = null, List<string>? stopSequences = null)
+        public SessionPromptParams(string sessionId, List<ContentBlock> prompt, int? maxTokens = null, List<string>? stopSequences = null)
         {
             SessionId = sessionId;
             Prompt = prompt;

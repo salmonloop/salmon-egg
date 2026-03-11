@@ -26,7 +26,7 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// 可以是文本、工具调用、计划、模式切换等。
         /// </summary>
         [JsonPropertyName("update")]
-        public SessionUpdate? Update { get; set; }
+        public SessionUpdate Update { get; set; } = null!;
 
         /// <summary>
         /// 创建新的 SessionUpdateParams 实例。
@@ -40,7 +40,7 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// </summary>
         /// <param name="sessionId">会话 ID</param>
         /// <param name="update">更新内容</param>
-        public SessionUpdateParams(string sessionId, SessionUpdate? update = null)
+        public SessionUpdateParams(string sessionId, SessionUpdate update)
         {
             SessionId = sessionId;
             Update = update;
@@ -144,13 +144,6 @@ namespace SalmonEgg.Domain.Models.Protocol
         public string? ToolCallId { get; set; }
 
         /// <summary>
-        /// 工具调用数据。
-        /// 可以是任何 JSON 结构，表示工具的具体参数。
-        /// </summary>
-        [JsonPropertyName("toolCall")]
-        public JsonElement? ToolCall { get; set; }
-
-        /// <summary>
         /// 工具调用类型。
         /// </summary>
         [JsonPropertyName("kind")]
@@ -169,6 +162,30 @@ namespace SalmonEgg.Domain.Models.Protocol
         public string? Title { get; set; }
 
         /// <summary>
+        /// 工具调用产生的内容。
+        /// </summary>
+        [JsonPropertyName("content")]
+        public List<ToolCallContent>? Content { get; set; }
+
+        /// <summary>
+        /// 文件位置列表，表示工具调用影响的文件。
+        /// </summary>
+        [JsonPropertyName("locations")]
+        public List<ToolCallLocation>? Locations { get; set; }
+
+        /// <summary>
+        /// 原始输入参数。
+        /// </summary>
+        [JsonPropertyName("rawInput")]
+        public JsonElement? RawInput { get; set; }
+
+        /// <summary>
+        /// 原始输出结果。
+        /// </summary>
+        [JsonPropertyName("rawOutput")]
+        public JsonElement? RawOutput { get; set; }
+
+        /// <summary>
         /// 创建新的 ToolCallUpdate 实例。
         /// </summary>
         public ToolCallUpdate()
@@ -179,22 +196,31 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// 创建新的 ToolCallUpdate 实例。
         /// </summary>
         /// <param name="toolCallId">工具调用 ID</param>
-        /// <param name="toolCall">工具调用数据</param>
         /// <param name="kind">工具调用类型</param>
         /// <param name="status">工具调用状态</param>
         /// <param name="title">标题</param>
+        /// <param name="content">工具调用产生的内容</param>
+        /// <param name="locations">文件位置列表</param>
+        /// <param name="rawInput">原始输入参数</param>
+        /// <param name="rawOutput">原始输出结果</param>
         public ToolCallUpdate(
             string? toolCallId = null,
-            JsonElement? toolCall = null,
             ToolCallKind? kind = null,
             ToolCallStatus? status = null,
-            string? title = null)
+            string? title = null,
+            List<ToolCallContent>? content = null,
+            List<ToolCallLocation>? locations = null,
+            JsonElement? rawInput = null,
+            JsonElement? rawOutput = null)
         {
             ToolCallId = toolCallId;
-            ToolCall = toolCall;
             Kind = kind;
             Status = status;
             Title = title;
+            Content = content;
+            Locations = locations;
+            RawInput = rawInput;
+            RawOutput = rawOutput;
         }
     }
 
@@ -306,10 +332,10 @@ namespace SalmonEgg.Domain.Models.Protocol
         public ToolCallStatus? Status { get; set; }
 
         /// <summary>
-        /// 工具返回内容（可能是内容块数组或任意 JSON）。
+        /// 工具调用产生的内容。
         /// </summary>
         [JsonPropertyName("content")]
-        public JsonElement? Content { get; set; }
+        public List<ToolCallContent>? Content { get; set; }
     }
 
     /// <summary>

@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Application.Common;
+using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
@@ -144,7 +146,7 @@ namespace SalmonEgg.Application.Services.Chat
                     var newSessionParams = new SessionNewParams
                     {
                         Cwd = Environment.CurrentDirectory,
-                        McpServers = Array.Empty<object>()
+                        McpServers = new List<McpServer>()
                     };
 
                     var response = await _chatService.CreateSessionAsync(newSessionParams);

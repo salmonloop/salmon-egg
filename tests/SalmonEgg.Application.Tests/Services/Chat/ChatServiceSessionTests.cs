@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Moq;
@@ -31,7 +32,7 @@ public sealed class ChatServiceSessionTests
         var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
 
         using var cts = new CancellationTokenSource();
-        await sut.SendPromptAsync(new SessionPromptParams("s1", prompt: Array.Empty<object>()), cts.Token);
+        await sut.SendPromptAsync(new SessionPromptParams("s1", prompt: new List<ContentBlock>()), cts.Token);
 
         Assert.Equal(cts.Token, captured);
 

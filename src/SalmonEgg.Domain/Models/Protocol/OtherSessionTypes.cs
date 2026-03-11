@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Models.Session;
 
 namespace SalmonEgg.Domain.Models.Protocol
@@ -165,7 +166,7 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// MCP 服务器配置列表（可选）。
         /// </summary>
         [JsonPropertyName("mcpServers")]
-        public Dictionary<string, object>? McpServers { get; set; }
+        public List<McpServer>? McpServers { get; set; }
 
         /// <summary>
         /// 创建新的 SessionLoadParams 实例。
@@ -180,7 +181,7 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// <param name="sessionId">会话 ID</param>
         /// <param name="cwd">工作目录</param>
         /// <param name="mcpServers">MCP 服务器配置</param>
-        public SessionLoadParams(string sessionId, string cwd, Dictionary<string, object>? mcpServers = null)
+        public SessionLoadParams(string sessionId, string cwd, List<McpServer>? mcpServers = null)
         {
             SessionId = sessionId;
             Cwd = cwd;
@@ -229,7 +230,7 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// 配置选项的值（必填）。
         /// </summary>
         [JsonPropertyName("value")]
-        public JsonElement Value { get; set; }
+        public string Value { get; set; } = string.Empty;
 
         /// <summary>
         /// 创建新的 SessionSetConfigOptionParams 实例。
@@ -244,7 +245,7 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// <param name="sessionId">会话 ID</param>
         /// <param name="configId">配置选项 ID</param>
         /// <param name="value">配置选项的值</param>
-        public SessionSetConfigOptionParams(string sessionId, string configId, JsonElement value)
+        public SessionSetConfigOptionParams(string sessionId, string configId, string value)
         {
             SessionId = sessionId;
             ConfigId = configId;

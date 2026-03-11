@@ -17,5 +17,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\SalmonEgg.Domain\SalmonEgg.Domain.csproj" />
+    <ProjectReference Include="..\..\src\SalmonEgg.Infrastructure\SalmonEgg.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

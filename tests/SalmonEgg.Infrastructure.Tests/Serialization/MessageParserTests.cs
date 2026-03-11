@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text.Json;
 using SalmonEgg.Domain.Models.JsonRpc;
 using SalmonEgg.Domain.Models.Content;
@@ -46,7 +47,7 @@ public class MessageParserTests
         var promptParams = new SessionPromptParams
         {
             SessionId = "sess_test",
-            Prompt = new[] { new TextContentBlock { Text = "hi" } },
+            Prompt = new List<ContentBlock> { new TextContentBlock { Text = "hi" } },
             MaxTokens = null,
             StopSequences = null
         };

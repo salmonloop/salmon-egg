@@ -25,7 +25,7 @@ public sealed partial class DiagnosticsSettingsViewModel : ObservableObject
 
     public string AppVersion => typeof(App).Assembly.GetName().Version?.ToString() ?? "unknown";
 
-    public string ProtocolVersion => (new InitializeParams().ProtocolVersion?.ToString()) ?? "unknown";
+    public string ProtocolVersion => new InitializeParams().ProtocolVersion.ToString();
 
     public string OsDescription => System.Runtime.InteropServices.RuntimeInformation.OSDescription;
 

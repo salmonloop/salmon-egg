@@ -73,6 +73,11 @@ namespace SalmonEgg.Application.Services.Chat
         event EventHandler<FileSystemRequestEventArgs>? FileSystemRequestReceived;
 
         /// <summary>
+        /// 终端请求事件
+        /// </summary>
+        event EventHandler<TerminalRequestEventArgs>? TerminalRequestReceived;
+
+        /// <summary>
         /// 错误事件
         /// </summary>
         event EventHandler<string>? ErrorOccurred;

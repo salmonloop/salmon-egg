@@ -130,8 +130,10 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
             return viewModel;
         }
 
-        public static ChatMessageViewModel CreateFromToolCall(string id, string? toolCallId, object? toolCall, ToolCallKind? kind, ToolCallStatus? status, string? title, bool isOutgoing = false)
+        public static ChatMessageViewModel CreateFromToolCall(string id, string? toolCallId, string? rawInput, string? rawOutput, ToolCallKind? kind, ToolCallStatus? status, string? title, bool isOutgoing = false)
         {
+            var toolCallJson = !string.IsNullOrEmpty(rawInput) ? rawInput : (!string.IsNullOrEmpty(rawOutput) ? rawOutput : string.Empty);
+            
             return new ChatMessageViewModel
             {
                 Id = id,
@@ -141,7 +143,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                 ToolCallId = toolCallId,
                 ToolCallKind = kind,
                 ToolCallStatus = status,
-                ToolCallJson = toolCall?.ToString() ?? string.Empty,
+                ToolCallJson = toolCallJson,
                 Timestamp = DateTime.Now
             };
         }

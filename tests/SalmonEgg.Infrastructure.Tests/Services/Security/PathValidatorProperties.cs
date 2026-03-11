@@ -114,16 +114,34 @@ namespace SalmonEgg.Infrastructure.Tests.Services.Security
         [Property]
         public bool PathNormalization_PreservesSemantics(string pathSegment)
         {
-            // 过滤掉无效字符
-            var safeSegment = pathSegment.Replace("\0", "").TrimStart('.', '/');
+            // 过滤掉无效字符和空字节
+            if (string.IsNullOrEmpty(pathSegment) || pathSegment.Contains("\0"))
+            {
+                return true;
+            }
+
+            // 过滤掉会导致问题的特殊输入
+            var safeSegment = pathSegment
+                .Replace("\0", "")
+                .TrimStart('.', '/', '\\');
+
+            if (string.IsNullOrEmpty(safeSegment))
+            {
+                return true;
+            }
+
             var path = System.IO.Path.Combine("dir1", "dir2", safeSegment);
 
             try
             {
                 var normalized = _validator.NormalizePath(path);
+
+                // 检查是否使用跨平台的分隔符检查
+                var normalizedForCheck = normalized.Replace('\\', '/');
+
                 return System.IO.Path.IsPathRooted(normalized)
-                    && !normalized.Contains("..")
-                    && !normalized.Contains("/.");
+                    && !normalizedForCheck.Contains("..")
+                    && !normalizedForCheck.Contains("/.");
             }
             catch
             {

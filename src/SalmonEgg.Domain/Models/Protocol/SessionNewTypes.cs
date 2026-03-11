@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using SalmonEgg.Domain.Models.Mcp;
 
 namespace SalmonEgg.Domain.Models.Protocol
 {
@@ -17,15 +18,11 @@ namespace SalmonEgg.Domain.Models.Protocol
         [JsonPropertyName("cwd")]
         public string Cwd { get; set; } = string.Empty;
 
-        
-        
         /// <summary>
-        /// MCP 服务器配置列表（根据对端Agent要求，似乎是必填的数组）。
+        /// MCP 服务器配置列表（必填，根据协议要求为数组）。
         /// </summary>
         [JsonPropertyName("mcpServers")]
-        public object McpServers { get; set; } = new object[0];
-
-
+        public List<McpServer> McpServers { get; set; } = new List<McpServer>();
 
         /// <summary>
         /// 创建新的 SessionNewParams 实例。
@@ -39,10 +36,10 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// </summary>
         /// <param name="cwd">工作目录</param>
         /// <param name="mcpServers">MCP 服务器配置</param>
-        public SessionNewParams(string cwd, object? mcpServers = null)
+        public SessionNewParams(string cwd, List<McpServer>? mcpServers = null)
         {
             Cwd = cwd;
-            McpServers = mcpServers ?? new object[0];
+            McpServers = mcpServers ?? new List<McpServer>();
         }
     }
 

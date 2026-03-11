@@ -69,6 +69,11 @@ namespace SalmonEgg.Infrastructure.Client
         public event EventHandler<FileSystemRequestEventArgs>? FileSystemRequestReceived;
 
         /// <summary>
+        /// 终端请求事件。
+        /// </summary>
+        public event EventHandler<TerminalRequestEventArgs>? TerminalRequestReceived;
+
+        /// <summary>
         /// 连接错误事件。
         /// </summary>
         public event EventHandler<string>? ErrorOccurred;
@@ -169,8 +174,8 @@ namespace SalmonEgg.Infrastructure.Client
             }
 
             // 验证协议版本
-            var serverVersionStr = initializeResponse.ProtocolVersion?.ToString() ?? string.Empty;
-            var clientVersionStr = @params.ProtocolVersion?.ToString() ?? string.Empty;
+            var serverVersionStr = initializeResponse.ProtocolVersion.ToString();
+            var clientVersionStr = @params.ProtocolVersion.ToString();
             
             if (serverVersionStr != clientVersionStr)
             {
@@ -668,6 +673,18 @@ namespace SalmonEgg.Infrastructure.Client
                     }
                     HandleFileSystemRequest(request);
                     break;
+                case "terminal/create":
+                case "terminal/output":
+                case "terminal/wait_for_exit":
+                case "terminal/kill":
+                case "terminal/release":
+                    if (!string.IsNullOrWhiteSpace(requestIdStr))
+                    {
+                        _pendingInboundRequestMethods[requestIdStr] = request.Method;
+                        ScheduleInboundRequestTimeout(request.Id, TimeSpan.FromSeconds(30), defaultKind: "terminal");
+                    }
+                    HandleTerminalRequest(request);
+                    break;
                 default:
                     // Best-effort: respond with "method not found" so the agent doesn't hang waiting.
                     _pendingInboundRequestMethods.TryRemove(request.Id?.ToString() ?? string.Empty, out _);
@@ -867,6 +884,64 @@ namespace SalmonEgg.Infrastructure.Client
         }
 
         /// <summary>
+        /// 处理终端请求。
+        /// </summary>
+        private void HandleTerminalRequest(JsonRpcRequest request)
+        {
+            try
+            {
+                if (!request.Params.HasValue)
+                {
+                    _pendingInboundRequestMethods.TryRemove(request.Id?.ToString() ?? string.Empty, out _);
+                    _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Missing params")));
+                    return;
+                }
+
+                var rawParams = request.Params.Value;
+                if (!rawParams.TryGetProperty("sessionId", out var sessionIdProp))
+                {
+                    _pendingInboundRequestMethods.TryRemove(request.Id?.ToString() ?? string.Empty, out _);
+                    _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Missing sessionId")));
+                    return;
+                }
+
+                var sessionId = sessionIdProp.GetString() ?? string.Empty;
+                string? terminalId = null;
+                if (rawParams.TryGetProperty("terminalId", out var terminalIdProp))
+                {
+                    terminalId = terminalIdProp.GetString();
+                }
+
+                var terminalResponseFunc = new Func<object, Task<bool>>(async (result) =>
+                {
+                    _pendingInboundRequestMethods.TryRemove(request.Id?.ToString() ?? string.Empty, out _);
+                    return await SendResponseAsync(new JsonRpcResponse(request.Id, JsonSerializer.SerializeToElement(result, _parser.Options))).ConfigureAwait(false);
+                });
+
+                var eventArgs = new TerminalRequestEventArgs(
+                    request.Id,
+                    sessionId,
+                    terminalId,
+                    request.Method,
+                    rawParams,
+                    terminalResponseFunc);
+
+                if (TerminalRequestReceived == null)
+                {
+                    // No UI hooked up; deny to avoid deadlock.
+                    _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateMethodNotFound(request.Method)));
+                    return;
+                }
+
+                TerminalRequestReceived.Invoke(this, eventArgs);
+            }
+            catch (Exception ex)
+            {
+                OnErrorOccurred($"Failed to process terminal request: {ex.Message}");
+            }
+        }
+
+        /// <summary>
         /// 处理传输错误事件。
         /// </summary>
         private void OnTransportError(object? sender, TransportErrorEventArgs e)
@@ -897,6 +972,39 @@ namespace SalmonEgg.Infrastructure.Client
         /// <summary>
         /// 确保客户端已初始化。
         /// </summary>
+        /// <summary>
+        /// Lists all available sessions.
+        /// </summary>
+        public async Task<ListSessionsResponse> ListSessionsAsync(ListSessionsParams @params, CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+
+            var request = new JsonRpcRequest(
+                Interlocked.Increment(ref _nextMessageId),
+                "session/list",
+                JsonSerializer.SerializeToElement(@params, _parser.Options));
+            var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
+
+            var validationResult = _validator.ValidateResponse(response);
+            if (!validationResult.IsValid)
+            {
+                throw new AcpException(JsonRpcErrorCode.InvalidRequest, $"Response validation failed: {string.Join("; ", validationResult.Errors)}");
+            }
+
+            if (response.IsError)
+            {
+                throw new AcpException(response.Error!.Code, response.Error.Message, response.Error.Data);
+            }
+
+            var result = JsonSerializer.Deserialize<ListSessionsResponse>(response.Result!.Value.GetRawText(), _parser.Options);
+            if (result == null)
+            {
+                throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to deserialize ListSessionsResponse");
+            }
+
+            return result;
+        }
+
         private void EnsureInitialized()
         {
             if (!_isInitialized)
