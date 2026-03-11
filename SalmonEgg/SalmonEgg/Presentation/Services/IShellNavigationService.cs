@@ -6,5 +6,6 @@ namespace SalmonEgg.Presentation.Services;
 public interface IShellNavigationService
 {
     void NavigateToSettings(string key);
+    void NavigateToChat();
+    void NavigateToStart();
 }
-

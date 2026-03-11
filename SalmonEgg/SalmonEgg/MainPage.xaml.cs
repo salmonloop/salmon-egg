@@ -18,11 +18,13 @@ using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Navigation;
 using SalmonEgg.Application.Common.Shell;
 using SalmonEgg.Domain.Models.Session;
+using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.Views;
 using SalmonEgg.Presentation.Views.Chat;
+using SalmonEgg.Presentation.Views.Start;
 
 namespace SalmonEgg;
 
@@ -36,6 +38,7 @@ public sealed partial class MainPage : Page
     private double _rightPanelResizeStartX;
     private double _rightPanelResizeStartWidth;
     private string? _activeRightPanel;
+    private string _activePrimaryNavKey = MainNavItemKeys.Start;
     private bool _suppressNavSelectionChanged;
     private bool _isRebuildingChatProjectMenu;
     private long _navSelectionRequestId;
@@ -84,9 +87,9 @@ public sealed partial class MainPage : Page
 
         ConfigureNavigationView();
 
-        // 4. 启动后默认进入对话界面
-        NavigateToChat();
-        App.BootLog("MainPage: navigated to ChatView");
+        // 4. 启动后默认进入开始界面
+        NavigateToStart();
+        App.BootLog("MainPage: navigated to StartView");
     }
 
     private void OnMainPageUnloaded(object sender, RoutedEventArgs e)
@@ -143,16 +146,27 @@ public sealed partial class MainPage : Page
             // Uno's NavigationView selection model (Skia) can throw if the selected item is removed while the
             // internal IndexPath tree is being updated. Clear selection before mutating the hierarchy, then
             // re-sync after rebuild.
-            if (MainNavView != null && MainNavView.SelectedItem is NavigationViewItem)
+            if (MainNavView != null && MainNavView.SelectedItem is NavigationViewItem selected)
             {
-                _suppressNavSelectionChanged = true;
-                try
+                // Only clear selection when we are in Chat context and the currently-selected item lives in the
+                // Chat subtree we are about to mutate. This prevents Start/Settings selection from being cleared
+                // (and later "drifting" due to async sidebar updates).
+                var shouldClearSelection =
+                    string.Equals(_activePrimaryNavKey, MainNavItemKeys.Chat, StringComparison.Ordinal)
+                    && (ReferenceEquals(selected, ChatNavRoot)
+                        || IsNavItemInTree(ChatNavRoot.MenuItems, selected));
+
+                if (shouldClearSelection)
                 {
-                    MainNavView.SelectedItem = null;
-                }
-                finally
-                {
-                    _suppressNavSelectionChanged = false;
+                    _suppressNavSelectionChanged = true;
+                    try
+                    {
+                        MainNavView.SelectedItem = null;
+                    }
+                    finally
+                    {
+                        _suppressNavSelectionChanged = false;
+                    }
                 }
             }
 
@@ -346,6 +360,13 @@ public sealed partial class MainPage : Page
             return;
         }
 
+        // Keep selection aligned with the visible top-level page. When Start/Settings is active,
+        // sidebar/session state changes must not steal focus in the NavigationView.
+        if (!string.Equals(_activePrimaryNavKey, MainNavItemKeys.Chat, StringComparison.Ordinal))
+        {
+            return;
+        }
+
         if (_isRebuildingChatProjectMenu)
         {
             // Avoid re-entrant selection changes while rebuilding menu items (Uno NavigationView selection model is sensitive).
@@ -530,6 +551,18 @@ public sealed partial class MainPage : Page
         SetSelectedNavItemDeferred(ChatNavRoot);
     }
 
+    public void NavigateToStart()
+    {
+        EnsureStartContent();
+
+        if (MainNavView == null || StartNavRoot == null)
+        {
+            return;
+        }
+
+        SetSelectedNavItemDeferred(StartNavRoot);
+    }
+
     public void NavigateToSettingsSubPage(string key)
     {
         if (string.IsNullOrWhiteSpace(key))
@@ -698,7 +731,13 @@ public sealed partial class MainPage : Page
 
         if (item.Tag is string key)
         {
-            if (key == "Chat")
+            if (key == MainNavItemKeys.Start)
+            {
+                EnsureStartContent();
+                return;
+            }
+
+            if (key == MainNavItemKeys.Chat)
             {
                 EnsureChatContent();
                 return;
@@ -713,6 +752,8 @@ public sealed partial class MainPage : Page
 
     private void EnsureChatContent()
     {
+        _activePrimaryNavKey = MainNavItemKeys.Chat;
+
         if (ContentFrame?.CurrentSourcePageType != typeof(ChatView))
         {
             NavigateTo(typeof(ChatView));
@@ -722,8 +763,23 @@ public sealed partial class MainPage : Page
         UpdateBackButtonState();
     }
 
+    private void EnsureStartContent()
+    {
+        _activePrimaryNavKey = MainNavItemKeys.Start;
+
+        if (ContentFrame?.CurrentSourcePageType != typeof(StartView))
+        {
+            NavigateTo(typeof(StartView));
+        }
+
+        UpdateRightPanelAvailability(false);
+        UpdateBackButtonState();
+    }
+
     private void EnsureSettingsContent(string key)
     {
+        _activePrimaryNavKey = MainNavItemKeys.Settings;
+
         var pageType = GetSettingsShellPageType();
         if (ContentFrame?.CurrentSourcePageType != pageType)
         {
@@ -940,13 +996,22 @@ public sealed partial class MainPage : Page
 
         if (pageType == typeof(ChatView))
         {
+            _activePrimaryNavKey = MainNavItemKeys.Chat;
             // Prefer highlighting the currently-selected session/project if available.
             SyncSelectedNavItemFromViewModel();
             return;
         }
 
+        if (pageType == typeof(StartView) && StartNavRoot != null)
+        {
+            _activePrimaryNavKey = MainNavItemKeys.Start;
+            SetSelectedNavItemDeferred(StartNavRoot);
+            return;
+        }
+
         if (pageType == typeof(SalmonEgg.Presentation.Views.SettingsShellPage))
         {
+            _activePrimaryNavKey = MainNavItemKeys.Settings;
             SetSelectedSettingsItemDeferred();
         }
     }

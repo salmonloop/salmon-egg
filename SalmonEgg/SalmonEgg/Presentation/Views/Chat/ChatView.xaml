@@ -5,6 +5,7 @@
     xmlns:vm="using:SalmonEgg.Presentation.ViewModels.Chat"
     xmlns:domain="using:SalmonEgg.Domain.Models"
     xmlns:converters="using:SalmonEgg.Presentation.Converters"
+    xmlns:controls="using:SalmonEgg.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
@@ -197,130 +198,8 @@
                 </ListView.ItemContainerStyle>
             </ListView>
 
-            <!-- 输入区域 -->
-            <Border Grid.Row="2"
-                    Padding="20,0,20,20"
-                    Background="Transparent">
-                <Grid MaxWidth="800">
-                    <Grid RowDefinitions="Auto,Auto,Auto">
-                        <!-- Slash commands menu -->
-                        <Border Grid.Row="0"
-                                Margin="0,0,0,8"
-                                Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                                BorderThickness="1"
-                                CornerRadius="10"
-                                Visibility="{x:Bind ViewModel.ShowSlashCommands, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                            <StackPanel Padding="8" Spacing="6">
-                                <ListView ItemsSource="{x:Bind ViewModel.FilteredSlashCommands, Mode=OneWay}"
-                                          SelectedItem="{x:Bind ViewModel.SelectedSlashCommand, Mode=TwoWay}"
-                                          SelectionMode="Single"
-                                          MaxHeight="220">
-                                    <ListView.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:SlashCommandViewModel">
-                                            <Grid ColumnDefinitions="Auto,*" Padding="8,6">
-                                                <TextBlock Text="{x:Bind DisplayText, Mode=OneWay}"
-                                                           FontFamily="Consolas"
-                                                           FontSize="13"
-                                                           Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                                           Margin="0,0,12,0"/>
-                                                <TextBlock Grid.Column="1"
-                                                           Text="{x:Bind Description, Mode=OneWay}"
-                                                           TextWrapping="Wrap"
-                                                           Opacity="0.7"/>
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ListView.ItemTemplate>
-                                </ListView>
-                                <TextBlock Text="{x:Bind ViewModel.SelectedSlashCommand.InputHint, Mode=OneWay}"
-                                           Opacity="0.6"
-                                           FontSize="12"/>
-                            </StackPanel>
-                        </Border>
-
-                        <StackPanel Grid.Row="1" Spacing="8">
-                            <InfoBar Severity="Error"
-                                     IsClosable="True"
-                                     IsOpen="{x:Bind ViewModel.ShowTransientNotification, Mode=TwoWay}"
-                                     Message="{x:Bind ViewModel.TransientNotificationMessage, Mode=OneWay}"
-                                     Visibility="{x:Bind ViewModel.ShowTransientNotification, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
-
-                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                <Grid Grid.Column="0">
-                                <!-- Ghost completion overlay -->
-                                <TextBlock IsHitTestVisible="False"
-                                           Margin="12,10,12,10"
-                                           TextWrapping="Wrap"
-                                           Opacity="0.65"
-                                           Visibility="{x:Bind ViewModel.ShowSlashCommands, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                                    <Run Text="{x:Bind ViewModel.CurrentPrompt, Mode=OneWay}" Foreground="Transparent"/>
-                                    <Run Text="{x:Bind ViewModel.SlashGhostSuffix, Mode=OneWay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                </TextBlock>
-
-                                <TextBox x:Name="InputBox"
-                                         PlaceholderText="向 Agent 发送消息... (Enter 发送，Ctrl+Enter 换行)"
-                                         Text="{x:Bind ViewModel.CurrentPrompt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                         AcceptsReturn="True"
-                                         TextWrapping="Wrap"
-                                         MinHeight="44"
-                                         MaxHeight="120"
-                                         IsEnabled="{x:Bind ViewModel.IsInputEnabled, Mode=OneWay}"
-                                         KeyboardAcceleratorPlacementMode="Hidden"
-                                         KeyDown="OnInputKeyDown">
-                                    <TextBox.KeyboardAccelerators>
-                                        <KeyboardAccelerator Key="Enter" Invoked="OnSendAcceleratorInvoked"/>
-                                        <KeyboardAccelerator Key="Enter" Modifiers="Control" Invoked="OnNewLineAcceleratorInvoked"/>
-                                    </TextBox.KeyboardAccelerators>
-                                </TextBox>
-                            </Grid>
-
-                                <Grid Grid.Column="1" VerticalAlignment="Bottom">
-                                    <Button Content="&#xE724;"
-                                            FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                            Width="36"
-                                            Height="36"
-                                            CornerRadius="18"
-                                            Background="{ThemeResource AccentBrush}"
-                                            Foreground="White"
-                                            Command="{x:Bind ViewModel.SendPromptCommand}"
-                                            IsEnabled="{x:Bind ViewModel.CanSendPromptUi, Mode=OneWay}"
-                                            Visibility="{x:Bind ViewModel.IsPromptInFlight, Mode=OneWay, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
-
-                                    <Button Content="&#xE711;"
-                                            FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                            Width="36"
-                                            Height="36"
-                                            CornerRadius="18"
-                                            Background="{ThemeResource AccentBrush}"
-                                            Foreground="White"
-                                            Command="{x:Bind ViewModel.CancelPromptCommand}"
-                                            Visibility="{x:Bind ViewModel.IsPromptInFlight, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                </Grid>
-                            </Grid>
-                        </StackPanel>
-
-                        <StackPanel Grid.Row="2"
-                                    Orientation="Horizontal"
-                                    Spacing="8"
-                                    Margin="0,10,0,0">
-                            <ComboBox Width="140"
-                                      FontSize="12"
-                                      MinWidth="0"
-                                      ItemsSource="{x:Bind ViewModel.AvailableModes, Mode=OneWay}"
-                                      SelectedItem="{x:Bind ViewModel.SelectedMode, Mode=TwoWay}"
-                                      PlaceholderText="选择模式">
-                                <ComboBox.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:SessionModeViewModel">
-                                        <TextBlock Text="{x:Bind ModeName, Mode=OneWay}"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   MaxLines="1"/>
-                                    </DataTemplate>
-                                </ComboBox.ItemTemplate>
-                            </ComboBox>
-                        </StackPanel>
-                    </Grid>
-                </Grid>
-            </Border>
+            <!-- 输入区域（可复用控件，包含模式选择与后续扩展位） -->
+            <controls:ChatInputArea Grid.Row="2" />
 
             <!-- 加载遮罩 -->
             <Grid Grid.RowSpan="3"

@@ -8,6 +8,7 @@
     xmlns:controls="using:SalmonEgg.Controls"
     xmlns:vm="using:SalmonEgg.Presentation.ViewModels"
     xmlns:nav="using:SalmonEgg.Presentation.ViewModels.Navigation"
+    xmlns:navModels="using:SalmonEgg.Presentation.Models.Navigation"
     mc:Ignorable="d"
     Background="Transparent"
     AllowDrop="False">
@@ -330,9 +331,17 @@
                              PaneClosed="OnMainNavPaneClosed"
                              PaneClosing="OnMainNavPaneClosing">
                 <NavigationView.MenuItems>
+                     <NavigationViewItem x:Name="StartNavRoot"
+                                         Content="开始"
+                                         Tag="{x:Bind navModels:MainNavItemKeys.Start}">
+                         <NavigationViewItem.Icon>
+                             <FontIcon Glyph="&#xE80F;" />
+                         </NavigationViewItem.Icon>
+                     </NavigationViewItem>
+
                      <NavigationViewItem x:Name="ChatNavRoot"
                                          Content="对话"
-                                         Tag="Chat">
+                                         Tag="{x:Bind navModels:MainNavItemKeys.Chat}">
                          <NavigationViewItem.Icon>
                              <FontIcon Glyph="&#xE8BD;" />
                          </NavigationViewItem.Icon>

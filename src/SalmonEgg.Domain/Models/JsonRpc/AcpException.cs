@@ -16,19 +16,19 @@ namespace SalmonEgg.Domain.Models.JsonRpc
         /// <summary>
         /// 可选的附加错误数据。
         /// </summary>
-        public object? Data { get; }
+        public object? ErrorData { get; }
 
         /// <summary>
         /// 创建新的 AcpException 实例。
         /// </summary>
         /// <param name="errorCode">JSON-RPC 2.0 错误码</param>
         /// <param name="message">异常消息</param>
-        /// <param name="data">可选的附加数据</param>
-        public AcpException(int errorCode, string message, object? data = null)
+        /// <param name="errorData">可选的附加数据</param>
+        public AcpException(int errorCode, string message, object? errorData = null)
             : base(message)
         {
             ErrorCode = errorCode;
-            Data = data;
+            ErrorData = errorData;
         }
 
         /// <summary>
@@ -37,12 +37,12 @@ namespace SalmonEgg.Domain.Models.JsonRpc
         /// <param name="errorCode">JSON-RPC 2.0 错误码</param>
         /// <param name="message">异常消息</param>
         /// <param name="innerException">内部异常</param>
-        /// <param name="data">可选的附加数据</param>
-        public AcpException(int errorCode, string message, Exception innerException, object? data = null)
+        /// <param name="errorData">可选的附加数据</param>
+        public AcpException(int errorCode, string message, Exception innerException, object? errorData = null)
             : base(message, innerException)
         {
             ErrorCode = errorCode;
-            Data = data;
+            ErrorData = errorData;
         }
 
         /// <summary>
@@ -64,12 +64,12 @@ namespace SalmonEgg.Domain.Models.JsonRpc
         /// <param name="message">错误消息</param>
         /// <param name="data">可选的附加数据</param>
         /// <returns>AcpException 实例</returns>
-        public static AcpException CreateInvalidRequest(string message, object? data = null)
+        public static AcpException CreateInvalidRequest(string message, object? errorData = null)
         {
             return new AcpException(
                 JsonRpcErrorCode.InvalidRequest,
                 message,
-                data);
+                errorData);
         }
 
         /// <summary>
@@ -90,12 +90,12 @@ namespace SalmonEgg.Domain.Models.JsonRpc
         /// <param name="message">错误消息</param>
         /// <param name="data">可选的附加数据</param>
         /// <returns>AcpException 实例</returns>
-        public static AcpException CreateInvalidParams(string message, object? data = null)
+        public static AcpException CreateInvalidParams(string message, object? errorData = null)
         {
             return new AcpException(
                 JsonRpcErrorCode.InvalidParams,
                 message,
-                data);
+                errorData);
         }
 
         /// <summary>
@@ -105,7 +105,7 @@ namespace SalmonEgg.Domain.Models.JsonRpc
         /// <param name="innerException">内部异常</param>
         /// <param name="data">可选的附加数据</param>
         /// <returns>AcpException 实例</returns>
-        public static AcpException CreateInternalError(string message, Exception? innerException = null, object? data = null)
+        public static AcpException CreateInternalError(string message, Exception? innerException = null, object? errorData = null)
         {
             if (innerException != null)
             {
@@ -113,13 +113,13 @@ namespace SalmonEgg.Domain.Models.JsonRpc
                     JsonRpcErrorCode.InternalError,
                     message,
                     innerException,
-                    data);
+                    errorData);
             }
 
             return new AcpException(
                 JsonRpcErrorCode.InternalError,
                 message,
-                data);
+                errorData);
         }
 
         /// <summary>

@@ -9,6 +9,16 @@ public sealed class ShellNavigationService : IShellNavigationService
         GetShell()?.NavigateToSettingsSubPage(key);
     }
 
+    public void NavigateToChat()
+    {
+        GetShell()?.NavigateToChat();
+    }
+
+    public void NavigateToStart()
+    {
+        GetShell()?.NavigateToStart();
+    }
+
     private static MainPage? GetShell()
     {
         if (App.MainWindowInstance?.Content is not Frame rootFrame)
@@ -19,4 +29,3 @@ public sealed class ShellNavigationService : IShellNavigationService
         return rootFrame.Content as MainPage;
     }
 }
-
