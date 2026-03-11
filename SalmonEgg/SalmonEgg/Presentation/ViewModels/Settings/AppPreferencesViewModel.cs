@@ -53,6 +53,13 @@ public partial class AppPreferencesViewModel : ObservableObject
     [ObservableProperty]
     private int _cacheRetentionDays = 7;
 
+    // Navigation state (Projects -> Sessions) lives in AppSettings to persist between launches.
+    // Keep a single writer (AppPreferencesViewModel) to avoid settings overwrite races.
+    public ObservableCollection<ProjectDefinition> Projects { get; } = new();
+
+    [ObservableProperty]
+    private string? _lastSelectedProjectId;
+
     public ObservableCollection<KeyBindingPairViewModel> KeyBindings { get; } = new();
 
     public AppPreferencesViewModel(IAppSettingsService appSettingsService, ILogger<AppPreferencesViewModel> logger)
@@ -61,6 +68,7 @@ public partial class AppPreferencesViewModel : ObservableObject
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _syncContext = SynchronizationContext.Current ?? new SynchronizationContext();
         KeyBindings.CollectionChanged += OnKeyBindingsChanged;
+        Projects.CollectionChanged += OnProjectsChanged;
         _ = LoadAsync();
     }
 
@@ -83,6 +91,30 @@ public partial class AppPreferencesViewModel : ObservableObject
                 HistoryRetentionDays = settings.HistoryRetentionDays;
                 RememberRecentProjectPaths = settings.RememberRecentProjectPaths;
                 CacheRetentionDays = settings.CacheRetentionDays;
+                LastSelectedProjectId = settings.LastSelectedProjectId;
+
+                Projects.Clear();
+                foreach (var project in settings.Projects)
+                {
+                    if (project is null)
+                    {
+                        continue;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(project.ProjectId) ||
+                        string.IsNullOrWhiteSpace(project.Name) ||
+                        string.IsNullOrWhiteSpace(project.RootPath))
+                    {
+                        continue;
+                    }
+
+                    Projects.Add(new ProjectDefinition
+                    {
+                        ProjectId = project.ProjectId.Trim(),
+                        Name = project.Name.Trim(),
+                        RootPath = project.RootPath.Trim()
+                    });
+                }
 
                 KeyBindings.Clear();
                 foreach (var kvp in settings.KeyBindings)
@@ -114,6 +146,12 @@ public partial class AppPreferencesViewModel : ObservableObject
     partial void OnHistoryRetentionDaysChanged(int value) => ScheduleSave();
     partial void OnRememberRecentProjectPathsChanged(bool value) => ScheduleSave();
     partial void OnCacheRetentionDaysChanged(int value) => ScheduleSave();
+    partial void OnLastSelectedProjectIdChanged(string? value) => ScheduleSave();
+
+    private void OnProjectsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        ScheduleSave();
+    }
 
     private void OnKeyBindingsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
@@ -232,6 +270,18 @@ public partial class AppPreferencesViewModel : ObservableObject
                     HistoryRetentionDays = HistoryRetentionDays,
                     RememberRecentProjectPaths = RememberRecentProjectPaths,
                     CacheRetentionDays = CacheRetentionDays,
+                    LastSelectedProjectId = LastSelectedProjectId,
+                    Projects = Projects
+                        .Where(p => !string.IsNullOrWhiteSpace(p.ProjectId)
+                                    && !string.IsNullOrWhiteSpace(p.Name)
+                                    && !string.IsNullOrWhiteSpace(p.RootPath))
+                        .Select(p => new ProjectDefinition
+                        {
+                            ProjectId = p.ProjectId.Trim(),
+                            Name = p.Name.Trim(),
+                            RootPath = p.RootPath.Trim()
+                        })
+                        .ToList(),
                     KeyBindings = KeyBindings
                         .Where(k => !string.IsNullOrWhiteSpace(k.ActionId) && !string.IsNullOrWhiteSpace(k.Gesture))
                         .GroupBy(k => k.ActionId.Trim(), StringComparer.OrdinalIgnoreCase)

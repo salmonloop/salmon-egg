@@ -14,7 +14,6 @@
 
     <Page.Resources>
         <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
-        <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
         <converters:InverseBoolConverter x:Key="InverseBoolToVisibilityConverter"/>
         <converters:MessageDirectionToAlignmentConverter x:Key="HorizontalAlignmentConverter"/>
         <converters:TimeFormatConverter x:Key="TimeFormatConverter"/>
@@ -199,7 +198,9 @@
             </ListView>
 
             <!-- 输入区域（可复用控件，包含模式选择与后续扩展位） -->
-            <controls:ChatInputArea Grid.Row="2" />
+            <controls:ChatInputArea Grid.Row="2"
+                                    ViewModel="{x:Bind ViewModel, Mode=OneWay}"
+                                    SubmitCommand="{x:Bind ViewModel.SendPromptCommand}" />
 
             <!-- 加载遮罩 -->
             <Grid Grid.RowSpan="3"

@@ -2,20 +2,17 @@ using System;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using SalmonEgg.Presentation.Services;
-using SalmonEgg.Presentation.ViewModels.Chat;
+using SalmonEgg.Presentation.ViewModels.Start;
 
 namespace SalmonEgg.Presentation.Views.Start;
 
 public sealed partial class StartView : Page
 {
-    private readonly IShellNavigationService _shellNavigation;
-    private readonly ChatViewModel _chatViewModel;
+    public StartViewModel ViewModel { get; }
 
     public StartView()
     {
-        _shellNavigation = App.ServiceProvider.GetRequiredService<IShellNavigationService>();
-        _chatViewModel = App.ServiceProvider.GetRequiredService<ChatViewModel>();
+        ViewModel = App.ServiceProvider.GetRequiredService<StartViewModel>();
 
         InitializeComponent();
         Loaded += OnLoaded;
@@ -25,17 +22,11 @@ public sealed partial class StartView : Page
     {
         try
         {
-            await _chatViewModel.RestoreConversationsAsync();
-            await _chatViewModel.TryAutoConnectAsync();
-            await _chatViewModel.EnsureAcpProfilesLoadedAsync();
+            await ViewModel.Chat.RestoreConversationsAsync();
+            await ViewModel.Chat.EnsureAcpProfilesLoadedAsync();
         }
         catch
         {
         }
-    }
-
-    private void OnPromptSubmitted(object sender, EventArgs e)
-    {
-        _shellNavigation.NavigateToChat();
     }
 }

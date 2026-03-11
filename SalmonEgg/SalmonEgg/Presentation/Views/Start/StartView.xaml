@@ -6,10 +6,13 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:controls="using:SalmonEgg.Controls"
     xmlns:models="using:SalmonEgg.Presentation.Models"
+    xmlns:converters="using:SalmonEgg.Presentation.Converters"
     mc:Ignorable="d"
     Background="Transparent">
 
     <Page.Resources>
+        <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+
         <Style x:Key="QuickEntryCardButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"/>
             <Setter Property="BorderBrush" Value="{ThemeResource DividerStrokeColorDefaultBrush}"/>
@@ -36,7 +39,7 @@
         <!-- 智能推荐快速入口（占位符） -->
         <Grid Grid.Row="1"
               Margin="20,0,20,12"
-              MaxWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneWay}"
+              MaxWidth="{x:Bind models:UiLayout.ContentMaxWidth}"
               HorizontalAlignment="Center"
               ColumnSpacing="12"
               ColumnDefinitions="*,*,*">
@@ -82,6 +85,14 @@
 
         <!-- 底部输入区（复用对话页组件） -->
         <controls:ChatInputArea Grid.Row="2"
-                                PromptSubmitted="OnPromptSubmitted"/>
+                                ViewModel="{x:Bind ViewModel.Chat, Mode=OneWay}"
+                                SubmitCommand="{x:Bind ViewModel.StartSessionAndSendCommand}" />
+
+        <!-- 启动/连接遮罩 -->
+        <Grid Grid.RowSpan="3"
+              Background="#40000000"
+              Visibility="{x:Bind ViewModel.IsStarting, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+            <ProgressRing IsActive="True" Width="48" Height="48"/>
+        </Grid>
     </Grid>
 </Page>

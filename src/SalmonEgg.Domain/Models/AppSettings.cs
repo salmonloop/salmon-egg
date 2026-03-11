@@ -37,5 +37,9 @@ public sealed class AppSettings
 
     // Shortcuts
     public Dictionary<string, string> KeyBindings { get; set; } = new();
-}
 
+    // Projects (Navigation)
+    public List<ProjectDefinition> Projects { get; set; } = new();
+
+    public string? LastSelectedProjectId { get; set; }
+}

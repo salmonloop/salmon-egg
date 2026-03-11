@@ -1,3 +1,4 @@
+using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -28,7 +29,6 @@ namespace SalmonEgg.Presentation.Views.Chat
             {
                 // Restore may already be running from the singleton VM; calling again is safe.
                 await ViewModel.RestoreConversationsAsync();
-                await ViewModel.TryAutoConnectAsync();
                 await ViewModel.EnsureAcpProfilesLoadedAsync();
             }
             catch

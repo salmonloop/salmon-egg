@@ -939,7 +939,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                Logger.LogInformation("正在创建新会话...");
                var sessionParams = new SalmonEgg.Domain.Models.Protocol.SessionNewParams
                {
-                   Cwd = Environment.CurrentDirectory
+                   Cwd = GetActiveSessionCwdOrDefault()
                };
 
                 SessionNewResponse response;
@@ -1267,25 +1267,17 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             binding.RemoteSessionId ??= sessionId;
             binding.BoundProfileId ??= _preferences.LastSelectedServerId;
 
-            // If the active ACP changed since this conversation was last used, create a fresh remote session and rebind.
+            // If the active ACP changed since this conversation was last used, defer remote session creation to the next send.
+            // Switching conversations should be instant and offline-friendly.
             var currentProfileId = _preferences.LastSelectedServerId;
-            if (_chatService is { IsConnected: true, IsInitialized: true } &&
-                !string.IsNullOrWhiteSpace(currentProfileId) &&
+            if (!string.IsNullOrWhiteSpace(currentProfileId) &&
                 !string.Equals(binding.BoundProfileId, currentProfileId, StringComparison.Ordinal))
             {
-                var response = await _chatService.CreateSessionAsync(new SessionNewParams
-                {
-                    Cwd = Environment.CurrentDirectory
-                }).ConfigureAwait(false);
-
                 binding.BoundProfileId = currentProfileId;
-                binding.RemoteSessionId = response.SessionId;
-                _currentRemoteSessionId = response.SessionId;
-
-                _syncContext.Post(_ =>
-                {
-                    ApplySessionNewResponse(response);
-                }, null);
+                binding.RemoteSessionId = null;
+                binding.LastUpdatedAt = DateTime.UtcNow;
+                _currentRemoteSessionId = null;
+                ScheduleConversationSave();
             }
             else
             {
@@ -1894,7 +1886,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
 
             var sessionParams = new SessionNewParams
             {
-                Cwd = Environment.CurrentDirectory,
+                Cwd = GetActiveSessionCwdOrDefault(),
                 McpServers = new List<McpServer>() // 可以根据配置添加 MCP 服务器
             };
 
@@ -2186,6 +2178,34 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         });
     }
 
+    private string? GetActiveSessionCwdOrDefault()
+    {
+        try
+        {
+            var sessionId = CurrentSessionId;
+            if (!string.IsNullOrWhiteSpace(sessionId))
+            {
+                var session = _sessionManager.GetSession(sessionId);
+                if (!string.IsNullOrWhiteSpace(session?.Cwd))
+                {
+                    return session!.Cwd!.Trim();
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            return Environment.CurrentDirectory;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private async Task<string> EnsureRemoteSessionAsync(CancellationToken cancellationToken = default)
     {
         if (_chatService is not { IsConnected: true, IsInitialized: true })
@@ -2207,7 +2227,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
 
         var sessionParams = new SessionNewParams
         {
-            Cwd = Environment.CurrentDirectory,
+            Cwd = GetActiveSessionCwdOrDefault(),
             McpServers = new List<McpServer>()
         };
 
@@ -2227,10 +2247,21 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             response = await _chatService.CreateSessionAsync(sessionParams).ConfigureAwait(false);
         }
         binding.RemoteSessionId = response.SessionId;
-        binding.BoundProfileId ??= _preferences.LastSelectedServerId;
+        binding.BoundProfileId = _preferences.LastSelectedServerId;
         binding.LastUpdatedAt = DateTime.UtcNow;
         _currentRemoteSessionId = response.SessionId;
         ScheduleConversationSave();
+
+        // Apply agent-advertised capabilities (modes/config) on the UI thread so the rest of the page can update.
+        var activeConversationId = binding.ConversationId;
+        _syncContext.Post(_ =>
+        {
+            if (string.Equals(CurrentSessionId, activeConversationId, StringComparison.Ordinal))
+            {
+                ApplySessionNewResponse(response);
+            }
+        }, null);
+
         return response.SessionId;
     }
 

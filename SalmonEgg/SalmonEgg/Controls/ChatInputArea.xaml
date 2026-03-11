@@ -97,7 +97,7 @@
                                     CornerRadius="18"
                                     Background="{ThemeResource AccentBrush}"
                                     Foreground="White"
-                                    IsEnabled="{x:Bind ViewModel.CanSendPromptUi, Mode=OneWay}"
+                                    IsEnabled="{x:Bind CanSubmitUi, Mode=OneWay}"
                                     Click="OnSendClick"
                                     Visibility="{x:Bind ViewModel.IsPromptInFlight, Mode=OneWay, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
 
@@ -146,4 +146,3 @@
         </Grid>
     </Border>
 </UserControl>
-

@@ -23,6 +23,7 @@ using SalmonEgg.Presentation.ViewModels;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Settings;
+using SalmonEgg.Presentation.ViewModels.Start;
 using SalmonEgg.Presentation.Services;
 
 namespace SalmonEgg;
@@ -182,8 +183,11 @@ public static class DependencyInjection
         // Must be singleton so connection/session state survives navigation and is shared between Settings and Chat pages.
         services.AddSingleton<ChatViewModel>();
 
-        // Sidebar navigation state (projects/sessions)
-        services.AddSingleton<SidebarViewModel>();
+        // Main shell navigation (Start + Projects -> Sessions tree)
+        services.AddSingleton<MainNavigationViewModel>();
+
+        // Start page orchestrator (Start creates session and submits)
+        services.AddSingleton<StartViewModel>();
 
         // App preferences used by General/Appearance settings and window behaviors.
         services.AddSingleton<AppPreferencesViewModel>();
@@ -202,6 +206,9 @@ public static class DependencyInjection
 
         // Shell navigation facade (prevents Settings pages from walking the visual tree)
         services.AddSingleton<IShellNavigationService, ShellNavigationService>();
+
+        // UI interaction helpers (ContentDialog, FolderPicker)
+        services.AddSingleton<IUiInteractionService, UiInteractionService>();
     }
 
     private static string GetAppDataPath()

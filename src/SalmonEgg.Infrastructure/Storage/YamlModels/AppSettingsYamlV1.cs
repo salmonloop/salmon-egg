@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using SalmonEgg.Domain.Models;
 
 namespace SalmonEgg.Infrastructure.Storage.YamlModels;
 
@@ -36,5 +37,9 @@ internal sealed class AppSettingsYamlV1
 
     // Shortcuts
     public Dictionary<string, string> KeyBindings { get; set; } = new();
-}
 
+    // Projects (Navigation)
+    public List<ProjectDefinition> Projects { get; set; } = new();
+
+    public string LastSelectedProjectId { get; set; } = string.Empty;
+}

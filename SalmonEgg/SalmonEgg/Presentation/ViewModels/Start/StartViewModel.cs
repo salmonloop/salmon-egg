@@ -1,0 +1,128 @@
+using System;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
+using SalmonEgg.Domain.Services;
+using SalmonEgg.Presentation.Services;
+using SalmonEgg.Presentation.ViewModels.Chat;
+using SalmonEgg.Presentation.ViewModels.Navigation;
+using SalmonEgg.Presentation.ViewModels.Settings;
+
+namespace SalmonEgg.Presentation.ViewModels.Start;
+
+public sealed partial class StartViewModel : ObservableObject
+{
+    private readonly ISessionManager _sessionManager;
+    private readonly AppPreferencesViewModel _preferences;
+    private readonly IShellNavigationService _shellNavigation;
+    private readonly MainNavigationViewModel _nav;
+    private readonly ILogger<StartViewModel> _logger;
+
+    public ChatViewModel Chat { get; }
+
+    private bool _isStarting;
+
+    public bool IsStarting
+    {
+        get => _isStarting;
+        set => SetProperty(ref _isStarting, value);
+    }
+
+    public IAsyncRelayCommand StartSessionAndSendCommand { get; }
+
+    public StartViewModel(
+        ChatViewModel chatViewModel,
+        ISessionManager sessionManager,
+        AppPreferencesViewModel preferences,
+        IShellNavigationService shellNavigation,
+        MainNavigationViewModel nav,
+        ILogger<StartViewModel> logger)
+    {
+        Chat = chatViewModel ?? throw new ArgumentNullException(nameof(chatViewModel));
+        _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
+        _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
+        _shellNavigation = shellNavigation ?? throw new ArgumentNullException(nameof(shellNavigation));
+        _nav = nav ?? throw new ArgumentNullException(nameof(nav));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+        StartSessionAndSendCommand = new AsyncRelayCommand(StartSessionAndSendAsync, () => !IsStarting);
+    }
+
+    private async Task StartSessionAndSendAsync()
+    {
+        var promptText = (Chat.CurrentPrompt ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(promptText))
+        {
+            return;
+        }
+
+        IsStarting = true;
+        StartSessionAndSendCommand.NotifyCanExecuteChanged();
+        try
+        {
+            var cwd = ResolveDefaultCwd();
+            var sessionId = Guid.NewGuid().ToString("N");
+
+            try
+            {
+                await _sessionManager.CreateSessionAsync(sessionId, cwd);
+            }
+            catch
+            {
+                // If somehow collides, fall back to another id.
+                sessionId = Guid.NewGuid().ToString("N");
+                await _sessionManager.CreateSessionAsync(sessionId, cwd);
+            }
+
+            await Chat.TrySwitchToSessionAsync(sessionId).ConfigureAwait(true);
+
+            _shellNavigation.NavigateToChat();
+            _nav.SelectSession(sessionId);
+
+            if (!Chat.IsConnected)
+            {
+                await Chat.TryAutoConnectAsync().ConfigureAwait(true);
+            }
+
+            if (!Chat.IsConnected)
+            {
+                _shellNavigation.NavigateToSettings("General");
+                Chat.ShowTransportConfigPanel = true;
+                return;
+            }
+
+            if (Chat.SendPromptCommand != null && Chat.SendPromptCommand.CanExecute(null))
+            {
+                Chat.SendPromptCommand.Execute(null);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Start session failed");
+        }
+        finally
+        {
+            IsStarting = false;
+            StartSessionAndSendCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    private string? ResolveDefaultCwd()
+    {
+        var projectId = _preferences.LastSelectedProjectId;
+        if (!string.IsNullOrWhiteSpace(projectId))
+        {
+            var project = _preferences.Projects.FirstOrDefault(p => string.Equals(p.ProjectId, projectId, StringComparison.Ordinal));
+            if (project != null && !string.IsNullOrWhiteSpace(project.RootPath))
+            {
+                return project.RootPath.Trim();
+            }
+        }
+
+        // Fallback: if no project selected, keep it unclassified.
+        return null;
+    }
+}

@@ -49,7 +49,9 @@ public sealed class AppSettingsService : IAppSettingsService
                 HistoryRetentionDays = model.HistoryRetentionDays > 0 ? model.HistoryRetentionDays : 30,
                 RememberRecentProjectPaths = model.RememberRecentProjectPaths,
                 CacheRetentionDays = model.CacheRetentionDays > 0 ? model.CacheRetentionDays : 7,
-                KeyBindings = model.KeyBindings ?? new()
+                KeyBindings = model.KeyBindings ?? new(),
+                Projects = model.Projects ?? new(),
+                LastSelectedProjectId = string.IsNullOrWhiteSpace(model.LastSelectedProjectId) ? null : model.LastSelectedProjectId
             };
         }
         catch (YamlException)
@@ -83,7 +85,9 @@ public sealed class AppSettingsService : IAppSettingsService
             HistoryRetentionDays = settings.HistoryRetentionDays > 0 ? settings.HistoryRetentionDays : 30,
             RememberRecentProjectPaths = settings.RememberRecentProjectPaths,
             CacheRetentionDays = settings.CacheRetentionDays > 0 ? settings.CacheRetentionDays : 7,
-            KeyBindings = settings.KeyBindings ?? new()
+            KeyBindings = settings.KeyBindings ?? new(),
+            Projects = settings.Projects ?? new(),
+            LastSelectedProjectId = settings.LastSelectedProjectId ?? string.Empty
         };
 
         var yaml = YamlSerialization.CreateSerializer().Serialize(model);

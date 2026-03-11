@@ -19,8 +19,8 @@ using Microsoft.UI.Xaml.Navigation;
 using SalmonEgg.Application.Common.Shell;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Presentation.Models.Navigation;
-using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Chat;
+using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.Views;
 using SalmonEgg.Presentation.Views.Chat;
@@ -40,26 +40,23 @@ public sealed partial class MainPage : Page
     private string? _activeRightPanel;
     private string _activePrimaryNavKey = MainNavItemKeys.Start;
     private bool _suppressNavSelectionChanged;
-    private bool _isRebuildingChatProjectMenu;
     private long _navSelectionRequestId;
-    // We only keep dynamic Chat items in the main NavigationView. Settings is the built-in SettingsItem.
-    private readonly HashSet<ObservableCollection<SessionNavItemViewModel>> _watchedSessionCollections = new();
     private readonly ShellPanePolicy _panePolicy = new();
 #if WINDOWS
     private AppWindowTitleBar? _appWindowTitleBar;
 #endif
 
     public AppPreferencesViewModel Preferences { get; }
-    public SidebarViewModel SidebarVM { get; }
-    public ChatViewModel ChatVM { get; }
+    public MainNavigationViewModel NavVM { get; }
+    private readonly ChatViewModel _chatViewModel;
 
     public MainPage()
     {
         App.BootLog("MainPage: ctor start");
         // 1. 在初始化组件前获取 ViewModel，确保 x:Bind 绑定正常
         Preferences = App.ServiceProvider.GetRequiredService<AppPreferencesViewModel>();
-        SidebarVM = App.ServiceProvider.GetRequiredService<SidebarViewModel>();
-        ChatVM = App.ServiceProvider.GetRequiredService<ChatViewModel>();
+        NavVM = App.ServiceProvider.GetRequiredService<MainNavigationViewModel>();
+        _chatViewModel = App.ServiceProvider.GetRequiredService<ChatViewModel>();
 
         this.InitializeComponent();
         App.BootLog("MainPage: InitializeComponent done");
@@ -88,367 +85,22 @@ public sealed partial class MainPage : Page
         ConfigureNavigationView();
 
         // 4. 启动后默认进入开始界面
+        NavVM.SelectStart();
         NavigateToStart();
         App.BootLog("MainPage: navigated to StartView");
     }
 
     private void OnMainPageUnloaded(object sender, RoutedEventArgs e)
     {
-        SidebarVM.Projects.CollectionChanged -= OnProjectsCollectionChanged;
-        SidebarVM.PropertyChanged -= OnSidebarPropertyChanged;
-
-        foreach (var sessions in _watchedSessionCollections)
-        {
-            sessions.CollectionChanged -= OnSessionsCollectionChanged;
-        }
-        _watchedSessionCollections.Clear();
+        Preferences.PropertyChanged -= OnPreferencesPropertyChanged;
     }
-
-    private sealed record NavTag(ProjectNavItemViewModel? Project = null, SessionNavItemViewModel? Session = null);
 
     private void ConfigureNavigationView()
-    {
-        if (MainNavView == null || ChatNavRoot == null)
-        {
-            return;
-        }
-
-        // Wire up sources that drive the navigation structure.
-        SidebarVM.Projects.CollectionChanged += OnProjectsCollectionChanged;
-        SidebarVM.PropertyChanged += OnSidebarPropertyChanged;
-
-        RebuildChatProjectMenu();
-    }
-
-    private void OnProjectsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        RebuildChatProjectMenu();
-    }
-
-    private void OnSidebarPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == nameof(SidebarVM.SelectedProject))
-        {
-            SyncSelectedNavItemFromViewModel();
-        }
-    }
-
-    private void RebuildChatProjectMenu()
-    {
-        if (ChatNavRoot == null)
-        {
-            return;
-        }
-
-        _isRebuildingChatProjectMenu = true;
-        try
-        {
-            // Uno's NavigationView selection model (Skia) can throw if the selected item is removed while the
-            // internal IndexPath tree is being updated. Clear selection before mutating the hierarchy, then
-            // re-sync after rebuild.
-            if (MainNavView != null && MainNavView.SelectedItem is NavigationViewItem selected)
-            {
-                // Only clear selection when we are in Chat context and the currently-selected item lives in the
-                // Chat subtree we are about to mutate. This prevents Start/Settings selection from being cleared
-                // (and later "drifting" due to async sidebar updates).
-                var shouldClearSelection =
-                    string.Equals(_activePrimaryNavKey, MainNavItemKeys.Chat, StringComparison.Ordinal)
-                    && (ReferenceEquals(selected, ChatNavRoot)
-                        || IsNavItemInTree(ChatNavRoot.MenuItems, selected));
-
-                if (shouldClearSelection)
-                {
-                    _suppressNavSelectionChanged = true;
-                    try
-                    {
-                        MainNavView.SelectedItem = null;
-                    }
-                    finally
-                    {
-                        _suppressNavSelectionChanged = false;
-                    }
-                }
-            }
-
-            // Rebuild to keep the hierarchy in sync (projects + sessions are dynamic).
-            ChatNavRoot.MenuItems.Clear();
-
-            foreach (var sessions in _watchedSessionCollections)
-            {
-                sessions.CollectionChanged -= OnSessionsCollectionChanged;
-            }
-            _watchedSessionCollections.Clear();
-
-            foreach (var project in SidebarVM.Projects)
-            {
-                if (project is null || project.Sessions is null)
-                {
-                    continue;
-                }
-
-                if (_watchedSessionCollections.Add(project.Sessions))
-                {
-                    project.Sessions.CollectionChanged += OnSessionsCollectionChanged;
-                }
-
-                var projectItem = new NavigationViewItem
-                {
-                    Content = project.Name,
-                    Tag = new NavTag(Project: project),
-                    IsExpanded = project.IsExpanded
-                };
-
-                // Keep expand/collapse state in sync with the VM (used by other parts of the app).
-                projectItem.SetBinding(NavigationViewItem.IsExpandedProperty, new Binding
-                {
-                    Source = project,
-                    Path = new PropertyPath(nameof(ProjectNavItemViewModel.IsExpanded)),
-                    Mode = BindingMode.TwoWay
-                });
-
-                foreach (var session in project.Sessions)
-                {
-                    var sessionItem = new NavigationViewItem
-                    {
-                        Tag = new NavTag(Project: project, Session: session)
-                    };
-
-                    if (string.Equals(session.SessionId, SidebarViewModel.LoadingPlaceholderSessionId, StringComparison.Ordinal))
-                    {
-                        sessionItem.IsEnabled = false;
-                        var content = new StackPanel
-                        {
-                            Orientation = Orientation.Horizontal,
-                            Spacing = 8
-                        };
-                        content.Children.Add(new ProgressRing { IsActive = true, Width = 14, Height = 14 });
-                        content.Children.Add(new TextBlock { Text = session.Title, Opacity = 0.8 });
-                        sessionItem.Content = content;
-                    }
-                    else
-                    {
-                        // Keep session label reactive (rename from inline header or context menu should update immediately).
-                        sessionItem.SetBinding(ContentControl.ContentProperty, new Binding
-                        {
-                            Source = session,
-                            Path = new PropertyPath(nameof(SessionNavItemViewModel.Title)),
-                            Mode = BindingMode.OneWay
-                        });
-
-                        sessionItem.ContextFlyout = BuildSessionContextFlyout(project, session);
-                    }
-
-                    projectItem.MenuItems.Add(sessionItem);
-                }
-
-                ChatNavRoot.MenuItems.Add(projectItem);
-            }
-        }
-        finally
-        {
-            _isRebuildingChatProjectMenu = false;
-        }
-
-        SyncSelectedNavItemFromViewModel();
-    }
-
-    private MenuFlyout BuildSessionContextFlyout(ProjectNavItemViewModel project, SessionNavItemViewModel session)
-    {
-        var flyout = new MenuFlyout();
-
-        var rename = new MenuFlyoutItem
-        {
-            Text = "重命名",
-            Icon = new SymbolIcon(Symbol.Edit)
-        };
-        rename.Click += async (_, _) => await PromptRenameSessionAsync(session);
-
-        var delete = new MenuFlyoutItem
-        {
-            Text = "删除",
-            Icon = new SymbolIcon(Symbol.Delete)
-        };
-        delete.Click += async (_, _) => await PromptDeleteSessionAsync(project, session);
-
-        flyout.Items.Add(rename);
-        flyout.Items.Add(new MenuFlyoutSeparator());
-        flyout.Items.Add(delete);
-
-        return flyout;
-    }
-
-    private async Task PromptRenameSessionAsync(SessionNavItemViewModel session)
-    {
-        if (session == null || string.IsNullOrWhiteSpace(session.SessionId))
-        {
-            return;
-        }
-
-        var input = new TextBox
-        {
-            Text = session.Title ?? string.Empty,
-            PlaceholderText = "会话名称",
-            MinWidth = 320
-        };
-
-        var dialog = new ContentDialog
-        {
-            Title = "重命名会话",
-            Content = input,
-            PrimaryButtonText = "确定",
-            CloseButtonText = "取消",
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = XamlRoot
-        };
-
-        var result = await dialog.ShowAsync();
-        if (result != ContentDialogResult.Primary)
-        {
-            return;
-        }
-
-        var sanitized = SessionNamePolicy.Sanitize(input.Text);
-        var finalName = string.IsNullOrEmpty(sanitized)
-            ? SessionNamePolicy.CreateDefault(session.SessionId)
-            : sanitized;
-
-        session.Title = finalName;
-        ChatVM.RenameConversation(session.SessionId, finalName);
-    }
-
-    private async Task PromptDeleteSessionAsync(ProjectNavItemViewModel project, SessionNavItemViewModel session)
-    {
-        if (project == null || session == null || string.IsNullOrWhiteSpace(session.SessionId))
-        {
-            return;
-        }
-
-        var dialog = new ContentDialog
-        {
-            Title = "删除会话？",
-            Content = "此操作将删除该会话的本地记录（不可恢复）。",
-            PrimaryButtonText = "删除",
-            CloseButtonText = "取消",
-            DefaultButton = ContentDialogButton.Close,
-            XamlRoot = XamlRoot
-        };
-
-        var result = await dialog.ShowAsync();
-        if (result != ContentDialogResult.Primary)
-        {
-            return;
-        }
-
-        if (project.SelectedSession == session)
-        {
-            project.SelectedSession = null;
-        }
-
-        project.Sessions.Remove(session);
-        ChatVM.DeleteConversation(session.SessionId);
-    }
-
-    private void OnSessionsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        RebuildChatProjectMenu();
-    }
-
-    private void SyncSelectedNavItemFromViewModel()
-    {
-        if (MainNavView == null || ChatNavRoot == null)
-        {
-            return;
-        }
-
-        // Keep selection aligned with the visible top-level page. When Start/Settings is active,
-        // sidebar/session state changes must not steal focus in the NavigationView.
-        if (!string.Equals(_activePrimaryNavKey, MainNavItemKeys.Chat, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        if (_isRebuildingChatProjectMenu)
-        {
-            // Avoid re-entrant selection changes while rebuilding menu items (Uno NavigationView selection model is sensitive).
-            _ = DispatcherQueue.TryEnqueue(SyncSelectedNavItemFromViewModel);
-            return;
-        }
-
-        var selectedProject = SidebarVM.SelectedProject;
-        var selectedSession = selectedProject?.SelectedSession;
-
-        NavigationViewItem? match = null;
-
-        if (selectedSession != null)
-        {
-            match = FindNavItemByTag(MainNavView.MenuItems, t => t is NavTag tag && ReferenceEquals(tag.Session, selectedSession));
-        }
-
-        match ??= selectedProject != null
-            ? FindNavItemByTag(MainNavView.MenuItems, t => t is NavTag tag && ReferenceEquals(tag.Project, selectedProject) && tag.Session == null)
-            : null;
-
-        if (match == null)
-        {
-            return;
-        }
-
-        SetSelectedNavItemDeferred(match);
-    }
-
-    private void SetSelectedNavItemDeferred(NavigationViewItem target)
     {
         if (MainNavView == null)
         {
             return;
         }
-
-        if (ReferenceEquals(MainNavView.SelectedItem, target))
-        {
-            return;
-        }
-
-        var requestId = Interlocked.Increment(ref _navSelectionRequestId);
-
-        // Defer to avoid setting SelectedItem during SelectionChanged/Navigated re-entrancy on Uno Skia.
-        _ = DispatcherQueue.TryEnqueue(() =>
-        {
-            if (MainNavView == null)
-            {
-                return;
-            }
-
-            if (requestId != _navSelectionRequestId)
-            {
-                return;
-            }
-
-            if (_isRebuildingChatProjectMenu)
-            {
-                _ = DispatcherQueue.TryEnqueue(() => SetSelectedNavItemDeferred(target));
-                return;
-            }
-
-            if (!IsNavItemInTree(MainNavView.MenuItems, target))
-            {
-                return;
-            }
-
-            if (ReferenceEquals(MainNavView.SelectedItem, target))
-            {
-                return;
-            }
-
-            _suppressNavSelectionChanged = true;
-            try
-            {
-                MainNavView.SelectedItem = target;
-            }
-            finally
-            {
-                _suppressNavSelectionChanged = false;
-            }
-        });
     }
 
     private void SetSelectedSettingsItemDeferred()
@@ -493,74 +145,19 @@ public sealed partial class MainPage : Page
         });
     }
 
-    private static bool IsNavItemInTree(IList<object> items, NavigationViewItem target)
-    {
-        foreach (var obj in items)
-        {
-            if (ReferenceEquals(obj, target))
-            {
-                return true;
-            }
-
-            if (obj is NavigationViewItem nvi && nvi.MenuItems is { Count: > 0 })
-            {
-                if (IsNavItemInTree(nvi.MenuItems, target))
-                {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    private static NavigationViewItem? FindNavItemByTag(IList<object> items, Func<object?, bool> predicate)
-    {
-        foreach (var obj in items)
-        {
-            if (obj is NavigationViewItem nvi)
-            {
-                if (predicate(nvi.Tag))
-                {
-                    return nvi;
-                }
-
-                if (nvi.MenuItems is { Count: > 0 })
-                {
-                    var found = FindNavItemByTag(nvi.MenuItems, predicate);
-                    if (found != null)
-                    {
-                        return found;
-                    }
-                }
-            }
-        }
-
-        return null;
-    }
-
     public void NavigateToChat()
     {
         EnsureChatContent();
-
-        if (MainNavView == null || ChatNavRoot == null)
+        if (!string.IsNullOrWhiteSpace(_chatViewModel.CurrentSessionId))
         {
-            return;
+            NavVM.SelectSession(_chatViewModel.CurrentSessionId!);
         }
-
-        SetSelectedNavItemDeferred(ChatNavRoot);
     }
 
     public void NavigateToStart()
     {
         EnsureStartContent();
-
-        if (MainNavView == null || StartNavRoot == null)
-        {
-            return;
-        }
-
-        SetSelectedNavItemDeferred(StartNavRoot);
+        NavVM.SelectStart();
     }
 
     public void NavigateToSettingsSubPage(string key)
@@ -705,49 +302,40 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        if (args.SelectedItem is not NavigationViewItem item)
+        if (args.SelectedItem is StartNavItemViewModel)
         {
+            EnsureStartContent();
             return;
         }
 
-        if (item.Tag is NavTag tag && tag.Project != null)
+        if (args.SelectedItem is SessionNavItemViewModel session && !session.IsPlaceholder)
         {
-            SidebarVM.SelectedProject = tag.Project;
-            if (tag.Session != null)
-            {
-                if (string.Equals(tag.Session.SessionId, SidebarViewModel.LoadingPlaceholderSessionId, StringComparison.Ordinal))
-                {
-                    EnsureChatContent();
-                    return;
-                }
-
-                tag.Project.SelectedSession = tag.Session;
-                _ = SidebarVM.TryActivateSessionAsync(tag.Session);
-            }
-
             EnsureChatContent();
+
+            var projectId = session.ProjectId;
+            Preferences.LastSelectedProjectId = string.Equals(projectId, MainNavigationViewModel.UnclassifiedProjectId, StringComparison.Ordinal)
+                ? null
+                : projectId;
+
+            _ = _chatViewModel.TrySwitchToSessionAsync(session.SessionId);
             return;
-        }
-
-        if (item.Tag is string key)
-        {
-            if (key == MainNavItemKeys.Start)
-            {
-                EnsureStartContent();
-                return;
-            }
-
-            if (key == MainNavItemKeys.Chat)
-            {
-                EnsureChatContent();
-                return;
-            }
         }
     }
 
     private void OnMainNavItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
     {
-        // SelectionChanged handles navigation; keep to avoid XAML event binding errors and for future use.
+        var invoked = args.InvokedItemContainer?.DataContext ?? args.InvokedItem;
+        if (invoked is ProjectNavItemViewModel project)
+        {
+            NavVM.ToggleProjectExpanded(project.ProjectId);
+            return;
+        }
+
+        if (invoked is MoreSessionsNavItemViewModel more)
+        {
+            _ = more.ShowMoreCommand.ExecuteAsync(null);
+            return;
+        }
     }
 
     private void EnsureChatContent()
@@ -931,6 +519,7 @@ public sealed partial class MainPage : Page
     {
         ConfigureTitleBar();
         UpdateNavPaneToggleUi();
+        NavVM.RebuildTree();
     }
 
     private void OnContentFrameNavigated(object sender, NavigationEventArgs e)
@@ -997,15 +586,17 @@ public sealed partial class MainPage : Page
         if (pageType == typeof(ChatView))
         {
             _activePrimaryNavKey = MainNavItemKeys.Chat;
-            // Prefer highlighting the currently-selected session/project if available.
-            SyncSelectedNavItemFromViewModel();
+            if (!string.IsNullOrWhiteSpace(_chatViewModel.CurrentSessionId))
+            {
+                NavVM.SelectSession(_chatViewModel.CurrentSessionId!);
+            }
             return;
         }
 
-        if (pageType == typeof(StartView) && StartNavRoot != null)
+        if (pageType == typeof(StartView))
         {
             _activePrimaryNavKey = MainNavItemKeys.Start;
-            SetSelectedNavItemDeferred(StartNavRoot);
+            NavVM.SelectStart();
             return;
         }
 
