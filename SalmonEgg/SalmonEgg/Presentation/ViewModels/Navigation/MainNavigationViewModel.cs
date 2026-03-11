@@ -25,6 +25,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     private readonly ISessionManager _sessionManager;
     private readonly AppPreferencesViewModel _preferences;
     private readonly IUiInteractionService _ui;
+    private readonly IShellNavigationService _shellNavigation;
     private readonly ILogger<MainNavigationViewModel> _logger;
     private readonly SynchronizationContext _syncContext;
     private readonly System.Collections.Specialized.NotifyCollectionChangedEventHandler _projectsChangedHandler;
@@ -52,12 +53,14 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         ISessionManager sessionManager,
         AppPreferencesViewModel preferences,
         IUiInteractionService ui,
+        IShellNavigationService shellNavigation,
         ILogger<MainNavigationViewModel> logger)
     {
         _chatViewModel = chatViewModel ?? throw new ArgumentNullException(nameof(chatViewModel));
         _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
         _ui = ui ?? throw new ArgumentNullException(nameof(ui));
+        _shellNavigation = shellNavigation ?? throw new ArgumentNullException(nameof(shellNavigation));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _syncContext = SynchronizationContext.Current ?? new SynchronizationContext();
 
@@ -131,6 +134,18 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         {
             project.IsExpanded = !project.IsExpanded;
         }
+    }
+
+    public Task PrepareStartForProjectAsync(string projectId)
+    {
+        var normalizedId = string.Equals(projectId, UnclassifiedProjectId, StringComparison.Ordinal)
+            ? null
+            : projectId;
+
+        _preferences.LastSelectedProjectId = normalizedId;
+        _shellNavigation.NavigateToStart();
+        SelectStart();
+        return Task.CompletedTask;
     }
 
     public async Task ShowAllSessionsForProjectAsync(string projectId)
@@ -264,7 +279,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
         foreach (var (project, isSystem) in projects)
         {
-            var projectVm = new ProjectNavItemViewModel(project, isSystem)
+            var projectVm = new ProjectNavItemViewModel(project, isSystem, PrepareStartForProjectAsync)
             {
                 IsExpanded = true
             };
@@ -318,7 +333,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             Name = "未归类",
             RootPath = string.Empty
         };
-        var vm = new ProjectNavItemViewModel(project, isSystemProject: true) { IsExpanded = true };
+        var vm = new ProjectNavItemViewModel(project, isSystemProject: true, PrepareStartForProjectAsync) { IsExpanded = true };
         _projectIndex[vm.ProjectId] = vm;
         return vm;
     }

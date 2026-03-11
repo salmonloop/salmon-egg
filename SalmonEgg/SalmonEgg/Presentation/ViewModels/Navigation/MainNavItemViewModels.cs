@@ -41,6 +41,8 @@ public sealed partial class ProjectNavItemViewModel : MainNavItemViewModel
     public string RootPath { get; }
     public bool IsSystemProject { get; }
 
+    public IAsyncRelayCommand CreateSessionCommand { get; }
+
     private bool _isExpanded = true;
 
     public bool IsExpanded
@@ -49,12 +51,13 @@ public sealed partial class ProjectNavItemViewModel : MainNavItemViewModel
         set => SetProperty(ref _isExpanded, value);
     }
 
-    public ProjectNavItemViewModel(ProjectDefinition project, bool isSystemProject)
+    public ProjectNavItemViewModel(ProjectDefinition project, bool isSystemProject, Func<string, Task> createSessionAsync)
     {
         ProjectId = project.ProjectId;
         Title = project.Name;
         RootPath = project.RootPath;
         IsSystemProject = isSystemProject;
+        CreateSessionCommand = new AsyncRelayCommand(() => createSessionAsync(ProjectId));
     }
 }
 
