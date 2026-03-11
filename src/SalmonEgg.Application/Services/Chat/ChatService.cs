@@ -428,6 +428,26 @@ namespace SalmonEgg.Application.Services.Chat
             }
         }
 
+        public async Task<AuthenticateResponse> AuthenticateAsync(AuthenticateParams @params, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                return await _acpClient.AuthenticateAsync(@params, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                var entry = new ErrorLogEntry(
+                    "AuthenticateAsync failed",
+                    ex.Message,
+                    ErrorSeverity.Error,
+                    nameof(AuthenticateAsync),
+                    _currentSessionId,
+                    ex);
+                _errorLogger.LogError(entry);
+                throw;
+            }
+        }
+
         public async Task<bool> RespondToPermissionRequestAsync(object messageId, string outcome, string? optionId = null)
         {
             try

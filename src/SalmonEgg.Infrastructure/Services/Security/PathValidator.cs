@@ -74,6 +74,8 @@ namespace SalmonEgg.Infrastructure.Services.Security
             if (path.Contains('\0'))
             {
                 errors.Add("路径包含空字节");
+                // Path APIs will throw when null bytes are present; fail fast once detected.
+                return errors;
             }
 
             // 如果设置了允许目录，检查路径是否在其中
@@ -109,11 +111,18 @@ namespace SalmonEgg.Infrastructure.Services.Security
             // 检查是否尝试访问根目录
             if (path == "/" || path == "\\" || path.StartsWith("./") || path.StartsWith(".\\"))
             {
-                // 允许相对路径，但需要进一步检查
-                var normalized = NormalizePath(path);
-                if (normalized == "/" || normalized == "\\")
+                try
                 {
-                    errors.Add("不允许访问根目录");
+                    // 允许相对路径，但需要进一步检查
+                    var normalized = NormalizePath(path);
+                    if (normalized == "/" || normalized == "\\")
+                    {
+                        errors.Add("不允许访问根目录");
+                    }
+                }
+                catch
+                {
+                    errors.Add("路径规范化失败");
                 }
             }
 

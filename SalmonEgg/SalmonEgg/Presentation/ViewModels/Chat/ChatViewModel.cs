@@ -198,6 +198,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     private FileSystemRequestViewModel? _pendingFileSystemRequest;
 
+    [ObservableProperty]
+    private bool _isAuthenticationRequired;
+
+    [ObservableProperty]
+    private string? _authenticationHintMessage;
+
     public string? CurrentConnectionStatus { get; private set; }
 
     public ChatViewModel(
@@ -287,8 +293,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             // Ensure we have a conversation binding for this conversation id.
             var binding = GetOrCreateConversationBinding(value);
 
-            // Default remote session id to the conversation id (initial connect path).
-            binding.RemoteSessionId ??= value;
             binding.BoundProfileId ??= _preferences.LastSelectedServerId;
 
             _currentRemoteSessionId = binding.RemoteSessionId;
@@ -912,9 +916,13 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                    throw new TimeoutException("初始化超时：Agent 未在规定时间内响应。请检查命令和参数是否正确。");
                }
 
-               await initTask;
+               var initResponse = await initTask;
                UpdateAgentInfo();
                Logger.LogInformation("ACP 协议初始化完成，Agent: {Name} v{Version}", AgentName, AgentVersion);
+
+               // Some agents advertise external auth steps (e.g., "run `claude /login`") but do not implement an
+               // `authenticate` RPC. Treat auth methods as informational only.
+               _ = TryAuthenticateIfNeededAsync(initResponse);
 
                // 初始化成功后，自动创建新会话（ACP 标准流程）
                // 参考：https://agentclientprotocol.com/protocol/session-setup
@@ -943,8 +951,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                 }
                 else
                 {
-                    CurrentSessionId = remoteSessionId;
-                    IsSessionActive = hasRemoteSession;
+                    // Do NOT replace the local conversation id with the ACP session id.
+                    // If there isn't a local conversation selected, create one and bind it to the new remote session.
+                    if (string.IsNullOrWhiteSpace(CurrentSessionId))
+                    {
+                        CurrentSessionId = Guid.NewGuid().ToString();
+                    }
+
+                    IsSessionActive = !string.IsNullOrWhiteSpace(CurrentSessionId);
                     _currentRemoteSessionId = remoteSessionId;
 
                     if (!string.IsNullOrWhiteSpace(CurrentSessionId))
@@ -952,6 +966,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                         var binding = GetOrCreateConversationBinding(CurrentSessionId);
                         binding.RemoteSessionId = remoteSessionId;
                         binding.BoundProfileId = _preferences.LastSelectedServerId;
+                        binding.LastUpdatedAt = DateTime.UtcNow;
                     }
                 }
 
@@ -970,9 +985,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                 ConnectionErrorMessage = $"连接失败：{ex.Message}";
                 Logger.LogError(ex, "连接时出错");
                 IsConnected = false;
-                CurrentSessionId = null;
                 _currentRemoteSessionId = null;
-                IsSessionActive = false;
+                // Keep the local conversation visible; only clear the remote binding so we don't send to stale ids.
+                ClearRemoteSessionBindingForCurrentConversation();
             }
            finally
            {
@@ -1481,6 +1496,39 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         }
     }
 
+    private async Task<bool> TryAuthenticateIfNeededAsync(InitializeResponse initResponse)
+    {
+        if (_chatService == null)
+        {
+            return true;
+        }
+
+        var methods = initResponse.AuthMethods;
+        if (methods == null || methods.Count == 0)
+        {
+            IsAuthenticationRequired = false;
+            AuthenticationHintMessage = null;
+            return true;
+        }
+
+        var method = methods.FirstOrDefault(m => !string.IsNullOrWhiteSpace(m.Id));
+        if (method == null)
+        {
+            IsAuthenticationRequired = false;
+            AuthenticationHintMessage = null;
+            return true;
+        }
+
+        // Many agents (e.g., Claude Code) expose auth steps via authMethods but do not implement an `authenticate` RPC.
+        // Show the hint and let the user complete the auth flow outside the app.
+        var message = method.Description ?? "该 Agent 需要先完成登录/认证后才能正常回复。";
+        IsAuthenticationRequired = true;
+        AuthenticationHintMessage = message;
+        Logger.LogInformation("Agent advertised auth method. id={MethodId}, name={Name}, hint={Hint}", method.Id, method.Name, message);
+        ShowTransientNotificationToast(message);
+        return true;
+    }
+
     private void LoadSessionHistory()
     {
         // Conversations are local. When a remote session replays history, it is appended through SessionUpdate events.
@@ -1713,8 +1761,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                throw new InvalidOperationException("Chat service is not initialized");
            }
 
-           var response = await _chatService.InitializeAsync(initParams);
+           var initResponse = await _chatService.InitializeAsync(initParams);
            UpdateAgentInfo();
+
+           _ = TryAuthenticateIfNeededAsync(initResponse);
        }
        catch (Exception ex)
        {
@@ -1810,11 +1860,17 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
     [RelayCommand(CanExecute = nameof(CanSendPrompt))]
     private async Task SendPromptAsync()
     {
-        if (string.IsNullOrWhiteSpace(CurrentPrompt) || !IsSessionActive || string.IsNullOrWhiteSpace(_currentRemoteSessionId))
+        if (string.IsNullOrWhiteSpace(CurrentPrompt) || !IsSessionActive)
             return;
 
         if (IsPromptInFlight)
             return;
+
+        if (IsAuthenticationRequired)
+        {
+            ShowTransientNotificationToast(AuthenticationHintMessage ?? "该 Agent 需要先完成登录/认证后才能回复。");
+            return;
+        }
 
         var promptText = CurrentPrompt;
 
@@ -1833,25 +1889,49 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             AddMessageToHistory(userContent, isOutgoing: true);
             _activeAgentTextStreamMessage = null;
 
-            var promptParams = new SessionPromptParams
-            {
-                SessionId = _currentRemoteSessionId!,
-                Prompt = new[] { new { type = "text", text = promptText } },
-                MaxTokens = null,
-                StopSequences = null
-            };
-
-
             if (_chatService != null)
             {
                 _sendPromptCts?.Cancel();
                 _sendPromptCts = new CancellationTokenSource();
-                await _chatService.SendPromptAsync(promptParams, _sendPromptCts.Token);
+
+                var remoteSessionId = await EnsureRemoteSessionAsync();
+                var promptParams = new SessionPromptParams
+                {
+                    SessionId = remoteSessionId,
+                    Prompt = new[] { new { type = "text", text = promptText } },
+                    MaxTokens = null,
+                    StopSequences = null
+                };
+
+                try
+                {
+                    await _chatService.SendPromptAsync(promptParams, _sendPromptCts.Token);
+                }
+                catch (Exception ex) when (IsRemoteSessionNotFound(ex))
+                {
+                    // The agent process might have restarted; create a new remote session and retry once.
+                    ClearRemoteSessionBindingForCurrentConversation();
+                    remoteSessionId = await EnsureRemoteSessionAsync();
+                    promptParams.SessionId = remoteSessionId;
+                    await _chatService.SendPromptAsync(promptParams, _sendPromptCts.Token);
+                }
             }
         }
         catch (OperationCanceledException)
         {
             // User-cancelled; keep input cleared.
+        }
+        catch (TimeoutException ex)
+        {
+            Logger.LogError(ex, "SendPrompt timed out");
+            SetError("发送超时：Agent 长时间无响应。");
+
+            if (string.IsNullOrWhiteSpace(CurrentPrompt))
+            {
+                CurrentPrompt = promptText;
+            }
+
+            ShowTransientNotificationToast("Agent 无响应（超时）。请检查 Agent 是否需要先登录/初始化，或稍后重试。");
         }
         catch (Exception ex)
         {
@@ -1878,7 +1958,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
     private bool CanSendPrompt() =>
         IsSessionActive
         && _chatService is { IsConnected: true, IsInitialized: true }
-        && !string.IsNullOrWhiteSpace(_currentRemoteSessionId)
+        && !string.IsNullOrWhiteSpace(CurrentSessionId)
         && !string.IsNullOrWhiteSpace(CurrentPrompt)
         && !IsBusy
         && !IsPromptInFlight;
@@ -1899,16 +1979,27 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         {
         }
 
-        if (!IsSessionActive || string.IsNullOrWhiteSpace(_currentRemoteSessionId))
+        if (!IsSessionActive)
         {
             return;
         }
 
         try
         {
+            var remoteSessionId = _currentRemoteSessionId;
+            if (string.IsNullOrWhiteSpace(remoteSessionId) && !string.IsNullOrWhiteSpace(CurrentSessionId))
+            {
+                remoteSessionId = TryGetConversationBinding(CurrentSessionId)?.RemoteSessionId;
+            }
+
+            if (string.IsNullOrWhiteSpace(remoteSessionId))
+            {
+                return;
+            }
+
             var cancelParams = new SessionCancelParams
             {
-                SessionId = _currentRemoteSessionId!,
+                SessionId = remoteSessionId!,
                 Reason = "User cancelled"
             };
 
@@ -1962,6 +2053,60 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             _syncContext.Post(_ => { ShowTransientNotification = false; }, null);
         });
     }
+
+    private async Task<string> EnsureRemoteSessionAsync()
+    {
+        if (_chatService is not { IsConnected: true, IsInitialized: true })
+        {
+            throw new InvalidOperationException("尚未连接到 ACP Agent。");
+        }
+
+        if (!IsSessionActive || string.IsNullOrWhiteSpace(CurrentSessionId))
+        {
+            throw new InvalidOperationException("未选择会话。");
+        }
+
+        var binding = GetOrCreateConversationBinding(CurrentSessionId!);
+        if (!string.IsNullOrWhiteSpace(binding.RemoteSessionId))
+        {
+            _currentRemoteSessionId = binding.RemoteSessionId;
+            return binding.RemoteSessionId!;
+        }
+
+        var sessionParams = new SessionNewParams
+        {
+            Cwd = Environment.CurrentDirectory,
+            McpServers = new object[0]
+        };
+
+        var response = await _chatService.CreateSessionAsync(sessionParams).ConfigureAwait(false);
+        binding.RemoteSessionId = response.SessionId;
+        binding.BoundProfileId ??= _preferences.LastSelectedServerId;
+        binding.LastUpdatedAt = DateTime.UtcNow;
+        _currentRemoteSessionId = response.SessionId;
+        ScheduleConversationSave();
+        return response.SessionId;
+    }
+
+    private void ClearRemoteSessionBindingForCurrentConversation()
+    {
+        if (string.IsNullOrWhiteSpace(CurrentSessionId))
+        {
+            _currentRemoteSessionId = null;
+            return;
+        }
+
+        var binding = GetOrCreateConversationBinding(CurrentSessionId);
+        binding.RemoteSessionId = null;
+        binding.LastUpdatedAt = DateTime.UtcNow;
+        _currentRemoteSessionId = null;
+        ScheduleConversationSave();
+    }
+
+    private static bool IsRemoteSessionNotFound(Exception ex) =>
+        ex is SalmonEgg.Domain.Models.JsonRpc.AcpException acp
+        && acp.Message.Contains("Session", StringComparison.OrdinalIgnoreCase)
+        && acp.Message.Contains("not found", StringComparison.OrdinalIgnoreCase);
 
     [RelayCommand]
     private async Task SetModeAsync(SessionModeViewModel? mode)

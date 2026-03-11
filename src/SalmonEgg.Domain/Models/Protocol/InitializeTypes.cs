@@ -26,7 +26,7 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// <summary>
         /// 客户端能力声明。
         /// </summary>
-        [JsonPropertyName("capabilities")]
+        [JsonPropertyName("clientCapabilities")]
         public ClientCapabilities ClientCapabilities { get; set; } = new ClientCapabilities();
 
         /// <summary>
@@ -187,8 +187,14 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// <summary>
         /// Agent 能力声明。
         /// </summary>
-        [JsonPropertyName("capabilities")]
+        [JsonPropertyName("agentCapabilities")]
         public AgentCapabilities AgentCapabilities { get; set; } = new AgentCapabilities();
+
+        /// <summary>
+        /// 可选的认证方法列表（当 Agent 需要认证时提供）。
+        /// </summary>
+        [JsonPropertyName("authMethods")]
+        public List<AuthMethodDefinition>? AuthMethods { get; set; }
 
         /// <summary>
         /// 创建新的 InitializeResponse 实例。
@@ -265,7 +271,7 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// <summary>
         /// 提示相关能力。
         /// </summary>
-        [JsonPropertyName("prompt")]
+        [JsonPropertyName("promptCapabilities")]
         public PromptCapabilities? PromptCapabilities { get; set; }
 
         /// <summary>
@@ -277,7 +283,7 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// <summary>
         /// MCP 相关能力。
         /// </summary>
-        [JsonPropertyName("mcp")]
+        [JsonPropertyName("mcpCapabilities")]
         public McpCapabilities? McpCapabilities { get; set; }
 
         /// <summary>

@@ -35,6 +35,8 @@ namespace SalmonEgg.Infrastructure.Client
 
         
         private readonly ConcurrentDictionary<string, TaskCompletionSource<JsonRpcResponse>> _pendingRequests = new();
+        // Inbound tool requests (agent -> client) are correlated by request id so we can format responses correctly.
+        private readonly ConcurrentDictionary<string, string> _pendingInboundRequestMethods = new();
 
         private readonly object _lock = new();
         private bool _disposed;
@@ -425,8 +427,7 @@ namespace SalmonEgg.Infrastructure.Client
         /// </summary>
         public async Task<bool> RespondToPermissionRequestAsync(object messageId, string outcome, string? optionId = null)
         {
-            var response = new JsonRpcResponse(messageId, JsonSerializer.SerializeToElement(new { outcome, optionId }));
-            return await SendResponseAsync(response).ConfigureAwait(false);
+            return await TrySendPermissionOutcomeResponseAsync(messageId, outcome, optionId).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -434,15 +435,57 @@ namespace SalmonEgg.Infrastructure.Client
         /// </summary>
         public async Task<bool> RespondToFileSystemRequestAsync(object messageId, bool success, string? content = null, string? message = null)
         {
-            var result = new
-            {
-                success,
-                content,
-                message
-            };
+            return await TrySendFileSystemResponseAsync(messageId, success, content, message).ConfigureAwait(false);
+        }
 
-            var response = new JsonRpcResponse(messageId, JsonSerializer.SerializeToElement(result));
+        private async Task<bool> TrySendPermissionOutcomeResponseAsync(object messageId, string outcome, string? optionId)
+        {
+            // Only respond once per inbound request id.
+            if (!_pendingInboundRequestMethods.TryRemove(messageId?.ToString() ?? string.Empty, out _))
+            {
+                return false;
+            }
+
+            // ACP schema: result = { outcome: { outcome: "selected"|"cancelled", optionId? } }
+            object outcomePayload = string.IsNullOrWhiteSpace(optionId)
+                ? new { outcome }
+                : new { outcome, optionId };
+
+            var response = new JsonRpcResponse(
+                messageId,
+                JsonSerializer.SerializeToElement(new { outcome = outcomePayload }, _parser.Options));
             return await SendResponseAsync(response).ConfigureAwait(false);
+        }
+
+        private async Task<bool> TrySendFileSystemResponseAsync(object messageId, bool success, string? content, string? message)
+        {
+            var idStr = messageId?.ToString() ?? string.Empty;
+            if (!_pendingInboundRequestMethods.TryRemove(idStr, out var method))
+            {
+                return false;
+            }
+
+            if (!success)
+            {
+                // Use a JSON-RPC error instead of a success=false payload (ACP tools follow JSON-RPC semantics).
+                var error = new JsonRpcError(
+                    JsonRpcErrorCode.PermissionDenied,
+                    string.IsNullOrWhiteSpace(message) ? "Permission denied" : message);
+                return await SendResponseAsync(new JsonRpcResponse(messageId, error)).ConfigureAwait(false);
+            }
+
+            JsonElement result;
+            if (string.Equals(method, "fs/read_text_file", StringComparison.Ordinal))
+            {
+                result = JsonSerializer.SerializeToElement(new { content = content ?? string.Empty }, _parser.Options);
+            }
+            else
+            {
+                // fs/write_text_file returns null on success.
+                result = JsonSerializer.SerializeToElement<object?>(null, _parser.Options);
+            }
+
+            return await SendResponseAsync(new JsonRpcResponse(messageId, result)).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -566,6 +609,11 @@ namespace SalmonEgg.Infrastructure.Client
                     }
                 }
 
+                else if (message is JsonRpcRequest request)
+                {
+                    // Agent -> client tool invocation (requires a JSON-RPC response).
+                    HandleRequest(request);
+                }
                 else if (message is JsonRpcNotification notification)
                 {
                     // 处理通知
@@ -588,17 +636,82 @@ namespace SalmonEgg.Infrastructure.Client
                 case "session/update":
                     HandleSessionUpdate(notification);
                     break;
-                case "session/request_permission":
-                    HandlePermissionRequest(notification);
-                    break;
-                case "fs/read_text_file":
-                case "fs/write_text_file":
-                    HandleFileSystemRequest(notification);
-                    break;
                 default:
                     // 未知通知类型
                     break;
             }
+        }
+
+        /// <summary>
+        /// 处理请求消息（Agent -> Client，需要返回响应）。
+        /// </summary>
+        private void HandleRequest(JsonRpcRequest request)
+        {
+            var requestIdStr = request.Id?.ToString() ?? string.Empty;
+
+            switch (request.Method)
+            {
+                case "session/request_permission":
+                    if (!string.IsNullOrWhiteSpace(requestIdStr))
+                    {
+                        _pendingInboundRequestMethods[requestIdStr] = request.Method;
+                        ScheduleInboundRequestTimeout(request.Id, TimeSpan.FromSeconds(30), defaultKind: "permission");
+                    }
+                    HandlePermissionRequest(request);
+                    break;
+                case "fs/read_text_file":
+                case "fs/write_text_file":
+                    if (!string.IsNullOrWhiteSpace(requestIdStr))
+                    {
+                        _pendingInboundRequestMethods[requestIdStr] = request.Method;
+                        ScheduleInboundRequestTimeout(request.Id, TimeSpan.FromSeconds(30), defaultKind: "fs");
+                    }
+                    HandleFileSystemRequest(request);
+                    break;
+                default:
+                    // Best-effort: respond with "method not found" so the agent doesn't hang waiting.
+                    _pendingInboundRequestMethods.TryRemove(request.Id?.ToString() ?? string.Empty, out _);
+                    _ = SendResponseAsync(new JsonRpcResponse(
+                        request.Id,
+                        JsonRpcError.CreateMethodNotFound(request.Method)));
+                    break;
+            }
+        }
+
+        private void ScheduleInboundRequestTimeout(object messageId, TimeSpan timeout, string defaultKind)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(timeout).ConfigureAwait(false);
+                }
+                catch
+                {
+                    return;
+                }
+
+                var idStr = messageId?.ToString() ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(idStr))
+                {
+                    return;
+                }
+
+                if (defaultKind == "permission")
+                {
+                    await TrySendPermissionOutcomeResponseAsync(messageId, "cancelled", null).ConfigureAwait(false);
+                    return;
+                }
+
+                // For other tool requests, return a JSON-RPC error so the agent can continue.
+                if (_pendingInboundRequestMethods.TryRemove(idStr, out _))
+                {
+                    var error = new JsonRpcError(
+                        JsonRpcErrorCode.CapabilityNotSupported,
+                        $"Client did not respond to {defaultKind} request in time.");
+                    await SendResponseAsync(new JsonRpcResponse(messageId, error)).ConfigureAwait(false);
+                }
+            });
         }
 
         /// <summary>
@@ -630,17 +743,26 @@ namespace SalmonEgg.Infrastructure.Client
         /// <summary>
         /// 处理权限请求通知。
         /// </summary>
-        private void HandlePermissionRequest(JsonRpcNotification notification)
+        private void HandlePermissionRequest(JsonRpcRequest request)
         {
             try
             {
-                if (!notification.Params.HasValue)
+                if (!request.Params.HasValue)
                 {
+                    _pendingInboundRequestMethods.TryRemove(request.Id?.ToString() ?? string.Empty, out _);
+                    _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Missing params")));
                     return;
                 }
 
-                var rawParams = notification.Params.Value;
-                var sessionId = rawParams.GetProperty("sessionId").GetString() ?? "";
+                var rawParams = request.Params.Value;
+                if (!rawParams.TryGetProperty("sessionId", out var sessionIdProp))
+                {
+                    _pendingInboundRequestMethods.TryRemove(request.Id?.ToString() ?? string.Empty, out _);
+                    _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Missing sessionId")));
+                    return;
+                }
+
+                var sessionId = sessionIdProp.GetString() ?? string.Empty;
                 var toolCall = rawParams.TryGetProperty("toolCall", out var toolCallProp) ? toolCallProp : default;
                 var optionsProp = rawParams.TryGetProperty("options", out var options) ? options : default;
 
@@ -657,16 +779,23 @@ namespace SalmonEgg.Infrastructure.Client
                 }
 
                 var permissionResponseFunc = new Func<string, string?, Task>((outcome, optionId) =>
-                    RespondToPermissionRequestAsync(notification.Id!, outcome, optionId));
+                    RespondToPermissionRequestAsync(request.Id, outcome, optionId));
 
                 var eventArgs = new PermissionRequestEventArgs(
-                    notification.Id!,
+                    request.Id,
                     sessionId,
                     toolCall,
                     optionsList,
                     permissionResponseFunc);
 
-                PermissionRequestReceived?.Invoke(this, eventArgs);
+                if (PermissionRequestReceived == null)
+                {
+                    // No UI hooked up; cancel to avoid deadlock.
+                    _ = RespondToPermissionRequestAsync(request.Id, "cancelled", null);
+                    return;
+                }
+
+                PermissionRequestReceived.Invoke(this, eventArgs);
             }
             catch (Exception ex)
             {
@@ -677,27 +806,44 @@ namespace SalmonEgg.Infrastructure.Client
         /// <summary>
         /// 处理文件系统请求通知。
         /// </summary>
-        private void HandleFileSystemRequest(JsonRpcNotification notification)
+        private void HandleFileSystemRequest(JsonRpcRequest request)
         {
             try
             {
-                if (!notification.Params.HasValue)
+                if (!request.Params.HasValue)
                 {
+                    _pendingInboundRequestMethods.TryRemove(request.Id?.ToString() ?? string.Empty, out _);
+                    _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Missing params")));
                     return;
                 }
 
-                var rawParams = notification.Params.Value;
-                var sessionId = rawParams.GetProperty("sessionId").GetString() ?? "";
-                var operation = rawParams.GetProperty("operation").GetString() ?? "";
-                var path = rawParams.GetProperty("path").GetString() ?? "";
-                var encoding = rawParams.TryGetProperty("encoding", out var enc) ? enc.GetString() : null;
+                var rawParams = request.Params.Value;
+                if (!rawParams.TryGetProperty("sessionId", out var sessionIdProp) ||
+                    !rawParams.TryGetProperty("path", out var pathProp))
+                {
+                    _pendingInboundRequestMethods.TryRemove(request.Id?.ToString() ?? string.Empty, out _);
+                    _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Missing sessionId or path")));
+                    return;
+                }
+
+                var sessionId = sessionIdProp.GetString() ?? string.Empty;
+                var path = pathProp.GetString() ?? string.Empty;
                 var content = rawParams.TryGetProperty("content", out var cont) ? cont.GetString() : null;
 
+                // For legacy UI/viewmodels we expose an "operation" hint.
+                var operation = request.Method switch
+                {
+                    "fs/read_text_file" => "read",
+                    "fs/write_text_file" => "write",
+                    _ => request.Method
+                };
+                var encoding = (string?)null;
+
                 var fileSystemResponseFunc = new Func<bool, string?, string?, Task>((success, respContent, respMessage) =>
-                RespondToFileSystemRequestAsync(notification.Id!, success, respContent, respMessage));
+                RespondToFileSystemRequestAsync(request.Id, success, respContent, respMessage));
 
                 var eventArgs = new FileSystemRequestEventArgs(
-                notification.Id!,
+                request.Id,
                 sessionId,
                 operation,
                 path,
@@ -705,7 +851,14 @@ namespace SalmonEgg.Infrastructure.Client
                 content,
                 fileSystemResponseFunc);
 
-                FileSystemRequestReceived?.Invoke(this, eventArgs);
+                if (FileSystemRequestReceived == null)
+                {
+                    // No UI hooked up; deny to avoid deadlock.
+                    _ = RespondToFileSystemRequestAsync(request.Id, success: false, content: null, message: "File system requests are not supported.");
+                    return;
+                }
+
+                FileSystemRequestReceived.Invoke(this, eventArgs);
             }
             catch (Exception ex)
             {

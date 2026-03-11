@@ -32,6 +32,8 @@ namespace SalmonEgg.Infrastructure.Serialization
                 IncludeFields = false,
                 ReadCommentHandling = JsonCommentHandling.Skip,
                 AllowTrailingCommas = false,
+                // ACP agents can be strict about optional fields; omit nulls rather than writing `"foo": null`.
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
                 Converters =
                 {
                     // 添加 JsonRpcMessage 的多态转换器

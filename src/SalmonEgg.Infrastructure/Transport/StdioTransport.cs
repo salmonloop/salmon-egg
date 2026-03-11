@@ -369,6 +369,8 @@ namespace SalmonEgg.Infrastructure.Transport
 
                     if (!string.IsNullOrWhiteSpace(line))
                     {
+                        _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] STDERR: {line}");
+                        _debugFileWriter?.Flush();
                         _logger.Warning("[StdioTransport.ReadError] 进程错误：{Line}", line);
                         OnErrorOccurred(new TransportErrorEventArgs($"进程错误：{line}"));
                     }

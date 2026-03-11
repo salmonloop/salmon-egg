@@ -9,22 +9,10 @@ namespace SalmonEgg.Domain.Models.Protocol
     public class AuthenticateParams
     {
         /// <summary>
-        /// 认证方法（例如 "bearer", "api_key"）。
+        /// Agent-advertised authentication method id (from initializeResponse.authMethods[].id).
         /// </summary>
-        [JsonPropertyName("method")]
-        public string Method { get; set; } = string.Empty;
-
-        /// <summary>
-        /// 认证令牌（用于 "bearer" 方法）。
-        /// </summary>
-        [JsonPropertyName("token")]
-        public string? Token { get; set; }
-
-        /// <summary>
-        /// 认证密钥（用于 "api_key" 方法）。
-        /// </summary>
-        [JsonPropertyName("key")]
-        public string? Key { get; set; }
+        [JsonPropertyName("methodId")]
+        public string MethodId { get; set; } = string.Empty;
 
         /// <summary>
         /// 创建新的 AuthenticateParams 实例。
@@ -34,23 +22,12 @@ namespace SalmonEgg.Domain.Models.Protocol
         }
 
         /// <summary>
-        /// 创建基于令牌的认证参数。
+        /// Create params for a specific method id.
         /// </summary>
-        /// <param name="token">认证令牌</param>
-        public AuthenticateParams(string token)
+        /// <param name="methodId">Authentication method id</param>
+        public AuthenticateParams(string methodId)
         {
-            Method = "bearer";
-            Token = token;
-        }
-
-        /// <summary>
-        /// 创建基于 API 密钥的认证参数。
-        /// </summary>
-        /// <param name="key">API 密钥</param>
-        public AuthenticateParams(string key, bool isApiKey = true)
-        {
-            Method = "api_key";
-            Key = key;
+            MethodId = methodId;
         }
     }
 
