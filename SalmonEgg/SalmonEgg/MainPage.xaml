@@ -19,6 +19,8 @@
 
     <Page.Resources>
         <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+        <x:Double x:Key="NavCompactPaneLength">72</x:Double>
+        <x:Double x:Key="NavOpenPaneLength">300</x:Double>
 
         <!-- Navigation section header sizing (keep consistent + tweakable in one place) -->
         <x:Double x:Key="NavSectionHeaderMinHeight">32</x:Double>
@@ -290,7 +292,6 @@
                                         <VisualState.Setters>
                                             <Setter Target="ContentPresenter.Margin" Value="{ThemeResource NavigationViewCompactItemContentPresenterMargin}" />
                                             <Setter Target="ContentGrid.Margin" Value="0,0,0,0" />
-                                            <Setter Target="IconColumn.Width" Value="0" />
                                             <Setter Target="InfoBadgePresenter.(Grid.Column)" Value="0" />
                                             <Setter Target="InfoBadgePresenter.(Grid.ColumnSpan)" Value="3" />
                                             <Setter Target="InfoBadgePresenter.VerticalAlignment" Value="Top" />
@@ -512,6 +513,7 @@
 
         <DataTemplate x:Key="StartNavTemplate" x:DataType="nav:StartNavItemViewModel">
             <NavigationViewItem Content="{x:Bind Title, Mode=OneWay}"
+                                Tag="{x:Bind navModels:NavItemTag.Start}"
                                 ContentTransitions="{x:Bind models:UiMotion.Current.NavItemTransitions, Mode=OneWay}">
                 <NavigationViewItem.Icon>
                     <SymbolIcon Symbol="Home" />
@@ -522,28 +524,15 @@
         <DataTemplate x:Key="SessionsHeaderTemplate" x:DataType="nav:SessionsHeaderNavItemViewModel">
             <!-- Use a NavigationViewItem so it reliably renders across hosts, but neutralize hover/pressed visuals
                  via official theme resource overrides (no template hacks). -->
-            <NavigationViewItem SelectsOnInvoked="False"
-                                IsTabStop="False"
-                                MinHeight="{StaticResource NavSectionHeaderMinHeight}"
+            <NavigationViewItem MinHeight="{StaticResource NavSectionHeaderMinHeight}"
                                 HorizontalContentAlignment="Stretch"
                                 Padding="0"
                                 Style="{StaticResource SessionsHeaderNavItemStyle}"
+                                SelectsOnInvoked="False"
+                                Tag="{x:Bind navModels:NavItemTag.SessionsHeader}"
+                                Icon="{x:Bind CompactIcon, Mode=OneWay}"
                                 ContentTransitions="{x:Bind models:UiMotion.Current.NavItemTransitions, Mode=OneWay}">
                 <NavigationViewItem.Resources>
-                    <StaticResource x:Key="NavigationViewItemBackground" ResourceKey="SubtleFillColorTransparentBrush" />
-                    <StaticResource x:Key="NavigationViewItemBackgroundPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
-                    <StaticResource x:Key="NavigationViewItemBackgroundPressed" ResourceKey="SubtleFillColorTransparentBrush" />
-                    <StaticResource x:Key="NavigationViewItemBackgroundSelected" ResourceKey="SubtleFillColorTransparentBrush" />
-                    <StaticResource x:Key="NavigationViewItemBackgroundSelectedPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
-                    <StaticResource x:Key="NavigationViewItemBackgroundSelectedPressed" ResourceKey="SubtleFillColorTransparentBrush" />
-
-                    <StaticResource x:Key="NavigationViewItemBorderBrush" ResourceKey="SubtleFillColorTransparentBrush" />
-                    <StaticResource x:Key="NavigationViewItemBorderBrushPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
-                    <StaticResource x:Key="NavigationViewItemBorderBrushPressed" ResourceKey="SubtleFillColorTransparentBrush" />
-                    <StaticResource x:Key="NavigationViewItemBorderBrushSelected" ResourceKey="SubtleFillColorTransparentBrush" />
-                    <StaticResource x:Key="NavigationViewItemBorderBrushSelectedPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
-                    <StaticResource x:Key="NavigationViewItemBorderBrushSelectedPressed" ResourceKey="SubtleFillColorTransparentBrush" />
-
                     <StaticResource x:Key="NavigationViewItemForeground" ResourceKey="TextFillColorSecondaryBrush" />
                     <StaticResource x:Key="NavigationViewItemForegroundPointerOver" ResourceKey="TextFillColorSecondaryBrush" />
                     <StaticResource x:Key="NavigationViewItemForegroundPressed" ResourceKey="TextFillColorSecondaryBrush" />
@@ -584,31 +573,6 @@
                                           FontSize="14" />
                             </Button>
                         </Grid>
-
-                        <!-- Compact pane: center the + button in the rail. -->
-                        <Grid Padding="0"
-                              HorizontalAlignment="Stretch"
-                              Visibility="{x:Bind IsPaneOpen, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}">
-                            <Button Width="{StaticResource NavSectionHeaderActionButtonSize}"
-                                    Height="{StaticResource NavSectionHeaderActionButtonSize}"
-                                    MinWidth="{StaticResource NavSectionHeaderActionButtonSize}"
-                                    MinHeight="{StaticResource NavSectionHeaderActionButtonSize}"
-                                    Padding="0"
-                                    HorizontalAlignment="Center"
-                                    VerticalAlignment="Center"
-                                    CornerRadius="{ThemeResource ControlCornerRadius}"
-                                    Background="{ThemeResource SubtleFillColorTransparentBrush}"
-                                    BorderBrush="{ThemeResource SubtleFillColorTransparentBrush}"
-                                    BorderThickness="0"
-                                    ToolTipService.ToolTip="添加项目"
-                                    Command="{x:Bind AddProjectCommand}"
-                                    AutomationProperties.Name="添加项目">
-                                <FontIcon Glyph="&#xE710;"
-                                          FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                          FontSize="14" />
-                            </Button>
-                        </Grid>
-
                     </Grid>
                 </NavigationViewItem.Content>
             </NavigationViewItem>
@@ -620,6 +584,7 @@
                                 HorizontalContentAlignment="Stretch"
                                 Style="{StaticResource ProjectNavItemStyle}"
                                 SelectsOnInvoked="False"
+                                Tag="{x:Bind navModels:NavItemTag.Project(ProjectId)}"
                                 ContentTransitions="{x:Bind models:UiMotion.Current.NavItemTransitions, Mode=OneWay}">
                 <NavigationViewItem.Icon>
                     <SymbolIcon Symbol="Folder" />
@@ -694,6 +659,7 @@
         <DataTemplate x:Key="MoreNavTemplate" x:DataType="nav:MoreSessionsNavItemViewModel">
             <NavigationViewItem Content="{x:Bind Title, Mode=OneWay}"
                                 SelectsOnInvoked="False"
+                                Tag="{x:Bind navModels:NavItemTag.More(ProjectId)}"
                                 ContentTransitions="{x:Bind models:UiMotion.Current.NavItemTransitions, Mode=OneWay}">
                 <NavigationViewItem.Icon>
                     <SymbolIcon Symbol="More" />
@@ -1014,8 +980,8 @@
              <NavigationView x:Name="MainNavView"
                              Grid.Column="0"
                              Background="Transparent"
-                             CompactPaneLength="72"
-                             OpenPaneLength="240"
+                             CompactPaneLength="{StaticResource NavCompactPaneLength}"
+                             OpenPaneLength="{StaticResource NavOpenPaneLength}"
                              IsPaneOpen="True"
                              IsBackButtonVisible="Collapsed"
                              IsPaneToggleButtonVisible="False"
@@ -1026,6 +992,12 @@
                              SelectedItem="{x:Bind NavVM.SelectedItem, Mode=TwoWay}"
                              SelectionChanged="OnMainNavSelectionChanged"
                              ItemInvoked="OnMainNavItemInvoked"
+                             PointerPressed="OnMainNavPointerPressed"
+                             PointerReleased="OnMainNavPointerReleased"
+                             PointerCaptureLost="OnMainNavPointerCaptureLost"
+                             SizeChanged="OnMainNavSizeChanged"
+                             DisplayModeChanged="OnMainNavDisplayModeChanged"
+                             PaneOpening="OnMainNavPaneOpening"
                              PaneOpened="OnMainNavPaneOpened"
                              PaneClosed="OnMainNavPaneClosed"
                              PaneClosing="OnMainNavPaneClosing">

@@ -12,6 +12,13 @@
     <PackageReference Include="Serilog.Extensions.Logging" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Ensure Uno can resolve the language tag for this resource file -->
+    <PRIResource Update="Strings\zh-CN\Resources.resw">
+      <Language>zh-CN</Language>
+    </PRIResource>
+  </ItemGroup>
+
   <PropertyGroup>
     <!-- Mobile targets are opt-in to keep `dotnet build` working on dev machines without workloads/toolchains. -->
     <EnableMobileTargets Condition="'$(EnableMobileTargets)' == ''">false</EnableMobileTargets>

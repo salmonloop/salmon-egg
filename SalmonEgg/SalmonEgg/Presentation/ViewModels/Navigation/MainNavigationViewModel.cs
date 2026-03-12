@@ -195,15 +195,19 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     private async Task AddProjectAsync()
     {
+        _logger.LogInformation("AddProject: start");
         var pickedPath = await _ui.PickFolderAsync().ConfigureAwait(true);
+        _logger.LogInformation("AddProject: picker returned {Path}", pickedPath ?? "<null>");
         if (string.IsNullOrWhiteSpace(pickedPath))
         {
+            _logger.LogInformation("AddProject: canceled or empty path");
             return;
         }
 
         var normalized = NavTimeFormatter.NormalizePathForPrefixMatch(pickedPath).TrimEnd(System.IO.Path.DirectorySeparatorChar);
         if (string.IsNullOrWhiteSpace(normalized))
         {
+            _logger.LogInformation("AddProject: normalized path empty");
             return;
         }
 

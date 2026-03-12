@@ -90,6 +90,7 @@ public sealed class UiInteractionService : IUiInteractionService
 #if WINDOWS
         try
         {
+            SalmonEgg.App.BootLog("UiInteraction: PickFolderAsync (FolderPicker) start");
             var picker = new Windows.Storage.Pickers.FolderPicker();
             picker.FileTypeFilter.Add("*");
 
@@ -101,14 +102,17 @@ public sealed class UiInteractionService : IUiInteractionService
             }
 
             var folder = await picker.PickSingleFolderAsync();
+            SalmonEgg.App.BootLog($"UiInteraction: FolderPicker result = {(folder?.Path ?? "<null>")}");
             return folder?.Path;
         }
         catch
         {
             // Fall back to manual input below.
+            SalmonEgg.App.BootLog("UiInteraction: FolderPicker failed, falling back to text prompt");
         }
 #endif
 
+        SalmonEgg.App.BootLog("UiInteraction: showing text prompt for project path");
         return await PromptTextAsync(
             title: "添加项目",
             primaryButtonText: "确定",
