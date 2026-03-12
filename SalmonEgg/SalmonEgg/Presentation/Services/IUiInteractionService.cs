@@ -9,6 +9,12 @@ public interface IUiInteractionService
 {
     Task ShowInfoAsync(string message);
 
+    Task<bool> ConfirmAsync(
+        string title,
+        string message,
+        string primaryButtonText,
+        string closeButtonText);
+
     Task<string?> PromptTextAsync(
         string title,
         string primaryButtonText,
@@ -22,4 +28,3 @@ public interface IUiInteractionService
         IReadOnlyList<SessionNavItemViewModel> sessions,
         Action<string> onPickSession);
 }
-

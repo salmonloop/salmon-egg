@@ -29,6 +29,28 @@ public sealed class UiInteractionService : IUiInteractionService
         await dialog.ShowAsync();
     }
 
+    public async Task<bool> ConfirmAsync(string title, string message, string primaryButtonText, string closeButtonText)
+    {
+        var xamlRoot = GetXamlRoot();
+        if (xamlRoot == null)
+        {
+            return false;
+        }
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = xamlRoot,
+            Title = title ?? string.Empty,
+            Content = message ?? string.Empty,
+            PrimaryButtonText = string.IsNullOrWhiteSpace(primaryButtonText) ? "确定" : primaryButtonText,
+            CloseButtonText = string.IsNullOrWhiteSpace(closeButtonText) ? "取消" : closeButtonText,
+            DefaultButton = ContentDialogButton.Primary
+        };
+
+        var result = await dialog.ShowAsync();
+        return result == ContentDialogResult.Primary;
+    }
+
     public async Task<string?> PromptTextAsync(string title, string primaryButtonText, string closeButtonText, string initialText)
     {
         var xamlRoot = GetXamlRoot();

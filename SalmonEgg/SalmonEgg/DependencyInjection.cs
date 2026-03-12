@@ -113,6 +113,7 @@ public static class DependencyInjection
         services.AddSingleton<IAppSettingsService, AppSettingsService>();
         services.AddSingleton<IAppDataService, AppDataService>();
         services.AddSingleton<IAppMaintenanceService, AppMaintenanceService>();
+        services.AddSingleton<IAppDocumentService, AppDocumentService>();
         services.AddSingleton<IConversationStore, ConversationStore>();
 
         // 配置管理器
@@ -191,6 +192,9 @@ public static class DependencyInjection
 
         // App preferences used by General/Appearance settings and window behaviors.
         services.AddSingleton<AppPreferencesViewModel>();
+
+        // General settings
+        services.AddSingleton<GeneralSettingsViewModel>();
 
         // ACP connection profiles (server presets)
         services.AddSingleton<AcpProfilesViewModel>();
