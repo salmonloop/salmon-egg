@@ -24,7 +24,7 @@ SalmonEgg/
 
 ### 核心框架
 - **Uno Platform 6.5+**: 跨平台 UI 框架
-- **.NET 9.0**: 目标框架（平台头）
+- **.NET 10.0**: 目标框架（平台头）
 - **.NET Standard 2.1**: 共享库目标框架
 
 ### 第三方库
@@ -53,7 +53,7 @@ SalmonEgg/
 ### 开发环境
 
 **所有平台通用**:
-- [.NET 9.0 SDK](https://dotnet.microsoft.com/download/dotnet/9.0) 或更高版本
+- [.NET 10.0 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) 或更高版本
 - [Visual Studio 2022](https://visualstudio.microsoft.com/) (17.12+) 或 [Visual Studio Code](https://code.visualstudio.com/)
 - [Uno Platform 模板](https://platform.uno/docs/articles/get-started.html)
 
@@ -79,9 +79,9 @@ dotnet new list | grep -i uno
 
 ## 项目初始化
 
-由于 Uno Platform 6.5+ 需要 .NET 9.0，请确保已安装 .NET 9.0 SDK。
+由于 Uno Platform 6.5+ 需要 .NET 10.0，请确保已安装 .NET 10.0 SDK。
 
-### 创建项目（需要 .NET 9.0）
+### 创建项目（需要 .NET 10.0）
 
 ```bash
 # 创建 Uno Platform 应用
@@ -147,10 +147,10 @@ dotnet add SalmonEgg/SalmonEgg.csproj reference ../src/SalmonEgg.Infrastructure/
 - 创建了测试项目结构
 - 配置了项目引用关系
 
-⚠️ 待完成（需要 .NET 9.0 SDK）：
-- Uno Platform 主项目需要 .NET 9.0 SDK
-- 当前 Uno Platform 6.5+ 版本要求 .NET 9.0 或更高版本
-- 建议升级到 .NET 9.0 SDK 后继续项目初始化
+⚠️ 待完成（需要 .NET 10.0 SDK）：
+- Uno Platform 主项目需要 .NET 10.0 SDK
+- 当前 Uno Platform 6.5+ 版本要求 .NET 10.0 或更高版本
+- 建议升级到 .NET 10.0 SDK 后继续项目初始化
 
 ## 构建项目
 
@@ -174,7 +174,7 @@ dotnet test tests/SalmonEgg.Infrastructure.Tests
 
 ## 下一步
 
-1. 升级到 .NET 9.0 SDK
+1. 升级到 .NET 10.0 SDK
 2. 完成 Uno Platform 主项目的创建
 3. 实现领域模型（AcpMessage, ConnectionState, ServerConfiguration）
 4. 实现基础设施层（消息解析器、连接管理器）

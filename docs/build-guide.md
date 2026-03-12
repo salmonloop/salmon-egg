@@ -4,8 +4,8 @@
 
 ### 开发环境
 
-- **.NET 9.0 SDK** 或更高版本
-  - 下载地址：https://dotnet.microsoft.com/download/dotnet/9.0
+- **.NET 10.0 SDK** 或更高版本
+  - 下载地址：https://dotnet.microsoft.com/download/dotnet/10.0
   - 验证安装：`dotnet --version`
 
 - **Visual Studio 2022** (17.12+) 或 **Visual Studio Code**
@@ -66,13 +66,13 @@ dotnet build SalmonEgg.sln --configuration Release
 
 #### Windows (Desktop)
 ```bash
-dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj --framework net9.0-windows10.0.19041.0
+run.bat
 ```
 
 #### WebAssembly
 ```bash
 cd SalmonEgg/SalmonEgg
-dotnet run --framework net9.0-browserwasm
+dotnet run --framework net10.0-browserwasm
 ```
 浏览器会自动打开 http://localhost:5000
 
@@ -83,14 +83,21 @@ dotnet run --framework net9.0-browserwasm
 > 说明：原生 WinUI 3 目标需要 Windows 10/11 SDK + Visual Studio 2022（或 Build Tools 2022，含 MSBuild + C++ 工具链），否则会在 XamlCompiler 步骤失败。
 
 ```bash
-# 运行
-dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj --framework net9.0-windows10.0.19041.0
+# 运行（MSIX）
+run.bat
 
-# 发布为独立应用
+# 仅打包 MSIX（不安装）
+build.bat msix
+
+# Skia Desktop（跨平台）
+dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj \
+  -f net10.0-desktop
+
+# 发布 Skia Desktop
 dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj \
-  -f net9.0-windows10.0.19041.0 \
+  -f net10.0-desktop \
   -c Release \
-  -o ./publish
+  -o ./publish/windows-desktop
 ```
 
 ### WebAssembly
@@ -98,13 +105,13 @@ dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj \
 ```bash
 # 运行开发服务器
 cd SalmonEgg/SalmonEgg
-dotnet run --framework net9.0-browserwasm
+dotnet run --framework net10.0-browserwasm
 
 # 发布为静态网站
 dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj \
-  -f net9.0-browserwasm \
+  -f net10.0-browserwasm \
   -c Release \
-  -o ./dist
+  -o ./publish/wasm
 ```
 
 发布后的文件可以部署到任何静态网站托管服务（如 Azure Static Web Apps、GitHub Pages、Netlify 等）。
@@ -117,16 +124,19 @@ dotnet workload install android
 
 # 运行在 Android 模拟器
 dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj \
-  -f net9.0-android
+  -f net10.0-android36.0
 
 # 发布 APK
 dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj \
-  -f net9.0-android \
+  -f net10.0-android36.0 \
   -c Release \
-  -o ./publish-android
+  -o ./publish/android
 ```
 
-### iOS (需要 macOS)
+### iOS (需要 macOS，可选)
+
+> 说明：当前仓库默认只启用 `net10.0-android36.0`（见 `SalmonEgg/SalmonEgg/SalmonEgg.csproj`）。
+> 如需 iOS/macOS，请先将对应 TFM 加入 `TargetFrameworks`。
 
 ```bash
 # 安装 iOS 工作负载（首次需要）
@@ -134,7 +144,7 @@ dotnet workload install ios
 
 # 运行在 iOS 模拟器
 dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj \
-  -f net9.0-ios \
+  -f net10.0-ios \
   -t:RunSimulator
 ```
 
@@ -182,14 +192,14 @@ dotnet test /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura
 
 1. 打开 `SalmonEgg.sln`
 2. 设置启动项目为 `SalmonEgg`
-3. 选择目标框架（如 `net9.0-windows10.0.19041.0`）
+3. 选择目标框架（如 `net10.0-windows10.0.26100.0`）
 4. 按 F5 开始调试
 
 ### Visual Studio Code
 
 1. 安装 C# Dev Kit 扩展
 2. 打开项目文件夹
-3. 选择 .NET 9.0 作为目标框架
+3. 选择 .NET 10.0 作为目标框架
 4. 按 F5 开始调试
 
 ### 调试日志
@@ -210,7 +220,7 @@ dotnet test /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura
 **症状**: 编译错误提到找不到类型或命名空间
 
 **解决方案**:
-1. 确保已安装 .NET 9.0 SDK
+1. 确保已安装 .NET 10.0 SDK
 2. 运行 `dotnet restore`
 3. 清理并重新构建：
    ```bash
@@ -241,7 +251,7 @@ dotnet workload install ios
 dotnet workload install wasm-tools
 
 # 重新构建
-dotnet build --framework net9.0-browserwasm
+dotnet build --framework net10.0-browserwasm
 ```
 
 ### 问题 4: XAML 编译错误
@@ -307,7 +317,7 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v3
       with:
-        dotnet-version: '9.0.x'
+        dotnet-version: '10.0.x'
     
     - name: Restore dependencies
       run: dotnet restore
@@ -322,7 +332,7 @@ jobs:
 ## 参考资源
 
 - [Uno Platform 官方文档](https://platform.uno/docs/)
-- [.NET 9.0 文档](https://learn.microsoft.com/dotnet/core/whats-new/dotnet-9)
+- [.NET 10.0 文档](https://learn.microsoft.com/dotnet/core/whats-new/dotnet-10)
 - [CommunityToolkit.Mvvm](https://learn.microsoft.com/dotnet/communitytoolkit/mvvm/)
 - [Serilog 文档](https://serilog.net/)
 - [xUnit 测试框架](https://xunit.net/)

@@ -5,6 +5,5 @@ namespace SalmonEgg.Presentation.Models;
 /// </summary>
 public static class UiLayout
 {
-    public static double ContentMaxWidth { get; } = 800;
+    public static double ContentMaxWidth { get; } = 900;
 }
-

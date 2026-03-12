@@ -6,6 +6,10 @@ set "REPO_ROOT=%~dp0"
 pushd "%REPO_ROOT%" >nul
 
 if /I "%1"=="desktop" goto :desktop
+if /I "%1"=="msix" goto :msix
+if /I "%1"=="-h" goto :usage
+if /I "%1"=="--help" goto :usage
+if /I "%1"=="/?" goto :usage
 
 set "WINSDK_BIN=%ProgramFiles(x86)%\Windows Kits\10\bin"
 if exist "%WINSDK_BIN%" goto :run
@@ -31,7 +35,7 @@ echo ERROR: MSVC C++ toolchain not installed.
 echo Install Visual Studio 2022 (or Build Tools 2022) workload "Desktop development with C++", and ensure "MSVC v143 - VS 2022 C++ x64/x86 build tools" is selected.
 exit /b 1
 
-:runapp
+:msix
 set "PWSH_EXE="
 for /f "usebackq delims=" %%I in (`where pwsh 2^>nul`) do (
   set "PWSH_EXE=%%I"
@@ -52,3 +56,13 @@ dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj --framework net10.0-de
 set "EC=%errorlevel%"
 popd >nul
 exit /b %EC%
+
+:usage
+echo.
+echo Usage:
+echo   run.bat            ^(default: msix^)
+echo   run.bat msix       ^(build/install/run WinUI 3 MSIX^)
+echo   run.bat desktop    ^(dotnet run net10.0-desktop^)
+echo.
+popd >nul
+exit /b 0

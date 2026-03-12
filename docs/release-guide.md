@@ -18,7 +18,7 @@
 
 ### 通用要求
 
-- .NET 9.0 SDK 或更高版本
+- .NET 10.0 SDK 或更高版本
 - Visual Studio 2022 (17.12+) 或 Visual Studio Code
 - Git
 
@@ -36,19 +36,28 @@
 
 ## Windows 发布
 
-### 发布为独立应用
+### MSIX（WinUI 3，推荐）
+
+```bash
+# 生成 MSIX（不安装）
+build.bat msix
+```
+
+输出目录：`artifacts/msix/`
+
+### 发布为独立应用（Skia Desktop）
 
 ```bash
 cd SalmonEgg/SalmonEgg
 
 # 发布为 Windows 独立应用（包含 .NET 运行时）
-dotnet publish -f net9.0-windows10.0.19041.0 -c Release \
+dotnet publish -f net10.0-desktop -c Release \
   --self-contained true \
   -r win-x64 \
   -o ../../publish/windows-x64
 
 # 或使用依赖框架的发布（需要用户已安装 .NET）
-dotnet publish -f net9.0-windows10.0.19041.0 -c Release \
+dotnet publish -f net10.0-desktop -c Release \
   --self-contained false \
   -o ../../publish/windows-desktop
 ```
@@ -82,12 +91,12 @@ iscc windows-installer.iss
 cd SalmonEgg/SalmonEgg
 
 # 发布为 WebAssembly（优化后）
-dotnet publish -f net9.0-browserwasm -c Release \
+dotnet publish -f net10.0-browserwasm -c Release \
   --no-build \
   -o ../../publish/wasm
 
 # 或使用 AOT 编译（更快但包更大）
-dotnet publish -f net9.0-browserwasm -c Release \
+dotnet publish -f net10.0-browserwasm -c Release \
   -p:PublishTrimmed=true \
   -p:TrimMode=link \
   -o ../../publish/wasm-aot
@@ -142,7 +151,7 @@ server {
 # 使用 .NET HTTP 服务器
 cd publish/wasm/wwwroot
 dotnet run --project ../../../SalmonEgg/SalmonEgg/SalmonEgg.csproj \
-  -f net9.0-browserwasm
+  -f net10.0-browserwasm
 
 # 或使用任意 HTTP 服务器
 python -m http.server 8080
@@ -169,12 +178,12 @@ keytool -genkey -v -keystore uno-acp-client.keystore -alias uno-acp -keyalg RSA 
 cd SalmonEgg/SalmonEgg
 
 # 发布未签名的 APK
-dotnet publish -f net9.0-android -c Release \
+dotnet publish -f net10.0-android36.0 -c Release \
   -p:AndroidPackageFormat=apk \
   -o ../../publish/android
 
 # 发布签名后的 APK
-dotnet publish -f net9.0-android -c Release \
+dotnet publish -f net10.0-android36.0 -c Release \
   -p:AndroidPackageFormat=apk \
   -p:AndroidKeyStore=true \
   -p:AndroidSigningKeyStore=uno-acp-client.keystore \
@@ -187,7 +196,7 @@ dotnet publish -f net9.0-android -c Release \
 ### 发布 AAB（Google Play 要求）
 
 ```bash
-dotnet publish -f net9.0-android -c Release \
+dotnet publish -f net10.0-android36.0 -c Release \
   -p:AndroidPackageFormat=aab \
   -p:AndroidKeyStore=true \
   -p:AndroidSigningKeyStore=uno-acp-client.keystore \
@@ -202,7 +211,7 @@ dotnet publish -f net9.0-android -c Release \
 adb install publish/android/SalmonEgg.apk
 
 # 或在设备上调试
-dotnet build -t:Run -f net9.0-android -c Release
+dotnet build -t:Run -f net10.0-android36.0 -c Release
 ```
 
 ---
@@ -217,11 +226,14 @@ dotnet build -t:Run -f net9.0-android -c Release
 
 ### 创建 IPA
 
+> 说明：当前仓库默认未启用 `net10.0-ios`（见 `SalmonEgg/SalmonEgg/SalmonEgg.csproj`）。
+> 如需 iOS/macOS，请先将对应 TFM 加入 `TargetFrameworks`。
+
 ```bash
 cd SalmonEgg/SalmonEgg
 
 # 发布为 IPA
-dotnet publish -f net9.0-ios -c Release \
+dotnet publish -f net10.0-ios -c Release \
   -p:ArchiveOnBuild=true \
   -p:CreateIpa=true \
   -p:CodesignKey="iPhone Distribution: Your Company" \
@@ -248,13 +260,13 @@ xcrun altool --upload-app --type ios -f SalmonEgg.ipa \
 cd SalmonEgg/SalmonEgg
 
 # 发布 macOS 应用
-dotnet publish -f net9.0-maccatalyst -c Release \
+dotnet publish -f net10.0-maccatalyst -c Release \
   --self-contained true \
   -r osx-x64 \
   -o ../../publish/macos-x64
 
 # 或 Apple Silicon (M1/M2)
-dotnet publish -f net9.0-maccatalyst -c Release \
+dotnet publish -f net10.0-maccatalyst -c Release \
   --self-contained true \
   -r osx-arm64 \
   -o ../../publish/macos-arm64
@@ -306,7 +318,7 @@ steps:
 - task: UseDotNet@2
   inputs:
     packageType: 'sdk'
-    version: '9.0.x'
+    version: '10.0.x'
 
 - script: dotnet build -c Release
   displayName: 'Build'
@@ -316,7 +328,7 @@ steps:
 
 - script: |
     cd SalmonEgg/SalmonEgg
-    dotnet publish -f net9.0-browserwasm -c Release -o ../../publish/wasm
+    dotnet publish -f net10.0-browserwasm -c Release -o ../../publish/wasm
   displayName: 'Publish WebAssembly'
 
 - task: PublishBuildArtifacts@1

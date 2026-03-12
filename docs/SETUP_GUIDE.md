@@ -8,8 +8,8 @@
 
 ### 必需软件
 
-1. **.NET 9.0 SDK** 或更高版本
-   - 下载地址: https://dotnet.microsoft.com/download/dotnet/9.0
+1. **.NET 10.0 SDK** 或更高版本
+   - 下载地址: https://dotnet.microsoft.com/download/dotnet/10.0
    - 验证安装: `dotnet --version`
 
 2. **Visual Studio 2022** (17.12+) 或 **Visual Studio Code**
@@ -33,7 +33,7 @@
 ### 1. 验证环境
 
 ```bash
-# 检查 .NET 版本（需要 9.0+）
+# 检查 .NET 版本（需要 10.0+）
 dotnet --version
 
 # 检查 Uno Platform 模板
@@ -64,7 +64,7 @@ dotnet new sln -n SalmonEgg
 ### 4. 创建 Uno Platform 主项目
 
 ```bash
-# 创建 Uno Platform 应用（需要 .NET 9.0）
+# 创建 Uno Platform 应用（需要 .NET 10.0）
 dotnet new unoapp -o SalmonEgg
 
 # 添加到解决方案
@@ -233,7 +233,7 @@ dotnet test
 **症状**: 错误提示包不兼容 net8.0
 
 **解决方案**: 
-- 确保安装了 .NET 9.0 SDK
+- 确保安装了 .NET 10.0 SDK
 - 更新 Uno Platform 模板: `dotnet new install Uno.Templates --force`
 
 ### 问题 2: Websocket.Client 不兼容 netstandard2.0
@@ -314,11 +314,11 @@ dotnet run
 1. **架构文档**: `.kiro/specs/uno-acp-client/design.md`
 2. **需求文档**: `.kiro/specs/uno-acp-client/requirements.md`
 3. **任务列表**: `.kiro/specs/uno-acp-client/tasks.md`
-4. **构建指南**: `docs/BUILD_GUIDE.md`（待创建）
+4. **构建指南**: `BUILD_GUIDE.md`
 
 ## 参考资源
 
 - [Uno Platform 官方文档](https://platform.uno/docs/)
-- [.NET 9.0 文档](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-9)
+- [.NET 10.0 文档](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-10)
 - [Clean Architecture](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
 - [MVVM Pattern](https://learn.microsoft.com/en-us/dotnet/architecture/maui/mvvm)

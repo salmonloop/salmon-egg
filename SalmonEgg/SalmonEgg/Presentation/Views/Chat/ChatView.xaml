@@ -6,6 +6,7 @@
     xmlns:domain="using:SalmonEgg.Domain.Models"
     xmlns:converters="using:SalmonEgg.Presentation.Converters"
     xmlns:controls="using:SalmonEgg.Controls"
+    xmlns:models="using:SalmonEgg.Presentation.Models"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
@@ -67,7 +68,6 @@
             <Grid Margin="0,8" HorizontalAlignment="{x:Bind IsOutgoing, Converter={StaticResource HorizontalAlignmentConverter}, Mode=OneWay}">
                 <Border CornerRadius="12"
                         Padding="12,8"
-                        MaxWidth="500"
                         Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                         BorderThickness="1">
@@ -183,24 +183,35 @@
             </Border>
 
             <!-- 消息列表 -->
-            <ListView Grid.Row="1"
-                      ItemsSource="{x:Bind ViewModel.MessageHistory, Mode=OneWay}"
-                      ItemTemplate="{StaticResource MessageTemplate}"
-                      Padding="20"
-                      SelectionMode="None">
-                <ListView.ItemContainerStyle>
-                    <Style TargetType="ListViewItem">
-                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                        <Setter Property="Padding" Value="0"/>
-                        <Setter Property="MinHeight" Value="0"/>
-                    </Style>
-                </ListView.ItemContainerStyle>
-            </ListView>
+            <controls:ResponsiveContentHost Grid.Row="1"
+                                            MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneWay}">
+                <controls:ResponsiveContentHost.Child>
+                    <ListView ItemsSource="{x:Bind ViewModel.MessageHistory, Mode=OneWay}"
+                              ItemTemplate="{StaticResource MessageTemplate}"
+                              Padding="20"
+                              SelectionMode="None"
+                              HorizontalAlignment="Stretch"
+                              MinWidth="0">
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="MinHeight" Value="0"/>
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                    </ListView>
+                </controls:ResponsiveContentHost.Child>
+            </controls:ResponsiveContentHost>
 
             <!-- 输入区域（可复用控件，包含模式选择与后续扩展位） -->
-            <controls:ChatInputArea Grid.Row="2"
-                                    ViewModel="{x:Bind ViewModel, Mode=OneWay}"
-                                    SubmitCommand="{x:Bind ViewModel.SendPromptCommand}" />
+            <controls:ResponsiveContentHost Grid.Row="2"
+                                            MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneWay}">
+                <controls:ResponsiveContentHost.Child>
+                    <controls:ChatInputArea ViewModel="{x:Bind ViewModel, Mode=OneWay}"
+                                            SubmitCommand="{x:Bind ViewModel.SendPromptCommand}"
+                                            HorizontalAlignment="Stretch" />
+                </controls:ResponsiveContentHost.Child>
+            </controls:ResponsiveContentHost>
 
             <!-- 加载遮罩 -->
             <Grid Grid.RowSpan="3"

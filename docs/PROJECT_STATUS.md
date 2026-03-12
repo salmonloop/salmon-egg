@@ -81,19 +81,19 @@ tests/
 - Infrastructure 层引用 Domain 层
 - Uno Platform 主项目引用所有三层
 
-### 待完成项（需要 .NET 9.0 SDK）
+### 待完成项（需要 .NET 10.0 SDK）
 
 ⚠️ **Uno Platform 项目构建**
-- Uno Platform 6.5+ 要求 .NET 9.0 SDK
+- Uno Platform 6.5+ 要求 .NET 10.0 SDK
 - 当前系统安装的是 .NET 8.0 SDK
-- 需要升级到 .NET 9.0 SDK 才能构建和运行 Uno Platform 项目
+- 需要升级到 .NET 10.0 SDK 才能构建和运行 Uno Platform 项目
 
 ### 解决方案
 
 有两个选择：
 
-**选项 1: 升级到 .NET 9.0 SDK（推荐）**
-1. 从 https://dotnet.microsoft.com/download/dotnet/9.0 下载并安装 .NET 9.0 SDK
+**选项 1: 升级到 .NET 10.0 SDK（推荐）**
+1. 从 https://dotnet.microsoft.com/download/dotnet/10.0 下载并安装 .NET 10.0 SDK
 2. 运行 `dotnet restore SalmonEgg.sln`
 3. 运行 `dotnet build SalmonEgg.sln`
 
@@ -104,7 +104,7 @@ tests/
 
 ### 验证步骤
 
-完成 .NET 9.0 SDK 安装后，运行以下命令验证：
+完成 .NET 10.0 SDK 安装后，运行以下命令验证：
 
 ```bash
 # 验证 .NET 版本
@@ -119,8 +119,8 @@ dotnet build SalmonEgg.sln --configuration Debug
 # 运行测试
 dotnet test
 
-# 运行 Uno Platform 应用（Desktop）
-dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj --framework net9.0-windows10.0.19041.0
+# 运行 Uno Platform 应用（WinUI 3 MSIX）
+run.bat
 ```
 
 ### 下一步
@@ -130,6 +130,6 @@ dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj --framework net9.0-win
 - ✅ NuGet 包配置完成
 - ✅ 依赖注入容器配置完成
 - ✅ 目录结构创建完成
-- ⚠️ 需要 .NET 9.0 SDK 才能完整验证
+- ⚠️ 需要 .NET 10.0 SDK 才能完整验证
 
-可以继续进行任务 2（领域层实现），因为领域层使用 .NET Standard 2.1，不依赖 .NET 9.0。
+可以继续进行任务 2（领域层实现），因为领域层使用 .NET Standard 2.1，不依赖 .NET 10.0。
