@@ -3,6 +3,7 @@
     <ProjectReference Include="..\..\src\SalmonEgg.Domain\SalmonEgg.Domain.csproj" />
     <ProjectReference Include="..\..\src\SalmonEgg.Application\SalmonEgg.Application.csproj" />
     <ProjectReference Include="..\..\src\SalmonEgg.Infrastructure\SalmonEgg.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\SalmonEgg.Presentation.Core\SalmonEgg.Presentation.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>

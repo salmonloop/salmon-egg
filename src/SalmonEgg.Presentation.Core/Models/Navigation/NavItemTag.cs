@@ -2,7 +2,7 @@ using System;
 
 namespace SalmonEgg.Presentation.Models.Navigation;
 
-internal static class NavItemTag
+public static class NavItemTag
 {
     public static string SessionsHeader => "SessionsHeader";
 
