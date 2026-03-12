@@ -402,7 +402,15 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                     {
                         try { _sessionManager.CreateSessionAsync(convo.ConversationId).GetAwaiter().GetResult(); } catch { }
                     }
-                    _sessionManager.UpdateSession(convo.ConversationId, s => s.DisplayName = displayName);
+                    _sessionManager.UpdateSession(
+                        convo.ConversationId,
+                        s =>
+                        {
+                            s.DisplayName = displayName;
+                            s.CreatedAt = binding.CreatedAt;
+                            s.LastActivityAt = binding.LastUpdatedAt;
+                        },
+                        updateActivity: false);
 
                     binding.Transcript.Clear();
                     foreach (var msg in convo.Messages)
@@ -634,7 +642,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             ? SessionNamePolicy.CreateDefault(conversationId)
             : sanitized;
 
-        _sessionManager.UpdateSession(conversationId, s => s.DisplayName = finalName);
+        _sessionManager.UpdateSession(conversationId, s => s.DisplayName = finalName, updateActivity: false);
 
         if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
         {

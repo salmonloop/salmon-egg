@@ -64,8 +64,9 @@ namespace SalmonEgg.Infrastructure.Services
         /// </summary>
         /// <param name="sessionId">会话 ID</param>
         /// <param name="updateAction">更新操作</param>
+        /// <param name="updateActivity">是否同步更新最后活动时间</param>
         /// <returns>是否成功更新</returns>
-        public bool UpdateSession(string sessionId, Action<Session> updateAction)
+        public bool UpdateSession(string sessionId, Action<Session> updateAction, bool updateActivity = true)
         {
             if (string.IsNullOrWhiteSpace(sessionId))
             {
@@ -82,7 +83,10 @@ namespace SalmonEgg.Infrastructure.Services
                 lock (_lock)
                 {
                     updateAction(session);
-                    session.UpdateActivity();
+                    if (updateActivity)
+                    {
+                        session.UpdateActivity();
+                    }
                     return true;
                 }
             }

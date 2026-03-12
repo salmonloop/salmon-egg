@@ -31,8 +31,9 @@ namespace SalmonEgg.Domain.Services
         /// </summary>
         /// <param name="sessionId">会话 ID</param>
         /// <param name="updateAction">更新操作</param>
+        /// <param name="updateActivity">是否同步更新最后活动时间</param>
         /// <returns>是否成功更新</returns>
-        bool UpdateSession(string sessionId, Action<Session> updateAction);
+        bool UpdateSession(string sessionId, Action<Session> updateAction, bool updateActivity = true);
 
         /// <summary>
         /// 取消会话。

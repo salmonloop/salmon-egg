@@ -28,6 +28,14 @@ public sealed partial class SessionsHeaderNavItemViewModel : MainNavItemViewMode
 
     public IAsyncRelayCommand AddProjectCommand { get; }
 
+    private bool _isPaneOpen = true;
+
+    public bool IsPaneOpen
+    {
+        get => _isPaneOpen;
+        set => SetProperty(ref _isPaneOpen, value);
+    }
+
     public SessionsHeaderNavItemViewModel(IAsyncRelayCommand addProjectCommand)
     {
         AddProjectCommand = addProjectCommand;

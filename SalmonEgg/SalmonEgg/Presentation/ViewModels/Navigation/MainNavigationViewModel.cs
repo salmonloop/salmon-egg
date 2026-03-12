@@ -29,6 +29,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     private readonly ILogger<MainNavigationViewModel> _logger;
     private readonly SynchronizationContext _syncContext;
     private readonly System.Collections.Specialized.NotifyCollectionChangedEventHandler _projectsChangedHandler;
+    private readonly Timer _relativeTimeTimer;
+    private static readonly TimeSpan RelativeTimeRefreshInterval = TimeSpan.FromSeconds(30);
 
     private readonly Dictionary<string, SessionNavItemViewModel> _sessionIndex = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ProjectNavItemViewModel> _projectIndex = new(StringComparer.Ordinal);
@@ -82,12 +84,19 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         _chatViewModel.PropertyChanged += OnChatViewModelPropertyChanged;
         _projectsChangedHandler = (_, _) => RebuildTree();
         _preferences.Projects.CollectionChanged += _projectsChangedHandler;
+
+        _relativeTimeTimer = new Timer(
+            _ => _syncContext.Post(__ => RefreshRelativeTimes(), null),
+            null,
+            RelativeTimeRefreshInterval,
+            RelativeTimeRefreshInterval);
     }
 
     public void Dispose()
     {
         _chatViewModel.PropertyChanged -= OnChatViewModelPropertyChanged;
         _preferences.Projects.CollectionChanged -= _projectsChangedHandler;
+        _relativeTimeTimer.Dispose();
     }
 
     private void OnChatViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -245,6 +254,45 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 _logger.LogWarning(ex, "Failed to rebuild navigation tree");
             }
         }, null);
+    }
+
+    private void RefreshRelativeTimes()
+    {
+        foreach (var item in Items)
+        {
+            RefreshRelativeTimes(item);
+        }
+    }
+
+    private void RefreshRelativeTimes(MainNavItemViewModel item)
+    {
+        if (item is SessionNavItemViewModel sessionItem)
+        {
+            if (sessionItem.IsPlaceholder || string.IsNullOrWhiteSpace(sessionItem.SessionId))
+            {
+                return;
+            }
+
+            var session = _sessionManager.GetSession(sessionItem.SessionId);
+            if (session == null)
+            {
+                return;
+            }
+
+            var timestamp = session.LastActivityAt == default ? session.CreatedAt : session.LastActivityAt;
+            var relative = NavTimeFormatter.ToRelativeText(timestamp);
+            if (!string.Equals(sessionItem.RelativeTimeText, relative, StringComparison.Ordinal))
+            {
+                sessionItem.RelativeTimeText = relative;
+            }
+
+            return;
+        }
+
+        foreach (var child in item.Children)
+        {
+            RefreshRelativeTimes(child);
+        }
     }
 
     private IEnumerable<ProjectNavItemViewModel> BuildProjects()

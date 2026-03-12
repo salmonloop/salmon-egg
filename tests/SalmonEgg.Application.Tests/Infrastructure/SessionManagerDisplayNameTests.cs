@@ -25,5 +25,18 @@ public sealed class SessionManagerDisplayNameTests
         Assert.True(ok);
         Assert.Equal("My Session", manager.GetSession("abc")!.DisplayName);
     }
-}
 
+    [Fact]
+    public async Task UpdateSession_CanSkipActivityUpdate()
+    {
+        var manager = new SessionManager();
+        await manager.CreateSessionAsync("abc");
+
+        var original = manager.GetSession("abc")!.LastActivityAt;
+        var ok = manager.UpdateSession("abc", s => s.DisplayName = "My Session", updateActivity: false);
+
+        Assert.True(ok);
+        Assert.Equal("My Session", manager.GetSession("abc")!.DisplayName);
+        Assert.Equal(original, manager.GetSession("abc")!.LastActivityAt);
+    }
+}

@@ -696,6 +696,7 @@ public sealed partial class MainPage : Page
     {
         ConfigureTitleBar();
         UpdateNavPaneToggleUi();
+        SyncSessionsHeaderPaneState(MainNavView?.IsPaneOpen ?? true);
         NavVM.RebuildTree();
 #if WINDOWS
         InitializeTray();
@@ -735,6 +736,7 @@ public sealed partial class MainPage : Page
         if (!UiMotion.Current.IsAnimationEnabled || MainNavView.DisplayMode == NavigationViewDisplayMode.Minimal)
         {
             MainNavView.IsPaneOpen = targetOpen;
+            SyncSessionsHeaderPaneState(targetOpen);
             UpdateNavPaneToggleUi(targetOpen);
             return;
         }
@@ -800,11 +802,23 @@ public sealed partial class MainPage : Page
     private void OnMainNavPaneOpened(NavigationView sender, object args)
     {
         UpdateNavPaneToggleUi();
+        SyncSessionsHeaderPaneState(sender.IsPaneOpen);
     }
 
     private void OnMainNavPaneClosed(NavigationView sender, object args)
     {
         UpdateNavPaneToggleUi();
+        SyncSessionsHeaderPaneState(sender.IsPaneOpen);
+    }
+
+    private void SyncSessionsHeaderPaneState(bool isOpen)
+    {
+        if (NavVM?.SessionsHeaderItem == null)
+        {
+            return;
+        }
+
+        NavVM.SessionsHeaderItem.IsPaneOpen = isOpen;
     }
 
     private void AnimateNavPane(bool targetOpen)
