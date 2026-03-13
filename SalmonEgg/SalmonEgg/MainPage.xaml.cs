@@ -36,6 +36,8 @@ public sealed partial class MainPage : Page
 {
     private double _navCompactPaneLength = 72;
     private double _navOpenPaneLength = 300;
+    private const double NavPaneMinWidth = 240;
+    private const double NavPaneMaxWidth = 480;
     private const double NavPaneAnimationDurationMs = 180;
     private const double RightPanelMinWidth = 240;
     private const double RightPanelMaxWidth = 520;
@@ -43,6 +45,9 @@ public sealed partial class MainPage : Page
     private bool _isResizingRightPanel;
     private double _rightPanelResizeStartX;
     private double _rightPanelResizeStartWidth;
+    private bool _isResizingLeftNav;
+    private double _leftNavResizeStartX;
+    private double _leftNavResizeStartWidth;
     private string? _activeRightPanel;
     private double _rightPanelLastWidth = 320;
     private Storyboard? _rightPanelStoryboard;
@@ -157,6 +162,7 @@ public sealed partial class MainPage : Page
 
         MainNavView.CompactPaneLength = _navCompactPaneLength;
         MainNavView.OpenPaneLength = _navOpenPaneLength;
+        UpdateLeftNavResizerState();
     }
 
     private void SetSelectedSettingsItemDeferred()
@@ -1012,12 +1018,19 @@ public sealed partial class MainPage : Page
     {
         UpdateNavPaneToggleUi();
         SyncSessionsHeaderPaneState(sender.IsPaneOpen);
+        UpdateLeftNavResizerState();
     }
 
     private void OnMainNavPaneClosed(NavigationView sender, object args)
     {
         UpdateNavPaneToggleUi();
         SyncSessionsHeaderPaneState(sender.IsPaneOpen);
+        UpdateLeftNavResizerState();
+    }
+
+    private void OnMainNavDisplayModeChanged(NavigationView sender, NavigationViewDisplayModeChangedEventArgs args)
+    {
+        UpdateLeftNavResizerState();
     }
 
     private void OnChatViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -1055,6 +1068,8 @@ public sealed partial class MainPage : Page
             _navPaneStoryboard?.Stop();
             _navPaneAnimating = false;
         }
+
+        UpdateLeftNavResizerState();
 
         var from = targetOpen ? _navCompactPaneLength : MainNavView.OpenPaneLength;
         var to = targetOpen ? _navOpenPaneLength : _navCompactPaneLength;
@@ -1096,6 +1111,7 @@ public sealed partial class MainPage : Page
                 MainNavView.OpenPaneLength = _navOpenPaneLength;
             }
             UpdateNavPaneToggleUi();
+            UpdateLeftNavResizerState();
             _navPaneStoryboard = null;
         };
 
@@ -1111,6 +1127,130 @@ public sealed partial class MainPage : Page
         {
             args.Cancel = true;
         }
+    }
+
+    private void UpdateLeftNavResizerState()
+    {
+        if (LeftNavResizer == null || MainNavView == null)
+        {
+            return;
+        }
+
+        var isOpen = MainNavView.IsPaneOpen;
+        var isMinimal = MainNavView.DisplayMode == NavigationViewDisplayMode.Minimal;
+        var shouldShow = isOpen && !isMinimal && !_navPaneAnimating;
+        LeftNavResizer.Visibility = shouldShow ? Visibility.Visible : Visibility.Collapsed;
+
+        if (shouldShow)
+        {
+            UpdateLeftNavResizerPosition();
+        }
+    }
+
+    private void UpdateLeftNavResizerPosition()
+    {
+        if (LeftNavResizerTransform == null || LeftNavResizer == null || MainNavView == null)
+        {
+            return;
+        }
+
+        var width = LeftNavResizer.Width;
+        if (double.IsNaN(width) || width <= 0)
+        {
+            width = 6;
+        }
+
+        var targetX = MainNavView.OpenPaneLength - width;
+        if (targetX < 0)
+        {
+            targetX = 0;
+        }
+
+        LeftNavResizerTransform.X = targetX;
+    }
+
+    private bool CanResizeLeftNav()
+    {
+        if (MainNavView == null)
+        {
+            return false;
+        }
+
+        if (_navPaneAnimating)
+        {
+            return false;
+        }
+
+        if (!MainNavView.IsPaneOpen)
+        {
+            return false;
+        }
+
+        return MainNavView.DisplayMode != NavigationViewDisplayMode.Minimal;
+    }
+
+    private void OnLeftNavResizerPointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (LeftNavResizer == null || MainNavView == null || !CanResizeLeftNav())
+        {
+            return;
+        }
+
+        _isResizingLeftNav = true;
+        _leftNavResizeStartX = e.GetCurrentPoint(this).Position.X;
+        _leftNavResizeStartWidth = MainNavView.OpenPaneLength;
+
+        LeftNavResizer.CapturePointer(e.Pointer);
+        e.Handled = true;
+    }
+
+    private void OnLeftNavResizerPointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_isResizingLeftNav || MainNavView == null)
+        {
+            return;
+        }
+
+        var currentX = e.GetCurrentPoint(this).Position.X;
+        var delta = currentX - _leftNavResizeStartX;
+        var newWidth = _leftNavResizeStartWidth + delta;
+
+        if (newWidth < NavPaneMinWidth)
+        {
+            newWidth = NavPaneMinWidth;
+        }
+        else if (newWidth > NavPaneMaxWidth)
+        {
+            newWidth = NavPaneMaxWidth;
+        }
+
+        MainNavView.OpenPaneLength = newWidth;
+        _navOpenPaneLength = newWidth;
+        UpdateLeftNavResizerPosition();
+        e.Handled = true;
+    }
+
+    private void OnLeftNavResizerPointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        EndLeftNavResize(e.Pointer);
+        e.Handled = true;
+    }
+
+    private void OnLeftNavResizerPointerCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        EndLeftNavResize(e.Pointer);
+    }
+
+    private void EndLeftNavResize(Pointer pointer)
+    {
+        if (!_isResizingLeftNav || LeftNavResizer == null)
+        {
+            return;
+        }
+
+        _isResizingLeftNav = false;
+        LeftNavResizer.ReleasePointerCapture(pointer);
+        UpdateLeftNavResizerPosition();
     }
 
     private void ConfigureTitleBar()

@@ -499,7 +499,7 @@
                 <ColumnDefinition x:Name="RightPanelColumnDefinition" Width="Auto" />
             </Grid.ColumnDefinitions>
 
-             <NavigationView x:Name="MainNavView"
+            <NavigationView x:Name="MainNavView"
                              Grid.Column="0"
                              Background="Transparent"
                              CompactPaneLength="{StaticResource NavCompactPaneLength}"
@@ -514,6 +514,7 @@
                              SelectedItem="{x:Bind NavVM.SelectedItem, Mode=TwoWay}"
                              SelectionChanged="OnMainNavSelectionChanged"
                              ItemInvoked="OnMainNavItemInvoked"
+                             DisplayModeChanged="OnMainNavDisplayModeChanged"
                              PaneOpened="OnMainNavPaneOpened"
                              PaneClosed="OnMainNavPaneClosed"
                              PaneClosing="OnMainNavPaneClosing">
@@ -523,6 +524,23 @@
                            ContentTransitions="{x:Bind models:UiMotion.Current.PageTransitions, Mode=OneWay}" />
                 </NavigationView.Content>
             </NavigationView>
+
+            <controls:ResizeGrip x:Name="LeftNavResizer"
+                                 Grid.Column="0"
+                                 HorizontalAlignment="Left"
+                                 VerticalAlignment="Stretch"
+                                 Width="6"
+                                 Background="Transparent"
+                                 Style="{StaticResource SubMenuResizerThumbStyle}"
+                                 Visibility="Collapsed"
+                                 PointerPressed="OnLeftNavResizerPointerPressed"
+                                 PointerMoved="OnLeftNavResizerPointerMoved"
+                                 PointerReleased="OnLeftNavResizerPointerReleased"
+                                 PointerCaptureLost="OnLeftNavResizerPointerCaptureLost">
+                <controls:ResizeGrip.RenderTransform>
+                    <TranslateTransform x:Name="LeftNavResizerTransform" />
+                </controls:ResizeGrip.RenderTransform>
+            </controls:ResizeGrip>
 
             <!-- 右侧边栏：Diff / Todo / Files -->
             <Grid x:Name="RightPanelColumn"
