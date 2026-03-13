@@ -24,6 +24,11 @@ namespace SalmonEgg.Domain.Models.Conversation
 
         public DateTime LastUpdatedAt { get; set; } = DateTime.UtcNow;
 
+        /// <summary>
+        /// 会话的工作目录，用于会话重启后正确分类到对应项目。
+        /// </summary>
+        public string? Cwd { get; set; }
+
         public List<ConversationMessageSnapshot> Messages { get; set; } = new();
     }
 

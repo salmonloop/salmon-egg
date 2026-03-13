@@ -416,7 +416,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
 
                     if (_sessionManager.GetSession(convo.ConversationId) == null)
                     {
-                        try { _sessionManager.CreateSessionAsync(convo.ConversationId).GetAwaiter().GetResult(); } catch { }
+                        try { _sessionManager.CreateSessionAsync(convo.ConversationId, convo.Cwd).GetAwaiter().GetResult(); } catch { }
                     }
                     _sessionManager.UpdateSession(
                         convo.ConversationId,
@@ -425,6 +425,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                             s.DisplayName = displayName;
                             s.CreatedAt = binding.CreatedAt;
                             s.LastActivityAt = binding.LastUpdatedAt;
+                            // Restore Cwd from persisted conversation record.
+                            if (!string.IsNullOrWhiteSpace(convo.Cwd))
+                            {
+                                s.Cwd = convo.Cwd;
+                            }
                         },
                         updateActivity: false);
 
@@ -571,12 +576,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         foreach (var binding in ordered)
         {
             var name = ResolveSessionDisplayName(binding.ConversationId);
+            var session = _sessionManager.GetSession(binding.ConversationId);
             var record = new ConversationRecord
             {
                 ConversationId = binding.ConversationId,
                 DisplayName = name,
                 CreatedAt = binding.CreatedAt,
-                LastUpdatedAt = binding.LastUpdatedAt
+                LastUpdatedAt = binding.LastUpdatedAt,
+                Cwd = session?.Cwd
             };
 
             foreach (var msg in binding.Transcript)
