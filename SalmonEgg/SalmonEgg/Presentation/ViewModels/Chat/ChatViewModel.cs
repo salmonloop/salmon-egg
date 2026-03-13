@@ -1218,6 +1218,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                     _activeAgentTextStreamMessage = null;
                     UpdateSlashCommands(commandsUpdate);
                 }
+                else if (e.Update != null)
+                {
+                    // Log unhandled update types for debugging protocol alignment issues.
+                    Logger.LogInformation("未处理的会话更新类型: {UpdateType}", e.Update.GetType().Name);
+                }
             }
             catch (Exception ex)
             {
