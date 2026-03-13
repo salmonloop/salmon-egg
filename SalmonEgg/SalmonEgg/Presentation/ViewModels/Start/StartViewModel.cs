@@ -112,17 +112,20 @@ public sealed partial class StartViewModel : ObservableObject
 
     private string? ResolveDefaultCwd()
     {
+        var pending = _nav.ConsumePendingProjectRootPath();
+        string? lastSelectedRoot = null;
+
         var projectId = _preferences.LastSelectedProjectId;
         if (!string.IsNullOrWhiteSpace(projectId))
         {
             var project = _preferences.Projects.FirstOrDefault(p => string.Equals(p.ProjectId, projectId, StringComparison.Ordinal));
             if (project != null && !string.IsNullOrWhiteSpace(project.RootPath))
             {
-                return project.RootPath.Trim();
+                lastSelectedRoot = project.RootPath;
             }
         }
 
         // Fallback: if no project selected, keep it unclassified.
-        return null;
+        return SessionCwdResolver.Resolve(pending, lastSelectedRoot);
     }
 }

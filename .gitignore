@@ -13,6 +13,9 @@
 *.userosscache
 *.sln.docstates
 *.rsuser
+.opencode/
+.claude/
+.codex/
 
 # Build results
 [Dd]ebug/
@@ -152,3 +155,5 @@ wwwroot/
 AGENTS.md
 CLAUDE.md
 GEMINI.md
+
+opencode.jsonc

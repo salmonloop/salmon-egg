@@ -78,6 +78,10 @@
     <UnoFeatures>SkiaRenderer;</UnoFeatures>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-browserwasm'">
+    <RuntimeIdentifier>browser-wasm</RuntimeIdentifier>
+  </PropertyGroup>
+
   <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.26100.0'">
     <!-- Keep runtime compatibility wide while targeting an installed Windows SDK toolset -->
     <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>

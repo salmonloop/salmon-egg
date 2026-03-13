@@ -34,6 +34,7 @@ public sealed partial class ChatInputArea : UserControl
 
     private INotifyPropertyChanged? _attachedViewModel;
     private ICommand? _attachedSubmitCommand;
+    private bool _isImeComposing;
 
     public ChatViewModel ViewModel
     {
@@ -58,6 +59,10 @@ public sealed partial class ChatInputArea : UserControl
         ViewModel = App.ServiceProvider.GetRequiredService<ChatViewModel>();
         InitializeComponent();
         SubmitCommand ??= ViewModel.SendPromptCommand;
+#if WINDOWS
+        InputBox.TextCompositionStarted += OnInputTextCompositionStarted;
+        InputBox.TextCompositionEnded += OnInputTextCompositionEnded;
+#endif
         AttachViewModel(ViewModel);
         AttachSubmitCommand(SubmitCommand);
         UpdateCanSubmitUi();
@@ -205,6 +210,11 @@ public sealed partial class ChatInputArea : UserControl
 
     private void OnInputKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (_isImeComposing)
+        {
+            return;
+        }
+
         if (!ViewModel.ShowSlashCommands)
         {
             return;
@@ -242,6 +252,11 @@ public sealed partial class ChatInputArea : UserControl
 
     private void OnSendAcceleratorInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
+        if (_isImeComposing)
+        {
+            return;
+        }
+
         // Enter sends; if slash commands menu is open, accept selection instead.
         if (ViewModel.ShowSlashCommands)
         {
@@ -259,6 +274,11 @@ public sealed partial class ChatInputArea : UserControl
 
     private void OnNewLineAcceleratorInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
+        if (_isImeComposing)
+        {
+            return;
+        }
+
         // Ctrl+Enter inserts a newline at the caret (even if IME/target platform behaves differently).
         var text = InputBox.Text ?? string.Empty;
         var start = InputBox.SelectionStart;
@@ -281,6 +301,16 @@ public sealed partial class ChatInputArea : UserControl
     private void OnSendClick(object sender, RoutedEventArgs e)
     {
         TrySendPrompt();
+    }
+
+    private void OnInputTextCompositionStarted(object sender, TextCompositionStartedEventArgs e)
+    {
+        _isImeComposing = true;
+    }
+
+    private void OnInputTextCompositionEnded(object sender, TextCompositionEndedEventArgs e)
+    {
+        _isImeComposing = false;
     }
 
     private void TrySendPrompt()

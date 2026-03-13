@@ -34,6 +34,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     private readonly Dictionary<string, SessionNavItemViewModel> _sessionIndex = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ProjectNavItemViewModel> _projectIndex = new(StringComparer.Ordinal);
+    private string? _pendingProjectIdForNewSession;
 
     public ObservableCollection<MainNavItemViewModel> Items { get; } = new();
 
@@ -172,9 +173,29 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             : projectId;
 
         _preferences.LastSelectedProjectId = normalizedId;
+        _pendingProjectIdForNewSession = normalizedId;
         _shellNavigation.NavigateToStart();
         SelectStart();
         return Task.CompletedTask;
+    }
+
+    public string? ConsumePendingProjectRootPath()
+    {
+        var projectId = _pendingProjectIdForNewSession;
+        _pendingProjectIdForNewSession = null;
+
+        if (string.IsNullOrWhiteSpace(projectId))
+        {
+            return null;
+        }
+
+        var project = _preferences.Projects.FirstOrDefault(p => string.Equals(p.ProjectId, projectId, StringComparison.Ordinal));
+        if (project == null || string.IsNullOrWhiteSpace(project.RootPath))
+        {
+            return null;
+        }
+
+        return project.RootPath.Trim();
     }
 
     public async Task ShowAllSessionsForProjectAsync(string projectId)
@@ -342,7 +363,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             .ToList();
 
         var byProject = sessions
-            .GroupBy(s => ClassifyProjectId(s, normalizedRoots), StringComparer.Ordinal)
+            .GroupBy(s => ProjectSessionClassifier.ClassifyProjectId(s.Cwd, normalizedRoots, UnclassifiedProjectId), StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.OrderByDescending(s => s.LastActivityAt).ToList(), StringComparer.Ordinal);
 
         foreach (var (project, isSystem) in projects)
@@ -406,35 +427,6 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         return vm;
     }
 
-    private string ClassifyProjectId(Session session, IReadOnlyDictionary<string, string> normalizedRoots)
-    {
-        var cwdNorm = NavTimeFormatter.NormalizePathForPrefixMatch(session.Cwd);
-        if (string.IsNullOrWhiteSpace(cwdNorm))
-        {
-            return UnclassifiedProjectId;
-        }
-
-        string? bestId = null;
-        var bestLen = -1;
-
-        foreach (var kvp in normalizedRoots)
-        {
-            var rootNorm = kvp.Value;
-            if (string.IsNullOrWhiteSpace(rootNorm))
-            {
-                continue;
-            }
-
-            if (cwdNorm.StartsWith(rootNorm, StringComparison.OrdinalIgnoreCase) && rootNorm.Length > bestLen)
-            {
-                bestId = kvp.Key;
-                bestLen = rootNorm.Length;
-            }
-        }
-
-        return bestId ?? UnclassifiedProjectId;
-    }
-
     private IReadOnlyList<SessionNavItemViewModel> BuildSessionItemsForProject(string projectId, int? limit)
     {
         if (string.IsNullOrWhiteSpace(projectId))
@@ -456,7 +448,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             .Select(id => _sessionManager.GetSession(id))
             .Where(s => s != null)
             .Cast<Session>()
-            .Where(s => string.Equals(ClassifyProjectId(s, normalizedRoots), projectId, StringComparison.Ordinal))
+            .Where(s => string.Equals(ProjectSessionClassifier.ClassifyProjectId(s.Cwd, normalizedRoots, UnclassifiedProjectId), projectId, StringComparison.Ordinal))
             .OrderByDescending(s => s.LastActivityAt)
             .ToList();
 
