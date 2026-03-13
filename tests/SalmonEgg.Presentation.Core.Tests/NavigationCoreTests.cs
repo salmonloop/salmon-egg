@@ -24,7 +24,7 @@ public sealed class NavigationCoreTests
         var path = Path.Combine("C:", "Temp", "Demo");
         var normalized = NavTimeFormatter.NormalizePathForPrefixMatch(path);
 
-        Assert.EndsWith(Path.DirectorySeparatorChar, normalized, StringComparison.Ordinal);
+        Assert.EndsWith(Path.DirectorySeparatorChar.ToString(), normalized, StringComparison.Ordinal);
         Assert.Contains("Demo", normalized, StringComparison.OrdinalIgnoreCase);
     }
 

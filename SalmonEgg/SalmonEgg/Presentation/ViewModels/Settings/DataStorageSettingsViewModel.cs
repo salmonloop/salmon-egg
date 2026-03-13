@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -93,24 +95,20 @@ public partial class DataStorageSettingsViewModel : ObservableObject
 
             if (string.Equals(format, "json", StringComparison.OrdinalIgnoreCase))
             {
-                var payload = new
-                {
-                    sessionId = Chat.CurrentSessionId,
-                    agentName = Chat.AgentName,
-                    agentVersion = Chat.AgentVersion,
-                    exportedAtUtc = DateTimeOffset.UtcNow,
-                    messages = Chat.MessageHistory.Select(m => new
-                    {
-                        id = m.Id,
-                        timestamp = m.Timestamp,
-                        isOutgoing = m.IsOutgoing,
-                        contentType = m.ContentType,
-                        title = m.Title,
-                        text = m.TextContent
-                    })
-                };
+                var payload = new ExportPayload(
+                    Chat.CurrentSessionId,
+                    Chat.AgentName,
+                    Chat.AgentVersion,
+                    DateTimeOffset.UtcNow,
+                    Chat.MessageHistory.Select(m => new ExportMessage(
+                        m.Id,
+                        m.Timestamp,
+                        m.IsOutgoing,
+                        m.ContentType,
+                        m.Title,
+                        m.TextContent)).ToList());
 
-                var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
+                var json = JsonSerializer.Serialize(payload, ExportPayloadJsonContext.Default.ExportPayload);
                 await File.WriteAllTextAsync(path, json, Encoding.UTF8).ConfigureAwait(false);
             }
             else
@@ -202,4 +200,25 @@ public partial class DataStorageSettingsViewModel : ObservableObject
         }
         return name;
     }
+}
+
+internal sealed record ExportMessage(
+    string Id,
+    DateTimeOffset Timestamp,
+    bool IsOutgoing,
+    string? ContentType,
+    string? Title,
+    string? Text);
+
+internal sealed record ExportPayload(
+    string? SessionId,
+    string? AgentName,
+    string? AgentVersion,
+    DateTimeOffset ExportedAtUtc,
+    List<ExportMessage> Messages);
+
+[JsonSourceGenerationOptions(WriteIndented = true)]
+[JsonSerializable(typeof(ExportPayload))]
+internal partial class ExportPayloadJsonContext : JsonSerializerContext
+{
 }

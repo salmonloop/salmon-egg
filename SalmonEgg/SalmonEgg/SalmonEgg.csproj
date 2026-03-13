@@ -14,15 +14,23 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Ensure Uno can resolve the language tag for this resource file -->
-    <PRIResource Update="Strings\zh-CN\Resources.resw">
-      <Language>zh-CN</Language>
+    <!-- Explicitly list PRI resources with language to avoid inference warnings -->
+    <PRIResource Include="Strings\en\Resources.resw">
+      <Language>en</Language>
+    </PRIResource>
+    <PRIResource Include="Strings\en-US\Resources.resw">
+      <Language>en-US</Language>
+    </PRIResource>
+    <PRIResource Include="Strings\zh-Hans\Resources.resw">
+      <Language>zh-Hans</Language>
     </PRIResource>
   </ItemGroup>
 
   <PropertyGroup>
     <!-- Mobile targets are opt-in to keep `dotnet build` working on dev machines without workloads/toolchains. -->
     <EnableMobileTargets Condition="'$(EnableMobileTargets)' == ''">false</EnableMobileTargets>
+    <!-- Avoid duplicate PRIResource items when we explicitly list them above -->
+    <EnableDefaultPriItems>false</EnableDefaultPriItems>
 
     <SalmonEggTargetFrameworks>net10.0-browserwasm;net10.0-desktop;net10.0-windows10.0.26100.0</SalmonEggTargetFrameworks>
     <SalmonEggAndroidTargetFrameworks Condition="

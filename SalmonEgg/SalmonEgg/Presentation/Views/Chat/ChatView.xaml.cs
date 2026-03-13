@@ -3,6 +3,7 @@ using System.Collections.Specialized;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using SalmonEgg.Presentation.Models;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.Services;
 
@@ -23,6 +24,13 @@ namespace SalmonEgg.Presentation.Views.Chat
             _shellNavigation = App.ServiceProvider.GetRequiredService<IShellNavigationService>();
 
             this.InitializeComponent();
+
+#if WINDOWS
+            if (MessagesList != null)
+            {
+                MessagesList.ItemContainerTransitions = UiMotion.Current.ListItemTransitions;
+            }
+#endif
 
             Loaded += OnLoaded;
             Unloaded += OnUnloaded;

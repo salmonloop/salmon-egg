@@ -194,8 +194,7 @@
                               Padding="20"
                               SelectionMode="None"
                               HorizontalAlignment="Stretch"
-                              MinWidth="0"
-                              ItemContainerTransitions="{x:Bind models:UiMotion.Current.ListItemTransitions, Mode=OneTime}">
+                              MinWidth="0">
                         <ListView.ItemContainerStyle>
                             <Style TargetType="ListViewItem">
                                 <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
