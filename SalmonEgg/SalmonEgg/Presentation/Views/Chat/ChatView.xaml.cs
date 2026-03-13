@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Specialized;
+using System.ComponentModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -16,6 +17,7 @@ namespace SalmonEgg.Presentation.Views.Chat
         private bool _isViewLoaded;
         private bool _isTrackingMessages;
         private bool _pendingInitialScroll = true;
+        private bool _isMotionSubscribed;
 
         public ChatView()
         {
@@ -25,13 +27,6 @@ namespace SalmonEgg.Presentation.Views.Chat
 
             this.InitializeComponent();
 
-#if WINDOWS
-            if (MessagesList != null)
-            {
-                MessagesList.ItemContainerTransitions = UiMotion.Current.ListItemTransitions;
-            }
-#endif
-
             Loaded += OnLoaded;
             Unloaded += OnUnloaded;
         }
@@ -39,6 +34,7 @@ namespace SalmonEgg.Presentation.Views.Chat
         private async void OnLoaded(object sender, RoutedEventArgs e)
         {
             _isViewLoaded = true;
+            SubscribeMotion();
             EnsureMessageTracking();
             RequestInitialScroll();
             try
@@ -55,12 +51,54 @@ namespace SalmonEgg.Presentation.Views.Chat
         private void OnUnloaded(object sender, RoutedEventArgs e)
         {
             _isViewLoaded = false;
+            UnsubscribeMotion();
             if (_isTrackingMessages)
             {
                 ViewModel.MessageHistory.CollectionChanged -= OnMessageHistoryChanged;
                 ViewModel.PropertyChanged -= OnViewModelPropertyChanged;
                 _isTrackingMessages = false;
             }
+        }
+
+        private void SubscribeMotion()
+        {
+            if (_isMotionSubscribed)
+            {
+                return;
+            }
+
+            UiMotion.Current.PropertyChanged += OnUiMotionPropertyChanged;
+            _isMotionSubscribed = true;
+            ApplyListTransitions();
+        }
+
+        private void UnsubscribeMotion()
+        {
+            if (!_isMotionSubscribed)
+            {
+                return;
+            }
+
+            UiMotion.Current.PropertyChanged -= OnUiMotionPropertyChanged;
+            _isMotionSubscribed = false;
+        }
+
+        private void OnUiMotionPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(UiMotion.ListItemTransitions))
+            {
+                ApplyListTransitions();
+            }
+        }
+
+        private void ApplyListTransitions()
+        {
+#if WINDOWS
+            if (MessagesList != null)
+            {
+                MessagesList.ItemContainerTransitions = UiMotion.Current.ListItemTransitions;
+            }
+#endif
         }
 
         private void EnsureMessageTracking()

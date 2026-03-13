@@ -1,6 +1,9 @@
 using System;
+using System.ComponentModel;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Navigation;
+using SalmonEgg.Presentation.Models;
 
 namespace SalmonEgg.Presentation.Views;
 
@@ -13,10 +16,13 @@ namespace SalmonEgg.Presentation.Views;
 public sealed partial class SettingsShellPage : Page
 {
     private bool _suppressSelection;
+    private bool _isMotionSubscribed;
 
     public SettingsShellPage()
     {
         InitializeComponent();
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
     }
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
@@ -55,6 +61,74 @@ public sealed partial class SettingsShellPage : Page
         if (SettingsFrame.CurrentSourcePageType != pageType)
         {
             SettingsFrame.Navigate(pageType);
+        }
+    }
+
+    private void OnLoaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        SubscribeMotion();
+    }
+
+    private void OnUnloaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        UnsubscribeMotion();
+    }
+
+    private void SubscribeMotion()
+    {
+        if (_isMotionSubscribed)
+        {
+            return;
+        }
+
+        UiMotion.Current.PropertyChanged += OnUiMotionPropertyChanged;
+        _isMotionSubscribed = true;
+        ApplyFrameTransitions();
+    }
+
+    private void UnsubscribeMotion()
+    {
+        if (!_isMotionSubscribed)
+        {
+            return;
+        }
+
+        UiMotion.Current.PropertyChanged -= OnUiMotionPropertyChanged;
+        _isMotionSubscribed = false;
+    }
+
+    private void OnUiMotionPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(UiMotion.IsAnimationEnabled))
+        {
+            ApplyFrameTransitions();
+        }
+    }
+
+    private void ApplyFrameTransitions()
+    {
+        if (SettingsFrame == null)
+        {
+            return;
+        }
+
+        if (UiMotion.Current.IsAnimationEnabled)
+        {
+#if WINDOWS
+            SettingsFrame.ContentTransitions = new TransitionCollection
+            {
+                new NavigationThemeTransition { DefaultNavigationTransitionInfo = new EntranceNavigationTransitionInfo() }
+            };
+#else
+            SettingsFrame.ContentTransitions = new TransitionCollection
+            {
+                new EntranceThemeTransition()
+            };
+#endif
+        }
+        else
+        {
+            SettingsFrame.ContentTransitions = null;
         }
     }
 
