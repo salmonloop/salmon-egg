@@ -1,4 +1,6 @@
 using System;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -20,6 +22,7 @@ public sealed partial class StartViewModel : ObservableObject
     private readonly IShellNavigationService _shellNavigation;
     private readonly MainNavigationViewModel _nav;
     private readonly ILogger<StartViewModel> _logger;
+    private readonly System.Collections.Specialized.NotifyCollectionChangedEventHandler _projectsChangedHandler;
 
     public ChatViewModel Chat { get; }
 
@@ -32,6 +35,11 @@ public sealed partial class StartViewModel : ObservableObject
     }
 
     public IAsyncRelayCommand StartSessionAndSendCommand { get; }
+
+    public ObservableCollection<ProjectOptionViewModel> ProjectOptions { get; } = new();
+
+    [ObservableProperty]
+    private ProjectOptionViewModel? _selectedProjectOption;
 
     public StartViewModel(
         ChatViewModel chatViewModel,
@@ -49,6 +57,46 @@ public sealed partial class StartViewModel : ObservableObject
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         StartSessionAndSendCommand = new AsyncRelayCommand(StartSessionAndSendAsync, () => !IsStarting);
+
+        _projectsChangedHandler = (_, _) => RefreshProjectOptions();
+        _preferences.Projects.CollectionChanged += _projectsChangedHandler;
+        _preferences.PropertyChanged += OnPreferencesPropertyChanged;
+        RefreshProjectOptions();
+    }
+
+    private void OnPreferencesPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(AppPreferencesViewModel.LastSelectedProjectId))
+        {
+            SyncSelectedProjectOption();
+        }
+    }
+
+    private void RefreshProjectOptions()
+    {
+        ProjectOptions.Clear();
+        ProjectOptions.Add(new ProjectOptionViewModel(null, "未归类", null));
+
+        foreach (var project in _preferences.Projects.Where(p => p != null))
+        {
+            ProjectOptions.Add(new ProjectOptionViewModel(project.ProjectId, project.Name, project.RootPath));
+        }
+
+        SyncSelectedProjectOption();
+    }
+
+    private void SyncSelectedProjectOption()
+    {
+        var targetId = _preferences.LastSelectedProjectId;
+        var match = ProjectOptions.FirstOrDefault(p => string.Equals(p.ProjectId, targetId, StringComparison.Ordinal));
+        SelectedProjectOption = match ?? ProjectOptions.FirstOrDefault();
+    }
+
+    partial void OnSelectedProjectOptionChanged(ProjectOptionViewModel? value)
+    {
+        _preferences.LastSelectedProjectId = string.IsNullOrWhiteSpace(value?.ProjectId)
+            ? null
+            : value.ProjectId;
     }
 
     private async Task StartSessionAndSendAsync()

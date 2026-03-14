@@ -20,6 +20,8 @@ using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Presentation.Models;
+using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Settings;
 
 namespace SalmonEgg.Presentation.ViewModels.Chat;
@@ -36,6 +38,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
     private readonly AcpProfilesViewModel _acpProfiles;
     private readonly ISessionManager _sessionManager;
     private readonly IConversationStore _conversationStore;
+    private readonly ITerminalService _terminalService;
     private IChatService? _chatService;
     private readonly SynchronizationContext _syncContext;
     private bool _disposed;
@@ -49,10 +52,13 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
     private CancellationTokenSource? _transientNotificationCts;
     private string? _currentRemoteSessionId;
     private ChatMessageViewModel? _activeAgentTextStreamMessage;
+    private ChatMessageViewModel? _activeThinkingMessage;
     private IReadOnlyList<AuthMethodDefinition>? _advertisedAuthMethods;
 
     // Local conversation binding: ConversationId (stable for sidebar/UI) -> active remote session id (per ACP) + transcript.
     private readonly Dictionary<string, ConversationBinding> _conversationBindings = new(StringComparer.Ordinal);
+    private readonly ObservableCollection<ConversationOptionViewModel> _conversationOptions = new();
+    private bool _isUpdatingConversationOptions;
 
     private sealed class ConversationBinding
     {
@@ -73,6 +79,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         public List<PlanEntryViewModel> Plan { get; } = new();
         public bool ShowPlanPanel { get; set; }
         public string? PlanTitle { get; set; }
+
+        public bool IsTerminalVisible { get; set; }
+        public string? TerminalProfileId { get; set; }
+        public string TerminalOutput { get; set; } = string.Empty;
+        public double TerminalHeight { get; set; } = 220;
+        public ITerminalSession? TerminalSession { get; set; }
     }
 
     [ObservableProperty]
@@ -109,6 +121,54 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     private string _editingSessionName = string.Empty;
+
+    [ObservableProperty]
+    private bool _isTerminalVisible;
+
+    [ObservableProperty]
+    private string _terminalOutput = string.Empty;
+
+    [ObservableProperty]
+    private string _terminalInput = string.Empty;
+
+    [ObservableProperty]
+    private double _terminalPanelHeight = 220;
+
+    public ObservableCollection<TerminalDefinition> AvailableTerminalDefinitions { get; } = new();
+
+    public bool HasTerminalSupport => AvailableTerminalDefinitions.Count > 0;
+
+    public bool IsTerminalToggleVisible => HasTerminalSupport && IsSessionActive;
+
+    [ObservableProperty]
+    private TerminalDefinition? _selectedTerminalDefinition;
+
+    public ObservableCollection<ConversationOptionViewModel> ConversationOptions => _conversationOptions;
+
+    private ConversationOptionViewModel? _selectedConversationOption;
+    public ConversationOptionViewModel? SelectedConversationOption
+    {
+        get => _selectedConversationOption;
+        set
+        {
+            if (!SetProperty(ref _selectedConversationOption, value))
+            {
+                return;
+            }
+
+            if (_isUpdatingConversationOptions || value == null || string.IsNullOrWhiteSpace(value.ConversationId))
+            {
+                return;
+            }
+
+            if (string.Equals(value.ConversationId, CurrentSessionId, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _ = TrySwitchToSessionAsync(value.ConversationId);
+        }
+    }
 
     [ObservableProperty]
     private string? _agentName;
@@ -240,6 +300,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         AcpProfilesViewModel acpProfiles,
         ISessionManager sessionManager,
         IConversationStore conversationStore,
+        ITerminalService terminalService,
         ILogger<ChatViewModel> logger)
         : base(logger)
     {
@@ -249,6 +310,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         _acpProfiles = acpProfiles ?? throw new ArgumentNullException(nameof(acpProfiles));
         _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
         _conversationStore = conversationStore ?? throw new ArgumentNullException(nameof(conversationStore));
+        _terminalService = terminalService ?? throw new ArgumentNullException(nameof(terminalService));
         _syncContext = SynchronizationContext.Current ?? new SynchronizationContext();
 
         // 创建默认 ChatService 实例
@@ -266,6 +328,25 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
 
         // Sync Thinking Levels from ACP ConfigOptions (category: "thought_level")
         SyncThinkingLevelsFromConfigOptions();
+
+        LoadTerminalDefinitions();
+    }
+
+    private void LoadTerminalDefinitions()
+    {
+        AvailableTerminalDefinitions.Clear();
+        var definitions = _terminalService.GetAvailableTerminals();
+        foreach (var definition in definitions)
+        {
+            AvailableTerminalDefinitions.Add(definition);
+        }
+
+        OnPropertyChanged(nameof(HasTerminalSupport));
+        OnPropertyChanged(nameof(IsTerminalToggleVisible));
+        if (AvailableTerminalDefinitions.Count > 0)
+        {
+            SelectedTerminalDefinition ??= AvailableTerminalDefinitions[0];
+        }
     }
 
     private void SyncThinkingLevelsFromConfigOptions()
@@ -418,6 +499,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             _currentRemoteSessionId = binding.RemoteSessionId;
 
             RestoreConversation(binding);
+            RestoreTerminalState(binding);
         }
         else
         {
@@ -425,6 +507,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             CurrentPlanTitle = null;
             ShowPlanPanel = false;
             CurrentPlan.Clear();
+            IsTerminalVisible = false;
+            TerminalOutput = string.Empty;
         }
 
         if (IsEditingSessionName)
@@ -435,6 +519,29 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
 
         // Persist "last active" selection.
         ScheduleConversationSave();
+
+        SyncSelectedConversationOption();
+    }
+
+    private void RestoreTerminalState(ConversationBinding binding)
+    {
+        _isTerminalVisible = binding.IsTerminalVisible;
+        _terminalPanelHeight = binding.TerminalHeight;
+        _terminalOutput = binding.TerminalOutput;
+        OnPropertyChanged(nameof(IsTerminalVisible));
+        OnPropertyChanged(nameof(TerminalPanelHeight));
+        OnPropertyChanged(nameof(TerminalOutput));
+
+        if (!string.IsNullOrWhiteSpace(binding.TerminalProfileId))
+        {
+            SelectedTerminalDefinition = AvailableTerminalDefinitions.FirstOrDefault(d =>
+                string.Equals(d.Id, binding.TerminalProfileId, StringComparison.Ordinal));
+        }
+
+        if (IsTerminalVisible)
+        {
+            EnsureTerminalSession(binding);
+        }
     }
 
     private ConversationBinding GetOrCreateConversationBinding(string conversationId)
@@ -468,6 +575,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         {
             MessageHistory.Add(msg);
         }
+        _activeThinkingMessage = MessageHistory.LastOrDefault(m => m.IsThinkingPlaceholder);
 
         CurrentPlan.Clear();
         foreach (var entry in binding.Plan)
@@ -755,6 +863,226 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         return SessionNamePolicy.CreateDefault(sessionId);
     }
 
+    partial void OnIsTerminalVisibleChanged(bool value)
+    {
+        var binding = TryGetConversationBinding(CurrentSessionId);
+        if (binding == null)
+        {
+            return;
+        }
+
+        binding.IsTerminalVisible = value;
+        if (value)
+        {
+            EnsureTerminalSession(binding);
+        }
+    }
+
+    partial void OnTerminalPanelHeightChanged(double value)
+    {
+        var binding = TryGetConversationBinding(CurrentSessionId);
+        if (binding == null)
+        {
+            return;
+        }
+
+        binding.TerminalHeight = value;
+    }
+
+    partial void OnSelectedTerminalDefinitionChanged(TerminalDefinition? value)
+    {
+        var binding = TryGetConversationBinding(CurrentSessionId);
+        if (binding == null)
+        {
+            return;
+        }
+
+        binding.TerminalProfileId = value?.Id;
+        if (IsTerminalVisible)
+        {
+            RestartTerminalSession(binding);
+        }
+    }
+
+    [RelayCommand]
+    private void ToggleTerminal()
+    {
+        if (!IsSessionActive || string.IsNullOrWhiteSpace(CurrentSessionId))
+        {
+            return;
+        }
+
+        IsTerminalVisible = !IsTerminalVisible;
+        if (IsTerminalVisible)
+        {
+            var binding = TryGetConversationBinding(CurrentSessionId);
+            if (binding != null)
+            {
+                EnsureTerminalSession(binding);
+            }
+        }
+    }
+
+    [RelayCommand]
+    private void KillTerminal()
+    {
+        var binding = TryGetConversationBinding(CurrentSessionId);
+        if (binding == null)
+        {
+            return;
+        }
+
+        DisposeTerminalSession(binding);
+        binding.TerminalOutput = string.Empty;
+        TerminalOutput = string.Empty;
+        IsTerminalVisible = false;
+    }
+
+    [RelayCommand]
+    private void SendTerminalInput()
+    {
+        var input = TerminalInput;
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return;
+        }
+
+        TerminalInput = string.Empty;
+        var binding = TryGetConversationBinding(CurrentSessionId);
+        if (binding?.TerminalSession == null)
+        {
+            return;
+        }
+
+        binding.TerminalSession.SendInput(input);
+    }
+
+    private void EnsureTerminalSession(ConversationBinding binding)
+    {
+        if (binding.TerminalSession != null)
+        {
+            return;
+        }
+
+        var definition = SelectedTerminalDefinition ?? AvailableTerminalDefinitions.FirstOrDefault();
+        if (definition == null)
+        {
+            return;
+        }
+
+        binding.TerminalProfileId = definition.Id;
+
+        var cwd = ResolveTerminalCwd(binding.ConversationId);
+        var session = _terminalService.CreateSession(definition, cwd);
+        if (session == null)
+        {
+            return;
+        }
+
+        binding.TerminalSession = session;
+        session.OutputReceived += OnTerminalOutputReceived;
+        session.Exited += OnTerminalSessionExited;
+    }
+
+    private void RestartTerminalSession(ConversationBinding binding)
+    {
+        DisposeTerminalSession(binding);
+        if (IsTerminalVisible)
+        {
+            EnsureTerminalSession(binding);
+        }
+    }
+
+    private void DisposeTerminalSession(ConversationBinding binding)
+    {
+        if (binding.TerminalSession == null)
+        {
+            return;
+        }
+
+        try
+        {
+            binding.TerminalSession.OutputReceived -= OnTerminalOutputReceived;
+            binding.TerminalSession.Exited -= OnTerminalSessionExited;
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            binding.TerminalSession.Kill();
+            binding.TerminalSession.Dispose();
+        }
+        catch
+        {
+        }
+
+        binding.TerminalSession = null;
+    }
+
+    private string ResolveTerminalCwd(string? conversationId)
+    {
+        if (!string.IsNullOrWhiteSpace(conversationId))
+        {
+            var session = _sessionManager.GetSession(conversationId);
+            if (session != null && !string.IsNullOrWhiteSpace(session.Cwd))
+            {
+                return session.Cwd;
+            }
+        }
+
+        return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    }
+
+    private void OnTerminalOutputReceived(object? sender, string output)
+    {
+        _syncContext.Post(_ =>
+        {
+            if (sender is not ITerminalSession session)
+            {
+                return;
+            }
+
+            var binding = _conversationBindings.Values.FirstOrDefault(b => ReferenceEquals(b.TerminalSession, session));
+            if (binding == null)
+            {
+                return;
+            }
+
+            binding.TerminalOutput += output;
+            if (string.Equals(CurrentSessionId, binding.ConversationId, StringComparison.Ordinal))
+            {
+                TerminalOutput = binding.TerminalOutput;
+            }
+        }, null);
+    }
+
+    private void OnTerminalSessionExited(object? sender, int? exitCode)
+    {
+        _syncContext.Post(_ =>
+        {
+            if (sender is not ITerminalSession session)
+            {
+                return;
+            }
+
+            var binding = _conversationBindings.Values.FirstOrDefault(b => ReferenceEquals(b.TerminalSession, session));
+            if (binding == null)
+            {
+                return;
+            }
+
+            DisposeTerminalSession(binding);
+
+            binding.TerminalOutput += $"[Terminal exited: {exitCode?.ToString() ?? "unknown"}]{Environment.NewLine}";
+            if (string.Equals(CurrentSessionId, binding.ConversationId, StringComparison.Ordinal))
+            {
+                TerminalOutput = binding.TerminalOutput;
+            }
+        }, null);
+    }
+
     [RelayCommand]
     private void BeginEditSessionName()
     {
@@ -830,7 +1158,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        _conversationBindings.Remove(conversationId);
+        if (_conversationBindings.TryGetValue(conversationId, out var binding))
+        {
+            DisposeTerminalSession(binding);
+            _conversationBindings.Remove(conversationId);
+        }
         _sessionManager.RemoveSession(conversationId);
 
         if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
@@ -844,6 +1176,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         }
 
         ScheduleConversationSave();
+        NotifyConversationListChanged();
     }
 
     public string[] GetKnownConversationIds()
@@ -853,6 +1186,57 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             .Select(c => c.ConversationId)
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .ToArray();
+    }
+
+    private void UpdateConversationOptions()
+    {
+        _syncContext.Post(_ =>
+        {
+            _isUpdatingConversationOptions = true;
+            try
+            {
+                _conversationOptions.Clear();
+
+                var sessions = GetKnownConversationIds()
+                    .Select(id => _sessionManager.GetSession(id))
+                    .Where(s => s != null)
+                    .Cast<Session>()
+                    .OrderByDescending(s => s.LastActivityAt == default ? s.CreatedAt : s.LastActivityAt)
+                    .ToList();
+
+                foreach (var session in sessions)
+                {
+                    var displayName = ResolveSessionDisplayName(session.SessionId);
+                    _conversationOptions.Add(new ConversationOptionViewModel(session.SessionId, displayName));
+                }
+
+                SyncSelectedConversationOption();
+            }
+            finally
+            {
+                _isUpdatingConversationOptions = false;
+            }
+        }, null);
+    }
+
+    private void SyncSelectedConversationOption()
+    {
+        var currentId = CurrentSessionId;
+        if (string.IsNullOrWhiteSpace(currentId))
+        {
+            _selectedConversationOption = null;
+            OnPropertyChanged(nameof(SelectedConversationOption));
+            return;
+        }
+
+        var match = _conversationOptions.FirstOrDefault(option =>
+            string.Equals(option.ConversationId, currentId, StringComparison.Ordinal));
+
+        if (!ReferenceEquals(_selectedConversationOption, match))
+        {
+            _selectedConversationOption = match;
+            OnPropertyChanged(nameof(SelectedConversationOption));
+        }
     }
 
     public async Task EnsureAcpProfilesLoadedAsync()
@@ -1329,12 +1713,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                 if (e.Update is AgentMessageUpdate messageUpdate && messageUpdate.Content != null)
                 {
                     IsThinking = false;
+                    ClearThinkingPlaceholder();
                     HandleAgentContentChunk(messageUpdate.Content);
                 }
                 else if (e.Update is AgentThoughtUpdate)
                 {
-                    // Agents may stream thought chunks. We don't render them, but can use them as a "thinking" signal.
+                    // Agents may stream thought chunks. Surface a placeholder that will be replaced by the next reply.
                     IsThinking = true;
+                    EnsureThinkingPlaceholder();
                 }
                 else if (e.Update is UserMessageUpdate userMessageUpdate && userMessageUpdate.Content != null)
                 {
@@ -1395,6 +1781,13 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             return;
         }
 
+        if (_activeThinkingMessage != null)
+        {
+            var replacement = CreateMessageFromContent(content, isOutgoing: false);
+            ReplaceThinkingPlaceholder(replacement);
+            return;
+        }
+
         _activeAgentTextStreamMessage = null;
         AddMessageToHistory(content, isOutgoing: false);
     }
@@ -1403,6 +1796,27 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
     {
         if (string.IsNullOrEmpty(chunk))
         {
+            return;
+        }
+
+        if (_activeThinkingMessage != null)
+        {
+            _activeAgentTextStreamMessage = _activeThinkingMessage;
+            _activeAgentTextStreamMessage.ContentType = "text";
+            _activeAgentTextStreamMessage.Title = string.Empty;
+            _activeAgentTextStreamMessage.ToolCallId = null;
+            _activeAgentTextStreamMessage.ToolCallKind = null;
+            _activeAgentTextStreamMessage.ToolCallStatus = null;
+            _activeAgentTextStreamMessage.ToolCallJson = null;
+            _activeAgentTextStreamMessage.TextContent = chunk;
+            _activeThinkingMessage = null;
+
+            var binding = TryGetConversationBinding(CurrentSessionId);
+            if (binding != null)
+            {
+                binding.LastUpdatedAt = DateTime.UtcNow;
+                ScheduleConversationSave();
+            }
             return;
         }
 
@@ -1421,10 +1835,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
 
         _activeAgentTextStreamMessage.TextContent += chunk;
 
-        var binding = TryGetConversationBinding(CurrentSessionId);
-        if (binding != null)
+        var currentBinding = TryGetConversationBinding(CurrentSessionId);
+        if (currentBinding != null)
         {
-            binding.LastUpdatedAt = DateTime.UtcNow;
+            currentBinding.LastUpdatedAt = DateTime.UtcNow;
             ScheduleConversationSave();
         }
     }
@@ -1863,34 +2277,63 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         }
     }
 
-    private void AddMessageToHistory(ContentBlock content, bool isOutgoing)
+    private void RemoveMessageFromTranscript(ChatMessageViewModel message)
     {
-        var id = Guid.NewGuid().ToString();
-        ChatMessageViewModel message;
+        MessageHistory.Remove(message);
 
-        switch (content)
+        var binding = TryGetConversationBinding(CurrentSessionId);
+        if (binding != null)
         {
-            case TextContentBlock text:
-                message = ChatMessageViewModel.CreateFromTextContent(id, content, isOutgoing);
-                break;
-            case ImageContentBlock image:
-                message = ChatMessageViewModel.CreateFromImageContent(id, content, isOutgoing);
-                break;
-            case AudioContentBlock audio:
-                message = ChatMessageViewModel.CreateFromAudioContent(id, content, isOutgoing);
-                break;
-            case ResourceContentBlock resourceContent:
-                message = ChatMessageViewModel.CreateFromResourceContent(id, resourceContent, isOutgoing);
-                break;
-            case ResourceLinkContentBlock resourceLink:
-                message = ChatMessageViewModel.CreateFromResourceLink(id, resourceLink, isOutgoing);
-                break;
-            default:
-                message = ChatMessageViewModel.CreateFromTextContent(id, content, isOutgoing);
-                break;
+            binding.Transcript.Remove(message);
+            binding.LastUpdatedAt = DateTime.UtcNow;
+            ScheduleConversationSave();
+        }
+    }
+
+    private void ReplaceMessageInTranscript(ChatMessageViewModel oldMessage, ChatMessageViewModel newMessage)
+    {
+        var index = MessageHistory.IndexOf(oldMessage);
+        if (index >= 0)
+        {
+            MessageHistory[index] = newMessage;
         }
 
+        var binding = TryGetConversationBinding(CurrentSessionId);
+        if (binding != null)
+        {
+            var transcriptIndex = binding.Transcript.IndexOf(oldMessage);
+            if (transcriptIndex >= 0)
+            {
+                binding.Transcript[transcriptIndex] = newMessage;
+            }
+            else
+            {
+                binding.Transcript.Add(newMessage);
+            }
+
+            binding.LastUpdatedAt = DateTime.UtcNow;
+            ScheduleConversationSave();
+        }
+    }
+
+    private void AddMessageToHistory(ContentBlock content, bool isOutgoing)
+    {
+        var message = CreateMessageFromContent(content, isOutgoing);
         AppendToTranscript(message);
+    }
+
+    private static ChatMessageViewModel CreateMessageFromContent(ContentBlock content, bool isOutgoing)
+    {
+        var id = Guid.NewGuid().ToString();
+        return content switch
+        {
+            TextContentBlock => ChatMessageViewModel.CreateFromTextContent(id, content, isOutgoing),
+            ImageContentBlock => ChatMessageViewModel.CreateFromImageContent(id, content, isOutgoing),
+            AudioContentBlock => ChatMessageViewModel.CreateFromAudioContent(id, content, isOutgoing),
+            ResourceContentBlock resourceContent => ChatMessageViewModel.CreateFromResourceContent(id, resourceContent, isOutgoing),
+            ResourceLinkContentBlock resourceLink => ChatMessageViewModel.CreateFromResourceLink(id, resourceLink, isOutgoing),
+            _ => ChatMessageViewModel.CreateFromTextContent(id, content, isOutgoing)
+        };
     }
 
     private void AddToolCallToHistory(ToolCallUpdate toolCall)
@@ -1907,7 +2350,48 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             toolCall.Status,
             toolCall.Title,
             isOutgoing: false);
+        if (_activeThinkingMessage != null)
+        {
+            ReplaceThinkingPlaceholder(message);
+            return;
+        }
+
         AppendToTranscript(message);
+    }
+
+    private void EnsureThinkingPlaceholder()
+    {
+        if (_activeThinkingMessage != null)
+        {
+            return;
+        }
+
+        var placeholder = ChatMessageViewModel.CreateThinkingPlaceholder(Guid.NewGuid().ToString());
+        _activeThinkingMessage = placeholder;
+        AppendToTranscript(placeholder);
+    }
+
+    private void ClearThinkingPlaceholder()
+    {
+        if (_activeThinkingMessage == null)
+        {
+            return;
+        }
+
+        RemoveMessageFromTranscript(_activeThinkingMessage);
+        _activeThinkingMessage = null;
+    }
+
+    private void ReplaceThinkingPlaceholder(ChatMessageViewModel replacement)
+    {
+        if (_activeThinkingMessage == null)
+        {
+            AppendToTranscript(replacement);
+            return;
+        }
+
+        ReplaceMessageInTranscript(_activeThinkingMessage, replacement);
+        _activeThinkingMessage = null;
     }
 
     private void UpdateToolCallStatus(ToolCallStatusUpdate toolCallStatusUpdate)
@@ -1995,7 +2479,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         _sessionManager.RemoveSession(conversationId);
 
         // 从 ConversationBindings 中移除
-        _conversationBindings.Remove(conversationId);
+        if (_conversationBindings.TryGetValue(conversationId, out var binding))
+        {
+            DisposeTerminalSession(binding);
+            _conversationBindings.Remove(conversationId);
+        }
 
         // 如果当前会话是被归档的会话，清除当前会话状态
         if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
@@ -2018,6 +2506,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
     {
         ConversationListVersion++;
         OnPropertyChanged(nameof(GetKnownConversationIds));
+        UpdateConversationOptions();
     }
 
     private void OnModeChanged(CurrentModeUpdate modeChange)
@@ -2735,6 +3224,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
     {
         SendPromptCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(CanSendPromptUi));
+        OnPropertyChanged(nameof(IsTerminalToggleVisible));
     }
 
     partial void OnShowPlanPanelChanged(bool value)
@@ -2778,6 +3268,17 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                    {
                        // Best-effort flush so the latest transcript survives restarts.
                        SaveConversationsAsync(CancellationToken.None).GetAwaiter().GetResult();
+                   }
+                   catch
+                   {
+                   }
+
+                   try
+                   {
+                       foreach (var binding in _conversationBindings.Values.ToList())
+                       {
+                           DisposeTerminalSession(binding);
+                       }
                    }
                    catch
                    {

@@ -481,18 +481,20 @@
                              HorizontalAlignment="Center"
                              VerticalAlignment="Center"
                              TextChanged="OnSearchBoxTextChanged"
-                             GotFocus="OnSearchBoxGotFocus" />
+                             GotFocus="OnSearchBoxGotFocus"
+                             LostFocus="OnSearchBoxLostFocus" />
 
                     <!-- 搜索面板 Popup -->
                     <Popup x:Name="SearchPanelPopup"
                            Grid.Column="1"
-                           HorizontalAlignment="Center"
+                           HorizontalAlignment="Left"
                            VerticalAlignment="Top"
-                           Margin="0,48,0,0"
                            IsOpen="{x:Bind SearchVM.IsSearchPanelOpen, Mode=TwoWay}"
                            IsLightDismissEnabled="True"
+                           Opened="OnSearchPanelPopupOpened"
                            Closed="OnSearchPanelPopupClosed">
-                        <Border Width="420"
+                        <Border x:Name="SearchPanelBorder"
+                                Width="420"
                                 MaxHeight="480"
                                 CornerRadius="8"
                                 Background="{ThemeResource LayerFillColorDefaultBrush}"
@@ -617,6 +619,14 @@
                                 Orientation="Horizontal"
                                 Spacing="8"
                                 VerticalAlignment="Center">
+                        <ToggleButton x:Name="TerminalPanelButton"
+                                      Style="{StaticResource TitleBarToggleButtonStyle}"
+                                      ToolTipService.ToolTip="Terminal"
+                                      IsChecked="{x:Bind ChatVM.IsTerminalVisible, Mode=OneWay}"
+                                      Command="{x:Bind ChatVM.ToggleTerminalCommand}"
+                                      Visibility="{x:Bind ChatVM.IsTerminalToggleVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <SymbolIcon Symbol="Keyboard" />
+                        </ToggleButton>
                         <ToggleButton x:Name="DiffPanelButton"
                                       Tag="Diff"
                                       Style="{StaticResource TitleBarToggleButtonStyle}"

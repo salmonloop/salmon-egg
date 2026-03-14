@@ -85,6 +85,7 @@ public sealed partial class MainPage : Page
         _chatViewModel = App.ServiceProvider.GetRequiredService<ChatViewModel>();
         SearchVM = App.ServiceProvider.GetRequiredService<GlobalSearchViewModel>();
         _floatingWindowService = App.ServiceProvider.GetRequiredService<IFloatingChatWindowService>();
+        _floatingWindowService.OpenStateChanged += OnFloatingWindowOpenStateChanged;
 
         this.InitializeComponent();
         BootLogDebug("MainPage: InitializeComponent done");
@@ -136,6 +137,7 @@ public sealed partial class MainPage : Page
         UnsubscribeMotion();
         Preferences.PropertyChanged -= OnPreferencesPropertyChanged;
         _chatViewModel.PropertyChanged -= OnChatViewModelPropertyChanged;
+        _floatingWindowService.OpenStateChanged -= OnFloatingWindowOpenStateChanged;
 #if WINDOWS
         _trayIcon?.Dispose();
         _trayIcon = null;
@@ -146,6 +148,16 @@ public sealed partial class MainPage : Page
     {
         _floatingWindowService.Toggle();
         TitleBarToggleFloatButton.IsChecked = _floatingWindowService.IsOpen;
+    }
+
+    private void OnFloatingWindowOpenStateChanged(object? sender, bool isOpen)
+    {
+        if (TitleBarToggleFloatButton == null)
+        {
+            return;
+        }
+
+        TitleBarToggleFloatButton.IsChecked = isOpen;
     }
 
     private void ConfigureNavigationView()
@@ -965,8 +977,32 @@ public sealed partial class MainPage : Page
         // 搜索框获得焦点时，显示搜索面板
         if (SearchVM != null)
         {
+            UpdateSearchPopupPosition();
             SearchVM.OpenSearchPanelCommand.Execute(null);
         }
+    }
+
+    private void OnSearchBoxLostFocus(object sender, RoutedEventArgs e)
+    {
+        if (SearchVM == null || SearchPanelPopup == null)
+        {
+            return;
+        }
+
+        if (SearchPanelInput?.FocusState != FocusState.Unfocused)
+        {
+            return;
+        }
+
+        if (SearchPanelPopup.IsOpen)
+        {
+            SearchVM.CloseSearchPanelCommand.Execute(null);
+        }
+    }
+
+    private void OnSearchPanelPopupOpened(object sender, object e)
+    {
+        UpdateSearchPopupPosition();
     }
 
     private void OnSearchPanelPopupClosed(object sender, object e)
@@ -976,6 +1012,8 @@ public sealed partial class MainPage : Page
         {
             SearchVM.CloseSearchPanelCommand.Execute(null);
         }
+
+        ClearSearchFocus();
     }
 
     private void OnSearchResultItemClick(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
@@ -984,6 +1022,49 @@ public sealed partial class MainPage : Page
         {
             SearchVM?.SelectResultCommand.Execute(item);
         }
+    }
+
+    private void UpdateSearchPopupPosition()
+    {
+        if (TopSearchBox == null || SearchPanelPopup == null || RootPage == null)
+        {
+            return;
+        }
+
+        var popupWidth = SearchPanelBorder?.ActualWidth ?? 0;
+        if (popupWidth <= 0)
+        {
+            popupWidth = 420;
+        }
+
+        var transform = TopSearchBox.TransformToVisual(RootPage);
+        var anchorPoint = transform.TransformPoint(new Windows.Foundation.Point(0, TopSearchBox.ActualHeight));
+        var targetX = anchorPoint.X + (TopSearchBox.ActualWidth - popupWidth) / 2;
+        var targetY = anchorPoint.Y + 8;
+
+        var maxX = Math.Max(0, RootPage.ActualWidth - popupWidth);
+        if (targetX < 0)
+        {
+            targetX = 0;
+        }
+        else if (targetX > maxX)
+        {
+            targetX = maxX;
+        }
+
+        SearchPanelPopup.HorizontalOffset = targetX;
+        SearchPanelPopup.VerticalOffset = Math.Max(0, targetY);
+    }
+
+    private void ClearSearchFocus()
+    {
+        if (ContentFrame != null)
+        {
+            ContentFrame.Focus(FocusState.Programmatic);
+            return;
+        }
+
+        RootPage?.Focus(FocusState.Programmatic);
     }
 
     private void OnSearchHistoryItemClick(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)

@@ -147,6 +147,9 @@ public sealed partial class ChatInputArea : UserControl
             case nameof(ChatViewModel.CanSendPromptUi):
                 UpdateCanSubmitUi();
                 break;
+            case nameof(ChatViewModel.SelectedSlashCommand):
+                EnsureSlashCommandSelectionVisible();
+                break;
         }
     }
 
@@ -236,6 +239,7 @@ public sealed partial class ChatInputArea : UserControl
             case Windows.System.VirtualKey.Up:
                 if (ViewModel.TryMoveSlashSelection(-1))
                 {
+                    EnsureSlashCommandSelectionVisible();
                     e.Handled = true;
                     return;
                 }
@@ -243,6 +247,7 @@ public sealed partial class ChatInputArea : UserControl
             case Windows.System.VirtualKey.Down:
                 if (ViewModel.TryMoveSlashSelection(1))
                 {
+                    EnsureSlashCommandSelectionVisible();
                     e.Handled = true;
                     return;
                 }
@@ -301,6 +306,16 @@ public sealed partial class ChatInputArea : UserControl
     private void OnSendClick(object sender, RoutedEventArgs e)
     {
         TrySendPrompt();
+    }
+
+    private void EnsureSlashCommandSelectionVisible()
+    {
+        if (SlashCommandsList?.SelectedItem == null)
+        {
+            return;
+        }
+
+        SlashCommandsList.ScrollIntoView(SlashCommandsList.SelectedItem);
     }
 
     private void OnInputTextCompositionStarted(object sender, TextCompositionStartedEventArgs e)

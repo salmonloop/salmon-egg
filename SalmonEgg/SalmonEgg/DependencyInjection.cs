@@ -227,8 +227,10 @@ public static class DependencyInjection
         // Floating chat window (platform-specific)
 #if WINDOWS
         services.AddSingleton<IFloatingChatWindowService, SalmonEgg.Platforms.Windows.FloatingChatWindowService>();
+        services.AddSingleton<ITerminalService, SalmonEgg.Platforms.Windows.WindowsTerminalService>();
 #else
         services.AddSingleton<IFloatingChatWindowService, NoopFloatingChatWindowService>();
+        services.AddSingleton<ITerminalService, NoopTerminalService>();
 #endif
     }
 

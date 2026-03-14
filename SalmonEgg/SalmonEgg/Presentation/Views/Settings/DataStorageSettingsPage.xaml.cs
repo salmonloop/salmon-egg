@@ -1,4 +1,6 @@
 using Microsoft.UI.Xaml.Controls;
+using System.Threading.Tasks;
+using Windows.Foundation;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.Views;
 
@@ -27,7 +29,7 @@ public sealed partial class DataStorageSettingsPage : SettingsPageBase
             DefaultButton = ContentDialogButton.Primary
         };
 
-        var result = await dialog.ShowAsync();
+        var result = await ShowContentDialogAsync(dialog);
         if (result == ContentDialogResult.Primary)
         {
             await ViewModel.ClearCacheCommand.ExecuteAsync(null);
@@ -46,7 +48,7 @@ public sealed partial class DataStorageSettingsPage : SettingsPageBase
             DefaultButton = ContentDialogButton.Primary
         };
 
-        var result = await dialog.ShowAsync();
+        var result = await ShowContentDialogAsync(dialog);
         if (result == ContentDialogResult.Primary)
         {
             ViewModel.Preferences.ResetToDefaults();
@@ -65,10 +67,34 @@ public sealed partial class DataStorageSettingsPage : SettingsPageBase
             DefaultButton = ContentDialogButton.Primary
         };
 
-        var result = await dialog.ShowAsync();
+        var result = await ShowContentDialogAsync(dialog);
         if (result == ContentDialogResult.Primary)
         {
             await ViewModel.ClearAllLocalDataCommand.ExecuteAsync(null);
         }
+    }
+
+    private static Task<ContentDialogResult> ShowContentDialogAsync(ContentDialog dialog)
+    {
+        var operation = dialog.ShowAsync();
+        var tcs = new TaskCompletionSource<ContentDialogResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        operation.Completed = (info, status) =>
+        {
+            switch (status)
+            {
+                case AsyncStatus.Completed:
+                    tcs.TrySetResult(info.GetResults());
+                    break;
+                case AsyncStatus.Canceled:
+                    tcs.TrySetCanceled();
+                    break;
+                case AsyncStatus.Error:
+                    tcs.TrySetException(info.ErrorCode);
+                    break;
+            }
+        };
+
+        return tcs.Task;
     }
 }

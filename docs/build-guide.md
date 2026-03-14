@@ -192,7 +192,7 @@ dotnet test /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura
 
 1. 打开 `SalmonEgg.sln`
 2. 设置启动项目为 `SalmonEgg`
-3. 选择目标框架（如 `net10.0-windows10.0.26100.0`）
+3. 选择目标框架（如 `net10.0-windows10.0.22621.0`）
 4. 按 F5 开始调试
 
 ### Visual Studio Code

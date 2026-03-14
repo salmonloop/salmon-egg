@@ -6,6 +6,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:controls="using:SalmonEgg.Controls"
     xmlns:models="using:SalmonEgg.Presentation.Models"
+    xmlns:start="using:SalmonEgg.Presentation.ViewModels.Start"
     xmlns:converters="using:SalmonEgg.Presentation.Converters"
     mc:Ignorable="d"
     Background="Transparent">
@@ -29,13 +30,36 @@
         <Grid Grid.Row="0"
               VerticalAlignment="Center"
               Margin="20,20,20,0">
-            <TextBlock Text="Salmon Egg"
-                       x:Uid="Start_Title"
-                       FontSize="56"
-                       FontWeight="SemiBold"
-                       HorizontalAlignment="Center"
-                       TextAlignment="Center"
-                       AutomationProperties.Name="Salmon Egg 欢迎标题"/>
+            <StackPanel HorizontalAlignment="Center"
+                        Spacing="12">
+                <TextBlock Text="Salmon Egg"
+                           x:Uid="Start_Title"
+                           FontSize="56"
+                           FontWeight="SemiBold"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center"
+                           AutomationProperties.Name="Salmon Egg 欢迎标题"/>
+                <StackPanel Orientation="Horizontal"
+                            Spacing="8"
+                            HorizontalAlignment="Center">
+                    <TextBlock Text="项目"
+                               FontSize="13"
+                               Opacity="0.7"
+                               VerticalAlignment="Center"/>
+                    <ComboBox Width="240"
+                              ItemsSource="{x:Bind ViewModel.ProjectOptions, Mode=OneWay}"
+                              SelectedItem="{x:Bind ViewModel.SelectedProjectOption, Mode=TwoWay}"
+                              PlaceholderText="选择项目">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="start:ProjectOptionViewModel">
+                                <TextBlock Text="{x:Bind Name, Mode=OneWay}"
+                                           TextTrimming="CharacterEllipsis"
+                                           MaxLines="1"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </StackPanel>
+            </StackPanel>
         </Grid>
 
         <!-- 智能推荐快速入口（占位符） -->

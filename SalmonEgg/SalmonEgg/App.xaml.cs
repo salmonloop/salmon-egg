@@ -1,7 +1,9 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using Microsoft.UI.Xaml.Controls;
 #if HAS_UNO && !WINDOWS
 using Uno.UI;

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
-using System.Threading;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -11,6 +11,7 @@ using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Models.Search;
 using SalmonEgg.Presentation.Services;
+using SalmonEgg.Presentation.Utilities;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Settings;
@@ -32,8 +33,7 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
     private readonly ILogger<GlobalSearchViewModel> _logger;
 
     private readonly List<string> _searchHistory = new();
-    private CancellationTokenSource? _searchCts;
-    private int _searchVersion;
+    private readonly AsyncQueryCoordinator _searchCoordinator = new();
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasQuery))]
@@ -88,17 +88,16 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
             return;
         }
 
-        var version = Interlocked.Increment(ref _searchVersion);
-        _searchCts = new CancellationTokenSource();
-        _ = SearchAsync(value, version, _searchCts.Token);
+        var ticket = _searchCoordinator.Begin();
+        _ = SearchAsync(value, ticket);
     }
 
-    private async Task SearchAsync(string query, int version, CancellationToken token)
+    private async Task SearchAsync(string query, AsyncQueryCoordinator.QueryTicket ticket)
     {
         try
         {
-            await Task.Delay(150, token);
-            if (token.IsCancellationRequested || version != _searchVersion)
+            await Task.Delay(150, ticket.Token);
+            if (!_searchCoordinator.IsActive(ticket))
             {
                 return;
             }
@@ -108,7 +107,7 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
 
             // 1. 搜索会话（当前页面相关性最高）
             var sessionGroup = await SearchSessionsAsync(normalizedQuery);
-            if (token.IsCancellationRequested || version != _searchVersion)
+            if (!_searchCoordinator.IsActive(ticket))
             {
                 return;
             }
@@ -119,7 +118,7 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
 
             // 2. 搜索项目
             var projectGroup = SearchProjects(normalizedQuery);
-            if (token.IsCancellationRequested || version != _searchVersion)
+            if (!_searchCoordinator.IsActive(ticket))
             {
                 return;
             }
@@ -130,7 +129,7 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
 
             // 3. 搜索设置
             var settingsGroup = SearchSettings(normalizedQuery);
-            if (token.IsCancellationRequested || version != _searchVersion)
+            if (!_searchCoordinator.IsActive(ticket))
             {
                 return;
             }
@@ -141,7 +140,7 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
 
             // 4. 搜索命令
             var commandsGroup = SearchCommands(normalizedQuery);
-            if (token.IsCancellationRequested || version != _searchVersion)
+            if (!_searchCoordinator.IsActive(ticket))
             {
                 return;
             }
@@ -150,7 +149,7 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
                 groups.Add(commandsGroup);
             }
 
-            if (token.IsCancellationRequested || version != _searchVersion || !string.Equals(Query, query, StringComparison.Ordinal))
+            if (!_searchCoordinator.IsActive(ticket) || !string.Equals(Query, query, StringComparison.Ordinal))
             {
                 return;
             }
@@ -358,7 +357,7 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
     }
 
     [RelayCommand]
-    private async Task SelectResultAsync(SearchResultItem? item)
+    private async Task SelectResultAsync(SearchResultItem item)
     {
         if (item == null)
         {
@@ -494,27 +493,11 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
 
     private void CancelPendingSearch()
     {
-        if (_searchCts == null)
-        {
-            return;
-        }
-
-        try
-        {
-            _searchCts.Cancel();
-            _searchCts.Dispose();
-        }
-        catch
-        {
-        }
-        finally
-        {
-            _searchCts = null;
-        }
+        _searchCoordinator.Cancel();
     }
 
     public void Dispose()
     {
-        CancelPendingSearch();
+        _searchCoordinator.Dispose();
     }
 }

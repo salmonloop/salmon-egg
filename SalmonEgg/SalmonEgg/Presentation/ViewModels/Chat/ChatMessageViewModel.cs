@@ -3,6 +3,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using SalmonEgg.Domain.Models.Content;
 using SalmonEgg.Domain.Models.Plan;
 using SalmonEgg.Domain.Models.Tool;
+using ToolCallKindType = SalmonEgg.Domain.Models.Tool.ToolCallKind;
+using ToolCallStatusType = SalmonEgg.Domain.Models.Tool.ToolCallStatus;
 
 namespace SalmonEgg.Presentation.ViewModels.Chat
 {
@@ -21,6 +23,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
         private bool _isOutgoing;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(IsThinkingPlaceholder))]
         private string _contentType = string.Empty;
 
         [ObservableProperty]
@@ -49,12 +52,15 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
         private string? _toolCallId;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(ToolCallKindDisplayName))]
         private ToolCallKind? _toolCallKind;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(ToolCallStatusDisplayName))]
         private ToolCallStatus? _toolCallStatus;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(HasToolCallJson))]
         private string? _toolCallJson;
 
         // 计划条目
@@ -148,6 +154,19 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
             };
         }
 
+        public static ChatMessageViewModel CreateThinkingPlaceholder(string id)
+        {
+            return new ChatMessageViewModel
+            {
+                Id = id,
+                IsOutgoing = false,
+                ContentType = "thinking",
+                Title = "思考中",
+                TextContent = string.Empty,
+                Timestamp = DateTime.Now
+            };
+        }
+
         public static ChatMessageViewModel CreateFromPlanEntry(string id, PlanEntry entry, bool isOutgoing = false)
         {
             return new ChatMessageViewModel
@@ -214,6 +233,31 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
        public bool HasModeChange => !string.IsNullOrEmpty(ModeId);
        public bool HasResourceContent => ResourceViewModel?.IsResourceContent == true;
        public bool HasResourceLink => ResourceViewModel?.IsResourceLink == true;
+
+       public bool IsThinkingPlaceholder => string.Equals(ContentType, "thinking", StringComparison.Ordinal);
+
+       public string ToolCallStatusDisplayName => ToolCallStatus switch
+       {
+           ToolCallStatusType.Pending => "待处理",
+           ToolCallStatusType.InProgress => "进行中",
+           ToolCallStatusType.Completed => "已完成",
+           ToolCallStatusType.Failed => "失败",
+           _ => "未知"
+       };
+
+       public string ToolCallKindDisplayName => ToolCallKind switch
+       {
+           ToolCallKindType.Read => "读取",
+           ToolCallKindType.Edit => "编辑",
+           ToolCallKindType.Delete => "删除",
+           ToolCallKindType.Move => "移动",
+           ToolCallKindType.Search => "搜索",
+           ToolCallKindType.Execute => "执行",
+           ToolCallKindType.Think => "思考",
+           _ => "工具"
+       };
+
+       public bool HasToolCallJson => !string.IsNullOrWhiteSpace(ToolCallJson);
     }
 
     /// <summary>
@@ -233,8 +277,8 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
         public string StatusDisplayName => Status switch
         {
             Domain.Models.Plan.PlanEntryStatus.Pending => "待处理",
-            Domain.Models.Plan.PlanEntryStatus.InProgress => "进行中",
-            Domain.Models.Plan.PlanEntryStatus.Completed => "已完成",
+            Domain.Models.Plan.PlanEntryStatus.InProgress => "处理中",
+            Domain.Models.Plan.PlanEntryStatus.Completed => "完成",
             Domain.Models.Plan.PlanEntryStatus.Failed => "失败",
             _ => "未知"
         };

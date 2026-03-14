@@ -16,7 +16,7 @@
 ### 0.2 硬约束（不可违背）
 - **必须使用 .NET 10**（项目 TargetFramework 以 `net10.0-*` 为主）。
 - 必须同时支持：
-  - `net10.0-windows10.0.26100.0`（WinUI3 / Windows）
+  - `net10.0-windows10.0.22621.0`（WinUI3 / Windows）
   - `net10.0-desktop`（Skia Desktop / 跨平台）
 - Windows 运行路径固定为 **MSIX**（不走 unpackaged exe 运行路径）。
 - 平台差异只允许出现在**宿主层（Host）**与**平台服务适配层（Adapters）**，禁止散落在页面语义/业务流程中。
@@ -27,7 +27,7 @@
 
 ### 1.1 项目框架
 `SalmonEgg/SalmonEgg/SalmonEgg.csproj`
-- `TargetFrameworks`：`net10.0-browserwasm;net10.0-desktop;net10.0-windows10.0.26100.0`
+- `TargetFrameworks`：`net10.0-browserwasm;net10.0-desktop;net10.0-windows10.0.22621.0`
 
 ### 1.2 Windows（WinUI3）必须使用 MSIX
 - `WindowsPackageType=MSIX`

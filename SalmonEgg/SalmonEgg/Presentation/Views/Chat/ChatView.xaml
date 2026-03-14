@@ -7,6 +7,7 @@
     xmlns:converters="using:SalmonEgg.Presentation.Converters"
     xmlns:controls="using:SalmonEgg.Controls"
     xmlns:models="using:SalmonEgg.Presentation.Models"
+    xmlns:primitives="using:Microsoft.UI.Xaml.Controls.Primitives"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
@@ -86,11 +87,43 @@
                                    Visibility="{x:Bind HasTitle, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                    Margin="0,0,0,4"/>
 
+                        <!-- 思考占位符 -->
+                        <StackPanel Orientation="Horizontal"
+                                    Spacing="8"
+                                    Visibility="{x:Bind IsThinkingPlaceholder, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <ProgressBar IsIndeterminate="True"
+                                         Width="32"
+                                         Height="3"
+                                         VerticalAlignment="Center"/>
+                            <TextBlock Text="思考中..."
+                                       FontSize="12"
+                                       Opacity="0.8"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+
                         <TextBlock Text="{x:Bind TextContent, Mode=OneWay}"
                                    TextWrapping="Wrap"
                                    IsTextSelectionEnabled="True"
                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                    Visibility="{x:Bind HasTextContent, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                        <!-- 工具调用详情 -->
+                        <StackPanel Spacing="4"
+                                    Margin="0,4,0,0"
+                                    Visibility="{x:Bind HasToolCall, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <TextBlock Text="{x:Bind ToolCallKindDisplayName, Mode=OneWay}"
+                                       FontSize="12"
+                                       Opacity="0.8"/>
+                            <TextBlock Text="{x:Bind ToolCallStatusDisplayName, Mode=OneWay}"
+                                       FontSize="12"
+                                       Opacity="0.7"/>
+                            <TextBlock Text="{x:Bind ToolCallJson, Mode=OneWay}"
+                                       FontFamily="Consolas"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Visibility="{x:Bind HasToolCallJson, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                       Opacity="0.8"/>
+                        </StackPanel>
 
                         <TextBlock Text="{x:Bind Timestamp, Converter={StaticResource TimeFormatConverter}, Mode=OneWay}"
                                    FontSize="10"
@@ -132,16 +165,23 @@
         </Grid>
 
         <!-- 已激活会话状态：对话界面 -->
-        <Grid RowDefinitions="Auto,*,Auto"
-              Transitions="{x:Bind Motion.PageTransitions, Mode=OneWay}"
+        <Grid Transitions="{x:Bind Motion.PageTransitions, Mode=OneWay}"
               Visibility="{x:Bind ViewModel.IsSessionActive, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition x:Name="TerminalSplitterRowDefinition" Height="0"/>
+                <RowDefinition x:Name="TerminalRowDefinition" Height="0"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
 
             <!-- 顶部状态条 -->
             <Border Grid.Row="0"
                     Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                     BorderThickness="0,0,0,1"
-                    Padding="16,8">
+                    Padding="16,8"
+                    Visibility="{x:Bind MainHeaderVisibility, Mode=OneWay}">
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
                     <StackPanel Orientation="Horizontal" Spacing="12">
                         <FontIcon Glyph="&#xE8BD;" FontSize="16" Foreground="{ThemeResource AccentBrush}" VerticalAlignment="Center"/>
@@ -192,6 +232,72 @@
                 </Grid>
             </Border>
 
+            <!-- 悬浮窗顶部：会话切换 + ACP 选择 + 操作按钮 -->
+            <Border Grid.Row="0"
+                    Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                    BorderThickness="0,0,0,1"
+                    Padding="16,8"
+                    Visibility="{x:Bind FloatingHeaderVisibility, Mode=OneWay}">
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
+                    <ComboBox Grid.Column="0"
+                              MinWidth="160"
+                              FontSize="12"
+                              ItemsSource="{x:Bind ViewModel.ConversationOptions, Mode=OneWay}"
+                              SelectedItem="{x:Bind ViewModel.SelectedConversationOption, Mode=TwoWay}"
+                              PlaceholderText="切换会话">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ConversationOptionViewModel">
+                                <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}"
+                                           TextTrimming="CharacterEllipsis"
+                                           MaxLines="1"
+                                           VerticalAlignment="Center"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <ComboBox Grid.Column="1"
+                              Width="140"
+                              FontSize="12"
+                              MinWidth="0"
+                              HorizontalAlignment="Right"
+                              VerticalAlignment="Center"
+                              ItemsSource="{x:Bind ViewModel.AcpProfileList, Mode=OneWay}"
+                              SelectedItem="{x:Bind ViewModel.SelectedAcpProfile, Mode=TwoWay}"
+                              PlaceholderText="选择 ACP">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="domain:ServerConfiguration">
+                                <TextBlock Text="{x:Bind Name, Mode=OneTime}"
+                                           TextTrimming="CharacterEllipsis"
+                                           MaxLines="1"
+                                           VerticalAlignment="Center"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <StackPanel Grid.Column="2"
+                                Orientation="Horizontal"
+                                Spacing="8"
+                                VerticalAlignment="Center">
+                        <Button Content="&#xE8A7;"
+                                FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                Width="28"
+                                Height="28"
+                                CornerRadius="14"
+                                ToolTipService.ToolTip="回到主界面"
+                                Click="OnReturnToMainClick"/>
+                        <ToggleButton x:Name="AlwaysOnTopToggle"
+                                      Content="&#xE840;"
+                                      FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                      Width="28"
+                                      Height="28"
+                                      CornerRadius="14"
+                                      ToolTipService.ToolTip="置顶悬浮窗"
+                                      Click="OnFloatingAlwaysOnTopClick"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
             <!-- 消息列表 -->
             <controls:ResponsiveContentHost Grid.Row="1"
                                             MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}">
@@ -214,29 +320,75 @@
                 </controls:ResponsiveContentHost.Child>
             </controls:ResponsiveContentHost>
 
-            <!-- Agent 思考状态指示器 -->
-            <Border Grid.Row="1"
-                    VerticalAlignment="Bottom"
-                    HorizontalAlignment="Left"
-                    Margin="20,0,20,16"
-                    Padding="12,8"
+            <!-- 终端拖动分隔条 -->
+            <primitives:Thumb x:Name="TerminalSplitter"
+                              Grid.Row="2"
+                              Height="6"
+                              HorizontalAlignment="Stretch"
+                              Background="Transparent"
+                              DragDelta="OnTerminalSplitterDragDelta"
+                              DragCompleted="OnTerminalThumbDragCompleted"
+                              Visibility="{x:Bind ViewModel.IsTerminalVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+            <!-- 终端面板 -->
+            <Border x:Name="TerminalPanel"
+                    Grid.Row="3"
+                    Margin="20,0,20,8"
                     Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                    CornerRadius="8"
-                    Visibility="{x:Bind ViewModel.IsThinking, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <ProgressBar IsIndeterminate="True"
-                                 Width="32"
-                                 Height="3"
-                                 VerticalAlignment="Center"/>
-                    <TextBlock Text="正在思考..."
-                               FontSize="13"
-                               Opacity="0.8"
-                               VerticalAlignment="Center"/>
-                </StackPanel>
+                    BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Visibility="{x:Bind ViewModel.IsTerminalVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                <Grid RowDefinitions="*,Auto,Auto">
+                    <ScrollViewer Grid.Row="0"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Auto"
+                                  Padding="12,8">
+                        <TextBlock Text="{x:Bind ViewModel.TerminalOutput, Mode=OneWay}"
+                                   FontFamily="Consolas"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Opacity="0.85"/>
+                    </ScrollViewer>
+
+                    <TextBox Grid.Row="1"
+                             x:Name="TerminalInputBox"
+                             PlaceholderText="输入命令并回车"
+                             Text="{x:Bind ViewModel.TerminalInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             MinHeight="32"
+                             Margin="12,0,12,8"
+                             KeyDown="OnTerminalInputKeyDown"/>
+
+                    <Border Grid.Row="2"
+                            Background="{ThemeResource SubtleFillColorTransparentBrush}"
+                            BorderThickness="1,0,0,0"
+                            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                            Padding="12,8">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <ComboBox Grid.Column="0"
+                                      MinWidth="160"
+                                      ItemsSource="{x:Bind ViewModel.AvailableTerminalDefinitions, Mode=OneWay}"
+                                      SelectedItem="{x:Bind ViewModel.SelectedTerminalDefinition, Mode=TwoWay}"
+                                      PlaceholderText="选择终端">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="models:TerminalDefinition">
+                                        <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   MaxLines="1"/>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+
+                            <Button Grid.Column="1"
+                                    Content="结束终端"
+                                    Command="{x:Bind ViewModel.KillTerminalCommand}" />
+                        </Grid>
+                    </Border>
+                </Grid>
             </Border>
 
             <!-- 输入区域（可复用控件，包含模式选择与后续扩展位） -->
-            <controls:ResponsiveContentHost Grid.Row="2"
+            <controls:ResponsiveContentHost Grid.Row="4"
                                             MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}">
                 <controls:ResponsiveContentHost.Child>
                     <controls:ChatInputArea ViewModel="{x:Bind ViewModel, Mode=OneWay}"
@@ -246,7 +398,7 @@
             </controls:ResponsiveContentHost>
 
             <!-- 加载遮罩 -->
-            <Grid Grid.RowSpan="3"
+            <Grid Grid.RowSpan="5"
                   Background="#40000000"
                   Visibility="{x:Bind ViewModel.IsConnecting, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                 <ProgressBar IsIndeterminate="True"

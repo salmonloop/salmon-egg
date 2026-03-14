@@ -290,12 +290,39 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 {
                     Items.Add(project);
                 }
+
+                NormalizeSelectionAfterRebuild();
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to rebuild navigation tree");
             }
         }, null);
+    }
+
+    private void NormalizeSelectionAfterRebuild()
+    {
+        var currentSessionId = _chatViewModel.CurrentSessionId;
+        if (string.IsNullOrWhiteSpace(currentSessionId))
+        {
+            if (SelectedItem is SessionNavItemViewModel)
+            {
+                SelectedItem = StartItem;
+            }
+            return;
+        }
+
+        if (_sessionIndex.TryGetValue(currentSessionId, out var currentItem))
+        {
+            if (!ReferenceEquals(SelectedItem, currentItem))
+            {
+                SelectedItem = currentItem;
+            }
+        }
+        else if (SelectedItem is SessionNavItemViewModel)
+        {
+            SelectedItem = StartItem;
+        }
     }
 
     private void RefreshRelativeTimes()
