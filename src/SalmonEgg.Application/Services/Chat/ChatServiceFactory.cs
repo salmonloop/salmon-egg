@@ -79,6 +79,24 @@ public class ChatServiceFactory
         return new ChatService(acpClient, _errorLogger, _sessionManager);
     }
 
+    public IChatService CreateChatService(ServerConfiguration config)
+    {
+        if (config == null)
+        {
+            throw new ArgumentNullException(nameof(config));
+        }
+
+        _logger?.Information("正在创建新的 ChatService 实例：TransportType={TransportType}", config.Transport);
+
+        var transport = _transportFactory.CreateTransport(config);
+        var acpClient = new AcpClient(
+            transport,
+            _messageParser,
+            _messageValidator);
+
+        return new ChatService(acpClient, _errorLogger, _sessionManager);
+    }
+
     /// <summary>
     /// 创建默认的 <see cref="IChatService"/> 实例（使用 Stdio 传输）。
     /// </summary>

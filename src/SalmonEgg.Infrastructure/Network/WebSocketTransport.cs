@@ -15,6 +15,7 @@ namespace SalmonEgg.Infrastructure.Network
     {
         private readonly ILogger _logger;
         private IWebsocketClient? _client;
+        private readonly HttpTransportOptions? _options;
         private readonly Subject<string> _messagesSubject;
         private readonly BehaviorSubject<TransportState> _stateSubject;
         private bool _disposed;
@@ -23,9 +24,10 @@ namespace SalmonEgg.Infrastructure.Network
         /// Initializes a new instance of the WebSocketTransport class.
         /// </summary>
         /// <param name="logger">Logger instance for logging transport events.</param>
-        public WebSocketTransport(ILogger logger)
+        public WebSocketTransport(ILogger logger, HttpTransportOptions? options = null)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _options = options;
             _messagesSubject = new Subject<string>();
             _stateSubject = new BehaviorSubject<TransportState>(TransportState.Disconnected);
         }
@@ -57,7 +59,12 @@ namespace SalmonEgg.Infrastructure.Network
 
                 // Create WebSocket client
                 var uri = new Uri(url);
-                _client = new WebsocketClient(uri);
+                _client = new WebsocketClient(uri, () =>
+                {
+                    var ws = new System.Net.WebSockets.ClientWebSocket();
+                    ApplyOptions(ws);
+                    return ws;
+                });
 
                 // Configure reconnection strategy (disabled for manual control)
                 _client.ReconnectTimeout = null;
@@ -95,6 +102,35 @@ namespace SalmonEgg.Infrastructure.Network
                 _stateSubject.OnNext(TransportState.Error);
                 _logger.Error(ex, "Failed to connect to WebSocket server at {Url}", url);
                 throw;
+            }
+        }
+
+        private void ApplyOptions(System.Net.WebSockets.ClientWebSocket ws)
+        {
+            if (_options == null)
+            {
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(_options.ProxyUrl))
+            {
+                try
+                {
+                    ws.Options.Proxy = new System.Net.WebProxy(new Uri(_options.ProxyUrl));
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warning(ex, "Failed to apply WebSocket proxy");
+                }
+            }
+
+            foreach (var kvp in _options.Headers)
+            {
+                if (string.IsNullOrWhiteSpace(kvp.Key))
+                {
+                    continue;
+                }
+                ws.Options.SetRequestHeader(kvp.Key, kvp.Value ?? string.Empty);
             }
         }
 

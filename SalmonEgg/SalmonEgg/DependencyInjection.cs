@@ -223,6 +223,13 @@ public static class DependencyInjection
 
         // UI interaction helpers (ContentDialog, FolderPicker)
         services.AddSingleton<IUiInteractionService, UiInteractionService>();
+
+        // Floating chat window (platform-specific)
+#if WINDOWS
+        services.AddSingleton<IFloatingChatWindowService, SalmonEgg.Platforms.Windows.FloatingChatWindowService>();
+#else
+        services.AddSingleton<IFloatingChatWindowService, NoopFloatingChatWindowService>();
+#endif
     }
 
     private static string GetAppDataPath()

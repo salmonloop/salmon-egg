@@ -73,6 +73,7 @@ public sealed partial class MainPage : Page
     public MainNavigationViewModel NavVM { get; }
     public GlobalSearchViewModel SearchVM { get; }
     private readonly ChatViewModel _chatViewModel;
+    private readonly IFloatingChatWindowService _floatingWindowService;
     public ChatViewModel ChatVM => _chatViewModel;
 
     public MainPage()
@@ -83,6 +84,7 @@ public sealed partial class MainPage : Page
         NavVM = App.ServiceProvider.GetRequiredService<MainNavigationViewModel>();
         _chatViewModel = App.ServiceProvider.GetRequiredService<ChatViewModel>();
         SearchVM = App.ServiceProvider.GetRequiredService<GlobalSearchViewModel>();
+        _floatingWindowService = App.ServiceProvider.GetRequiredService<IFloatingChatWindowService>();
 
         this.InitializeComponent();
         BootLogDebug("MainPage: InitializeComponent done");
@@ -108,6 +110,8 @@ public sealed partial class MainPage : Page
         ApplyBackdrop();
         UpdateNavigationTransitions();
         BootLogDebug("MainPage: transitions updated");
+
+        TitleBarToggleFloatButton.IsChecked = _floatingWindowService.IsOpen;
 
         ConfigureNavigationView();
         SubscribeMotion();
@@ -136,6 +140,12 @@ public sealed partial class MainPage : Page
         _trayIcon?.Dispose();
         _trayIcon = null;
 #endif
+    }
+
+    private void OnToggleFloatingWindowClick(object sender, RoutedEventArgs e)
+    {
+        _floatingWindowService.Toggle();
+        TitleBarToggleFloatButton.IsChecked = _floatingWindowService.IsOpen;
     }
 
     private void ConfigureNavigationView()

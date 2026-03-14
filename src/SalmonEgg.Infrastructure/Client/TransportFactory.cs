@@ -53,6 +53,21 @@ public class TransportFactory : ITransportFactory
        };
    }
 
+   public SalmonEgg.Domain.Interfaces.Transport.ITransport CreateTransport(ServerConfiguration config)
+   {
+       if (config == null)
+       {
+           throw new ArgumentNullException(nameof(config));
+       }
+
+       return CreateTransport(
+           config.Transport,
+           config.StdioCommand,
+           config.StdioArgs,
+           config.ServerUrl,
+           config);
+   }
+
    /// <summary>
    /// 创建默认传输实例（Stdio）。
    /// </summary>
@@ -93,7 +108,7 @@ public class TransportFactory : ITransportFactory
    /// <param name="url">WebSocket URL</param>
    /// <returns>WebSocket 传输实例</returns>
    /// <exception cref="ArgumentException">当 URL 为空或无效时抛出</exception>
-   private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateWebSocketTransport(string? url)
+   private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateWebSocketTransport(string? url, ServerConfiguration? config = null)
    {
        if (string.IsNullOrWhiteSpace(url))
        {
@@ -108,7 +123,9 @@ public class TransportFactory : ITransportFactory
        _logger.Information("创建 WebSocket 传输：Url={Url}", url);
 
        var logger = _logger;
-       var inner = new SalmonEgg.Infrastructure.Network.WebSocketTransport(logger);
+       var inner = new SalmonEgg.Infrastructure.Network.WebSocketTransport(
+           logger,
+           BuildHttpOptions(config));
        return new NetworkTransportAdapter(inner, url.Trim());
    }
 
@@ -118,7 +135,7 @@ public class TransportFactory : ITransportFactory
    /// <param name="url">HTTP SSE URL</param>
    /// <returns>HTTP SSE 传输实例</returns>
    /// <exception cref="ArgumentException">当 URL 为空或无效时抛出</exception>
-   private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateHttpSseTransport(string? url)
+   private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateHttpSseTransport(string? url, ServerConfiguration? config = null)
    {
        if (string.IsNullOrWhiteSpace(url))
        {
@@ -133,7 +150,56 @@ public class TransportFactory : ITransportFactory
        _logger.Information("创建 HTTP SSE 传输：Url={Url}", url);
 
        var logger = _logger;
-       var inner = new SalmonEgg.Infrastructure.Network.HttpSseTransport(logger);
+       var inner = new SalmonEgg.Infrastructure.Network.HttpSseTransport(
+           logger,
+           BuildHttpOptions(config));
        return new NetworkTransportAdapter(inner, url.Trim());
+   }
+
+   private SalmonEgg.Infrastructure.Network.HttpTransportOptions? BuildHttpOptions(ServerConfiguration? config)
+   {
+       if (config == null)
+       {
+           return null;
+       }
+
+       var options = new SalmonEgg.Infrastructure.Network.HttpTransportOptions();
+
+       var token = config.Authentication?.Token;
+       if (!string.IsNullOrWhiteSpace(token))
+       {
+           options.Headers["Authorization"] = $"Bearer {token.Trim()}";
+       }
+
+       var apiKey = config.Authentication?.ApiKey;
+       if (!string.IsNullOrWhiteSpace(apiKey))
+       {
+           options.Headers["X-API-Key"] = apiKey.Trim();
+       }
+
+       if (config.Proxy?.Enabled == true && !string.IsNullOrWhiteSpace(config.Proxy.ProxyUrl))
+       {
+           options.ProxyUrl = config.Proxy.ProxyUrl.Trim();
+       }
+
+       return options;
+   }
+
+   private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateTransport(
+       TransportType transportType,
+       string? command,
+       string? args,
+       string? url,
+       ServerConfiguration? config)
+   {
+       _logger.Information("正在创建传输实例：{TransportType}", transportType);
+
+       return transportType switch
+       {
+           TransportType.Stdio => CreateStdioTransport(command, args),
+           TransportType.WebSocket => CreateWebSocketTransport(url, config),
+           TransportType.HttpSse => CreateHttpSseTransport(url, config),
+           _ => throw new NotSupportedException($"不支持的传输类型：{transportType}")
+       };
    }
 }

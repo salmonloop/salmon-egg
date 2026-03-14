@@ -1,8 +1,10 @@
 using System;
+using System.Reflection;
 using Moq;
 using Serilog;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Infrastructure.Client;
+using SalmonEgg.Infrastructure.Network;
 using SalmonEgg.Infrastructure.Transport;
 using Xunit;
 
@@ -86,5 +88,76 @@ public sealed class TransportFactoryTests
         var transport = factory.CreateDefaultTransport();
 
         Assert.IsType<StdioTransport>(transport);
+    }
+
+    [Fact]
+    public void CreateTransport_WithHttpConfig_Should_ApplyHeadersAndProxy()
+    {
+        var factory = new TransportFactory(_logger);
+        var config = new ServerConfiguration
+        {
+            Transport = TransportType.HttpSse,
+            ServerUrl = "https://example.com/sse",
+            Authentication = new AuthenticationConfig
+            {
+                Token = "token-123",
+                ApiKey = "key-456"
+            },
+            Proxy = new ProxyConfig
+            {
+                Enabled = true,
+                ProxyUrl = "http://proxy:8080"
+            }
+        };
+
+        var transport = factory.CreateTransport(config);
+        var adapter = Assert.IsType<NetworkTransportAdapter>(transport);
+        var inner = GetPrivateField<object>(adapter, "_inner");
+        Assert.IsType<HttpSseTransport>(inner);
+        var options = GetPrivateField<HttpTransportOptions>(inner, "_options");
+
+        Assert.NotNull(options);
+        Assert.Equal("http://proxy:8080", options.ProxyUrl);
+        Assert.Equal("Bearer token-123", options.Headers["Authorization"]);
+        Assert.Equal("key-456", options.Headers["X-API-Key"]);
+    }
+
+    [Fact]
+    public void CreateTransport_WithWebSocketConfig_Should_ApplyHeadersAndProxy()
+    {
+        var factory = new TransportFactory(_logger);
+        var config = new ServerConfiguration
+        {
+            Transport = TransportType.WebSocket,
+            ServerUrl = "wss://example.com/socket",
+            Authentication = new AuthenticationConfig
+            {
+                Token = "token-abc",
+                ApiKey = "key-def"
+            },
+            Proxy = new ProxyConfig
+            {
+                Enabled = true,
+                ProxyUrl = "http://proxy:8080"
+            }
+        };
+
+        var transport = factory.CreateTransport(config);
+        var adapter = Assert.IsType<NetworkTransportAdapter>(transport);
+        var inner = GetPrivateField<object>(adapter, "_inner");
+        Assert.IsType<WebSocketTransport>(inner);
+        var options = GetPrivateField<HttpTransportOptions>(inner, "_options");
+
+        Assert.NotNull(options);
+        Assert.Equal("http://proxy:8080", options.ProxyUrl);
+        Assert.Equal("Bearer token-abc", options.Headers["Authorization"]);
+        Assert.Equal("key-def", options.Headers["X-API-Key"]);
+    }
+
+    private static T GetPrivateField<T>(object instance, string fieldName) where T : class
+    {
+        var field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        return (T)field!.GetValue(instance)!;
     }
 }

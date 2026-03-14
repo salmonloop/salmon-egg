@@ -17,6 +17,7 @@ namespace SalmonEgg.Infrastructure.Network
     {
         private readonly ILogger _logger;
         private readonly HttpClient _httpClient;
+        private readonly HttpTransportOptions? _options;
         private readonly Subject<string> _messagesSubject;
         private readonly BehaviorSubject<TransportState> _stateSubject;
         private CancellationTokenSource? _connectionCts;
@@ -29,10 +30,11 @@ namespace SalmonEgg.Infrastructure.Network
         /// </summary>
         /// <param name="logger">Logger instance for logging transport events.</param>
         /// <param name="httpClient">Optional HttpClient instance. If not provided, a new one will be created.</param>
-        public HttpSseTransport(ILogger logger, HttpClient? httpClient = null)
+        public HttpSseTransport(ILogger logger, HttpTransportOptions? options = null, HttpClient? httpClient = null)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _httpClient = httpClient ?? new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
+            _options = options;
+            _httpClient = httpClient ?? CreateHttpClient(options);
             _messagesSubject = new Subject<string>();
             _stateSubject = new BehaviorSubject<TransportState>(TransportState.Disconnected);
         }
@@ -154,7 +156,12 @@ namespace SalmonEgg.Infrastructure.Network
 
                 // Send message via HTTP POST
                 var content = new StringContent(message, Encoding.UTF8, "application/json");
-                var response = await _httpClient.PostAsync(_serverUrl, content, ct);
+                using var request = new HttpRequestMessage(HttpMethod.Post, _serverUrl)
+                {
+                    Content = content
+                };
+                ApplyRequestHeaders(request);
+                var response = await _httpClient.SendAsync(request, ct);
 
                 response.EnsureSuccessStatusCode();
 
@@ -181,6 +188,7 @@ namespace SalmonEgg.Infrastructure.Network
                 var request = new HttpRequestMessage(HttpMethod.Get, _serverUrl);
                 request.Headers.Add("Accept", "text/event-stream");
                 request.Headers.Add("Cache-Control", "no-cache");
+                ApplyRequestHeaders(request);
 
                 // Send request and get response stream
                 var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
@@ -244,6 +252,45 @@ namespace SalmonEgg.Infrastructure.Network
             {
                 _logger.Error(ex, "Error in SSE receive loop");
                 _stateSubject.OnNext(TransportState.Error);
+            }
+        }
+
+        private static HttpClient CreateHttpClient(HttpTransportOptions? options)
+        {
+            var handler = new HttpClientHandler();
+            if (!string.IsNullOrWhiteSpace(options?.ProxyUrl))
+            {
+                try
+                {
+                    handler.Proxy = new System.Net.WebProxy(new Uri(options.ProxyUrl));
+                    handler.UseProxy = true;
+                }
+                catch
+                {
+                    // Ignore invalid proxy; transport will still try direct.
+                }
+            }
+
+            return new HttpClient(handler)
+            {
+                Timeout = Timeout.InfiniteTimeSpan
+            };
+        }
+
+        private void ApplyRequestHeaders(HttpRequestMessage request)
+        {
+            if (_options == null)
+            {
+                return;
+            }
+
+            foreach (var kvp in _options.Headers)
+            {
+                if (string.IsNullOrWhiteSpace(kvp.Key))
+                {
+                    continue;
+                }
+                request.Headers.TryAddWithoutValidation(kvp.Key, kvp.Value ?? string.Empty);
             }
         }
 

@@ -464,6 +464,12 @@
                             Click="OnToggleLeftNavClick">
                         <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE700;"/>
                     </Button>
+                    <ToggleButton x:Name="TitleBarToggleFloatButton"
+                                  Style="{StaticResource TitleBarToggleButtonStyle}"
+                                  ToolTipService.ToolTip="对话悬小窗"
+                                  Click="OnToggleFloatingWindowClick">
+                        <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE8A7;"/>
+                    </ToggleButton>
                     </StackPanel>
 
                     <TextBox x:Name="TopSearchBox"

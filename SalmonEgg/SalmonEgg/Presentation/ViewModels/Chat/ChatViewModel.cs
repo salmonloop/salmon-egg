@@ -668,6 +668,41 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
 
     private async Task SaveConversationsAsync(CancellationToken cancellationToken)
     {
+        var doc = await BuildConversationDocumentSnapshotAsync(cancellationToken).ConfigureAwait(false);
+        await _conversationStore.SaveAsync(doc, cancellationToken).ConfigureAwait(false);
+    }
+
+    private Task<ConversationDocument> BuildConversationDocumentSnapshotAsync(CancellationToken cancellationToken)
+    {
+        if (SynchronizationContext.Current == _syncContext)
+        {
+            return Task.FromResult(BuildConversationDocumentSnapshot());
+        }
+
+        var tcs = new TaskCompletionSource<ConversationDocument>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _syncContext.Post(_ =>
+        {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                tcs.TrySetCanceled(cancellationToken);
+                return;
+            }
+
+            try
+            {
+                tcs.TrySetResult(BuildConversationDocumentSnapshot());
+            }
+            catch (Exception ex)
+            {
+                tcs.TrySetException(ex);
+            }
+        }, null);
+
+        return tcs.Task;
+    }
+
+    private ConversationDocument BuildConversationDocumentSnapshot()
+    {
         var doc = new ConversationDocument
         {
             Version = 1,
@@ -700,7 +735,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             doc.Conversations.Add(record);
         }
 
-        await _conversationStore.SaveAsync(doc, cancellationToken).ConfigureAwait(false);
+        return doc;
     }
 
     private string ResolveSessionDisplayName(string? sessionId)
@@ -921,7 +956,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
 
             // Switching ACP should not reset the current conversation transcript.
             var preserveConversation = IsSessionActive && !string.IsNullOrWhiteSpace(CurrentSessionId);
-            await ApplyTransportConfigCoreAsync(preserveConversation);
+            await ApplyTransportConfigCoreAsync(preserveConversation, profile);
         }
         catch (Exception ex)
         {
@@ -951,10 +986,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
     [RelayCommand]
         private async Task ApplyTransportConfigAsync()
         {
-            await ApplyTransportConfigCoreAsync(preserveConversation: false);
+            await ApplyTransportConfigCoreAsync(preserveConversation: false, profile: null);
         }
 
-        private async Task ApplyTransportConfigCoreAsync(bool preserveConversation)
+        private async Task ApplyTransportConfigCoreAsync(bool preserveConversation, ServerConfiguration? profile = null)
         {
             var (isValid, errorMessage) = TransportConfig.Validate();
             if (!isValid)
@@ -974,32 +1009,39 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                // 使用 ChatServiceFactory 根据用户配置重新创建 ChatService
                // 1. 根据传输类型创建新的 ChatService 实例
                IChatService newChatService;
-               switch (TransportConfig.SelectedTransportType)
+               if (profile != null)
                {
-                   case TransportType.Stdio:
-                       Logger.LogInformation("Stdio 配置 - 命令：{Command}, 参数：{Args}", TransportConfig.StdioCommand, TransportConfig.StdioArgs);
-                       newChatService = _chatServiceFactory.CreateChatService(
-                           TransportType.Stdio,
-                           TransportConfig.StdioCommand,
-                           TransportConfig.StdioArgs,
-                           null);
-                       break;
-                   case TransportType.WebSocket:
-                       newChatService = _chatServiceFactory.CreateChatService(
-                           TransportType.WebSocket,
-                           null,
-                           null,
-                           TransportConfig.RemoteUrl);
-                       break;
-                   case TransportType.HttpSse:
-                       newChatService = _chatServiceFactory.CreateChatService(
-                           TransportType.HttpSse,
-                           null,
-                           null,
-                           TransportConfig.RemoteUrl);
-                       break;
-                   default:
-                       throw new InvalidOperationException($"不支持的传输类型：{TransportConfig.SelectedTransportType}");
+                   newChatService = _chatServiceFactory.CreateChatService(profile);
+               }
+               else
+               {
+                   switch (TransportConfig.SelectedTransportType)
+                   {
+                       case TransportType.Stdio:
+                           Logger.LogInformation("Stdio 配置 - 命令：{Command}, 参数：{Args}", TransportConfig.StdioCommand, TransportConfig.StdioArgs);
+                           newChatService = _chatServiceFactory.CreateChatService(
+                               TransportType.Stdio,
+                               TransportConfig.StdioCommand,
+                               TransportConfig.StdioArgs,
+                               null);
+                           break;
+                       case TransportType.WebSocket:
+                           newChatService = _chatServiceFactory.CreateChatService(
+                               TransportType.WebSocket,
+                               null,
+                               null,
+                               TransportConfig.RemoteUrl);
+                           break;
+                       case TransportType.HttpSse:
+                           newChatService = _chatServiceFactory.CreateChatService(
+                               TransportType.HttpSse,
+                               null,
+                               null,
+                               TransportConfig.RemoteUrl);
+                           break;
+                       default:
+                           throw new InvalidOperationException($"不支持的传输类型：{TransportConfig.SelectedTransportType}");
+                   }
                }
 
                // Best-effort: disconnect previous transport to avoid leaks (do not reset local conversation state).
@@ -1959,6 +2001,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
         {
             CurrentSessionId = null;
+            _currentRemoteSessionId = null;
             IsSessionActive = false;
             MessageHistory.Clear();
             CurrentPlan.Clear();

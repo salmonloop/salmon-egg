@@ -29,6 +29,13 @@ public interface ITransportFactory
         string? url = null);
 
     /// <summary>
+    /// 使用完整的服务器配置创建传输实例（用于远程认证/代理等高级配置）。
+    /// </summary>
+    /// <param name="config">服务器配置</param>
+    /// <returns>新创建的 <see cref="ITransport"/> 实例</returns>
+    ITransport CreateTransport(ServerConfiguration config);
+
+    /// <summary>
     /// 创建默认传输实例（通常为 Stdio）。
     /// </summary>
     /// <returns>默认的 <see cref="ITransport"/> 实例</returns>
