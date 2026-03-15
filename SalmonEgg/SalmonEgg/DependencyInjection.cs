@@ -190,6 +190,9 @@ public static class DependencyInjection
         // Main shell navigation (Start + Projects -> Sessions tree)
         services.AddSingleton<MainNavigationViewModel>();
 
+        // Global search
+        services.AddSingleton<GlobalSearchViewModel>();
+
         // Start page orchestrator (Start creates session and submits)
         services.AddSingleton<StartViewModel>();
 
