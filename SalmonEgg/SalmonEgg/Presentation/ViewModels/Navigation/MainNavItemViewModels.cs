@@ -16,7 +16,12 @@ public sealed partial class StartNavItemViewModel : MainNavItemViewModel
 public sealed partial class ProjectNavItemViewModel : MainNavItemViewModel
 {
     public string ProjectId { get; }
-    public string Title { get; }
+    private string _title = string.Empty;
+    public string Title
+    {
+        get => _title;
+        set => SetProperty(ref _title, value);
+    }
     public string RootPath { get; }
     public bool IsSystemProject { get; }
 
@@ -33,7 +38,7 @@ public sealed partial class ProjectNavItemViewModel : MainNavItemViewModel
     public ProjectNavItemViewModel(ProjectDefinition project, bool isSystemProject, Func<string, Task> createSessionAsync)
     {
         ProjectId = project.ProjectId;
-        Title = project.Name;
+        _title = project.Name;
         RootPath = project.RootPath;
         IsSystemProject = isSystemProject;
         CreateSessionCommand = new AsyncRelayCommand(() => createSessionAsync(ProjectId));
@@ -138,14 +143,27 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
 public sealed partial class MoreSessionsNavItemViewModel : MainNavItemViewModel
 {
     public string ProjectId { get; }
-    public string Title { get; }
+    private int _count;
+    public int Count
+    {
+        get => _count;
+        set
+        {
+            if (SetProperty(ref _count, value))
+            {
+                OnPropertyChanged(nameof(Title));
+            }
+        }
+    }
+
+    public string Title => Count > 0 ? $"展开显示（+{Count}）" : "展开显示";
 
     public IAsyncRelayCommand ShowMoreCommand { get; }
 
     public MoreSessionsNavItemViewModel(string projectId, int remainingCount, IAsyncRelayCommand showMoreCommand)
     {
         ProjectId = projectId;
-        Title = remainingCount > 0 ? $"展开显示（+{remainingCount}）" : "展开显示";
+        _count = remainingCount;
         ShowMoreCommand = showMoreCommand;
     }
 }

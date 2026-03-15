@@ -34,6 +34,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     private readonly Dictionary<string, SessionNavItemViewModel> _sessionIndex = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ProjectNavItemViewModel> _projectIndex = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ProjectNavItemViewModel> _projectVms = new(StringComparer.Ordinal);
     private string? _pendingProjectIdForNewSession;
 
     public ObservableCollection<MainNavItemViewModel> Items { get; } = new();
@@ -275,21 +276,75 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         {
             try
             {
-                var currentSelected = SelectedItem;
+                // Ensure we have the base items
+                if (Items.Count < 2)
+                {
+                    Items.Clear();
+                    Items.Add(StartItem);
+                    Items.Add(SessionsHeaderItem);
+                }
+
                 _sessionIndex.Clear();
                 _projectIndex.Clear();
 
-                // Remove in reverse to avoid index shifts and keep fixed items stable.
-                while (Items.Count > 2)
+                var projects = GetProjectDefinitions();
+                var sessionsByProject = GetSessionsByProject(projects);
+
+                // Index of where project items start
+                int itemIndex = 2;
+
+                foreach (var (projectDef, isSystem) in projects)
+                {
+                    var projectId = projectDef.ProjectId!;
+                    if (!_projectVms.TryGetValue(projectId, out var projectVm))
+                    {
+                        projectVm = new ProjectNavItemViewModel(projectDef, isSystem, PrepareStartForProjectAsync)
+                        {
+                            IsExpanded = true
+                        };
+                        _projectVms[projectId] = projectVm;
+                    }
+                    else
+                    {
+                        // Update existing VM properties if they changed
+                        projectVm.Title = projectDef.Name ?? string.Empty;
+                    }
+
+                    _projectIndex[projectId] = projectVm;
+
+                    // Ensure the project VM is at the correct position in the Items collection
+                    if (itemIndex < Items.Count)
+                    {
+                        if (!ReferenceEquals(Items[itemIndex], projectVm))
+                        {
+                            // If it's elsewhere, remove it first (should be rare)
+                            int existingIndex = Items.IndexOf(projectVm);
+                            if (existingIndex != -1)
+                            {
+                                Items.RemoveAt(existingIndex);
+                            }
+                            Items.Insert(itemIndex, projectVm);
+                        }
+                    }
+                    else
+                    {
+                        Items.Add(projectVm);
+                    }
+
+                    SyncSessions(projectVm, sessionsByProject.TryGetValue(projectId, out var s) ? s : new List<Session>());
+                    itemIndex++;
+                }
+
+                // Remove orphans
+                while (Items.Count > itemIndex)
                 {
                     Items.RemoveAt(Items.Count - 1);
                 }
 
-                var newProjects = BuildProjects();
-                foreach (var project in newProjects)
-                {
-                    Items.Add(project);
-                }
+                // Cleanup _projectVms for projects that no longer exist
+                var currentProjectIds = new HashSet<string>(projects.Select(p => p.Project.ProjectId!), StringComparer.Ordinal);
+                var toRemove = _projectVms.Keys.Where(id => !currentProjectIds.Contains(id)).ToList();
+                foreach (var id in toRemove) _projectVms.Remove(id);
 
                 NormalizeSelectionAfterRebuild();
             }
@@ -298,6 +353,130 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 _logger.LogWarning(ex, "导航树重建过程中发生异常，已拦截以防止闪退");
             }
         }, null);
+    }
+
+    private void SyncSessions(ProjectNavItemViewModel projectVm, List<Session> sessions)
+    {
+        var top = sessions.Take(20).ToList();
+        var remainingCount = Math.Max(0, sessions.Count - top.Count);
+
+        int childIndex = 0;
+        foreach (var session in top)
+        {
+            var title = string.IsNullOrWhiteSpace(session.DisplayName)
+                ? SessionNamePolicy.CreateDefault(session.SessionId)
+                : session.DisplayName.Trim();
+            var relative = NavTimeFormatter.ToRelativeText(session.LastActivityAt == default ? session.CreatedAt : session.LastActivityAt);
+
+            SessionNavItemViewModel? sessionVm = null;
+            if (childIndex < projectVm.Children.Count && projectVm.Children[childIndex] is SessionNavItemViewModel existingSvm && !existingSvm.IsPlaceholder)
+            {
+                if (string.Equals(existingSvm.SessionId, session.SessionId, StringComparison.Ordinal))
+                {
+                    sessionVm = existingSvm;
+                    sessionVm.Title = title;
+                    sessionVm.RelativeTimeText = relative;
+                }
+            }
+
+            if (sessionVm == null)
+            {
+                // Look for it elsewhere in children to avoid full re-creation if it moved
+                sessionVm = projectVm.Children.OfType<SessionNavItemViewModel>().FirstOrDefault(v => string.Equals(v.SessionId, session.SessionId, StringComparison.Ordinal));
+                if (sessionVm != null)
+                {
+                    projectVm.Children.Remove(sessionVm);
+                    sessionVm.Title = title;
+                    sessionVm.RelativeTimeText = relative;
+                }
+                else
+                {
+                    sessionVm = new SessionNavItemViewModel(
+                        sessionId: session.SessionId,
+                        projectId: projectVm.ProjectId,
+                        title: title,
+                        relativeTimeText: relative,
+                        ui: _ui,
+                        chatViewModel: _chatViewModel);
+                }
+                projectVm.Children.Insert(childIndex, sessionVm);
+            }
+
+            _sessionIndex[session.SessionId] = sessionVm;
+            childIndex++;
+        }
+
+        // Handle "More" item
+        if (remainingCount > 0)
+        {
+            if (childIndex < projectVm.Children.Count && projectVm.Children[childIndex] is MoreSessionsNavItemViewModel existingMore)
+            {
+                existingMore.Count = remainingCount;
+            }
+            else
+            {
+                // Remove any existing More item if it's at the wrong place
+                var oldMore = projectVm.Children.OfType<MoreSessionsNavItemViewModel>().FirstOrDefault();
+                if (oldMore != null) projectVm.Children.Remove(oldMore);
+
+                var showMore = new AsyncRelayCommand(() => ShowAllSessionsForProjectAsync(projectVm.ProjectId));
+                projectVm.Children.Insert(childIndex, new MoreSessionsNavItemViewModel(projectVm.ProjectId, remainingCount, showMore));
+            }
+            childIndex++;
+        }
+        else
+        {
+            var oldMore = projectVm.Children.OfType<MoreSessionsNavItemViewModel>().FirstOrDefault();
+            if (oldMore != null) projectVm.Children.Remove(oldMore);
+        }
+
+        // Add loading placeholder if needed
+        if (_chatViewModel.IsConversationListLoading && childIndex == 0 && projectVm.ProjectId == UnclassifiedProjectId)
+        {
+            projectVm.Children.Add(CreateLoadingPlaceholder());
+            childIndex++;
+        }
+
+        // Remove orphans
+        while (projectVm.Children.Count > childIndex)
+        {
+            projectVm.Children.RemoveAt(projectVm.Children.Count - 1);
+        }
+    }
+
+    private List<(ProjectDefinition Project, bool IsSystem)> GetProjectDefinitions()
+    {
+        var projects = new List<(ProjectDefinition Project, bool IsSystem)>
+        {
+            (new ProjectDefinition { ProjectId = UnclassifiedProjectId, Name = "未归类", RootPath = string.Empty }, true)
+        };
+
+        projects.AddRange(_preferences.Projects
+            .Where(p => p != null
+                        && !string.IsNullOrWhiteSpace(p.ProjectId)
+                        && !string.IsNullOrWhiteSpace(p.Name)
+                        && !string.IsNullOrWhiteSpace(p.RootPath))
+            .Select(p => (p, false)));
+
+        return projects;
+    }
+
+    private Dictionary<string, List<Session>> GetSessionsByProject(List<(ProjectDefinition Project, bool IsSystem)> projects)
+    {
+        var normalizedRoots = projects.ToDictionary(
+            p => p.Project.ProjectId!,
+            p => NavTimeFormatter.NormalizePathForPrefixMatch(p.Project.RootPath),
+            StringComparer.Ordinal);
+
+        var sessions = _chatViewModel.GetKnownConversationIds()
+            .Select(id => _sessionManager.GetSession(id))
+            .Where(s => s != null)
+            .Cast<Session>()
+            .ToList();
+
+        return sessions
+            .GroupBy(s => ProjectSessionClassifier.ClassifyProjectId(s.Cwd, normalizedRoots, UnclassifiedProjectId), StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(s => s.LastActivityAt).ToList(), StringComparer.Ordinal);
     }
 
     private void NormalizeSelectionAfterRebuild()
@@ -374,33 +553,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     private IEnumerable<ProjectNavItemViewModel> BuildProjects()
     {
-        var projects = new List<(ProjectDefinition Project, bool IsSystem)>
-        {
-            (new ProjectDefinition { ProjectId = UnclassifiedProjectId, Name = "未归类", RootPath = string.Empty }, true)
-        };
-
-        projects.AddRange(_preferences.Projects
-            .Where(p => p != null
-                        && !string.IsNullOrWhiteSpace(p.ProjectId)
-                        && !string.IsNullOrWhiteSpace(p.Name)
-                        && !string.IsNullOrWhiteSpace(p.RootPath))
-            .Select(p => (p, false)));
-
-        // Normalize roots once for classification.
-        var normalizedRoots = projects.ToDictionary(
-            p => p.Project.ProjectId,
-            p => NavTimeFormatter.NormalizePathForPrefixMatch(p.Project.RootPath),
-            StringComparer.Ordinal);
-
-        var sessions = _chatViewModel.GetKnownConversationIds()
-            .Select(id => _sessionManager.GetSession(id))
-            .Where(s => s != null)
-            .Cast<Session>()
-            .ToList();
-
-        var byProject = sessions
-            .GroupBy(s => ProjectSessionClassifier.ClassifyProjectId(s.Cwd, normalizedRoots, UnclassifiedProjectId), StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.OrderByDescending(s => s.LastActivityAt).ToList(), StringComparer.Ordinal);
+        var projects = GetProjectDefinitions();
+        var byProject = GetSessionsByProject(projects);
 
         foreach (var (project, isSystem) in projects)
         {
@@ -409,9 +563,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 IsExpanded = true
             };
 
-            _projectIndex[projectVm.ProjectId] = projectVm;
-
-            var list = byProject.TryGetValue(project.ProjectId, out var value) ? value : new List<Session>();
+            var list = byProject.TryGetValue(project.ProjectId!, out var value) ? value : new List<Session>();
             var top = list.Take(20).ToList();
             var remaining = Math.Max(0, list.Count - top.Count);
 
@@ -430,7 +582,6 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                     ui: _ui,
                     chatViewModel: _chatViewModel);
 
-                _sessionIndex[session.SessionId] = vm;
                 projectVm.Children.Add(vm);
             }
 
@@ -440,7 +591,6 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 projectVm.Children.Add(new MoreSessionsNavItemViewModel(projectVm.ProjectId, remaining, showMore));
             }
 
-            // If still loading and there are no sessions yet, show a placeholder so the pane doesn't look empty.
             if (_chatViewModel.IsConversationListLoading && projectVm.Children.Count == 0 && projectVm.ProjectId == UnclassifiedProjectId)
             {
                 projectVm.Children.Add(CreateLoadingPlaceholder());
