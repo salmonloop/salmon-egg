@@ -73,7 +73,7 @@
                             </TextBlock>
 
                             <TextBox x:Name="InputBox"
-                                     PlaceholderText="向 Agent 发送消息... (Enter 发送，Ctrl+Enter 换行)"
+                                     x:Uid="ChatInputBox"
                                      Text="{x:Bind ViewModel.CurrentPrompt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                      AcceptsReturn="True"
                                      TextWrapping="Wrap"
@@ -91,6 +91,7 @@
 
                         <Grid Grid.Column="1" VerticalAlignment="Bottom">
                             <Button x:Name="SendButton"
+                                    x:Uid="SendButton"
                                     Content="&#xE724;"
                                     FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                     Width="44"
@@ -101,11 +102,11 @@
                                     Background="{ThemeResource AccentBrush}"
                                     Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
                                     IsEnabled="{x:Bind CanSubmitUi, Mode=OneWay}"
-                                    AutomationProperties.Name="发送"
                                     Command="{x:Bind SubmitCommand}"
                                     Visibility="{x:Bind ViewModel.IsPromptInFlight, Mode=OneWay, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
 
                             <Button x:Name="CancelButton"
+                                    x:Uid="CancelButton"
                                     Content="&#xE711;"
                                     FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                     Width="44"
@@ -116,7 +117,6 @@
                                     Background="{ThemeResource AccentBrush}"
                                     Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
                                     Command="{x:Bind ViewModel.CancelPromptCommand}"
-                                    AutomationProperties.Name="取消发送"
                                     Visibility="{x:Bind ViewModel.IsPromptInFlight, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
                         </Grid>
                     </Grid>
@@ -126,12 +126,12 @@
                             Orientation="Horizontal"
                             Spacing="8"
                             Margin="0,10,0,0">
-                    <ComboBox MinWidth="120"
+                    <ComboBox x:Uid="ChatModeSelector"
+                              MinWidth="120"
                               MaxWidth="240"
                               FontSize="12"
                               ItemsSource="{x:Bind ViewModel.AvailableModes, Mode=OneWay}"
-                              SelectedItem="{x:Bind ViewModel.SelectedMode, Mode=TwoWay}"
-                              PlaceholderText="选择模式">
+                              SelectedItem="{x:Bind ViewModel.SelectedMode, Mode=TwoWay}">
                         <ComboBox.ItemTemplate>
                             <DataTemplate x:DataType="vm:SessionModeViewModel">
                                 <TextBlock Text="{x:Bind ModeName, Mode=OneWay}"
@@ -142,12 +142,11 @@
                     </ComboBox>
 
                     <!-- “娶她”功能占位：后续启用时复用同一输入区域组件 -->
-                    <Button Content="娶她"
+                    <Button x:Uid="MarryHerButton"
                             FontSize="12"
                             MinHeight="28"
                             Padding="12,0"
                             CornerRadius="8"
-                            ToolTipService.ToolTip="“娶她”功能占位"
                             Visibility="{x:Bind models:UiFeatures.MarryHerEnabled, Mode=OneTime, Converter={StaticResource BoolToVisibilityConverter}}"/>
                 </StackPanel>
             </Grid>

@@ -475,4 +475,22 @@
   <data name="SearchPanelEmptyText.Text" xml:space="preserve">
     <value>无搜索结果</value>
   </data>
+  <data name="ChatInputBox.PlaceholderText" xml:space="preserve">
+    <value>向 Agent 发送消息... (Enter 发送，Ctrl+Enter 换行)</value>
+  </data>
+  <data name="SendButton.AutomationProperties.Name" xml:space="preserve">
+    <value>发送</value>
+  </data>
+  <data name="CancelButton.AutomationProperties.Name" xml:space="preserve">
+    <value>取消发送</value>
+  </data>
+  <data name="ChatModeSelector.PlaceholderText" xml:space="preserve">
+    <value>选择模式</value>
+  </data>
+  <data name="MarryHerButton.Content" xml:space="preserve">
+    <value>娶她</value>
+  </data>
+  <data name="MarryHerButton.ToolTipService.ToolTip" xml:space="preserve">
+    <value>“娶她”功能占位</value>
+  </data>
 </root>

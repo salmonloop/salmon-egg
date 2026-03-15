@@ -50,6 +50,24 @@
   <data name="SearchPanelEmptyText.Text" xml:space="preserve">
     <value>No results</value>
   </data>
+  <data name="ChatInputBox.PlaceholderText" xml:space="preserve">
+    <value>Send a message to the agent... (Enter to send, Ctrl+Enter for newline)</value>
+  </data>
+  <data name="SendButton.AutomationProperties.Name" xml:space="preserve">
+    <value>Send</value>
+  </data>
+  <data name="CancelButton.AutomationProperties.Name" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="ChatModeSelector.PlaceholderText" xml:space="preserve">
+    <value>Choose mode</value>
+  </data>
+  <data name="MarryHerButton.Content" xml:space="preserve">
+    <value>Marry her</value>
+  </data>
+  <data name="MarryHerButton.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Placeholder for the “Marry her” feature</value>
+  </data>
   <data name="Appearance_ThemeDescription.Text" xml:space="preserve">
     <value>Choose your preferred app theme.</value>
   </data>

@@ -421,6 +421,27 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             return;
         }
 
+        foreach (var convo in doc.Conversations)
+        {
+            if (string.IsNullOrWhiteSpace(convo.ConversationId))
+            {
+                continue;
+            }
+
+            if (_sessionManager.GetSession(convo.ConversationId) != null)
+            {
+                continue;
+            }
+
+            try
+            {
+                await _sessionManager.CreateSessionAsync(convo.ConversationId, convo.Cwd).ConfigureAwait(false);
+            }
+            catch
+            {
+            }
+        }
+
         _syncContext.Post(_ =>
         {
             try
@@ -441,10 +462,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                         ? SessionNamePolicy.CreateDefault(convo.ConversationId)
                         : convo.DisplayName.Trim();
 
-                    if (_sessionManager.GetSession(convo.ConversationId) == null)
-                    {
-                        try { _sessionManager.CreateSessionAsync(convo.ConversationId, convo.Cwd).GetAwaiter().GetResult(); } catch { }
-                    }
                     _sessionManager.UpdateSession(
                         convo.ConversationId,
                         s =>
@@ -2786,8 +2803,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                    _transientNotificationCts?.Cancel();
                    try
                    {
-                       // Best-effort flush so the latest transcript survives restarts.
-                       SaveConversationsAsync(CancellationToken.None).GetAwaiter().GetResult();
+                       // Best-effort flush so the latest transcript survives restarts without blocking UI thread.
+                       _ = Task.Run(async () =>
+                       {
+                           try { await SaveConversationsAsync(CancellationToken.None).ConfigureAwait(false); } catch { }
+                       });
                    }
                    catch
                    {

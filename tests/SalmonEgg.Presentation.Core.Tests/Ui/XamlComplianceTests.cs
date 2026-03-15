@@ -79,8 +79,12 @@ public sealed class XamlComplianceTests
         var sendTag = FindElementTag(xaml, "SendButton");
         var cancelTag = FindElementTag(xaml, "CancelButton");
 
-        Assert.Contains("AutomationProperties.Name", sendTag);
-        Assert.Contains("AutomationProperties.Name", cancelTag);
+        Assert.True(
+            sendTag.Contains("AutomationProperties.Name") || sendTag.Contains("x:Uid=\"SendButton\""),
+            "SendButton must expose an accessible name via AutomationProperties.Name or x:Uid localization.");
+        Assert.True(
+            cancelTag.Contains("AutomationProperties.Name") || cancelTag.Contains("x:Uid=\"CancelButton\""),
+            "CancelButton must expose an accessible name via AutomationProperties.Name or x:Uid localization.");
         Assert.Contains("MinWidth=\"44\"", sendTag);
         Assert.Contains("MinHeight=\"44\"", sendTag);
         Assert.Contains("MinWidth=\"44\"", cancelTag);
@@ -103,6 +107,24 @@ public sealed class XamlComplianceTests
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml");
 
         Assert.DoesNotContain("Width=\"140\"", xaml);
+    }
+
+    [Fact]
+    public void ChatInputArea_TextsAreLocalized()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml");
+
+        Assert.DoesNotContain("PlaceholderText=\"向 Agent 发送消息", xaml);
+        Assert.DoesNotContain("PlaceholderText=\"选择模式\"", xaml);
+        Assert.DoesNotContain("Content=\"娶她\"", xaml);
+        Assert.DoesNotContain("ToolTipService.ToolTip=\"“娶她”功能占位\"", xaml);
+        Assert.DoesNotContain("AutomationProperties.Name=\"发送\"", xaml);
+        Assert.DoesNotContain("AutomationProperties.Name=\"取消发送\"", xaml);
+        Assert.Contains("x:Uid=\"ChatInputBox\"", xaml);
+        Assert.Contains("x:Uid=\"ChatModeSelector\"", xaml);
+        Assert.Contains("x:Uid=\"MarryHerButton\"", xaml);
+        Assert.Contains("x:Uid=\"SendButton\"", xaml);
+        Assert.Contains("x:Uid=\"CancelButton\"", xaml);
     }
 
     [Theory]
