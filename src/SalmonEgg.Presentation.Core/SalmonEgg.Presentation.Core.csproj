@@ -12,5 +12,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SalmonEgg.Domain\SalmonEgg.Domain.csproj" />
+    <ProjectReference Include="..\SalmonEgg.Application\SalmonEgg.Application.csproj" />
   </ItemGroup>
 </Project>

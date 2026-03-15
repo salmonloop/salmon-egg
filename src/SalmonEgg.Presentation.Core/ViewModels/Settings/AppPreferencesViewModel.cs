@@ -9,7 +9,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
-using SalmonEgg.Presentation.Models;
+using SalmonEgg.Presentation.Services;
 
 namespace SalmonEgg.Presentation.ViewModels.Settings;
 
@@ -19,6 +19,7 @@ public partial class AppPreferencesViewModel : ObservableObject
     private readonly IAppStartupService _startupService;
     private readonly IAppLanguageService _languageService;
     private readonly IPlatformCapabilityService _capabilities;
+    private readonly IUiRuntimeService _uiRuntime;
     private readonly ILogger<AppPreferencesViewModel> _logger;
     private readonly SynchronizationContext _syncContext;
     private CancellationTokenSource? _saveCts;
@@ -77,12 +78,14 @@ public partial class AppPreferencesViewModel : ObservableObject
         IAppStartupService startupService,
         IAppLanguageService languageService,
         IPlatformCapabilityService capabilities,
+        IUiRuntimeService uiRuntime,
         ILogger<AppPreferencesViewModel> logger)
     {
         _appSettingsService = appSettingsService ?? throw new ArgumentNullException(nameof(appSettingsService));
         _startupService = startupService ?? throw new ArgumentNullException(nameof(startupService));
         _languageService = languageService ?? throw new ArgumentNullException(nameof(languageService));
         _capabilities = capabilities ?? throw new ArgumentNullException(nameof(capabilities));
+        _uiRuntime = uiRuntime ?? throw new ArgumentNullException(nameof(uiRuntime));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _syncContext = SynchronizationContext.Current ?? new SynchronizationContext();
         KeyBindings.CollectionChanged += OnKeyBindingsChanged;
@@ -117,8 +120,7 @@ public partial class AppPreferencesViewModel : ObservableObject
                 Theme = settings.Theme;
                 // Default to enabled and mark "disable" as not yet supported in UI.
                 IsAnimationEnabled = true;
-                UiMotion.Current.IsAnimationEnabled = true;
-                App.ApplyReducedMotion(false);
+                _uiRuntime.SetAnimationsEnabled(true);
                 Backdrop = settings.Backdrop;
                 LaunchOnStartup = launchOnStartup;
                 MinimizeToTray = settings.MinimizeToTray;
@@ -183,8 +185,7 @@ public partial class AppPreferencesViewModel : ObservableObject
     partial void OnThemeChanged(string value) => ScheduleSave();
     partial void OnIsAnimationEnabledChanged(bool value)
     {
-        UiMotion.Current.IsAnimationEnabled = value;
-        App.ApplyReducedMotion(!value);
+        _uiRuntime.SetAnimationsEnabled(value);
 
         if (_suppressSave)
         {
@@ -209,7 +210,7 @@ public partial class AppPreferencesViewModel : ObservableObject
 
         ScheduleSave();
         _ = _languageService.ApplyLanguageOverrideAsync(value);
-        App.ReloadMainShell();
+        _uiRuntime.ReloadShell();
     }
     partial void OnLastSelectedServerIdChanged(string? value) => ScheduleSave();
     partial void OnSaveLocalHistoryChanged(bool value) => ScheduleSave();

@@ -23,7 +23,9 @@ public sealed partial class DiagnosticsSettingsViewModel : ObservableObject
 
     public ChatViewModel Chat { get; }
 
-    public string AppVersion => typeof(App).Assembly.GetName().Version?.ToString() ?? "unknown";
+    public string AppVersion => System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString()
+        ?? System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString()
+        ?? "unknown";
 
     public string ProtocolVersion => new InitializeParams().ProtocolVersion.ToString();
 

@@ -1379,7 +1379,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             }, null);
 
             var binding = GetOrCreateConversationBinding(sessionId);
-            binding.RemoteSessionId ??= sessionId;
             binding.BoundProfileId ??= _preferences.LastSelectedServerId;
 
             // If the active ACP changed since this conversation was last used, defer remote session creation to the next send.

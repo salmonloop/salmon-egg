@@ -156,9 +156,12 @@ public partial class DataStorageSettingsViewModel : ObservableObject
     {
         try
         {
+            var appVersion = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString()
+                ?? System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString()
+                ?? "unknown";
             var snapshot = new DiagnosticsSnapshot
             {
-                AppVersion = typeof(App).Assembly.GetName().Version?.ToString() ?? "unknown",
+                AppVersion = appVersion,
                 ProtocolVersion = new InitializeParams().ProtocolVersion.ToString(),
                 OsDescription = System.Runtime.InteropServices.RuntimeInformation.OSDescription,
                 FrameworkDescription = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,

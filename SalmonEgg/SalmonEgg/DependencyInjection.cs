@@ -219,6 +219,9 @@ public static class DependencyInjection
 
         // UI interaction helpers (ContentDialog, FolderPicker)
         services.AddSingleton<IUiInteractionService, UiInteractionService>();
+
+        // UI runtime bridge (animations, shell reload)
+        services.AddSingleton<IUiRuntimeService, UiRuntimeService>();
     }
 
     private static string GetAppDataPath()

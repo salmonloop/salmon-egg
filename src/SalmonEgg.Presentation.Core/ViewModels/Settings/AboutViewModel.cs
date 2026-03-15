@@ -19,7 +19,9 @@ public sealed partial class AboutViewModel : ObservableObject
 
     public string AppName => "SalmonEgg";
 
-    public string AppVersion => typeof(App).Assembly.GetName().Version?.ToString() ?? "unknown";
+    public string AppVersion => System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString()
+        ?? System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString()
+        ?? "unknown";
 
     public string ProtocolVersion => new InitializeParams().ProtocolVersion.ToString();
 
