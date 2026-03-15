@@ -377,6 +377,29 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         CurrentPlanTitle = binding.PlanTitle;
     }
 
+    private Task PostToUiAsync(Action action)
+    {
+        if (action == null)
+        {
+            throw new ArgumentNullException(nameof(action));
+        }
+
+        var tcs = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _syncContext.Post(_ =>
+        {
+            try
+            {
+                action();
+                tcs.SetResult(null);
+            }
+            catch (Exception ex)
+            {
+                tcs.SetException(ex);
+            }
+        }, null);
+        return tcs.Task;
+    }
+
     public async Task RestoreConversationsAsync()
     {
         if (_conversationsRestored)
@@ -1372,11 +1395,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             _suppressSessionUpdatesToUi = true;
 
             // Switch local conversation first (UI stays stable even if not connected).
-            _syncContext.Post(_ =>
+            await PostToUiAsync(() =>
             {
                 CurrentSessionId = sessionId;
                 IsSessionActive = true;
-            }, null);
+            }).ConfigureAwait(false);
 
             var binding = GetOrCreateConversationBinding(sessionId);
             binding.BoundProfileId ??= _preferences.LastSelectedServerId;
@@ -1398,10 +1421,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                 _currentRemoteSessionId = binding.RemoteSessionId;
             }
 
-            _syncContext.Post(_ =>
+            await PostToUiAsync(() =>
             {
                 RestoreConversation(binding);
-            }, null);
+            }).ConfigureAwait(false);
 
             return true;
         }

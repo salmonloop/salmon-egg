@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Reflection;
 using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Moq;
 using SalmonEgg.Application.Services.Chat;
@@ -17,9 +18,10 @@ using Xunit;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
+[Collection("NonParallel")]
 public class ChatViewModelTests
 {
-    private static ChatViewModel CreateViewModel()
+    private static ChatViewModel CreateViewModel(SynchronizationContext? syncContext = null)
     {
         var transportFactory = new Mock<ITransportFactory>();
         var messageParser = new Mock<IMessageParser>();
@@ -62,16 +64,24 @@ public class ChatViewModelTests
         var conversationStore = new Mock<IConversationStore>();
         var vmLogger = new Mock<ILogger<ChatViewModel>>();
 
-        SynchronizationContext.SetSynchronizationContext(new SynchronizationContext());
+        var originalContext = SynchronizationContext.Current;
+        try
+        {
+            SynchronizationContext.SetSynchronizationContext(syncContext ?? new SynchronizationContext());
 
-        return new ChatViewModel(
-            chatServiceFactory,
-            configService.Object,
-            preferences,
-            profiles,
-            sessionManager.Object,
-            conversationStore.Object,
-            vmLogger.Object);
+            return new ChatViewModel(
+                chatServiceFactory,
+                configService.Object,
+                preferences,
+                profiles,
+                sessionManager.Object,
+                conversationStore.Object,
+                vmLogger.Object);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
     }
 
     [Fact]
@@ -89,5 +99,52 @@ public class ChatViewModelTests
         var remote = (string?)remoteProp?.GetValue(binding);
 
         Assert.Null(remote);
+    }
+
+    [Fact]
+    public async Task TrySwitchToSessionAsync_WaitsForUiStateBeforeCompleting()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var viewModel = CreateViewModel(syncContext);
+        var sessionId = Guid.NewGuid().ToString("N");
+
+        var switchTask = viewModel.TrySwitchToSessionAsync(sessionId);
+        for (var i = 0; i < 4 && !switchTask.IsCompleted; i++)
+        {
+            Assert.True(await syncContext.WaitForPostAsync(TimeSpan.FromSeconds(1)));
+            syncContext.RunAll();
+        }
+
+        var completed = await Task.WhenAny(switchTask, Task.Delay(TimeSpan.FromSeconds(2)));
+        Assert.Same(switchTask, completed);
+        await switchTask;
+
+        Assert.Equal(sessionId, viewModel.CurrentSessionId);
+    }
+
+    private sealed class QueueingSynchronizationContext : SynchronizationContext
+    {
+        private readonly Queue<(SendOrPostCallback callback, object? state)> _work = new();
+        private readonly SemaphoreSlim _posted = new(0);
+
+        public override void Post(SendOrPostCallback d, object? state)
+        {
+            _work.Enqueue((d, state));
+            _posted.Release();
+        }
+
+        public Task<bool> WaitForPostAsync(TimeSpan timeout)
+        {
+            return _posted.WaitAsync(timeout);
+        }
+
+        public void RunAll()
+        {
+            while (_work.Count > 0)
+            {
+                var (callback, state) = _work.Dequeue();
+                callback(state);
+            }
+        }
     }
 }
