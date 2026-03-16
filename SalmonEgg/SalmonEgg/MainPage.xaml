@@ -673,7 +673,7 @@
                                  Width="6"
                                  Background="Transparent"
                                  Style="{StaticResource SubMenuResizerThumbStyle}"
-                                 Visibility="Collapsed"
+                                 Visibility="{x:Bind NavVM.IsLeftNavResizerVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                  PointerPressed="OnLeftNavResizerPointerPressed"
                                  PointerMoved="OnLeftNavResizerPointerMoved"
                                  PointerReleased="OnLeftNavResizerPointerReleased"

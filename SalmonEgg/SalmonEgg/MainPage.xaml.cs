@@ -166,7 +166,7 @@ public sealed partial class MainPage : Page
         }
 
         NavVM.IsPaneOpen = MainNavView.IsPaneOpen;
-        UpdateLeftNavResizerState();
+        UpdateLeftNavResizerPosition();
     }
 
     private void SetSelectedSettingsItemDeferred()
@@ -1074,18 +1074,18 @@ public sealed partial class MainPage : Page
     private void OnMainNavPaneOpened(NavigationView sender, object args)
     {
         UpdateNavPaneToggleUi();
-        UpdateLeftNavResizerState();
+        UpdateLeftNavResizerPosition();
     }
 
     private void OnMainNavPaneClosed(NavigationView sender, object args)
     {
         UpdateNavPaneToggleUi();
-        UpdateLeftNavResizerState();
+        UpdateLeftNavResizerPosition();
     }
 
     private void OnMainNavDisplayModeChanged(NavigationView sender, NavigationViewDisplayModeChangedEventArgs args)
     {
-        UpdateLeftNavResizerState();
+        UpdateLeftNavResizerPosition();
     }
 
     private void OnChatViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -1114,7 +1114,7 @@ public sealed partial class MainPage : Page
             _navPaneAnimating = false;
         }
 
-        UpdateLeftNavResizerState();
+        UpdateLeftNavResizerPosition();
 
         var from = targetOpen ? NavVM.NavCompactPaneLength : MainNavView.OpenPaneLength;
         var to = targetOpen ? NavVM.NavOpenPaneLength : NavVM.NavCompactPaneLength;
@@ -1146,6 +1146,7 @@ public sealed partial class MainPage : Page
         storyboard.Completed += (_, _) =>
         {
             _navPaneAnimating = false;
+            NavVM.IsNavPaneAnimating = false;
             if (!targetOpen)
             {
                 MainNavView.IsPaneOpen = false;
@@ -1155,11 +1156,12 @@ public sealed partial class MainPage : Page
                 MainNavView.OpenPaneLength = NavVM.NavOpenPaneLength;
             }
             UpdateNavPaneToggleUi();
-            UpdateLeftNavResizerState();
+            UpdateLeftNavResizerPosition();
             _navPaneStoryboard = null;
         };
 
         _navPaneAnimating = true;
+        NavVM.IsNavPaneAnimating = true;
         _navPaneStoryboard = storyboard;
         storyboard.Begin();
     }
@@ -1170,24 +1172,6 @@ public sealed partial class MainPage : Page
         if (_panePolicy.ShouldCancelClosing(isMinimalMode: isMinimal))
         {
             args.Cancel = true;
-        }
-    }
-
-    private void UpdateLeftNavResizerState()
-    {
-        if (LeftNavResizer == null || MainNavView == null)
-        {
-            return;
-        }
-
-        var isOpen = MainNavView.IsPaneOpen;
-        var isMinimal = MainNavView.DisplayMode == NavigationViewDisplayMode.Minimal;
-        var shouldShow = isOpen && !isMinimal && !_navPaneAnimating;
-        LeftNavResizer.Visibility = shouldShow ? Visibility.Visible : Visibility.Collapsed;
-
-        if (shouldShow)
-        {
-            UpdateLeftNavResizerPosition();
         }
     }
 

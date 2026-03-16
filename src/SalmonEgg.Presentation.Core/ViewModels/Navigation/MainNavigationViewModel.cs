@@ -41,6 +41,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     private double _openPaneLength = 300;
     private bool _isPaneOpen;
     private NavigationPaneDisplayMode _paneDisplayMode = NavigationPaneDisplayMode.Expanded;
+    private bool _isNavPaneAnimating;
+    private bool _isLeftNavResizerVisible;
 
     public ObservableCollection<MainNavItemViewModel> Items { get; } = new();
 
@@ -103,6 +105,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 SetPaneOpen(value);
                 LogPaneState("IsPaneOpenChanged");
                 UpdateOpenPaneLength();
+                UpdateLeftNavResizerVisibility();
             }
         }
     }
@@ -116,8 +119,28 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             {
                 LogPaneState("PaneDisplayModeChanged");
                 UpdateOpenPaneLength();
+                UpdateLeftNavResizerVisibility();
             }
         }
+    }
+
+    public bool IsNavPaneAnimating
+    {
+        get => _isNavPaneAnimating;
+        set
+        {
+            if (SetProperty(ref _isNavPaneAnimating, value))
+            {
+                LogPaneState("IsNavPaneAnimatingChanged");
+                UpdateLeftNavResizerVisibility();
+            }
+        }
+    }
+
+    public bool IsLeftNavResizerVisible
+    {
+        get => _isLeftNavResizerVisible;
+        private set => SetProperty(ref _isLeftNavResizerVisible, value);
     }
 
     public IAsyncRelayCommand AddProjectCommand { get; }
@@ -164,6 +187,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             RelativeTimeRefreshInterval);
 
         UpdateOpenPaneLength();
+        UpdateLeftNavResizerVisibility();
     }
 
     public void SetPaneOpen(bool isOpen)
@@ -185,6 +209,15 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         {
             OpenPaneLength = target;
         }
+    }
+
+    private void UpdateLeftNavResizerVisibility()
+    {
+        var shouldShow = IsPaneOpen
+                         && !IsNavPaneAnimating
+                         && PaneDisplayMode == NavigationPaneDisplayMode.Expanded;
+
+        IsLeftNavResizerVisible = shouldShow;
     }
 
     private void LogPaneState(string reason)

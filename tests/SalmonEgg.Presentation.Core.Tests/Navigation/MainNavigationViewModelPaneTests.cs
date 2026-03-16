@@ -72,6 +72,54 @@ public sealed class MainNavigationViewModelPaneTests
         Assert.Equal(380, nav.OpenPaneLength);
     }
 
+    [Fact]
+    public void LeftNavResizerVisible_WhenPaneOpenAndExpanded()
+    {
+        var nav = CreateNav();
+
+        nav.PaneDisplayMode = NavigationPaneDisplayMode.Expanded;
+        nav.IsPaneOpen = true;
+        nav.IsNavPaneAnimating = false;
+
+        Assert.True(nav.IsLeftNavResizerVisible);
+    }
+
+    [Fact]
+    public void LeftNavResizerHidden_WhenPaneClosed()
+    {
+        var nav = CreateNav();
+
+        nav.PaneDisplayMode = NavigationPaneDisplayMode.Expanded;
+        nav.IsPaneOpen = false;
+        nav.IsNavPaneAnimating = false;
+
+        Assert.False(nav.IsLeftNavResizerVisible);
+    }
+
+    [Fact]
+    public void LeftNavResizerHidden_WhenCompact()
+    {
+        var nav = CreateNav();
+
+        nav.PaneDisplayMode = NavigationPaneDisplayMode.Compact;
+        nav.IsPaneOpen = true;
+        nav.IsNavPaneAnimating = false;
+
+        Assert.False(nav.IsLeftNavResizerVisible);
+    }
+
+    [Fact]
+    public void LeftNavResizerHidden_WhenAnimating()
+    {
+        var nav = CreateNav();
+
+        nav.PaneDisplayMode = NavigationPaneDisplayMode.Expanded;
+        nav.IsPaneOpen = true;
+        nav.IsNavPaneAnimating = true;
+
+        Assert.False(nav.IsLeftNavResizerVisible);
+    }
+
     private static MainNavigationViewModel CreateNav()
     {
         var originalContext = SynchronizationContext.Current;
