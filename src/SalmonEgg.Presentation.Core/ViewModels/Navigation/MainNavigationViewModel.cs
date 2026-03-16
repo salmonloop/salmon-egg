@@ -36,6 +36,11 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     private readonly Dictionary<string, ProjectNavItemViewModel> _projectIndex = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ProjectNavItemViewModel> _projectVms = new(StringComparer.Ordinal);
     private string? _pendingProjectIdForNewSession;
+    private double _navCompactPaneLength = 72;
+    private double _navOpenPaneLength = 300;
+    private double _openPaneLength = 300;
+    private bool _isPaneOpen;
+    private NavigationPaneDisplayMode _paneDisplayMode = NavigationPaneDisplayMode.Expanded;
 
     public ObservableCollection<MainNavItemViewModel> Items { get; } = new();
 
@@ -48,6 +53,71 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     {
         get => _selectedItem;
         set => SetProperty(ref _selectedItem, value);
+    }
+
+    public double NavCompactPaneLength
+    {
+        get => _navCompactPaneLength;
+        set
+        {
+            if (SetProperty(ref _navCompactPaneLength, value))
+            {
+                LogPaneState("NavCompactPaneLengthChanged");
+                UpdateOpenPaneLength();
+            }
+        }
+    }
+
+    public double NavOpenPaneLength
+    {
+        get => _navOpenPaneLength;
+        set
+        {
+            if (SetProperty(ref _navOpenPaneLength, value))
+            {
+                LogPaneState("NavOpenPaneLengthChanged");
+                UpdateOpenPaneLength();
+            }
+        }
+    }
+
+    public double OpenPaneLength
+    {
+        get => _openPaneLength;
+        set
+        {
+            if (SetProperty(ref _openPaneLength, value))
+            {
+                LogPaneState("OpenPaneLengthChanged");
+            }
+        }
+    }
+
+    public bool IsPaneOpen
+    {
+        get => _isPaneOpen;
+        set
+        {
+            if (SetProperty(ref _isPaneOpen, value))
+            {
+                SetPaneOpen(value);
+                LogPaneState("IsPaneOpenChanged");
+                UpdateOpenPaneLength();
+            }
+        }
+    }
+
+    public NavigationPaneDisplayMode PaneDisplayMode
+    {
+        get => _paneDisplayMode;
+        set
+        {
+            if (SetProperty(ref _paneDisplayMode, value))
+            {
+                LogPaneState("PaneDisplayModeChanged");
+                UpdateOpenPaneLength();
+            }
+        }
     }
 
     public IAsyncRelayCommand AddProjectCommand { get; }
@@ -92,6 +162,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             null,
             RelativeTimeRefreshInterval,
             RelativeTimeRefreshInterval);
+
+        UpdateOpenPaneLength();
     }
 
     public void SetPaneOpen(bool isOpen)
@@ -100,6 +172,33 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         {
             SetPaneOpenRecursive(item, isOpen);
         }
+    }
+
+    private void UpdateOpenPaneLength()
+    {
+        var useCompact = !IsPaneOpen &&
+                         (PaneDisplayMode == NavigationPaneDisplayMode.Compact
+                          || PaneDisplayMode == NavigationPaneDisplayMode.Minimal);
+
+        var target = useCompact ? NavCompactPaneLength : NavOpenPaneLength;
+        if (!double.Equals(OpenPaneLength, target))
+        {
+            OpenPaneLength = target;
+        }
+    }
+
+    private void LogPaneState(string reason)
+    {
+#if DEBUG
+        _logger.LogDebug(
+            "NavPaneState {Reason} CompactLen={CompactLen} OpenLen={OpenLen} PaneOpen={PaneOpen} Mode={Mode} EffectiveLen={EffectiveLen}",
+            reason,
+            NavCompactPaneLength,
+            NavOpenPaneLength,
+            IsPaneOpen,
+            PaneDisplayMode,
+            OpenPaneLength);
+#endif
     }
 
     private static void SetPaneOpenRecursive(MainNavItemViewModel item, bool isOpen)

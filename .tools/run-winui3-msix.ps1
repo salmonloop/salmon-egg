@@ -90,6 +90,24 @@ function Get-CertificateFromStore {
     }
 }
 
+function Get-CertificatesFromStore {
+    param(
+        [Parameter(Mandatory = $true)] [string] $Subject,
+        [Parameter(Mandatory = $true)] [string] $StoreName,
+        [Parameter(Mandatory = $true)] [System.Security.Cryptography.X509Certificates.StoreLocation] $StoreLocation
+    )
+
+    $store = [System.Security.Cryptography.X509Certificates.X509Store]::new($StoreName, $StoreLocation)
+    $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadOnly)
+    try {
+        return $store.Certificates |
+            Where-Object { $_.Subject -eq $Subject } |
+            Sort-Object NotAfter -Descending
+    } finally {
+        $store.Close()
+    }
+}
+
 function Add-CertificateToStore {
     param(
         [Parameter(Mandatory = $true)] [System.Security.Cryptography.X509Certificates.X509Certificate2] $Cert,
@@ -100,7 +118,10 @@ function Add-CertificateToStore {
     $store = [System.Security.Cryptography.X509Certificates.X509Store]::new($StoreName, $StoreLocation)
     $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
     try {
-        $store.Add($Cert)
+        $exists = $store.Certificates | Where-Object { $_.Thumbprint -eq $Cert.Thumbprint } | Select-Object -First 1
+        if (-not $exists) {
+            $store.Add($Cert)
+        }
     } finally {
         $store.Close()
     }
@@ -122,23 +143,38 @@ function Remove-CertificateFromStore {
     }
 }
 
+function Get-ValidCodeSigningCert {
+    param(
+        [Parameter(Mandatory = $true)] [System.Security.Cryptography.X509Certificates.X509Certificate2] $Cert
+    )
+
+    if (-not $Cert.HasPrivateKey) {
+        return $false
+    }
+
+    try {
+        $rsaKey = $Cert.GetRSAPrivateKey()
+    } catch {
+        return $false
+    }
+
+    return ($null -ne $rsaKey)
+}
+
 function Get-OrCreateDevCert {
     param([string] $Subject)
 
-    $cert = Get-CertificateFromStore -Subject $Subject -StoreName 'My' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
+    $candidates = Get-CertificatesFromStore -Subject $Subject -StoreName 'My' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
+    $cert = $candidates | Where-Object { Get-ValidCodeSigningCert -Cert $_ } | Select-Object -First 1
     if ($cert) {
-        $rsaKey = $null
-        try {
-            $rsaKey = $cert.GetRSAPrivateKey()
-        } catch {
-        }
+        return $cert
+    }
 
-        if ($cert.HasPrivateKey -and $rsaKey) {
-            return $cert
+    if ($candidates) {
+        Write-Host "Existing dev certs are missing an RSA private key; recreating."
+        foreach ($old in $candidates) {
+            Remove-CertificateFromStore -Cert $old -StoreName 'My' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
         }
-
-        Write-Host "Existing dev cert is missing an RSA private key; recreating."
-        Remove-CertificateFromStore -Cert $cert -StoreName 'My' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
     }
 
     # Prefer New-SelfSignedCertificate to create a standard code-signing cert compatible with signtool.
@@ -188,6 +224,29 @@ function Get-OrCreateDevCert {
 
     Add-CertificateToStore -Cert $persisted -StoreName 'My' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
     return $persisted
+}
+
+function Remove-ExtraCertificates {
+    param(
+        [Parameter(Mandatory = $true)] [string] $Subject,
+        [Parameter(Mandatory = $true)] [string] $ThumbprintToKeep,
+        [Parameter(Mandatory = $true)] [string] $StoreName,
+        [Parameter(Mandatory = $true)] [System.Security.Cryptography.X509Certificates.StoreLocation] $StoreLocation
+    )
+
+    $store = [System.Security.Cryptography.X509Certificates.X509Store]::new($StoreName, $StoreLocation)
+    $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+    try {
+        foreach ($cert in $store.Certificates | Where-Object { $_.Subject -eq $Subject -and $_.Thumbprint -ne $ThumbprintToKeep }) {
+            try {
+                $store.Remove($cert)
+            } catch {
+                Write-Host "WARN: Failed to remove duplicate cert from ${StoreLocation}\\${StoreName}: $($_.Exception.Message)"
+            }
+        }
+    } finally {
+        $store.Close()
+    }
 }
 
 function Get-MsixManifestInfo {
@@ -293,10 +352,15 @@ $appId = $manifestInfo.AppId
 # Trust cert. Add-AppxPackage validates against LocalMachine trust in many configurations.
 Add-CertificateToStore -Cert $cert -StoreName 'TrustedPeople' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
 Add-CertificateToStore -Cert $cert -StoreName 'Root' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
+Remove-ExtraCertificates -Subject $certSubject -ThumbprintToKeep $cert.Thumbprint -StoreName 'TrustedPeople' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
+Remove-ExtraCertificates -Subject $certSubject -ThumbprintToKeep $cert.Thumbprint -StoreName 'Root' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
+Remove-ExtraCertificates -Subject $certSubject -ThumbprintToKeep $cert.Thumbprint -StoreName 'My' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
 
 if ($isAdmin) {
     Add-CertificateToStore -Cert $cert -StoreName 'TrustedPeople' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::LocalMachine)
     Add-CertificateToStore -Cert $cert -StoreName 'Root' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::LocalMachine)
+    Remove-ExtraCertificates -Subject $certSubject -ThumbprintToKeep $cert.Thumbprint -StoreName 'TrustedPeople' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::LocalMachine)
+    Remove-ExtraCertificates -Subject $certSubject -ThumbprintToKeep $cert.Thumbprint -StoreName 'Root' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::LocalMachine)
 } else {
     Write-Host "NOTE: For MSIX install to succeed you may need to run this script from an elevated PowerShell once (Run as Administrator) to trust the dev certificate for LocalMachine."
 }

@@ -36,8 +36,6 @@ namespace SalmonEgg;
 
 public sealed partial class MainPage : Page
 {
-    private double _navCompactPaneLength = 72;
-    private double _navOpenPaneLength = 300;
     private const double NavPaneMinWidth = 240;
     private const double NavPaneMaxWidth = 480;
     private const double NavPaneAnimationDurationMs = 180;
@@ -151,24 +149,23 @@ public sealed partial class MainPage : Page
         // Single source of truth: pull default sizes from XAML resources.
         if (Resources.TryGetValue("NavCompactPaneLength", out var compact) && compact is double compactLength)
         {
-            _navCompactPaneLength = compactLength;
+            NavVM.NavCompactPaneLength = compactLength;
         }
         else
         {
-            _navCompactPaneLength = MainNavView.CompactPaneLength;
+            NavVM.NavCompactPaneLength = MainNavView.CompactPaneLength;
         }
 
         if (Resources.TryGetValue("NavOpenPaneLength", out var open) && open is double openLength)
         {
-            _navOpenPaneLength = openLength;
+            NavVM.NavOpenPaneLength = openLength;
         }
         else
         {
-            _navOpenPaneLength = MainNavView.OpenPaneLength;
+            NavVM.NavOpenPaneLength = MainNavView.OpenPaneLength;
         }
 
-        MainNavView.CompactPaneLength = _navCompactPaneLength;
-        MainNavView.OpenPaneLength = _navOpenPaneLength;
+        NavVM.IsPaneOpen = MainNavView.IsPaneOpen;
         UpdateLeftNavResizerState();
     }
 
@@ -948,7 +945,10 @@ public sealed partial class MainPage : Page
     {
         ConfigureTitleBar();
         UpdateNavPaneToggleUi();
-        SyncSessionsHeaderPaneState(MainNavView?.IsPaneOpen ?? true);
+        if (MainNavView != null)
+        {
+            NavVM.IsPaneOpen = MainNavView.IsPaneOpen;
+        }
         NavVM.RebuildTree();
         ApplyNavItemTransitionsDeferred();
 #if WINDOWS
@@ -1004,14 +1004,11 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        MainNavView.CompactPaneLength = _navCompactPaneLength;
-        MainNavView.OpenPaneLength = _navOpenPaneLength;
         var targetOpen = _panePolicy.Toggle(MainNavView.IsPaneOpen);
 
         if (!UiMotion.Current.IsAnimationEnabled || MainNavView.DisplayMode == NavigationViewDisplayMode.Minimal)
         {
             MainNavView.IsPaneOpen = targetOpen;
-            SyncSessionsHeaderPaneState(targetOpen);
             UpdateNavPaneToggleUi(targetOpen);
             return;
         }
@@ -1077,14 +1074,12 @@ public sealed partial class MainPage : Page
     private void OnMainNavPaneOpened(NavigationView sender, object args)
     {
         UpdateNavPaneToggleUi();
-        SyncSessionsHeaderPaneState(sender.IsPaneOpen);
         UpdateLeftNavResizerState();
     }
 
     private void OnMainNavPaneClosed(NavigationView sender, object args)
     {
         UpdateNavPaneToggleUi();
-        SyncSessionsHeaderPaneState(sender.IsPaneOpen);
         UpdateLeftNavResizerState();
     }
 
@@ -1106,16 +1101,6 @@ public sealed partial class MainPage : Page
         }
     }
 
-    private void SyncSessionsHeaderPaneState(bool isOpen)
-    {
-        if (NavVM == null)
-        {
-            return;
-        }
-
-        NavVM.SetPaneOpen(isOpen);
-    }
-
     private void AnimateNavPane(bool targetOpen)
     {
         if (MainNavView == null)
@@ -1131,8 +1116,8 @@ public sealed partial class MainPage : Page
 
         UpdateLeftNavResizerState();
 
-        var from = targetOpen ? _navCompactPaneLength : MainNavView.OpenPaneLength;
-        var to = targetOpen ? _navOpenPaneLength : _navCompactPaneLength;
+        var from = targetOpen ? NavVM.NavCompactPaneLength : MainNavView.OpenPaneLength;
+        var to = targetOpen ? NavVM.NavOpenPaneLength : NavVM.NavCompactPaneLength;
 
         if (targetOpen)
         {
@@ -1164,11 +1149,10 @@ public sealed partial class MainPage : Page
             if (!targetOpen)
             {
                 MainNavView.IsPaneOpen = false;
-                MainNavView.OpenPaneLength = _navOpenPaneLength;
             }
             else
             {
-                MainNavView.OpenPaneLength = _navOpenPaneLength;
+                MainNavView.OpenPaneLength = NavVM.NavOpenPaneLength;
             }
             UpdateNavPaneToggleUi();
             UpdateLeftNavResizerState();
@@ -1284,10 +1268,13 @@ public sealed partial class MainPage : Page
             newWidth = NavPaneMaxWidth;
         }
 
-        MainNavView.OpenPaneLength = newWidth;
-        _navOpenPaneLength = newWidth;
+        NavVM.NavOpenPaneLength = newWidth;
+        NavVM.OpenPaneLength = newWidth;
         UpdateLeftNavResizerPosition();
         e.Handled = true;
+#if DEBUG
+        System.Diagnostics.Debug.WriteLine($"[NavResize] NewWidth={newWidth} IsPaneOpen={MainNavView.IsPaneOpen} DisplayMode={MainNavView.DisplayMode}");
+#endif
     }
 
     private void OnLeftNavResizerPointerReleased(object sender, PointerRoutedEventArgs e)
