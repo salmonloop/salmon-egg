@@ -11,6 +11,11 @@ namespace SalmonEgg.Presentation.ViewModels.Navigation;
 public sealed partial class StartNavItemViewModel : MainNavItemViewModel
 {
     public string Title { get; } = "开始";
+
+    public StartNavItemViewModel(INavigationStateService navigationState) 
+        : base(navigationState)
+    {
+    }
 }
 
 public sealed partial class ProjectNavItemViewModel : MainNavItemViewModel
@@ -35,7 +40,12 @@ public sealed partial class ProjectNavItemViewModel : MainNavItemViewModel
         set => SetProperty(ref _isExpanded, value);
     }
 
-    public ProjectNavItemViewModel(ProjectDefinition project, bool isSystemProject, Func<string, Task> createSessionAsync)
+    public ProjectNavItemViewModel(
+        ProjectDefinition project, 
+        bool isSystemProject, 
+        Func<string, Task> createSessionAsync,
+        INavigationStateService navigationState)
+        : base(navigationState)
     {
         ProjectId = project.ProjectId;
         _title = project.Name;
@@ -80,7 +90,9 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
         string relativeTimeText,
         IUiInteractionService ui,
         ChatViewModel chatViewModel,
+        INavigationStateService navigationState,
         bool isPlaceholder = false)
+        : base(navigationState)
     {
         SessionId = sessionId;
         ProjectId = projectId;
@@ -160,7 +172,8 @@ public sealed partial class MoreSessionsNavItemViewModel : MainNavItemViewModel
 
     public IAsyncRelayCommand ShowMoreCommand { get; }
 
-    public MoreSessionsNavItemViewModel(string projectId, int remainingCount, IAsyncRelayCommand showMoreCommand)
+    public MoreSessionsNavItemViewModel(string projectId, int remainingCount, IAsyncRelayCommand showMoreCommand, INavigationStateService navigationState)
+        : base(navigationState)
     {
         ProjectId = projectId;
         _count = remainingCount;

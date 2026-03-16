@@ -217,6 +217,9 @@ public static class DependencyInjection
         // Shell navigation facade (prevents Settings pages from walking the visual tree)
         services.AddSingleton<IShellNavigationService, ShellNavigationService>();
 
+        // Navigation state service (Single Source of Truth for IsPaneOpen)
+        services.AddSingleton<INavigationStateService, NavigationStateService>();
+
         // UI interaction helpers (ContentDialog, FolderPicker)
         services.AddSingleton<IUiInteractionService, UiInteractionService>();
 

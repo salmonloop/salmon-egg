@@ -39,7 +39,6 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     private double _navCompactPaneLength = 72;
     private double _navOpenPaneLength = 300;
     private double _openPaneLength = 300;
-    private bool _isPaneOpen = true; // Initialize to true to match children's default and Expanded mode
     private NavigationPaneDisplayMode _paneDisplayMode = NavigationPaneDisplayMode.Expanded;
     private bool _isNavPaneAnimating;
     private bool _isLeftNavResizerVisible;
@@ -97,14 +96,20 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     public bool IsPaneOpen
     {
-        get => _isPaneOpen;
+        get => _navigationState.IsPaneOpen;
         set
         {
-            if (SetProperty(ref _isPaneOpen, value))
+            if (_navigationState.IsPaneOpen != value)
             {
-                OnIsPaneOpenChanged(value, "IsPaneOpenChanged");
+                _navigationState.IsPaneOpen = value;
             }
         }
+    }
+
+    private void OnServicePaneStateChanged(object? sender, EventArgs e)
+    {
+        OnPropertyChanged(nameof(IsPaneOpen));
+        OnIsPaneOpenChanged(_navigationState.IsPaneOpen, "ServiceSync");
     }
 
     public NavigationPaneDisplayMode PaneDisplayMode
@@ -166,19 +171,17 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         };
 
         // Only adjust when the display mode actually changes; user toggles within a mode are preserved.
-        if (shouldBeOpen == _isPaneOpen)
+        if (shouldBeOpen == _navigationState.IsPaneOpen)
         {
             return;
         }
 
-        // Use the same side-effects as user-driven changes.
-        if (SetProperty(ref _isPaneOpen, shouldBeOpen, nameof(IsPaneOpen)))
-        {
-            OnIsPaneOpenChanged(shouldBeOpen, $"IsPaneOpenPolicy({previous}->{current})");
-        }
+        _navigationState.IsPaneOpen = shouldBeOpen;
     }
 
     public IAsyncRelayCommand AddProjectCommand { get; }
+
+    private readonly INavigationStateService _navigationState;
 
     public MainNavigationViewModel(
         ChatViewModel chatViewModel,
@@ -186,7 +189,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         AppPreferencesViewModel preferences,
         IUiInteractionService ui,
         IShellNavigationService shellNavigation,
-        ILogger<MainNavigationViewModel> logger)
+        ILogger<MainNavigationViewModel> logger,
+        INavigationStateService navigationState)
     {
         _chatViewModel = chatViewModel ?? throw new ArgumentNullException(nameof(chatViewModel));
         _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
@@ -194,12 +198,13 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         _ui = ui ?? throw new ArgumentNullException(nameof(ui));
         _shellNavigation = shellNavigation ?? throw new ArgumentNullException(nameof(shellNavigation));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _navigationState = navigationState ?? throw new ArgumentNullException(nameof(navigationState));
         _syncContext = SynchronizationContext.Current ?? new SynchronizationContext();
 
         AddProjectCommand = new AsyncRelayCommand(AddProjectAsync);
 
-        StartItem = new StartNavItemViewModel();
-        SessionsHeaderItem = new SessionsHeaderNavItemViewModel(AddProjectCommand);
+        StartItem = new StartNavItemViewModel(_navigationState);
+        SessionsHeaderItem = new SessionsHeaderNavItemViewModel(AddProjectCommand, _navigationState);
 
         Items.Add(StartItem);
         Items.Add(SessionsHeaderItem);
@@ -224,16 +229,13 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         UpdateOpenPaneLength();
         UpdateLeftNavResizerVisibility();
 
-        // 确保启动时无论是 Expanded 还是被 UI 设置为 Compact，都能向所有的初始节点显式同步一次正确的状态
-        SetPaneOpen(_isPaneOpen);
+        _navigationState.PaneStateChanged += OnServicePaneStateChanged;
     }
 
     public void SetPaneOpen(bool isOpen)
     {
-        foreach (var item in Items)
-        {
-            SetPaneOpenRecursive(item, isOpen);
-        }
+        // We do not broadcast state recursively anymore, because all VMs share the Service directly.
+        _navigationState.IsPaneOpen = isOpen;
     }
 
     private void UpdateOpenPaneLength()
@@ -272,20 +274,39 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 #endif
     }
 
-    private static void SetPaneOpenRecursive(MainNavItemViewModel item, bool isOpen)
-    {
-        item.IsPaneOpen = isOpen;
-        foreach (var child in item.Children)
-        {
-            SetPaneOpenRecursive(child, isOpen);
-        }
-    }
-
     public void Dispose()
     {
+        _navigationState.PaneStateChanged -= OnServicePaneStateChanged;
         _chatViewModel.PropertyChanged -= OnChatViewModelPropertyChanged;
         _preferences.Projects.CollectionChanged -= _projectsChangedHandler;
         _relativeTimeTimer.Dispose();
+
+        DisposeItem(StartItem);
+        DisposeItem(SessionsHeaderItem);
+        foreach (var item in Items)
+        {
+            DisposeItem(item);
+        }
+        Items.Clear();
+        _projectVms.Clear();
+    }
+
+    private void DisposeItem(object? item)
+    {
+        if (item is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
+    }
+
+    private void DisposeAndRemoveAt<T>(ObservableCollection<T> collection, int index)
+    {
+        if (index >= 0 && index < collection.Count)
+        {
+            var item = collection[index];
+            collection.RemoveAt(index);
+            DisposeItem(item);
+        }
     }
 
     private void OnChatViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -414,6 +435,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             relativeTimeText: string.Empty,
             ui: _ui,
             chatViewModel: _chatViewModel,
+            navigationState: _navigationState,
             isPlaceholder: true);
     }
 
@@ -462,6 +484,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 // Ensure we have the base items
                 if (Items.Count < 2)
                 {
+                    foreach (var item in Items) DisposeItem(item);
                     Items.Clear();
                     Items.Add(StartItem);
                     Items.Add(SessionsHeaderItem);
@@ -481,7 +504,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                     var projectId = projectDef.ProjectId!;
                     if (!_projectVms.TryGetValue(projectId, out var projectVm))
                     {
-                        projectVm = new ProjectNavItemViewModel(projectDef, isSystem, PrepareStartForProjectAsync)
+                        projectVm = new ProjectNavItemViewModel(projectDef, isSystem, PrepareStartForProjectAsync, _navigationState)
                         {
                             IsExpanded = true
                         };
@@ -504,6 +527,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                             int existingIndex = Items.IndexOf(projectVm);
                             if (existingIndex != -1)
                             {
+                                // Note: We don't dispose projectVm here because it's still being used (moved)
                                 Items.RemoveAt(existingIndex);
                             }
                             Items.Insert(itemIndex, projectVm);
@@ -521,13 +545,17 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 // Remove orphans
                 while (Items.Count > itemIndex)
                 {
-                    Items.RemoveAt(Items.Count - 1);
+                    DisposeAndRemoveAt(Items, Items.Count - 1);
                 }
 
                 // Cleanup _projectVms for projects that no longer exist
                 var currentProjectIds = new HashSet<string>(projects.Select(p => p.Project.ProjectId!), StringComparer.Ordinal);
                 var toRemove = _projectVms.Keys.Where(id => !currentProjectIds.Contains(id)).ToList();
-                foreach (var id in toRemove) _projectVms.Remove(id);
+                foreach (var id in toRemove)
+                {
+                    if (_projectVms.TryGetValue(id, out var vm)) DisposeItem(vm);
+                    _projectVms.Remove(id);
+                }
 
                 NormalizeSelectionAfterRebuild();
                 NormalizeSelection();
@@ -569,6 +597,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 sessionVm = projectVm.Children.OfType<SessionNavItemViewModel>().FirstOrDefault(v => string.Equals(v.SessionId, session.SessionId, StringComparison.Ordinal));
                 if (sessionVm != null)
                 {
+                    // Note: We don't dispose here because we are re-inserting it at a new position
                     projectVm.Children.Remove(sessionVm);
                     sessionVm.Title = title;
                     sessionVm.RelativeTimeText = relative;
@@ -581,7 +610,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                         title: title,
                         relativeTimeText: relative,
                         ui: _ui,
-                        chatViewModel: _chatViewModel);
+                        chatViewModel: _chatViewModel,
+                        navigationState: _navigationState);
                 }
                 projectVm.Children.Insert(childIndex, sessionVm);
             }
@@ -601,17 +631,25 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             {
                 // Remove any existing More item if it's at the wrong place
                 var oldMore = projectVm.Children.OfType<MoreSessionsNavItemViewModel>().FirstOrDefault();
-                if (oldMore != null) projectVm.Children.Remove(oldMore);
+                if (oldMore != null)
+                {
+                    projectVm.Children.Remove(oldMore);
+                    DisposeItem(oldMore);
+                }
 
                 var showMore = new AsyncRelayCommand(() => ShowAllSessionsForProjectAsync(projectVm.ProjectId));
-                projectVm.Children.Insert(childIndex, new MoreSessionsNavItemViewModel(projectVm.ProjectId, remainingCount, showMore));
+                projectVm.Children.Insert(childIndex, new MoreSessionsNavItemViewModel(projectVm.ProjectId, remainingCount, showMore, _navigationState));
             }
             childIndex++;
         }
         else
         {
             var oldMore = projectVm.Children.OfType<MoreSessionsNavItemViewModel>().FirstOrDefault();
-            if (oldMore != null) projectVm.Children.Remove(oldMore);
+            if (oldMore != null)
+            {
+                projectVm.Children.Remove(oldMore);
+                DisposeItem(oldMore);
+            }
         }
 
         // Add loading placeholder if needed
@@ -623,7 +661,9 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
         while (projectVm.Children.Count > childIndex)
         {
+            var item = projectVm.Children[projectVm.Children.Count - 1];
             projectVm.Children.RemoveAt(projectVm.Children.Count - 1);
+            DisposeItem(item);
         }
 
         NormalizeSelection();
@@ -768,7 +808,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
         foreach (var (project, isSystem) in projects)
         {
-            var projectVm = new ProjectNavItemViewModel(project, isSystem, PrepareStartForProjectAsync)
+            var projectVm = new ProjectNavItemViewModel(project, isSystem, PrepareStartForProjectAsync, _navigationState)
             {
                 IsExpanded = true
             };
@@ -790,7 +830,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                     title: title,
                     relativeTimeText: relative,
                     ui: _ui,
-                    chatViewModel: _chatViewModel);
+                    chatViewModel: _chatViewModel,
+                    navigationState: _navigationState);
 
                 projectVm.Children.Add(vm);
             }
@@ -798,7 +839,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             if (remaining > 0)
             {
                 var showMore = new AsyncRelayCommand(() => ShowAllSessionsForProjectAsync(projectVm.ProjectId));
-                projectVm.Children.Add(new MoreSessionsNavItemViewModel(projectVm.ProjectId, remaining, showMore));
+                projectVm.Children.Add(new MoreSessionsNavItemViewModel(projectVm.ProjectId, remaining, showMore, _navigationState));
             }
 
             if (_chatViewModel.IsConversationListLoading && projectVm.Children.Count == 0 && projectVm.ProjectId == UnclassifiedProjectId)
@@ -818,7 +859,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             Name = "未归类",
             RootPath = string.Empty
         };
-        var vm = new ProjectNavItemViewModel(project, isSystemProject: true, PrepareStartForProjectAsync) { IsExpanded = true };
+        var vm = new ProjectNavItemViewModel(project, isSystemProject: true, PrepareStartForProjectAsync, _navigationState) { IsExpanded = true };
         _projectIndex[vm.ProjectId] = vm;
         return vm;
     }
@@ -863,7 +904,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 title: title,
                 relativeTimeText: relative,
                 ui: _ui,
-                chatViewModel: _chatViewModel);
+                chatViewModel: _chatViewModel,
+                navigationState: _navigationState);
         }).ToList();
     }
 }

@@ -47,7 +47,8 @@ public sealed class StartViewModelTests
             preferences,
             ui.Object,
             shellNavigation.Object,
-            navLogger.Object);
+            navLogger.Object,
+            new NavigationStateService());
 
         var startLogger = new Mock<ILogger<StartViewModel>>();
         var startViewModel = new StartViewModel(
@@ -93,7 +94,8 @@ public sealed class StartViewModelTests
             preferences,
             ui.Object,
             shellNavigation.Object,
-            navLogger.Object);
+            navLogger.Object,
+            new NavigationStateService());
 
         var startLogger = new Mock<ILogger<StartViewModel>>();
         var startViewModel = new StartViewModel(
@@ -138,7 +140,7 @@ public sealed class StartViewModelTests
 
         var conversationStore = new Mock<IConversationStore>();
         var neverComplete = new TaskCompletionSource<ConversationDocument>();
-        conversationStore.Setup(s => s.LoadAsync()).Returns(neverComplete.Task);
+        conversationStore.Setup(s => s.LoadAsync(CancellationToken.None)).Returns(neverComplete.Task);
 
         var vmLogger = new Mock<ILogger<ChatViewModel>>();
 

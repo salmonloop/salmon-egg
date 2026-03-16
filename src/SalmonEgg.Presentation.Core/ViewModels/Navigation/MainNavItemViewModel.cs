@@ -1,32 +1,46 @@
+using System;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using SalmonEgg.Presentation.Services;
 
 namespace SalmonEgg.Presentation.ViewModels.Navigation;
 
-public abstract partial class MainNavItemViewModel : ObservableObject
+public abstract partial class MainNavItemViewModel : ObservableObject, IDisposable
 {
+    protected readonly INavigationStateService NavigationState;
+
     public ObservableCollection<MainNavItemViewModel> Children { get; } = new();
 
-    private bool _isPaneOpen = true;
-
-    public bool IsPaneOpen
+    protected MainNavItemViewModel(INavigationStateService navigationState)
     {
-        get => _isPaneOpen;
-        set
-        {
-            if (SetProperty(ref _isPaneOpen, value))
-            {
-                OnPropertyChanged(nameof(IsPaneClosed));
-                OnPaneStateChanged();
-            }
-        }
+        NavigationState = navigationState;
+        NavigationState.PaneStateChanged += OnServicePaneStateChanged;
     }
+
+    public bool IsPaneOpen => NavigationState.IsPaneOpen;
 
     public bool IsPaneClosed => !IsPaneOpen;
 
+    private void OnServicePaneStateChanged(object? sender, EventArgs e)
+    {
+        OnPropertyChanged(nameof(IsPaneOpen));
+        OnPropertyChanged(nameof(IsPaneClosed));
+        OnPaneStateChanged();
+    }
+
     protected virtual void OnPaneStateChanged()
     {
+    }
+
+    public virtual void Dispose()
+    {
+        NavigationState.PaneStateChanged -= OnServicePaneStateChanged;
+        foreach (var child in Children)
+        {
+            child.Dispose();
+        }
+        Children.Clear();
     }
 }
 
@@ -40,7 +54,8 @@ public sealed partial class SessionsHeaderNavItemViewModel : MainNavItemViewMode
 
     public bool ShowCompactButton => IsPaneClosed;
 
-    public SessionsHeaderNavItemViewModel(IAsyncRelayCommand addProjectCommand)
+    public SessionsHeaderNavItemViewModel(IAsyncRelayCommand addProjectCommand, INavigationStateService navigationState)
+        : base(navigationState)
     {
         AddProjectCommand = addProjectCommand;
     }

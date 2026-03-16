@@ -44,6 +44,66 @@ public sealed class MainNavigationViewModelPaneTests
     }
 
     [Fact]
+    public void NavigationState_IsSharedAcrossViewModels()
+    {
+        var navState = new NavigationStateService();
+        
+        // Mock dependencies for ViewModels
+        var sessionManager = new Mock<ISessionManager>();
+        var preferences = CreatePreferences();
+        var chatViewModel = CreateChatViewModel(new SynchronizationContext(), preferences, sessionManager.Object);
+        var ui = new Mock<IUiInteractionService>();
+        var shellNavigation = new Mock<IShellNavigationService>();
+        var navLogger = new Mock<ILogger<MainNavigationViewModel>>();
+
+        var navVm = new MainNavigationViewModel(
+            chatViewModel,
+            sessionManager.Object,
+            preferences,
+            ui.Object,
+            shellNavigation.Object,
+            navLogger.Object,
+            navState);
+
+        // Child ViewModel
+        var startItem = new StartNavItemViewModel(navState);
+
+        // Act: Change state in parent
+        navVm.IsPaneOpen = true;
+
+        // Assert: Child reflects change
+        Assert.True(startItem.IsPaneOpen);
+
+        // Act: Change state in child (simulated by service change)
+        navState.IsPaneOpen = false;
+
+        // Assert: Parent reflects change
+        Assert.False(navVm.IsPaneOpen);
+        Assert.False(navState.IsPaneOpen);
+    }
+
+    [Fact]
+    public void NavigationState_TriggersPropertyChangeNotifications()
+    {
+        var navState = new NavigationStateService();
+        var shellNavigation = new Mock<IShellNavigationService>();
+        var item = new StartNavItemViewModel(navState);
+        
+        bool isPaneOpenChangedCalled = false;
+        item.PropertyChanged += (s, e) =>
+        {
+            if (e.PropertyName == nameof(item.IsPaneOpen))
+                isPaneOpenChangedCalled = true;
+        };
+
+        // Act
+        navState.IsPaneOpen = !navState.IsPaneOpen;
+
+        // Assert
+        Assert.True(isPaneOpenChangedCalled);
+    }
+
+    [Fact]
     public void OpenPaneLength_UsesCompactLength_WhenPaneClosedInCompact()
     {
         var nav = CreateNav();
@@ -160,6 +220,7 @@ public sealed class MainNavigationViewModelPaneTests
         var ui = new Mock<IUiInteractionService>();
         var shellNavigation = new Mock<IShellNavigationService>();
         var navLogger = new Mock<ILogger<MainNavigationViewModel>>();
+        var navState = new NavigationStateService();
 
         return new MainNavigationViewModel(
             chatViewModel,
@@ -167,7 +228,8 @@ public sealed class MainNavigationViewModelPaneTests
             preferences,
             ui.Object,
             shellNavigation.Object,
-            navLogger.Object);
+            navLogger.Object,
+            navState);
     }
 
     private static ChatViewModel CreateChatViewModel(
@@ -197,7 +259,7 @@ public sealed class MainNavigationViewModelPaneTests
 
         var conversationStore = new Mock<IConversationStore>();
         var neverComplete = new TaskCompletionSource<ConversationDocument>();
-        conversationStore.Setup(s => s.LoadAsync()).Returns(neverComplete.Task);
+        conversationStore.Setup(s => s.LoadAsync(It.IsAny<CancellationToken>())).Returns(neverComplete.Task);
 
         var vmLogger = new Mock<ILogger<ChatViewModel>>();
 
