@@ -1165,6 +1165,14 @@ public sealed partial class MainPage : Page
 
     private void OnMainNavPaneClosing(NavigationView sender, NavigationViewPaneClosingEventArgs args)
     {
+        // If the state change was already confirmed in the ViewModel (Single Source of Truth), 
+        // we should not interfere with the closing process. This ensures that programmatic 
+        // or policy-driven collapses (like at startup) sync correctly with the UI.
+        if (NavVM != null && !NavVM.IsPaneOpen)
+        {
+            return;
+        }
+
         var isMinimal = sender.DisplayMode == NavigationViewDisplayMode.Minimal;
         if (_panePolicy.ShouldCancelClosing(isMinimalMode: isMinimal))
         {
