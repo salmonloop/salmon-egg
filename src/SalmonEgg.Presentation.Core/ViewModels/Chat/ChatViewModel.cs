@@ -231,7 +231,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         AcpProfilesViewModel acpProfiles,
         ISessionManager sessionManager,
         IConversationStore conversationStore,
-        ILogger<ChatViewModel> logger)
+        ILogger<ChatViewModel> logger,
+        SynchronizationContext? syncContext = null)
         : base(logger)
     {
         _chatServiceFactory = chatServiceFactory ?? throw new ArgumentNullException(nameof(chatServiceFactory));
@@ -240,7 +241,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         _acpProfiles = acpProfiles ?? throw new ArgumentNullException(nameof(acpProfiles));
         _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
         _conversationStore = conversationStore ?? throw new ArgumentNullException(nameof(conversationStore));
-        _syncContext = SynchronizationContext.Current ?? new SynchronizationContext();
+        _syncContext = syncContext ?? SynchronizationContext.Current ?? new SynchronizationContext();
 
         // 创建默认 ChatService 实例
         // 延迟创建 ChatService，等待用户配置

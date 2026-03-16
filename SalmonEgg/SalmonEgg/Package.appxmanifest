@@ -6,8 +6,14 @@
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
   IgnorableNamespaces="uap uap5 rescap">
 
-  <Identity />
-  <Properties />
+  <Identity Name="com.companyname.salmonegg"
+            Publisher="CN=SalmonEgg"
+            Version="1.0.0.0" />
+  <Properties>
+    <DisplayName>SalmonEgg</DisplayName>
+    <PublisherDisplayName>SalmonEgg</PublisherDisplayName>
+    <Logo>Assets\Icons\iconLogo.png</Logo>
+  </Properties>
 
   <Dependencies>
     <TargetDeviceFamily Name="Windows.Universal" MinVersion="10.0.17763.0" MaxVersionTested="10.0.19041.0" />
@@ -23,7 +29,11 @@
       Executable="$targetnametoken$.exe"
       EntryPoint="$targetentrypoint$">
       <!-- Use Uno.Resizetizer-generated assets (from Assets/Icons/icon.svg) to avoid stale AppIcon.* files. -->
-      <uap:VisualElements  Square44x44Logo="Assets\Icons\iconLogo.png" DisplayName="Salmon Egg" Description="AI Agent">
+      <uap:VisualElements Square44x44Logo="Assets\Icons\iconLogo.png"
+                          Square150x150Logo="Assets\Icons\iconLogo.png"
+                          DisplayName="Salmon Egg"
+                          Description="AI Agent"
+                          BackgroundColor="transparent">
         <uap:DefaultTile/>
         <uap:InitialRotationPreference>
           <uap:Rotation Preference="landscape"/>

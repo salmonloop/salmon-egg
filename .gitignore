@@ -118,6 +118,8 @@ _pkginfo.txt
 *.appx
 *.appxbundle
 *.appxupload
+**/*.g.cs
+/SalmonEgg/SalmonEgg/input.json
 
 # Android
 *.apk

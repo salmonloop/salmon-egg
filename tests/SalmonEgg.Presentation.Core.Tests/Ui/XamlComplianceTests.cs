@@ -59,6 +59,27 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void MainPage_SearchActionsUseCommands()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");
+
+        Assert.Contains("Command=\"{x:Bind ActivateCommand", xaml);
+        Assert.Contains("Command=\"{x:Bind UseCommand", xaml);
+        Assert.DoesNotContain("OnSearchResultItemClick", xaml);
+        Assert.DoesNotContain("OnSearchHistoryItemClick", xaml);
+    }
+
+    [Fact]
+    public void MainPage_SearchFocusIsViewModelDriven()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");
+
+        Assert.DoesNotContain("GotFocus=\"OnSearchBoxGotFocus\"", xaml);
+        Assert.DoesNotContain("LostFocus=\"OnSearchBoxLostFocus\"", xaml);
+        Assert.Contains("FocusMonitor.IsFocused", xaml);
+    }
+
+    [Fact]
     public void MainPage_SearchStringsAreLocalized()
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");
@@ -70,6 +91,25 @@ public sealed class XamlComplianceTests
         Assert.Contains("x:Uid=\"TopSearchBox\"", xaml);
         Assert.Contains("x:Uid=\"SearchPanelRecentTitle\"", xaml);
         Assert.Contains("x:Uid=\"SearchPanelEmptyText\"", xaml);
+    }
+
+    [Fact]
+    public void MainPage_MenuAndPlanStringsAreLocalized()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");
+
+        Assert.DoesNotContain("Text=\"新建会话\"", xaml);
+        Assert.DoesNotContain("Text=\"归档…\"", xaml);
+        Assert.DoesNotContain("Text=\"重命名…\"", xaml);
+        Assert.DoesNotContain("Text=\"Diff 面板占位\"", xaml);
+        Assert.DoesNotContain("Text=\"暂无计划\"", xaml);
+        Assert.DoesNotContain("Text=\"等待 Agent 更新\"", xaml);
+        Assert.Contains("x:Uid=\"ProjectNavNewSessionItem\"", xaml);
+        Assert.Contains("x:Uid=\"SessionNavArchiveItem\"", xaml);
+        Assert.Contains("x:Uid=\"SessionNavRenameItem\"", xaml);
+        Assert.Contains("x:Uid=\"DiffPanelPlaceholder\"", xaml);
+        Assert.Contains("x:Uid=\"PlanEmptyTitle\"", xaml);
+        Assert.Contains("x:Uid=\"PlanEmptySubtitle\"", xaml);
     }
 
     [Fact]

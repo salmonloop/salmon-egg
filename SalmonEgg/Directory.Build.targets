@@ -22,8 +22,8 @@
           BeforeTargets="MarkupCompilePass1"
           Condition="'$(TargetFramework)' == 'net10.0-windows10.0.26100.0'">
     <ItemGroup>
-      <ReferenceAssemblyPaths Include="$(PkgMicrosoft_WindowsAppSDK)\metadata\"
-                              Condition="Exists('$(PkgMicrosoft_WindowsAppSDK)\metadata\')" />
+      <ReferenceAssemblyPaths Include="$(PkgMicrosoft_WindowsAppSDK_WinUI)\metadata\"
+                              Condition="Exists('$(PkgMicrosoft_WindowsAppSDK_WinUI)\metadata\')" />
     </ItemGroup>
   </Target>
 

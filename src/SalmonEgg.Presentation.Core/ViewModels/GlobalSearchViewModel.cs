@@ -32,8 +32,9 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
     private readonly ISessionManager _sessionManager;
     private readonly ILogger<GlobalSearchViewModel> _logger;
 
-    private readonly List<string> _searchHistory = new();
+    private readonly List<SearchHistoryItem> _searchHistory = new();
     private readonly AsyncQueryCoordinator _searchCoordinator = new();
+    private bool _suppressAutoOpen;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasQuery))]
@@ -53,6 +54,9 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
     [ObservableProperty]
     private SearchResultItem? _selectedItem;
 
+    [ObservableProperty]
+    private bool _isSearchBoxFocused;
+
     public bool HasQuery => !string.IsNullOrWhiteSpace(Query);
     public bool IsSearching => HasQuery;
     public bool ShowSuggestions => !HasQuery && _searchHistory.Count > 0;
@@ -60,7 +64,7 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
     public bool IsEmpty => HasQuery && !HasResults;
     public bool HasAnyContent => HasResults || ShowSuggestions;
 
-    public IReadOnlyList<string> RecentSearches => _searchHistory.AsReadOnly();
+    public IReadOnlyList<SearchHistoryItem> RecentSearches => _searchHistory.AsReadOnly();
 
     public GlobalSearchViewModel(
         ChatViewModel chatViewModel,
@@ -83,10 +87,15 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
     partial void OnQueryChanged(string value)
     {
         CancelPendingSearch();
+        if (!_suppressAutoOpen || !string.IsNullOrWhiteSpace(value))
+        {
+            _suppressAutoOpen = false;
+        }
 
         if (string.IsNullOrWhiteSpace(value))
         {
             ResultGroups.Clear();
+            UpdateSearchPanelState();
             return;
         }
 
@@ -158,6 +167,7 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
 
             ResultGroups = new ObservableCollection<SearchResultGroup>(
                 groups.OrderByDescending(g => g.Priority).Take(MaxSearchResults));
+            UpdateSearchPanelState();
         }
         catch (Exception ex)
         {
@@ -194,7 +204,8 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
                 Title = session.DisplayName ?? SessionNamePolicy.CreateDefault(session.SessionId),
                 Subtitle = session.Cwd,
                 Kind = SearchResultKind.Session,
-                IconGlyph = "\uE8BD" // Chat icon
+                IconGlyph = "\uE8BD", // Chat icon
+                ActivateCommand = SelectResultCommand
             });
         }
 
@@ -213,14 +224,15 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
         // 未归类项目
         if (MatchScore("未归类", normalizedQuery) > 0)
         {
-            group.Items.Add(new SearchResultItem
-            {
-                Id = MainNavigationViewModel.UnclassifiedProjectId,
-                Title = "未归类",
-                Subtitle = null,
-                Kind = SearchResultKind.Project,
-                IconGlyph = "\uE8F1" // Folder
-            });
+                group.Items.Add(new SearchResultItem
+                {
+                    Id = MainNavigationViewModel.UnclassifiedProjectId,
+                    Title = "未归类",
+                    Subtitle = null,
+                    Kind = SearchResultKind.Project,
+                    IconGlyph = "\uE8F1", // Folder
+                    ActivateCommand = SelectResultCommand
+                });
         }
 
         // 用户项目
@@ -235,7 +247,8 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
                     Title = project.Name,
                     Subtitle = project.RootPath,
                     Kind = SearchResultKind.Project,
-                    IconGlyph = "\uE8F1"
+                    IconGlyph = "\uE8F1",
+                    ActivateCommand = SelectResultCommand
                 });
             }
         }
@@ -275,7 +288,8 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
                     Title = title,
                     Subtitle = subtitle,
                     Kind = SearchResultKind.Setting,
-                    IconGlyph = "\uE713" // Settings gear
+                    IconGlyph = "\uE713", // Settings gear
+                    ActivateCommand = SelectResultCommand
                 });
             }
         }
@@ -316,6 +330,7 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
                     Subtitle = subtitle,
                     Kind = SearchResultKind.Command,
                     IconGlyph = "\uE756", // Command
+                    ActivateCommand = SelectResultCommand,
                     Tag = tag
                 });
             }
@@ -446,6 +461,7 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
     [RelayCommand]
     private void CloseSearchPanel()
     {
+        _suppressAutoOpen = true;
         IsSearchPanelOpen = false;
         Query = string.Empty;
         ResultGroups.Clear();
@@ -466,6 +482,7 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
         _searchHistory.Clear();
         OnPropertyChanged(nameof(RecentSearches));
         OnPropertyChanged(nameof(ShowSuggestions));
+        UpdateSearchPanelState();
     }
 
     private void AddToHistory(string query)
@@ -476,10 +493,18 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
         }
 
         // 移除已存在的相同项
-        _searchHistory.Remove(query);
+        var existingIndex = _searchHistory.FindIndex(item => string.Equals(item.Query, query, StringComparison.Ordinal));
+        if (existingIndex >= 0)
+        {
+            _searchHistory.RemoveAt(existingIndex);
+        }
 
         // 添加到开头
-        _searchHistory.Insert(0, query);
+        _searchHistory.Insert(0, new SearchHistoryItem
+        {
+            Query = query,
+            UseCommand = UseHistoryItemCommand
+        });
 
         // 限制历史记录数量
         while (_searchHistory.Count > MaxHistoryItems)
@@ -489,6 +514,33 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
 
         OnPropertyChanged(nameof(RecentSearches));
         OnPropertyChanged(nameof(ShowSuggestions));
+        UpdateSearchPanelState();
+    }
+
+    partial void OnIsSearchBoxFocusedChanged(bool value)
+    {
+        if (value)
+        {
+            _suppressAutoOpen = false;
+        }
+
+        UpdateSearchPanelState();
+    }
+
+    private void UpdateSearchPanelState()
+    {
+        if (!IsSearchBoxFocused || !HasAnyContent)
+        {
+            IsSearchPanelOpen = false;
+            return;
+        }
+
+        if (_suppressAutoOpen)
+        {
+            return;
+        }
+
+        IsSearchPanelOpen = true;
     }
 
     public void FocusSearch()

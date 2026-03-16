@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Windows.Input;
 
 namespace SalmonEgg.Presentation.Models.Search;
 
@@ -26,6 +27,15 @@ public sealed class SearchResultItem
     public string? IconGlyph { get; init; }
 
     public string? Tag { get; init; }
+
+    public ICommand? ActivateCommand { get; init; }
+}
+
+public sealed class SearchHistoryItem
+{
+    public required string Query { get; init; }
+
+    public ICommand? UseCommand { get; init; }
 }
 
 public sealed class SearchResultGroup

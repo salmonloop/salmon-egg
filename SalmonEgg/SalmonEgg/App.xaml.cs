@@ -1,11 +1,10 @@
 using System;
 using System.Linq;
 using Microsoft.UI.Xaml.Controls;
-#if HAS_UNO
+#if HAS_UNO && !WINDOWS
 using Uno.UI;
 #endif
 using SalmonEgg.Presentation.Models;
-using Uno.Resizetizer;
 using SalmonEgg.Infrastructure.Storage;
 
 namespace SalmonEgg;
@@ -20,7 +19,7 @@ public partial class App : global::Microsoft.UI.Xaml.Application
     public static Microsoft.UI.Xaml.Window? MainWindowInstance => (Current as App)?.MainWindow;
     private static readonly Uri ReducedMotionDictionarySource = new("ms-appx:///Styles/ReducedMotion.xaml");
     private static Microsoft.UI.Xaml.ResourceDictionary? _reducedMotionDictionary;
-#if HAS_UNO
+#if HAS_UNO && !WINDOWS
     private static TimeSpan? _defaultThemeAnimationDuration;
 #endif
 
@@ -73,7 +72,7 @@ public partial class App : global::Microsoft.UI.Xaml.Application
                 return;
             }
 
-#if HAS_UNO
+#if HAS_UNO && !WINDOWS
             try
             {
                 _defaultThemeAnimationDuration ??= FeatureConfiguration.ThemeAnimation.DefaultThemeAnimationDuration;
@@ -246,7 +245,9 @@ public partial class App : global::Microsoft.UI.Xaml.Application
         }
 
         // Applies the generated icon.ico (from Assets/Icons/icon.svg) to the native window (Desktop/Windows).
+#if HAS_UNO
         MainWindow.SetWindowIcon();
+#endif
         MainWindow.Activate();
         BootLog("OnLaunched: window activated");
     }
@@ -288,8 +289,8 @@ public partial class App : global::Microsoft.UI.Xaml.Application
             builder.AddFilter("Windows", LogLevel.Warning);
             builder.AddFilter("Microsoft", LogLevel.Warning);
         });
-        global::Uno.Extensions.LogExtensionPoint.AmbientLoggerFactory = factory;
 #if HAS_UNO
+        global::Uno.Extensions.LogExtensionPoint.AmbientLoggerFactory = factory;
         global::Uno.UI.Adapter.Microsoft.Extensions.Logging.LoggingAdapter.Initialize();
 #endif
     }

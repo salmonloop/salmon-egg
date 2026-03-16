@@ -28,8 +28,18 @@ function Get-SignToolPath {
     $candidates = @()
 
     if (Test-Path $kitsBin) {
-        $candidates += Get-ChildItem -Path $kitsBin -Directory -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -match '^\d+\.\d+\.\d+\.\d+$' } |
+        $versionDirs = Get-ChildItem -Path $kitsBin -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match '^\d+\.\d+\.\d+\.\d+$' }
+
+        $preferred = @($versionDirs | Where-Object { $_.Name -eq '10.0.22621.0' } |
+            ForEach-Object { Join-Path $_.FullName 'x64\signtool.exe' } |
+            Where-Object { Test-Path $_ })
+
+        if ($preferred.Count -gt 0) {
+            return ($preferred | Select-Object -First 1)
+        }
+
+        $candidates += $versionDirs |
             Sort-Object Name -Descending |
             ForEach-Object { Join-Path $_.FullName 'x64\signtool.exe' } |
             Where-Object { Test-Path $_ }
@@ -96,15 +106,62 @@ function Add-CertificateToStore {
     }
 }
 
+function Remove-CertificateFromStore {
+    param(
+        [Parameter(Mandatory = $true)] [System.Security.Cryptography.X509Certificates.X509Certificate2] $Cert,
+        [Parameter(Mandatory = $true)] [string] $StoreName,
+        [Parameter(Mandatory = $true)] [System.Security.Cryptography.X509Certificates.StoreLocation] $StoreLocation
+    )
+
+    $store = [System.Security.Cryptography.X509Certificates.X509Store]::new($StoreName, $StoreLocation)
+    $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+    try {
+        $store.Remove($Cert)
+    } finally {
+        $store.Close()
+    }
+}
+
 function Get-OrCreateDevCert {
     param([string] $Subject)
 
     $cert = Get-CertificateFromStore -Subject $Subject -StoreName 'My' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
     if ($cert) {
-        return $cert
+        $rsaKey = $null
+        try {
+            $rsaKey = $cert.GetRSAPrivateKey()
+        } catch {
+        }
+
+        if ($cert.HasPrivateKey -and $rsaKey) {
+            return $cert
+        }
+
+        Write-Host "Existing dev cert is missing an RSA private key; recreating."
+        Remove-CertificateFromStore -Cert $cert -StoreName 'My' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
     }
 
-    # Create a self-signed code signing cert and persist private key in CurrentUser\My
+    # Prefer New-SelfSignedCertificate to create a standard code-signing cert compatible with signtool.
+    try {
+        $created = New-SelfSignedCertificate `
+            -Subject $Subject `
+            -CertStoreLocation 'Cert:\CurrentUser\My' `
+            -KeyAlgorithm RSA `
+            -KeyLength 2048 `
+            -KeySpec Signature `
+            -Provider 'Microsoft Enhanced RSA and AES Cryptographic Provider' `
+            -KeyExportPolicy Exportable `
+            -KeyUsage DigitalSignature `
+            -Type CodeSigningCert `
+            -NotAfter (Get-Date).AddYears(2)
+        if ($created) {
+            return $created
+        }
+    } catch {
+        Write-Host "New-SelfSignedCertificate failed; falling back to manual certificate creation."
+    }
+
+    # Fallback: create a self-signed code signing cert and persist private key in CurrentUser\My
     $rsa = [System.Security.Cryptography.RSA]::Create(2048)
     $hash = [System.Security.Cryptography.HashAlgorithmName]::SHA256
     $padding = [System.Security.Cryptography.RSASignaturePadding]::Pkcs1
@@ -176,7 +233,7 @@ $env:DOTNET_NOLOGO = '1'
 
 $project = Join-Path $repoRoot 'SalmonEgg\SalmonEgg\SalmonEgg.csproj'
 $tfm = 'net10.0-windows10.0.26100.0'
-$profile = 'Properties/PublishProfiles/win-msix-x64.pubxml'
+$publishProfile = 'Properties/PublishProfiles/win-msix-x64.pubxml'
 $msixOutDir = Join-Path $repoRoot 'artifacts\msix'
 
 Write-Host "Publishing MSIX ($Configuration, $tfm)..."
@@ -188,7 +245,7 @@ Write-Host "Restoring with MSBuild..."
 if ($LASTEXITCODE -ne 0) {
     throw "MSBuild restore failed with exit code $LASTEXITCODE"
 }
-& $msbuild $project /t:Publish /p:Configuration=$Configuration /p:TargetFramework=$tfm /p:PublishProfile=$profile /p:EnableWinUIBuild=true /v:m | Out-Host
+& $msbuild $project /t:Publish /p:Configuration=$Configuration /p:TargetFramework=$tfm /p:PublishProfile=$publishProfile /p:EnableWinUIBuild=true /v:m | Out-Host
 if ($LASTEXITCODE -ne 0) {
     throw "MSBuild publish failed with exit code $LASTEXITCODE"
 }
@@ -202,14 +259,30 @@ if (-not $msix) {
 }
 
 $isAdmin = Test-IsAdmin
-$certSubject = 'O=SalmonEgg'
+$certSubject = 'CN=SalmonEgg'
 $cert = Get-OrCreateDevCert -Subject $certSubject
 $signTool = Get-SignToolPath
 
+Write-Host "SignTool path: $signTool"
 Write-Host "Signing MSIX with cert '$certSubject' ($($cert.Thumbprint))..."
-& $signTool sign /fd SHA256 /sha1 $cert.Thumbprint /s My $msix.FullName | Out-Host
-if ($LASTEXITCODE -ne 0) {
-    throw "signtool failed with exit code $LASTEXITCODE"
+$pfxPath = $null
+$pfxPassword = $null
+try {
+    $pfxPath = Join-Path $env:TEMP ("salmonegg-sign-" + [Guid]::NewGuid().ToString("N") + ".pfx")
+    $pfxPassword = [Guid]::NewGuid().ToString("N")
+    $securePassword = ConvertTo-SecureString -String $pfxPassword -AsPlainText -Force
+    Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $securePassword | Out-Null
+    $pfxInfo = Get-Item -Path $pfxPath -ErrorAction Stop
+    Write-Host "PFX size: $($pfxInfo.Length) bytes"
+
+    & "$signTool" sign /fd SHA256 /f $pfxPath /p $pfxPassword /debug /v $msix.FullName | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw "signtool failed with exit code $LASTEXITCODE"
+    }
+} finally {
+    if ($pfxPath -and (Test-Path $pfxPath)) {
+        Remove-Item -Force -Path $pfxPath -ErrorAction SilentlyContinue
+    }
 }
 
 # Read manifest info (IdentityName/AppId) from MSIX so we can uninstall/reinstall and launch reliably.

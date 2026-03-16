@@ -76,7 +76,8 @@ public class ChatViewModelTests
                 profiles,
                 sessionManager.Object,
                 conversationStore.Object,
-                vmLogger.Object);
+                vmLogger.Object,
+                syncContext);
         }
         finally
         {
@@ -107,12 +108,21 @@ public class ChatViewModelTests
         var syncContext = new QueueingSynchronizationContext();
         var viewModel = CreateViewModel(syncContext);
         var sessionId = Guid.NewGuid().ToString("N");
+        var syncField = typeof(ChatViewModel).GetField("_syncContext", BindingFlags.Instance | BindingFlags.NonPublic);
+        var capturedContext = syncField?.GetValue(viewModel);
+        Assert.Same(syncContext, capturedContext);
+        var gateField = typeof(ChatViewModel).GetField("_sessionSwitchGate", BindingFlags.Instance | BindingFlags.NonPublic);
+        var gate = (SemaphoreSlim?)gateField?.GetValue(viewModel);
+        Assert.NotNull(gate);
+        Assert.Equal(1, gate!.CurrentCount);
 
         var switchTask = viewModel.TrySwitchToSessionAsync(sessionId);
+        await Task.Yield();
+        Assert.False(switchTask.IsCompleted);
         for (var i = 0; i < 4 && !switchTask.IsCompleted; i++)
         {
-            Assert.True(await syncContext.WaitForPostAsync(TimeSpan.FromSeconds(1)));
             syncContext.RunAll();
+            await Task.Delay(TimeSpan.FromMilliseconds(10));
         }
 
         var completed = await Task.WhenAny(switchTask, Task.Delay(TimeSpan.FromSeconds(2)));
@@ -125,17 +135,10 @@ public class ChatViewModelTests
     private sealed class QueueingSynchronizationContext : SynchronizationContext
     {
         private readonly Queue<(SendOrPostCallback callback, object? state)> _work = new();
-        private readonly SemaphoreSlim _posted = new(0);
 
         public override void Post(SendOrPostCallback d, object? state)
         {
             _work.Enqueue((d, state));
-            _posted.Release();
-        }
-
-        public Task<bool> WaitForPostAsync(TimeSpan timeout)
-        {
-            return _posted.WaitAsync(timeout);
         }
 
         public void RunAll()

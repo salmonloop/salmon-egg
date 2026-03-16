@@ -493,4 +493,22 @@
   <data name="MarryHerButton.ToolTipService.ToolTip" xml:space="preserve">
     <value>“娶她”功能占位</value>
   </data>
+  <data name="ProjectNavNewSessionItem.Text" xml:space="preserve">
+    <value>新建会话</value>
+  </data>
+  <data name="SessionNavArchiveItem.Text" xml:space="preserve">
+    <value>归档…</value>
+  </data>
+  <data name="SessionNavRenameItem.Text" xml:space="preserve">
+    <value>重命名…</value>
+  </data>
+  <data name="DiffPanelPlaceholder.Text" xml:space="preserve">
+    <value>Diff 面板占位</value>
+  </data>
+  <data name="PlanEmptyTitle.Text" xml:space="preserve">
+    <value>暂无计划</value>
+  </data>
+  <data name="PlanEmptySubtitle.Text" xml:space="preserve">
+    <value>等待 Agent 更新</value>
+  </data>
 </root>

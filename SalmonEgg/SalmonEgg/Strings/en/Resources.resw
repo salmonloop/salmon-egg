@@ -150,4 +150,22 @@
   <data name="MarryHerButton.ToolTipService.ToolTip" xml:space="preserve">
     <value>Placeholder for the “Marry her” feature</value>
   </data>
+  <data name="ProjectNavNewSessionItem.Text" xml:space="preserve">
+    <value>New session</value>
+  </data>
+  <data name="SessionNavArchiveItem.Text" xml:space="preserve">
+    <value>Archive...</value>
+  </data>
+  <data name="SessionNavRenameItem.Text" xml:space="preserve">
+    <value>Rename...</value>
+  </data>
+  <data name="DiffPanelPlaceholder.Text" xml:space="preserve">
+    <value>Diff panel placeholder</value>
+  </data>
+  <data name="PlanEmptyTitle.Text" xml:space="preserve">
+    <value>No plan yet</value>
+  </data>
+  <data name="PlanEmptySubtitle.Text" xml:space="preserve">
+    <value>Waiting for agent updates</value>
+  </data>
 </root>

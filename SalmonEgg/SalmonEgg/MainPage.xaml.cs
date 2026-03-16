@@ -90,8 +90,6 @@ public sealed partial class MainPage : Page
         this.InitializeComponent();
         BootLogDebug("MainPage: InitializeComponent done");
 
-        SearchVM.PropertyChanged += OnSearchVMPropertyChanged;
-
         Loaded += OnMainPageLoaded;
         Unloaded += OnMainPageUnloaded;
         ContentFrame.Navigated += OnContentFrameNavigated;
@@ -977,52 +975,6 @@ public sealed partial class MainPage : Page
         ToggleNavPane();
     }
 
-    private void OnSearchVMPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == nameof(GlobalSearchViewModel.HasAnyContent))
-        {
-            if (SearchVM.HasAnyContent && TopSearchBox != null)
-            {
-                // 如果当前搜索框有焦点且有了新内容，确保 Flyout 打开
-                _ = DispatcherQueue.TryEnqueue(() =>
-                {
-                    if (Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(this.XamlRoot) == TopSearchBox)
-                    {
-                        FlyoutBase.ShowAttachedFlyout(TopSearchBox);
-                    }
-                });
-            }
-        }
-    }
-
-    private void OnSearchBoxTextChanged(object sender, TextChangedEventArgs e)
-    {
-        // 搜索框文本变化时，同步到 SearchVM
-        if (SearchVM != null && sender is Microsoft.UI.Xaml.Controls.TextBox textBox)
-        {
-            SearchVM.Query = textBox.Text;
-            
-            // 如果有内容且未显示，则打开 Flyout
-            if (SearchVM.HasAnyContent)
-            {
-                FlyoutBase.ShowAttachedFlyout(textBox);
-            }
-        }
-    }
-
-    private void OnSearchBoxGotFocus(object sender, RoutedEventArgs e)
-    {
-        if (SearchVM != null && SearchVM.HasAnyContent && sender is FrameworkElement fe)
-        {
-            FlyoutBase.ShowAttachedFlyout(fe);
-        }
-    }
-
-    private void OnSearchBoxLostFocus(object sender, RoutedEventArgs e)
-    {
-        // Flyout 的标准行为会自动处理点击外部关闭
-    }
-
     private void OnSearchPanelPopupOpened(object sender, object e)
     {
         // Flyout 不需要手动计算位置
@@ -1036,35 +988,12 @@ public sealed partial class MainPage : Page
         }
     }
 
-    private void OnSearchResultItemClick(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
-    {
-        if (sender is Microsoft.UI.Xaml.Controls.Button button && button.Tag is SalmonEgg.Presentation.Models.Search.SearchResultItem item)
-        {
-            SearchVM?.SelectResultCommand.Execute(item);
-            
-            // 选中后关闭 Flyout
-            if (TopSearchBox != null)
-            {
-                FlyoutBase.GetAttachedFlyout(TopSearchBox)?.Hide();
-            }
-        }
-    }
-
     private void ClearSearchFocus()
     {
         if (TopSearchBox != null)
         {
             // 移除焦点到背景或 Frame
             ContentFrame?.Focus(FocusState.Programmatic);
-        }
-    }
-
-    private void OnSearchHistoryItemClick(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
-    {
-        if (sender is Microsoft.UI.Xaml.Controls.Button button && button.Tag is string query)
-        {
-            SearchVM?.UseHistoryItemCommand.Execute(query);
-            TopSearchBox.Focus(FocusState.Programmatic);
         }
     }
 

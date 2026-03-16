@@ -16,6 +16,7 @@
     xmlns:navViews="using:SalmonEgg.Presentation.Views.Navigation"
     xmlns:converters="using:SalmonEgg.Presentation.Converters"
     xmlns:chatVm="using:SalmonEgg.Presentation.ViewModels.Chat"
+    xmlns:behaviors="using:SalmonEgg.Presentation.Behaviors"
     mc:Ignorable="d"
     Background="Transparent"
     AllowDrop="False">
@@ -128,7 +129,7 @@
 
                 <NavigationViewItem.ContextFlyout>
                     <MenuFlyout>
-                        <MenuFlyoutItem Text="新建会话"
+                        <MenuFlyoutItem x:Uid="ProjectNavNewSessionItem"
                                         Command="{x:Bind CreateSessionCommand}" />
                     </MenuFlyout>
                 </NavigationViewItem.ContextFlyout>
@@ -165,11 +166,11 @@
 
                 <NavigationViewItem.ContextFlyout>
                     <MenuFlyout Closed="OnSessionNavFlyoutClosed">
-                        <MenuFlyoutItem Text="归档…"
+                        <MenuFlyoutItem x:Uid="SessionNavArchiveItem"
                                         Click="OnSessionArchiveMenuItemClick"
                                         CommandParameter="{x:Bind}"
                                         IsEnabled="{x:Bind IsPlaceholder, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}" />
-                        <MenuFlyoutItem Text="重命名…"
+                        <MenuFlyoutItem x:Uid="SessionNavRenameItem"
                                         Command="{x:Bind RenameCommand}" />
                     </MenuFlyout>
                 </NavigationViewItem.ContextFlyout>
@@ -381,7 +382,6 @@
                         <Setter Target="TopSearchBox.Visibility" Value="Visible" />
                         <Setter Target="TopSearchBox.MinWidth" Value="{StaticResource SearchBoxMinWidthWide}" />
                         <Setter Target="TopSearchBox.MaxWidth" Value="{StaticResource SearchBoxMaxWidthWide}" />
-                        <Setter Target="ChatNavRoot.IsExpanded" Value="True" />
                     </VisualState.Setters>
                 </VisualState>
 
@@ -396,7 +396,6 @@
                         <Setter Target="TopSearchBox.Visibility" Value="Visible" />
                         <Setter Target="TopSearchBox.MinWidth" Value="{StaticResource SearchBoxMinWidthMedium}" />
                         <Setter Target="TopSearchBox.MaxWidth" Value="{StaticResource SearchBoxMaxWidthMedium}" />
-                        <Setter Target="ChatNavRoot.IsExpanded" Value="False" />
                     </VisualState.Setters>
                 </VisualState>
 
@@ -409,7 +408,6 @@
                         <Setter Target="MainNavView.PaneDisplayMode" Value="LeftMinimal" />
                         <Setter Target="MainNavView.IsPaneOpen" Value="False" />
                         <Setter Target="TopSearchBox.Visibility" Value="Collapsed" />
-                        <Setter Target="ChatNavRoot.IsExpanded" Value="False" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
@@ -467,20 +465,19 @@
                              Grid.Column="1"
                              Height="32"
                              Text="{x:Bind SearchVM.Query, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             behaviors:FocusMonitor.IsFocused="{x:Bind SearchVM.IsSearchBoxFocused, Mode=TwoWay}"
+                             behaviors:FlyoutMonitor.IsOpen="{x:Bind SearchVM.IsSearchPanelOpen, Mode=TwoWay}"
                              CornerRadius="8"
                              HorizontalAlignment="Center"
-                             VerticalAlignment="Center"
-                             GotFocus="OnSearchBoxGotFocus"
-                             LostFocus="OnSearchBoxLostFocus">
+                             VerticalAlignment="Center">
                         <FlyoutBase.AttachedFlyout>
                             <Flyout Placement="BottomEdgeAlignedLeft"
-                                    ShowMode="Transient">
+                                    ShowMode="Transient"
+                                    Opened="OnSearchPanelPopupOpened"
+                                    Closed="OnSearchPanelPopupClosed">
                                 <Flyout.FlyoutPresenterStyle>
                                     <Style TargetType="FlyoutPresenter">
                                         <Setter Property="Padding" Value="0" />
-                                        <!-- Binding required: FlyoutPresenterStyle does not support x:Bind ElementName. -->
-                                        <Setter Property="MinWidth" Value="{Binding ElementName=TopSearchBox, Path=ActualWidth}" />
-                                        <Setter Property="MaxWidth" Value="{Binding ElementName=TopSearchBox, Path=ActualWidth}" />
                                         <Setter Property="CornerRadius" Value="8" />
                                         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                                         <Setter Property="Background" Value="{ThemeResource SolidBackgroundFillColorBaseBrush}" />
@@ -489,7 +486,10 @@
                                         <Setter Property="Visibility" Value="{x:Bind SearchVM.HasAnyContent, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
                                     </Style>
                                 </Flyout.FlyoutPresenterStyle>
-                                <Grid x:Name="SearchPanelBorder" HorizontalAlignment="Stretch">
+                                <Grid x:Name="SearchPanelBorder"
+                                      MinWidth="{x:Bind TopSearchBox.ActualWidth}"
+                                      MaxWidth="{x:Bind TopSearchBox.ActualWidth}"
+                                      HorizontalAlignment="Stretch">
                                     <!-- 搜索结果列表 -->
                                     <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="400" HorizontalAlignment="Stretch">
                                         <StackPanel HorizontalAlignment="Stretch">
@@ -518,8 +518,8 @@
                                                                                 HorizontalContentAlignment="Stretch"
                                                                                 Padding="12,8"
                                                                                 Margin="4,2"
-                                                                                Click="OnSearchResultItemClick"
-                                                                                Tag="{x:Bind}"
+                                                                                Command="{x:Bind ActivateCommand}"
+                                                                                CommandParameter="{x:Bind}"
                                                                                 AutomationProperties.Name="{x:Bind Title}">
                                                                             <Button.Style>
                                                                                 <Style TargetType="Button">
@@ -572,14 +572,14 @@
                                                         <muxc:StackLayout Spacing="2" />
                                                     </muxc:ItemsRepeater.Layout>
                                                     <muxc:ItemsRepeater.ItemTemplate>
-                                                        <DataTemplate x:DataType="x:String">
-                                                            <Button Content="{x:Bind}"
+                                                        <DataTemplate x:DataType="searchModels:SearchHistoryItem">
+                                                            <Button Content="{x:Bind Query}"
                                                                     Padding="12,8"
                                                                     Margin="4,2"
                                                                     HorizontalAlignment="Stretch"
                                                                     HorizontalContentAlignment="Left"
-                                                                    Click="OnSearchHistoryItemClick"
-                                                                    Tag="{x:Bind}">
+                                                                    Command="{x:Bind UseCommand}"
+                                                                    CommandParameter="{x:Bind Query}">
                                                                 <Button.Style>
                                                                     <Style TargetType="Button">
                                                                         <Setter Property="Background" Value="Transparent" />
@@ -707,7 +707,7 @@
 
                 <Grid Grid.Row="1">
                     <Grid x:Name="DiffPanel" Visibility="Collapsed">
-                        <TextBlock Text="Diff 面板占位" Opacity="0.7" Margin="20,8" />
+                        <TextBlock x:Uid="DiffPanelPlaceholder" Opacity="0.7" Margin="20,8" />
                     </Grid>
                     <Grid x:Name="TodoPanel" Visibility="Collapsed">
                         <Grid>
@@ -759,11 +759,11 @@
                                         HorizontalAlignment="Center"
                                         VerticalAlignment="Center"
                                         Margin="20,0">
-                                <TextBlock Text="暂无计划"
+                                <TextBlock x:Uid="PlanEmptyTitle"
                                            FontSize="16"
                                            FontWeight="SemiBold"
                                            HorizontalAlignment="Center" />
-                                <TextBlock Text="等待 Agent 更新"
+                                <TextBlock x:Uid="PlanEmptySubtitle"
                                            Opacity="0.7"
                                            Margin="0,6,0,0"
                                            HorizontalAlignment="Center" />
