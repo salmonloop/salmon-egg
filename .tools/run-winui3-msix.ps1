@@ -153,12 +153,34 @@ function Get-ValidCodeSigningCert {
 }
 
 function Get-OrCreateDevCert {
-    param([string] $Subject)
+    param(
+        [Parameter(Mandatory = $true)] [string] $Subject,
+        [Parameter(Mandatory = $true)] [string] $PfxPath,
+        [Parameter(Mandatory = $true)] [string] $PasswordPath
+    )
 
     $candidates = Get-CertificatesFromStore -Subject $Subject -StoreName 'My' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
     $cert = $candidates | Where-Object { Get-ValidCodeSigningCert -Cert $_ } | Select-Object -First 1
     if ($cert) {
         return $cert
+    }
+
+    if ((Test-Path $PfxPath) -and (Test-Path $PasswordPath)) {
+        $pfxPassword = Get-Content -Path $PasswordPath -ErrorAction Stop | Select-Object -First 1
+        $imported = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
+            $PfxPath,
+            $pfxPassword,
+            [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable -bor
+            [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::PersistKeySet -bor
+            [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::UserKeySet
+        )
+        Add-CertificateToStore -Cert $imported -StoreName 'My' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
+
+        $candidates = Get-CertificatesFromStore -Subject $Subject -StoreName 'My' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
+        $cert = $candidates | Where-Object { Get-ValidCodeSigningCert -Cert $_ } | Select-Object -First 1
+        if ($cert) {
+            return $cert
+        }
     }
 
     if ($candidates) {
@@ -182,6 +204,10 @@ function Get-OrCreateDevCert {
             -Type CodeSigningCert `
             -NotAfter (Get-Date).AddYears(2)
         if ($created) {
+            $password = [Guid]::NewGuid().ToString("N")
+            $secure = ConvertTo-SecureString -String $password -AsPlainText -Force
+            Export-PfxCertificate -Cert $created -FilePath $PfxPath -Password $secure | Out-Null
+            Set-Content -Path $PasswordPath -Value $password -Encoding ASCII
             return $created
         }
     } catch {
@@ -204,16 +230,19 @@ function Get-OrCreateDevCert {
     $tmpCert = $req.CreateSelfSigned($notBefore, $notAfter)
 
     # Re-import as PFX to persist the private key in the user key store
-    $pfxBytes = $tmpCert.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Pfx, '')
+    $password = [Guid]::NewGuid().ToString("N")
+    $pfxBytes = $tmpCert.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Pfx, $password)
     $persisted = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
         $pfxBytes,
-        '',
+        $password,
         [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable -bor
         [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::PersistKeySet -bor
         [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::UserKeySet
     )
 
     Add-CertificateToStore -Cert $persisted -StoreName 'My' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
+    Export-PfxCertificate -Cert $persisted -FilePath $PfxPath -Password (ConvertTo-SecureString -String $password -AsPlainText -Force) | Out-Null
+    Set-Content -Path $PasswordPath -Value $password -Encoding ASCII
     return $persisted
 }
 
@@ -272,6 +301,10 @@ function Get-MsixManifestInfo {
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
+$certCacheDir = Join-Path $repoRoot '.tools\certs'
+$certPfxPath = Join-Path $certCacheDir 'SalmonEgg-dev.pfx'
+$certPasswordPath = Join-Path $certCacheDir 'SalmonEgg-dev.pfx.pass'
+New-Item -ItemType Directory -Force -Path $certCacheDir | Out-Null
 
 # Ensure dotnet first-time setup and tool caches go to a writable location
 # (avoids issues when HOME/DOTNET_CLI_HOME points at a restricted directory).
@@ -310,7 +343,7 @@ if (-not $msix) {
 
 $isAdmin = Test-IsAdmin
 $certSubject = 'CN=SalmonEgg'
-$cert = Get-OrCreateDevCert -Subject $certSubject
+$cert = Get-OrCreateDevCert -Subject $certSubject -PfxPath $certPfxPath -PasswordPath $certPasswordPath
 $signTool = Get-SignToolPath
 
 Write-Host "SignTool path: $signTool"
