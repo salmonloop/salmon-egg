@@ -220,6 +220,9 @@ public static class DependencyInjection
         // Navigation state service (Single Source of Truth for IsPaneOpen)
         services.AddSingleton<INavigationStateService, NavigationStateService>();
 
+        // Right panel state service (Single Source of Truth for RightPanelMode)
+        services.AddSingleton<IRightPanelService, RightPanelService>();
+
         // UI interaction helpers (ContentDialog, FolderPicker)
         services.AddSingleton<IUiInteractionService, UiInteractionService>();
 

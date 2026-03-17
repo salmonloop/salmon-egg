@@ -149,7 +149,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
     // so expose a stable property for UI bindings.
     public bool CanSendPromptUi => CanSendPrompt();
 
-    public bool HasPlanEntries => CurrentPlan.Count > 0;
+    public bool HasPlanEntries => PlanEntries.Count > 0;
 
     public bool ShouldShowPlanList => ShowPlanPanel && HasPlanEntries;
 
@@ -196,7 +196,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
     private string _slashGhostSuffix = string.Empty;
 
     [ObservableProperty]
-    private ObservableCollection<PlanEntryViewModel> _currentPlan = new();
+    private ObservableCollection<PlanEntryViewModel> _planEntries = new();
 
     [ObservableProperty]
     private bool _showPlanPanel;
@@ -249,7 +249,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
 
         // 订阅事件
         SubscribeToEvents();
-        CurrentPlan.CollectionChanged += OnCurrentPlanCollectionChanged;
+        PlanEntries.CollectionChanged += OnCurrentPlanCollectionChanged;
         _acpProfiles.PropertyChanged += OnAcpProfilesPropertyChanged;
         _preferences.PropertyChanged += OnPreferencesPropertyChanged;
 
@@ -303,6 +303,13 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         _ = ConnectToAcpProfileCommand.ExecuteAsync(value);
     }
 
+    // Partial method implementations called by source-generated code.
+    partial void OnShowPlanPanelChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShouldShowPlanList));
+        OnPropertyChanged(nameof(ShouldShowPlanEmpty));
+    }
+
     partial void OnCurrentSessionIdChanged(string? value)
     {
         // Keep the header name stable and decouple it from ACP sessionId.
@@ -324,7 +331,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             _currentRemoteSessionId = null;
             CurrentPlanTitle = null;
             ShowPlanPanel = false;
-            CurrentPlan.Clear();
+            PlanEntries.Clear();
         }
 
         if (IsEditingSessionName)
@@ -369,10 +376,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             MessageHistory.Add(msg);
         }
 
-        CurrentPlan.Clear();
+        PlanEntries.Clear();
         foreach (var entry in binding.Plan)
         {
-            CurrentPlan.Add(entry);
+            PlanEntries.Add(entry);
         }
         ShowPlanPanel = binding.ShowPlanPanel;
         CurrentPlanTitle = binding.PlanTitle;
@@ -750,7 +757,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             _currentRemoteSessionId = null;
             IsSessionActive = false;
             MessageHistory.Clear();
-            CurrentPlan.Clear();
+            PlanEntries.Clear();
             ShowPlanPanel = false;
             _suppressSessionUpdatesToUi = false;
         }
@@ -786,7 +793,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             _currentRemoteSessionId = null;
             IsSessionActive = false;
             MessageHistory.Clear();
-            CurrentPlan.Clear();
+            PlanEntries.Clear();
             ShowPlanPanel = false;
             _suppressSessionUpdatesToUi = false;
         }
@@ -2036,14 +2043,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
     private void UpdatePlan(PlanUpdate planUpdate)
     {
         ShowPlanPanel = true;
-        CurrentPlan.Clear();
+        PlanEntries.Clear();
         CurrentPlanTitle = string.IsNullOrWhiteSpace(planUpdate.Title) ? null : planUpdate.Title.Trim();
 
         if (planUpdate.Entries != null)
         {
             foreach (var entry in planUpdate.Entries)
             {
-                CurrentPlan.Add(new PlanEntryViewModel
+                PlanEntries.Add(new PlanEntryViewModel
                 {
                     Content = entry.Content ?? string.Empty,
                     Status = entry.Status,
@@ -2056,7 +2063,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         if (binding != null)
         {
             binding.Plan.Clear();
-            foreach (var item in CurrentPlan)
+            foreach (var item in PlanEntries)
             {
                 binding.Plan.Add(item);
             }
@@ -2682,7 +2689,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
     private void ClearHistory()
     {
         MessageHistory.Clear();
-        CurrentPlan.Clear();
+        PlanEntries.Clear();
         ShowPlanPanel = false;
         CurrentPlanTitle = null;
 
@@ -2715,7 +2722,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             _currentRemoteSessionId = null;
             IsSessionActive = false;
             MessageHistory.Clear();
-            CurrentPlan.Clear();
+            PlanEntries.Clear();
             CurrentPlanTitle = null;
             AvailableModes.Clear();
             SelectedMode = null;
@@ -2765,11 +2772,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanSendPromptUi));
     }
 
-    partial void OnShowPlanPanelChanged(bool value)
-    {
-        OnPropertyChanged(nameof(ShouldShowPlanList));
-        OnPropertyChanged(nameof(ShouldShowPlanEmpty));
-    }
 
     private void OnCurrentPlanCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
@@ -2795,7 +2797,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
 
                if (disposing)
                {
-                   CurrentPlan.CollectionChanged -= OnCurrentPlanCollectionChanged;
+                   PlanEntries.CollectionChanged -= OnCurrentPlanCollectionChanged;
                    _acpProfiles.PropertyChanged -= OnAcpProfilesPropertyChanged;
                    _preferences.PropertyChanged -= OnPreferencesPropertyChanged;
 

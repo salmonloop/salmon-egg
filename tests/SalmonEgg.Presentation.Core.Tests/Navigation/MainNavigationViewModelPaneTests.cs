@@ -63,7 +63,8 @@ public sealed class MainNavigationViewModelPaneTests
             ui.Object,
             shellNavigation.Object,
             navLogger.Object,
-            navState);
+            navState,
+            new Mock<IRightPanelService>().Object);
 
         // Child ViewModel
         var startItem = new StartNavItemViewModel(navState);
@@ -229,7 +230,8 @@ public sealed class MainNavigationViewModelPaneTests
             ui.Object,
             shellNavigation.Object,
             navLogger.Object,
-            navState);
+            navState,
+            new Mock<IRightPanelService>().Object);
     }
 
     private static ChatViewModel CreateChatViewModel(

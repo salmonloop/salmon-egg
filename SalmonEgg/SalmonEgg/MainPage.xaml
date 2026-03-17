@@ -26,26 +26,20 @@
         <converters:InverseBoolConverter x:Key="InverseBoolToVisibilityConverter"/>
         <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
         <converters:PlanStatusToColorConverter x:Key="PlanStatusToColorConverter" />
+        <converters:EnumToBooleanConverter x:Key="EnumToBoolConverter" />
+        <converters:EnumToVisibilityConverter x:Key="EnumToVisibilityConverter" />
+
         <x:Double x:Key="NavCompactPaneLength">72</x:Double>
         <x:Double x:Key="NavOpenPaneLength">300</x:Double>
 
         <!-- Navigation section header sizing (keep consistent + tweakable in one place) -->
         <x:Double x:Key="NavSectionHeaderMinHeight">32</x:Double>
         <x:Double x:Key="NavSectionHeaderActionButtonSize">24</x:Double>
-<x:Double x:Key="NavProjectActionButtonSize">24</x:Double>
+        <x:Double x:Key="NavProjectActionButtonSize">24</x:Double>
         <x:Double x:Key="SearchBoxMinWidthWide">220</x:Double>
         <x:Double x:Key="SearchBoxMaxWidthWide">360</x:Double>
         <x:Double x:Key="SearchBoxMinWidthMedium">180</x:Double>
         <x:Double x:Key="SearchBoxMaxWidthMedium">300</x:Double>
-
-
-
-
-
-
-
-        <!-- 会话头部导航项样式 -->
-
 
         <DataTemplate x:Key="StartNavTemplate" x:DataType="nav:StartNavItemViewModel">
             <NavigationViewItem Content="{x:Bind Title, Mode=OneWay}"
@@ -55,23 +49,18 @@
                 </NavigationViewItem.Icon>
             </NavigationViewItem>
         </DataTemplate>
-
-        
-        
         
         <DataTemplate x:Key="SessionsHeaderTemplate" x:DataType="nav:SessionsHeaderNavItemViewModel">
             <NavigationViewItem MinHeight="{StaticResource NavSectionHeaderMinHeight}"
                                 HorizontalContentAlignment="Stretch"
                                 Padding="0"
                                 SelectsOnInvoked="False">
-                <!-- Use Icon slot for Compact mode visibility and perfect alignment -->
                 <NavigationViewItem.Icon>
                     <SymbolIcon Symbol="Add" 
                                 Visibility="{x:Bind ShowCompactButton, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
                 </NavigationViewItem.Icon>
 
                 <NavigationViewItem.Content>
-                    <!-- Expanded layout: System will apply its default NavigationViewItemContentMargin automatically -->
                     <Grid ColumnDefinitions="*,Auto"
                           ColumnSpacing="8"
                           Visibility="{x:Bind ShowHeaderLabel, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
@@ -102,15 +91,10 @@
             </NavigationViewItem>
         </DataTemplate>
 
-
-
-
-
         <DataTemplate x:Key="ProjectNavTemplate" x:DataType="nav:ProjectNavItemViewModel">
             <NavigationViewItem MenuItemsSource="{x:Bind Children, Mode=OneWay}"
                                 IsExpanded="{x:Bind IsExpanded, Mode=TwoWay}"
                                 HorizontalContentAlignment="Stretch"
-
                                 SelectsOnInvoked="False"
                                 ContentTransitions="{x:Bind models:UiMotion.Current.NavItemTransitions, Mode=OneWay}">
                 <NavigationViewItem.Icon>
@@ -195,108 +179,6 @@
                                               SessionTemplate="{StaticResource SessionNavTemplate}"
                                               MoreTemplate="{StaticResource MoreNavTemplate}" />
 
-        <!-- 极简导航项样式 (Nav Rail) -->
-        <Style x:Key="NavRailItemStyle" TargetType="ListViewItem">
-            <Setter Property="MinWidth" Value="72"/>
-            <Setter Property="Padding" Value="0"/>
-            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ListViewItem">
-                        <Grid x:Name="LayoutRoot" Background="{TemplateBinding Background}" Height="64">
-                            <VisualStateManager.VisualStateGroups>
-                                <VisualStateGroup x:Name="CommonStates">
-                                    <VisualState x:Name="Normal"/>
-                                    <VisualState x:Name="PointerOver">
-                                        <VisualState.Setters>
-                                            <Setter Target="LayoutRoot.Background" Value="{ThemeResource ControlFillColorSecondaryBrush}"/>
-                                        </VisualState.Setters>
-                                    </VisualState>
-                                    <VisualState x:Name="Selected">
-                                        <VisualState.Setters>
-                                            <Setter Target="SelectionIndicator.Visibility" Value="Visible"/>
-                                            <Setter Target="ContentPanel.Foreground" Value="{ThemeResource AccentBrush}"/>
-                                            <Setter Target="LayoutRoot.Background" Value="{ThemeResource ControlFillColorTertiaryBrush}"/>
-                                        </VisualState.Setters>
-                                    </VisualState>
-                                </VisualStateGroup>
-                            </VisualStateManager.VisualStateGroups>
-
-                            <!-- 选中状态指示条 -->
-                            <Rectangle x:Name="SelectionIndicator"
-                                       Width="3" Height="24"
-                                       Fill="{ThemeResource AccentBrush}"
-                                       HorizontalAlignment="Left"
-                                       VerticalAlignment="Center"
-                                       Visibility="Collapsed"/>
-
-                            <ContentPresenter x:Name="ContentPanel"
-                                              HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"
-                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                        </Grid>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!-- 会话头部导航项样式 -->
-        <!-- 二级导航项样式 (Sub Menu) -->
-
-<Style x:Key="SubMenuItemStyle" TargetType="ListViewItem">
-            <Setter Property="Padding" Value="12,10"/>
-            <Setter Property="Margin" Value="8,2"/>
-            <Setter Property="CornerRadius" Value="8"/>
-            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ListViewItem">
-                        <Border x:Name="OuterBorder"
-                                Background="{TemplateBinding Background}"
-                                CornerRadius="{TemplateBinding CornerRadius}"
-                                BorderThickness="1"
-                                BorderBrush="Transparent">
-                            <VisualStateManager.VisualStateGroups>
-                                <VisualStateGroup x:Name="CommonStates">
-                                    <VisualState x:Name="Normal"/>
-                                    <VisualState x:Name="PointerOver">
-                                        <VisualState.Setters>
-                                            <Setter Target="OuterBorder.Background" Value="{ThemeResource ControlFillColorSecondaryBrush}"/>
-                                        </VisualState.Setters>
-                                    </VisualState>
-                                    <VisualState x:Name="Selected">
-                                        <VisualState.Setters>
-                                            <Setter Target="OuterBorder.Background" Value="{ThemeResource ControlFillColorTertiaryBrush}"/>
-                                            <Setter Target="OuterBorder.BorderBrush" Value="{ThemeResource AccentBrush}"/>
-                                            <Setter Target="SubMenuContentPresenter.Foreground" Value="{ThemeResource AccentBrush}"/>
-                                        </VisualState.Setters>
-                                    </VisualState>
-                                </VisualStateGroup>
-                            </VisualStateManager.VisualStateGroups>
-                            <ContentPresenter x:Name="SubMenuContentPresenter"
-                                              Content="{TemplateBinding Content}"
-                                              Padding="{TemplateBinding Padding}"
-                                              HorizontalAlignment="Stretch"
-                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                                              Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="ProjectGroupItemStyle" TargetType="ListViewItem" BasedOn="{StaticResource SubMenuItemStyle}">
-            <Setter Property="Padding" Value="0"/>
-        </Style>
-
-        <Style x:Key="SessionSubMenuItemStyle" TargetType="ListViewItem" BasedOn="{StaticResource SubMenuItemStyle}">
-            <!-- Keep the container full-width; indent via Padding instead of Margin -->
-            <Setter Property="Margin" Value="8,2"/>
-            <Setter Property="Padding" Value="24,10"/>
-        </Style>
-
         <Style x:Key="SubMenuResizerThumbStyle" TargetType="controls:ResizeGrip">
             <Setter Property="IsTabStop" Value="False"/>
             <Setter Property="Template">
@@ -369,9 +251,7 @@
 
     <Grid x:Name="LayoutRoot">
         <VisualStateManager.VisualStateGroups>
-            <!-- Responsive shell layout (NavigationView + TitleBar). -->
             <VisualStateGroup x:Name="WindowWidthStates">
-                <!-- Wide: fully expanded fixed pane; show hierarchy inline. -->
                 <VisualState x:Name="Wide">
                     <VisualState.StateTriggers>
                         <AdaptiveTrigger MinWindowWidth="1000" />
@@ -384,7 +264,6 @@
                     </VisualState.Setters>
                 </VisualState>
 
-                <!-- Medium: fixed compact rail + expanded pane (no dimming overlay). -->
                 <VisualState x:Name="Medium">
                     <VisualState.StateTriggers>
                         <AdaptiveTrigger MinWindowWidth="640" />
@@ -397,7 +276,6 @@
                     </VisualState.Setters>
                 </VisualState>
 
-                <!-- Narrow: keep content usable; menu becomes an overlay (minimal). -->
                 <VisualState x:Name="Narrow">
                     <VisualState.StateTriggers>
                         <AdaptiveTrigger MinWindowWidth="0" />
@@ -414,7 +292,6 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Native title bar (full customization) -->
         <Border x:Name="AppTitleBar"
                 Grid.Row="0"
                 Background="Transparent"
@@ -422,11 +299,7 @@
                 BorderThickness="0,0,0,1"
                 Height="48">
             <Grid>
-                <!-- Dedicated draggable region (Windows title bar best practice). -->
-                <Grid x:Name="TitleBarDragRegion"
-                      Background="Transparent" />
-
-                <!-- Interactive content sits above the drag region; keep Background unset so empty space is draggable. -->
+                <Grid x:Name="TitleBarDragRegion" Background="Transparent" />
                 <Grid x:Name="AppTitleBarContent">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
@@ -439,22 +312,21 @@
                                 Orientation="Horizontal"
                                 Spacing="4"
                                 Margin="8,0,0,0"
-                                VerticalAlignment="Center"
-                                Visibility="Visible">
-                    <Button x:Name="TitleBarBackButton"
-                            Style="{StaticResource TitleBarCommandButtonStyle}"
-                            ToolTipService.ToolTip="返回"
-                            AutomationProperties.Name="返回"
-                            Click="OnTitleBarBackClick">
-                        <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE72B;"/>
-                    </Button>
-                    <Button x:Name="TitleBarToggleLeftNavButton"
-                            Style="{StaticResource TitleBarCommandButtonStyle}"
-                            ToolTipService.ToolTip="折叠左侧边栏"
-                            AutomationProperties.Name="切换侧边栏"
-                            Click="OnToggleLeftNavClick">
-                        <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE700;"/>
-                    </Button>
+                                VerticalAlignment="Center">
+                        <Button x:Name="TitleBarBackButton"
+                                Style="{StaticResource TitleBarCommandButtonStyle}"
+                                ToolTipService.ToolTip="返回"
+                                AutomationProperties.Name="返回"
+                                Click="OnTitleBarBackClick">
+                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE72B;"/>
+                        </Button>
+                        <Button x:Name="TitleBarToggleLeftNavButton"
+                                Style="{StaticResource TitleBarCommandButtonStyle}"
+                                ToolTipService.ToolTip="折叠左侧边栏"
+                                AutomationProperties.Name="切换侧边栏"
+                                Click="OnToggleLeftNavClick">
+                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE700;"/>
+                        </Button>
                     </StackPanel>
 
                     <TextBox x:Name="TopSearchBox"
@@ -487,7 +359,6 @@
                                       MinWidth="{x:Bind TopSearchBox.ActualWidth}"
                                       MaxWidth="{x:Bind TopSearchBox.ActualWidth}"
                                       HorizontalAlignment="Stretch">
-                                    <!-- 搜索结果列表 -->
                                     <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="400" HorizontalAlignment="Stretch">
                                         <StackPanel HorizontalAlignment="Stretch">
                                             <muxc:ItemsRepeater ItemsSource="{x:Bind SearchVM.ResultGroups, Mode=OneWay}" HorizontalAlignment="Stretch">
@@ -497,14 +368,11 @@
                                                 <muxc:ItemsRepeater.ItemTemplate>
                                                     <DataTemplate x:DataType="searchModels:SearchResultGroup">
                                                         <StackPanel HorizontalAlignment="Stretch">
-                                                            <!-- 分组标题 -->
                                                             <TextBlock Text="{x:Bind Title}"
                                                                        FontSize="12"
                                                                        FontWeight="SemiBold"
                                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                                        Margin="16,12,16,4" />
-
-                                                            <!-- 分组项目 -->
                                                             <muxc:ItemsRepeater ItemsSource="{x:Bind Items}" HorizontalAlignment="Stretch">
                                                                 <muxc:ItemsRepeater.Layout>
                                                                     <muxc:StackLayout Spacing="2" />
@@ -555,7 +423,6 @@
                                                 </muxc:ItemsRepeater.ItemTemplate>
                                             </muxc:ItemsRepeater>
 
-                                            <!-- 最近搜索建议 -->
                                             <StackPanel Visibility="{x:Bind SearchVM.ShowSuggestions, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                                         Margin="0,0,0,8"
                                                         HorizontalAlignment="Stretch">
@@ -592,7 +459,6 @@
                                         </StackPanel>
                                     </ScrollViewer>
 
-                                    <!-- 无结果提示 -->
                                     <TextBlock x:Uid="SearchPanelEmptyText"
                                                HorizontalAlignment="Center"
                                                VerticalAlignment="Center"
@@ -607,14 +473,15 @@
                     <StackPanel Grid.Column="2"
                                 Orientation="Horizontal"
                                 Spacing="8"
-                                VerticalAlignment="Center">
+                                VerticalAlignment="Center"
+                                Margin="0,0,8,0">
                         <ToggleButton x:Name="DiffPanelButton"
                                       Tag="Diff"
                                       Style="{StaticResource TitleBarToggleButtonStyle}"
                                       ToolTipService.ToolTip="Diff"
                                       AutomationProperties.Name="Diff 面板"
-                                      Click="OnRightPanelButtonClick">
-                            <!-- SymbolIcon.Symbol must be a valid WinUI Symbol enum value -->
+                                      Click="OnRightPanelButtonClick"
+                                      IsChecked="{x:Bind NavVM.RightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Diff}">
                             <SymbolIcon Symbol="Preview" />
                         </ToggleButton>
                         <ToggleButton x:Name="TodoPanelButton"
@@ -622,7 +489,8 @@
                                       Style="{StaticResource TitleBarToggleButtonStyle}"
                                       ToolTipService.ToolTip="Todo"
                                       AutomationProperties.Name="Todo 面板"
-                                      Click="OnRightPanelButtonClick">
+                                      Click="OnRightPanelButtonClick"
+                                      IsChecked="{x:Bind NavVM.RightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Todo}">
                             <SymbolIcon Symbol="Bullets" />
                         </ToggleButton>
                     </StackPanel>
@@ -680,104 +548,68 @@
                 </controls:ResizeGrip.RenderTransform>
             </controls:ResizeGrip>
 
-            <!-- 右侧边栏：Diff / Todo / Files -->
             <Grid x:Name="RightPanelColumn"
                   Grid.Column="1"
-                  Width="320"
-                  Background="Transparent"
+                  Width="0"
+                  Visibility="Collapsed"
+                  Background="{ThemeResource LayerFillColorDefaultBrush}"
                   BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                  BorderThickness="1,0,0,0"
-                  Visibility="Collapsed">
+                  BorderThickness="1,0,0,0">
                 <Grid.RenderTransform>
-                    <TranslateTransform x:Name="RightPanelTranslate" X="0"/>
+                    <TranslateTransform x:Name="RightPanelTranslate" />
                 </Grid.RenderTransform>
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <TextBlock x:Name="RightPanelTitle"
-                           Grid.Row="0"
-                           Text=""
-                           FontSize="16"
-                           FontWeight="SemiBold"
-                           Margin="20,24,16,16" />
+                <Grid Grid.Row="0" Height="48" Padding="16,0,8,0">
+                    <TextBlock x:Name="RightPanelTitle" Text="Panel" VerticalAlignment="Center" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+
+
+                </Grid>
 
                 <Grid Grid.Row="1">
-                    <Grid x:Name="DiffPanel" Visibility="Collapsed">
-                        <TextBlock x:Uid="DiffPanelPlaceholder" Opacity="0.7" Margin="20,8" />
+                    <Grid Visibility="{x:Bind NavVM.RightPanelMode, Mode=OneWay, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=Diff}">
+                         <TextBlock x:Uid="DiffPanelPlaceholder" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.6"/>
                     </Grid>
-                    <Grid x:Name="TodoPanel" Visibility="Collapsed">
-                        <Grid>
-                            <Grid Visibility="{x:Bind ChatVM.ShouldShowPlanList, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                                <ListView ItemsSource="{x:Bind ChatVM.CurrentPlan, Mode=OneWay}"
-                                          SelectionMode="None"
-                                          Background="Transparent"
-                                          BorderThickness="0"
-                                          Margin="12,0,12,12">
+
+                    <Grid Visibility="{x:Bind NavVM.RightPanelMode, Mode=OneWay, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=Todo}">
+                        <ScrollViewer>
+                            <Grid Padding="16">
+                                <ListView ItemsSource="{x:Bind ChatVM.PlanEntries, Mode=OneWay}" SelectionMode="None">
                                     <ListView.ItemTemplate>
                                         <DataTemplate x:DataType="chatVm:PlanEntryViewModel">
-                                            <Border Margin="0,0,0,8"
-                                                    Padding="8"
-                                                    CornerRadius="8"
-                                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                                                <Grid>
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="Auto" />
-                                                        <ColumnDefinition Width="*" />
-                                                        <ColumnDefinition Width="Auto" />
-                                                    </Grid.ColumnDefinitions>
-                                                    <Ellipse Width="8"
-                                                             Height="8"
-                                                             VerticalAlignment="Center"
-                                                             Fill="{x:Bind Status, Converter={StaticResource PlanStatusToColorConverter}}" />
-                                                    <TextBlock Grid.Column="1"
-                                                               Text="{x:Bind Content}"
-                                                               Margin="8,0,8,0"
-                                                               TextWrapping="Wrap" />
-                                                    <StackPanel Grid.Column="2"
-                                                                Orientation="Vertical"
-                                                                HorizontalAlignment="Right">
-                                                        <TextBlock Text="{x:Bind StatusDisplayName}"
-                                                                   FontSize="12"
-                                                                   Opacity="0.8"
-                                                                   HorizontalAlignment="Right" />
-                                                        <TextBlock Text="{x:Bind PriorityDisplayName}"
-                                                                   FontSize="12"
-                                                                   Opacity="0.6"
-                                                                   HorizontalAlignment="Right" />
+                                            <Border Margin="0,0,0,8" Padding="12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                                    <Ellipse Width="8" Height="8" VerticalAlignment="Center" Fill="{x:Bind Status, Converter={StaticResource PlanStatusToColorConverter}}" />
+                                                    <TextBlock Grid.Column="1" Text="{x:Bind Content}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                                    <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                                        <TextBlock Text="{x:Bind StatusDisplayName}" FontSize="11" Opacity="0.8" HorizontalAlignment="Right" />
+                                                        <TextBlock Text="{x:Bind PriorityDisplayName}" FontSize="10" Opacity="0.5" HorizontalAlignment="Right" />
                                                     </StackPanel>
                                                 </Grid>
                                             </Border>
                                         </DataTemplate>
                                     </ListView.ItemTemplate>
                                 </ListView>
+
+                                <StackPanel Visibility="{x:Bind ChatVM.ShouldShowPlanEmpty, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,40">
+                                    <TextBlock x:Uid="PlanEmptyTitle" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                    <TextBlock x:Uid="PlanEmptySubtitle" Opacity="0.7" Margin="0,8,0,0" TextAlignment="Center" HorizontalAlignment="Center" />
+                                </StackPanel>
                             </Grid>
-                            <StackPanel Visibility="{x:Bind ChatVM.ShouldShowPlanEmpty, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                                        HorizontalAlignment="Center"
-                                        VerticalAlignment="Center"
-                                        Margin="20,0">
-                                <TextBlock x:Uid="PlanEmptyTitle"
-                                           FontSize="16"
-                                           FontWeight="SemiBold"
-                                           HorizontalAlignment="Center" />
-                                <TextBlock x:Uid="PlanEmptySubtitle"
-                                           Opacity="0.7"
-                                           Margin="0,6,0,0"
-                                           HorizontalAlignment="Center" />
-                            </StackPanel>
-                        </Grid>
+                        </ScrollViewer>
                     </Grid>
                 </Grid>
 
-                <controls:ResizeGrip x:Name="RightPanelResizer"
-                                     Grid.RowSpan="2"
-                                     HorizontalAlignment="Left"
-                                     VerticalAlignment="Stretch"
-                                     Width="6"
-                                     Background="Transparent"
-                                     Style="{StaticResource RightPanelResizerThumbStyle}"
-                                     PointerPressed="OnRightPanelResizerPointerPressed"
+                <controls:ResizeGrip x:Name="RightPanelResizer" 
+                                     HorizontalAlignment="Left" 
+                                     VerticalAlignment="Stretch" 
+                                     Width="6" 
+                                     Background="Transparent" 
+                                     Style="{StaticResource RightPanelResizerThumbStyle}" 
+                                     PointerPressed="OnRightPanelResizerPointerPressed" 
                                      PointerMoved="OnRightPanelResizerPointerMoved"
                                      PointerReleased="OnRightPanelResizerPointerReleased"
                                      PointerCaptureLost="OnRightPanelResizerPointerCaptureLost" />
@@ -785,7 +617,3 @@
         </Grid>
     </Grid>
 </Page>
-
-
-
-

@@ -48,7 +48,7 @@ public sealed partial class MainPage : Page
     private bool _isResizingLeftNav;
     private double _leftNavResizeStartX;
     private double _leftNavResizeStartWidth;
-    private string? _activeRightPanel;
+
     private double _rightPanelLastWidth = 320;
     private Storyboard? _rightPanelStoryboard;
     private Storyboard? _navPaneStoryboard;
@@ -113,6 +113,7 @@ public sealed partial class MainPage : Page
         ConfigureNavigationView();
         SubscribeMotion();
         SubscribeNavItems();
+        NavVM.PropertyChanged += OnNavVMPropertyChanged;
 
         // 4. 启动后默认进入开始界面
         NavVM.SelectStart();
@@ -133,6 +134,7 @@ public sealed partial class MainPage : Page
         UnsubscribeMotion();
         Preferences.PropertyChanged -= OnPreferencesPropertyChanged;
         _chatViewModel.PropertyChanged -= OnChatViewModelPropertyChanged;
+        NavVM.PropertyChanged -= OnNavVMPropertyChanged;
 #if WINDOWS
         _trayIcon?.Dispose();
         _trayIcon = null;
@@ -262,6 +264,27 @@ public sealed partial class MainPage : Page
             UpdateTrayState();
         }
 #endif
+    }
+
+    private void OnNavVMPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(NavVM.RightPanelMode))
+        {
+            UpdateRightPanelState();
+        }
+    }
+
+    private void UpdateRightPanelState()
+    {
+        var mode = NavVM.RightPanelMode;
+        if (mode == RightPanelMode.None)
+        {
+            CloseRightPanel();
+        }
+        else
+        {
+            OpenRightPanel(mode);
+        }
     }
 
     private void ApplyTheme()
@@ -642,112 +665,84 @@ public sealed partial class MainPage : Page
 
     private void OnRightPanelButtonClick(object sender, RoutedEventArgs e)
     {
-        if (sender is not ToggleButton button || RightPanelColumn is null)
+        if (sender is FrameworkElement element && element.Tag is string tag)
         {
-            return;
-        }
+            var targetMode = tag switch
+            {
+                "Diff" => RightPanelMode.Diff,
+                "Todo" => RightPanelMode.Todo,
+                _ => RightPanelMode.None
+            };
 
-        var key = button.Tag?.ToString() ?? string.Empty;
-        if (RightPanelColumn.Visibility == Visibility.Visible && _activeRightPanel == key)
-        {
-            CloseRightPanel();
-            return;
+            if (targetMode != RightPanelMode.None)
+            {
+                // Toggle behavior: if already in this mode, turn off.
+                NavVM.RightPanelMode = NavVM.RightPanelMode == targetMode 
+                    ? RightPanelMode.None 
+                    : targetMode;
+            }
         }
-
-        OpenRightPanel(key);
     }
 
-    private void OpenRightPanel(string key)
-    {
-        if (RightPanelColumn is null || RightPanelTitle is null)
-        {
-            return;
-        }
 
-        _activeRightPanel = key;
+
+    private void OpenRightPanel(RightPanelMode mode)
+    {
+        if (RightPanelColumn is null) return;
+
+        UpdateRightPanelTitle();
+
         if (RightPanelColumnDefinition is not null)
         {
             RightPanelColumnDefinition.Width = GridLength.Auto;
         }
-        var baseWidth = double.IsNaN(RightPanelColumn.Width) || RightPanelColumn.Width <= 0
-            ? _rightPanelLastWidth
-            : RightPanelColumn.Width;
-        var targetWidth = Math.Clamp(baseWidth, RightPanelMinWidth, RightPanelMaxWidth);
-        _rightPanelLastWidth = targetWidth;
 
+        var targetWidth = Math.Clamp(_rightPanelLastWidth, RightPanelMinWidth, RightPanelMaxWidth);
+        
         if (UiMotion.Current.IsAnimationEnabled)
         {
-            RightPanelColumn.Visibility = Visibility.Visible;
-            RightPanelColumn.Width = 0;
-            RightPanelColumn.Opacity = 0;
-            if (RightPanelTranslate is not null)
+            if (RightPanelColumn.Visibility != Visibility.Visible || RightPanelColumn.ActualWidth == 0)
             {
-                RightPanelTranslate.X = RightPanelAnimationOffset;
+                RightPanelColumn.Visibility = Visibility.Visible;
+                RightPanelColumn.Width = 0;
+                RightPanelColumn.Opacity = 0;
+                if (RightPanelTranslate is not null) RightPanelTranslate.X = RightPanelAnimationOffset;
+                AnimateRightPanel(open: true, fromWidth: 0, toWidth: targetWidth);
             }
-            AnimateRightPanel(open: true, fromWidth: 0, toWidth: targetWidth);
+            else
+            {
+                RightPanelColumn.Width = targetWidth;
+                RightPanelColumn.Opacity = 1;
+                if (RightPanelTranslate is not null) RightPanelTranslate.X = 0;
+            }
         }
         else
         {
             RightPanelColumn.Visibility = Visibility.Visible;
             RightPanelColumn.Width = targetWidth;
             RightPanelColumn.Opacity = 1;
-            if (RightPanelTranslate is not null)
-            {
-                RightPanelTranslate.X = 0;
-            }
+            if (RightPanelTranslate is not null) RightPanelTranslate.X = 0;
         }
-
-        UpdateRightPanelTitle();
-
-        DiffPanel.Visibility = key == "Diff" ? Visibility.Visible : Visibility.Collapsed;
-        TodoPanel.Visibility = key == "Todo" ? Visibility.Visible : Visibility.Collapsed;
-
-        DiffPanelButton.IsChecked = key == "Diff";
-        TodoPanelButton.IsChecked = key == "Todo";
     }
 
     private void CloseRightPanel()
     {
-        if (RightPanelColumn is null)
-        {
-            return;
-        }
+        if (RightPanelColumn is null) return;
 
-        _activeRightPanel = null;
         if (UiMotion.Current.IsAnimationEnabled)
         {
             var fromWidth = RightPanelColumn.Width;
-            if (double.IsNaN(fromWidth) || fromWidth <= 0)
-            {
-                fromWidth = RightPanelColumn.ActualWidth;
-            }
-            if (fromWidth <= 0)
-            {
-                fromWidth = _rightPanelLastWidth;
-            }
+            if (double.IsNaN(fromWidth) || fromWidth <= 0) fromWidth = RightPanelColumn.ActualWidth;
+            if (fromWidth <= 0) fromWidth = _rightPanelLastWidth;
+
             _rightPanelLastWidth = Math.Clamp(fromWidth, RightPanelMinWidth, RightPanelMaxWidth);
             AnimateRightPanel(open: false, fromWidth: fromWidth, toWidth: 0);
         }
         else
         {
             RightPanelColumn.Visibility = Visibility.Collapsed;
-            if (RightPanelColumnDefinition is not null)
-            {
-                RightPanelColumnDefinition.Width = new GridLength(0);
-            }
             RightPanelColumn.Width = 0;
-            RightPanelColumn.Opacity = 1;
-            if (RightPanelTranslate is not null)
-            {
-                RightPanelTranslate.X = 0;
-            }
         }
-
-        DiffPanel.Visibility = Visibility.Collapsed;
-        TodoPanel.Visibility = Visibility.Collapsed;
-
-        DiffPanelButton.IsChecked = false;
-        TodoPanelButton.IsChecked = false;
     }
 
     private void UpdateRightPanelTitle()
@@ -757,10 +752,10 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        RightPanelTitle.Text = _activeRightPanel switch
+        RightPanelTitle.Text = NavVM.RightPanelMode switch
         {
-            "Diff" => "Diff",
-            "Todo" => ResolveTodoPanelTitle(),
+            RightPanelMode.Diff => "Diff",
+            RightPanelMode.Todo => ResolveTodoPanelTitle(),
             _ => "Panel"
         };
     }
@@ -1086,7 +1081,7 @@ public sealed partial class MainPage : Page
 
     private void OnChatViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (_activeRightPanel != "Todo")
+        if (NavVM.RightPanelMode != RightPanelMode.Todo)
         {
             return;
         }

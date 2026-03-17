@@ -27,6 +27,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     private readonly IUiInteractionService _ui;
     private readonly IShellNavigationService _shellNavigation;
     private readonly ILogger<MainNavigationViewModel> _logger;
+    private readonly INavigationStateService _navigationState;
+    private readonly IRightPanelService _rightPanelService;
     private readonly SynchronizationContext _syncContext;
     private readonly System.Collections.Specialized.NotifyCollectionChangedEventHandler _projectsChangedHandler;
     private readonly Timer _relativeTimeTimer;
@@ -106,10 +108,21 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         }
     }
 
+    public RightPanelMode RightPanelMode
+    {
+        get => _rightPanelService.CurrentMode;
+        set => _rightPanelService.CurrentMode = value;
+    }
+
     private void OnServicePaneStateChanged(object? sender, EventArgs e)
     {
         OnPropertyChanged(nameof(IsPaneOpen));
         OnIsPaneOpenChanged(_navigationState.IsPaneOpen, "ServiceSync");
+    }
+
+    private void OnRightPanelServiceModeChanged(object? sender, EventArgs e)
+    {
+        OnPropertyChanged(nameof(RightPanelMode));
     }
 
     public NavigationPaneDisplayMode PaneDisplayMode
@@ -181,7 +194,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     public IAsyncRelayCommand AddProjectCommand { get; }
 
-    private readonly INavigationStateService _navigationState;
+
 
     public MainNavigationViewModel(
         ChatViewModel chatViewModel,
@@ -190,7 +203,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         IUiInteractionService ui,
         IShellNavigationService shellNavigation,
         ILogger<MainNavigationViewModel> logger,
-        INavigationStateService navigationState)
+        INavigationStateService navigationState,
+        IRightPanelService rightPanelService)
     {
         _chatViewModel = chatViewModel ?? throw new ArgumentNullException(nameof(chatViewModel));
         _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
@@ -199,9 +213,11 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         _shellNavigation = shellNavigation ?? throw new ArgumentNullException(nameof(shellNavigation));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _navigationState = navigationState ?? throw new ArgumentNullException(nameof(navigationState));
+        _rightPanelService = rightPanelService ?? throw new ArgumentNullException(nameof(rightPanelService));
         _syncContext = SynchronizationContext.Current ?? new SynchronizationContext();
 
         AddProjectCommand = new AsyncRelayCommand(AddProjectAsync);
+
 
         StartItem = new StartNavItemViewModel(_navigationState);
         SessionsHeaderItem = new SessionsHeaderNavItemViewModel(AddProjectCommand, _navigationState);
@@ -230,6 +246,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         UpdateLeftNavResizerVisibility();
 
         _navigationState.PaneStateChanged += OnServicePaneStateChanged;
+        _rightPanelService.ModeChanged += OnRightPanelServiceModeChanged;
     }
 
     public void SetPaneOpen(bool isOpen)
@@ -277,6 +294,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     public void Dispose()
     {
         _navigationState.PaneStateChanged -= OnServicePaneStateChanged;
+        _rightPanelService.ModeChanged -= OnRightPanelServiceModeChanged;
         _chatViewModel.PropertyChanged -= OnChatViewModelPropertyChanged;
         _preferences.Projects.CollectionChanged -= _projectsChangedHandler;
         _relativeTimeTimer.Dispose();

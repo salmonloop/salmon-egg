@@ -48,7 +48,8 @@ public sealed class StartViewModelTests
             ui.Object,
             shellNavigation.Object,
             navLogger.Object,
-            new NavigationStateService());
+            new NavigationStateService(),
+            new Mock<IRightPanelService>().Object);
 
         var startLogger = new Mock<ILogger<StartViewModel>>();
         var startViewModel = new StartViewModel(
@@ -95,7 +96,8 @@ public sealed class StartViewModelTests
             ui.Object,
             shellNavigation.Object,
             navLogger.Object,
-            new NavigationStateService());
+            new NavigationStateService(),
+            new Mock<IRightPanelService>().Object);
 
         var startLogger = new Mock<ILogger<StartViewModel>>();
         var startViewModel = new StartViewModel(
