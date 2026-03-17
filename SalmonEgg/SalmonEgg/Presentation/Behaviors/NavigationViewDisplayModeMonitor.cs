@@ -58,6 +58,7 @@ public static class NavigationViewDisplayModeMonitor
         }
 
         nav.DisplayModeChanged += OnNavDisplayModeChanged;
+        nav.SizeChanged += OnNavSizeChanged;
         nav.Loaded += OnNavLoaded;
         nav.Unloaded += OnNavUnloaded;
         var token = nav.RegisterPropertyChangedCallback(NavigationView.PaneDisplayModeProperty, OnPaneDisplayModePropertyChanged);
@@ -78,6 +79,7 @@ public static class NavigationViewDisplayModeMonitor
         if (sender is NavigationView nav)
         {
             nav.DisplayModeChanged -= OnNavDisplayModeChanged;
+            nav.SizeChanged -= OnNavSizeChanged;
             nav.Loaded -= OnNavLoaded;
             nav.Unloaded -= OnNavUnloaded;
             var token = GetPaneDisplayModeToken(nav);
@@ -95,6 +97,14 @@ public static class NavigationViewDisplayModeMonitor
         UpdateDisplayMode(sender);
     }
 
+    private static void OnNavSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (sender is NavigationView nav)
+        {
+            UpdateDisplayMode(nav);
+        }
+    }
+
     private static void OnPaneDisplayModePropertyChanged(DependencyObject sender, DependencyProperty dp)
     {
         if (sender is NavigationView nav)
@@ -109,14 +119,22 @@ public static class NavigationViewDisplayModeMonitor
         System.Diagnostics.Debug.WriteLine(
             $"[NavDisplayMode] Raw={nav.DisplayMode} IsPaneOpen={nav.IsPaneOpen} OpenPaneLength={nav.OpenPaneLength} CompactPaneLength={nav.CompactPaneLength}");
 #endif
-        SetDisplayMode(nav, MapDisplayMode(nav.PaneDisplayMode));
-    }
-
-    private static NavigationPaneDisplayMode MapDisplayMode(NavigationViewPaneDisplayMode displayMode) =>
-        displayMode switch
+        // Prefer requested PaneDisplayMode when explicitly set, otherwise fall back to effective DisplayMode.
+        var mapped = nav.PaneDisplayMode switch
         {
             NavigationViewPaneDisplayMode.LeftMinimal => NavigationPaneDisplayMode.Minimal,
             NavigationViewPaneDisplayMode.LeftCompact => NavigationPaneDisplayMode.Compact,
+            NavigationViewPaneDisplayMode.Left => NavigationPaneDisplayMode.Expanded,
+            _ => MapDisplayMode(nav.DisplayMode)
+        };
+        SetDisplayMode(nav, mapped);
+    }
+
+    private static NavigationPaneDisplayMode MapDisplayMode(NavigationViewDisplayMode displayMode) =>
+        displayMode switch
+        {
+            NavigationViewDisplayMode.Minimal => NavigationPaneDisplayMode.Minimal,
+            NavigationViewDisplayMode.Compact => NavigationPaneDisplayMode.Compact,
             _ => NavigationPaneDisplayMode.Expanded
         };
 }
