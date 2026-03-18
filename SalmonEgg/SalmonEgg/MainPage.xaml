@@ -45,7 +45,8 @@
         <x:Double x:Key="SearchBoxMaxWidthMedium">300</x:Double>
 
         <DataTemplate x:Key="StartNavTemplate" x:DataType="nav:StartNavItemViewModel">
-            <NavigationViewItem ContentTransitions="{x:Bind models:UiMotion.Current.NavItemTransitions, Mode=OneWay}">
+            <NavigationViewItem ContentTransitions="{x:Bind models:UiMotion.Current.NavItemTransitions, Mode=OneWay}"
+                                Tag="{x:Bind navModels:NavItemTag.Start}">
                 <NavigationViewItem.Icon>
                     <SymbolIcon Symbol="Home" />
                 </NavigationViewItem.Icon>
@@ -105,7 +106,7 @@
             <NavigationViewItem MenuItemsSource="{x:Bind Children, Mode=OneWay}"
                                 IsExpanded="{x:Bind IsExpanded, Mode=TwoWay}"
                                 HorizontalContentAlignment="Stretch"
-                                SelectsOnInvoked="False"
+                                SelectsOnInvoked="True"
                                 ContentTransitions="{x:Bind models:UiMotion.Current.NavItemTransitions, Mode=OneWay}">
                 <NavigationViewItem.Icon>
                     <SymbolIcon Symbol="Folder" />
@@ -132,6 +133,7 @@
 
         <DataTemplate x:Key="SessionNavTemplate" x:DataType="nav:SessionNavItemViewModel">
             <NavigationViewItem SelectsOnInvoked="True"
+                                Tag="{x:Bind navModels:NavItemTag.Session(SessionId)}"
                                 ContentTransitions="{x:Bind models:UiMotion.Current.NavItemTransitions, Mode=OneWay}">
                 <NavigationViewItem.Icon>
                     <SymbolIcon Symbol="Comment" />

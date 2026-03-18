@@ -38,8 +38,19 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
+    public void NavItemTag_SessionTag_RoundTrips()
+    {
+        var tag = NavItemTag.Session("session-42");
+
+        Assert.True(NavItemTag.TryParseSession(tag, out var sessionId));
+        Assert.Equal("session-42", sessionId);
+    }
+
+    [Fact]
     public void NavItemTag_ParseRejectsInvalid()
     {
+        Assert.False(NavItemTag.TryParseSession("Session:", out _));
+        Assert.False(NavItemTag.TryParseSession("Other:123", out _));
         Assert.False(NavItemTag.TryParseMore("More:", out _));
         Assert.False(NavItemTag.TryParseMore("Other:123", out _));
     }

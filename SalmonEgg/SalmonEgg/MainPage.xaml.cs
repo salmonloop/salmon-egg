@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 #if WINDOWS
 using Microsoft.UI;
 using Microsoft.UI.Input;
@@ -425,7 +427,7 @@ public sealed partial class MainPage : Page
         ContentFrame.Navigate(pageType, parameter, transition);
     }
 
-    private void OnMainNavItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
+    private async void OnMainNavItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
     {
         var rawInvokedType = args.InvokedItem?.GetType().Name ?? "null";
         var containerType = args.InvokedItemContainer?.GetType().Name ?? "null";
@@ -437,7 +439,7 @@ public sealed partial class MainPage : Page
         if (args.InvokedItemContainer is NavigationViewItem navItem
             && navItem.Tag is string tag)
         {
-            if (TryHandleNavItemTag(tag))
+            if (await TryHandleNavItemTagAsync(tag))
             {
                 return;
             }
@@ -461,15 +463,14 @@ public sealed partial class MainPage : Page
 
         if (invoked is SessionNavItemViewModel session && !session.IsPlaceholder)
         {
-            NavVM.SelectSession(session.SessionId);
-            EnsureChatContent();
+            await ActivateSessionAsync(session.SessionId, session.ProjectId);
+            return;
+        }
 
-            var projectId = session.ProjectId;
-            Preferences.LastSelectedProjectId = string.Equals(projectId, MainNavigationViewModel.UnclassifiedProjectId, StringComparison.Ordinal)
-                ? null
-                : projectId;
-
-            _ = _chatViewModel.TrySwitchToSessionAsync(session.SessionId);
+        if (invoked is ProjectNavItemViewModel project)
+        {
+            NavVM.ToggleProjectExpanded(project.ProjectId);
+            ApplyMainNavSelectionDeferred();
             return;
         }
 
@@ -527,8 +528,26 @@ public sealed partial class MainPage : Page
         _archiveOnFlyoutClosed.TryConsume(sessionId);
     }
 
-    private bool TryHandleNavItemTag(string tag)
+    private async Task<bool> TryHandleNavItemTagAsync(string tag)
     {
+        if (string.Equals(tag, NavItemTag.Start, StringComparison.Ordinal))
+        {
+            NavVM.SelectStart();
+            EnsureStartContent();
+            return true;
+        }
+
+        if (NavItemTag.TryParseSession(tag, out var sessionId))
+        {
+            var session = NavVM.Items
+                .OfType<ProjectNavItemViewModel>()
+                .SelectMany(project => project.Children.OfType<SessionNavItemViewModel>())
+                .FirstOrDefault(item => string.Equals(item.SessionId, sessionId, StringComparison.Ordinal));
+
+            await ActivateSessionAsync(sessionId, session?.ProjectId);
+            return true;
+        }
+
         if (string.Equals(tag, NavItemTag.SessionsHeader, StringComparison.Ordinal))
         {
             if (!NavVM.SessionsHeaderItem.IsPaneOpen)
@@ -549,6 +568,23 @@ public sealed partial class MainPage : Page
         }
 
         return false;
+    }
+
+    private async Task ActivateSessionAsync(string sessionId, string? projectId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return;
+        }
+
+        NavVM.SelectSession(sessionId);
+        EnsureChatContent();
+
+        Preferences.LastSelectedProjectId = string.Equals(projectId, MainNavigationViewModel.UnclassifiedProjectId, StringComparison.Ordinal)
+            ? null
+            : projectId;
+
+        await _chatViewModel.TrySwitchToSessionAsync(sessionId);
     }
 
     private static object? ResolveInvokedItem(NavigationViewItemInvokedEventArgs args)
@@ -853,16 +889,19 @@ public sealed partial class MainPage : Page
     private void OnMainNavPaneOpened(NavigationView sender, object args)
     {
         UpdateNavPaneToggleUi();
+        ApplyMainNavSelectionDeferred();
     }
 
     private void OnMainNavPaneClosed(NavigationView sender, object args)
     {
         UpdateNavPaneToggleUi();
+        ApplyMainNavSelectionDeferred();
     }
 
     private void OnMainNavDisplayModeChanged(NavigationView sender, NavigationViewDisplayModeChangedEventArgs args)
     {
         UpdateNavPaneToggleUi();
+        ApplyMainNavSelectionDeferred();
     }
 
     private void OnLayoutViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -927,13 +966,13 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        if (NavVM.IsSettingsSelected)
+        var target = ResolveMainNavSelectedItem();
+        if (ReferenceEquals(target, MainNavView.SettingsItem))
         {
             SetSelectedSettingsItemDeferred();
             return;
         }
 
-        var target = NavVM.SelectedItem;
         if (target is null)
         {
             return;
@@ -945,6 +984,40 @@ public sealed partial class MainPage : Page
         }
 
         MainNavView.SelectedItem = target;
+    }
+
+    private object? ResolveMainNavSelectedItem()
+    {
+        if (MainNavView is null)
+        {
+            return null;
+        }
+
+        if (NavVM.IsSettingsSelected)
+        {
+            return MainNavView.SettingsItem;
+        }
+
+        var target = NavVM.SelectedItem;
+        if (target is not SessionNavItemViewModel sessionItem)
+        {
+            return target;
+        }
+
+        if (LayoutVM.IsNavPaneOpen)
+        {
+            return sessionItem;
+        }
+
+        return (object?)NavVM.Items
+            .OfType<ProjectNavItemViewModel>()
+            .FirstOrDefault(project => string.Equals(project.ProjectId, sessionItem.ProjectId, StringComparison.Ordinal))
+            ?? sessionItem;
+    }
+
+    private void ApplyMainNavSelectionDeferred()
+    {
+        _ = DispatcherQueue.TryEnqueue(ApplyMainNavSelection);
     }
 
     private NavigationViewPaneDisplayMode ResolveNavigationViewPaneDisplayMode()
