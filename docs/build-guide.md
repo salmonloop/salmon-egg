@@ -83,6 +83,9 @@ dotnet run --framework net10.0-browserwasm
 ### Windows Desktop
 
 > 说明：原生 WinUI 3 目标需要 Windows 10/11 SDK + Visual Studio 2022（或 Build Tools 2022，含 MSBuild + C++ 工具链），否则会在 XamlCompiler 步骤失败。
+> 首次安装需要在“管理员 PowerShell”运行一次 `run.bat`，以将开发证书写入本机信任存储。
+> 证书复用：修复后的 `.tools/run-winui3-msix.ps1` 会复用同一张开发证书，不应再在每次 `run.bat msix` 时重建证书或反复要求安装证书。
+> 历史根因：脚本曾使用 PowerShell 中不可靠的 `$Cert.GetRSAPrivateKey()` 调用来判断私钥可用性，导致有效的 RSA 私钥被误判为不可用，进而每次重建新证书；现已改为标准的 `RSACertificateExtensions.GetRSAPrivateKey(...)`。
 
 ```bash
 # 运行（MSIX）
@@ -100,6 +103,13 @@ dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj \
   -f net10.0-desktop \
   -c Release \
   -o ./publish/windows-desktop
+```
+
+如果你怀疑本机仍在反复装证书，可以用下面两条命令核对当前签名证书和本机信任证书是否是同一个 thumbprint：
+
+```bash
+Get-ChildItem Cert:\CurrentUser\My | Where-Object Subject -eq 'CN=SalmonEgg'
+Get-ChildItem Cert:\LocalMachine\TrustedPeople | Where-Object Subject -eq 'CN=SalmonEgg'
 ```
 
 ### WebAssembly

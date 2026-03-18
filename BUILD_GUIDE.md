@@ -92,6 +92,8 @@ run.bat
 
 > 说明：Windows 原生 WinUI 3 目标使用 MSIX 方式安装/启动（避免 unpackaged WinUI3 在部分系统上启动即崩溃）。
 > 首次安装需要在“管理员 PowerShell”运行一次 `run.bat` 以将开发证书加入本机证书存储。
+> 证书复用：`.tools/run-winui3-msix.ps1` 现在会复用同一张开发证书，不应再在每次 `run.bat msix` 时重建证书或反复要求安装证书。
+> 历史根因：脚本曾使用 PowerShell 中不可靠的 `$Cert.GetRSAPrivateKey()` 调用来判断私钥可用性，导致有效的 RSA 私钥被误判为不可用，进而每次重建新证书；现已改为标准的 `RSACertificateExtensions.GetRSAPrivateKey(...)`。
 > 工具链锁定：Windows SDK 10.0.26100.0，signtool 来自 SDK 10.0.22621.0。
 > Workload manifest：CI 固定 10.0.200-manifests.34a88a22；本地允许最新。
 
@@ -175,6 +177,26 @@ rm -rf */obj */bin
 # 重新构建
 dotnet build
 ```
+
+### 问题 5: `run.bat msix` 每次都重新安装开发证书
+**现象**: 每次在管理员 PowerShell 中运行 `run.bat msix` 都重新生成证书，或 Windows 再次提示安装开发证书
+
+**原因**:
+旧脚本对证书私钥的可用性判断有误，把可复用的 RSA 证书误判成“没有私钥”，从而每次重建新证书；一旦签名证书 thumbprint 变化，Windows 就会把它视为新的签名者。
+
+**当前预期**:
+修复后，同一开发证书会被复用；连续执行 `run.bat msix` 时，不应再出现 `Existing dev certs are missing an RSA private key; recreating.`。
+
+**排查**:
+```bash
+# 查看当前用户的开发证书
+Get-ChildItem Cert:\CurrentUser\My | Where-Object Subject -eq 'CN=SalmonEgg'
+
+# 查看本机信任的开发证书
+Get-ChildItem Cert:\LocalMachine\TrustedPeople | Where-Object Subject -eq 'CN=SalmonEgg'
+```
+
+若 `CurrentUser\My` 与 `LocalMachine\TrustedPeople` 的 thumbprint 不一致，请先使用最新脚本再次执行一次管理员 `run.bat msix`，让脚本重新同步信任存储。
 
 ## 构建输出
 
