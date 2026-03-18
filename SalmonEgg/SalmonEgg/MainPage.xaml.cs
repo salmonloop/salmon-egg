@@ -96,11 +96,6 @@ public sealed partial class MainPage : Page
         this.InitializeComponent();
         BootLogDebug("MainPage: InitializeComponent done");
 
-#if WINDOWS
-        _metricsProvider.Attach(App.MainWindowInstance!, _appWindowTitleBar);
-#else
-        _metricsProvider.Attach(App.MainWindowInstance!, null);
-#endif
         _searchLogic.Attach(this);
 
         Loaded += OnMainPageLoaded;
@@ -951,6 +946,11 @@ public sealed partial class MainPage : Page
     private void OnMainPageLoaded(object sender, RoutedEventArgs e)
     {
         ConfigureTitleBar();
+#if WINDOWS
+        _metricsProvider.Attach(App.MainWindowInstance!, _appWindowTitleBar);
+#else
+        _metricsProvider.Attach(App.MainWindowInstance!, null);
+#endif
         UpdateNavPaneToggleUi();
         NavVM.RebuildTree();
         ApplyNavItemTransitionsDeferred();

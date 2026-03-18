@@ -31,7 +31,7 @@ public sealed partial class ShellLayoutViewModel : ObservableObject, IDisposable
     public ShellLayoutViewModel(IShellLayoutStore store)
     {
         _store = store;
-        _store.Snapshot.ForEach(async (snapshot, ct) =>
+        _store.SnapshotState.ForEach(async (snapshot, ct) =>
         {
             if (snapshot is null) return;
             NavPaneDisplayMode = snapshot.NavPaneDisplayMode;

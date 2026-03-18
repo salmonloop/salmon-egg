@@ -9,7 +9,7 @@ namespace SalmonEgg.Presentation.Services;
 public sealed class NavigationStateService : INavigationStateService, IDisposable
 {
     private readonly IShellLayoutMetricsSink _sink;
-    private readonly IDisposable _subscription;
+    private readonly IDisposable? _subscription;
     private bool _isPaneOpen = true;
 
     public bool IsPaneOpen
@@ -29,15 +29,15 @@ public sealed class NavigationStateService : INavigationStateService, IDisposabl
     public NavigationStateService(IShellLayoutStore store, IShellLayoutMetricsSink sink)
     {
         _sink = sink;
-        _subscription = store.Snapshot.ForEach((snapshot, ct) =>
+        // Using the ForEach overload that worked in ShellLayoutViewModel
+        store.SnapshotState.ForEach(async (snapshot, ct) =>
         {
-            if (snapshot is null) return ValueTask.CompletedTask;
-            if (_isPaneOpen == snapshot.IsNavPaneOpen) return ValueTask.CompletedTask;
+            if (snapshot is null) return;
+            if (_isPaneOpen == snapshot.IsNavPaneOpen) return;
 
             _isPaneOpen = snapshot.IsNavPaneOpen;
             PaneStateChanged?.Invoke(this, EventArgs.Empty);
-            return ValueTask.CompletedTask;
-        });
+        }, out _subscription);
     }
 
     public void Dispose() => _subscription?.Dispose();

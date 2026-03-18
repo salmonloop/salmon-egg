@@ -2,7 +2,6 @@ using System;
 using System.Threading.Tasks;
 using SalmonEgg.Presentation.Core.Mvux.ShellLayout;
 using SalmonEgg.Presentation.Core.Services;
-using SalmonEgg.Presentation.ViewModels.Navigation;
 using Uno.Extensions.Reactive;
 
 namespace SalmonEgg.Presentation.Services;
@@ -10,7 +9,7 @@ namespace SalmonEgg.Presentation.Services;
 public sealed class RightPanelService : IRightPanelService, IDisposable
 {
     private readonly IShellLayoutMetricsSink _sink;
-    private readonly IDisposable _subscription;
+    private readonly IDisposable? _subscription;
     private RightPanelMode _currentMode = RightPanelMode.None;
     private double _panelWidth = 320;
 
@@ -45,9 +44,10 @@ public sealed class RightPanelService : IRightPanelService, IDisposable
     public RightPanelService(IShellLayoutStore store, IShellLayoutMetricsSink sink)
     {
         _sink = sink;
-        _subscription = store.Snapshot.ForEach((snapshot, ct) =>
+        // Using the ForEach overload that worked in ShellLayoutViewModel
+        store.SnapshotState.ForEach(async (snapshot, ct) =>
         {
-            if (snapshot is null) return ValueTask.CompletedTask;
+            if (snapshot is null) return;
 
             if (_currentMode != snapshot.RightPanelMode)
             {
@@ -60,8 +60,7 @@ public sealed class RightPanelService : IRightPanelService, IDisposable
                 _panelWidth = snapshot.RightPanelWidth;
                 WidthChanged?.Invoke(this, EventArgs.Empty);
             }
-            return ValueTask.CompletedTask;
-        });
+        }, out _subscription);
     }
 
     public void Dispose() => _subscription?.Dispose();

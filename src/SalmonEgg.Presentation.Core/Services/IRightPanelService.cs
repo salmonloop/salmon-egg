@@ -2,7 +2,7 @@ using System;
 
 namespace SalmonEgg.Presentation.Services;
 
-using SalmonEgg.Presentation.ViewModels.Navigation;
+using SalmonEgg.Presentation.Core.Mvux.ShellLayout;
 
 /// <summary>
 /// Service for managing the state of the right sidebar (SSOT).

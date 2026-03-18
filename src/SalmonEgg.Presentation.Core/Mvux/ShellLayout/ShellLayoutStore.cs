@@ -5,26 +5,26 @@ namespace SalmonEgg.Presentation.Core.Mvux.ShellLayout;
 
 public interface IShellLayoutStore
 {
-    IState<ShellLayoutState> State { get; }
-    IState<ShellLayoutSnapshot> Snapshot { get; }
+    IState<ShellLayoutState> InternalState { get; }
+    IState<ShellLayoutSnapshot> SnapshotState { get; }
     ValueTask Dispatch(ShellLayoutAction action);
 }
 
 public sealed class ShellLayoutStore : IShellLayoutStore
 {
     private readonly IState<ShellLayoutSnapshot> _snapshotState;
-    public IState<ShellLayoutState> State { get; }
-    public IState<ShellLayoutSnapshot> Snapshot => _snapshotState;
+    public IState<ShellLayoutState> InternalState { get; }
+    public IState<ShellLayoutSnapshot> SnapshotState => _snapshotState;
 
     public ShellLayoutStore(IState<ShellLayoutState> state, IState<ShellLayoutSnapshot> snapshotState)
     {
-        State = state;
+        InternalState = state;
         _snapshotState = snapshotState;
     }
 
     public async ValueTask Dispatch(ShellLayoutAction action)
     {
-        await State.Update(s =>
+        await InternalState.Update(s =>
         {
             var reduced = ShellLayoutReducer.Reduce(s!, action);
             _snapshotState.Update(_ => reduced.Snapshot, default);
