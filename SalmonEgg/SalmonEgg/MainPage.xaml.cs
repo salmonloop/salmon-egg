@@ -6,7 +6,10 @@ using System.ComponentModel;
 using System.Threading;
 #if WINDOWS
 using Microsoft.UI;
+using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
+using Windows.Foundation;
+using Windows.Graphics;
 #endif
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -54,19 +57,18 @@ public sealed partial class MainPage : Page
     private double _leftNavResizeStartWidth;
 
     private string _activePrimaryNavKey = MainNavItemKeys.Start;
-    private bool _suppressNavSelectionChanged;
     private long _navSelectionRequestId;
     private bool _isMotionSubscribed;
     private bool _isNavItemsSubscribed;
     private readonly DeferredActionGate<string> _archiveOnFlyoutClosed = new(StringComparer.Ordinal);
     private string? _pendingArchiveSessionId;
-    private readonly ShellPanePolicy _panePolicy = new();
 #if WINDOWS
     private TrayIconManager? _trayIcon;
     private bool _allowClose;
 #endif
 #if WINDOWS
     private AppWindowTitleBar? _appWindowTitleBar;
+    private InputNonClientPointerSource? _titleBarPointerSource;
 #endif
 
     public AppPreferencesViewModel Preferences { get; }
@@ -110,6 +112,8 @@ public sealed partial class MainPage : Page
         // 2. Listen for global preference changes (animations, theme, backdrop)
         Preferences.PropertyChanged += OnPreferencesPropertyChanged;
         _chatViewModel.PropertyChanged += OnChatViewModelPropertyChanged;
+        LayoutVM.PropertyChanged += OnLayoutViewModelPropertyChanged;
+        NavVM.PropertyChanged += OnNavigationViewModelPropertyChanged;
 
         // 3. Initialize theme and motion state
         ApplyTheme();
@@ -140,7 +144,8 @@ public sealed partial class MainPage : Page
         UnsubscribeMotion();
         Preferences.PropertyChanged -= OnPreferencesPropertyChanged;
         _chatViewModel.PropertyChanged -= OnChatViewModelPropertyChanged;
-        // NavVM.PropertyChanged unregistration removed
+        LayoutVM.PropertyChanged -= OnLayoutViewModelPropertyChanged;
+        NavVM.PropertyChanged -= OnNavigationViewModelPropertyChanged;
         _metricsProvider.Detach();
 #if WINDOWS
         _trayIcon?.Dispose();
@@ -178,15 +183,7 @@ public sealed partial class MainPage : Page
                 return;
             }
 
-            _suppressNavSelectionChanged = true;
-            try
-            {
-                MainNavView.SelectedItem = MainNavView.SettingsItem;
-            }
-            finally
-            {
-                _suppressNavSelectionChanged = false;
-            }
+            MainNavView.SelectedItem = MainNavView.SettingsItem;
         });
     }
 
@@ -243,14 +240,6 @@ public sealed partial class MainPage : Page
         }
 #endif
     }
-
-    private void OnNavVMPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        // Layout sync is now handled by ShellLayoutStore and LayoutVM bindings
-    }
-
-    // Redundant layout methods removed as they are now driven by LayoutVM bindings.
-
 
     private void ApplyTheme()
     {
@@ -436,39 +425,6 @@ public sealed partial class MainPage : Page
         ContentFrame.Navigate(pageType, parameter, transition);
     }
 
-    private void OnMainNavSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
-    {
-        if (_suppressNavSelectionChanged)
-        {
-            return;
-        }
-
-        if (args.IsSettingsSelected)
-        {
-            NavigateToSettingsSubPage("General");
-            return;
-        }
-
-        if (args.SelectedItem is StartNavItemViewModel)
-        {
-            EnsureStartContent();
-            return;
-        }
-
-        if (args.SelectedItem is SessionNavItemViewModel session && !session.IsPlaceholder)
-        {
-            EnsureChatContent();
-
-            var projectId = session.ProjectId;
-            Preferences.LastSelectedProjectId = string.Equals(projectId, MainNavigationViewModel.UnclassifiedProjectId, StringComparison.Ordinal)
-                ? null
-                : projectId;
-
-            _ = _chatViewModel.TrySwitchToSessionAsync(session.SessionId);
-            return;
-        }
-    }
-
     private void OnMainNavItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
     {
         var rawInvokedType = args.InvokedItem?.GetType().Name ?? "null";
@@ -487,8 +443,36 @@ public sealed partial class MainPage : Page
             }
         }
 
+        if (ReferenceEquals(args.InvokedItemContainer, sender.SettingsItem))
+        {
+            NavVM.SelectSettings();
+            NavigateToSettingsSubPage("General");
+            return;
+        }
+
         var invoked = ResolveInvokedItem(args);
         BootLogDebug($"MainNav ItemInvoked: resolved={invoked?.GetType().Name ?? "null"}");
+        if (invoked is StartNavItemViewModel)
+        {
+            NavVM.SelectStart();
+            EnsureStartContent();
+            return;
+        }
+
+        if (invoked is SessionNavItemViewModel session && !session.IsPlaceholder)
+        {
+            NavVM.SelectSession(session.SessionId);
+            EnsureChatContent();
+
+            var projectId = session.ProjectId;
+            Preferences.LastSelectedProjectId = string.Equals(projectId, MainNavigationViewModel.UnclassifiedProjectId, StringComparison.Ordinal)
+                ? null
+                : projectId;
+
+            _ = _chatViewModel.TrySwitchToSessionAsync(session.SessionId);
+            return;
+        }
+
         if (invoked is SessionsHeaderNavItemViewModel header)
         {
             BootLogDebug($"MainNav SessionsHeader invoked (paneOpen={header.IsPaneOpen})");
@@ -744,11 +728,27 @@ public sealed partial class MainPage : Page
 #else
         _metricsProvider.Attach(App.MainWindowInstance!, null);
 #endif
+        ApplyNavigationViewState();
         UpdateNavPaneToggleUi();
         NavVM.RebuildTree();
+        ApplyMainNavSelection();
         ApplyNavItemTransitionsDeferred();
 #if WINDOWS
         InitializeTray();
+#endif
+    }
+
+    private void OnAppTitleBarLoaded(object sender, RoutedEventArgs e)
+    {
+#if WINDOWS
+        UpdateTitleBarInteractiveRegions();
+#endif
+    }
+
+    private void OnAppTitleBarSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+#if WINDOWS
+        UpdateTitleBarInteractiveRegions();
 #endif
     }
 
@@ -766,9 +766,9 @@ public sealed partial class MainPage : Page
         }
     }
 
-    private void OnToggleLeftNavClick(object sender, RoutedEventArgs e)
+    private async void OnToggleLeftNavClick(object sender, RoutedEventArgs e)
     {
-        _metricsSink.ReportNavToggle("TitleBarButton");
+        await _metricsSink.ReportNavToggle("TitleBarButton");
     }
 
     private void OnSearchPanelPopupOpened(object sender, object e)
@@ -845,7 +845,8 @@ public sealed partial class MainPage : Page
         if (pageType == typeof(SalmonEgg.Presentation.Views.SettingsShellPage))
         {
             _activePrimaryNavKey = MainNavItemKeys.Settings;
-            SetSelectedSettingsItemDeferred();
+            NavVM.SelectSettings();
+            return;
         }
     }
 
@@ -862,6 +863,24 @@ public sealed partial class MainPage : Page
     private void OnMainNavDisplayModeChanged(NavigationView sender, NavigationViewDisplayModeChangedEventArgs args)
     {
         UpdateNavPaneToggleUi();
+    }
+
+    private void OnLayoutViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ShellLayoutViewModel.IsNavPaneOpen) ||
+            e.PropertyName == nameof(ShellLayoutViewModel.NavPaneDisplayMode))
+        {
+            ApplyNavigationViewState();
+        }
+    }
+
+    private void OnNavigationViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainNavigationViewModel.SelectedItem) ||
+            e.PropertyName == nameof(MainNavigationViewModel.IsSettingsSelected))
+        {
+            ApplyMainNavSelection();
+        }
     }
 
     private void OnChatViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -882,20 +901,61 @@ public sealed partial class MainPage : Page
 
     private void OnMainNavPaneClosing(NavigationView sender, NavigationViewPaneClosingEventArgs args)
     {
-        // If the state change was already confirmed in the ViewModel (Single Source of Truth), 
-        // we should not interfere with the closing process. This ensures that programmatic 
-        // or policy-driven collapses (like at startup) sync correctly with the UI.
-        if (LayoutVM != null && !LayoutVM.IsNavPaneOpen)
+        // The view must follow the store snapshot. If the shell still wants the pane open,
+        // reject spontaneous UI closes in expanded/compact modes so NavigationView cannot drift
+        // away from the SSOT store state.
+        args.Cancel = ShellPanePolicy.ShouldCancelClosing(
+            desiredPaneOpen: LayoutVM?.IsNavPaneOpen == true,
+            isMinimalMode: sender.DisplayMode == NavigationViewDisplayMode.Minimal);
+    }
+
+    private void ApplyNavigationViewState()
+    {
+        if (MainNavView is null)
         {
             return;
         }
 
-        var isMinimal = sender.DisplayMode == NavigationViewDisplayMode.Minimal;
-        if (_panePolicy.ShouldCancelClosing(isMinimalMode: isMinimal))
-        {
-            args.Cancel = true;
-        }
+        MainNavView.PaneDisplayMode = ResolveNavigationViewPaneDisplayMode();
+        MainNavView.IsPaneOpen = LayoutVM.IsNavPaneOpen;
     }
+
+    private void ApplyMainNavSelection()
+    {
+        if (MainNavView is null)
+        {
+            return;
+        }
+
+        if (NavVM.IsSettingsSelected)
+        {
+            SetSelectedSettingsItemDeferred();
+            return;
+        }
+
+        var target = NavVM.SelectedItem;
+        if (target is null)
+        {
+            return;
+        }
+
+        if (ReferenceEquals(MainNavView.SelectedItem, target))
+        {
+            return;
+        }
+
+        MainNavView.SelectedItem = target;
+    }
+
+    private NavigationViewPaneDisplayMode ResolveNavigationViewPaneDisplayMode()
+        => LayoutVM.NavPaneDisplayMode switch
+        {
+            SalmonEgg.Presentation.Core.Mvux.ShellLayout.NavigationPaneDisplayMode.Expanded when LayoutVM.IsNavPaneOpen => NavigationViewPaneDisplayMode.Left,
+            SalmonEgg.Presentation.Core.Mvux.ShellLayout.NavigationPaneDisplayMode.Expanded => NavigationViewPaneDisplayMode.LeftCompact,
+            SalmonEgg.Presentation.Core.Mvux.ShellLayout.NavigationPaneDisplayMode.Compact => NavigationViewPaneDisplayMode.LeftCompact,
+            SalmonEgg.Presentation.Core.Mvux.ShellLayout.NavigationPaneDisplayMode.Minimal => NavigationViewPaneDisplayMode.LeftMinimal,
+            _ => NavigationViewPaneDisplayMode.Auto
+        };
 
     // Manual resizer positioning removed as it is now handled by XAML binding to LayoutVM.LeftNavResizerLeft
 
@@ -979,8 +1039,8 @@ public sealed partial class MainPage : Page
         try
         {
             window.ExtendsContentIntoTitleBar = true;
-            // Only the dedicated drag region participates in window dragging.
-            window.SetTitleBar(TitleBarDragRegion);
+            // Use the full custom title bar and mark interactive controls as passthrough regions.
+            window.SetTitleBar(AppTitleBar);
         }
         catch
         {
@@ -1012,8 +1072,51 @@ public sealed partial class MainPage : Page
         // but preserve system hover/pressed visuals (including the Close button red state).
         _appWindowTitleBar.ButtonBackgroundColor = Colors.Transparent;
         _appWindowTitleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
+        _titleBarPointerSource = InputNonClientPointerSource.GetForWindowId(window.AppWindow.Id);
+        UpdateTitleBarInteractiveRegions();
 #endif
     }
+
+#if WINDOWS
+    private void UpdateTitleBarInteractiveRegions()
+    {
+        if (AppTitleBar is null || _titleBarPointerSource is null || AppTitleBar.XamlRoot is null)
+        {
+            return;
+        }
+
+        var regions = new List<RectInt32>();
+
+        TryAddInteractiveRegion(TitleBarLeftButtons, regions);
+        TryAddInteractiveRegion(TopSearchBox, regions);
+        TryAddInteractiveRegion(TitleBarRightButtons, regions);
+
+        _titleBarPointerSource.SetRegionRects(NonClientRegionKind.Passthrough, regions.ToArray());
+    }
+
+    private void TryAddInteractiveRegion(FrameworkElement? element, List<RectInt32> regions)
+    {
+        if (element is null || AppTitleBar is null || AppTitleBar.XamlRoot is null)
+        {
+            return;
+        }
+
+        if (element.Visibility != Visibility.Visible || element.ActualWidth <= 0 || element.ActualHeight <= 0)
+        {
+            return;
+        }
+
+        var transform = element.TransformToVisual(AppTitleBar);
+        var origin = transform.TransformPoint(new Point(0, 0));
+        var scale = AppTitleBar.XamlRoot.RasterizationScale;
+
+        regions.Add(new RectInt32(
+            (int)Math.Round(origin.X * scale),
+            (int)Math.Round(origin.Y * scale),
+            Math.Max(1, (int)Math.Round(element.ActualWidth * scale)),
+            Math.Max(1, (int)Math.Round(element.ActualHeight * scale))));
+    }
+#endif
 
 #if WINDOWS
     private void InitializeTray()
@@ -1128,5 +1231,6 @@ public sealed partial class MainPage
         Loaded -= OnMainPageLoaded;
         Unloaded -= OnMainPageUnloaded;
         ContentFrame.Navigated -= OnContentFrameNavigated;
+        LayoutVM.PropertyChanged -= OnLayoutViewModelPropertyChanged;
     }
 }

@@ -21,6 +21,7 @@ public sealed partial class StartNavItemViewModel : MainNavItemViewModel
 public sealed partial class ProjectNavItemViewModel : MainNavItemViewModel
 {
     public string ProjectId { get; }
+    private bool _isActiveDescendant;
     private string _title = string.Empty;
     public string Title
     {
@@ -40,6 +41,20 @@ public sealed partial class ProjectNavItemViewModel : MainNavItemViewModel
         set => SetProperty(ref _isExpanded, value);
     }
 
+    public bool IsActiveDescendant
+    {
+        get => _isActiveDescendant;
+        set
+        {
+            if (SetProperty(ref _isActiveDescendant, value))
+            {
+                OnPropertyChanged(nameof(HasActiveDescendantIndicator));
+            }
+        }
+    }
+
+    public bool HasActiveDescendantIndicator => IsActiveDescendant && IsPaneClosed;
+
     public ProjectNavItemViewModel(
         ProjectDefinition project, 
         bool isSystemProject, 
@@ -52,6 +67,11 @@ public sealed partial class ProjectNavItemViewModel : MainNavItemViewModel
         RootPath = project.RootPath;
         IsSystemProject = isSystemProject;
         CreateSessionCommand = new AsyncRelayCommand(() => createSessionAsync(ProjectId));
+    }
+
+    protected override void OnPaneStateChanged()
+    {
+        OnPropertyChanged(nameof(HasActiveDescendantIndicator));
     }
 }
 

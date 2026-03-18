@@ -23,11 +23,19 @@ public sealed class ShellLayoutStore : IShellLayoutStore
 
     public async ValueTask Dispatch(ShellLayoutAction action)
     {
+        ShellLayoutReduced? reduced = null;
+
         await _state.Update(s =>
         {
-            var reduced = ShellLayoutReducer.Reduce(s!, action);
-            _snapshotState.Update(_ => reduced.Snapshot, default);
+            reduced = ShellLayoutReducer.Reduce(s!, action);
             return reduced.State;
         }, default);
+
+        if (reduced is null)
+        {
+            return;
+        }
+
+        await _snapshotState.Update(_ => reduced.Snapshot, default);
     }
 }

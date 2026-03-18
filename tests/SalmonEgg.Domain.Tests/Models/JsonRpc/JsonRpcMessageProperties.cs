@@ -68,7 +68,7 @@ namespace SalmonEgg.Domain.Tests.Models.JsonRpc
         /// 属性 1：JSON-RPC 2.0 请求消息往返一致性
         /// 验证序列化后反序列化产生等效对象，所有必需字段保持不变。
         /// </summary>
-        [FsCheck.NUnit.Property]
+        [FsCheck.NUnit.Property(QuietOnSuccess = true)]
         public void JsonRpcRequest_RoundTrip_PreservesEquivalence(string id, string method, byte[]? paramsData)
         {
             // Arrange
@@ -111,7 +111,7 @@ namespace SalmonEgg.Domain.Tests.Models.JsonRpc
         /// <summary>
         /// 属性 1：JSON-RPC 2.0 响应消息往返一致性（成功情况）
         /// </summary>
-        [FsCheck.NUnit.Property]
+        [FsCheck.NUnit.Property(QuietOnSuccess = true)]
         public void JsonRpcResponse_Success_RoundTrip_PreservesEquivalence(string id, byte[] resultData)
         {
             // Arrange
@@ -140,7 +140,7 @@ namespace SalmonEgg.Domain.Tests.Models.JsonRpc
         /// <summary>
         /// 属性 1：JSON-RPC 2.0 响应消息往返一致性（错误情况）
         /// </summary>
-        [FsCheck.NUnit.Property]
+        [FsCheck.NUnit.Property(QuietOnSuccess = true)]
         public void JsonRpcResponse_Error_RoundTrip_PreservesEquivalence(string id, int code, string message)
         {
             // Arrange
@@ -166,7 +166,7 @@ namespace SalmonEgg.Domain.Tests.Models.JsonRpc
         /// <summary>
         /// 属性 1：JSON-RPC 2.0 通知消息往返一致性
         /// </summary>
-        [FsCheck.NUnit.Property]
+        [FsCheck.NUnit.Property(QuietOnSuccess = true)]
         public void JsonRpcNotification_RoundTrip_PreservesEquivalence(string method, byte[]? paramsData)
         {
             // Arrange
@@ -204,7 +204,7 @@ namespace SalmonEgg.Domain.Tests.Models.JsonRpc
         /// 属性 2：请求消息必需字段完整性
         /// 验证序列化后的 JSON 包含 jsonrpc, method, id 字段。
         /// </summary>
-        [FsCheck.NUnit.Property]
+        [FsCheck.NUnit.Property(QuietOnSuccess = true)]
         public void JsonRpcRequest_RequiredFields_Present(string id, string method)
         {
             // Arrange
@@ -228,7 +228,7 @@ namespace SalmonEgg.Domain.Tests.Models.JsonRpc
         /// 属性 3：通知消息字段约束
         /// 验证通知消息不包含 id 字段。
         /// </summary>
-        [FsCheck.NUnit.Property]
+        [FsCheck.NUnit.Property(QuietOnSuccess = true)]
         public void JsonRpcNotification_NoIdField(string method)
         {
             // Arrange
@@ -236,7 +236,6 @@ namespace SalmonEgg.Domain.Tests.Models.JsonRpc
 
             // Act
             var json = JsonSerializer.Serialize(notification);
-            System.Console.WriteLine($"Notification JSON: {json}");
             var doc = JsonDocument.Parse(json);
 
             // Assert
@@ -258,9 +257,6 @@ namespace SalmonEgg.Domain.Tests.Models.JsonRpc
             // Act
             var json = JsonSerializer.Serialize(response);
             var doc = JsonDocument.Parse(json);
-
-            // Debug: Print JSON to console for debugging
-            System.Console.WriteLine($"Serialized JSON: {json}");
 
             // Assert
             var hasResult = doc.RootElement.TryGetProperty("result", out var resultProp);
@@ -287,9 +283,6 @@ namespace SalmonEgg.Domain.Tests.Models.JsonRpc
             var json = JsonSerializer.Serialize(response);
             var doc = JsonDocument.Parse(json);
 
-            // Debug: Print JSON to console for debugging
-            System.Console.WriteLine($"Serialized JSON: {json}");
-
             // Assert
             var hasResult = doc.RootElement.TryGetProperty("result", out var resultProp);
             var hasError = doc.RootElement.TryGetProperty("error", out var errorProp);
@@ -306,7 +299,7 @@ namespace SalmonEgg.Domain.Tests.Models.JsonRpc
         /// 属性 5：错误码标准化
         /// 验证所有错误响应包含标准错误码在有效范围内。
         /// </summary>
-        [FsCheck.NUnit.Property]
+        [FsCheck.NUnit.Property(QuietOnSuccess = true)]
         public void JsonRpcError_StandardErrorCodeRange(int code, string message)
         {
             // Arrange

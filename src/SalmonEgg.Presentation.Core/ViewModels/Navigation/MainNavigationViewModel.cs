@@ -22,6 +22,12 @@ namespace SalmonEgg.Presentation.ViewModels.Navigation;
 public sealed partial class MainNavigationViewModel : ObservableObject, IDisposable
 {
     public const string UnclassifiedProjectId = "__unclassified__";
+    private enum NavigationSelectionKind
+    {
+        Start,
+        Session,
+        Settings
+    }
 
     private readonly ChatViewModel _chatViewModel;
     private readonly ISessionManager _sessionManager;
@@ -47,18 +53,23 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     public SessionsHeaderNavItemViewModel SessionsHeaderItem { get; }
 
     private object? _selectedItem;
+    private NavigationSelectionKind _selectionKind = NavigationSelectionKind.Start;
+    private string? _selectedSessionId;
 
     public object? SelectedItem
     {
         get => _selectedItem;
-        set => SetProperty(ref _selectedItem, value);
+        private set => SetProperty(ref _selectedItem, value);
     }
+
+    public bool IsSettingsSelected => _selectionKind == NavigationSelectionKind.Settings;
 
     public bool IsPaneOpen => _navigationState.IsPaneOpen;
 
     private void OnServicePaneStateChanged(object? sender, EventArgs e)
     {
         OnPropertyChanged(nameof(IsPaneOpen));
+        ApplySelectionProjection();
     }
 
     public IAsyncRelayCommand AddProjectCommand { get; }
@@ -97,6 +108,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         Items.Add(placeholderProject);
 
         SelectedItem = StartItem;
+        ApplySelectionProjection();
 
         _chatViewModel.PropertyChanged += OnChatViewModelPropertyChanged;
         _projectsChangedHandler = (_, _) => RebuildTree();
@@ -170,27 +182,27 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     public void SelectStart()
     {
-        SelectedItem = StartItem;
+        SetSelectionState(NavigationSelectionKind.Start);
+    }
+
+    public void SelectSettings()
+    {
+        SetSelectionState(NavigationSelectionKind.Settings);
     }
 
     public void SelectSession(string sessionId)
     {
         if (string.IsNullOrWhiteSpace(sessionId))
         {
-            SelectedItem = StartItem;
+            SelectStart();
             return;
         }
 
-        if (_sessionIndex.TryGetValue(sessionId, out var item))
-        {
-            SelectedItem = item;
-            return;
-        }
+        SetSelectionState(NavigationSelectionKind.Session, sessionId);
 
-        RebuildTree();
-        if (_sessionIndex.TryGetValue(sessionId, out item))
+        if (!_sessionIndex.ContainsKey(sessionId))
         {
-            SelectedItem = item;
+            RebuildTree();
         }
     }
 
@@ -395,7 +407,6 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 }
 
                 NormalizeSelectionAfterRebuild();
-                NormalizeSelection();
             }
             catch (Exception ex)
             {
@@ -503,32 +514,6 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             DisposeItem(item);
         }
 
-        NormalizeSelection();
-    }
-
-    private void NormalizeSelection()
-    {
-        var current = SelectedItem;
-        if (current == null || ReferenceEquals(current, StartItem) || ReferenceEquals(current, SessionsHeaderItem))
-        {
-            return;
-        }
-
-        if (current is SessionNavItemViewModel sessionItem)
-        {
-            if (!_sessionIndex.ContainsKey(sessionItem.SessionId))
-            {
-                // The selected session is no longer in the tree (e.g. archived)
-                SelectStart();
-            }
-        }
-        else if (current is ProjectNavItemViewModel projectItem)
-        {
-            if (!_projectIndex.ContainsKey(projectItem.ProjectId))
-            {
-                SelectStart();
-            }
-        }
     }
 
     private List<(ProjectDefinition Project, bool IsSystem)> GetProjectDefinitions()
@@ -570,33 +555,92 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     {
         try
         {
-            var currentSessionId = _chatViewModel.CurrentSessionId;
-            if (string.IsNullOrWhiteSpace(currentSessionId))
-            {
-                if (SelectedItem is SessionNavItemViewModel)
-                {
-                    SelectedItem = StartItem;
-                }
-                return;
-            }
-
-            if (_sessionIndex.TryGetValue(currentSessionId, out var currentItem))
-            {
-                if (!ReferenceEquals(SelectedItem, currentItem))
-                {
-                    SelectedItem = currentItem;
-                }
-            }
-            else
-            {
-                SelectedItem = StartItem;
-            }
+            NormalizeSelectionState();
+            ApplySelectionProjection();
         }
         catch
         {
-            SelectedItem = StartItem;
+            SetSelectionState(NavigationSelectionKind.Start);
         }
     }
+
+    private void NormalizeSelectionState()
+    {
+        if (_selectionKind != NavigationSelectionKind.Session)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_selectedSessionId) || !_sessionIndex.ContainsKey(_selectedSessionId))
+        {
+            _selectionKind = NavigationSelectionKind.Start;
+            _selectedSessionId = null;
+            OnPropertyChanged(nameof(IsSettingsSelected));
+        }
+    }
+
+    private void SetSelectionState(NavigationSelectionKind kind, string? sessionId = null)
+    {
+        var normalizedSessionId = kind == NavigationSelectionKind.Session ? sessionId : null;
+        var kindChanged = _selectionKind != kind;
+        var sessionChanged = !string.Equals(_selectedSessionId, normalizedSessionId, StringComparison.Ordinal);
+        if (!kindChanged && !sessionChanged)
+        {
+            ApplySelectionProjection();
+            return;
+        }
+
+        _selectionKind = kind;
+        _selectedSessionId = normalizedSessionId;
+        OnPropertyChanged(nameof(IsSettingsSelected));
+        ApplySelectionProjection();
+    }
+
+    private void ApplySelectionProjection()
+    {
+        ApplyVisualSelectionState();
+        SelectedItem = ResolveProjectedSelectedItem();
+    }
+
+    private void ApplyVisualSelectionState()
+    {
+        StartItem.IsLogicallySelected = _selectionKind == NavigationSelectionKind.Start;
+        SessionsHeaderItem.IsLogicallySelected = false;
+
+        foreach (var project in _projectVms.Values)
+        {
+            project.IsLogicallySelected = false;
+            project.IsActiveDescendant = false;
+
+            foreach (var child in project.Children)
+            {
+                child.IsLogicallySelected = false;
+            }
+        }
+
+        if (_selectionKind == NavigationSelectionKind.Session &&
+            !string.IsNullOrWhiteSpace(_selectedSessionId) &&
+            _sessionIndex.TryGetValue(_selectedSessionId, out var sessionItem))
+        {
+            sessionItem.IsLogicallySelected = true;
+
+            if (_projectIndex.TryGetValue(sessionItem.ProjectId, out var projectItem))
+            {
+                projectItem.IsActiveDescendant = true;
+            }
+        }
+    }
+
+    private object? ResolveProjectedSelectedItem()
+        => _selectionKind switch
+        {
+            NavigationSelectionKind.Start => StartItem,
+            NavigationSelectionKind.Settings => null,
+            NavigationSelectionKind.Session when !string.IsNullOrWhiteSpace(_selectedSessionId)
+                && _sessionIndex.TryGetValue(_selectedSessionId, out var sessionItem) => sessionItem,
+            NavigationSelectionKind.Session => StartItem,
+            _ => StartItem
+        };
 
 
     private void RefreshRelativeTimes()

@@ -3,11 +3,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Moq;
+using SalmonEgg.Domain.Interfaces;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
-using SalmonEgg.Domain.Interfaces;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Services;
@@ -21,75 +21,10 @@ using Xunit;
 namespace SalmonEgg.Presentation.Core.Tests.Navigation;
 
 [Collection("NonParallel")]
-public sealed class MainNavigationViewModelPaneTests
+public sealed class MainNavigationViewModelSelectionTests
 {
     [Fact]
-    public void NavigationState_IsSharedAcrossViewModels()
-    {
-        var originalContext = SynchronizationContext.Current;
-        var syncContext = new SynchronizationContext();
-        SynchronizationContext.SetSynchronizationContext(syncContext);
-        try
-        {
-            var navState = new FakeNavigationPaneState();
-
-            var sessionManager = new Mock<ISessionManager>();
-            var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
-            var chatViewModel = chat.ViewModel;
-            var ui = new Mock<IUiInteractionService>();
-            var shellNavigation = new Mock<IShellNavigationService>();
-            var navLogger = new Mock<ILogger<MainNavigationViewModel>>();
-            var metricsSink = new Mock<IShellLayoutMetricsSink>();
-
-            using var navVm = new MainNavigationViewModel(
-                chatViewModel,
-                sessionManager.Object,
-                preferences,
-                ui.Object,
-                shellNavigation.Object,
-                navLogger.Object,
-                navState,
-                metricsSink.Object);
-
-            var startItem = new StartNavItemViewModel(navState);
-
-            navState.SetPaneOpen(true);
-
-            Assert.True(navVm.IsPaneOpen);
-            Assert.True(startItem.IsPaneOpen);
-
-            navState.SetPaneOpen(false);
-
-            Assert.False(navVm.IsPaneOpen);
-            Assert.False(startItem.IsPaneOpen);
-        }
-        finally
-        {
-            SynchronizationContext.SetSynchronizationContext(originalContext);
-        }
-    }
-
-    [Fact]
-    public void NavigationState_TriggersPropertyChangeNotifications()
-    {
-        var navState = new FakeNavigationPaneState();
-        var item = new StartNavItemViewModel(navState);
-
-        bool isPaneOpenChangedCalled = false;
-        item.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(item.IsPaneOpen))
-                isPaneOpenChangedCalled = true;
-        };
-
-        navState.SetPaneOpen(!navState.IsPaneOpen);
-
-        Assert.True(isPaneOpenChangedCalled);
-    }
-
-    [Fact]
-    public async Task SelectedItem_RemainsSession_WhenPaneClosesWithActiveSession()
+    public async Task LogicalSelection_RemainsActiveSession_WhenPaneClosesAndReopens()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -99,103 +34,21 @@ public sealed class MainNavigationViewModelPaneTests
             var navState = new FakeNavigationPaneState();
             navState.SetPaneOpen(true);
 
-            var session = new Session("session-1", @"C:\repo\demo")
+            var sessionManager = CreateSessionManager(new Session("session-1", @"C:\repo\demo")
             {
                 DisplayName = "Session 1"
-            };
-
-            var sessionManager = new Mock<ISessionManager>();
-            sessionManager.Setup(s => s.GetSession("session-1")).Returns(session);
-
-            var preferences = CreatePreferences();
-            preferences.Projects.Add(new ProjectDefinition
-            {
-                ProjectId = "project-1",
-                Name = "Demo",
-                RootPath = @"C:\repo\demo"
             });
+            var preferences = CreatePreferencesWithProject();
 
             using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
-            var chatViewModel = chat.ViewModel;
-            var ui = new Mock<IUiInteractionService>();
-            var shellNavigation = new Mock<IShellNavigationService>();
-            var navLogger = new Mock<ILogger<MainNavigationViewModel>>();
-            var metricsSink = new Mock<IShellLayoutMetricsSink>();
+            using var navVm = CreateNavigationViewModel(chat.ViewModel, sessionManager.Object, preferences, navState);
 
-            using var navVm = new MainNavigationViewModel(
-                chatViewModel,
-                sessionManager.Object,
-                preferences,
-                ui.Object,
-                shellNavigation.Object,
-                navLogger.Object,
-                navState,
-                metricsSink.Object);
-
-            await chatViewModel.TrySwitchToSessionAsync("session-1");
+            await chat.ViewModel.TrySwitchToSessionAsync("session-1");
             navVm.RebuildTree();
 
             Assert.IsType<SessionNavItemViewModel>(navVm.SelectedItem);
 
             navState.SetPaneOpen(false);
-
-            var selectedSession = Assert.IsType<SessionNavItemViewModel>(navVm.SelectedItem);
-            Assert.Equal("session-1", selectedSession.SessionId);
-        }
-        finally
-        {
-            SynchronizationContext.SetSynchronizationContext(originalContext);
-        }
-    }
-
-    [Fact]
-    public async Task SelectedItem_ProjectsBackToSession_WhenPaneReopens()
-    {
-        var originalContext = SynchronizationContext.Current;
-        var syncContext = new ImmediateSynchronizationContext();
-        SynchronizationContext.SetSynchronizationContext(syncContext);
-        try
-        {
-            var navState = new FakeNavigationPaneState();
-            navState.SetPaneOpen(true);
-
-            var session = new Session("session-1", @"C:\repo\demo")
-            {
-                DisplayName = "Session 1"
-            };
-
-            var sessionManager = new Mock<ISessionManager>();
-            sessionManager.Setup(s => s.GetSession("session-1")).Returns(session);
-
-            var preferences = CreatePreferences();
-            preferences.Projects.Add(new ProjectDefinition
-            {
-                ProjectId = "project-1",
-                Name = "Demo",
-                RootPath = @"C:\repo\demo"
-            });
-
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
-            var chatViewModel = chat.ViewModel;
-            var ui = new Mock<IUiInteractionService>();
-            var shellNavigation = new Mock<IShellNavigationService>();
-            var navLogger = new Mock<ILogger<MainNavigationViewModel>>();
-            var metricsSink = new Mock<IShellLayoutMetricsSink>();
-
-            using var navVm = new MainNavigationViewModel(
-                chatViewModel,
-                sessionManager.Object,
-                preferences,
-                ui.Object,
-                shellNavigation.Object,
-                navLogger.Object,
-                navState,
-                metricsSink.Object);
-
-            await chatViewModel.TrySwitchToSessionAsync("session-1");
-            navVm.RebuildTree();
-            navState.SetPaneOpen(false);
-
             navState.SetPaneOpen(true);
 
             var selectedSession = Assert.IsType<SessionNavItemViewModel>(navVm.SelectedItem);
@@ -208,7 +61,7 @@ public sealed class MainNavigationViewModelPaneTests
     }
 
     [Fact]
-    public async Task SelectedItem_StaysOnSession_AcrossRepeatedPaneToggles()
+    public async Task ProjectVisualState_FollowsActiveSessionWithoutChangingLogicalSelection()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -216,55 +69,129 @@ public sealed class MainNavigationViewModelPaneTests
         try
         {
             var navState = new FakeNavigationPaneState();
-            navState.SetPaneOpen(true);
+            navState.SetPaneOpen(false);
 
-            var session = new Session("session-1", @"C:\repo\demo")
+            var sessionManager = CreateSessionManager(new Session("session-1", @"C:\repo\demo")
             {
                 DisplayName = "Session 1"
-            };
-
-            var sessionManager = new Mock<ISessionManager>();
-            sessionManager.Setup(s => s.GetSession("session-1")).Returns(session);
-
-            var preferences = CreatePreferences();
-            preferences.Projects.Add(new ProjectDefinition
-            {
-                ProjectId = "project-1",
-                Name = "Demo",
-                RootPath = @"C:\repo\demo"
             });
+            var preferences = CreatePreferencesWithProject();
 
             using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
-            var chatViewModel = chat.ViewModel;
-            var ui = new Mock<IUiInteractionService>();
-            var shellNavigation = new Mock<IShellNavigationService>();
-            var navLogger = new Mock<ILogger<MainNavigationViewModel>>();
-            var metricsSink = new Mock<IShellLayoutMetricsSink>();
+            using var navVm = CreateNavigationViewModel(chat.ViewModel, sessionManager.Object, preferences, navState);
 
-            using var navVm = new MainNavigationViewModel(
-                chatViewModel,
-                sessionManager.Object,
-                preferences,
-                ui.Object,
-                shellNavigation.Object,
-                navLogger.Object,
-                navState,
-                metricsSink.Object);
-
-            await chatViewModel.TrySwitchToSessionAsync("session-1");
+            await chat.ViewModel.TrySwitchToSessionAsync("session-1");
             navVm.RebuildTree();
 
-            navState.SetPaneOpen(false);
-            navState.SetPaneOpen(true);
-            navState.SetPaneOpen(false);
+            var project = Assert.Single(navVm.Items.OfType<ProjectNavItemViewModel>(), p => p.ProjectId == "project-1");
+            Assert.True(project.IsActiveDescendant);
+            Assert.True(project.HasActiveDescendantIndicator);
 
             var selectedSession = Assert.IsType<SessionNavItemViewModel>(navVm.SelectedItem);
+            Assert.True(selectedSession.IsLogicallySelected);
             Assert.Equal("session-1", selectedSession.SessionId);
         }
         finally
         {
             SynchronizationContext.SetSynchronizationContext(originalContext);
         }
+    }
+
+    [Fact]
+    public async Task ActiveDescendantIndicator_OnlyShowsWhenPaneIsClosed()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            navState.SetPaneOpen(false);
+
+            var sessionManager = CreateSessionManager(new Session("session-1", @"C:\repo\demo")
+            {
+                DisplayName = "Session 1"
+            });
+            var preferences = CreatePreferencesWithProject();
+
+            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
+            using var navVm = CreateNavigationViewModel(chat.ViewModel, sessionManager.Object, preferences, navState);
+
+            await chat.ViewModel.TrySwitchToSessionAsync("session-1");
+            navVm.RebuildTree();
+
+            var project = Assert.Single(navVm.Items.OfType<ProjectNavItemViewModel>(), p => p.ProjectId == "project-1");
+            Assert.True(project.IsActiveDescendant);
+            Assert.True(project.HasActiveDescendantIndicator);
+
+            navState.SetPaneOpen(true);
+
+            Assert.True(project.IsActiveDescendant);
+            Assert.False(project.HasActiveDescendantIndicator);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task SelectSettings_UsesSemanticSelectionInsteadOfNavItemObject()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var sessionManager = CreateSessionManager();
+            var preferences = CreatePreferencesWithProject();
+
+            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
+            using var navVm = CreateNavigationViewModel(chat.ViewModel, sessionManager.Object, preferences, navState);
+
+            navVm.SelectSettings();
+
+            Assert.True(navVm.IsSettingsSelected);
+            Assert.Null(navVm.SelectedItem);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    private static MainNavigationViewModel CreateNavigationViewModel(
+        ChatViewModel chatViewModel,
+        ISessionManager sessionManager,
+        AppPreferencesViewModel preferences,
+        FakeNavigationPaneState navState)
+    {
+        var ui = new Mock<IUiInteractionService>();
+        var shellNavigation = new Mock<IShellNavigationService>();
+        var navLogger = new Mock<ILogger<MainNavigationViewModel>>();
+        var metricsSink = new Mock<IShellLayoutMetricsSink>();
+
+        return new MainNavigationViewModel(
+            chatViewModel,
+            sessionManager,
+            preferences,
+            ui.Object,
+            shellNavigation.Object,
+            navLogger.Object,
+            navState,
+            metricsSink.Object);
+    }
+
+    private static Mock<ISessionManager> CreateSessionManager(params Session[] sessions)
+    {
+        var sessionManager = new Mock<ISessionManager>();
+        foreach (var session in sessions)
+        {
+            sessionManager.Setup(s => s.GetSession(session.SessionId)).Returns(session);
+        }
+
+        return sessionManager;
     }
 
     private sealed class FakeNavigationPaneState : INavigationPaneState
@@ -294,7 +221,7 @@ public sealed class MainNavigationViewModelPaneTests
         AppPreferencesViewModel preferences,
         ISessionManager sessionManager)
     {
-        var state = Uno.Extensions.Reactive.State.Value(new object(), () => ChatState.Empty);
+        var state = State.Value(new object(), () => ChatState.Empty);
         var chatStore = new Mock<IChatStore>();
         chatStore.Setup(s => s.State).Returns(state);
         var transportFactory = new Mock<ITransportFactory>();
@@ -345,7 +272,7 @@ public sealed class MainNavigationViewModelPaneTests
         }
     }
 
-    private static AppPreferencesViewModel CreatePreferences()
+    private static AppPreferencesViewModel CreatePreferencesWithProject()
     {
         var appSettingsService = new Mock<IAppSettingsService>();
         appSettingsService.Setup(s => s.LoadAsync()).ReturnsAsync(new AppSettings());
@@ -356,13 +283,22 @@ public sealed class MainNavigationViewModelPaneTests
         var uiRuntime = new Mock<IUiRuntimeService>();
         var prefsLogger = new Mock<ILogger<AppPreferencesViewModel>>();
 
-        return new AppPreferencesViewModel(
+        var preferences = new AppPreferencesViewModel(
             appSettingsService.Object,
             startupService.Object,
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
             prefsLogger.Object);
+
+        preferences.Projects.Add(new ProjectDefinition
+        {
+            ProjectId = "project-1",
+            Name = "Demo",
+            RootPath = @"C:\repo\demo"
+        });
+
+        return preferences;
     }
 
     private sealed class ChatViewModelHarness : IDisposable

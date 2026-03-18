@@ -33,7 +33,7 @@ namespace SalmonEgg.Domain.Tests.Models.Content
         /// <summary>
         /// 属性 6：文本内容块往返一致性
         /// </summary>
-        [FsCheck.NUnit.Property]
+        [FsCheck.NUnit.Property(QuietOnSuccess = true)]
         public void TextContentBlock_RoundTrip_PreservesEquivalence(string text)
         {
             // Arrange
@@ -42,7 +42,6 @@ namespace SalmonEgg.Domain.Tests.Models.Content
 
             // Act
             var json = JsonSerializer.Serialize(baseRef, _jsonOptions);
-            System.Console.WriteLine($"Text JSON: {json}");
             var deserialized = JsonSerializer.Deserialize<ContentBlock>(json, _jsonOptions) as TextContentBlock;
 
             // Assert
@@ -54,7 +53,7 @@ namespace SalmonEgg.Domain.Tests.Models.Content
         /// <summary>
         /// 属性 6：图片内容块往返一致性
         /// </summary>
-        [FsCheck.NUnit.Property]
+        [FsCheck.NUnit.Property(QuietOnSuccess = true)]
         public void ImageContentBlock_RoundTrip_PreservesEquivalence(string data, string mimeType)
         {
             // Arrange
@@ -63,7 +62,6 @@ namespace SalmonEgg.Domain.Tests.Models.Content
 
             // Act
             var json = JsonSerializer.Serialize(baseRef, _jsonOptions);
-            System.Console.WriteLine($"Image JSON: {json}");
             var deserialized = JsonSerializer.Deserialize<ContentBlock>(json, _jsonOptions) as ImageContentBlock;
 
             // Assert
@@ -76,7 +74,7 @@ namespace SalmonEgg.Domain.Tests.Models.Content
         /// <summary>
         /// 属性 6：音频内容块往返一致性
         /// </summary>
-        [FsCheck.NUnit.Property]
+        [FsCheck.NUnit.Property(QuietOnSuccess = true)]
         public void AudioContentBlock_RoundTrip_PreservesEquivalence(string data, string mimeType)
         {
             // Arrange
@@ -85,7 +83,6 @@ namespace SalmonEgg.Domain.Tests.Models.Content
 
             // Act
             var json = JsonSerializer.Serialize(baseRef, _jsonOptions);
-            System.Console.WriteLine($"Audio JSON: {json}");
             var deserialized = JsonSerializer.Deserialize<ContentBlock>(json, _jsonOptions) as AudioContentBlock;
 
             // Assert
@@ -98,7 +95,7 @@ namespace SalmonEgg.Domain.Tests.Models.Content
         /// <summary>
         /// 属性 6：资源内容块往返一致性
         /// </summary>
-        [FsCheck.NUnit.Property]
+        [FsCheck.NUnit.Property(QuietOnSuccess = true)]
         public void ResourceContentBlock_RoundTrip_PreservesEquivalence(string uri, string text, string mimeType)
         {
             // Arrange
@@ -108,7 +105,6 @@ namespace SalmonEgg.Domain.Tests.Models.Content
 
             // Act
             var json = JsonSerializer.Serialize(baseRef, _jsonOptions);
-            System.Console.WriteLine($"Resource JSON: {json}");
             var deserialized = JsonSerializer.Deserialize<ContentBlock>(json, _jsonOptions) as ResourceContentBlock;
 
             // Assert
@@ -160,7 +156,6 @@ namespace SalmonEgg.Domain.Tests.Models.Content
 
             // Act
             var json = JsonSerializer.Serialize(blocks, _jsonOptions);
-            System.Console.WriteLine($"Array JSON: {json}");
             var doc = JsonDocument.Parse(json);
 
             // Assert

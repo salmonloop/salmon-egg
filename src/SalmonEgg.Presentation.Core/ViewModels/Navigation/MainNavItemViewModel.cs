@@ -9,6 +9,7 @@ namespace SalmonEgg.Presentation.ViewModels.Navigation;
 public abstract partial class MainNavItemViewModel : ObservableObject, IDisposable
 {
     protected readonly INavigationPaneState NavigationState;
+    private bool _isLogicallySelected;
 
     public ObservableCollection<MainNavItemViewModel> Children { get; } = new();
 
@@ -21,6 +22,12 @@ public abstract partial class MainNavItemViewModel : ObservableObject, IDisposab
     public bool IsPaneOpen => NavigationState.IsPaneOpen;
 
     public bool IsPaneClosed => !IsPaneOpen;
+
+    public bool IsLogicallySelected
+    {
+        get => _isLogicallySelected;
+        set => SetProperty(ref _isLogicallySelected, value);
+    }
 
     private void OnServicePaneStateChanged(object? sender, EventArgs e)
     {

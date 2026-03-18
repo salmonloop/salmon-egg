@@ -4,6 +4,12 @@
     <WindowsSdkVersion Condition="'$(WindowsSdkVersion)' == ''">10.0.26100.0</WindowsSdkVersion>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'SalmonEgg' and '$(IsolatedMsixBuild)' == 'true'">
+    <!-- MSIX restore/publish must keep the WinUI app's assets isolated from net10.0 library assets. -->
+    <BaseIntermediateOutputPath>obj\msix-app\</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
+  </PropertyGroup>
+
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 using Uno.Extensions.Reactive;
@@ -42,6 +44,27 @@ public class ShellLayoutViewModelTests
         Assert.Equal(60, vm.TitleBarHeight);
     }
 
+    [Fact]
+    public async Task ViewModel_ProjectsSnapshot_OnProvidedSynchronizationContext()
+    {
+        await using var store = new FakeShellLayoutStore();
+        var syncContext = new PumpingSynchronizationContext();
+        using var vm = new ShellLayoutViewModel(store, syncContext);
+
+        await store.SnapshotState.Update(_ => new ShellLayoutSnapshot(
+            NavigationPaneDisplayMode.Compact, false, 300, 72,
+            false, 0, 0, new LayoutPadding(4, 0, 4, 0), new LayoutPadding(0, 0, 0, 0), 60,
+            false, 0, RightPanelMode.None, false, 0), default);
+
+        await Task.Delay(50);
+        Assert.True(vm.IsNavPaneOpen);
+
+        syncContext.RunAll();
+
+        Assert.False(vm.IsNavPaneOpen);
+        Assert.Equal(NavigationPaneDisplayMode.Compact, vm.NavPaneDisplayMode);
+    }
+
     private sealed class FakeShellLayoutStore : IShellLayoutStore, IAsyncDisposable
     {
         private readonly IState<ShellLayoutState> _state;
@@ -60,6 +83,25 @@ public class ShellLayoutViewModelTests
         {
             await SnapshotState.DisposeAsync();
             await _state.DisposeAsync();
+        }
+    }
+
+    private sealed class PumpingSynchronizationContext : SynchronizationContext
+    {
+        private readonly Queue<(SendOrPostCallback Callback, object? State)> _queue = new();
+
+        public override void Post(SendOrPostCallback d, object? state)
+        {
+            _queue.Enqueue((d, state));
+        }
+
+        public void RunAll()
+        {
+            while (_queue.Count > 0)
+            {
+                var work = _queue.Dequeue();
+                work.Callback(work.State);
+            }
         }
     }
 }

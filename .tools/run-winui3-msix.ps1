@@ -369,6 +369,96 @@ function Get-MsixManifestInfo {
     }
 }
 
+function ConvertTo-ProcessArgumentString {
+    param([Parameter(Mandatory = $true)] [string[]] $Arguments)
+
+    return ($Arguments | ForEach-Object {
+        if ($_ -match '[\s"]') {
+            '"' + ($_ -replace '"', '\"') + '"'
+        } else {
+            $_
+        }
+    }) -join ' '
+}
+
+function Show-LogTail {
+    param(
+        [Parameter(Mandatory = $true)] [string] $Path,
+        [int] $LineCount = 40
+    )
+
+    if (-not (Test-Path $Path)) {
+        return
+    }
+
+    Write-Host "---- Last $LineCount lines from $Path ----"
+    Get-Content -Path $Path -Tail $LineCount | ForEach-Object { Write-Host $_ }
+    Write-Host "---- End log tail ----"
+}
+
+function Invoke-LoggedProcess {
+    param(
+        [Parameter(Mandatory = $true)] [string] $FilePath,
+        [Parameter(Mandatory = $true)] [string[]] $Arguments,
+        [Parameter(Mandatory = $true)] [string] $LogPath,
+        [Parameter(Mandatory = $true)] [string] $StepName,
+        [string] $DisplayCommand
+    )
+
+    $logDir = Split-Path -Parent $LogPath
+    if ($logDir) {
+        New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+    }
+
+    $psi = [System.Diagnostics.ProcessStartInfo]::new()
+    $psi.FileName = $FilePath
+    $psi.Arguments = ConvertTo-ProcessArgumentString -Arguments $Arguments
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.CreateNoWindow = $true
+
+    $commandLabel = if ($DisplayCommand) { $DisplayCommand } else { "$FilePath $($psi.Arguments)" }
+    $header = @(
+        "# $StepName"
+        "# Started: $(Get-Date -Format o)"
+        "# Command: $commandLabel"
+        ""
+    )
+    Set-Content -Path $LogPath -Value $header -Encoding UTF8
+
+    Write-Host "$StepName..."
+    Write-Host "  log: $LogPath"
+
+    $process = [System.Diagnostics.Process]::new()
+    $process.StartInfo = $psi
+
+    try {
+        [void]$process.Start()
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+        $process.WaitForExit()
+
+        $stdout = $stdoutTask.GetAwaiter().GetResult()
+        $stderr = $stderrTask.GetAwaiter().GetResult()
+
+        if (-not [string]::IsNullOrEmpty($stdout)) {
+            Add-Content -Path $LogPath -Value "## STDOUT`r`n$stdout" -Encoding UTF8
+        }
+
+        if (-not [string]::IsNullOrEmpty($stderr)) {
+            Add-Content -Path $LogPath -Value "## STDERR`r`n$stderr" -Encoding UTF8
+        }
+
+        if ($process.ExitCode -ne 0) {
+            Show-LogTail -Path $LogPath
+            throw "$StepName failed with exit code $($process.ExitCode). See log: $LogPath"
+        }
+    } finally {
+        $process.Dispose()
+    }
+}
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $certCacheDir = Join-Path $repoRoot '.tools\certs'
 $certPfxPath = Join-Path $certCacheDir 'SalmonEgg-dev.pfx'
@@ -384,19 +474,80 @@ $env:DOTNET_SKIP_FIRST_TIME_EXPERIENCE = '1'
 $env:DOTNET_NOLOGO = '1'
 
 $project = Join-Path $repoRoot 'SalmonEgg\SalmonEgg\SalmonEgg.csproj'
+$presentationCoreProject = Join-Path $repoRoot 'src\SalmonEgg.Presentation.Core\SalmonEgg.Presentation.Core.csproj'
 $tfm = 'net10.0-windows10.0.26100.0'
 $publishProfile = 'Properties/PublishProfiles/win-msix-x64.pubxml'
 $msixOutDir = Join-Path $repoRoot 'artifacts\msix'
+$msixLogDir = Join-Path $repoRoot 'artifacts\logs\msix'
+$logStamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+$restoreLogPath = Join-Path $msixLogDir "$logStamp-restore.log"
+$referenceBuildLogPath = Join-Path $msixLogDir "$logStamp-reference-build.log"
+$publishLogPath = Join-Path $msixLogDir "$logStamp-publish.log"
+$signLogPath = Join-Path $msixLogDir "$logStamp-sign.log"
+$restoreBinLogPath = Join-Path $msixLogDir "$logStamp-restore.binlog"
+$referenceBuildBinLogPath = Join-Path $msixLogDir "$logStamp-reference-build.binlog"
+$publishBinLogPath = Join-Path $msixLogDir "$logStamp-publish.binlog"
 
 Write-Host "Publishing MSIX ($Configuration, $tfm)..."
 New-Item -ItemType Directory -Force -Path $msixOutDir | Out-Null
+New-Item -ItemType Directory -Force -Path $msixLogDir | Out-Null
 
 $msbuild = Get-MSBuildPath
-Write-Host "Restoring and publishing with MSBuild..."
-& $msbuild $project /restore /t:Publish /p:Configuration=$Configuration /p:TargetFramework=$tfm /p:PublishProfile=$publishProfile /p:EnableWinUIBuild=true /v:m | Out-Host
-if ($LASTEXITCODE -ne 0) {
-    throw "MSBuild publish failed with exit code $LASTEXITCODE"
+$isolatedAppObjDir = Join-Path $repoRoot 'SalmonEgg\SalmonEgg\obj\msix-app'
+if (Test-Path $isolatedAppObjDir) {
+    Remove-Item -Recurse -Force $isolatedAppObjDir -ErrorAction SilentlyContinue
 }
+
+Invoke-LoggedProcess `
+    -FilePath $msbuild `
+    -Arguments @(
+        $project,
+        '/t:Restore',
+        "/p:Configuration=$Configuration",
+        "/p:TargetFramework=$tfm",
+        '/p:EnableWinUIBuild=true',
+        '/p:IsolatedMsixBuild=true',
+        '/p:BuildProjectReferences=false',
+        "/bl:$restoreBinLogPath",
+        '/v:minimal'
+    ) `
+    -LogPath $restoreLogPath `
+    -StepName 'Restoring WinUI app with isolated intermediates' `
+    -DisplayCommand "MSBuild Restore (binlog: $restoreBinLogPath)"
+
+Invoke-LoggedProcess `
+    -FilePath 'dotnet' `
+    -Arguments @(
+        'build',
+        $presentationCoreProject,
+        '-c', $Configuration,
+        '-f', 'net10.0',
+        '-nodeReuse:false',
+        "-bl:$referenceBuildBinLogPath",
+        '-v:minimal'
+    ) `
+    -LogPath $referenceBuildLogPath `
+    -StepName 'Rebuilding net10.0 reference projects after WinUI restore' `
+    -DisplayCommand "dotnet build Presentation.Core (binlog: $referenceBuildBinLogPath)"
+
+Invoke-LoggedProcess `
+    -FilePath $msbuild `
+    -Arguments @(
+        $project,
+        '/t:Publish',
+        "/p:Configuration=$Configuration",
+        "/p:TargetFramework=$tfm",
+        "/p:PublishProfile=$publishProfile",
+        '/p:EnableWinUIBuild=true',
+        '/p:IsolatedMsixBuild=true',
+        '/p:BuildProjectReferences=false',
+        '/p:Restore=false',
+        "/bl:$publishBinLogPath",
+        '/v:minimal'
+    ) `
+    -LogPath $publishLogPath `
+    -StepName 'Publishing MSIX with MSBuild' `
+    -DisplayCommand "MSBuild Publish (binlog: $publishBinLogPath)"
 
 $msix = Get-ChildItem -Path $msixOutDir -Recurse -Filter *.msix -File -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending |
@@ -411,7 +562,6 @@ $certSubject = 'CN=SalmonEgg'
 $cert = Get-OrCreateDevCert -Subject $certSubject -PfxPath $certPfxPath -PasswordPath $certPasswordPath
 $signTool = Get-SignToolPath
 
-Write-Host "SignTool path: $signTool"
 Write-Host "Signing MSIX with cert '$certSubject' ($($cert.Thumbprint))..."
 $pfxPath = $null
 $pfxPassword = $null
@@ -420,13 +570,19 @@ try {
     $pfxPassword = [Guid]::NewGuid().ToString("N")
     $securePassword = ConvertTo-SecureString -String $pfxPassword -AsPlainText -Force
     Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $securePassword | Out-Null
-    $pfxInfo = Get-Item -Path $pfxPath -ErrorAction Stop
-    Write-Host "PFX size: $($pfxInfo.Length) bytes"
 
-    & "$signTool" sign /fd SHA256 /f $pfxPath /p $pfxPassword /debug /v $msix.FullName | Out-Host
-    if ($LASTEXITCODE -ne 0) {
-        throw "signtool failed with exit code $LASTEXITCODE"
-    }
+    Invoke-LoggedProcess `
+        -FilePath $signTool `
+        -Arguments @(
+            'sign',
+            '/fd', 'SHA256',
+            '/f', $pfxPath,
+            '/p', $pfxPassword,
+            $msix.FullName
+        ) `
+        -LogPath $signLogPath `
+        -StepName 'Signing MSIX package' `
+        -DisplayCommand "signtool sign $($msix.Name)"
 } finally {
     if ($pfxPath -and (Test-Path $pfxPath)) {
         Remove-Item -Force -Path $pfxPath -ErrorAction SilentlyContinue

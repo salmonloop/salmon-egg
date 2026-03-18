@@ -45,11 +45,18 @@
         <x:Double x:Key="SearchBoxMaxWidthMedium">300</x:Double>
 
         <DataTemplate x:Key="StartNavTemplate" x:DataType="nav:StartNavItemViewModel">
-            <NavigationViewItem Content="{x:Bind Title, Mode=OneWay}"
-                                ContentTransitions="{x:Bind models:UiMotion.Current.NavItemTransitions, Mode=OneWay}">
+            <NavigationViewItem ContentTransitions="{x:Bind models:UiMotion.Current.NavItemTransitions, Mode=OneWay}">
                 <NavigationViewItem.Icon>
                     <SymbolIcon Symbol="Home" />
                 </NavigationViewItem.Icon>
+                <NavigationViewItem.Content>
+                    <Grid Visibility="{x:Bind IsPaneOpen, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <TextBlock Text="{x:Bind Title, Mode=OneWay}"
+                                   TextTrimming="CharacterEllipsis"
+                                   MaxLines="1"
+                                   VerticalAlignment="Center" />
+                    </Grid>
+                </NavigationViewItem.Content>
             </NavigationViewItem>
         </DataTemplate>
         
@@ -131,7 +138,9 @@
                 </NavigationViewItem.Icon>
 
                 <NavigationViewItem.Content>
-                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                    <Grid ColumnDefinitions="Auto,*,Auto"
+                          ColumnSpacing="8"
+                          Visibility="{x:Bind IsPaneOpen, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                         <ProgressRing Width="14"
                                       Height="14"
                                       IsActive="{x:Bind IsPlaceholder, Mode=OneWay}"
@@ -265,6 +274,8 @@
                 Background="Transparent"
                 BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                 BorderThickness="0,0,0,1"
+                Loaded="OnAppTitleBarLoaded"
+                SizeChanged="OnAppTitleBarSizeChanged"
                 Height="{x:Bind LayoutVM.TitleBarHeight, Mode=OneWay}">
             <Grid>
                 <Grid x:Name="TitleBarDragRegion" Background="Transparent" />
@@ -450,7 +461,8 @@
                         </FlyoutBase.AttachedFlyout>
                     </TextBox>
 
-                    <StackPanel Grid.Column="2"
+                    <StackPanel x:Name="TitleBarRightButtons"
+                                Grid.Column="2"
                                 Orientation="Horizontal"
                                 Spacing="8"
                                 VerticalAlignment="Center"
@@ -489,17 +501,13 @@
                              Background="Transparent"
                              CompactPaneLength="{x:Bind LayoutVM.NavCompactPaneLength, Mode=OneWay}"
                              OpenPaneLength="{x:Bind LayoutVM.NavOpenPaneLength, Mode=OneWay}"
-                             IsPaneOpen="{x:Bind LayoutVM.IsNavPaneOpen, Mode=OneWay}"
                              IsBackButtonVisible="Collapsed"
                              IsPaneToggleButtonVisible="False"
                              IsSettingsVisible="True"
                              AlwaysShowHeader="False"
-                             PaneDisplayMode="{x:Bind LayoutVM.NavPaneDisplayMode, Mode=OneWay, Converter={StaticResource NavPaneDisplayModeConverter}}"
                              Padding="{x:Bind LayoutVM.NavViewPadding, Mode=OneWay, Converter={StaticResource PaddingConverter}}"
                              MenuItemsSource="{x:Bind NavVM.Items, Mode=OneWay}"
                              MenuItemTemplateSelector="{StaticResource MainNavItemTemplateSelector}"
-                             SelectedItem="{x:Bind NavVM.SelectedItem, Mode=TwoWay}"
-                             SelectionChanged="OnMainNavSelectionChanged"
                              ItemInvoked="OnMainNavItemInvoked"
                              DisplayModeChanged="OnMainNavDisplayModeChanged"
                              PaneOpened="OnMainNavPaneOpened"

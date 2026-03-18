@@ -1,8 +1,14 @@
 <Project Sdk="Uno.Sdk">
   <ItemGroup>
-    <ProjectReference Include="..\..\src\SalmonEgg.Domain\SalmonEgg.Domain.csproj" />
-    <ProjectReference Include="..\..\src\SalmonEgg.Application\SalmonEgg.Application.csproj" />
-    <ProjectReference Include="..\..\src\SalmonEgg.Infrastructure\SalmonEgg.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\SalmonEgg.Domain\SalmonEgg.Domain.csproj"
+                      SetTargetFramework="TargetFramework=net10.0"
+                      SkipGetTargetFrameworkProperties="true" />
+    <ProjectReference Include="..\..\src\SalmonEgg.Application\SalmonEgg.Application.csproj"
+                      SetTargetFramework="TargetFramework=net10.0"
+                      SkipGetTargetFrameworkProperties="true" />
+    <ProjectReference Include="..\..\src\SalmonEgg.Infrastructure\SalmonEgg.Infrastructure.csproj"
+                      SetTargetFramework="TargetFramework=net10.0"
+                      SkipGetTargetFrameworkProperties="true" />
     <ProjectReference Include="..\..\src\SalmonEgg.Presentation.Core\SalmonEgg.Presentation.Core.csproj" />
   </ItemGroup>
 
@@ -247,10 +253,10 @@
                                Condition="Exists('$(PkgMicrosoft_WindowsAppSDK_WinUI)\metadata\Microsoft.UI.Text.winmd')" />
       <XamlReferencesToCompile Include="$(PkgMicrosoft_WindowsAppSDK_WinUI)\lib\net6.0-windows10.0.17763.0\Microsoft.WinUI.dll"
                                Condition="Exists('$(PkgMicrosoft_WindowsAppSDK_WinUI)\lib\net6.0-windows10.0.17763.0\Microsoft.WinUI.dll')" />
-      <XamlReferencesToCompile Include="$(NuGetPackageRoot)microsoft.windowsappsdk\1.7.260208005\lib\uap10.0.18362\Microsoft.UI.winmd"
-                               Condition="Exists('$(NuGetPackageRoot)microsoft.windowsappsdk\1.7.260208005\lib\uap10.0.18362\Microsoft.UI.winmd')" />
-      <XamlReferencesToCompile Include="$(NuGetPackageRoot)microsoft.windowsappsdk\1.7.260208005\lib\uap10.0.17763\Microsoft.UI.winmd"
-                               Condition="Exists('$(NuGetPackageRoot)microsoft.windowsappsdk\1.7.260208005\lib\uap10.0.17763\Microsoft.UI.winmd')" />
+      <XamlReferencesToCompile Include="$(PkgMicrosoft_WindowsAppSDK)\lib\uap10.0.18362\Microsoft.UI.winmd"
+                               Condition="Exists('$(PkgMicrosoft_WindowsAppSDK)\lib\uap10.0.18362\Microsoft.UI.winmd')" />
+      <XamlReferencesToCompile Include="$(PkgMicrosoft_WindowsAppSDK)\lib\uap10.0.17763\Microsoft.UI.winmd"
+                               Condition="Exists('$(PkgMicrosoft_WindowsAppSDK)\lib\uap10.0.17763\Microsoft.UI.winmd')" />
       <XamlReferencesToCompile Include="$(_WinSdkUnionMetadataDir)\Windows.winmd"
                                Condition="Exists('$(_WinSdkUnionMetadataDir)\\Windows.winmd')" />
       <XamlReferencesToCompile Include="$(_WinSdkReferencesDir)\Windows.Foundation.UniversalApiContract\**\*.winmd"
