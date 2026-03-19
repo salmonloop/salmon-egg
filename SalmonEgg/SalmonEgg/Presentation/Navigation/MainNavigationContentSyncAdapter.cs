@@ -1,0 +1,63 @@
+using System;
+using SalmonEgg.Presentation.Core.Services;
+using SalmonEgg.Presentation.Models.Navigation;
+using SalmonEgg.Presentation.Views.Chat;
+using SalmonEgg.Presentation.Views.Start;
+
+namespace SalmonEgg.Presentation.Navigation;
+
+/// <summary>
+/// UI-only adapter that maps concrete shell pages back to semantic navigation content.
+/// It keeps MainPage from interpreting shell selection rules directly.
+/// </summary>
+public sealed class MainNavigationContentSyncAdapter
+{
+    private readonly INavigationCoordinator _navigationCoordinator;
+    private readonly Func<string?> _currentSessionIdAccessor;
+
+    public MainNavigationContentSyncAdapter(
+        INavigationCoordinator navigationCoordinator,
+        Func<string?> currentSessionIdAccessor)
+    {
+        _navigationCoordinator = navigationCoordinator ?? throw new ArgumentNullException(nameof(navigationCoordinator));
+        _currentSessionIdAccessor = currentSessionIdAccessor ?? throw new ArgumentNullException(nameof(currentSessionIdAccessor));
+    }
+
+    public void OnFrameNavigated(Type? pageType)
+    {
+        if (!TryResolveContent(pageType, out var content))
+        {
+            return;
+        }
+
+        var currentSessionId = content == ShellNavigationContent.Chat
+            ? _currentSessionIdAccessor()
+            : null;
+
+        _navigationCoordinator.SyncSelectionFromShellContent(content, currentSessionId);
+    }
+
+    internal static bool TryResolveContent(Type? pageType, out ShellNavigationContent content)
+    {
+        if (pageType == typeof(ChatView))
+        {
+            content = ShellNavigationContent.Chat;
+            return true;
+        }
+
+        if (pageType == typeof(StartView))
+        {
+            content = ShellNavigationContent.Start;
+            return true;
+        }
+
+        if (pageType == typeof(SalmonEgg.Presentation.Views.SettingsShellPage))
+        {
+            content = ShellNavigationContent.Settings;
+            return true;
+        }
+
+        content = ShellNavigationContent.None;
+        return false;
+    }
+}

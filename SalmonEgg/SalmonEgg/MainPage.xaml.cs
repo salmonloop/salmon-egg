@@ -25,6 +25,7 @@ using SalmonEgg.Application.Common.Shell;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Presentation.Models;
 using SalmonEgg.Presentation.Models.Navigation;
+using SalmonEgg.Presentation.Navigation;
 using SalmonEgg.Presentation.ViewModels;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.ViewModels.Navigation;
@@ -58,8 +59,6 @@ public sealed partial class MainPage : Page
     private double _leftNavResizeStartX;
     private double _leftNavResizeStartWidth;
 
-    private string _activePrimaryNavKey = MainNavItemKeys.Start;
-    private long _navSelectionRequestId;
     private bool _isMotionSubscribed;
     private bool _isNavItemsSubscribed;
     private readonly DeferredActionGate<string> _archiveOnFlyoutClosed = new(StringComparer.Ordinal);
@@ -81,6 +80,9 @@ public sealed partial class MainPage : Page
     public ShellLayoutViewModel LayoutVM { get; }
     private readonly WindowMetricsProvider _metricsProvider;
     private readonly IShellLayoutMetricsSink _metricsSink;
+    private readonly INavigationCoordinator _navigationCoordinator;
+    private readonly MainNavigationContentSyncAdapter _mainNavigationContentSyncAdapter;
+    private readonly MainNavigationViewAdapter _mainNavigationViewAdapter;
     private readonly SalmonEgg.Presentation.Logic.SearchInteractionLogic _searchLogic = new();
 
     public MainPage()
@@ -95,8 +97,11 @@ public sealed partial class MainPage : Page
         LayoutVM = App.ServiceProvider.GetRequiredService<ShellLayoutViewModel>();
         _metricsProvider = App.ServiceProvider.GetRequiredService<WindowMetricsProvider>();
         _metricsSink = App.ServiceProvider.GetRequiredService<IShellLayoutMetricsSink>();
+        _navigationCoordinator = App.ServiceProvider.GetRequiredService<INavigationCoordinator>();
 
         this.InitializeComponent();
+        _mainNavigationContentSyncAdapter = new MainNavigationContentSyncAdapter(_navigationCoordinator, () => _chatViewModel.CurrentSessionId);
+        _mainNavigationViewAdapter = new MainNavigationViewAdapter(MainNavView, DispatcherQueue, NavVM, _navigationCoordinator);
         BootLogDebug("MainPage: InitializeComponent done");
 
         Loaded += OnMainPageLoaded;
@@ -114,7 +119,6 @@ public sealed partial class MainPage : Page
         // 2. Listen for global preference changes (animations, theme, backdrop)
         Preferences.PropertyChanged += OnPreferencesPropertyChanged;
         _chatViewModel.PropertyChanged += OnChatViewModelPropertyChanged;
-        LayoutVM.PropertyChanged += OnLayoutViewModelPropertyChanged;
         NavVM.PropertyChanged += OnNavigationViewModelPropertyChanged;
 
         // 3. Initialize theme and motion state
@@ -128,8 +132,7 @@ public sealed partial class MainPage : Page
         // NavVM.PropertyChanged registration removed as layout is now driven by LayoutVM SSOT
 
         // 4. Default to Start view on launch
-        NavVM.SelectStart();
-        NavigateToStart();
+        EnsureStartContent();
         BootLogDebug("MainPage: navigated to StartView");
     }
 
@@ -146,7 +149,6 @@ public sealed partial class MainPage : Page
         UnsubscribeMotion();
         Preferences.PropertyChanged -= OnPreferencesPropertyChanged;
         _chatViewModel.PropertyChanged -= OnChatViewModelPropertyChanged;
-        LayoutVM.PropertyChanged -= OnLayoutViewModelPropertyChanged;
         NavVM.PropertyChanged -= OnNavigationViewModelPropertyChanged;
         _metricsProvider.Detach();
 #if WINDOWS
@@ -155,53 +157,14 @@ public sealed partial class MainPage : Page
 #endif
     }
 
-    private void SetSelectedSettingsItemDeferred()
-    {
-        if (MainNavView?.SettingsItem is null)
-        {
-            return;
-        }
-
-        if (ReferenceEquals(MainNavView.SelectedItem, MainNavView.SettingsItem))
-        {
-            return;
-        }
-
-        var requestId = Interlocked.Increment(ref _navSelectionRequestId);
-        _ = DispatcherQueue.TryEnqueue(() =>
-        {
-            if (MainNavView?.SettingsItem is null)
-            {
-                return;
-            }
-
-            if (requestId != _navSelectionRequestId)
-            {
-                return;
-            }
-
-            if (ReferenceEquals(MainNavView.SelectedItem, MainNavView.SettingsItem))
-            {
-                return;
-            }
-
-            MainNavView.SelectedItem = MainNavView.SettingsItem;
-        });
-    }
-
     public void NavigateToChat()
     {
         EnsureChatContent();
-        if (!string.IsNullOrWhiteSpace(_chatViewModel.CurrentSessionId))
-        {
-            NavVM.SelectSession(_chatViewModel.CurrentSessionId!);
-        }
     }
 
     public void NavigateToStart()
     {
         EnsureStartContent();
-        NavVM.SelectStart();
     }
 
     public void NavigateToSettingsSubPage(string key)
@@ -212,7 +175,7 @@ public sealed partial class MainPage : Page
         }
 
         EnsureSettingsContent(key);
-        SetSelectedSettingsItemDeferred();
+        _mainNavigationViewAdapter.ApplySelectionDeferred();
     }
 
     private static Type GetSettingsShellPageType() => typeof(SalmonEgg.Presentation.Views.SettingsShellPage);
@@ -436,65 +399,12 @@ public sealed partial class MainPage : Page
         var tagText = (args.InvokedItemContainer as NavigationViewItem)?.Tag?.ToString() ?? "<null>";
         BootLogDebug($"MainNav ItemInvoked: display={sender.DisplayMode} paneOpen={sender.IsPaneOpen} raw={rawInvokedType} container={containerType} containerDC={containerDcType} invokedDC={invokedDcType} tag={tagText}");
 
-        if (args.InvokedItemContainer is NavigationViewItem navItem
-            && navItem.Tag is string tag)
+        if (await _mainNavigationViewAdapter.HandleItemInvokedAsync(args))
         {
-            if (await TryHandleNavItemTagAsync(tag))
-            {
-                return;
-            }
-        }
-
-        if (ReferenceEquals(args.InvokedItemContainer, sender.SettingsItem))
-        {
-            NavVM.SelectSettings();
-            NavigateToSettingsSubPage("General");
             return;
         }
-
-        var invoked = ResolveInvokedItem(args);
-        BootLogDebug($"MainNav ItemInvoked: resolved={invoked?.GetType().Name ?? "null"}");
-        if (invoked is StartNavItemViewModel)
-        {
-            NavVM.SelectStart();
-            EnsureStartContent();
-            return;
-        }
-
-        if (invoked is SessionNavItemViewModel session && !session.IsPlaceholder)
-        {
-            await ActivateSessionAsync(session.SessionId, session.ProjectId);
-            return;
-        }
-
-        if (invoked is ProjectNavItemViewModel project)
-        {
-            NavVM.ToggleProjectExpanded(project.ProjectId);
-            ApplyMainNavSelectionDeferred();
-            return;
-        }
-
-        if (invoked is SessionsHeaderNavItemViewModel header)
-        {
-            BootLogDebug($"MainNav SessionsHeader invoked (paneOpen={header.IsPaneOpen})");
-            if (!header.IsPaneOpen)
-            {
-                BootLogDebug("MainNav SessionsHeader: executing AddProjectCommand");
-                _ = header.AddProjectCommand.ExecuteAsync(null);
-            }
-            else
-            {
-                BootLogDebug("MainNav SessionsHeader: skipped AddProjectCommand because pane is open");
-            }
-
-            return;
-        }
-
-        if (invoked is MoreSessionsNavItemViewModel more)
-        {
-            _ = more.ShowMoreCommand.ExecuteAsync(null);
-            return;
-        }
+        
+        BootLogDebug("MainNav ItemInvoked: no adapter route matched.");
     }
 
     private void OnSessionArchiveMenuItemClick(object sender, RoutedEventArgs e)
@@ -528,85 +438,8 @@ public sealed partial class MainPage : Page
         _archiveOnFlyoutClosed.TryConsume(sessionId);
     }
 
-    private async Task<bool> TryHandleNavItemTagAsync(string tag)
-    {
-        if (string.Equals(tag, NavItemTag.Start, StringComparison.Ordinal))
-        {
-            NavVM.SelectStart();
-            EnsureStartContent();
-            return true;
-        }
-
-        if (NavItemTag.TryParseSession(tag, out var sessionId))
-        {
-            var session = NavVM.Items
-                .OfType<ProjectNavItemViewModel>()
-                .SelectMany(project => project.Children.OfType<SessionNavItemViewModel>())
-                .FirstOrDefault(item => string.Equals(item.SessionId, sessionId, StringComparison.Ordinal));
-
-            await ActivateSessionAsync(sessionId, session?.ProjectId);
-            return true;
-        }
-
-        if (string.Equals(tag, NavItemTag.SessionsHeader, StringComparison.Ordinal))
-        {
-            if (!NavVM.SessionsHeaderItem.IsPaneOpen)
-            {
-                _ = NavVM.SessionsHeaderItem.AddProjectCommand.ExecuteAsync(null);
-            }
-            else
-            {
-            }
-
-            return true;
-        }
-
-        if (NavItemTag.TryParseMore(tag, out var moreProjectId))
-        {
-            _ = NavVM.ShowAllSessionsForProjectAsync(moreProjectId);
-            return true;
-        }
-
-        return false;
-    }
-
-    private async Task ActivateSessionAsync(string sessionId, string? projectId)
-    {
-        if (string.IsNullOrWhiteSpace(sessionId))
-        {
-            return;
-        }
-
-        NavVM.SelectSession(sessionId);
-        EnsureChatContent();
-
-        Preferences.LastSelectedProjectId = string.Equals(projectId, MainNavigationViewModel.UnclassifiedProjectId, StringComparison.Ordinal)
-            ? null
-            : projectId;
-
-        await _chatViewModel.TrySwitchToSessionAsync(sessionId);
-    }
-
-    private static object? ResolveInvokedItem(NavigationViewItemInvokedEventArgs args)
-    {
-        if (args.InvokedItemContainer is FrameworkElement container && container.DataContext != null)
-        {
-            return container.DataContext;
-        }
-
-        if (args.InvokedItem is FrameworkElement element && element.DataContext != null)
-        {
-            return element.DataContext;
-        }
-
-        return args.InvokedItem;
-    }
-
-
     private void EnsureChatContent()
     {
-        _activePrimaryNavKey = MainNavItemKeys.Chat;
-
         if (ContentFrame?.CurrentSourcePageType != typeof(ChatView))
         {
             NavigateTo(typeof(ChatView));
@@ -618,8 +451,6 @@ public sealed partial class MainPage : Page
 
     private void EnsureStartContent()
     {
-        _activePrimaryNavKey = MainNavItemKeys.Start;
-
         if (ContentFrame?.CurrentSourcePageType != typeof(StartView))
         {
             NavigateTo(typeof(StartView));
@@ -631,8 +462,6 @@ public sealed partial class MainPage : Page
 
     private void EnsureSettingsContent(string key)
     {
-        _activePrimaryNavKey = MainNavItemKeys.Settings;
-
         var pageType = GetSettingsShellPageType();
         if (ContentFrame?.CurrentSourcePageType != pageType)
         {
@@ -764,10 +593,9 @@ public sealed partial class MainPage : Page
 #else
         _metricsProvider.Attach(App.MainWindowInstance!, null);
 #endif
-        ApplyNavigationViewState();
         UpdateNavPaneToggleUi();
         NavVM.RebuildTree();
-        ApplyMainNavSelection();
+        _mainNavigationViewAdapter.ApplySelection();
         ApplyNavItemTransitionsDeferred();
 #if WINDOWS
         InitializeTray();
@@ -791,7 +619,7 @@ public sealed partial class MainPage : Page
     private void OnContentFrameNavigated(object sender, NavigationEventArgs e)
     {
         UpdateBackButtonState();
-        SyncNavSelectionFromCurrentPage(e.SourcePageType);
+        _mainNavigationContentSyncAdapter.OnFrameNavigated(e.SourcePageType);
     }
 
     private void OnTitleBarBackClick(object sender, RoutedEventArgs e)
@@ -854,71 +682,31 @@ public sealed partial class MainPage : Page
         TitleBarBackButton.IsEnabled = ContentFrame.CanGoBack;
     }
 
-    private void SyncNavSelectionFromCurrentPage(Type? pageType)
-    {
-        if (pageType == null || MainNavView == null)
-        {
-            return;
-        }
-
-        if (pageType == typeof(ChatView))
-        {
-            _activePrimaryNavKey = MainNavItemKeys.Chat;
-            if (!string.IsNullOrWhiteSpace(_chatViewModel.CurrentSessionId))
-            {
-                NavVM.SelectSession(_chatViewModel.CurrentSessionId!);
-            }
-            return;
-        }
-
-        if (pageType == typeof(StartView))
-        {
-            _activePrimaryNavKey = MainNavItemKeys.Start;
-            NavVM.SelectStart();
-            return;
-        }
-
-        if (pageType == typeof(SalmonEgg.Presentation.Views.SettingsShellPage))
-        {
-            _activePrimaryNavKey = MainNavItemKeys.Settings;
-            NavVM.SelectSettings();
-            return;
-        }
-    }
-
     private void OnMainNavPaneOpened(NavigationView sender, object args)
     {
         UpdateNavPaneToggleUi();
-        ApplyMainNavSelectionDeferred();
+        _mainNavigationViewAdapter.ApplySelectionDeferred();
     }
 
     private void OnMainNavPaneClosed(NavigationView sender, object args)
     {
         UpdateNavPaneToggleUi();
-        ApplyMainNavSelectionDeferred();
+        _mainNavigationViewAdapter.ApplySelectionDeferred();
     }
 
     private void OnMainNavDisplayModeChanged(NavigationView sender, NavigationViewDisplayModeChangedEventArgs args)
     {
         UpdateNavPaneToggleUi();
-        ApplyMainNavSelectionDeferred();
-    }
-
-    private void OnLayoutViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == nameof(ShellLayoutViewModel.IsNavPaneOpen) ||
-            e.PropertyName == nameof(ShellLayoutViewModel.NavPaneDisplayMode))
-        {
-            ApplyNavigationViewState();
-        }
+        _mainNavigationViewAdapter.ApplySelectionDeferred();
     }
 
     private void OnNavigationViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(MainNavigationViewModel.SelectedItem) ||
+            e.PropertyName == nameof(MainNavigationViewModel.ProjectedControlSelectedItem) ||
             e.PropertyName == nameof(MainNavigationViewModel.IsSettingsSelected))
         {
-            ApplyMainNavSelection();
+            _mainNavigationViewAdapter.ApplySelection();
         }
     }
 
@@ -947,88 +735,6 @@ public sealed partial class MainPage : Page
             desiredPaneOpen: LayoutVM?.IsNavPaneOpen == true,
             isMinimalMode: sender.DisplayMode == NavigationViewDisplayMode.Minimal);
     }
-
-    private void ApplyNavigationViewState()
-    {
-        if (MainNavView is null)
-        {
-            return;
-        }
-
-        MainNavView.PaneDisplayMode = ResolveNavigationViewPaneDisplayMode();
-        MainNavView.IsPaneOpen = LayoutVM.IsNavPaneOpen;
-    }
-
-    private void ApplyMainNavSelection()
-    {
-        if (MainNavView is null)
-        {
-            return;
-        }
-
-        var target = ResolveMainNavSelectedItem();
-        if (ReferenceEquals(target, MainNavView.SettingsItem))
-        {
-            SetSelectedSettingsItemDeferred();
-            return;
-        }
-
-        if (target is null)
-        {
-            return;
-        }
-
-        if (ReferenceEquals(MainNavView.SelectedItem, target))
-        {
-            return;
-        }
-
-        MainNavView.SelectedItem = target;
-    }
-
-    private object? ResolveMainNavSelectedItem()
-    {
-        if (MainNavView is null)
-        {
-            return null;
-        }
-
-        if (NavVM.IsSettingsSelected)
-        {
-            return MainNavView.SettingsItem;
-        }
-
-        var target = NavVM.SelectedItem;
-        if (target is not SessionNavItemViewModel sessionItem)
-        {
-            return target;
-        }
-
-        if (LayoutVM.IsNavPaneOpen)
-        {
-            return sessionItem;
-        }
-
-        return (object?)NavVM.Items
-            .OfType<ProjectNavItemViewModel>()
-            .FirstOrDefault(project => string.Equals(project.ProjectId, sessionItem.ProjectId, StringComparison.Ordinal))
-            ?? sessionItem;
-    }
-
-    private void ApplyMainNavSelectionDeferred()
-    {
-        _ = DispatcherQueue.TryEnqueue(ApplyMainNavSelection);
-    }
-
-    private NavigationViewPaneDisplayMode ResolveNavigationViewPaneDisplayMode()
-        => LayoutVM.NavPaneDisplayMode switch
-        {
-            SalmonEgg.Presentation.Core.Mvux.ShellLayout.NavigationPaneDisplayMode.Expanded when LayoutVM.IsNavPaneOpen => NavigationViewPaneDisplayMode.Left,
-            SalmonEgg.Presentation.Core.Mvux.ShellLayout.NavigationPaneDisplayMode.Expanded => NavigationViewPaneDisplayMode.LeftCompact,
-            SalmonEgg.Presentation.Core.Mvux.ShellLayout.NavigationPaneDisplayMode.Compact => NavigationViewPaneDisplayMode.LeftCompact,
-            SalmonEgg.Presentation.Core.Mvux.ShellLayout.NavigationPaneDisplayMode.Minimal => NavigationViewPaneDisplayMode.LeftMinimal,
-            _ => NavigationViewPaneDisplayMode.Auto
-        };
 
     // Manual resizer positioning removed as it is now handled by XAML binding to LayoutVM.LeftNavResizerLeft
 
@@ -1304,6 +1010,5 @@ public sealed partial class MainPage
         Loaded -= OnMainPageLoaded;
         Unloaded -= OnMainPageUnloaded;
         ContentFrame.Navigated -= OnContentFrameNavigated;
-        LayoutVM.PropertyChanged -= OnLayoutViewModelPropertyChanged;
     }
 }

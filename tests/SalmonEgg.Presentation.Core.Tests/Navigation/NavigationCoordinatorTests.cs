@@ -1,16 +1,19 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Moq;
+using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Interfaces;
+using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
-using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Core.Services;
+using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.ViewModels.Navigation;
@@ -22,10 +25,10 @@ using Xunit;
 namespace SalmonEgg.Presentation.Core.Tests.Navigation;
 
 [Collection("NonParallel")]
-public sealed class MainNavigationViewModelSelectionTests
+public sealed class NavigationCoordinatorTests
 {
     [Fact]
-    public async Task LogicalSelection_RemainsActiveSession_WhenPaneClosesAndReopens()
+    public async Task ActivateSessionAsync_UpdatesNavAndChatInOnePath()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -33,29 +36,23 @@ public sealed class MainNavigationViewModelSelectionTests
         try
         {
             var navState = new FakeNavigationPaneState();
-            navState.SetPaneOpen(true);
-
             var sessionManager = CreateSessionManager(new Session("session-1", @"C:\repo\demo")
             {
                 DisplayName = "Session 1"
             });
             var preferences = CreatePreferencesWithProject();
+            var shellNavigation = new Mock<IShellNavigationService>();
 
             using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
             using var navVm = CreateNavigationViewModel(chat.ViewModel, sessionManager.Object, preferences, navState);
+            var coordinator = new NavigationCoordinator(navVm, chat.ViewModel, preferences, shellNavigation.Object);
 
-            await chat.ViewModel.TrySwitchToSessionAsync("session-1");
             navVm.RebuildTree();
+            await coordinator.ActivateSessionAsync("session-1", "project-1");
 
             Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
-            Assert.IsType<SessionNavItemViewModel>(navVm.SelectedItem);
-
-            navState.SetPaneOpen(false);
-            navState.SetPaneOpen(true);
-
-            var selectedSession = Assert.IsType<SessionNavItemViewModel>(navVm.SelectedItem);
-            Assert.IsType<SessionNavItemViewModel>(navVm.ProjectedControlSelectedItem);
-            Assert.Equal("session-1", selectedSession.SessionId);
+            Assert.Equal("session-1", chat.ViewModel.CurrentSessionId);
+            shellNavigation.Verify(s => s.NavigateToChat(), Times.Once);
         }
         finally
         {
@@ -64,7 +61,7 @@ public sealed class MainNavigationViewModelSelectionTests
     }
 
     [Fact]
-    public async Task ProjectVisualState_FollowsActiveSessionWithoutChangingLogicalSelection()
+    public async Task ShowAllSessionsForProjectAsync_PickedSession_UsesCoordinatorActivationPath()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -72,30 +69,84 @@ public sealed class MainNavigationViewModelSelectionTests
         try
         {
             var navState = new FakeNavigationPaneState();
-            navState.SetPaneOpen(false);
+            var sessionManager = CreateSessionManager(
+                new Session("session-1", @"C:\repo\demo")
+                {
+                    DisplayName = "Session 1",
+                    LastActivityAt = DateTime.UtcNow.AddMinutes(-2)
+                },
+                new Session("session-2", @"C:\repo\demo")
+                {
+                    DisplayName = "Session 2",
+                    LastActivityAt = DateTime.UtcNow.AddMinutes(-1)
+                });
+            var preferences = CreatePreferencesWithProject();
+            var shellNavigation = new Mock<IShellNavigationService>();
+            var ui = new Mock<IUiInteractionService>();
+            Action<string>? pickSession = null;
 
+            ui.Setup(s => s.ShowSessionsListDialogAsync(
+                    "会话",
+                    It.IsAny<IReadOnlyList<SessionNavItemViewModel>>(),
+                    It.IsAny<Action<string>>()))
+                .Callback<string, IReadOnlyList<SessionNavItemViewModel>, Action<string>>((_, _, onPickSession) => pickSession = onPickSession)
+                .Returns(Task.CompletedTask);
+
+            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
+            using var navVm = CreateNavigationViewModel(chat.ViewModel, sessionManager.Object, preferences, navState, ui.Object);
+            var coordinator = new NavigationCoordinator(navVm, chat.ViewModel, preferences, shellNavigation.Object);
+
+            await chat.ViewModel.TrySwitchToSessionAsync("session-1");
+            navVm.RebuildTree();
+
+            await navVm.ShowAllSessionsForProjectAsync("project-1");
+
+            Assert.NotNull(pickSession);
+
+            pickSession!("session-2");
+            await WaitForConditionAsync(() => string.Equals(chat.ViewModel.CurrentSessionId, "session-2", StringComparison.Ordinal));
+
+            var selection = Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
+            Assert.Equal("session-2", selection.SessionId);
+            Assert.Equal("project-1", preferences.LastSelectedProjectId);
+            shellNavigation.Verify(s => s.NavigateToChat(), Times.Once);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task ToggleProjectAsync_DoesNotMutateSemanticSelection()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
             var sessionManager = CreateSessionManager(new Session("session-1", @"C:\repo\demo")
             {
                 DisplayName = "Session 1"
             });
             var preferences = CreatePreferencesWithProject();
+            var shellNavigation = new Mock<IShellNavigationService>();
 
             using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
             using var navVm = CreateNavigationViewModel(chat.ViewModel, sessionManager.Object, preferences, navState);
+            var coordinator = new NavigationCoordinator(navVm, chat.ViewModel, preferences, shellNavigation.Object);
 
             await chat.ViewModel.TrySwitchToSessionAsync("session-1");
             navVm.RebuildTree();
+
+            var project = Assert.Single(navVm.Items.OfType<ProjectNavItemViewModel>(), p => p.ProjectId == "project-1");
+            var originalExpanded = project.IsExpanded;
+
+            await coordinator.ToggleProjectAsync("project-1");
 
             Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
-            var project = Assert.Single(navVm.Items.OfType<ProjectNavItemViewModel>(), p => p.ProjectId == "project-1");
-            Assert.True(project.IsActiveDescendant);
-            Assert.True(project.HasActiveDescendantIndicator);
-            var projectedSession = Assert.IsType<SessionNavItemViewModel>(navVm.ProjectedControlSelectedItem);
-            Assert.Equal("session-1", projectedSession.SessionId);
-
-            var selectedSession = Assert.IsType<SessionNavItemViewModel>(navVm.SelectedItem);
-            Assert.True(selectedSession.IsLogicallySelected);
-            Assert.Equal("session-1", selectedSession.SessionId);
+            Assert.NotEqual(originalExpanded, project.IsExpanded);
         }
         finally
         {
@@ -104,45 +155,7 @@ public sealed class MainNavigationViewModelSelectionTests
     }
 
     [Fact]
-    public async Task ActiveDescendantIndicator_OnlyShowsWhenPaneIsClosed()
-    {
-        var originalContext = SynchronizationContext.Current;
-        var syncContext = new ImmediateSynchronizationContext();
-        SynchronizationContext.SetSynchronizationContext(syncContext);
-        try
-        {
-            var navState = new FakeNavigationPaneState();
-            navState.SetPaneOpen(false);
-
-            var sessionManager = CreateSessionManager(new Session("session-1", @"C:\repo\demo")
-            {
-                DisplayName = "Session 1"
-            });
-            var preferences = CreatePreferencesWithProject();
-
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
-            using var navVm = CreateNavigationViewModel(chat.ViewModel, sessionManager.Object, preferences, navState);
-
-            await chat.ViewModel.TrySwitchToSessionAsync("session-1");
-            navVm.RebuildTree();
-
-            var project = Assert.Single(navVm.Items.OfType<ProjectNavItemViewModel>(), p => p.ProjectId == "project-1");
-            Assert.True(project.IsActiveDescendant);
-            Assert.True(project.HasActiveDescendantIndicator);
-
-            navState.SetPaneOpen(true);
-
-            Assert.True(project.IsActiveDescendant);
-            Assert.False(project.HasActiveDescendantIndicator);
-        }
-        finally
-        {
-            SynchronizationContext.SetSynchronizationContext(originalContext);
-        }
-    }
-
-    [Fact]
-    public async Task SelectSettings_UsesSemanticSelectionInsteadOfNavItemObject()
+    public void SyncSelectionFromShellContent_Start_SelectsStart()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -152,16 +165,15 @@ public sealed class MainNavigationViewModelSelectionTests
             var navState = new FakeNavigationPaneState();
             var sessionManager = CreateSessionManager();
             var preferences = CreatePreferencesWithProject();
+            var shellNavigation = new Mock<IShellNavigationService>();
 
             using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
             using var navVm = CreateNavigationViewModel(chat.ViewModel, sessionManager.Object, preferences, navState);
+            var coordinator = new NavigationCoordinator(navVm, chat.ViewModel, preferences, shellNavigation.Object);
 
-            navVm.SelectSettings();
+            coordinator.SyncSelectionFromShellContent(ShellNavigationContent.Start, currentSessionId: null);
 
-            Assert.IsType<NavigationSelectionState.Settings>(navVm.CurrentSelection);
-            Assert.True(navVm.IsSettingsSelected);
-            Assert.Null(navVm.SelectedItem);
-            Assert.Null(navVm.ProjectedControlSelectedItem);
+            Assert.Equal(NavigationSelectionState.StartSelection, navVm.CurrentSelection);
         }
         finally
         {
@@ -170,7 +182,41 @@ public sealed class MainNavigationViewModelSelectionTests
     }
 
     [Fact]
-    public async Task TryGetProjectIdForSession_UsesSemanticSessionIndex()
+    public async Task SyncSelectionFromShellContent_ChatWithSession_SelectsSession()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var sessionManager = CreateSessionManager(new Session("session-2", @"C:\repo\demo")
+            {
+                DisplayName = "Session 2"
+            });
+            var preferences = CreatePreferencesWithProject();
+            var shellNavigation = new Mock<IShellNavigationService>();
+
+            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
+            using var navVm = CreateNavigationViewModel(chat.ViewModel, sessionManager.Object, preferences, navState);
+            var coordinator = new NavigationCoordinator(navVm, chat.ViewModel, preferences, shellNavigation.Object);
+
+            await chat.ViewModel.TrySwitchToSessionAsync("session-2");
+            navVm.RebuildTree();
+            await coordinator.ActivateStartAsync();
+            coordinator.SyncSelectionFromShellContent(ShellNavigationContent.Chat, "session-2");
+
+            var selection = Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
+            Assert.Equal("session-2", selection.SessionId);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task SyncSelectionFromShellContent_ChatWithoutSession_KeepsExistingSelection()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -183,15 +229,44 @@ public sealed class MainNavigationViewModelSelectionTests
                 DisplayName = "Session 1"
             });
             var preferences = CreatePreferencesWithProject();
+            var shellNavigation = new Mock<IShellNavigationService>();
 
             using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
             using var navVm = CreateNavigationViewModel(chat.ViewModel, sessionManager.Object, preferences, navState);
+            var coordinator = new NavigationCoordinator(navVm, chat.ViewModel, preferences, shellNavigation.Object);
 
-            await chat.ViewModel.TrySwitchToSessionAsync("session-1");
-            navVm.RebuildTree();
+            await coordinator.ActivateSessionAsync("session-1", "project-1");
+            coordinator.SyncSelectionFromShellContent(ShellNavigationContent.Chat, currentSessionId: null);
 
-            Assert.Equal("project-1", navVm.TryGetProjectIdForSession("session-1"));
-            Assert.Null(navVm.TryGetProjectIdForSession("missing-session"));
+            var selection = Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
+            Assert.Equal("session-1", selection.SessionId);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public void SyncSelectionFromShellContent_Settings_SelectsSettings()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var sessionManager = CreateSessionManager();
+            var preferences = CreatePreferencesWithProject();
+            var shellNavigation = new Mock<IShellNavigationService>();
+
+            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
+            using var navVm = CreateNavigationViewModel(chat.ViewModel, sessionManager.Object, preferences, navState);
+            var coordinator = new NavigationCoordinator(navVm, chat.ViewModel, preferences, shellNavigation.Object);
+
+            coordinator.SyncSelectionFromShellContent(ShellNavigationContent.Settings, currentSessionId: null);
+
+            Assert.Equal(NavigationSelectionState.SettingsSelection, navVm.CurrentSelection);
         }
         finally
         {
@@ -203,22 +278,24 @@ public sealed class MainNavigationViewModelSelectionTests
         ChatViewModel chatViewModel,
         ISessionManager sessionManager,
         AppPreferencesViewModel preferences,
-        FakeNavigationPaneState navState)
+        FakeNavigationPaneState navState,
+        IUiInteractionService? ui = null)
     {
-        var ui = new Mock<IUiInteractionService>();
         var shellNavigation = new Mock<IShellNavigationService>();
         var navLogger = new Mock<ILogger<MainNavigationViewModel>>();
         var metricsSink = new Mock<IShellLayoutMetricsSink>();
+        var projector = new NavigationSelectionProjector();
 
         return new MainNavigationViewModel(
             chatViewModel,
             sessionManager,
             preferences,
-            ui.Object,
+            ui ?? Mock.Of<IUiInteractionService>(),
             shellNavigation.Object,
             navLogger.Object,
             navState,
-            metricsSink.Object);
+            metricsSink.Object,
+            projector);
     }
 
     private static Mock<ISessionManager> CreateSessionManager(params Session[] sessions)
@@ -262,6 +339,9 @@ public sealed class MainNavigationViewModelSelectionTests
         var state = State.Value(new object(), () => ChatState.Empty);
         var chatStore = new Mock<IChatStore>();
         chatStore.Setup(s => s.State).Returns(state);
+        chatStore.Setup(s => s.Dispatch(It.IsAny<ChatAction>()))
+            .Returns<ChatAction>(action => state.Update(s => ChatReducer.Reduce(s!, action), CancellationToken.None));
+
         var transportFactory = new Mock<ITransportFactory>();
         var messageParser = new Mock<IMessageParser>();
         var messageValidator = new Mock<IMessageValidator>();
@@ -269,7 +349,7 @@ public sealed class MainNavigationViewModelSelectionTests
         var capabilityManager = new Mock<ICapabilityManager>();
         var serilog = new Mock<SerilogLogger>();
 
-        var chatServiceFactory = new SalmonEgg.Application.Services.Chat.ChatServiceFactory(
+        var chatServiceFactory = new ChatServiceFactory(
             transportFactory.Object,
             messageParser.Object,
             messageValidator.Object,
@@ -301,12 +381,32 @@ public sealed class MainNavigationViewModelSelectionTests
                 sessionManager,
                 conversationStore.Object,
                 miniWindow.Object,
-                vmLogger.Object);
+                vmLogger.Object,
+                syncContext);
             return new ChatViewModelHarness(viewModel, state);
         }
         finally
         {
             SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    private sealed class ChatViewModelHarness : IDisposable
+    {
+        private readonly IState<ChatState> _state;
+
+        public ChatViewModelHarness(ChatViewModel viewModel, IState<ChatState> state)
+        {
+            ViewModel = viewModel;
+            _state = state;
+        }
+
+        public ChatViewModel ViewModel { get; }
+
+        public void Dispose()
+        {
+            ViewModel.Dispose();
+            _state.DisposeAsync().AsTask().GetAwaiter().GetResult();
         }
     }
 
@@ -339,21 +439,18 @@ public sealed class MainNavigationViewModelSelectionTests
         return preferences;
     }
 
-    private sealed class ChatViewModelHarness : IDisposable
+    private static async Task WaitForConditionAsync(Func<bool> predicate)
     {
-        private readonly IState<ChatState> _state;
-        public ChatViewModel ViewModel { get; }
-
-        public ChatViewModelHarness(ChatViewModel viewModel, IState<ChatState> state)
+        for (var attempt = 0; attempt < 20; attempt++)
         {
-            ViewModel = viewModel;
-            _state = state;
+            if (predicate())
+            {
+                return;
+            }
+
+            await Task.Delay(10);
         }
 
-        public void Dispose()
-        {
-            ViewModel.Dispose();
-            _state.DisposeAsync().AsTask().GetAwaiter().GetResult();
-        }
+        Assert.True(predicate());
     }
 }

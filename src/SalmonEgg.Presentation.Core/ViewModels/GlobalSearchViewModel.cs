@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Models.Search;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.Utilities;
@@ -28,7 +29,7 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
     private readonly MainNavigationViewModel _navViewModel;
     private readonly AppPreferencesViewModel _preferences;
     private readonly IUiInteractionService _ui;
-    private readonly IShellNavigationService _shellNavigation;
+    private readonly INavigationCoordinator _navigationCoordinator;
     private readonly ISessionManager _sessionManager;
     private readonly ILogger<GlobalSearchViewModel> _logger;
 
@@ -71,7 +72,7 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
         MainNavigationViewModel navViewModel,
         AppPreferencesViewModel preferences,
         IUiInteractionService ui,
-        IShellNavigationService shellNavigation,
+        INavigationCoordinator navigationCoordinator,
         ISessionManager sessionManager,
         ILogger<GlobalSearchViewModel> logger)
     {
@@ -79,7 +80,7 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
         _navViewModel = navViewModel ?? throw new ArgumentNullException(nameof(navViewModel));
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
         _ui = ui ?? throw new ArgumentNullException(nameof(ui));
-        _shellNavigation = shellNavigation ?? throw new ArgumentNullException(nameof(shellNavigation));
+        _navigationCoordinator = navigationCoordinator ?? throw new ArgumentNullException(nameof(navigationCoordinator));
         _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -391,7 +392,8 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
         switch (item.Kind)
         {
             case SearchResultKind.Session:
-                _navViewModel.SelectSession(item.Id);
+                var session = _sessionManager.GetSession(item.Id);
+                await _navigationCoordinator.ActivateSessionAsync(item.Id, ResolveProjectId(session?.Cwd));
                 break;
 
             case SearchResultKind.Project:
@@ -406,7 +408,7 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
                 break;
 
             case SearchResultKind.Setting:
-                NavigateToSettings(item.Id);
+                await _navigationCoordinator.ActivateSettingsAsync(item.Id);
                 break;
 
             case SearchResultKind.Command:
@@ -416,11 +418,6 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
 
         // 关闭搜索面板
         CloseSearchPanel();
-    }
-
-    private void NavigateToSettings(string settingId)
-    {
-        _shellNavigation.NavigateToSettings(settingId);
     }
 
     private void ExecuteCommand(SearchResultItem item)
@@ -450,6 +447,26 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
                 _preferences.IsAnimationEnabled = !_preferences.IsAnimationEnabled;
                 break;
         }
+    }
+
+    private string? ResolveProjectId(string? cwd)
+    {
+        if (string.IsNullOrWhiteSpace(cwd))
+        {
+            return null;
+        }
+
+        var normalized = NavTimeFormatter.NormalizePathForPrefixMatch(cwd);
+        foreach (var project in _preferences.Projects)
+        {
+            var projectRoot = NavTimeFormatter.NormalizePathForPrefixMatch(project.RootPath);
+            if (normalized.StartsWith(projectRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                return project.ProjectId;
+            }
+        }
+
+        return MainNavigationViewModel.UnclassifiedProjectId;
     }
 
     [RelayCommand]

@@ -42,7 +42,7 @@ public sealed class StartViewModelTests
         SynchronizationContext.SetSynchronizationContext(originalContext);
 
         var ui = new Mock<IUiInteractionService>();
-        var shellNavigation = new Mock<IShellNavigationService>();
+        var navigationCoordinator = new Mock<INavigationCoordinator>();
         var navLogger = new Mock<ILogger<MainNavigationViewModel>>();
         var navState = new FakeNavigationPaneState();
         var metricsSink = new Mock<IShellLayoutMetricsSink>();
@@ -51,7 +51,7 @@ public sealed class StartViewModelTests
             sessionManager.Object,
             preferences,
             ui.Object,
-            shellNavigation.Object,
+            Mock.Of<IShellNavigationService>(),
             navLogger.Object,
             navState,
             metricsSink.Object);
@@ -61,7 +61,7 @@ public sealed class StartViewModelTests
             chatViewModel,
             sessionManager.Object,
             preferences,
-            shellNavigation.Object,
+            navigationCoordinator.Object,
             nav,
             startLogger.Object);
 
@@ -70,8 +70,8 @@ public sealed class StartViewModelTests
 
         await startViewModel.StartSessionAndSendCommand.ExecuteAsync(null);
 
-        shellNavigation.Verify(n => n.NavigateToChat(), Times.Never);
-        shellNavigation.Verify(n => n.NavigateToSettings(It.IsAny<string>()), Times.Never);
+        navigationCoordinator.Verify(n => n.ActivateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()), Times.Never);
+        navigationCoordinator.Verify(n => n.ActivateSettingsAsync(It.IsAny<string>()), Times.Never);
         Assert.Empty(chatViewModel.MessageHistory);
     }
 
@@ -93,7 +93,7 @@ public sealed class StartViewModelTests
         SynchronizationContext.SetSynchronizationContext(originalContext);
 
         var ui = new Mock<IUiInteractionService>();
-        var shellNavigation = new Mock<IShellNavigationService>();
+        var navigationCoordinator = new Mock<INavigationCoordinator>();
         var navLogger = new Mock<ILogger<MainNavigationViewModel>>();
         var navState = new FakeNavigationPaneState();
         var metricsSink = new Mock<IShellLayoutMetricsSink>();
@@ -102,7 +102,7 @@ public sealed class StartViewModelTests
             sessionManager.Object,
             preferences,
             ui.Object,
-            shellNavigation.Object,
+            Mock.Of<IShellNavigationService>(),
             navLogger.Object,
             navState,
             metricsSink.Object);
@@ -112,7 +112,7 @@ public sealed class StartViewModelTests
             chatViewModel,
             sessionManager.Object,
             preferences,
-            shellNavigation.Object,
+            navigationCoordinator.Object,
             nav,
             startLogger.Object);
 
@@ -120,7 +120,7 @@ public sealed class StartViewModelTests
 
         await startViewModel.StartSessionAndSendCommand.ExecuteAsync(null);
 
-        shellNavigation.Verify(n => n.NavigateToSettings(It.IsAny<string>()), Times.Never);
+        navigationCoordinator.Verify(n => n.ActivateSettingsAsync(It.IsAny<string>()), Times.Never);
     }
 
     private static ChatViewModelHarness CreateChatViewModel(

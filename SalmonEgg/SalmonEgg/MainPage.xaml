@@ -14,6 +14,7 @@
     xmlns:models="using:SalmonEgg.Presentation.Models"
     xmlns:searchModels="using:SalmonEgg.Presentation.Models.Search"
     xmlns:navViews="using:SalmonEgg.Presentation.Views.Navigation"
+    xmlns:navUi="using:SalmonEgg.Presentation.Navigation"
     xmlns:converters="using:SalmonEgg.Presentation.Converters"
     xmlns:chatVm="using:SalmonEgg.Presentation.ViewModels.Chat"
     xmlns:behaviors="using:SalmonEgg.Presentation.Behaviors"
@@ -46,6 +47,7 @@
 
         <DataTemplate x:Key="StartNavTemplate" x:DataType="nav:StartNavItemViewModel">
             <NavigationViewItem ContentTransitions="{x:Bind models:UiMotion.Current.NavItemTransitions, Mode=OneWay}"
+                                AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.StartItem()}"
                                 Tag="{x:Bind navModels:NavItemTag.Start}">
                 <NavigationViewItem.Icon>
                     <SymbolIcon Symbol="Home" />
@@ -65,6 +67,8 @@
             <NavigationViewItem MinHeight="{StaticResource NavSectionHeaderMinHeight}"
                                 HorizontalContentAlignment="Stretch"
                                 Padding="0"
+                                AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.SessionsHeader()}"
+                                Tag="{x:Bind navModels:NavItemTag.SessionsHeader}"
                                 SelectsOnInvoked="False">
                 <NavigationViewItem.Icon>
                     <SymbolIcon Symbol="Add" 
@@ -106,7 +110,9 @@
             <NavigationViewItem MenuItemsSource="{x:Bind Children, Mode=OneWay}"
                                 IsExpanded="{x:Bind IsExpanded, Mode=TwoWay}"
                                 HorizontalContentAlignment="Stretch"
-                                SelectsOnInvoked="True"
+                                SelectsOnInvoked="False"
+                                AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.ProjectItem(ProjectId)}"
+                                Tag="{x:Bind navModels:NavItemTag.Project(ProjectId)}"
                                 ContentTransitions="{x:Bind models:UiMotion.Current.NavItemTransitions, Mode=OneWay}">
                 <NavigationViewItem.Icon>
                     <SymbolIcon Symbol="Folder" />
@@ -133,6 +139,7 @@
 
         <DataTemplate x:Key="SessionNavTemplate" x:DataType="nav:SessionNavItemViewModel">
             <NavigationViewItem SelectsOnInvoked="True"
+                                AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.SessionItem(SessionId)}"
                                 Tag="{x:Bind navModels:NavItemTag.Session(SessionId)}"
                                 ContentTransitions="{x:Bind models:UiMotion.Current.NavItemTransitions, Mode=OneWay}">
                 <NavigationViewItem.Icon>
@@ -178,6 +185,7 @@
         <DataTemplate x:Key="MoreNavTemplate" x:DataType="nav:MoreSessionsNavItemViewModel">
             <NavigationViewItem Content="{x:Bind Title, Mode=OneWay}"
                                 SelectsOnInvoked="False"
+                                AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.MoreItem(ProjectId)}"
                                 Tag="{x:Bind navModels:NavItemTag.More(ProjectId)}"
                                 ContentTransitions="{x:Bind models:UiMotion.Current.NavItemTransitions, Mode=OneWay}">
                 <NavigationViewItem.Icon>
@@ -305,6 +313,7 @@
                         <Button x:Name="TitleBarToggleLeftNavButton"
                                 Style="{StaticResource TitleBarCommandButtonStyle}"
                                 ToolTipService.ToolTip="Collapse Sidebar"
+                                AutomationProperties.AutomationId="TitleBar.ToggleSidebar"
                                 AutomationProperties.Name="Toggle Sidebar"
                                 Click="OnToggleLeftNavClick">
                             <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE700;"/>
@@ -501,8 +510,11 @@
             <NavigationView x:Name="MainNavView"
                              Grid.Column="0"
                              Background="Transparent"
+                             AutomationProperties.AutomationId="MainNavView"
                              CompactPaneLength="{x:Bind LayoutVM.NavCompactPaneLength, Mode=OneWay}"
                              OpenPaneLength="{x:Bind LayoutVM.NavOpenPaneLength, Mode=OneWay}"
+                             PaneDisplayMode="{x:Bind LayoutVM, Mode=OneWay, Converter={StaticResource NavPaneDisplayModeConverter}}"
+                             IsPaneOpen="{x:Bind LayoutVM.IsNavPaneOpen, Mode=OneWay}"
                              IsBackButtonVisible="Collapsed"
                              IsPaneToggleButtonVisible="False"
                              IsSettingsVisible="True"

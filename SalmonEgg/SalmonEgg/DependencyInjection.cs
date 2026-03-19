@@ -206,7 +206,9 @@ public static class DependencyInjection
         services.AddSingleton<ChatViewModel>();
 
         // Main shell navigation (Start + Projects -> Sessions tree)
+        services.AddSingleton<NavigationSelectionProjector>();
         services.AddSingleton<MainNavigationViewModel>();
+        services.AddSingleton<INavigationCoordinator, NavigationCoordinator>();
 
         // Global search
         services.AddSingleton<GlobalSearchViewModel>();

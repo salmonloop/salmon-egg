@@ -35,6 +35,7 @@
                        FontWeight="SemiBold"
                        HorizontalAlignment="Center"
                        TextAlignment="Center"
+                       AutomationProperties.AutomationId="StartView.Title"
                        AutomationProperties.Name="Salmon Egg 欢迎标题"/>
         </Grid>
 

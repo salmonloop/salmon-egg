@@ -121,6 +121,7 @@
     <Grid>
         <!-- 未激活会话状态：空状态设计 -->
         <Grid Visibility="{x:Bind ViewModel.IsSessionActive, Mode=OneWay, Converter={StaticResource InverseBoolToVisibilityConverter}}"
+              AutomationProperties.AutomationId="ChatView.InactiveRoot"
               Transitions="{x:Bind Motion.PageTransitions, Mode=OneWay}">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="24">
                 <Viewbox Width="80" Height="80" Opacity="0.2">
@@ -139,6 +140,7 @@
                                TextAlignment="Center"/>
                 </StackPanel>
                 <Button Content="去配置 Agent"
+                        AutomationProperties.AutomationId="ChatView.GoToSettingsButton"
                         HorizontalAlignment="Center"
                         Style="{StaticResource AccentButtonStyle}"
                         Padding="24,8"
@@ -148,6 +150,7 @@
 
         <!-- 已激活会话状态：对话界面 -->
         <Grid RowDefinitions="Auto,*,Auto"
+              AutomationProperties.AutomationId="ChatView.ActiveRoot"
               Transitions="{x:Bind Motion.PageTransitions, Mode=OneWay}"
               Visibility="{x:Bind ViewModel.IsSessionActive, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
 
@@ -163,6 +166,7 @@
                         <StackPanel VerticalAlignment="Center">
                             <Grid>
                                 <Button Style="{StaticResource InlineHeaderButtonStyle}"
+                                        AutomationProperties.AutomationId="ChatView.CurrentSessionNameButton"
                                         HorizontalAlignment="Left"
                                         Visibility="{x:Bind ViewModel.IsEditingSessionName, Mode=OneWay, Converter={StaticResource InverseBoolToVisibilityConverter}}"
                                         Click="OnSessionNameClick">
@@ -172,6 +176,7 @@
                                 </Button>
 
                                 <TextBox x:Name="SessionNameEditor"
+                                         AutomationProperties.AutomationId="ChatView.CurrentSessionNameEditor"
                                          Text="{x:Bind ViewModel.EditingSessionName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                          FontWeight="SemiBold"
                                          FontSize="14"
@@ -212,6 +217,7 @@
                                             MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}">
                 <controls:ResponsiveContentHost.Child>
                     <ListView x:Name="MessagesList"
+                              AutomationProperties.AutomationId="ChatView.MessagesList"
                               ItemsSource="{x:Bind ViewModel.MessageHistory, Mode=OneWay}"
                               ItemTemplate="{StaticResource MessageTemplate}"
                               Padding="20"

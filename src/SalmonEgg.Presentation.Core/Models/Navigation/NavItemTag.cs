@@ -8,11 +8,16 @@ public static class NavItemTag
     public static string SessionsHeader => "SessionsHeader";
 
     private const string SessionPrefix = "Session:";
+    private const string ProjectPrefix = "Project:";
     private const string MorePrefix = "More:";
 
     public static string Session(string sessionId) => string.IsNullOrWhiteSpace(sessionId)
         ? SessionPrefix
         : SessionPrefix + sessionId;
+
+    public static string Project(string projectId) => string.IsNullOrWhiteSpace(projectId)
+        ? ProjectPrefix
+        : ProjectPrefix + projectId;
 
     public static string More(string projectId) => string.IsNullOrWhiteSpace(projectId)
         ? MorePrefix
@@ -28,6 +33,18 @@ public static class NavItemTag
 
         sessionId = tag.Substring(SessionPrefix.Length);
         return !string.IsNullOrWhiteSpace(sessionId);
+    }
+
+    public static bool TryParseProject(string? tag, out string projectId)
+    {
+        if (string.IsNullOrWhiteSpace(tag) || !tag.StartsWith(ProjectPrefix, StringComparison.Ordinal))
+        {
+            projectId = string.Empty;
+            return false;
+        }
+
+        projectId = tag.Substring(ProjectPrefix.Length);
+        return !string.IsNullOrWhiteSpace(projectId);
     }
 
     public static bool TryParseMore(string? tag, out string projectId)

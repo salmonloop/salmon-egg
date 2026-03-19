@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.ViewModels.Navigation;
@@ -17,7 +18,7 @@ public sealed partial class StartViewModel : ObservableObject
 {
     private readonly ISessionManager _sessionManager;
     private readonly AppPreferencesViewModel _preferences;
-    private readonly IShellNavigationService _shellNavigation;
+    private readonly INavigationCoordinator _navigationCoordinator;
     private readonly MainNavigationViewModel _nav;
     private readonly ILogger<StartViewModel> _logger;
 
@@ -37,14 +38,14 @@ public sealed partial class StartViewModel : ObservableObject
         ChatViewModel chatViewModel,
         ISessionManager sessionManager,
         AppPreferencesViewModel preferences,
-        IShellNavigationService shellNavigation,
+        INavigationCoordinator navigationCoordinator,
         MainNavigationViewModel nav,
         ILogger<StartViewModel> logger)
     {
         Chat = chatViewModel ?? throw new ArgumentNullException(nameof(chatViewModel));
         _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
-        _shellNavigation = shellNavigation ?? throw new ArgumentNullException(nameof(shellNavigation));
+        _navigationCoordinator = navigationCoordinator ?? throw new ArgumentNullException(nameof(navigationCoordinator));
         _nav = nav ?? throw new ArgumentNullException(nameof(nav));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
@@ -84,8 +85,7 @@ public sealed partial class StartViewModel : ObservableObject
                 return;
             }
 
-            _shellNavigation.NavigateToChat();
-            _nav.SelectSession(sessionId);
+            await _navigationCoordinator.ActivateSessionAsync(sessionId, _preferences.LastSelectedProjectId).ConfigureAwait(true);
 
             if (!Chat.IsConnected)
             {
@@ -100,7 +100,7 @@ public sealed partial class StartViewModel : ObservableObject
                     return;
                 }
 
-                _shellNavigation.NavigateToSettings("General");
+                await _navigationCoordinator.ActivateSettingsAsync("General").ConfigureAwait(true);
                 Chat.ShowTransportConfigPanel = true;
                 return;
             }

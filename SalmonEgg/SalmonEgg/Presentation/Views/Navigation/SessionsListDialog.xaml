@@ -5,7 +5,9 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:nav="using:SalmonEgg.Presentation.ViewModels.Navigation"
+    xmlns:navUi="using:SalmonEgg.Presentation.Navigation"
     mc:Ignorable="d"
+    AutomationProperties.AutomationId="SessionsDialog"
     Title="{x:Bind DialogTitle, Mode=OneWay}"
     CloseButtonText="关闭"
     DefaultButton="Close">
@@ -14,17 +16,21 @@
           MinWidth="420"
           MaxHeight="560">
         <TextBox PlaceholderText="搜索会话"
+                 AutomationProperties.AutomationId="SessionsDialog.SearchBox"
                  Text="{x:Bind FilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                  Margin="0,0,0,12"/>
 
         <ListView Grid.Row="1"
+                  AutomationProperties.AutomationId="SessionsDialog.List"
                   ItemsSource="{x:Bind FilteredSessions, Mode=OneWay}"
                   IsItemClickEnabled="True"
                   ItemClick="OnSessionItemClick"
                   SelectionMode="None">
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="nav:SessionNavItemViewModel">
-                    <Grid ColumnDefinitions="*,Auto" Padding="12,8">
+                    <Grid ColumnDefinitions="*,Auto"
+                          Padding="12,8"
+                          AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.SessionsDialogItem(SessionId)}">
                         <TextBlock Text="{x:Bind Title, Mode=OneWay}"
                                    TextTrimming="CharacterEllipsis"
                                    MaxLines="1"/>
