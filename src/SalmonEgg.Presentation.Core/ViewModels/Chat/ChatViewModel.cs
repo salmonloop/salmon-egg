@@ -271,7 +271,19 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
         _conversationStore = conversationStore ?? throw new ArgumentNullException(nameof(conversationStore));
         _miniWindowCoordinator = miniWindowCoordinator ?? throw new ArgumentNullException(nameof(miniWindowCoordinator));
         _syncContext = syncContext ?? SynchronizationContext.Current ?? new SynchronizationContext();
+        StartStoreProjection();
 
+        _acpProfiles.PropertyChanged += OnAcpProfilesPropertyChanged;
+        _acpProfiles.Profiles.CollectionChanged += OnAcpProfilesCollectionChanged;
+        _preferences.PropertyChanged += OnPreferencesPropertyChanged;
+        PlanEntries.CollectionChanged += OnCurrentPlanCollectionChanged;
+
+        // Start restoring local conversation list immediately so the sidebar can show it ASAP.
+        _ = RestoreConversationsAsync();
+    }
+
+    private void StartStoreProjection()
+    {
         // SINGLE SOURCE OF TRUTH (SSOT): We project the central store state into UI-bound properties.
         // This reactive pattern ensures the UI stays synchronized with the domain state regardless of which
         // thread triggered the update (e.g. background ACP streaming vs user interaction).
@@ -289,7 +301,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             {
                 await PostToUiAsync(() =>
                 {
-                    if (token.IsCancellationRequested || _disposed) return;
+                    if (token.IsCancellationRequested || _disposed)
+                    {
+                        return;
+                    }
 
                     IsPromptInFlight = state.IsPromptInFlight;
                     IsThinking = state.IsThinking;
@@ -309,14 +324,31 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
                 Logger.LogError(ex, "Chat store projection failed");
             }
         }, out _storeStateSubscription);
+    }
 
-        _acpProfiles.PropertyChanged += OnAcpProfilesPropertyChanged;
-        _acpProfiles.Profiles.CollectionChanged += OnAcpProfilesCollectionChanged;
-        _preferences.PropertyChanged += OnPreferencesPropertyChanged;
-        PlanEntries.CollectionChanged += OnCurrentPlanCollectionChanged;
+    private void StopStoreProjection()
+    {
+        _storeStateCts?.Cancel();
 
-        // Start restoring local conversation list immediately so the sidebar can show it ASAP.
-        _ = RestoreConversationsAsync();
+        try
+        {
+            _storeStateSubscription?.Dispose();
+        }
+        catch
+        {
+        }
+
+        _storeStateSubscription = null;
+
+        try
+        {
+            _storeStateCts?.Dispose();
+        }
+        catch
+        {
+        }
+
+        _storeStateCts = null;
     }
 
     [RelayCommand]
@@ -3083,10 +3115,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
            _conversationSaveCts?.Cancel();
            _sendPromptCts?.Cancel();
            _transientNotificationCts?.Cancel();
-           _storeStateCts?.Cancel();
-
-            try { _storeStateSubscription?.Dispose(); } catch { }
-            _storeStateSubscription = null;
+           StopStoreProjection();
 
             try
             {
@@ -3103,12 +3132,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable
             try { _conversationSaveCts?.Dispose(); } catch { }
             try { _sendPromptCts?.Dispose(); } catch { }
             try { _transientNotificationCts?.Dispose(); } catch { }
-            try { _storeStateCts?.Dispose(); } catch { }
 
             _conversationSaveCts = null;
             _sendPromptCts = null;
             _transientNotificationCts = null;
-            _storeStateCts = null;
        }
 }
 

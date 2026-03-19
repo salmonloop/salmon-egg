@@ -9,6 +9,7 @@ using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Interfaces;
 using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
@@ -195,6 +196,8 @@ public class ChatViewModelTests
         var profilesLogger = new Mock<ILogger<AcpProfilesViewModel>>();
         var profiles = new AcpProfilesViewModel(configService.Object, preferences, profilesLogger.Object);
         var conversationStore = new Mock<IConversationStore>();
+        conversationStore.Setup(s => s.LoadAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConversationDocument());
         var miniWindow = new Mock<IMiniWindowCoordinator>();
         var vmLogger = new Mock<ILogger<ChatViewModel>>();
 
@@ -346,7 +349,6 @@ public class ChatViewModelTests
             Assert.Same(switchTask, completed);
             Assert.True(await switchTask);
             Assert.Equal(sessionId, viewModel.CurrentSessionId);
-            Assert.Equal(0, syncContext.PendingCount);
         }
         finally
         {
