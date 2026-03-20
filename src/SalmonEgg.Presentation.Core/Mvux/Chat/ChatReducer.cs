@@ -13,7 +13,8 @@ public static class ChatReducer
         {
             SelectConversationAction selectConversation => state with
             {
-                SelectedConversationId = selectConversation.ConversationId,
+                SelectedConversationId = null,
+                HydratedConversationId = selectConversation.ConversationId,
                 Transcript = null,
                 PlanEntries = null,
                 ShowPlanPanel = false,
@@ -29,7 +30,7 @@ public static class ChatReducer
             {
                 Transcript = UpsertTranscript(state.Transcript, ToSnapshot(addMessage.Message))
             },
-            HydrateConversationAction hydrate when !string.Equals(hydrate.ConversationId, state.SelectedConversationId, StringComparison.Ordinal)
+            HydrateConversationAction hydrate when !string.Equals(hydrate.ConversationId, state.HydratedConversationId, StringComparison.Ordinal)
                 => state,
             HydrateConversationAction hydrate => state with
             {
@@ -38,7 +39,7 @@ public static class ChatReducer
                 ShowPlanPanel = hydrate.ShowPlanPanel,
                 PlanTitle = hydrate.PlanTitle
             },
-            ReplacePlanEntriesAction replacePlan when !string.Equals(replacePlan.ConversationId, state.SelectedConversationId, StringComparison.Ordinal)
+            ReplacePlanEntriesAction replacePlan when !string.Equals(replacePlan.ConversationId, state.HydratedConversationId, StringComparison.Ordinal)
                 => state,
             ReplacePlanEntriesAction replacePlan => state with
             {
@@ -46,7 +47,7 @@ public static class ChatReducer
                 ShowPlanPanel = replacePlan.ShowPlanPanel,
                 PlanTitle = replacePlan.PlanTitle
             },
-            UpsertTranscriptMessageAction upsertMessage when !string.Equals(upsertMessage.ConversationId, state.SelectedConversationId, StringComparison.Ordinal)
+            UpsertTranscriptMessageAction upsertMessage when !string.Equals(upsertMessage.ConversationId, state.HydratedConversationId, StringComparison.Ordinal)
                 => state,
             UpsertTranscriptMessageAction upsertMessage => state with
             {
@@ -56,7 +57,7 @@ public static class ChatReducer
             {
                 Transcript = UpsertTranscript(state.Transcript, ToSnapshot(updateMessage.Message))
             },
-            AppendTextDeltaAction appendDelta when !string.Equals(appendDelta.ConversationId, state.SelectedConversationId, StringComparison.Ordinal)
+            AppendTextDeltaAction appendDelta when !string.Equals(appendDelta.ConversationId, state.HydratedConversationId, StringComparison.Ordinal)
                 => state,
             AppendTextDeltaAction appendDelta => state with
             {

@@ -41,7 +41,6 @@ public sealed partial class SettingsBreadcrumbBar : UserControl
             return;
         }
 
-        _shellNavigation.NavigateToSettings(item.SettingsKey);
+        _ = _shellNavigation.NavigateToSettings(item.SettingsKey);
     }
 }
-

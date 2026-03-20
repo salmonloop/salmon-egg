@@ -11,7 +11,7 @@ using SalmonEgg.Domain.Services;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 
-public sealed class ChatConversationWorkspace : ObservableObject, IConversationCatalog, IConversationSessionSwitcher, IDisposable
+public sealed class ChatConversationWorkspace : ObservableObject, IConversationCatalog, IDisposable
 {
     private readonly ISessionManager _sessionManager;
     private readonly IConversationStore _conversationStore;
@@ -24,7 +24,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
     private bool _disposed;
     private bool _isConversationListLoading = true;
     private int _conversationListVersion;
-    private string? _currentConversationId;
+    private string? _lastActiveConversationId;
 
     public ChatConversationWorkspace(
         ISessionManager sessionManager,
@@ -54,8 +54,13 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
 
     public string? CurrentConversationId
     {
-        get => _currentConversationId;
-        private set => SetProperty(ref _currentConversationId, value);
+        get => null;
+    }
+
+    public string? LastActiveConversationId
+    {
+        get => _lastActiveConversationId;
+        private set => SetProperty(ref _lastActiveConversationId, value);
     }
 
     public async Task RestoreAsync(CancellationToken cancellationToken = default)
@@ -175,7 +180,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             return false;
         }
 
-        if (string.Equals(CurrentConversationId, sessionId, StringComparison.Ordinal))
+        if (string.Equals(LastActiveConversationId, sessionId, StringComparison.Ordinal))
         {
             return true;
         }
@@ -183,7 +188,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         await _sessionSwitchGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            await PostToContextAsync(() => CurrentConversationId = sessionId, cancellationToken).ConfigureAwait(false);
+            await PostToContextAsync(() => LastActiveConversationId = sessionId, cancellationToken).ConfigureAwait(false);
 
             return true;
         }
@@ -302,7 +307,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         var document = new ConversationDocument
         {
             Version = 1,
-            LastActiveConversationId = CurrentConversationId
+            LastActiveConversationId = null
         };
 
         foreach (var binding in _conversationBindings.Values.OrderByDescending(item => item.LastUpdatedAt))
@@ -383,11 +388,11 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         var lastActiveConversationId = document.LastActiveConversationId;
         if (!string.IsNullOrWhiteSpace(lastActiveConversationId) && _conversationBindings.ContainsKey(lastActiveConversationId))
         {
-            CurrentConversationId = lastActiveConversationId;
+            LastActiveConversationId = lastActiveConversationId;
             return;
         }
 
-        CurrentConversationId = _conversationBindings.Values
+        LastActiveConversationId = _conversationBindings.Values
             .OrderByDescending(binding => binding.LastUpdatedAt)
             .Select(binding => binding.ConversationId)
             .FirstOrDefault();
@@ -401,9 +406,9 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             return;
         }
 
-        if (string.Equals(CurrentConversationId, conversationId, StringComparison.Ordinal))
+        if (string.Equals(LastActiveConversationId, conversationId, StringComparison.Ordinal))
         {
-            CurrentConversationId = null;
+            LastActiveConversationId = null;
         }
 
         _conversationBindings.Remove(conversationId);

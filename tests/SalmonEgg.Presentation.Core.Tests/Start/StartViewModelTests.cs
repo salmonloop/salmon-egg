@@ -190,6 +190,7 @@ public sealed class StartViewModelTests
             navState,
             metricsSink.Object,
             new NavigationSelectionProjector(),
+            new ShellSelectionStateStore(),
             chat.Presenter);
     }
 

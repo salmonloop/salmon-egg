@@ -10,12 +10,12 @@ public sealed class ChatStateProjectorTests
     public void Apply_SelectedProfilePrefersStoreOverBinding()
     {
         var state = new ChatState(
-            SelectedConversationId: "conv-1",
+            HydratedConversationId: "conv-1",
             SelectedAcpProfileId: "profile-store");
         var binding = new ConversationRemoteBindingState("conv-1", "remote-1", "profile-binding");
         var projector = new ChatStateProjector();
 
-        var projection = projector.Apply(state, binding);
+        var projection = projector.Apply(state, "conv-1", binding);
 
         Assert.Equal("profile-store", projection.SelectedProfileId);
         Assert.Equal("remote-1", projection.RemoteSessionId);
@@ -24,11 +24,11 @@ public sealed class ChatStateProjectorTests
     [Fact]
     public void Apply_FallsBackToBindingProfileWhenStoreProfileMissing()
     {
-        var state = new ChatState(SelectedConversationId: "conv-2");
+        var state = new ChatState(HydratedConversationId: "conv-2");
         var binding = new ConversationRemoteBindingState("conv-2", "remote-2", "profile-binding");
         var projector = new ChatStateProjector();
 
-        var projection = projector.Apply(state, binding);
+        var projection = projector.Apply(state, "conv-2", binding);
 
         Assert.Equal("profile-binding", projection.SelectedProfileId);
         Assert.Equal("remote-2", projection.RemoteSessionId);
@@ -37,10 +37,10 @@ public sealed class ChatStateProjectorTests
     [Fact]
     public void Apply_ReturnsNullRemoteSessionWhenBindingMissing()
     {
-        var state = new ChatState(SelectedConversationId: "conv-3", SelectedAcpProfileId: "profile-store");
+        var state = new ChatState(HydratedConversationId: "conv-3", SelectedAcpProfileId: "profile-store");
         var projector = new ChatStateProjector();
 
-        var projection = projector.Apply(state, binding: null);
+        var projection = projector.Apply(state, "conv-3", binding: null);
 
         Assert.Null(projection.RemoteSessionId);
         Assert.Equal("profile-store", projection.SelectedProfileId);

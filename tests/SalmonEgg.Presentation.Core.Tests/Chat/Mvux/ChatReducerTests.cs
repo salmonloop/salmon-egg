@@ -8,7 +8,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat.Mvux;
 public class ChatReducerTests
 {
     [Fact]
-    public void GivenInitialState_WhenSetSelectedConversation_ThenConversationIdIsUpdated()
+    public void GivenInitialState_WhenSetSelectedConversation_ThenHydratedConversationIdIsUpdated()
     {
         // Arrange
         var initialState = new ChatState();
@@ -19,7 +19,8 @@ public class ChatReducerTests
         var newState = ChatReducer.Reduce(initialState, action);
 
         // Assert
-        Assert.Equal(conversationId, newState.SelectedConversationId);
+        Assert.Null(newState.SelectedConversationId);
+        Assert.Equal(conversationId, newState.HydratedConversationId);
     }
 
     [Fact]
@@ -69,7 +70,7 @@ public class ChatReducerTests
     public void GivenConversationState_WhenSelectConversation_ThenConversationSliceIsCleared()
     {
         var initialState = new ChatState(
-            SelectedConversationId: "conv-1",
+            HydratedConversationId: "conv-1",
             Transcript: ImmutableList.Create(new ConversationMessageSnapshot { Id = "m-1", TextContent = "hello", ContentType = "text" }),
             PlanEntries: ImmutableList.Create(new ConversationPlanEntrySnapshot { Content = "step-1" }),
             ShowPlanPanel: true,
@@ -77,7 +78,8 @@ public class ChatReducerTests
 
         var newState = ChatReducer.Reduce(initialState, new SelectConversationAction("conv-2"));
 
-        Assert.Equal("conv-2", newState.SelectedConversationId);
+        Assert.Null(newState.SelectedConversationId);
+        Assert.Equal("conv-2", newState.HydratedConversationId);
         Assert.Null(newState.Transcript);
         Assert.Null(newState.PlanEntries);
         Assert.False(newState.ShowPlanPanel);
@@ -87,7 +89,7 @@ public class ChatReducerTests
     [Fact]
     public void GivenDifferentSelectedConversation_WhenHydrating_ThenReducerIgnoresStaleSnapshot()
     {
-        var initialState = new ChatState(SelectedConversationId: "conv-1");
+        var initialState = new ChatState(HydratedConversationId: "conv-1");
         var action = new HydrateConversationAction(
             "conv-2",
             ImmutableList.Create(new ConversationMessageSnapshot { Id = "m-1", TextContent = "stale", ContentType = "text" }),
@@ -97,7 +99,8 @@ public class ChatReducerTests
 
         var newState = ChatReducer.Reduce(initialState, action);
 
-        Assert.Equal("conv-1", newState.SelectedConversationId);
+        Assert.Null(newState.SelectedConversationId);
+        Assert.Equal("conv-1", newState.HydratedConversationId);
         Assert.True(newState.Transcript is null or { Count: 0 });
         Assert.True(newState.PlanEntries is null or { Count: 0 });
         Assert.False(newState.ShowPlanPanel);

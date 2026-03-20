@@ -285,7 +285,7 @@ namespace SalmonEgg.Presentation.Views.Chat
 
         private void OnGoToSettingsClick(object sender, RoutedEventArgs e)
         {
-            _shellNavigation.NavigateToSettings("General");
+            _ = _shellNavigation.NavigateToSettings("General");
         }
     }
 }

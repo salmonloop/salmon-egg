@@ -9,7 +9,7 @@ public interface INavigationCoordinator
 
     Task ActivateSettingsAsync(string settingsKey);
 
-    Task ActivateSessionAsync(string sessionId, string? projectId);
+    Task<bool> ActivateSessionAsync(string sessionId, string? projectId);
 
     Task ToggleProjectAsync(string projectId);
 

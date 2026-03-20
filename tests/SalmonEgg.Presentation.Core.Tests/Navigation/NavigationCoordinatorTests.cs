@@ -19,6 +19,7 @@ using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Settings;
+using System.Reflection;
 using SerilogLogger = Serilog.ILogger;
 using Uno.Extensions.Reactive;
 using Xunit;
@@ -28,6 +29,17 @@ namespace SalmonEgg.Presentation.Core.Tests.Navigation;
 [Collection("NonParallel")]
 public sealed class NavigationCoordinatorTests
 {
+    [Fact]
+    public void ShellNavigationService_UsesExplicitAsyncResultContract_ForChatNavigation()
+    {
+        var navigateToChat = typeof(IShellNavigationService).GetMethod(
+            nameof(IShellNavigationService.NavigateToChat),
+            BindingFlags.Instance | BindingFlags.Public);
+
+        Assert.NotNull(navigateToChat);
+        Assert.NotEqual(typeof(void), navigateToChat!.ReturnType);
+    }
+
     [Fact]
     public async Task ActivateSessionAsync_UsesConversationSessionSwitcherDependency()
     {
@@ -42,7 +54,7 @@ public sealed class NavigationCoordinatorTests
                 DisplayName = "Session 1"
             });
             var preferences = CreatePreferencesWithProject();
-            var shellNavigation = new Mock<IShellNavigationService>();
+            var shellNavigation = CreateShellNavigationService();
 
             using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
             using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState);
@@ -80,7 +92,7 @@ public sealed class NavigationCoordinatorTests
                 DisplayName = "Session 1"
             });
             var preferences = CreatePreferencesWithProject();
-            var shellNavigation = new Mock<IShellNavigationService>();
+            var shellNavigation = CreateShellNavigationService();
 
             using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
             using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState);
@@ -93,6 +105,75 @@ public sealed class NavigationCoordinatorTests
             Assert.Equal(new[] { "session-1" }, switcher.ActivatedSessionIds);
             Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
             shellNavigation.Verify(s => s.NavigateToChat(), Times.Once);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task ActivateSessionAsync_WhenSwitcherFails_DoesNotNavigateToChat()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var sessionManager = CreateSessionManager(new Session("session-1", @"C:\repo\demo")
+            {
+                DisplayName = "Session 1"
+            });
+            var preferences = CreatePreferencesWithProject();
+            var shellNavigation = CreateShellNavigationService();
+
+            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
+            using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState);
+            var switcher = new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(false));
+            var coordinator = CreateCoordinator(navVm, switcher, preferences, shellNavigation.Object);
+
+            navVm.RebuildTree();
+            await coordinator.ActivateSessionAsync("session-1", "project-1");
+
+            shellNavigation.Verify(s => s.NavigateToChat(), Times.Never);
+            Assert.Null(preferences.LastSelectedProjectId);
+            Assert.Equal(NavigationSelectionState.StartSelection, navVm.CurrentSelection);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task ActivateSessionAsync_WhenShellNavigationFails_DoesNotCommitVisibleSelectionOrProjectSelection()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var sessionManager = CreateSessionManager(new Session("session-1", @"C:\repo\demo")
+            {
+                DisplayName = "Session 1"
+            });
+            var preferences = CreatePreferencesWithProject();
+            preferences.LastSelectedProjectId = "project-existing";
+            var shellNavigation = CreateShellNavigationService();
+            shellNavigation.Setup(s => s.NavigateToChat()).Throws(new InvalidOperationException("Navigation failed"));
+
+            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
+            using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState);
+            var switcher = new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(true));
+            var coordinator = CreateCoordinator(navVm, switcher, preferences, shellNavigation.Object);
+
+            navVm.RebuildTree();
+            await coordinator.ActivateSessionAsync("session-1", "project-1");
+
+            Assert.Equal(NavigationSelectionState.StartSelection, navVm.CurrentSelection);
+            Assert.Equal("project-existing", preferences.LastSelectedProjectId);
         }
         finally
         {
@@ -121,7 +202,7 @@ public sealed class NavigationCoordinatorTests
                     LastActivityAt = DateTime.UtcNow.AddMinutes(-1)
                 });
             var preferences = CreatePreferencesWithProject();
-            var shellNavigation = new Mock<IShellNavigationService>();
+            var shellNavigation = CreateShellNavigationService();
             var ui = new Mock<IUiInteractionService>();
             Action<string>? pickSession = null;
 
@@ -176,7 +257,7 @@ public sealed class NavigationCoordinatorTests
                 DisplayName = "Session 1"
             });
             var preferences = CreatePreferencesWithProject();
-            var shellNavigation = new Mock<IShellNavigationService>();
+            var shellNavigation = CreateShellNavigationService();
 
             using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
             using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState);
@@ -211,7 +292,7 @@ public sealed class NavigationCoordinatorTests
             var navState = new FakeNavigationPaneState();
             var sessionManager = CreateSessionManager();
             var preferences = CreatePreferencesWithProject();
-            var shellNavigation = new Mock<IShellNavigationService>();
+            var shellNavigation = CreateShellNavigationService();
 
             using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
             using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState);
@@ -243,7 +324,7 @@ public sealed class NavigationCoordinatorTests
                 DisplayName = "Session 2"
             });
             var preferences = CreatePreferencesWithProject();
-            var shellNavigation = new Mock<IShellNavigationService>();
+            var shellNavigation = CreateShellNavigationService();
 
             using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
             using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState);
@@ -279,7 +360,7 @@ public sealed class NavigationCoordinatorTests
                 DisplayName = "Session 1"
             });
             var preferences = CreatePreferencesWithProject();
-            var shellNavigation = new Mock<IShellNavigationService>();
+            var shellNavigation = CreateShellNavigationService();
 
             using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
             using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState);
@@ -310,7 +391,7 @@ public sealed class NavigationCoordinatorTests
             var navState = new FakeNavigationPaneState();
             var sessionManager = CreateSessionManager();
             var preferences = CreatePreferencesWithProject();
-            var shellNavigation = new Mock<IShellNavigationService>();
+            var shellNavigation = CreateShellNavigationService();
 
             using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
             using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState);
@@ -333,7 +414,7 @@ public sealed class NavigationCoordinatorTests
         FakeNavigationPaneState navState,
         IUiInteractionService? ui = null)
     {
-        var shellNavigation = new Mock<IShellNavigationService>();
+        var shellNavigation = CreateShellNavigationService();
         var navLogger = new Mock<ILogger<MainNavigationViewModel>>();
         var metricsSink = new Mock<IShellLayoutMetricsSink>();
         var projector = new NavigationSelectionProjector();
@@ -348,6 +429,7 @@ public sealed class NavigationCoordinatorTests
             navState,
             metricsSink.Object,
             projector,
+            new ShellSelectionStateStore(),
             chat.Presenter);
     }
 
@@ -547,6 +629,21 @@ public sealed class NavigationCoordinatorTests
         });
 
         return preferences;
+    }
+
+    private static Mock<IShellNavigationService> CreateShellNavigationService()
+    {
+        var shellNavigation = new Mock<IShellNavigationService>();
+        shellNavigation
+            .Setup(s => s.NavigateToChat())
+            .Returns(ValueTask.FromResult(ShellNavigationResult.Success()));
+        shellNavigation
+            .Setup(s => s.NavigateToStart())
+            .Returns(ValueTask.FromResult(ShellNavigationResult.Success()));
+        shellNavigation
+            .Setup(s => s.NavigateToSettings(It.IsAny<string>()))
+            .Returns(ValueTask.FromResult(ShellNavigationResult.Success()));
+        return shellNavigation;
     }
 
     private static async Task WaitForConditionAsync(Func<bool> predicate)

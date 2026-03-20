@@ -13,13 +13,14 @@ public class ChatStateProjectorTests
     {
         var projector = new ChatStateProjector();
         var state = new ChatState(
-            SelectedConversationId: "session-1",
+            HydratedConversationId: "session-1",
             SelectedAcpProfileId: null,
             Transcript: ImmutableList<ConversationMessageSnapshot>.Empty,
             PlanEntries: ImmutableList<ConversationPlanEntrySnapshot>.Empty);
 
         var projection = projector.Apply(
             state,
+            "session-1",
             new ConversationRemoteBindingState("session-1", "remote-1", "profile-a"));
 
         Assert.Equal("profile-a", projection.SelectedProfileId);
@@ -31,13 +32,14 @@ public class ChatStateProjectorTests
     {
         var projector = new ChatStateProjector();
         var state = new ChatState(
-            SelectedConversationId: "session-1",
+            HydratedConversationId: "session-1",
             SelectedAcpProfileId: "profile-b",
             Transcript: ImmutableList<ConversationMessageSnapshot>.Empty,
             PlanEntries: ImmutableList<ConversationPlanEntrySnapshot>.Empty);
 
         var projection = projector.Apply(
             state,
+            "session-1",
             new ConversationRemoteBindingState("session-1", "remote-1", "profile-a"));
 
         Assert.Equal("profile-b", projection.SelectedProfileId);

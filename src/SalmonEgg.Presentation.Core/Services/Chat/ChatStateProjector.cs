@@ -9,6 +9,7 @@ public interface IChatStateProjector
 {
     ChatUiProjection Apply(
         ChatState storeState,
+        string? currentConversationId,
         ConversationRemoteBindingState? binding);
 }
 
@@ -16,15 +17,16 @@ public sealed class ChatStateProjector : IChatStateProjector
 {
     public ChatUiProjection Apply(
         ChatState storeState,
+        string? currentConversationId,
         ConversationRemoteBindingState? binding)
     {
         ArgumentNullException.ThrowIfNull(storeState);
 
         return new ChatUiProjection(
-            SelectedConversationId: storeState.SelectedConversationId,
+            SelectedConversationId: currentConversationId,
             SelectedProfileId: storeState.SelectedAcpProfileId ?? binding?.BoundProfileId,
             RemoteSessionId: binding?.RemoteSessionId,
-            IsSessionActive: !string.IsNullOrWhiteSpace(storeState.SelectedConversationId),
+            IsSessionActive: !string.IsNullOrWhiteSpace(currentConversationId),
             IsPromptInFlight: storeState.IsPromptInFlight,
             IsThinking: storeState.IsThinking,
             IsConnecting: storeState.IsConnecting,

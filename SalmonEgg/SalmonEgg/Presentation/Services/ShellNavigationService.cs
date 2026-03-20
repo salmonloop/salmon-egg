@@ -4,19 +4,40 @@ namespace SalmonEgg.Presentation.Services;
 
 public sealed class ShellNavigationService : IShellNavigationService
 {
-    public void NavigateToSettings(string key)
+    public ValueTask<ShellNavigationResult> NavigateToSettings(string key)
     {
-        GetShell()?.NavigateToSettingsSubPage(key);
+        var shell = GetShell();
+        if (shell is null)
+        {
+            return ValueTask.FromResult(ShellNavigationResult.Failed("ShellUnavailable"));
+        }
+
+        shell.NavigateToSettingsSubPage(key);
+        return ValueTask.FromResult(ShellNavigationResult.Success());
     }
 
-    public void NavigateToChat()
+    public ValueTask<ShellNavigationResult> NavigateToChat()
     {
-        GetShell()?.NavigateToChat();
+        var shell = GetShell();
+        if (shell is null)
+        {
+            return ValueTask.FromResult(ShellNavigationResult.Failed("ShellUnavailable"));
+        }
+
+        shell.NavigateToChat();
+        return ValueTask.FromResult(ShellNavigationResult.Success());
     }
 
-    public void NavigateToStart()
+    public ValueTask<ShellNavigationResult> NavigateToStart()
     {
-        GetShell()?.NavigateToStart();
+        var shell = GetShell();
+        if (shell is null)
+        {
+            return ValueTask.FromResult(ShellNavigationResult.Failed("ShellUnavailable"));
+        }
+
+        shell.NavigateToStart();
+        return ValueTask.FromResult(ShellNavigationResult.Success());
     }
 
     private static MainPage? GetShell()

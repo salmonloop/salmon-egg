@@ -30,6 +30,17 @@ public interface IChatLaunchWorkflowChatFacade
     bool CanSendPrompt();
 
     void SendPrompt();
+
+    Task<ChatLaunchConnectionOutcome> EnsureConnectedForLaunchAsync(CancellationToken cancellationToken = default);
+
+    bool TrySendPromptForLaunch();
+}
+
+public enum ChatLaunchConnectionOutcome
+{
+    Connected,
+    InProgress,
+    RequiresConfiguration
 }
 
 public sealed class ChatLaunchWorkflow : IChatLaunchWorkflow
@@ -80,35 +91,37 @@ public sealed class ChatLaunchWorkflow : IChatLaunchWorkflow
 
         // Navigation owns the session switch for the Start path.
         // Calling Chat.TrySwitchToSessionAsync here would reintroduce the current double-owner bug.
-        await _navigationCoordinator.ActivateSessionAsync(sessionId, _preferences.LastSelectedProjectId).ConfigureAwait(true);
-
-        if (!string.Equals(_chat.CurrentSessionId, sessionId, StringComparison.Ordinal))
+        var activated = await _navigationCoordinator
+            .ActivateSessionAsync(sessionId, _preferences.LastSelectedProjectId)
+            .ConfigureAwait(true);
+        if (!activated)
         {
-            _logger.LogWarning("Start workflow stopped: navigation activation did not select the new session (SessionId={SessionId})", sessionId);
+            _logger.LogWarning("Start workflow stopped: navigation activation failed (SessionId={SessionId})", sessionId);
             return;
         }
 
-        if (!_chat.IsConnected)
+        var connectionOutcome = await _chat.EnsureConnectedForLaunchAsync(cancellationToken).ConfigureAwait(true);
+        switch (connectionOutcome)
         {
-            await _chat.TryAutoConnectAsync(cancellationToken).ConfigureAwait(true);
-        }
+            case ChatLaunchConnectionOutcome.Connected:
+                break;
 
-        if (!_chat.IsConnected)
-        {
-            if (_chat.IsConnecting || _chat.IsInitializing)
-            {
+            case ChatLaunchConnectionOutcome.InProgress:
                 _logger.LogInformation("Start workflow paused: connection is still in progress.");
                 return;
-            }
 
-            await _navigationCoordinator.ActivateSettingsAsync("General").ConfigureAwait(true);
-            _chat.ShowTransportConfigPanel = true;
-            return;
+            case ChatLaunchConnectionOutcome.RequiresConfiguration:
+                await _navigationCoordinator.ActivateSettingsAsync("General").ConfigureAwait(true);
+                _chat.ShowTransportConfigPanel = true;
+                return;
+
+            default:
+                return;
         }
 
-        if (_chat.CanSendPrompt())
+        if (_chat.TrySendPromptForLaunch())
         {
-            _chat.SendPrompt();
+            return;
         }
     }
 }
@@ -147,5 +160,35 @@ public sealed class ChatLaunchWorkflowChatFacadeAdapter : IChatLaunchWorkflowCha
         {
             _chatViewModel.SendPromptCommand.Execute(null);
         }
+    }
+
+    public async Task<ChatLaunchConnectionOutcome> EnsureConnectedForLaunchAsync(CancellationToken cancellationToken = default)
+    {
+        if (_chatViewModel.IsConnected)
+        {
+            return ChatLaunchConnectionOutcome.Connected;
+        }
+
+        await _chatViewModel.TryAutoConnectAsync(cancellationToken).ConfigureAwait(true);
+
+        if (_chatViewModel.IsConnected)
+        {
+            return ChatLaunchConnectionOutcome.Connected;
+        }
+
+        return _chatViewModel.IsConnecting || _chatViewModel.IsInitializing
+            ? ChatLaunchConnectionOutcome.InProgress
+            : ChatLaunchConnectionOutcome.RequiresConfiguration;
+    }
+
+    public bool TrySendPromptForLaunch()
+    {
+        if (_chatViewModel.SendPromptCommand?.CanExecute(null) != true)
+        {
+            return false;
+        }
+
+        _chatViewModel.SendPromptCommand.Execute(null);
+        return true;
     }
 }

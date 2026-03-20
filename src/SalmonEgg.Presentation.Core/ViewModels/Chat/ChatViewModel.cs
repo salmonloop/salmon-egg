@@ -691,7 +691,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         }
 
         var currentState = await _chatStore.State ?? ChatState.Empty;
-        if (!string.Equals(currentState.SelectedConversationId, conversationId, StringComparison.Ordinal))
+        if (!string.Equals(currentState.HydratedConversationId, conversationId, StringComparison.Ordinal))
         {
             return;
         }
@@ -776,7 +776,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             await _conversationWorkspace.RestoreAsync().ConfigureAwait(false);
             await PostToUiAsync(() =>
             {
-                var restoredConversationId = _conversationWorkspace.CurrentConversationId;
+                var restoredConversationId = _conversationWorkspace.LastActiveConversationId;
                 if (!string.IsNullOrWhiteSpace(restoredConversationId))
                 {
                     _suppressStoreConversationProjection = true;
@@ -793,7 +793,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 }
             }).ConfigureAwait(false);
 
-            await SelectAndHydrateConversationAsync(_conversationWorkspace.CurrentConversationId).ConfigureAwait(false);
+            await SelectAndHydrateConversationAsync(_conversationWorkspace.LastActiveConversationId).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -1051,11 +1051,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         => _conversationWorkspace.GetRemoteBinding(conversationId);
 
     private ChatUiProjection CreateProjection(ChatState state)
-        => _chatStateProjector.Apply(state, TryGetRemoteBinding(state.SelectedConversationId));
+        => _chatStateProjector.Apply(state, CurrentSessionId, TryGetRemoteBinding(CurrentSessionId));
 
     private void PersistConversationState(ChatState state, bool scheduleSave)
     {
-        if (string.IsNullOrWhiteSpace(state.SelectedConversationId))
+        if (string.IsNullOrWhiteSpace(state.HydratedConversationId))
         {
             return;
         }
@@ -1065,7 +1065,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             return;
         }
 
-        var conversationId = state.SelectedConversationId!;
+        var conversationId = state.HydratedConversationId!;
         var existing = _conversationWorkspace.GetConversationSnapshot(conversationId);
         var transcript = (state.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty)
             .Where(static message => !IsThinkingPlaceholder(message))

@@ -36,6 +36,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     private readonly IShellLayoutMetricsSink _metricsSink;
     private readonly NavigationSelectionProjector _selectionProjector;
     private readonly IConversationCatalogReadModel _conversationCatalogPresenter;
+    private readonly IShellSelectionReadModel _shellSelection;
+    private readonly IShellSelectionMutationSink _shellSelectionMutations;
     private readonly SynchronizationContext _syncContext;
     private readonly System.Collections.Specialized.NotifyCollectionChangedEventHandler _projectsChangedHandler;
     private readonly Timer _relativeTimeTimer;
@@ -54,7 +56,6 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     public SessionsHeaderNavItemViewModel SessionsHeaderItem { get; }
 
     private object? _selectedItem;
-    private NavigationSelectionState _selection = NavigationSelectionState.StartSelection;
     private NavigationViewProjection _projection = new(
         ControlSelectedItem: null,
         IsSettingsSelected: false,
@@ -67,7 +68,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         private set => SetProperty(ref _selectedItem, value);
     }
 
-    public NavigationSelectionState CurrentSelection => _selection;
+    public NavigationSelectionState CurrentSelection => _shellSelection.CurrentSelection;
 
     public object? ProjectedControlSelectedItem => _projection.ControlSelectedItem;
 
@@ -93,6 +94,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         INavigationPaneState navigationState,
         IShellLayoutMetricsSink metricsSink,
         NavigationSelectionProjector selectionProjector,
+        IShellSelectionReadModel shellSelection,
         IConversationCatalogReadModel conversationCatalogPresenter)
     {
         _conversationSessionSwitcher = conversationSessionSwitcher ?? throw new ArgumentNullException(nameof(conversationSessionSwitcher));
@@ -104,6 +106,9 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         _navigationState = navigationState ?? throw new ArgumentNullException(nameof(navigationState));
         _metricsSink = metricsSink ?? throw new ArgumentNullException(nameof(metricsSink));
         _selectionProjector = selectionProjector ?? throw new ArgumentNullException(nameof(selectionProjector));
+        _shellSelection = shellSelection ?? throw new ArgumentNullException(nameof(shellSelection));
+        _shellSelectionMutations = shellSelection as IShellSelectionMutationSink
+            ?? throw new ArgumentException("Shell selection read model must also support mutations.", nameof(shellSelection));
         _conversationCatalogPresenter = conversationCatalogPresenter ?? throw new ArgumentNullException(nameof(conversationCatalogPresenter));
         _syncContext = SynchronizationContext.Current ?? new SynchronizationContext();
         _sessionActivationHandler = SelectSessionAsync;
@@ -125,6 +130,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         ApplySelectionProjection();
 
         _conversationCatalogPresenter.PropertyChanged += OnConversationCatalogPresenterPropertyChanged;
+        _shellSelection.PropertyChanged += OnShellSelectionPropertyChanged;
         _projectsChangedHandler = (_, _) => RebuildTree();
         ((INotifyCollectionChanged)_projectPreferences.Projects).CollectionChanged += _projectsChangedHandler;
 
@@ -141,6 +147,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     {
         _navigationState.PaneStateChanged -= OnServicePaneStateChanged;
         _conversationCatalogPresenter.PropertyChanged -= OnConversationCatalogPresenterPropertyChanged;
+        _shellSelection.PropertyChanged -= OnShellSelectionPropertyChanged;
         ((INotifyCollectionChanged)_projectPreferences.Projects).CollectionChanged -= _projectsChangedHandler;
         _relativeTimeTimer.Dispose();
 
@@ -178,6 +185,17 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             || e.PropertyName == nameof(IConversationCatalogReadModel.ConversationListVersion))
         {
             RebuildTree();
+        }
+    }
+
+    private void OnShellSelectionPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(IShellSelectionReadModel.CurrentSelection)
+            || e.PropertyName == nameof(ShellSelectionStateStore.CurrentSelection))
+        {
+            OnPropertyChanged(nameof(CurrentSelection));
+            OnPropertyChanged(nameof(IsSettingsSelected));
+            NormalizeSelectionAfterRebuild();
         }
     }
 
@@ -237,17 +255,27 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         }
     }
 
-    public Task PrepareStartForProjectAsync(string projectId)
+    public async Task PrepareStartForProjectAsync(string projectId)
     {
         var normalizedId = string.Equals(projectId, UnclassifiedProjectId, StringComparison.Ordinal)
             ? null
             : projectId;
 
-        _projectPreferences.LastSelectedProjectId = normalizedId;
-        _pendingProjectIdForNewSession = normalizedId;
-        _shellNavigation.NavigateToStart();
-        SelectStart();
-        return Task.CompletedTask;
+        try
+        {
+            var navigationResult = await _shellNavigation.NavigateToStart().ConfigureAwait(true);
+            if (!navigationResult.Succeeded)
+            {
+                return;
+            }
+
+            _projectPreferences.LastSelectedProjectId = normalizedId;
+            _pendingProjectIdForNewSession = normalizedId;
+            SelectStart();
+        }
+        catch
+        {
+        }
     }
 
     public string? ConsumePendingProjectRootPath()
@@ -605,37 +633,32 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     private void NormalizeSelectionState()
     {
-        if (_selection is not NavigationSelectionState.Session sessionSelection)
+        if (CurrentSelection is not NavigationSelectionState.Session sessionSelection)
         {
             return;
         }
 
         if (string.IsNullOrWhiteSpace(sessionSelection.SessionId) || !_sessionIndex.ContainsKey(sessionSelection.SessionId))
         {
-            _selection = NavigationSelectionState.StartSelection;
-            OnPropertyChanged(nameof(IsSettingsSelected));
-            OnPropertyChanged(nameof(CurrentSelection));
+            _shellSelectionMutations.SetSelection(NavigationSelectionState.StartSelection);
         }
     }
 
     private void SetSelectionState(NavigationSelectionState selection)
     {
-        if (Equals(_selection, selection))
+        if (Equals(CurrentSelection, selection))
         {
             ApplySelectionProjection();
             return;
         }
 
-        _selection = selection;
-        OnPropertyChanged(nameof(CurrentSelection));
-        OnPropertyChanged(nameof(IsSettingsSelected));
-        ApplySelectionProjection();
+        _shellSelectionMutations.SetSelection(selection);
     }
 
     private void ApplySelectionProjection()
     {
         _projection = _selectionProjector.Project(
-            _selection,
+            CurrentSelection,
             StartItem,
             _sessionIndex,
             _projectIndex,
@@ -649,7 +672,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     private void ApplyVisualSelectionState(NavigationViewProjection projection)
     {
-        StartItem.IsLogicallySelected = _selection is NavigationSelectionState.Start;
+        StartItem.IsLogicallySelected = CurrentSelection is NavigationSelectionState.Start;
         SessionsHeaderItem.IsLogicallySelected = false;
 
         foreach (var project in _projectVms.Values)

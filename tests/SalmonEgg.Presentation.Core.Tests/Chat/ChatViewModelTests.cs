@@ -162,7 +162,8 @@ public class ChatViewModelTests
 
         Assert.True(switched);
         var state = await fixture.GetStateAsync();
-        Assert.Equal("session-1", state.SelectedConversationId);
+        Assert.Null(state.SelectedConversationId);
+        Assert.Equal("session-1", state.HydratedConversationId);
         var deadline = DateTime.UtcNow.AddSeconds(2);
         ConversationRemoteBindingState? remoteBinding = fixture.Workspace.GetRemoteBinding("session-1");
         var expectedProfileId = fixture.Preferences.LastSelectedServerId;
@@ -176,6 +177,25 @@ public class ChatViewModelTests
         Assert.NotNull(remoteBinding);
         Assert.Equal(expectedProfileId, remoteBinding!.BoundProfileId);
         Assert.Equal(remoteBinding.RemoteSessionId, fixture.ViewModel.CurrentRemoteSessionId);
+    }
+
+    [Fact]
+    public async Task TrySwitchToSessionAsync_DoesNotCommitSemanticSelectionIntoChatState()
+    {
+        await using var fixture = CreateViewModel();
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+
+        var switched = await fixture.ViewModel.TrySwitchToSessionAsync("session-1");
+
+        Assert.True(switched);
+        Assert.Null((await fixture.GetStateAsync()).SelectedConversationId);
     }
 
     [Fact]
@@ -230,12 +250,55 @@ public class ChatViewModelTests
         Assert.Equal("remote-1", fixture.ViewModel.CurrentRemoteSessionId);
 
         var state = await fixture.GetStateAsync();
-        Assert.Equal(fixture.ViewModel.CurrentSessionId, state.SelectedConversationId);
+        Assert.Null(state.SelectedConversationId);
+        Assert.Equal(fixture.ViewModel.CurrentSessionId, state.HydratedConversationId);
 
         var remoteBinding = fixture.Workspace.GetRemoteBinding(fixture.ViewModel.CurrentSessionId!);
         Assert.NotNull(remoteBinding);
         Assert.Equal("remote-1", remoteBinding!.RemoteSessionId);
         Assert.Equal("profile-1", remoteBinding.BoundProfileId);
+    }
+
+    [Fact]
+    public async Task CreateNewSessionCommand_DoesNotPromoteConversationSelectionIntoChatState()
+    {
+        await using var fixture = CreateViewModel();
+        fixture.Preferences.LastSelectedServerId = "profile-1";
+
+        var chatService = new Mock<IChatService>();
+        chatService.Setup(s => s.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+            .ReturnsAsync(new SessionNewResponse("remote-1"));
+        fixture.ViewModel.ReplaceChatService(chatService.Object);
+
+        await fixture.ViewModel.CreateNewSessionCommand.ExecuteAsync(null);
+
+        Assert.Null((await fixture.GetStateAsync()).SelectedConversationId);
+    }
+
+    [Fact]
+    public async Task TrySwitchToSessionAsync_DoesNotOwnStoreSelectedConversationId()
+    {
+        await using var fixture = CreateViewModel();
+        var switched = await fixture.ViewModel.TrySwitchToSessionAsync("session-1");
+        Assert.True(switched);
+
+        var state = await fixture.GetStateAsync();
+        Assert.Null(state.SelectedConversationId);
+    }
+
+    [Fact]
+    public async Task CreateNewSessionCommand_DoesNotOwnStoreSelectedConversationId()
+    {
+        await using var fixture = CreateViewModel();
+        var chatService = new Mock<IChatService>();
+        chatService.Setup(s => s.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+            .ReturnsAsync(new SessionNewResponse("remote-1"));
+        fixture.ViewModel.ReplaceChatService(chatService.Object);
+
+        await fixture.ViewModel.CreateNewSessionCommand.ExecuteAsync(null);
+
+        var state = await fixture.GetStateAsync();
+        Assert.Null(state.SelectedConversationId);
     }
 
     [Fact]

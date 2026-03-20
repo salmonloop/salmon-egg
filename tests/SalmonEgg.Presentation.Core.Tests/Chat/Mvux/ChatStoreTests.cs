@@ -6,13 +6,14 @@ using Xunit;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat.Mvux;
 
+[Collection("NonParallel")]
 public class ChatStoreTests
 {
     [Fact]
     public async Task GivenStore_WhenDispatchAction_ThenStateIsUpdatedViaReducer()
     {
         // Arrange
-        var initialState = new ChatState(SelectedConversationId: "initial");
+        var initialState = new ChatState(HydratedConversationId: "initial");
         await using var state = State.Value(this, () => initialState);
         var store = new ChatStore(state);
         var newConversationId = "updated-id";
@@ -24,7 +25,8 @@ public class ChatStoreTests
         // Assert
         var currentState = await state;
         Assert.NotNull(currentState);
-        Assert.Equal(newConversationId, currentState.SelectedConversationId);
+        Assert.Null(currentState.SelectedConversationId);
+        Assert.Equal(newConversationId, currentState.HydratedConversationId);
     }
 
     [Fact]
@@ -42,6 +44,7 @@ public class ChatStoreTests
         var currentState = await state;
         Assert.NotNull(currentState);
         Assert.False(currentState.IsPromptInFlight);
-        Assert.Equal("conv-1", currentState.SelectedConversationId);
+        Assert.Null(currentState.SelectedConversationId);
+        Assert.Equal("conv-1", currentState.HydratedConversationId);
     }
 }

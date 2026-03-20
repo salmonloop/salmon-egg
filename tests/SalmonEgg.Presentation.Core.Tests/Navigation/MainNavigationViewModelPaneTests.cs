@@ -179,6 +179,7 @@ public sealed class MainNavigationViewModelPaneTests
                 navState,
                 metricsSink.Object,
                 new NavigationSelectionProjector(),
+                new ShellSelectionStateStore(),
                 presenter);
 
             navVm.RebuildTree();
@@ -242,6 +243,7 @@ public sealed class MainNavigationViewModelPaneTests
                 navState,
                 metricsSink.Object,
                 new NavigationSelectionProjector(),
+                new ShellSelectionStateStore(),
                 presenter);
 
             navVm.RebuildTree();
@@ -310,6 +312,7 @@ public sealed class MainNavigationViewModelPaneTests
             navState,
             metricsSink.Object,
             new NavigationSelectionProjector(),
+            new ShellSelectionStateStore(),
             CreatePresenter((FakeChatSessionCatalog)chatCatalog));
     }
 

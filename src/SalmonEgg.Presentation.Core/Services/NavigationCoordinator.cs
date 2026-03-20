@@ -27,34 +27,68 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         _navigationHost.RegisterSessionActivationHandler(ActivateSessionAsync);
     }
 
-    public Task ActivateStartAsync()
+    public async Task ActivateStartAsync()
     {
-        _navigationHost.SelectStart();
-        _shellNavigationService.NavigateToStart();
-        return Task.CompletedTask;
+        try
+        {
+            var navigationResult = await _shellNavigationService.NavigateToStart().ConfigureAwait(true);
+            if (navigationResult.Succeeded)
+            {
+                _navigationHost.SelectStart();
+            }
+        }
+        catch
+        {
+        }
     }
 
-    public Task ActivateSettingsAsync(string settingsKey)
+    public async Task ActivateSettingsAsync(string settingsKey)
     {
-        _navigationHost.SelectSettings();
-        _shellNavigationService.NavigateToSettings(string.IsNullOrWhiteSpace(settingsKey) ? "General" : settingsKey);
-        return Task.CompletedTask;
+        try
+        {
+            var navigationResult = await _shellNavigationService
+                .NavigateToSettings(string.IsNullOrWhiteSpace(settingsKey) ? "General" : settingsKey)
+                .ConfigureAwait(true);
+            if (navigationResult.Succeeded)
+            {
+                _navigationHost.SelectSettings();
+            }
+        }
+        catch
+        {
+        }
     }
 
-    public async Task ActivateSessionAsync(string sessionId, string? projectId)
+    public async Task<bool> ActivateSessionAsync(string sessionId, string? projectId)
     {
         if (string.IsNullOrWhiteSpace(sessionId))
         {
-            return;
+            return false;
         }
 
-        _shellNavigationService.NavigateToChat();
-        _projectSelectionStore.RememberSelectedProject(projectId);
-
-        if (await _conversationSessionSwitcher.TrySwitchToSessionAsync(sessionId).ConfigureAwait(true))
+        var switched = await _conversationSessionSwitcher.TrySwitchToSessionAsync(sessionId).ConfigureAwait(true);
+        if (!switched)
         {
-            _navigationHost.SelectSession(sessionId);
+            return false;
         }
+
+        try
+        {
+            var navigationResult = await _shellNavigationService.NavigateToChat().ConfigureAwait(true);
+            if (!navigationResult.Succeeded)
+            {
+                return false;
+            }
+
+            _projectSelectionStore.RememberSelectedProject(projectId);
+            _navigationHost.SelectSession(sessionId);
+            return true;
+        }
+        catch
+        {
+        }
+
+        return false;
     }
 
     public Task ToggleProjectAsync(string projectId)

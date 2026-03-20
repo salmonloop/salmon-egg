@@ -233,6 +233,8 @@ public static class DependencyInjection
 
         // Main shell navigation (Start + Projects -> Sessions tree)
         services.AddSingleton<NavigationSelectionProjector>();
+        services.AddSingleton<ShellSelectionStateStore>();
+        services.AddSingleton<IShellSelectionReadModel>(sp => sp.GetRequiredService<ShellSelectionStateStore>());
         services.AddSingleton<MainNavigationViewModel>(sp =>
             new MainNavigationViewModel(
                 sp.GetRequiredService<IConversationCatalog>(),
@@ -244,6 +246,7 @@ public static class DependencyInjection
                 sp.GetRequiredService<INavigationPaneState>(),
                 sp.GetRequiredService<IShellLayoutMetricsSink>(),
                 sp.GetRequiredService<NavigationSelectionProjector>(),
+                sp.GetRequiredService<IShellSelectionReadModel>(),
                 sp.GetRequiredService<IConversationCatalogReadModel>()));
         services.AddSingleton<INavigationSelectionHost>(sp =>
             sp.GetRequiredService<MainNavigationViewModel>());

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -21,6 +22,19 @@ namespace SalmonEgg.Presentation.Core.Tests.Navigation;
 [Collection("NonParallel")]
 public sealed class MainNavigationViewModelSelectionTests
 {
+    [Fact]
+    public void Constructor_UsesShellSelectionReadModelProjectionInsteadOfPrivateSelectionOwnership()
+    {
+        var constructor = typeof(MainNavigationViewModel)
+            .GetConstructors(BindingFlags.Instance | BindingFlags.Public)
+            .OrderByDescending(ctor => ctor.GetParameters().Length)
+            .First();
+
+        Assert.Contains(
+            constructor.GetParameters(),
+            parameter => string.Equals(parameter.ParameterType.Name, "IShellSelectionReadModel", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task LogicalSelection_RemainsActiveSession_WhenPaneClosesAndReopens()
     {
@@ -263,6 +277,7 @@ public sealed class MainNavigationViewModelSelectionTests
                 navState,
                 metricsSink.Object,
                 new NavigationSelectionProjector(),
+                new ShellSelectionStateStore(),
                 presenter);
 
             navVm.RebuildTree();
@@ -302,6 +317,7 @@ public sealed class MainNavigationViewModelSelectionTests
             navState,
             metricsSink.Object,
             new NavigationSelectionProjector(),
+            new ShellSelectionStateStore(),
             presenter);
     }
 
