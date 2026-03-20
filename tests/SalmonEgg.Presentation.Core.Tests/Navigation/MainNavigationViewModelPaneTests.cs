@@ -78,7 +78,7 @@ public sealed class MainNavigationViewModelPaneTests
     }
 
     [Fact]
-    public async Task SelectedItem_RemainsSession_WhenPaneClosesWithActiveSession()
+    public async Task SelectedItem_RemainsStart_WhenPaneClosesWithExternalActiveSession()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -119,12 +119,11 @@ public sealed class MainNavigationViewModelPaneTests
 
             navVm.RebuildTree();
 
-            Assert.IsType<SessionNavItemViewModel>(navVm.SelectedItem);
+            Assert.Same(navVm.StartItem, navVm.SelectedItem);
 
             navState.SetPaneOpen(false);
 
-            var selectedSession = Assert.IsType<SessionNavItemViewModel>(navVm.SelectedItem);
-            Assert.Equal("session-1", selectedSession.SessionId);
+            Assert.Same(navVm.StartItem, navVm.SelectedItem);
         }
         finally
         {
@@ -133,7 +132,7 @@ public sealed class MainNavigationViewModelPaneTests
     }
 
     [Fact]
-    public async Task SelectedItem_ProjectsBackToSession_WhenPaneReopens()
+    public async Task SelectedItem_RemainsStart_WhenPaneReopensWithExternalActiveSession()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -187,8 +186,7 @@ public sealed class MainNavigationViewModelPaneTests
 
             navState.SetPaneOpen(true);
 
-            var selectedSession = Assert.IsType<SessionNavItemViewModel>(navVm.SelectedItem);
-            Assert.Equal("session-1", selectedSession.SessionId);
+            Assert.Same(navVm.StartItem, navVm.SelectedItem);
         }
         finally
         {
@@ -197,7 +195,7 @@ public sealed class MainNavigationViewModelPaneTests
     }
 
     [Fact]
-    public async Task SelectedItem_StaysOnSession_AcrossRepeatedPaneToggles()
+    public async Task SelectedItem_RemainsStart_AcrossRepeatedPaneTogglesWithExternalActiveSession()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -252,8 +250,7 @@ public sealed class MainNavigationViewModelPaneTests
             navState.SetPaneOpen(true);
             navState.SetPaneOpen(false);
 
-            var selectedSession = Assert.IsType<SessionNavItemViewModel>(navVm.SelectedItem);
-            Assert.Equal("session-1", selectedSession.SessionId);
+            Assert.Same(navVm.StartItem, navVm.SelectedItem);
         }
         finally
         {

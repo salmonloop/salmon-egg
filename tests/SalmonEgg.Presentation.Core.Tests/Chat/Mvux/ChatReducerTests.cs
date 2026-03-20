@@ -73,9 +73,7 @@ public class ChatReducerTests
             Transcript: ImmutableList.Create(new ConversationMessageSnapshot { Id = "m-1", TextContent = "hello", ContentType = "text" }),
             PlanEntries: ImmutableList.Create(new ConversationPlanEntrySnapshot { Content = "step-1" }),
             ShowPlanPanel: true,
-            PlanTitle: "plan",
-            BoundProfileId: "profile-1",
-            RemoteSessionId: "remote-1");
+            PlanTitle: "plan");
 
         var newState = ChatReducer.Reduce(initialState, new SelectConversationAction("conv-2"));
 
@@ -84,8 +82,6 @@ public class ChatReducerTests
         Assert.Null(newState.PlanEntries);
         Assert.False(newState.ShowPlanPanel);
         Assert.Null(newState.PlanTitle);
-        Assert.Null(newState.BoundProfileId);
-        Assert.Null(newState.RemoteSessionId);
     }
 
     [Fact]
@@ -97,9 +93,7 @@ public class ChatReducerTests
             ImmutableList.Create(new ConversationMessageSnapshot { Id = "m-1", TextContent = "stale", ContentType = "text" }),
             ImmutableList.Create(new ConversationPlanEntrySnapshot { Content = "step-1" }),
             true,
-            "plan",
-            "profile-1",
-            "remote-1");
+            "plan");
 
         var newState = ChatReducer.Reduce(initialState, action);
 
@@ -108,7 +102,5 @@ public class ChatReducerTests
         Assert.True(newState.PlanEntries is null or { Count: 0 });
         Assert.False(newState.ShowPlanPanel);
         Assert.Null(newState.PlanTitle);
-        Assert.Null(newState.BoundProfileId);
-        Assert.Null(newState.RemoteSessionId);
     }
 }

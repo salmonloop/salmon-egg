@@ -8,20 +8,22 @@ namespace SalmonEgg.Presentation.Core.Services.Chat;
 public interface IChatStateProjector
 {
     ChatUiProjection Apply(
-        ChatState storeState);
+        ChatState storeState,
+        ConversationRemoteBindingState? binding);
 }
 
 public sealed class ChatStateProjector : IChatStateProjector
 {
     public ChatUiProjection Apply(
-        ChatState storeState)
+        ChatState storeState,
+        ConversationRemoteBindingState? binding)
     {
         ArgumentNullException.ThrowIfNull(storeState);
 
         return new ChatUiProjection(
             SelectedConversationId: storeState.SelectedConversationId,
-            SelectedProfileId: storeState.SelectedAcpProfileId ?? storeState.BoundProfileId,
-            RemoteSessionId: storeState.RemoteSessionId,
+            SelectedProfileId: storeState.SelectedAcpProfileId ?? binding?.BoundProfileId,
+            RemoteSessionId: binding?.RemoteSessionId,
             IsSessionActive: !string.IsNullOrWhiteSpace(storeState.SelectedConversationId),
             IsPromptInFlight: storeState.IsPromptInFlight,
             IsThinking: storeState.IsThinking,

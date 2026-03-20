@@ -185,19 +185,6 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         {
             await PostToContextAsync(() => CurrentConversationId = sessionId, cancellationToken).ConfigureAwait(false);
 
-            var binding = GetOrCreateConversationBinding(sessionId);
-            binding.BoundProfileId ??= _preferences.SelectedProfileId;
-
-            var currentProfileId = _preferences.SelectedProfileId;
-            if (!string.IsNullOrWhiteSpace(currentProfileId)
-                && !string.Equals(binding.BoundProfileId, currentProfileId, StringComparison.Ordinal))
-            {
-                binding.BoundProfileId = currentProfileId;
-                binding.RemoteSessionId = null;
-                binding.LastUpdatedAt = DateTime.UtcNow;
-                ScheduleSave();
-            }
-
             return true;
         }
         catch (OperationCanceledException)

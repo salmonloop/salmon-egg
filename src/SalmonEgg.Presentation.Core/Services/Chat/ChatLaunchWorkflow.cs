@@ -137,7 +137,7 @@ public sealed class ChatLaunchWorkflowChatFacadeAdapter : IChatLaunchWorkflowCha
     }
 
     public Task TryAutoConnectAsync(CancellationToken cancellationToken = default) =>
-        _chatViewModel.TryAutoConnectAsync();
+        _chatViewModel.TryAutoConnectAsync(cancellationToken);
 
     public bool CanSendPrompt() => _chatViewModel.SendPromptCommand?.CanExecute(null) == true;
 

@@ -171,6 +171,38 @@ public sealed class ChatLaunchWorkflowTests
         Assert.Equal(0, chat.SendPromptCount);
     }
 
+    [Fact]
+    public async Task StartSessionAndSendAsync_ForwardsCancellationTokenToAutoConnect()
+    {
+        var sessionManager = new Mock<ISessionManager>();
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .ReturnsAsync((string id, string? cwd) => new Session { SessionId = id, Cwd = cwd });
+
+        var preferences = CreatePreferences();
+        var chat = new FakeChatLaunchWorkflowChatFacade
+        {
+            IsConnected = false,
+            AutoConnectAction = facade => facade.IsConnected = true
+        };
+        var navigation = new RecordingNavigationCoordinator(chat)
+        {
+            ApplyActivatedSessionToChat = true
+        };
+
+        var workflow = new ChatLaunchWorkflow(
+            chat,
+            sessionManager.Object,
+            preferences,
+            navigation,
+            () => @"C:\repo\demo");
+
+        using var cts = new CancellationTokenSource();
+        await workflow.StartSessionAndSendAsync("hello", cts.Token);
+
+        Assert.Equal(cts.Token, chat.LastAutoConnectToken);
+        Assert.Equal(1, chat.AutoConnectCallCount);
+    }
+
     private static AppPreferencesViewModel CreatePreferences(string? lastSelectedProjectId = null)
     {
         var appSettingsService = new Mock<IAppSettingsService>();
@@ -212,9 +244,12 @@ public sealed class ChatLaunchWorkflowTests
 
         public Action<FakeChatLaunchWorkflowChatFacade>? AutoConnectAction { get; set; }
 
+        public CancellationToken LastAutoConnectToken { get; private set; }
+
         public Task TryAutoConnectAsync(CancellationToken cancellationToken = default)
         {
             AutoConnectCallCount++;
+            LastAutoConnectToken = cancellationToken;
             AutoConnectAction?.Invoke(this);
             return Task.CompletedTask;
         }

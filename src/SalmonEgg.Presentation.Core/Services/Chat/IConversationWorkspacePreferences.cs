@@ -6,8 +6,6 @@ namespace SalmonEgg.Presentation.Core.Services.Chat;
 public interface IConversationWorkspacePreferences
 {
     bool SaveLocalHistory { get; }
-
-    string? SelectedProfileId { get; }
 }
 
 public sealed class AppPreferencesConversationWorkspacePreferences : IConversationWorkspacePreferences
@@ -20,6 +18,4 @@ public sealed class AppPreferencesConversationWorkspacePreferences : IConversati
     }
 
     public bool SaveLocalHistory => _preferences.SaveLocalHistory;
-
-    public string? SelectedProfileId => _preferences.LastSelectedServerId;
 }

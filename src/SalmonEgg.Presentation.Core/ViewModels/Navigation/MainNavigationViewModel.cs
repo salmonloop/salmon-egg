@@ -642,7 +642,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             _navigationState.IsPaneOpen);
 
         ApplyVisualSelectionState(_projection);
-        SelectedItem = ResolveProjectedSelectedItem();
+        SelectedItem = _projection.ControlSelectedItem;
         OnPropertyChanged(nameof(ProjectedControlSelectedItem));
         OnPropertyChanged(nameof(IsSettingsSelected));
     }
@@ -670,19 +670,6 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             }
         }
     }
-
-    private object? ResolveProjectedSelectedItem()
-    {
-        if (_selection is NavigationSelectionState.Start
-            && !string.IsNullOrWhiteSpace(_conversationSessionSwitcher.CurrentConversationId)
-            && _sessionIndex.TryGetValue(_conversationSessionSwitcher.CurrentConversationId, out var activeSessionItem))
-        {
-            return activeSessionItem;
-        }
-
-        return _projection.ControlSelectedItem;
-    }
-
 
     private void RefreshRelativeTimes()
     {

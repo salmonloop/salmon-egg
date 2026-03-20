@@ -18,8 +18,6 @@ public static class ChatReducer
                 PlanEntries = null,
                 ShowPlanPanel = false,
                 PlanTitle = null,
-                BoundProfileId = null,
-                RemoteSessionId = null,
                 IsPromptInFlight = false,
                 IsThinking = false
             },
@@ -38,9 +36,7 @@ public static class ChatReducer
                 Transcript = hydrate.Transcript,
                 PlanEntries = hydrate.PlanEntries,
                 ShowPlanPanel = hydrate.ShowPlanPanel,
-                PlanTitle = hydrate.PlanTitle,
-                BoundProfileId = hydrate.BoundProfileId,
-                RemoteSessionId = hydrate.RemoteSessionId
+                PlanTitle = hydrate.PlanTitle
             },
             ReplacePlanEntriesAction replacePlan when !string.Equals(replacePlan.ConversationId, state.SelectedConversationId, StringComparison.Ordinal)
                 => state,
@@ -49,13 +45,6 @@ public static class ChatReducer
                 PlanEntries = replacePlan.PlanEntries,
                 ShowPlanPanel = replacePlan.ShowPlanPanel,
                 PlanTitle = replacePlan.PlanTitle
-            },
-            UpdateConversationBindingAction updateBinding when !string.Equals(updateBinding.ConversationId, state.SelectedConversationId, StringComparison.Ordinal)
-                => state,
-            UpdateConversationBindingAction updateBinding => state with
-            {
-                BoundProfileId = updateBinding.BoundProfileId,
-                RemoteSessionId = updateBinding.RemoteSessionId
             },
             UpsertTranscriptMessageAction upsertMessage when !string.Equals(upsertMessage.ConversationId, state.SelectedConversationId, StringComparison.Ordinal)
                 => state,

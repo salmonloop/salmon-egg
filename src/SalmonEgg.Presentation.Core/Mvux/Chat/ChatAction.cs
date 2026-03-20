@@ -78,9 +78,7 @@ public sealed record HydrateConversationAction(
     IImmutableList<ConversationMessageSnapshot> Transcript,
     IImmutableList<ConversationPlanEntrySnapshot> PlanEntries,
     bool ShowPlanPanel,
-    string? PlanTitle,
-    string? BoundProfileId,
-    string? RemoteSessionId) : ChatAction;
+    string? PlanTitle) : ChatAction;
 
 public sealed record UpsertTranscriptMessageAction(string? ConversationId, ConversationMessageSnapshot Message) : ChatAction;
 
@@ -89,8 +87,3 @@ public sealed record ReplacePlanEntriesAction(
     IImmutableList<ConversationPlanEntrySnapshot> PlanEntries,
     bool ShowPlanPanel,
     string? PlanTitle) : ChatAction;
-
-public sealed record UpdateConversationBindingAction(
-    string? ConversationId,
-    string? BoundProfileId,
-    string? RemoteSessionId) : ChatAction;

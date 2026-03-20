@@ -6,8 +6,6 @@ namespace SalmonEgg.Presentation.Core.Mvux.Chat;
 public record ChatState(
     string? SelectedConversationId = null,
     string? SelectedAcpProfileId = null,
-    string? BoundProfileId = null,
-    string? RemoteSessionId = null,
     bool IsPromptInFlight = false,
     bool IsThinking = false,
     bool IsConnecting = false,

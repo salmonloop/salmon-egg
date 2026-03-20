@@ -82,7 +82,7 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
-    public async Task TrySwitchToSessionAsync_ProfileMismatch_ClearsRemoteBindingButKeepsLocalTranscript()
+    public async Task TrySwitchToSessionAsync_ProfileMismatch_KeepsRemoteBindingAndLocalTranscript()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var store = new CapturingConversationStore();
@@ -130,8 +130,8 @@ public sealed class ChatConversationWorkspaceTests
 
         var remoteBinding = workspace.GetRemoteBinding("session-1");
         Assert.NotNull(remoteBinding);
-        Assert.Null(remoteBinding!.RemoteSessionId);
-        Assert.Equal("profile-b", remoteBinding.BoundProfileId);
+        Assert.Equal("remote-1", remoteBinding!.RemoteSessionId);
+        Assert.Equal("profile-a", remoteBinding.BoundProfileId);
     }
 
     [Fact]
