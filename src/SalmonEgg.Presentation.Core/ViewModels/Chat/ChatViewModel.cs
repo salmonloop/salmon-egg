@@ -39,6 +39,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 {
     private readonly ChatServiceFactory _chatServiceFactory;
     private readonly ChatConversationWorkspace _conversationWorkspace;
+    private readonly IConversationActivationCoordinator _conversationActivationCoordinator;
     private readonly IAcpConnectionCommands _acpConnectionCommands;
     private readonly IConfigurationService _configurationService;
     private readonly AppPreferencesViewModel _preferences;
@@ -267,7 +268,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         IAcpSessionUpdateProjector? acpSessionUpdateProjector,
         ILogger<ChatViewModel> logger,
         SynchronizationContext? syncContext = null,
-        IAcpConnectionCommands? acpConnectionCommands = null)
+        IAcpConnectionCommands? acpConnectionCommands = null,
+        IConversationActivationCoordinator? conversationActivationCoordinator = null)
         : base(logger)
     {
         _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
@@ -278,6 +280,13 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
         _miniWindowCoordinator = miniWindowCoordinator ?? throw new ArgumentNullException(nameof(miniWindowCoordinator));
         _conversationWorkspace = conversationWorkspace ?? throw new ArgumentNullException(nameof(conversationWorkspace));
+        _conversationActivationCoordinator = conversationActivationCoordinator
+            ?? new ConversationActivationCoordinator(
+                conversationWorkspace,
+                conversationWorkspace,
+                chatStore,
+                preferences,
+                NullLogger<ConversationActivationCoordinator>.Instance);
         _conversationCatalogPresenter = conversationCatalogPresenter ?? throw new ArgumentNullException(nameof(conversationCatalogPresenter));
         _chatStateProjector = chatStateProjector ?? new ChatStateProjector();
         _acpSessionUpdateProjector = acpSessionUpdateProjector ?? new AcpSessionUpdateProjector();
@@ -617,11 +626,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     partial void OnCurrentSessionIdChanged(string? value)
     {
-        if (!_suppressStoreConversationProjection)
-        {
-            _ = SelectAndHydrateConversationAsync(value);
-        }
-
         // Keep the header name stable and decouple it from ACP sessionId.
         CurrentSessionDisplayName = ResolveSessionDisplayName(value);
 
@@ -654,58 +658,21 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     private async Task SelectAndHydrateConversationAsync(string? conversationId)
     {
-        await _chatStore.Dispatch(new SelectConversationAction(conversationId));
-        await DispatchConversationHydrationAsync(conversationId).ConfigureAwait(false);
-        await NormalizeConversationBindingForSelectedProfileAsync(conversationId).ConfigureAwait(false);
-        await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
-    }
-
-    private async Task DispatchConversationHydrationAsync(string? conversationId)
-    {
         if (string.IsNullOrWhiteSpace(conversationId))
         {
+            await _chatStore.Dispatch(new SelectConversationAction(null));
+            await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
             return;
         }
 
-        var snapshot = _conversationWorkspace.GetConversationSnapshot(conversationId);
-
-        await _chatStore.Dispatch(new HydrateConversationAction(
-            conversationId,
-            snapshot?.Transcript.ToImmutableList() ?? ImmutableList<ConversationMessageSnapshot>.Empty,
-            snapshot?.Plan.ToImmutableList() ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-            snapshot?.ShowPlanPanel ?? false,
-            snapshot?.PlanTitle)).ConfigureAwait(false);
-    }
-
-    private async Task NormalizeConversationBindingForSelectedProfileAsync(string? conversationId)
-    {
-        if (string.IsNullOrWhiteSpace(conversationId))
+        var activationResult = await _conversationActivationCoordinator
+            .ActivateSessionAsync(conversationId)
+            .ConfigureAwait(false);
+        if (!activationResult.Succeeded)
         {
             return;
         }
 
-        var selectedProfileId = _preferences.LastSelectedServerId;
-        if (string.IsNullOrWhiteSpace(selectedProfileId))
-        {
-            return;
-        }
-
-        var currentState = await _chatStore.State ?? ChatState.Empty;
-        if (!string.Equals(currentState.HydratedConversationId, conversationId, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        var binding = _conversationWorkspace.GetRemoteBinding(conversationId);
-        var boundProfileId = binding?.BoundProfileId;
-        if (string.IsNullOrWhiteSpace(boundProfileId)
-            || string.Equals(boundProfileId, selectedProfileId, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        _conversationWorkspace.UpdateRemoteBinding(conversationId, remoteSessionId: null, boundProfileId: selectedProfileId);
-        _conversationWorkspace.ScheduleSave();
         await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
     }
 
@@ -1174,18 +1141,20 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             return;
         }
 
-        if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
-        {
-            _suppressSessionUpdatesToUi = true;
-            CurrentSessionId = null;
-            _currentRemoteSessionId = null;
-            IsSessionActive = false;
-            _suppressSessionUpdatesToUi = false;
-        }
-
         try
         {
-            _conversationWorkspace.ArchiveConversation(conversationId);
+            var mutationResult = _conversationActivationCoordinator
+                .ArchiveConversationAsync(conversationId, CurrentSessionId)
+                .GetAwaiter()
+                .GetResult();
+            if (mutationResult.ClearedActiveConversation)
+            {
+                _suppressSessionUpdatesToUi = true;
+                CurrentSessionId = null;
+                _currentRemoteSessionId = null;
+                IsSessionActive = false;
+                _suppressSessionUpdatesToUi = false;
+            }
         }
         catch (Exception ex)
         {
@@ -1200,18 +1169,20 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             return;
         }
 
-        if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
-        {
-            _suppressSessionUpdatesToUi = true;
-            CurrentSessionId = null;
-            _currentRemoteSessionId = null;
-            IsSessionActive = false;
-            _suppressSessionUpdatesToUi = false;
-        }
-
         try
         {
-            _conversationWorkspace.DeleteConversation(conversationId);
+            var mutationResult = _conversationActivationCoordinator
+                .DeleteConversationAsync(conversationId, CurrentSessionId)
+                .GetAwaiter()
+                .GetResult();
+            if (mutationResult.ClearedActiveConversation)
+            {
+                _suppressSessionUpdatesToUi = true;
+                CurrentSessionId = null;
+                _currentRemoteSessionId = null;
+                IsSessionActive = false;
+                _suppressSessionUpdatesToUi = false;
+            }
         }
         catch (Exception ex)
         {
@@ -1576,17 +1547,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
         if (string.Equals(CurrentSessionId, sessionId, StringComparison.Ordinal))
         {
-            var currentState = await _chatStore.State ?? ChatState.Empty;
-            if (currentState.Transcript is null)
-            {
-                await SelectAndHydrateConversationAsync(sessionId).ConfigureAwait(false);
-            }
-            else
-            {
-                await NormalizeConversationBindingForSelectedProfileAsync(sessionId).ConfigureAwait(false);
-                await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
-            }
-
+            await SelectAndHydrateConversationAsync(sessionId).ConfigureAwait(false);
             return true;
         }
 
@@ -1594,10 +1555,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         {
             _suppressSessionUpdatesToUi = true;
 
-            var switched = await _conversationWorkspace
-                .TrySwitchToSessionAsync(sessionId, cancellationToken)
+            var activationResult = await _conversationActivationCoordinator
+                .ActivateSessionAsync(sessionId, cancellationToken)
                 .ConfigureAwait(false);
-            if (!switched)
+            if (!activationResult.Succeeded)
             {
                 return false;
             }
@@ -1611,7 +1572,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 _suppressStoreConversationProjection = false;
             }).ConfigureAwait(false);
 
-            await SelectAndHydrateConversationAsync(sessionId).ConfigureAwait(false);
+            await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
             NotifyConversationListChanged();
 
             return true;
@@ -2775,7 +2736,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
         if (!preserveConversation)
         {
-            _ = DispatchConversationHydrationAsync(CurrentSessionId);
+            _ = SelectAndHydrateConversationAsync(CurrentSessionId);
             return;
         }
 

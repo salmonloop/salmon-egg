@@ -179,13 +179,14 @@ public sealed class StartViewModelTests
         var navLogger = new Mock<ILogger<MainNavigationViewModel>>();
         var navState = new FakeNavigationPaneState();
         var metricsSink = new Mock<IShellLayoutMetricsSink>();
+        var navigationCoordinator = Mock.Of<INavigationCoordinator>();
 
         return new MainNavigationViewModel(
-            chat.ViewModel,
             chat.ViewModel,
             new NavigationProjectPreferencesAdapter(preferences),
             ui.Object,
             Mock.Of<IShellNavigationService>(),
+            navigationCoordinator,
             navLogger.Object,
             navState,
             metricsSink.Object,

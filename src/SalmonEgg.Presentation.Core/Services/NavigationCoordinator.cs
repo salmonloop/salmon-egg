@@ -9,22 +9,21 @@ namespace SalmonEgg.Presentation.Core.Services;
 
 public sealed class NavigationCoordinator : INavigationCoordinator
 {
-    private readonly INavigationSelectionHost _navigationHost;
-    private readonly IConversationSessionSwitcher _conversationSessionSwitcher;
+    private readonly IShellSelectionMutationSink _selectionSink;
+    private readonly IConversationActivationCoordinator _conversationActivationCoordinator;
     private readonly INavigationProjectSelectionStore _projectSelectionStore;
     private readonly IShellNavigationService _shellNavigationService;
 
     public NavigationCoordinator(
-        INavigationSelectionHost navigationHost,
-        IConversationSessionSwitcher conversationSessionSwitcher,
+        IShellSelectionMutationSink selectionSink,
+        IConversationActivationCoordinator conversationActivationCoordinator,
         INavigationProjectSelectionStore projectSelectionStore,
         IShellNavigationService shellNavigationService)
     {
-        _navigationHost = navigationHost ?? throw new ArgumentNullException(nameof(navigationHost));
-        _conversationSessionSwitcher = conversationSessionSwitcher ?? throw new ArgumentNullException(nameof(conversationSessionSwitcher));
+        _selectionSink = selectionSink ?? throw new ArgumentNullException(nameof(selectionSink));
+        _conversationActivationCoordinator = conversationActivationCoordinator ?? throw new ArgumentNullException(nameof(conversationActivationCoordinator));
         _projectSelectionStore = projectSelectionStore ?? throw new ArgumentNullException(nameof(projectSelectionStore));
         _shellNavigationService = shellNavigationService ?? throw new ArgumentNullException(nameof(shellNavigationService));
-        _navigationHost.RegisterSessionActivationHandler(ActivateSessionAsync);
     }
 
     public async Task ActivateStartAsync()
@@ -34,7 +33,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
             var navigationResult = await _shellNavigationService.NavigateToStart().ConfigureAwait(true);
             if (navigationResult.Succeeded)
             {
-                _navigationHost.SelectStart();
+                _selectionSink.SetSelection(NavigationSelectionState.StartSelection);
             }
         }
         catch
@@ -51,7 +50,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
                 .ConfigureAwait(true);
             if (navigationResult.Succeeded)
             {
-                _navigationHost.SelectSettings();
+                _selectionSink.SetSelection(NavigationSelectionState.SettingsSelection);
             }
         }
         catch
@@ -66,8 +65,10 @@ public sealed class NavigationCoordinator : INavigationCoordinator
             return false;
         }
 
-        var switched = await _conversationSessionSwitcher.TrySwitchToSessionAsync(sessionId).ConfigureAwait(true);
-        if (!switched)
+        var activationResult = await _conversationActivationCoordinator
+            .ActivateSessionAsync(sessionId)
+            .ConfigureAwait(true);
+        if (!activationResult.Succeeded)
         {
             return false;
         }
@@ -81,7 +82,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
             }
 
             _projectSelectionStore.RememberSelectedProject(projectId);
-            _navigationHost.SelectSession(sessionId);
+            _selectionSink.SetSelection(new NavigationSelectionState.Session(sessionId));
             return true;
         }
         catch
@@ -91,30 +92,16 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         return false;
     }
 
-    public Task ToggleProjectAsync(string projectId)
-    {
-        _navigationHost.ToggleProjectExpanded(projectId);
-        return Task.CompletedTask;
-    }
-
-    public void SyncSelectionFromShellContent(ShellNavigationContent content, string? currentSessionId)
+    public void SyncSelectionFromShellContent(ShellNavigationContent content)
     {
         switch (content)
         {
             case ShellNavigationContent.Start:
-                _navigationHost.SelectStart();
+                _selectionSink.SetSelection(NavigationSelectionState.StartSelection);
                 return;
 
             case ShellNavigationContent.Settings:
-                _navigationHost.SelectSettings();
-                return;
-
-            case ShellNavigationContent.Chat:
-                if (!string.IsNullOrWhiteSpace(currentSessionId))
-                {
-                    _navigationHost.SelectSession(currentSessionId);
-                }
-
+                _selectionSink.SetSelection(NavigationSelectionState.SettingsSelection);
                 return;
 
             default:

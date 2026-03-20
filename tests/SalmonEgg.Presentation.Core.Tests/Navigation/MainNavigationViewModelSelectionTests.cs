@@ -181,36 +181,6 @@ public sealed class MainNavigationViewModelSelectionTests
     }
 
     [Fact]
-    public void ExternalCurrentSessionChange_DoesNotOverrideVisibleStartSelection()
-    {
-        var originalContext = SynchronizationContext.Current;
-        var syncContext = new ImmediateSynchronizationContext();
-        SynchronizationContext.SetSynchronizationContext(syncContext);
-        try
-        {
-            var navState = new FakeNavigationPaneState();
-            var sessionManager = CreateSessionManager(new Session("session-1", @"C:\repo\demo")
-            {
-                DisplayName = "Session 1"
-            });
-            var preferences = CreatePreferencesWithProject();
-
-            var chatCatalog = CreateChatSessionCatalog("session-1");
-            using var navVm = CreateNavigationViewModel(chatCatalog, sessionManager.Object, preferences, navState);
-
-            navVm.SelectStart();
-            chatCatalog.RaisePropertyChanged("CurrentSessionId");
-
-            Assert.IsType<NavigationSelectionState.Start>(navVm.CurrentSelection);
-            Assert.Same(navVm.StartItem, navVm.SelectedItem);
-        }
-        finally
-        {
-            SynchronizationContext.SetSynchronizationContext(originalContext);
-        }
-    }
-
-    [Fact]
     public async Task TryGetProjectIdForSession_UsesSemanticSessionIndex()
     {
         var originalContext = SynchronizationContext.Current;
@@ -269,10 +239,10 @@ public sealed class MainNavigationViewModelSelectionTests
 
             using var navVm = new MainNavigationViewModel(
                 chatCatalog,
-                new FakeConversationSessionSwitcher(),
                 CreateProjectPreferences(preferences),
                 ui.Object,
                 shellNavigation.Object,
+                new StubNavigationCoordinator(),
                 navLogger.Object,
                 navState,
                 metricsSink.Object,
@@ -296,11 +266,11 @@ public sealed class MainNavigationViewModelSelectionTests
         IConversationCatalog chatCatalog,
         ISessionManager sessionManager,
         AppPreferencesViewModel preferences,
-        FakeNavigationPaneState navState,
-        IConversationSessionSwitcher? sessionSwitcher = null)
+        FakeNavigationPaneState navState)
     {
         var ui = new Mock<IUiInteractionService>();
         var shellNavigation = new Mock<IShellNavigationService>();
+        var navigationCoordinator = new StubNavigationCoordinator();
         var navLogger = new Mock<ILogger<MainNavigationViewModel>>();
         var metricsSink = new Mock<IShellLayoutMetricsSink>();
         var presenter = new ConversationCatalogPresenter();
@@ -309,10 +279,10 @@ public sealed class MainNavigationViewModelSelectionTests
 
         return new MainNavigationViewModel(
             chatCatalog,
-            sessionSwitcher ?? new FakeConversationSessionSwitcher(),
             CreateProjectPreferences(preferences),
             ui.Object,
             shellNavigation.Object,
+            navigationCoordinator,
             navLogger.Object,
             navState,
             metricsSink.Object,
@@ -438,14 +408,16 @@ public sealed class MainNavigationViewModelSelectionTests
             => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 
-    private sealed class FakeConversationSessionSwitcher : IConversationSessionSwitcher
+    private sealed class StubNavigationCoordinator : INavigationCoordinator
     {
-        public string? CurrentConversationId { get; set; }
+        public Task ActivateStartAsync() => Task.CompletedTask;
 
-        public Task<bool> TrySwitchToSessionAsync(string sessionId, CancellationToken cancellationToken = default)
+        public Task ActivateSettingsAsync(string settingsKey) => Task.CompletedTask;
+
+        public Task<bool> ActivateSessionAsync(string sessionId, string? projectId) => Task.FromResult(false);
+
+        public void SyncSelectionFromShellContent(ShellNavigationContent content)
         {
-            CurrentConversationId = sessionId;
-            return Task.FromResult(true);
         }
     }
 }

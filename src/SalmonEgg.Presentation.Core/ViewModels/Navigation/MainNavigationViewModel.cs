@@ -17,20 +17,19 @@ using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Core.Mvux.ShellLayout;
-using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.ViewModels.Settings;
 
 namespace SalmonEgg.Presentation.ViewModels.Navigation;
 
-public sealed partial class MainNavigationViewModel : ObservableObject, IDisposable, INavigationSelectionHost
+public sealed partial class MainNavigationViewModel : ObservableObject, IDisposable
 {
     public const string UnclassifiedProjectId = NavigationProjectIds.Unclassified;
 
-    private readonly IConversationSessionSwitcher _conversationSessionSwitcher;
     private readonly IChatSessionCatalog _chatSessionCatalogActions;
     private readonly INavigationProjectPreferences _projectPreferences;
     private readonly IUiInteractionService _ui;
     private readonly IShellNavigationService _shellNavigation;
+    private readonly INavigationCoordinator _navigationCoordinator;
     private readonly ILogger<MainNavigationViewModel> _logger;
     private readonly INavigationPaneState _navigationState;
     private readonly IShellLayoutMetricsSink _metricsSink;
@@ -41,7 +40,6 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     private readonly SynchronizationContext _syncContext;
     private readonly System.Collections.Specialized.NotifyCollectionChangedEventHandler _projectsChangedHandler;
     private readonly Timer _relativeTimeTimer;
-    private Func<string, string?, Task> _sessionActivationHandler;
     private static readonly TimeSpan RelativeTimeRefreshInterval = TimeSpan.FromSeconds(30);
 
     private readonly Dictionary<string, SessionNavItemViewModel> _sessionIndex = new(StringComparer.Ordinal);
@@ -86,10 +84,10 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     public MainNavigationViewModel(
         IConversationCatalog conversationCatalog,
-        IConversationSessionSwitcher conversationSessionSwitcher,
         INavigationProjectPreferences projectPreferences,
         IUiInteractionService ui,
         IShellNavigationService shellNavigation,
+        INavigationCoordinator navigationCoordinator,
         ILogger<MainNavigationViewModel> logger,
         INavigationPaneState navigationState,
         IShellLayoutMetricsSink metricsSink,
@@ -97,11 +95,11 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         IShellSelectionReadModel shellSelection,
         IConversationCatalogReadModel conversationCatalogPresenter)
     {
-        _conversationSessionSwitcher = conversationSessionSwitcher ?? throw new ArgumentNullException(nameof(conversationSessionSwitcher));
         _chatSessionCatalogActions = conversationCatalog as IChatSessionCatalog ?? new ChatViewModelSessionCatalogAdapter(conversationCatalog);
         _projectPreferences = projectPreferences ?? throw new ArgumentNullException(nameof(projectPreferences));
         _ui = ui ?? throw new ArgumentNullException(nameof(ui));
         _shellNavigation = shellNavigation ?? throw new ArgumentNullException(nameof(shellNavigation));
+        _navigationCoordinator = navigationCoordinator ?? throw new ArgumentNullException(nameof(navigationCoordinator));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _navigationState = navigationState ?? throw new ArgumentNullException(nameof(navigationState));
         _metricsSink = metricsSink ?? throw new ArgumentNullException(nameof(metricsSink));
@@ -111,8 +109,6 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             ?? throw new ArgumentException("Shell selection read model must also support mutations.", nameof(shellSelection));
         _conversationCatalogPresenter = conversationCatalogPresenter ?? throw new ArgumentNullException(nameof(conversationCatalogPresenter));
         _syncContext = SynchronizationContext.Current ?? new SynchronizationContext();
-        _sessionActivationHandler = SelectSessionAsync;
-
         AddProjectCommand = new AsyncRelayCommand(AddProjectAsync);
 
         StartItem = new StartNavItemViewModel(_navigationState);
@@ -225,11 +221,6 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         }
     }
 
-    public void RegisterSessionActivationHandler(Func<string, string?, Task> sessionActivationHandler)
-    {
-        _sessionActivationHandler = sessionActivationHandler ?? throw new ArgumentNullException(nameof(sessionActivationHandler));
-    }
-
     public string? TryGetProjectIdForSession(string sessionId)
     {
         if (string.IsNullOrWhiteSpace(sessionId))
@@ -325,17 +316,11 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             isPlaceholder: true);
     }
 
-    private Task SelectSessionAsync(string sessionId, string? _)
-    {
-        SelectSession(sessionId);
-        return Task.CompletedTask;
-    }
-
     private void ActivateSessionFromSessionsList(string sessionId, string projectId)
     {
         try
         {
-            var activationTask = _sessionActivationHandler(sessionId, projectId);
+            var activationTask = _navigationCoordinator.ActivateSessionAsync(sessionId, projectId);
             if (!activationTask.IsCompletedSuccessfully)
             {
                 _ = ObserveSessionActivationAsync(activationTask);

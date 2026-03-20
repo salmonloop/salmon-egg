@@ -5,10 +5,10 @@ using System.Threading;
 using Microsoft.Extensions.Logging;
 using Moq;
 using SalmonEgg.Domain.Models;
-using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
+using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Settings;
@@ -32,11 +32,9 @@ public sealed class MainNavigationViewModelPaneTests
             var sessionManager = new Mock<ISessionManager>();
             var preferences = CreatePreferences();
             var chatCatalog = CreateChatSessionCatalog();
-            var sessionSwitcher = new FakeConversationSessionSwitcher();
 
             using var navVm = CreateNavigationViewModel(
                 chatCatalog,
-                sessionSwitcher,
                 sessionManager,
                 preferences,
                 navState);
@@ -77,189 +75,6 @@ public sealed class MainNavigationViewModelPaneTests
         Assert.True(isPaneOpenChangedCalled);
     }
 
-    [Fact]
-    public async Task SelectedItem_RemainsStart_WhenPaneClosesWithExternalActiveSession()
-    {
-        var originalContext = SynchronizationContext.Current;
-        var syncContext = new ImmediateSynchronizationContext();
-        SynchronizationContext.SetSynchronizationContext(syncContext);
-        try
-        {
-            var navState = new FakeNavigationPaneState();
-            navState.SetPaneOpen(true);
-
-            var session = new Session("session-1", @"C:\repo\demo")
-            {
-                DisplayName = "Session 1"
-            };
-
-            var sessionManager = new Mock<ISessionManager>();
-            sessionManager.Setup(s => s.GetSession("session-1")).Returns(session);
-
-            var preferences = CreatePreferences();
-            preferences.Projects.Add(new ProjectDefinition
-            {
-                ProjectId = "project-1",
-                Name = "Demo",
-                RootPath = @"C:\repo\demo"
-            });
-
-            var chatCatalog = CreateChatSessionCatalog("session-1");
-            var sessionSwitcher = new FakeConversationSessionSwitcher
-            {
-                CurrentConversationId = "session-1"
-            };
-
-            using var navVm = CreateNavigationViewModel(
-                chatCatalog,
-                sessionSwitcher,
-                sessionManager,
-                preferences,
-                navState);
-
-            navVm.RebuildTree();
-
-            Assert.Same(navVm.StartItem, navVm.SelectedItem);
-
-            navState.SetPaneOpen(false);
-
-            Assert.Same(navVm.StartItem, navVm.SelectedItem);
-        }
-        finally
-        {
-            SynchronizationContext.SetSynchronizationContext(originalContext);
-        }
-    }
-
-    [Fact]
-    public async Task SelectedItem_RemainsStart_WhenPaneReopensWithExternalActiveSession()
-    {
-        var originalContext = SynchronizationContext.Current;
-        var syncContext = new ImmediateSynchronizationContext();
-        SynchronizationContext.SetSynchronizationContext(syncContext);
-        try
-        {
-            var navState = new FakeNavigationPaneState();
-            navState.SetPaneOpen(true);
-
-            var session = new Session("session-1", @"C:\repo\demo")
-            {
-                DisplayName = "Session 1"
-            };
-
-            var sessionManager = new Mock<ISessionManager>();
-            sessionManager.Setup(s => s.GetSession("session-1")).Returns(session);
-
-            var preferences = CreatePreferences();
-            preferences.Projects.Add(new ProjectDefinition
-            {
-                ProjectId = "project-1",
-                Name = "Demo",
-                RootPath = @"C:\repo\demo"
-            });
-
-            var chatCatalog = CreateChatSessionCatalog("session-1");
-            var sessionSwitcher = new FakeConversationSessionSwitcher
-            {
-                CurrentConversationId = "session-1"
-            };
-            var presenter = CreatePresenter(chatCatalog);
-            var ui = new Mock<IUiInteractionService>();
-            var shellNavigation = new Mock<IShellNavigationService>();
-            var navLogger = new Mock<ILogger<MainNavigationViewModel>>();
-            var metricsSink = new Mock<IShellLayoutMetricsSink>();
-
-            using var navVm = new MainNavigationViewModel(
-                chatCatalog,
-                sessionSwitcher,
-                CreateProjectPreferences(preferences),
-                ui.Object,
-                shellNavigation.Object,
-                navLogger.Object,
-                navState,
-                metricsSink.Object,
-                new NavigationSelectionProjector(),
-                new ShellSelectionStateStore(),
-                presenter);
-
-            navVm.RebuildTree();
-            navState.SetPaneOpen(false);
-
-            navState.SetPaneOpen(true);
-
-            Assert.Same(navVm.StartItem, navVm.SelectedItem);
-        }
-        finally
-        {
-            SynchronizationContext.SetSynchronizationContext(originalContext);
-        }
-    }
-
-    [Fact]
-    public async Task SelectedItem_RemainsStart_AcrossRepeatedPaneTogglesWithExternalActiveSession()
-    {
-        var originalContext = SynchronizationContext.Current;
-        var syncContext = new ImmediateSynchronizationContext();
-        SynchronizationContext.SetSynchronizationContext(syncContext);
-        try
-        {
-            var navState = new FakeNavigationPaneState();
-            navState.SetPaneOpen(true);
-
-            var session = new Session("session-1", @"C:\repo\demo")
-            {
-                DisplayName = "Session 1"
-            };
-
-            var sessionManager = new Mock<ISessionManager>();
-            sessionManager.Setup(s => s.GetSession("session-1")).Returns(session);
-
-            var preferences = CreatePreferences();
-            preferences.Projects.Add(new ProjectDefinition
-            {
-                ProjectId = "project-1",
-                Name = "Demo",
-                RootPath = @"C:\repo\demo"
-            });
-
-            var chatCatalog = CreateChatSessionCatalog("session-1");
-            var sessionSwitcher = new FakeConversationSessionSwitcher
-            {
-                CurrentConversationId = "session-1"
-            };
-            var presenter = CreatePresenter(chatCatalog);
-            var ui = new Mock<IUiInteractionService>();
-            var shellNavigation = new Mock<IShellNavigationService>();
-            var navLogger = new Mock<ILogger<MainNavigationViewModel>>();
-            var metricsSink = new Mock<IShellLayoutMetricsSink>();
-
-            using var navVm = new MainNavigationViewModel(
-                chatCatalog,
-                sessionSwitcher,
-                CreateProjectPreferences(preferences),
-                ui.Object,
-                shellNavigation.Object,
-                navLogger.Object,
-                navState,
-                metricsSink.Object,
-                new NavigationSelectionProjector(),
-                new ShellSelectionStateStore(),
-                presenter);
-
-            navVm.RebuildTree();
-
-            navState.SetPaneOpen(false);
-            navState.SetPaneOpen(true);
-            navState.SetPaneOpen(false);
-
-            Assert.Same(navVm.StartItem, navVm.SelectedItem);
-        }
-        finally
-        {
-            SynchronizationContext.SetSynchronizationContext(originalContext);
-        }
-    }
-
     private sealed class FakeNavigationPaneState : INavigationPaneState
     {
         public bool IsPaneOpen { get; private set; }
@@ -277,11 +92,6 @@ public sealed class MainNavigationViewModelPaneTests
         }
     }
 
-    private sealed class ImmediateSynchronizationContext : SynchronizationContext
-    {
-        public override void Post(SendOrPostCallback d, object? state) => d(state);
-    }
-
     private static ConversationCatalogPresenter CreatePresenter(FakeChatSessionCatalog catalog)
     {
         var presenter = new ConversationCatalogPresenter();
@@ -292,22 +102,22 @@ public sealed class MainNavigationViewModelPaneTests
 
     private static MainNavigationViewModel CreateNavigationViewModel(
         IConversationCatalog chatCatalog,
-        IConversationSessionSwitcher sessionSwitcher,
         Mock<ISessionManager> sessionManager,
         AppPreferencesViewModel preferences,
         FakeNavigationPaneState navState)
     {
         var ui = new Mock<IUiInteractionService>();
         var shellNavigation = new Mock<IShellNavigationService>();
+        var navigationCoordinator = new StubNavigationCoordinator();
         var navLogger = new Mock<ILogger<MainNavigationViewModel>>();
         var metricsSink = new Mock<IShellLayoutMetricsSink>();
 
         return new MainNavigationViewModel(
             chatCatalog,
-            sessionSwitcher,
             CreateProjectPreferences(preferences),
             ui.Object,
             shellNavigation.Object,
+            navigationCoordinator,
             navLogger.Object,
             navState,
             metricsSink.Object,
@@ -388,14 +198,16 @@ public sealed class MainNavigationViewModelPaneTests
         }
     }
 
-    private sealed class FakeConversationSessionSwitcher : IConversationSessionSwitcher
+    private sealed class StubNavigationCoordinator : INavigationCoordinator
     {
-        public string? CurrentConversationId { get; set; }
+        public Task ActivateStartAsync() => Task.CompletedTask;
 
-        public Task<bool> TrySwitchToSessionAsync(string sessionId, CancellationToken cancellationToken = default)
+        public Task ActivateSettingsAsync(string settingsKey) => Task.CompletedTask;
+
+        public Task<bool> ActivateSessionAsync(string sessionId, string? projectId) => Task.FromResult(false);
+
+        public void SyncSelectionFromShellContent(ShellNavigationContent content)
         {
-            CurrentConversationId = sessionId;
-            return Task.FromResult(true);
         }
     }
 }

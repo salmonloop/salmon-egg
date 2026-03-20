@@ -91,7 +91,7 @@ public sealed class MainNavigationViewAdapter
 
         if (NavItemTag.TryParseProject(tag, out var projectId))
         {
-            await _navigationCoordinator.ToggleProjectAsync(projectId).ConfigureAwait(true);
+            _viewModel.ToggleProjectExpanded(projectId);
             return true;
         }
 

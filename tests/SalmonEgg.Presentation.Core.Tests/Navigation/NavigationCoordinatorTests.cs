@@ -41,44 +41,6 @@ public sealed class NavigationCoordinatorTests
     }
 
     [Fact]
-    public async Task ActivateSessionAsync_UsesConversationSessionSwitcherDependency()
-    {
-        var originalContext = SynchronizationContext.Current;
-        var syncContext = new ImmediateSynchronizationContext();
-        SynchronizationContext.SetSynchronizationContext(syncContext);
-        try
-        {
-            var navState = new FakeNavigationPaneState();
-            var sessionManager = CreateSessionManager(new Session("session-1", @"C:\repo\demo")
-            {
-                DisplayName = "Session 1"
-            });
-            var preferences = CreatePreferencesWithProject();
-            var shellNavigation = CreateShellNavigationService();
-
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
-            using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState);
-            var switcher = new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(true));
-            var coordinator = new NavigationCoordinator(
-                navVm,
-                switcher,
-                new NavigationProjectSelectionStoreAdapter(preferences),
-                shellNavigation.Object);
-
-            await chat.ViewModel.TrySwitchToSessionAsync("session-1");
-            navVm.RebuildTree();
-            await coordinator.ActivateSessionAsync("session-1", "project-1");
-
-            Assert.Equal(new[] { "session-1" }, switcher.ActivatedSessionIds);
-            Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
-        }
-        finally
-        {
-            SynchronizationContext.SetSynchronizationContext(originalContext);
-        }
-    }
-
-    [Fact]
     public async Task ActivateSessionAsync_UpdatesNavAndNavigates_WhenSwitcherSucceeds()
     {
         var originalContext = SynchronizationContext.Current;
@@ -95,14 +57,15 @@ public sealed class NavigationCoordinatorTests
             var shellNavigation = CreateShellNavigationService();
 
             using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
-            using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState);
-            var switcher = new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(true));
-            var coordinator = CreateCoordinator(navVm, switcher, preferences, shellNavigation.Object);
+            var selectionStore = new ShellSelectionStateStore();
+            var activationCoordinator = new RecordingConversationActivationCoordinator((_, _) => Task.FromResult(true));
+            var coordinator = CreateCoordinator(selectionStore, activationCoordinator, preferences, shellNavigation.Object);
+            using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState, selectionStore, coordinator);
 
             navVm.RebuildTree();
             await coordinator.ActivateSessionAsync("session-1", "project-1");
 
-            Assert.Equal(new[] { "session-1" }, switcher.ActivatedSessionIds);
+            Assert.Equal(new[] { "session-1" }, activationCoordinator.ActivatedSessionIds);
             Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
             shellNavigation.Verify(s => s.NavigateToChat(), Times.Once);
         }
@@ -129,9 +92,10 @@ public sealed class NavigationCoordinatorTests
             var shellNavigation = CreateShellNavigationService();
 
             using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
-            using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState);
-            var switcher = new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(false));
-            var coordinator = CreateCoordinator(navVm, switcher, preferences, shellNavigation.Object);
+            var selectionStore = new ShellSelectionStateStore();
+            var activationCoordinator = new RecordingConversationActivationCoordinator((_, _) => Task.FromResult(false));
+            var coordinator = CreateCoordinator(selectionStore, activationCoordinator, preferences, shellNavigation.Object);
+            using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState, selectionStore, coordinator);
 
             navVm.RebuildTree();
             await coordinator.ActivateSessionAsync("session-1", "project-1");
@@ -165,9 +129,10 @@ public sealed class NavigationCoordinatorTests
             shellNavigation.Setup(s => s.NavigateToChat()).Throws(new InvalidOperationException("Navigation failed"));
 
             using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
-            using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState);
-            var switcher = new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(true));
-            var coordinator = CreateCoordinator(navVm, switcher, preferences, shellNavigation.Object);
+            var selectionStore = new ShellSelectionStateStore();
+            var activationCoordinator = new RecordingConversationActivationCoordinator((_, _) => Task.FromResult(true));
+            var coordinator = CreateCoordinator(selectionStore, activationCoordinator, preferences, shellNavigation.Object);
+            using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState, selectionStore, coordinator);
 
             navVm.RebuildTree();
             await coordinator.ActivateSessionAsync("session-1", "project-1");
@@ -214,10 +179,11 @@ public sealed class NavigationCoordinatorTests
                 .Returns(Task.CompletedTask);
 
             using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
-            using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState, ui.Object);
-            var switcher = new RecordingConversationSessionSwitcher(
-                (sessionId, cancellationToken) => chat.ViewModel.TrySwitchToSessionAsync(sessionId));
-            var coordinator = CreateCoordinator(navVm, switcher, preferences, shellNavigation.Object);
+            var selectionStore = new ShellSelectionStateStore();
+            var activationCoordinator = new RecordingConversationActivationCoordinator(
+                (sessionId, cancellationToken) => chat.ViewModel.TrySwitchToSessionAsync(sessionId, cancellationToken));
+            var coordinator = CreateCoordinator(selectionStore, activationCoordinator, preferences, shellNavigation.Object);
+            using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState, selectionStore, coordinator, ui.Object);
 
             await chat.ViewModel.TrySwitchToSessionAsync("session-1");
             navVm.RebuildTree();
@@ -244,44 +210,6 @@ public sealed class NavigationCoordinatorTests
     }
 
     [Fact]
-    public async Task ToggleProjectAsync_DoesNotMutateSemanticSelection()
-    {
-        var originalContext = SynchronizationContext.Current;
-        var syncContext = new ImmediateSynchronizationContext();
-        SynchronizationContext.SetSynchronizationContext(syncContext);
-        try
-        {
-            var navState = new FakeNavigationPaneState();
-            var sessionManager = CreateSessionManager(new Session("session-1", @"C:\repo\demo")
-            {
-                DisplayName = "Session 1"
-            });
-            var preferences = CreatePreferencesWithProject();
-            var shellNavigation = CreateShellNavigationService();
-
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
-            using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState);
-            var switcher = new RecordingConversationSessionSwitcher(
-                (sessionId, cancellationToken) => chat.ViewModel.TrySwitchToSessionAsync(sessionId));
-            var coordinator = CreateCoordinator(navVm, switcher, preferences, shellNavigation.Object);
-
-            await coordinator.ActivateSessionAsync("session-1", "project-1");
-
-            var project = Assert.Single(navVm.Items.OfType<ProjectNavItemViewModel>(), p => p.ProjectId == "project-1");
-            var originalExpanded = project.IsExpanded;
-
-            await coordinator.ToggleProjectAsync("project-1");
-
-            Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
-            Assert.NotEqual(originalExpanded, project.IsExpanded);
-        }
-        finally
-        {
-            SynchronizationContext.SetSynchronizationContext(originalContext);
-        }
-    }
-
-    [Fact]
     public void SyncSelectionFromShellContent_Start_SelectsStart()
     {
         var originalContext = SynchronizationContext.Current;
@@ -295,12 +223,12 @@ public sealed class NavigationCoordinatorTests
             var shellNavigation = CreateShellNavigationService();
 
             using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
-            using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState);
-            var switcher = new RecordingConversationSessionSwitcher(
-                (sessionId, cancellationToken) => chat.ViewModel.TrySwitchToSessionAsync(sessionId));
-            var coordinator = CreateCoordinator(navVm, switcher, preferences, shellNavigation.Object);
+            var selectionStore = new ShellSelectionStateStore();
+            var activationCoordinator = new RecordingConversationActivationCoordinator((_, _) => Task.FromResult(true));
+            var coordinator = CreateCoordinator(selectionStore, activationCoordinator, preferences, shellNavigation.Object);
+            using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState, selectionStore, coordinator);
 
-            coordinator.SyncSelectionFromShellContent(ShellNavigationContent.Start, currentSessionId: null);
+            coordinator.SyncSelectionFromShellContent(ShellNavigationContent.Start);
 
             Assert.Equal(NavigationSelectionState.StartSelection, navVm.CurrentSelection);
         }
@@ -311,43 +239,7 @@ public sealed class NavigationCoordinatorTests
     }
 
     [Fact]
-    public async Task SyncSelectionFromShellContent_ChatWithSession_SelectsSession()
-    {
-        var originalContext = SynchronizationContext.Current;
-        var syncContext = new ImmediateSynchronizationContext();
-        SynchronizationContext.SetSynchronizationContext(syncContext);
-        try
-        {
-            var navState = new FakeNavigationPaneState();
-            var sessionManager = CreateSessionManager(new Session("session-2", @"C:\repo\demo")
-            {
-                DisplayName = "Session 2"
-            });
-            var preferences = CreatePreferencesWithProject();
-            var shellNavigation = CreateShellNavigationService();
-
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
-            using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState);
-            var switcher = new RecordingConversationSessionSwitcher(
-                (sessionId, cancellationToken) => chat.ViewModel.TrySwitchToSessionAsync(sessionId));
-            var coordinator = CreateCoordinator(navVm, switcher, preferences, shellNavigation.Object);
-
-            await chat.ViewModel.TrySwitchToSessionAsync("session-2");
-            navVm.RebuildTree();
-            await coordinator.ActivateStartAsync();
-            coordinator.SyncSelectionFromShellContent(ShellNavigationContent.Chat, "session-2");
-
-            var selection = Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
-            Assert.Equal("session-2", selection.SessionId);
-        }
-        finally
-        {
-            SynchronizationContext.SetSynchronizationContext(originalContext);
-        }
-    }
-
-    [Fact]
-    public async Task SyncSelectionFromShellContent_ChatWithoutSession_KeepsExistingSelection()
+    public async Task SyncSelectionFromShellContent_Chat_DoesNotOverrideExistingSelection()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -363,13 +255,14 @@ public sealed class NavigationCoordinatorTests
             var shellNavigation = CreateShellNavigationService();
 
             using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
-            using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState);
-            var switcher = new RecordingConversationSessionSwitcher(
-                (sessionId, cancellationToken) => chat.ViewModel.TrySwitchToSessionAsync(sessionId));
-            var coordinator = CreateCoordinator(navVm, switcher, preferences, shellNavigation.Object);
+            var selectionStore = new ShellSelectionStateStore();
+            var activationCoordinator = new RecordingConversationActivationCoordinator(
+                (sessionId, cancellationToken) => chat.ViewModel.TrySwitchToSessionAsync(sessionId, cancellationToken));
+            var coordinator = CreateCoordinator(selectionStore, activationCoordinator, preferences, shellNavigation.Object);
+            using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState, selectionStore, coordinator);
 
             await coordinator.ActivateSessionAsync("session-1", "project-1");
-            coordinator.SyncSelectionFromShellContent(ShellNavigationContent.Chat, currentSessionId: null);
+            coordinator.SyncSelectionFromShellContent(ShellNavigationContent.Chat);
 
             var selection = Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
             Assert.Equal("session-1", selection.SessionId);
@@ -394,10 +287,12 @@ public sealed class NavigationCoordinatorTests
             var shellNavigation = CreateShellNavigationService();
 
             using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
-            using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState);
-            var coordinator = CreateCoordinator(navVm, chat.ViewModel, preferences, shellNavigation.Object);
+            var selectionStore = new ShellSelectionStateStore();
+            var activationCoordinator = new RecordingConversationActivationCoordinator((_, _) => Task.FromResult(true));
+            var coordinator = CreateCoordinator(selectionStore, activationCoordinator, preferences, shellNavigation.Object);
+            using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState, selectionStore, coordinator);
 
-            coordinator.SyncSelectionFromShellContent(ShellNavigationContent.Settings, currentSessionId: null);
+            coordinator.SyncSelectionFromShellContent(ShellNavigationContent.Settings);
 
             Assert.Equal(NavigationSelectionState.SettingsSelection, navVm.CurrentSelection);
         }
@@ -412,36 +307,40 @@ public sealed class NavigationCoordinatorTests
         ISessionManager sessionManager,
         AppPreferencesViewModel preferences,
         FakeNavigationPaneState navState,
+        ShellSelectionStateStore? selectionStore = null,
+        INavigationCoordinator? navigationCoordinator = null,
         IUiInteractionService? ui = null)
     {
         var shellNavigation = CreateShellNavigationService();
         var navLogger = new Mock<ILogger<MainNavigationViewModel>>();
         var metricsSink = new Mock<IShellLayoutMetricsSink>();
         var projector = new NavigationSelectionProjector();
+        selectionStore ??= new ShellSelectionStateStore();
+        navigationCoordinator ??= new StubNavigationCoordinator();
 
         return new MainNavigationViewModel(
-            chat.ViewModel,
             chat.ViewModel,
             new NavigationProjectPreferencesAdapter(preferences),
             ui ?? Mock.Of<IUiInteractionService>(),
             shellNavigation.Object,
+            navigationCoordinator,
             navLogger.Object,
             navState,
             metricsSink.Object,
             projector,
-            new ShellSelectionStateStore(),
+            selectionStore,
             chat.Presenter);
     }
 
     private static NavigationCoordinator CreateCoordinator(
-        MainNavigationViewModel navigationViewModel,
-        IConversationSessionSwitcher switcher,
+        IShellSelectionMutationSink selectionSink,
+        IConversationActivationCoordinator activationCoordinator,
         AppPreferencesViewModel preferences,
         IShellNavigationService shellNavigationService)
     {
         return new NavigationCoordinator(
-            navigationViewModel,
-            switcher,
+            selectionSink,
+            activationCoordinator,
             new NavigationProjectSelectionStoreAdapter(preferences),
             shellNavigationService);
     }
@@ -582,23 +481,43 @@ public sealed class NavigationCoordinatorTests
         }
     }
 
-    private sealed class RecordingConversationSessionSwitcher : IConversationSessionSwitcher
+    private sealed class RecordingConversationActivationCoordinator : IConversationActivationCoordinator
     {
-        private readonly Func<string, CancellationToken, Task<bool>> _onSwitch;
+        private readonly Func<string, CancellationToken, Task<bool>> _onActivate;
 
-        public RecordingConversationSessionSwitcher(Func<string, CancellationToken, Task<bool>> onSwitch)
+        public RecordingConversationActivationCoordinator(Func<string, CancellationToken, Task<bool>> onActivate)
         {
-            _onSwitch = onSwitch;
+            _onActivate = onActivate;
         }
 
         public List<string> ActivatedSessionIds { get; } = new();
 
-        public string? CurrentConversationId => null;
-
-        public async Task<bool> TrySwitchToSessionAsync(string sessionId, CancellationToken cancellationToken = default)
+        public async Task<ConversationActivationResult> ActivateSessionAsync(string sessionId, CancellationToken cancellationToken = default)
         {
             ActivatedSessionIds.Add(sessionId);
-            return await _onSwitch(sessionId, cancellationToken);
+            var activated = await _onActivate(sessionId, cancellationToken);
+            return activated
+                ? new ConversationActivationResult(true, sessionId, null)
+                : new ConversationActivationResult(false, sessionId, "ActivationRejected");
+        }
+
+        public Task<ConversationMutationResult> ArchiveConversationAsync(string conversationId, string? activeConversationId, CancellationToken cancellationToken = default)
+            => Task.FromResult(new ConversationMutationResult(true, string.Equals(conversationId, activeConversationId, StringComparison.Ordinal), null));
+
+        public Task<ConversationMutationResult> DeleteConversationAsync(string conversationId, string? activeConversationId, CancellationToken cancellationToken = default)
+            => Task.FromResult(new ConversationMutationResult(true, string.Equals(conversationId, activeConversationId, StringComparison.Ordinal), null));
+    }
+
+    private sealed class StubNavigationCoordinator : INavigationCoordinator
+    {
+        public Task ActivateStartAsync() => Task.CompletedTask;
+
+        public Task ActivateSettingsAsync(string settingsKey) => Task.CompletedTask;
+
+        public Task<bool> ActivateSessionAsync(string sessionId, string? projectId) => Task.FromResult(false);
+
+        public void SyncSelectionFromShellContent(ShellNavigationContent content)
+        {
         }
     }
 

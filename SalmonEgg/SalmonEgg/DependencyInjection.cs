@@ -219,8 +219,8 @@ public static class DependencyInjection
         services.AddSingleton<INavigationProjectSelectionStore>(sp =>
             new NavigationProjectSelectionStoreAdapter(sp.GetRequiredService<AppPreferencesViewModel>()));
         services.AddSingleton<ChatViewModel>();
-        services.AddSingleton<IConversationCatalog>(sp => sp.GetRequiredService<ChatViewModel>());
-        services.AddSingleton<IConversationSessionSwitcher>(sp => sp.GetRequiredService<ChatViewModel>());
+        services.AddSingleton<ConversationCatalogFacade>();
+        services.AddSingleton<IConversationCatalog>(sp => sp.GetRequiredService<ConversationCatalogFacade>());
         services.AddSingleton<ISettingsChatConnection>(sp =>
             new SettingsChatConnectionAdapter(sp.GetRequiredService<ChatViewModel>()));
         services.AddSingleton<IChatLaunchWorkflowChatFacade>(sp =>
@@ -230,30 +230,37 @@ public static class DependencyInjection
 
         // Extracted workspace is still registered so ChatViewModel can delegate local conversation state.
         services.AddSingleton<ChatConversationWorkspace>();
+        services.AddSingleton<IConversationBindingCommands>(sp => sp.GetRequiredService<ChatConversationWorkspace>());
+        services.AddSingleton<IConversationActivationCoordinator>(sp =>
+            new ConversationActivationCoordinator(
+                sp.GetRequiredService<ChatConversationWorkspace>(),
+                sp.GetRequiredService<IConversationBindingCommands>(),
+                sp.GetRequiredService<IChatStore>(),
+                sp.GetRequiredService<AppPreferencesViewModel>(),
+                sp.GetRequiredService<ILogger<ConversationActivationCoordinator>>()));
 
         // Main shell navigation (Start + Projects -> Sessions tree)
         services.AddSingleton<NavigationSelectionProjector>();
         services.AddSingleton<ShellSelectionStateStore>();
         services.AddSingleton<IShellSelectionReadModel>(sp => sp.GetRequiredService<ShellSelectionStateStore>());
+        services.AddSingleton<IShellSelectionMutationSink>(sp => sp.GetRequiredService<ShellSelectionStateStore>());
         services.AddSingleton<MainNavigationViewModel>(sp =>
             new MainNavigationViewModel(
                 sp.GetRequiredService<IConversationCatalog>(),
-                sp.GetRequiredService<IConversationSessionSwitcher>(),
                 sp.GetRequiredService<INavigationProjectPreferences>(),
                 sp.GetRequiredService<IUiInteractionService>(),
                 sp.GetRequiredService<IShellNavigationService>(),
+                sp.GetRequiredService<INavigationCoordinator>(),
                 sp.GetRequiredService<ILogger<MainNavigationViewModel>>(),
                 sp.GetRequiredService<INavigationPaneState>(),
                 sp.GetRequiredService<IShellLayoutMetricsSink>(),
                 sp.GetRequiredService<NavigationSelectionProjector>(),
                 sp.GetRequiredService<IShellSelectionReadModel>(),
                 sp.GetRequiredService<IConversationCatalogReadModel>()));
-        services.AddSingleton<INavigationSelectionHost>(sp =>
-            sp.GetRequiredService<MainNavigationViewModel>());
         services.AddSingleton<INavigationCoordinator>(sp =>
             new NavigationCoordinator(
-                sp.GetRequiredService<INavigationSelectionHost>(),
-                sp.GetRequiredService<IConversationSessionSwitcher>(),
+                sp.GetRequiredService<IShellSelectionMutationSink>(),
+                sp.GetRequiredService<IConversationActivationCoordinator>(),
                 sp.GetRequiredService<INavigationProjectSelectionStore>(),
                 sp.GetRequiredService<IShellNavigationService>()));
 

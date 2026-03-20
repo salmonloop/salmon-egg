@@ -11,7 +11,7 @@ using SalmonEgg.Domain.Services;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 
-public sealed class ChatConversationWorkspace : ObservableObject, IConversationCatalog, IDisposable
+public sealed class ChatConversationWorkspace : ObservableObject, IConversationCatalog, IConversationBindingCommands, IDisposable
 {
     private readonly ISessionManager _sessionManager;
     private readonly IConversationStore _conversationStore;

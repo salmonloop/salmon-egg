@@ -11,7 +11,5 @@ public interface INavigationCoordinator
 
     Task<bool> ActivateSessionAsync(string sessionId, string? projectId);
 
-    Task ToggleProjectAsync(string projectId);
-
-    void SyncSelectionFromShellContent(ShellNavigationContent content, string? currentSessionId);
+    void SyncSelectionFromShellContent(ShellNavigationContent content);
 }

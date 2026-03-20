@@ -13,22 +13,14 @@ namespace SalmonEgg.Presentation.Navigation;
 public sealed class MainNavigationContentSyncAdapter
 {
     private readonly INavigationCoordinator _navigationCoordinator;
-    private readonly Func<string?> _currentSessionIdAccessor;
 
     public MainNavigationContentSyncAdapter(
-        INavigationCoordinator navigationCoordinator,
-        Func<string?> currentSessionIdAccessor)
+        INavigationCoordinator navigationCoordinator)
     {
         _navigationCoordinator = navigationCoordinator ?? throw new ArgumentNullException(nameof(navigationCoordinator));
-        _currentSessionIdAccessor = currentSessionIdAccessor ?? throw new ArgumentNullException(nameof(currentSessionIdAccessor));
     }
 
     public void OnFrameNavigated(Type? pageType)
-    {
-        SyncFromVisibleContent(pageType);
-    }
-
-    public void OnChatSessionChanged(Type? pageType)
     {
         SyncFromVisibleContent(pageType);
     }
@@ -40,11 +32,7 @@ public sealed class MainNavigationContentSyncAdapter
             return;
         }
 
-        var currentSessionId = content == ShellNavigationContent.Chat
-            ? _currentSessionIdAccessor()
-            : null;
-
-        _navigationCoordinator.SyncSelectionFromShellContent(content, currentSessionId);
+        _navigationCoordinator.SyncSelectionFromShellContent(content);
     }
 
     internal static bool TryResolveContent(Type? pageType, out ShellNavigationContent content)

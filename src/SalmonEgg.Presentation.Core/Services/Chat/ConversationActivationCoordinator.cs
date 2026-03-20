@@ -1,0 +1,155 @@
+using System;
+using System.Collections.Immutable;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+using SalmonEgg.Domain.Models.Conversation;
+using SalmonEgg.Presentation.Core.Mvux.Chat;
+using SalmonEgg.Presentation.ViewModels.Settings;
+
+namespace SalmonEgg.Presentation.Core.Services.Chat;
+
+public sealed class ConversationActivationCoordinator : IConversationActivationCoordinator
+{
+    private readonly ChatConversationWorkspace _conversationWorkspace;
+    private readonly IConversationBindingCommands _bindingCommands;
+    private readonly IChatStore _chatStore;
+    private readonly AppPreferencesViewModel _preferences;
+    private readonly ILogger<ConversationActivationCoordinator> _logger;
+
+    public ConversationActivationCoordinator(
+        ChatConversationWorkspace conversationWorkspace,
+        IConversationBindingCommands bindingCommands,
+        IChatStore chatStore,
+        AppPreferencesViewModel preferences,
+        ILogger<ConversationActivationCoordinator> logger)
+    {
+        _conversationWorkspace = conversationWorkspace ?? throw new ArgumentNullException(nameof(conversationWorkspace));
+        _bindingCommands = bindingCommands ?? throw new ArgumentNullException(nameof(bindingCommands));
+        _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
+        _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
+    public async Task<ConversationActivationResult> ActivateSessionAsync(string sessionId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return new ConversationActivationResult(false, null, "SessionIdMissing");
+        }
+
+        try
+        {
+            var switched = await _conversationWorkspace
+                .TrySwitchToSessionAsync(sessionId, cancellationToken)
+                .ConfigureAwait(false);
+            if (!switched)
+            {
+                return new ConversationActivationResult(false, sessionId, "WorkspaceSwitchRejected");
+            }
+
+            var currentState = await _chatStore.State ?? ChatState.Empty;
+            if (!string.Equals(currentState.HydratedConversationId, sessionId, StringComparison.Ordinal))
+            {
+                await _chatStore.Dispatch(new SelectConversationAction(sessionId));
+            }
+
+            var snapshot = _conversationWorkspace.GetConversationSnapshot(sessionId);
+            await _chatStore.Dispatch(new HydrateConversationAction(
+                sessionId,
+                snapshot?.Transcript.ToImmutableList() ?? ImmutableList<ConversationMessageSnapshot>.Empty,
+                snapshot?.Plan.ToImmutableList() ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                snapshot?.ShowPlanPanel ?? false,
+                snapshot?.PlanTitle)).ConfigureAwait(false);
+
+            await NormalizeBindingForSelectedProfileAsync(sessionId).ConfigureAwait(false);
+            return new ConversationActivationResult(true, sessionId, null);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Conversation activation failed (ConversationId={ConversationId})", sessionId);
+            return new ConversationActivationResult(false, sessionId, ex.Message);
+        }
+    }
+
+    public Task<ConversationMutationResult> ArchiveConversationAsync(
+        string conversationId,
+        string? activeConversationId,
+        CancellationToken cancellationToken = default)
+        => RemoveConversationAsync(
+            conversationId,
+            activeConversationId,
+            static (workspace, id) => workspace.ArchiveConversation(id),
+            cancellationToken);
+
+    public Task<ConversationMutationResult> DeleteConversationAsync(
+        string conversationId,
+        string? activeConversationId,
+        CancellationToken cancellationToken = default)
+        => RemoveConversationAsync(
+            conversationId,
+            activeConversationId,
+            static (workspace, id) => workspace.DeleteConversation(id),
+            cancellationToken);
+
+    private async Task NormalizeBindingForSelectedProfileAsync(string conversationId)
+    {
+        var selectedProfileId = _preferences.LastSelectedServerId;
+        if (string.IsNullOrWhiteSpace(selectedProfileId))
+        {
+            return;
+        }
+
+        var currentState = await _chatStore.State ?? ChatState.Empty;
+        if (!string.Equals(currentState.HydratedConversationId, conversationId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var binding = _conversationWorkspace.GetRemoteBinding(conversationId);
+        var boundProfileId = binding?.BoundProfileId;
+        if (string.IsNullOrWhiteSpace(boundProfileId)
+            || string.Equals(boundProfileId, selectedProfileId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _bindingCommands.UpdateRemoteBinding(conversationId, remoteSessionId: null, boundProfileId: selectedProfileId);
+        _bindingCommands.ScheduleSave();
+    }
+
+    private async Task<ConversationMutationResult> RemoveConversationAsync(
+        string conversationId,
+        string? activeConversationId,
+        Action<ChatConversationWorkspace, string> removeConversation,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return new ConversationMutationResult(false, false, "ConversationIdMissing");
+        }
+
+        var clearsActiveConversation = string.Equals(activeConversationId, conversationId, StringComparison.Ordinal);
+        try
+        {
+            if (clearsActiveConversation)
+            {
+                await _chatStore.Dispatch(new SelectConversationAction(null));
+            }
+
+            removeConversation(_conversationWorkspace, conversationId);
+            return new ConversationMutationResult(true, clearsActiveConversation, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Conversation mutation failed (ConversationId={ConversationId})", conversationId);
+            return new ConversationMutationResult(false, false, ex.Message);
+        }
+    }
+}

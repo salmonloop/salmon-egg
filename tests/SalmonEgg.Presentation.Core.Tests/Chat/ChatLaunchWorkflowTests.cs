@@ -438,9 +438,7 @@ public sealed class ChatLaunchWorkflowTests
             return Task.FromResult(true);
         }
 
-        public Task ToggleProjectAsync(string projectId) => Task.CompletedTask;
-
-        public void SyncSelectionFromShellContent(ShellNavigationContent content, string? currentSessionId)
+        public void SyncSelectionFromShellContent(ShellNavigationContent content)
         {
         }
     }

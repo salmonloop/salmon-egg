@@ -101,7 +101,7 @@ public sealed partial class MainPage : Page
         _navigationCoordinator = App.ServiceProvider.GetRequiredService<INavigationCoordinator>();
 
         this.InitializeComponent();
-        _mainNavigationContentSyncAdapter = new MainNavigationContentSyncAdapter(_navigationCoordinator, () => _chatViewModel.CurrentSessionId);
+        _mainNavigationContentSyncAdapter = new MainNavigationContentSyncAdapter(_navigationCoordinator);
         _mainNavigationViewAdapter = new MainNavigationViewAdapter(MainNavView, DispatcherQueue, NavVM, _navigationCoordinator);
         BootLogDebug("MainPage: InitializeComponent done");
 
@@ -755,12 +755,6 @@ public sealed partial class MainPage : Page
 
     private void OnChatViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(ChatViewModel.CurrentSessionId))
-        {
-            BootLogDebug($"Chat CurrentSessionId changed: session={_chatViewModel.CurrentSessionId ?? "<null>"} page={ContentFrame?.CurrentSourcePageType?.Name ?? "<null>"}");
-            _mainNavigationContentSyncAdapter.OnChatSessionChanged(ContentFrame?.CurrentSourcePageType);
-        }
-
         if (LayoutVM.RightPanelMode != RightPanelMode.Todo)
         {
             return;
