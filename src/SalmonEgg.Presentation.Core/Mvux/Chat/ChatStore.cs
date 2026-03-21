@@ -29,7 +29,9 @@ public interface IChatStore
 public sealed class ChatStore : IChatStore
 {
     private readonly IWorkspaceWriter? _workspaceWriter;
+    private readonly SemaphoreSlim _dispatchGate = new(1, 1);
     private long _lastProjectedGeneration = long.MinValue;
+    private ChatState? _cachedState;
 
     public IState<ChatState> State { get; }
 
@@ -41,28 +43,31 @@ public sealed class ChatStore : IChatStore
 
     public async ValueTask Dispatch(ChatAction action)
     {
-        var previousGeneration = 0L;
-        ChatState? updatedState = null;
-
-        await State.Update(s =>
+        await _dispatchGate.WaitAsync().ConfigureAwait(false);
+        try
         {
-            var current = s ?? ChatState.Empty;
-            previousGeneration = current.Generation;
-            updatedState = ChatReducer.Reduce(current, action);
-            return updatedState;
-        }, default).ConfigureAwait(false);
+            var currentState = _cachedState ?? await State ?? ChatState.Empty;
+            var updatedState = ChatReducer.Reduce(currentState, action);
+            _cachedState = updatedState;
 
-        if (updatedState is null || updatedState.Generation <= previousGeneration)
-        {
-            return;
+            await State.Update(_ => updatedState, CancellationToken.None).ConfigureAwait(false);
+
+            if (updatedState.Generation <= currentState.Generation)
+            {
+                return;
+            }
+
+            if (!TryAdvanceProjectedGeneration(updatedState.Generation))
+            {
+                return;
+            }
+
+            _workspaceWriter?.Enqueue(updatedState, scheduleSave: true);
         }
-
-        if (!TryAdvanceProjectedGeneration(updatedState.Generation))
+        finally
         {
-            return;
+            _dispatchGate.Release();
         }
-
-        _workspaceWriter?.Enqueue(updatedState, scheduleSave: true);
     }
 
     private bool TryAdvanceProjectedGeneration(long generation)

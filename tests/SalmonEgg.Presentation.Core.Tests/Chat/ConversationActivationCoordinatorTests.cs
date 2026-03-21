@@ -48,11 +48,11 @@ public sealed class ConversationActivationCoordinatorTests
         var state = State.Value(new object(), () => ChatState.Empty with { Generation = 1 });
         var chatStore = CreateChatStore(state);
         var connectionStore = CreateConnectionStore();
-        var bindingCommands = new BindingCoordinator(workspace, chatStore.Object);
+        var bindingCommands = new BindingCoordinator(workspace, chatStore);
         var coordinator = new ConversationActivationCoordinator(
             workspace,
             bindingCommands,
-            chatStore.Object,
+            chatStore,
             connectionStore,
             Mock.Of<ILogger<ConversationActivationCoordinator>>());
 
@@ -88,11 +88,11 @@ public sealed class ConversationActivationCoordinatorTests
         var state = State.Value(new object(), () => ChatState.Empty with { Generation = 1 });
         var chatStore = CreateChatStore(state);
         var connectionStore = CreateConnectionStore();
-        var bindingCommands = new BindingCoordinator(workspace, chatStore.Object);
+        var bindingCommands = new BindingCoordinator(workspace, chatStore);
         var coordinator = new ConversationActivationCoordinator(
             workspace,
             bindingCommands,
-            chatStore.Object,
+            chatStore,
             connectionStore,
             Mock.Of<ILogger<ConversationActivationCoordinator>>());
 
@@ -133,11 +133,11 @@ public sealed class ConversationActivationCoordinatorTests
         });
         var chatStore = CreateChatStore(state);
         var connectionStore = CreateConnectionStore();
-        var bindingCommands = new BindingCoordinator(workspace, chatStore.Object);
+        var bindingCommands = new BindingCoordinator(workspace, chatStore);
         var coordinator = new ConversationActivationCoordinator(
             workspace,
             bindingCommands,
-            chatStore.Object,
+            chatStore,
             connectionStore,
             Mock.Of<ILogger<ConversationActivationCoordinator>>());
 
@@ -184,11 +184,11 @@ public sealed class ConversationActivationCoordinatorTests
         var state = State.Value(new object(), () => ChatState.Empty);
         var chatStore = CreateChatStore(state);
         var connectionStore = CreateConnectionStore();
-        var bindingCommands = new BindingCoordinator(workspace, chatStore.Object);
+        var bindingCommands = new BindingCoordinator(workspace, chatStore);
         var coordinator = new ConversationActivationCoordinator(
             workspace,
             bindingCommands,
-            chatStore.Object,
+            chatStore,
             connectionStore,
             Mock.Of<ILogger<ConversationActivationCoordinator>>());
 
@@ -270,11 +270,11 @@ public sealed class ConversationActivationCoordinatorTests
         });
         var chatStore = CreateChatStore(state);
         var connectionStore = CreateConnectionStore("profile-b");
-        var bindingCommands = new BindingCoordinator(workspace, chatStore.Object);
+        var bindingCommands = new BindingCoordinator(workspace, chatStore);
         var coordinator = new ConversationActivationCoordinator(
             workspace,
             bindingCommands,
-            chatStore.Object,
+            chatStore,
             connectionStore,
             Mock.Of<ILogger<ConversationActivationCoordinator>>());
 
@@ -315,11 +315,11 @@ public sealed class ConversationActivationCoordinatorTests
         await state.Update(_ => ChatReducer.Reduce(ChatState.Empty, new SelectConversationAction("session-1")), default);
         var chatStore = CreateChatStore(state);
         var connectionStore = CreateConnectionStore();
-        var bindingCommands = new BindingCoordinator(workspace, chatStore.Object);
+        var bindingCommands = new BindingCoordinator(workspace, chatStore);
         var coordinator = new ConversationActivationCoordinator(
             workspace,
             bindingCommands,
-            chatStore.Object,
+            chatStore,
             connectionStore,
             Mock.Of<ILogger<ConversationActivationCoordinator>>());
 
@@ -355,11 +355,11 @@ public sealed class ConversationActivationCoordinatorTests
         await state.Update(_ => ChatReducer.Reduce(ChatState.Empty, new SelectConversationAction("session-1")), default);
         var chatStore = CreateChatStore(state);
         var connectionStore = CreateConnectionStore();
-        var bindingCommands = new BindingCoordinator(workspace, chatStore.Object);
+        var bindingCommands = new BindingCoordinator(workspace, chatStore);
         var coordinator = new ConversationActivationCoordinator(
             workspace,
             bindingCommands,
-            chatStore.Object,
+            chatStore,
             connectionStore,
             Mock.Of<ILogger<ConversationActivationCoordinator>>());
 
@@ -373,13 +373,9 @@ public sealed class ConversationActivationCoordinatorTests
         Assert.Null(currentState.SelectedConversationId);
     }
 
-    private static Mock<IChatStore> CreateChatStore(IState<ChatState> state)
+    private static IChatStore CreateChatStore(IState<ChatState> state)
     {
-        var chatStore = new Mock<IChatStore>();
-        chatStore.Setup(s => s.State).Returns(state);
-        chatStore.Setup(s => s.Dispatch(It.IsAny<ChatAction>()))
-            .Returns<ChatAction>(action => state.Update(s => ChatReducer.Reduce(s!, action), default));
-        return chatStore;
+        return new ChatStore(state);
     }
 
     private static IChatConnectionStore CreateConnectionStore(string? selectedProfileId = null)

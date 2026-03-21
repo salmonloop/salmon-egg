@@ -258,6 +258,8 @@ public class ChatViewModelTests
         var restoreTask = fixture.ViewModel.RestoreAsync();
         await syncContext.RunUntilCompletedAsync(restoreTask);
         syncContext.RunAll();
+        await Task.Delay(50);
+        syncContext.RunAll();
 
         conversationStore.Verify(s => s.LoadAsync(It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(new[] { "session-1" }, fixture.Workspace.GetKnownConversationIds());

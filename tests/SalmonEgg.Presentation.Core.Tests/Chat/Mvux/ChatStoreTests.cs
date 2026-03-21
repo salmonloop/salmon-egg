@@ -26,7 +26,7 @@ public class ChatStoreTests
         await store.Dispatch(action);
 
         // Assert
-        var currentState = await state;
+        var currentState = await WaitForStateAsync(state, current => string.Equals(current?.HydratedConversationId, newConversationId, System.StringComparison.Ordinal));
         Assert.NotNull(currentState);
         Assert.Null(currentState.SelectedConversationId);
         Assert.Equal(newConversationId, currentState.HydratedConversationId);
@@ -44,7 +44,9 @@ public class ChatStoreTests
         await store.Dispatch(new SelectConversationAction("conv-1"));
 
         // Assert
-        var currentState = await state;
+        var currentState = await WaitForStateAsync(
+            state,
+            current => string.Equals(current?.HydratedConversationId, "conv-1", System.StringComparison.Ordinal) && current.IsPromptInFlight == false);
         Assert.NotNull(currentState);
         Assert.False(currentState.IsPromptInFlight);
         Assert.Null(currentState.SelectedConversationId);
@@ -109,5 +111,21 @@ public class ChatStoreTests
 
         public Task FlushAsync(CancellationToken cancellationToken = default)
             => Task.CompletedTask;
+    }
+
+    private static async Task<ChatState> WaitForStateAsync(IState<ChatState> state, System.Func<ChatState, bool> predicate, int maxAttempts = 20, int delayMs = 10)
+    {
+        for (var attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            var current = await state ?? ChatState.Empty;
+            if (predicate(current))
+            {
+                return current;
+            }
+
+            await Task.Delay(delayMs);
+        }
+
+        return await state ?? ChatState.Empty;
     }
 }
