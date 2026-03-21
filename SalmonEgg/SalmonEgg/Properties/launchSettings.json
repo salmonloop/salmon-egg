@@ -39,13 +39,13 @@
     "SalmonEgg (MSIX Script Run)": {
       "commandName": "Executable",
       "executablePath": "cmd.exe",
-      "commandLineArgs": "/c \"..\\\\..\\\\run.bat msix\"",
+      "commandLineArgs": "/c \"run.bat msix\"",
       "workingDirectory": "..\\\\.."
     },
     "SalmonEgg (MSIX Script Debug Attach)": {
       "commandName": "Executable",
       "executablePath": "powershell.exe",
-      "commandLineArgs": "-NoLogo -NoProfile -ExecutionPolicy Bypass -File \"..\\\\..\\\\.tools\\\\debug-winui3-msix.ps1\" -Configuration Debug",
+      "commandLineArgs": "-NoLogo -NoProfile -ExecutionPolicy Bypass -File \".tools\\\\debug-winui3-msix.ps1\" -Configuration Debug",
       "workingDirectory": "..\\\\.."
     },
     "SalmonEgg (Package)": {
