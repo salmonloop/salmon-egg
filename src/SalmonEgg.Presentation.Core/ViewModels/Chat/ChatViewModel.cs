@@ -623,7 +623,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     {
         if (!_suppressStoreProfileProjection)
         {
-            _ = _chatStore.Dispatch(new SelectProfileAction(value?.Id));
             _ = _chatConnectionStore.Dispatch(new SetSelectedProfileAction(value?.Id));
         }
 

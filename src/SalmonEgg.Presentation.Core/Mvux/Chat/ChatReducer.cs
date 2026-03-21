@@ -28,7 +28,6 @@ public static class ChatReducer
             {
                 Bindings = UpdateBindings(current.Bindings, setBinding.Binding)
             }),
-            SelectProfileAction selectProfile => Mutate(current, current with { SelectedAcpProfileId = selectProfile.ProfileId }),
             SetDraftTextAction draftText => Mutate(current, current with { DraftText = draftText.Text }),
             SetPromptInFlightAction setPromptInFlight => Mutate(current, current with { IsPromptInFlight = setPromptInFlight.IsInFlight }),
             SetIsThinkingAction setIsThinking => Mutate(current, current with { IsThinking = setIsThinking.IsThinking }),
@@ -69,27 +68,10 @@ public static class ChatReducer
             {
                 Transcript = AppendTranscriptDelta(current.Transcript, appendDelta.Delta)
             }),
-            SetConnectionLifecycleAction lifecycle => Mutate(current, current with
-            {
-                IsConnecting = lifecycle.IsConnecting,
-                IsInitializing = lifecycle.IsInitialized,
-                ConnectionStatus = lifecycle.IsConnected ? "Connected" : "Disconnected",
-                ConnectionError = lifecycle.ErrorMessage
-            }),
-            SetAuthenticationStateAction authentication => Mutate(current, current with
-            {
-                IsAuthenticationRequired = authentication.IsRequired,
-                AuthenticationHintMessage = authentication.HintMessage
-            }),
             SetAgentIdentityAction identity => Mutate(current, current with
             {
                 AgentName = identity.AgentName,
                 AgentVersion = identity.AgentVersion
-            }),
-            UpdateConnectionStatusAction updateStatus => Mutate(current, current with
-            {
-                ConnectionStatus = updateStatus.IsConnected ? "Connected" : "Disconnected",
-                ConnectionError = updateStatus.ErrorMessage
             }),
             _ => current
         };

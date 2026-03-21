@@ -34,11 +34,6 @@ public sealed record SelectConversationAction(string? ConversationId) : ChatActi
 public sealed record SetBindingSliceAction(ConversationBindingSlice? Binding) : ChatAction;
 
 /// <summary>
-/// Dispatched when the user selects a different ACP profile.
-/// </summary>
-public sealed record SelectProfileAction(string? ProfileId) : ChatAction;
-
-/// <summary>
 /// Dispatched when the user edits the draft prompt text.
 /// </summary>
 public sealed record SetDraftTextAction(string Text) : ChatAction;
@@ -47,19 +42,6 @@ public sealed record SetDraftTextAction(string Text) : ChatAction;
 /// Dispatched to clear the current chat state.
 /// </summary>
 public sealed record ClearChatAction : ChatAction;
-
-/// <summary>
-/// Dispatched to update the connection status.
-/// </summary>
-public sealed record UpdateConnectionStatusAction(bool IsConnected, string? ErrorMessage = null) : ChatAction;
-
-public sealed record SetConnectionLifecycleAction(
-    bool IsConnecting,
-    bool IsConnected,
-    bool IsInitialized,
-    string? ErrorMessage = null) : ChatAction;
-
-public sealed record SetAuthenticationStateAction(bool IsRequired, string? HintMessage) : ChatAction;
 
 public sealed record SetAgentIdentityAction(string? AgentName, string? AgentVersion) : ChatAction;
 

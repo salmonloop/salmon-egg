@@ -38,21 +38,6 @@ public class ChatReducerTests
     }
 
     [Fact]
-    public void GivenState_WhenSelectProfile_ThenSelectedProfileIdIsUpdated()
-    {
-        // Arrange
-        var initialState = new ChatState(SelectedAcpProfileId: null);
-        var profileId = "profile-1";
-        var action = new SelectProfileAction(profileId);
-
-        // Act
-        var newState = ChatReducer.Reduce(initialState, action);
-
-        // Assert
-        Assert.Equal(profileId, newState.SelectedAcpProfileId);
-    }
-
-    [Fact]
     public void GivenState_WhenSetDraftText_ThenDraftTextIsUpdated()
     {
         // Arrange

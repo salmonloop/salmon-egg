@@ -1096,10 +1096,15 @@ public class ChatViewModelTests
             .SelectMany(invocation => invocation.Arguments)
             .OfType<ChatAction>();
 
+        var legacyActionTypeNames = new[]
+        {
+            "SetConnectionLifecycleAction",
+            "UpdateConnectionStatusAction",
+            "SetAuthenticationStateAction"
+        };
+
         Assert.DoesNotContain(dispatchedActions, action =>
-            action is SetConnectionLifecycleAction
-            or UpdateConnectionStatusAction
-            or SetAuthenticationStateAction);
+            legacyActionTypeNames.Contains(action.GetType().Name, StringComparer.Ordinal));
     }
 
     private sealed class ViewModelFixture : IDisposable, IAsyncDisposable

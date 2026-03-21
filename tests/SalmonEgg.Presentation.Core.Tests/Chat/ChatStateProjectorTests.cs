@@ -14,7 +14,6 @@ public class ChatStateProjectorTests
         var projector = new ChatStateProjector();
         var state = new ChatState(
             HydratedConversationId: "session-1",
-            SelectedAcpProfileId: null,
             Transcript: ImmutableList<ConversationMessageSnapshot>.Empty,
             PlanEntries: ImmutableList<ConversationPlanEntrySnapshot>.Empty);
 
@@ -34,7 +33,6 @@ public class ChatStateProjectorTests
         var projector = new ChatStateProjector();
         var state = new ChatState(
             HydratedConversationId: "session-1",
-            SelectedAcpProfileId: "profile-b",
             Transcript: ImmutableList<ConversationMessageSnapshot>.Empty,
             PlanEntries: ImmutableList<ConversationPlanEntrySnapshot>.Empty);
 
