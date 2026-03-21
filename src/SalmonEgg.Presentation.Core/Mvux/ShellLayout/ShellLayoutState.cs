@@ -4,8 +4,11 @@ public sealed record ShellLayoutState(
     WindowMetrics WindowMetrics,
     LayoutPadding TitleBarPadding,
     double TitleBarInsetsHeight,
-    RightPanelMode RightPanelMode,
+    RightPanelMode DesiredRightPanelMode,
     double RightPanelPreferredWidth,
+    BottomPanelMode DesiredBottomPanelMode,
+    double BottomPanelPreferredHeight,
+    AuxiliaryPanelArea LastAuxiliaryPanelArea,
     double NavOpenPaneLength,
     double NavCompactPaneLength,
     bool? UserNavOpenIntent)
@@ -16,6 +19,9 @@ public sealed record ShellLayoutState(
         48,
         RightPanelMode.None,
         320,
+        BottomPanelMode.None,
+        240,
+        AuxiliaryPanelArea.None,
         300,
         72,
         null);

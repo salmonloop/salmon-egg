@@ -227,6 +227,7 @@ public static class DependencyInjection
         services.AddSingleton<INavigationProjectSelectionStore>(sp =>
             new NavigationProjectSelectionStoreAdapter(sp.GetRequiredService<AppPreferencesViewModel>()));
         services.AddSingleton<ChatViewModel>();
+        services.AddSingleton<ChatShellViewModel>();
         services.AddSingleton<ConversationCatalogFacade>();
         services.AddSingleton<IConversationCatalog>(sp => sp.GetRequiredService<ConversationCatalogFacade>());
         services.AddSingleton<ISettingsChatConnection>(sp =>

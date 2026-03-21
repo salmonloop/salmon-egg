@@ -5,6 +5,7 @@ namespace SalmonEgg.Presentation.Core.Mvux.ShellLayout;
 
 public interface IShellLayoutStore
 {
+    IFeed<ShellLayoutState> State { get; }
     IFeed<ShellLayoutSnapshot> Snapshot { get; }
     ValueTask Dispatch(ShellLayoutAction action);
 }
@@ -13,6 +14,7 @@ public sealed class ShellLayoutStore : IShellLayoutStore
 {
     private readonly IState<ShellLayoutState> _state;
     private readonly IState<ShellLayoutSnapshot> _snapshotState;
+    public IFeed<ShellLayoutState> State => _state;
     public IFeed<ShellLayoutSnapshot> Snapshot => _snapshotState;
 
     public ShellLayoutStore(IState<ShellLayoutState> state, IState<ShellLayoutSnapshot> snapshotState)

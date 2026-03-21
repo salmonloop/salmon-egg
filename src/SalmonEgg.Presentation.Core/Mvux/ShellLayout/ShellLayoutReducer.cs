@@ -15,8 +15,43 @@ public static class ShellLayoutReducer
                 TitleBarInsetsHeight = t.Height
             },
             NavToggleRequested => state with { UserNavOpenIntent = !ShellLayoutPolicy.Compute(state).IsNavPaneOpen },
-            RightPanelModeChanged r => state with { RightPanelMode = r.Mode },
-            RightPanelResizeRequested r => state with { RightPanelPreferredWidth = r.AbsoluteWidth },
+            ToggleRightPanelRequested t => state with
+            {
+                DesiredRightPanelMode = state.DesiredRightPanelMode == t.TargetMode ? RightPanelMode.None : t.TargetMode,
+                LastAuxiliaryPanelArea = state.DesiredRightPanelMode == t.TargetMode || t.TargetMode == RightPanelMode.None
+                    ? state.LastAuxiliaryPanelArea
+                    : AuxiliaryPanelArea.Right
+            },
+            ToggleBottomPanelRequested => state with
+            {
+                DesiredBottomPanelMode = state.DesiredBottomPanelMode == BottomPanelMode.None
+                    ? BottomPanelMode.Dock
+                    : BottomPanelMode.None,
+                LastAuxiliaryPanelArea = state.DesiredBottomPanelMode == BottomPanelMode.None
+                    ? AuxiliaryPanelArea.Bottom
+                    : state.LastAuxiliaryPanelArea
+            },
+            ClearAuxiliaryPanelsRequested => state with
+            {
+                DesiredRightPanelMode = RightPanelMode.None,
+                DesiredBottomPanelMode = BottomPanelMode.None,
+                LastAuxiliaryPanelArea = AuxiliaryPanelArea.None
+            },
+            RightPanelModeChanged r => state with
+            {
+                DesiredRightPanelMode = r.Mode,
+                LastAuxiliaryPanelArea = r.Mode == RightPanelMode.None ? state.LastAuxiliaryPanelArea : AuxiliaryPanelArea.Right
+            },
+            BottomPanelModeChanged b => state with
+            {
+                DesiredBottomPanelMode = b.Mode,
+                LastAuxiliaryPanelArea = b.Mode == BottomPanelMode.None ? state.LastAuxiliaryPanelArea : AuxiliaryPanelArea.Bottom
+            },
+            RightPanelResizeRequested r => state with
+            {
+                RightPanelPreferredWidth = r.AbsoluteWidth,
+                LastAuxiliaryPanelArea = state.DesiredRightPanelMode == RightPanelMode.None ? state.LastAuxiliaryPanelArea : AuxiliaryPanelArea.Right
+            },
             LeftNavResizeRequested l => state with { NavOpenPaneLength = l.OpenPaneLength },
             _ => state
         };

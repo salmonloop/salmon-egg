@@ -62,6 +62,9 @@
   <data name="ChatModeSelector.PlaceholderText" xml:space="preserve">
     <value>Choose mode</value>
   </data>
+  <data name="ChatAcpProfileSelector.PlaceholderText" xml:space="preserve">
+    <value>Select ACP</value>
+  </data>
   <data name="MarryHerButton.Content" xml:space="preserve">
     <value>Marry her</value>
   </data>
@@ -510,5 +513,23 @@
   </data>
   <data name="PlanEmptySubtitle.Text" xml:space="preserve">
     <value>Waiting for agent updates</value>
+  </data>
+  <data name="BottomPanelButton.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Bottom Panel</value>
+  </data>
+  <data name="BottomPanelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Bottom Panel</value>
+  </data>
+  <data name="BottomPanelPlaceholder.Text" xml:space="preserve">
+    <value>Bottom panel placeholder</value>
+  </data>
+  <data name="BottomPanelTerminalTab.Text" xml:space="preserve">
+    <value>Terminal</value>
+  </data>
+  <data name="BottomPanelOutputTab.Text" xml:space="preserve">
+    <value>Output</value>
+  </data>
+  <data name="ChatAcpProfileSelector.PlaceholderText" xml:space="preserve">
+    <value>Select ACP</value>
   </data>
 </root>

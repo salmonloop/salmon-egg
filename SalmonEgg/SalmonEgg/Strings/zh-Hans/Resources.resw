@@ -487,6 +487,9 @@
   <data name="ChatModeSelector.PlaceholderText" xml:space="preserve">
     <value>选择模式</value>
   </data>
+  <data name="ChatAcpProfileSelector.PlaceholderText" xml:space="preserve">
+    <value>选择 ACP</value>
+  </data>
   <data name="MarryHerButton.Content" xml:space="preserve">
     <value>娶她</value>
   </data>
@@ -510,5 +513,23 @@
   </data>
   <data name="PlanEmptySubtitle.Text" xml:space="preserve">
     <value>等待 Agent 更新</value>
+  </data>
+  <data name="BottomPanelButton.ToolTipService.ToolTip" xml:space="preserve">
+    <value>底栏</value>
+  </data>
+  <data name="BottomPanelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>底栏</value>
+  </data>
+  <data name="BottomPanelPlaceholder.Text" xml:space="preserve">
+    <value>底栏占位</value>
+  </data>
+  <data name="BottomPanelTerminalTab.Text" xml:space="preserve">
+    <value>终端</value>
+  </data>
+  <data name="BottomPanelOutputTab.Text" xml:space="preserve">
+    <value>输出</value>
+  </data>
+  <data name="ChatAcpProfileSelector.PlaceholderText" xml:space="preserve">
+    <value>选择 ACP</value>
   </data>
 </root>

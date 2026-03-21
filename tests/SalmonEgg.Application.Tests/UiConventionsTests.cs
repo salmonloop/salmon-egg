@@ -162,4 +162,33 @@ public class UiConventionsTests
 
         Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
     }
+
+    [Fact]
+    public void BottomPanelButton_Localization_ShouldUseToolTipServicePropertyKey()
+    {
+        var repoRoot = FindRepoRoot();
+        var reswFiles = new[]
+        {
+            Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Strings", "en", "Resources.resw"),
+            Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Strings", "en-US", "Resources.resw"),
+            Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Strings", "zh-Hans", "Resources.resw")
+        };
+
+        var failures = new List<string>();
+        foreach (var file in reswFiles)
+        {
+            var text = File.ReadAllText(file);
+            if (!text.Contains("BottomPanelButton.ToolTipService.ToolTip", StringComparison.Ordinal))
+            {
+                failures.Add($"{file}: missing BottomPanelButton.ToolTipService.ToolTip");
+            }
+
+            if (text.Contains("<data name=\"BottomPanelButton.ToolTip\" ", StringComparison.Ordinal))
+            {
+                failures.Add($"{file}: contains invalid BottomPanelButton.ToolTip key");
+            }
+        }
+
+        Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
+    }
 }

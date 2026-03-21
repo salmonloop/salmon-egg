@@ -25,10 +25,11 @@ public class ShellLayoutNavigationStateAdapterTests
 
         public TestShellLayoutStore()
         {
-            _state = State.Value(new object(), () => ShellLayoutState.Default);
-            SnapshotState = State.Value(new object(), () => ShellLayoutPolicy.Compute(ShellLayoutState.Default));
+            _state = Uno.Extensions.Reactive.State.Value(new object(), () => ShellLayoutState.Default);
+            SnapshotState = Uno.Extensions.Reactive.State.Value(new object(), () => ShellLayoutPolicy.Compute(ShellLayoutState.Default));
         }
 
+        public IFeed<ShellLayoutState> State => _state;
         public IFeed<ShellLayoutSnapshot> Snapshot => SnapshotState;
 
         public ValueTask Dispatch(ShellLayoutAction action) => ValueTask.CompletedTask;

@@ -1,12 +1,10 @@
-using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using Xunit;
 using Uno.Extensions.Reactive;
+using Xunit;
 using SalmonEgg.Presentation.Core.Mvux.ShellLayout;
 using SalmonEgg.Presentation.Core.ViewModels.ShellLayout;
-using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace SalmonEgg.Presentation.Core.Tests.ShellLayout;
 
@@ -24,6 +22,7 @@ public class ShellLayoutViewModelTests
         Assert.Equal(72, vm.NavCompactPaneLength);
         Assert.True(vm.SearchBoxVisible);
         Assert.Equal(48, vm.TitleBarHeight);
+        Assert.False(vm.BottomPanelVisible);
     }
 
     [Fact]
@@ -35,7 +34,7 @@ public class ShellLayoutViewModelTests
         await store.SnapshotState.Update(_ => new ShellLayoutSnapshot(
             NavigationPaneDisplayMode.Compact, false, 300, 72,
             false, 0, 0, new LayoutPadding(4, 0, 4, 0), new LayoutPadding(0, 0, 0, 0), 60,
-            false, 0, RightPanelMode.None, false, 0), default);
+            false, false, 0, RightPanelMode.None, false, 0, BottomPanelMode.None, false, 0), default);
 
         await Task.Delay(100);
 
@@ -54,7 +53,7 @@ public class ShellLayoutViewModelTests
         await store.SnapshotState.Update(_ => new ShellLayoutSnapshot(
             NavigationPaneDisplayMode.Compact, false, 300, 72,
             false, 0, 0, new LayoutPadding(4, 0, 4, 0), new LayoutPadding(0, 0, 0, 0), 60,
-            false, 0, RightPanelMode.None, false, 0), default);
+            false, false, 0, RightPanelMode.None, false, 0, BottomPanelMode.None, false, 0), default);
 
         await Task.Delay(50);
         Assert.True(vm.IsNavPaneOpen);
@@ -65,18 +64,67 @@ public class ShellLayoutViewModelTests
         Assert.Equal(NavigationPaneDisplayMode.Compact, vm.NavPaneDisplayMode);
     }
 
+    [Fact]
+    public async Task ViewModel_ProjectsBottomPanelSnapshot()
+    {
+        await using var store = new FakeShellLayoutStore();
+        using var vm = new ShellLayoutViewModel(store);
+
+        await store.SnapshotState.Update(_ => new ShellLayoutSnapshot(
+            NavigationPaneDisplayMode.Expanded, true, 300, 72,
+            true, 220, 360, new LayoutPadding(0, 0, 0, 0), new LayoutPadding(0, 0, 0, 0), 48,
+            true, false, 0, RightPanelMode.None, true, 240, BottomPanelMode.Dock, true, 294), default);
+
+        await Task.Delay(100);
+
+        Assert.True(vm.BottomPanelVisible);
+        Assert.Equal(240, vm.BottomPanelHeight);
+        Assert.Equal(BottomPanelMode.Dock, vm.BottomPanelMode);
+        Assert.True(vm.CanShowSimultaneousAuxiliaryPanels);
+    }
+
+    [Fact]
+    public async Task ViewModel_ProjectsDesiredModes_EvenWhenEffectiveIsSuppressed()
+    {
+        await using var store = new FakeShellLayoutStore();
+        using var vm = new ShellLayoutViewModel(store);
+
+        // Simulate a narrow shell where right+bottom cannot be shown simultaneously.
+        // User intent keeps both desired modes non-None, but policy suppresses the bottom panel.
+        var desired = ShellLayoutState.Default with
+        {
+            WindowMetrics = new WindowMetrics(1000, 650, 1000, 650),
+            DesiredRightPanelMode = RightPanelMode.Diff,
+            DesiredBottomPanelMode = BottomPanelMode.Dock,
+            LastAuxiliaryPanelArea = AuxiliaryPanelArea.Right
+        };
+
+        await store.StateState.Update(_ => desired, default);
+        await store.SnapshotState.Update(_ => ShellLayoutPolicy.Compute(desired), default);
+
+        await Task.Delay(100);
+
+        Assert.Equal(RightPanelMode.Diff, vm.DesiredRightPanelMode);
+        Assert.Equal(BottomPanelMode.Dock, vm.DesiredBottomPanelMode);
+        Assert.Equal(RightPanelMode.Diff, vm.RightPanelMode);
+        Assert.Equal(BottomPanelMode.None, vm.BottomPanelMode);
+        Assert.False(vm.BottomPanelVisible);
+    }
+
     private sealed class FakeShellLayoutStore : IShellLayoutStore, IAsyncDisposable
     {
         private readonly IState<ShellLayoutState> _state;
 
         public FakeShellLayoutStore()
         {
-            SnapshotState = State.Value(new object(), () => ShellLayoutPolicy.Compute(ShellLayoutState.Default));
-            _state = State.Value(new object(), () => ShellLayoutState.Default);
+            SnapshotState = Uno.Extensions.Reactive.State.Value(new object(), () => ShellLayoutPolicy.Compute(ShellLayoutState.Default));
+            _state = Uno.Extensions.Reactive.State.Value(new object(), () => ShellLayoutState.Default);
         }
 
+        public IFeed<ShellLayoutState> State => _state;
         public IFeed<ShellLayoutSnapshot> Snapshot => SnapshotState;
         public IState<ShellLayoutSnapshot> SnapshotState { get; }
+        public IState<ShellLayoutState> StateState => _state;
         public ValueTask Dispatch(ShellLayoutAction action) => ValueTask.CompletedTask;
 
         public async ValueTask DisposeAsync()

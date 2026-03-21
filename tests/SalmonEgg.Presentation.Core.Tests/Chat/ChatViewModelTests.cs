@@ -34,7 +34,8 @@ public class ChatViewModelTests
         Mock<IConversationStore>? conversationStore = null,
         IAcpConnectionCommands? acpConnectionCommands = null,
         Mock<IConfigurationService>? configurationService = null,
-        Mock<ISessionManager>? sessionManager = null)
+        Mock<ISessionManager>? sessionManager = null,
+        IConversationActivationCoordinator? conversationActivationCoordinator = null)
     {
         var state = State.Value(new object(), () => ChatState.Empty);
         var connectionState = State.Value(new object(), () => ChatConnectionState.Empty);
@@ -151,7 +152,8 @@ public class ChatViewModelTests
                 connectionStore,
                 vmLogger.Object,
                 syncContext,
-                acpConnectionCommands);
+                acpConnectionCommands,
+                conversationActivationCoordinator: conversationActivationCoordinator);
             return new ViewModelFixture(
                 viewModel,
                 state,
@@ -381,6 +383,136 @@ public class ChatViewModelTests
         var state = await fixture.GetStateAsync();
         Assert.Equal("store-selection", state.SelectedConversationId);
         Assert.Equal("session-1", fixture.ViewModel.CurrentSessionId);
+    }
+
+    [Fact]
+    public async Task CurrentSessionProjection_InitializesBottomPanelTabs()
+    {
+        await using var fixture = CreateViewModel();
+
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "session-1" });
+        await Task.Delay(50);
+
+        Assert.Collection(
+            fixture.ViewModel.BottomPanelTabs,
+            terminal => Assert.Equal("terminal", terminal.Id),
+            output => Assert.Equal("output", output.Id));
+        Assert.Equal("terminal", fixture.ViewModel.SelectedBottomPanelTab?.Id);
+    }
+
+    [Fact]
+    public async Task BottomPanelSelection_PersistsPerConversation()
+    {
+        await using var fixture = CreateViewModel();
+
+        Assert.Empty(fixture.ViewModel.BottomPanelTabs);
+        Assert.Null(fixture.ViewModel.SelectedBottomPanelTab);
+
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "session-1" });
+        await Task.Delay(50);
+
+        Assert.Equal(2, fixture.ViewModel.BottomPanelTabs.Count);
+        var outputTab = fixture.ViewModel.BottomPanelTabs[1];
+        Assert.Equal("output", outputTab.Id);
+
+        fixture.ViewModel.SelectedBottomPanelTab = outputTab;
+        await Task.Delay(50);
+
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "session-2" });
+        await Task.Delay(50);
+
+        Assert.Equal("terminal", fixture.ViewModel.SelectedBottomPanelTab?.Id);
+
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "session-1" });
+        await Task.Delay(50);
+
+        Assert.Equal("output", fixture.ViewModel.SelectedBottomPanelTab?.Id);
+    }
+
+    [Fact]
+    public async Task ArchiveConversation_CurrentSession_ClearsBottomPanelStateAndDoesNotReviveSelection()
+    {
+        var activation = new Mock<IConversationActivationCoordinator>();
+        activation
+            .Setup(a => a.ArchiveConversationAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConversationMutationResult(true, true, null));
+
+        await using var fixture = CreateViewModel(conversationActivationCoordinator: activation.Object);
+
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "session-1" });
+        await Task.Delay(50);
+
+        var stateMap = GetBottomPanelStateMap(fixture.ViewModel);
+        Assert.True(stateMap.Contains("session-1"));
+
+        var outputTab = fixture.ViewModel.BottomPanelTabs[1];
+        Assert.Equal("output", outputTab.Id);
+        fixture.ViewModel.SelectedBottomPanelTab = outputTab;
+        await Task.Delay(50);
+        Assert.Equal("output", fixture.ViewModel.SelectedBottomPanelTab?.Id);
+
+        fixture.ViewModel.ArchiveConversation("session-1");
+
+        activation.Verify(a => a.ArchiveConversationAsync("session-1", "session-1", It.IsAny<CancellationToken>()), Times.Once);
+
+        Assert.Empty(fixture.ViewModel.BottomPanelTabs);
+        Assert.Null(fixture.ViewModel.SelectedBottomPanelTab);
+        Assert.False(stateMap.Contains("session-1"));
+
+        // If store selection ever toggles away and back, previous selection must not revive.
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "session-2" });
+        await Task.Delay(50);
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "session-1" });
+        await Task.Delay(50);
+
+        Assert.Equal("terminal", fixture.ViewModel.SelectedBottomPanelTab?.Id);
+    }
+
+    [Fact]
+    public async Task DeleteConversation_CurrentSession_ClearsBottomPanelStateAndDoesNotReviveSelection()
+    {
+        var activation = new Mock<IConversationActivationCoordinator>();
+        activation
+            .Setup(a => a.DeleteConversationAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConversationMutationResult(true, true, null));
+
+        await using var fixture = CreateViewModel(conversationActivationCoordinator: activation.Object);
+
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "session-1" });
+        await Task.Delay(50);
+
+        var stateMap = GetBottomPanelStateMap(fixture.ViewModel);
+        Assert.True(stateMap.Contains("session-1"));
+
+        var outputTab = fixture.ViewModel.BottomPanelTabs[1];
+        Assert.Equal("output", outputTab.Id);
+        fixture.ViewModel.SelectedBottomPanelTab = outputTab;
+        await Task.Delay(50);
+        Assert.Equal("output", fixture.ViewModel.SelectedBottomPanelTab?.Id);
+
+        fixture.ViewModel.DeleteConversation("session-1");
+
+        activation.Verify(a => a.DeleteConversationAsync("session-1", "session-1", It.IsAny<CancellationToken>()), Times.Once);
+
+        Assert.Empty(fixture.ViewModel.BottomPanelTabs);
+        Assert.Null(fixture.ViewModel.SelectedBottomPanelTab);
+        Assert.False(stateMap.Contains("session-1"));
+
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "session-2" });
+        await Task.Delay(50);
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "session-1" });
+        await Task.Delay(50);
+
+        Assert.Equal("terminal", fixture.ViewModel.SelectedBottomPanelTab?.Id);
+    }
+
+    private static IDictionary GetBottomPanelStateMap(ChatViewModel viewModel)
+    {
+        var field = typeof(ChatViewModel).GetField("_bottomPanelStateByConversation", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        var value = field.GetValue(viewModel);
+        Assert.NotNull(value);
+        return Assert.IsAssignableFrom<IDictionary>(value);
     }
 
     [Fact]

@@ -11,8 +11,12 @@ public sealed record ShellLayoutSnapshot(
     LayoutPadding TitleBarPadding,
     LayoutPadding NavViewPadding,
     double TitleBarHeight,
+    bool CanShowSimultaneousAuxiliaryPanels,
     bool RightPanelVisible,
     double RightPanelWidth,
     RightPanelMode RightPanelMode,
+    bool BottomPanelVisible,
+    double BottomPanelHeight,
+    BottomPanelMode BottomPanelMode,
     bool IsNavResizerVisible,
     double LeftNavResizerLeft);

@@ -13,6 +13,7 @@ public class ShellLayoutStateTests
         Assert.True(state.RightPanelPreferredWidth > 0);
         Assert.True(state.TitleBarInsetsHeight > 0);
         Assert.Null(state.UserNavOpenIntent);
-        Assert.Equal(RightPanelMode.None, state.RightPanelMode);
+        Assert.Equal(RightPanelMode.None, state.DesiredRightPanelMode);
+        Assert.Equal(BottomPanelMode.None, state.DesiredBottomPanelMode);
     }
 }

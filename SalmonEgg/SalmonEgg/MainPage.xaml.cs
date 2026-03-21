@@ -85,6 +85,7 @@ public sealed partial class MainPage : Page
     private readonly MainNavigationContentSyncAdapter _mainNavigationContentSyncAdapter;
     private readonly MainNavigationViewAdapter _mainNavigationViewAdapter;
     private readonly SalmonEgg.Presentation.Logic.SearchInteractionLogic _searchLogic = new();
+    public bool IsSipRedockSymbolAvailable { get; }
 
     public MainPage()
     {
@@ -99,6 +100,7 @@ public sealed partial class MainPage : Page
         _metricsProvider = App.ServiceProvider.GetRequiredService<WindowMetricsProvider>();
         _metricsSink = App.ServiceProvider.GetRequiredService<IShellLayoutMetricsSink>();
         _navigationCoordinator = App.ServiceProvider.GetRequiredService<INavigationCoordinator>();
+        IsSipRedockSymbolAvailable = OperatingSystem.IsWindows();
 
         this.InitializeComponent();
         _mainNavigationContentSyncAdapter = new MainNavigationContentSyncAdapter(_navigationCoordinator);
@@ -481,6 +483,11 @@ public sealed partial class MainPage : Page
         UpdateBackButtonState();
     }
 
+    private void ResetChatAuxiliaryPanelsOnChatExit()
+    {
+        _metricsSink.ReportClearAuxiliaryPanels();
+    }
+
     private void EnsureStartContent()
     {
         if (ContentFrame?.CurrentSourcePageType != typeof(StartView))
@@ -522,16 +529,20 @@ public sealed partial class MainPage : Page
 
             if (targetMode != RightPanelMode.None)
             {
-                var newMode = LayoutVM.RightPanelMode == targetMode 
-                    ? RightPanelMode.None 
-                    : targetMode;
-                _metricsSink.ReportRightPanelMode(newMode);
+                _metricsSink.ReportToggleRightPanel(targetMode);
             }
         }
     }
 
+    private void OnBottomPanelButtonClick(object sender, RoutedEventArgs e)
+    {
+        if (!IsChatPageActive())
+        {
+            return;
+        }
 
-
+        _metricsSink.ReportToggleBottomPanel();
+    }
 
     private string GetRightPanelTitle(RightPanelMode mode, string? planTitle)
     {
@@ -543,16 +554,14 @@ public sealed partial class MainPage : Page
         };
     }
 
+    // Behavior notes:
+    // 1) Auxiliary title bar buttons only appear on chat pages.
     private void UpdateRightPanelAvailability(bool isChat)
     {
         var visibility = isChat ? Visibility.Visible : Visibility.Collapsed;
+        BottomPanelButton.Visibility = visibility;
         DiffPanelButton.Visibility = visibility;
         TodoPanelButton.Visibility = visibility;
-
-        if (!isChat && LayoutVM.RightPanelMode != RightPanelMode.None)
-        {
-            _metricsSink.ReportRightPanelMode(RightPanelMode.None);
-        }
     }
 
     private void OnRightPanelResizerPointerPressed(object sender, PointerRoutedEventArgs e)
@@ -653,9 +662,15 @@ public sealed partial class MainPage : Page
     private void OnContentFrameNavigated(object sender, NavigationEventArgs e)
     {
         BootLogDebug($"ContentFrame Navigated: {e.SourcePageType?.Name ?? "<null>"}");
+        if (!IsChatPageType(e.SourcePageType))
+        {
+            ResetChatAuxiliaryPanelsOnChatExit();
+        }
+
         UpdateBackButtonState();
         _mainNavigationContentSyncAdapter.OnFrameNavigated(e.SourcePageType);
         _mainNavigationViewAdapter.ApplySelectionDeferred();
+        UpdateRightPanelAvailability(IsChatPageType(e.SourcePageType));
     }
 
     private void OnTitleBarBackClick(object sender, RoutedEventArgs e)
@@ -790,6 +805,12 @@ public sealed partial class MainPage : Page
         null => "<null>",
         _ => selection.GetType().Name
     };
+
+    private bool IsChatPageActive()
+        => IsChatPageType(ContentFrame?.CurrentSourcePageType);
+
+    private static bool IsChatPageType(Type? pageType)
+        => pageType == typeof(ChatView);
 
     private bool CanResizeLeftNav()
     {

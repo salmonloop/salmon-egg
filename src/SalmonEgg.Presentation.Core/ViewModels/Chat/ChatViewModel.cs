@@ -78,6 +78,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private readonly object _restoreSync = new();
     private Task? _restoreTask;
     private long _connectionGeneration;
+    private readonly Dictionary<string, BottomPanelState> _bottomPanelStateByConversation = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Local conversation binding connects a stable UI ConversationId to a transient ACP RemoteSessionId.
@@ -232,6 +233,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     [ObservableProperty]
     private string? _currentPlanTitle;
+
+    [ObservableProperty]
+    private ObservableCollection<BottomPanelTabViewModel> _bottomPanelTabs = new();
+
+    [ObservableProperty]
+    private BottomPanelTabViewModel? _selectedBottomPanelTab;
 
     [ObservableProperty]
     private bool _showPermissionDialog;
@@ -698,6 +705,21 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         }
 
         SyncMiniWindowSelectedSession();
+        SyncBottomPanelState(value);
+    }
+
+    partial void OnSelectedBottomPanelTabChanged(BottomPanelTabViewModel? value)
+    {
+        var conversationId = CurrentSessionId;
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return;
+        }
+
+        if (_bottomPanelStateByConversation.TryGetValue(conversationId, out var state))
+        {
+            state.Selected = value;
+        }
     }
 
     partial void OnSelectedMiniWindowSessionChanged(MiniWindowConversationItemViewModel? value)
@@ -1206,6 +1228,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 .ArchiveConversationAsync(conversationId, CurrentSessionId)
                 .GetAwaiter()
                 .GetResult();
+
+            RemoveBottomPanelState(conversationId);
         }
         catch (Exception ex)
         {
@@ -1226,6 +1250,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 .DeleteConversationAsync(conversationId, CurrentSessionId)
                 .GetAwaiter()
                 .GetResult();
+
+            RemoveBottomPanelState(conversationId);
         }
         catch (Exception ex)
         {
@@ -1708,6 +1734,59 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         var token = afterSlash.Split(new[] { ' ', '\t', '\r', '\n' }, 2)[0];
         UpdateSlashGhostSuffix(token, trimmed);
         return true;
+    }
+
+    private void SyncBottomPanelState(string? conversationId)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            BottomPanelTabs = new ObservableCollection<BottomPanelTabViewModel>();
+            SelectedBottomPanelTab = null;
+            return;
+        }
+
+        if (!_bottomPanelStateByConversation.TryGetValue(conversationId, out var state))
+        {
+            state = new BottomPanelState(CreateDefaultBottomPanelTabs());
+            _bottomPanelStateByConversation[conversationId] = state;
+        }
+
+        EnsureSelectedBottomPanelTab(state);
+        BottomPanelTabs = state.Tabs;
+        SelectedBottomPanelTab = state.Selected;
+    }
+
+    private static ObservableCollection<BottomPanelTabViewModel> CreateDefaultBottomPanelTabs()
+        => new()
+        {
+            new BottomPanelTabViewModel("terminal", "BottomPanelTerminalTab.Text"),
+            new BottomPanelTabViewModel("output", "BottomPanelOutputTab.Text")
+        };
+
+    private static void EnsureSelectedBottomPanelTab(BottomPanelState state)
+    {
+        if (state.Selected != null && state.Tabs.Contains(state.Selected))
+        {
+            return;
+        }
+
+        state.Selected = state.Tabs.FirstOrDefault();
+    }
+
+    private void RemoveBottomPanelState(string conversationId)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return;
+        }
+
+        _bottomPanelStateByConversation.Remove(conversationId);
+
+        if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
+        {
+            BottomPanelTabs = new ObservableCollection<BottomPanelTabViewModel>();
+            SelectedBottomPanelTab = null;
+        }
     }
 
     private void OnPermissionRequestReceived(object? sender, PermissionRequestEventArgs e)
@@ -2744,6 +2823,17 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             => Task.CompletedTask;
     }
 
+    private sealed class BottomPanelState
+    {
+        public BottomPanelState(ObservableCollection<BottomPanelTabViewModel> tabs)
+        {
+            Tabs = tabs ?? throw new ArgumentNullException(nameof(tabs));
+        }
+
+        public ObservableCollection<BottomPanelTabViewModel> Tabs { get; }
+
+        public BottomPanelTabViewModel? Selected { get; set; }
+    }
 
     private void OnCurrentPlanCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {

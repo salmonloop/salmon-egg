@@ -18,6 +18,7 @@
         <converters:InverseBoolConverter x:Key="InverseBoolToVisibilityConverter"/>
         <converters:MessageDirectionToAlignmentConverter x:Key="HorizontalAlignmentConverter"/>
         <converters:TimeFormatConverter x:Key="TimeFormatConverter"/>
+        <converters:GridLengthConverter x:Key="GridLengthConverter" />
 
         <Style x:Key="InlineHeaderButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
@@ -149,10 +150,15 @@
         </Grid>
 
         <!-- 已激活会话状态：对话界面 -->
-        <Grid RowDefinitions="Auto,*,Auto"
+        <Grid
               AutomationProperties.AutomationId="ChatView.ActiveRoot"
               Transitions="{x:Bind Motion.PageTransitions, Mode=OneWay}"
               Visibility="{x:Bind ViewModel.IsSessionActive, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="{x:Bind LayoutVM.BottomPanelHeight, Mode=OneWay, Converter={StaticResource GridLengthConverter}}" />
+            </Grid.RowDefinitions>
 
             <!-- 顶部状态条 -->
             <Border Grid.Row="0"
@@ -192,6 +198,7 @@
                     </StackPanel>
 
                     <ComboBox Grid.Column="1"
+                              x:Uid="ChatAcpProfileSelector"
                               Width="140"
                               FontSize="12"
                               MinWidth="0"
@@ -212,39 +219,46 @@
                 </Grid>
             </Border>
 
-            <!-- 消息列表 -->
-            <controls:ResponsiveContentHost Grid.Row="1"
-                                            MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}">
-                <controls:ResponsiveContentHost.Child>
-                    <ListView x:Name="MessagesList"
-                              AutomationProperties.AutomationId="ChatView.MessagesList"
-                              ItemsSource="{x:Bind ViewModel.MessageHistory, Mode=OneWay}"
-                              ItemTemplate="{StaticResource MessageTemplate}"
-                              Padding="20"
-                              SelectionMode="None"
-                              HorizontalAlignment="Stretch"
-                              MinWidth="0"
-                              Loaded="OnMessagesListLoaded">
-                        <ListView.ItemContainerStyle>
-                            <Style TargetType="ListViewItem">
-                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                                <Setter Property="Padding" Value="0"/>
-                                <Setter Property="MinHeight" Value="0"/>
-                            </Style>
-                        </ListView.ItemContainerStyle>
-                    </ListView>
-                </controls:ResponsiveContentHost.Child>
-            </controls:ResponsiveContentHost>
+            <Grid Grid.Row="1" RowDefinitions="*,Auto">
+                <!-- 消息列表 -->
+                <controls:ResponsiveContentHost Grid.Row="0"
+                                                MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}">
+                    <controls:ResponsiveContentHost.Child>
+                        <ListView x:Name="MessagesList"
+                                  AutomationProperties.AutomationId="ChatView.MessagesList"
+                                  ItemsSource="{x:Bind ViewModel.MessageHistory, Mode=OneWay}"
+                                  ItemTemplate="{StaticResource MessageTemplate}"
+                                  Padding="20"
+                                  SelectionMode="None"
+                                  HorizontalAlignment="Stretch"
+                                  MinWidth="0"
+                                  Loaded="OnMessagesListLoaded">
+                            <ListView.ItemContainerStyle>
+                                <Style TargetType="ListViewItem">
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                    <Setter Property="Padding" Value="0"/>
+                                    <Setter Property="MinHeight" Value="0"/>
+                                </Style>
+                            </ListView.ItemContainerStyle>
+                        </ListView>
+                    </controls:ResponsiveContentHost.Child>
+                </controls:ResponsiveContentHost>
 
-            <!-- 输入区域（可复用控件，包含模式选择与后续扩展位） -->
-            <controls:ResponsiveContentHost Grid.Row="2"
-                                            MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}">
-                <controls:ResponsiveContentHost.Child>
-                    <controls:ChatInputArea ViewModel="{x:Bind ViewModel, Mode=OneWay}"
-                                            SubmitCommand="{x:Bind ViewModel.SendPromptCommand}"
-                                            HorizontalAlignment="Stretch" />
-                </controls:ResponsiveContentHost.Child>
-            </controls:ResponsiveContentHost>
+                <!-- 输入区域（属于聊天区域） -->
+                <controls:ResponsiveContentHost Grid.Row="1"
+                                                MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}">
+                    <controls:ResponsiveContentHost.Child>
+                        <controls:ChatInputArea ViewModel="{x:Bind ViewModel, Mode=OneWay}"
+                                                SubmitCommand="{x:Bind ViewModel.SendPromptCommand}"
+                                                HorizontalAlignment="Stretch" />
+                    </controls:ResponsiveContentHost.Child>
+                </controls:ResponsiveContentHost>
+            </Grid>
+
+            <local:BottomPanelHost Grid.Row="2"
+                                   Visibility="{x:Bind LayoutVM.BottomPanelVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                   TabsSource="{x:Bind ViewModel.BottomPanelTabs, Mode=OneWay}"
+                                   SelectedTab="{x:Bind ViewModel.SelectedBottomPanelTab, Mode=TwoWay}" />
 
             <!-- 加载遮罩 -->
             <Grid Grid.RowSpan="3"

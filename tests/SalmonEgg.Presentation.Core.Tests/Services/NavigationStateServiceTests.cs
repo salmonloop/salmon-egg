@@ -56,10 +56,11 @@ public class NavigationStateServiceTests
 
         public TestShellLayoutStore()
         {
-            _state = State.Value(new object(), () => ShellLayoutState.Default);
-            _snapshot = State.Value(new object(), () => ShellLayoutPolicy.Compute(ShellLayoutState.Default));
+            _state = Uno.Extensions.Reactive.State.Value(new object(), () => ShellLayoutState.Default);
+            _snapshot = Uno.Extensions.Reactive.State.Value(new object(), () => ShellLayoutPolicy.Compute(ShellLayoutState.Default));
         }
 
+        public IFeed<ShellLayoutState> State => _state;
         public IFeed<ShellLayoutSnapshot> Snapshot => _snapshot;
 
         public async ValueTask Dispatch(ShellLayoutAction action)

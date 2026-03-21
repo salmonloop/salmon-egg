@@ -479,22 +479,31 @@
                                 Spacing="8"
                                 VerticalAlignment="Center"
                                 Margin="0,0,8,0">
+                        <ToggleButton x:Name="BottomPanelButton"
+                                       x:Uid="BottomPanelButton"
+                                       Tag="BottomPanel"
+                                       Style="{StaticResource TitleBarToggleButtonStyle}"
+                                       Click="OnBottomPanelButtonClick"
+                                       IsChecked="{x:Bind LayoutVM.DesiredBottomPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Dock}">
+                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                      Glyph="&#xE15F;" />
+                        </ToggleButton>
                         <ToggleButton x:Name="DiffPanelButton"
-                                      Tag="Diff"
-                                      Style="{StaticResource TitleBarToggleButtonStyle}"
-                                      ToolTipService.ToolTip="Diff"
-                                      AutomationProperties.Name="Diff Panel"
-                                      Click="OnRightPanelButtonClick"
-                                      IsChecked="{x:Bind LayoutVM.RightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Diff}">
+                                       Tag="Diff"
+                                       Style="{StaticResource TitleBarToggleButtonStyle}"
+                                       ToolTipService.ToolTip="Diff"
+                                       AutomationProperties.Name="Diff Panel"
+                                       Click="OnRightPanelButtonClick"
+                                       IsChecked="{x:Bind LayoutVM.DesiredRightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Diff}">
                             <SymbolIcon Symbol="Preview" />
                         </ToggleButton>
                         <ToggleButton x:Name="TodoPanelButton"
-                                      Tag="Todo"
-                                      Style="{StaticResource TitleBarToggleButtonStyle}"
-                                      ToolTipService.ToolTip="Todo"
-                                      AutomationProperties.Name="Todo Panel"
-                                      Click="OnRightPanelButtonClick"
-                                      IsChecked="{x:Bind LayoutVM.RightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Todo}">
+                                       Tag="Todo"
+                                       Style="{StaticResource TitleBarToggleButtonStyle}"
+                                       ToolTipService.ToolTip="Todo"
+                                       AutomationProperties.Name="Todo Panel"
+                                       Click="OnRightPanelButtonClick"
+                                       IsChecked="{x:Bind LayoutVM.DesiredRightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Todo}">
                             <SymbolIcon Symbol="Bullets" />
                         </ToggleButton>
                     </StackPanel>

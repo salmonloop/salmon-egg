@@ -1,0 +1,74 @@
+<UserControl
+    x:Class="SalmonEgg.Presentation.Views.Chat.BottomPanelHost"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="using:SalmonEgg.Presentation.ViewModels.Chat"
+    xmlns:local="using:SalmonEgg.Presentation.Views.Chat"
+    mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <local:ResourceKeyToStringConverter x:Key="ResourceKeyToStringConverter" />
+        <local:TabAutomationIdConverter x:Key="TabAutomationIdConverter" />
+    </UserControl.Resources>
+
+    <Grid RowDefinitions="Auto,*"
+          Background="{ThemeResource LayerFillColorDefaultBrush}"
+          BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+          BorderThickness="0,1,0,0">
+        <ListView Grid.Row="0"
+                  x:Name="HeaderTabs"
+                  ItemsSource="{x:Bind TabsSource, Mode=OneWay}"
+                  SelectedItem="{x:Bind SelectedTab, Mode=TwoWay}"
+                  SelectionMode="Single"
+                  HorizontalAlignment="Stretch"
+                  ScrollViewer.HorizontalScrollMode="Enabled"
+                  ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                  ScrollViewer.VerticalScrollMode="Disabled"
+                  ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                  MinHeight="48">
+            <ListView.ItemContainerStyle>
+                <Style TargetType="ListViewItem">
+                    <Setter Property="Margin" Value="4,6,0,6" />
+                    <Setter Property="Padding" Value="16,10" />
+                    <Setter Property="CornerRadius" Value="8" />
+                    <Setter Property="BorderThickness" Value="1" />
+                    <Setter Property="BorderBrush" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                    <Setter Property="HorizontalContentAlignment" Value="Center" />
+                    <Setter Property="VerticalContentAlignment" Value="Center" />
+                </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <ItemsStackPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+            </ListView.ItemsPanel>
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="vm:BottomPanelTabViewModel">
+                    <TextBlock Text="{x:Bind TitleResourceKey, Mode=OneWay, Converter={StaticResource ResourceKeyToStringConverter}}"
+                               AutomationProperties.AutomationId="{x:Bind Id, Mode=OneWay, Converter={StaticResource TabAutomationIdConverter}}"
+                               AutomationProperties.Name="{x:Bind TitleResourceKey, Mode=OneWay, Converter={StaticResource ResourceKeyToStringConverter}}"
+                               FontWeight="SemiBold" />
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+
+        <Border Grid.Row="1"
+                Margin="12,0,12,12"
+                Padding="16"
+                CornerRadius="12"
+                Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                BorderThickness="1">
+            <StackPanel Spacing="8">
+                <TextBlock Text="{x:Bind SelectedTabTitle, Mode=OneWay}"
+                           FontSize="16"
+                           FontWeight="SemiBold" />
+                <TextBlock x:Uid="BottomPanelPlaceholder"
+                           Opacity="0.7"
+                           TextWrapping="Wrap" />
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

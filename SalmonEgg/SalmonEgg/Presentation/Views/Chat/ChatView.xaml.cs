@@ -7,13 +7,16 @@ using Microsoft.UI.Xaml.Input;
 using SalmonEgg.Presentation.Models;
 using SalmonEgg.Presentation.Utilities;
 using SalmonEgg.Presentation.ViewModels.Chat;
+using SalmonEgg.Presentation.Core.ViewModels.ShellLayout;
 using SalmonEgg.Presentation.Services;
 
 namespace SalmonEgg.Presentation.Views.Chat
 {
     public sealed partial class ChatView : Page
     {
-        public ChatViewModel ViewModel { get; }
+        public ChatShellViewModel ShellViewModel { get; }
+        public ChatViewModel ViewModel => ShellViewModel.Chat;
+        public ShellLayoutViewModel LayoutVM => ShellViewModel.ShellLayout;
         public UiMotion Motion => UiMotion.Current;
         private readonly IShellNavigationService _shellNavigation;
         private bool _isViewLoaded;
@@ -25,8 +28,7 @@ namespace SalmonEgg.Presentation.Views.Chat
 
         public ChatView()
         {
-            // 从全局服务容器获取 ViewModel 以确保状态在导航间持久化
-            ViewModel = App.ServiceProvider.GetRequiredService<ChatViewModel>();
+            ShellViewModel = App.ServiceProvider.GetRequiredService<ChatShellViewModel>();
             _shellNavigation = App.ServiceProvider.GetRequiredService<IShellNavigationService>();
 
             this.InitializeComponent();
