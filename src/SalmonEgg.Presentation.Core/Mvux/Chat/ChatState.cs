@@ -6,7 +6,7 @@ namespace SalmonEgg.Presentation.Core.Mvux.Chat;
 public record ChatState(
     string? SelectedConversationId = null,
     string? HydratedConversationId = null,
-    ConversationBindingSlice? Binding = null,
+    IImmutableDictionary<string, ConversationBindingSlice>? Bindings = null,
     long Generation = 0,
     string? SelectedAcpProfileId = null,
     bool IsPromptInFlight = false,
@@ -26,4 +26,18 @@ public record ChatState(
     string DraftText = "")
 {
     public static ChatState Empty { get; } = new();
+
+    public ConversationBindingSlice? Binding => ResolveBinding(HydratedConversationId);
+
+    public ConversationBindingSlice? ResolveBinding(string? conversationId)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId) || Bindings is null)
+        {
+            return null;
+        }
+
+        return Bindings.TryGetValue(conversationId, out var binding)
+            ? binding
+            : null;
+    }
 }

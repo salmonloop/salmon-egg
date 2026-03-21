@@ -48,7 +48,9 @@ public sealed class BindingCoordinatorTests
 
         Assert.Equal(BindingUpdateStatus.Success, result.Status);
         var currentState = await state;
-        Assert.Equal(new ConversationBindingSlice("session-1", "remote-new", "profile-new"), currentState.Binding);
+        Assert.Equal(
+            new ConversationBindingSlice("session-1", "remote-new", "profile-new"),
+            currentState.ResolveBinding("session-1"));
 
         var workspaceBinding = workspace.GetRemoteBinding("session-1");
         Assert.NotNull(workspaceBinding);
@@ -86,7 +88,7 @@ public sealed class BindingCoordinatorTests
 
         Assert.Equal(BindingUpdateStatus.Error, result.Status);
         var currentState = await state;
-        Assert.Null(currentState.Binding);
+        Assert.Null(currentState.ResolveBinding("session-1"));
 
         var workspaceBinding = workspace.GetRemoteBinding("session-1");
         Assert.NotNull(workspaceBinding);

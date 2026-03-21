@@ -45,7 +45,7 @@ public sealed class ConversationActivationCoordinatorTests
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
-        var state = State.Value(this, () => ChatState.Empty with { Generation = 1 });
+        var state = State.Value(new object(), () => ChatState.Empty with { Generation = 1 });
         var chatStore = CreateChatStore(state);
         var connectionStore = CreateConnectionStore();
         var bindingCommands = new BindingCoordinator(workspace, chatStore.Object);
@@ -83,7 +83,7 @@ public sealed class ConversationActivationCoordinatorTests
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
         workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-a");
 
-        var state = State.Value(this, () => ChatState.Empty with { Generation = 1 });
+        var state = State.Value(new object(), () => ChatState.Empty with { Generation = 1 });
         var chatStore = CreateChatStore(state);
         var connectionStore = CreateConnectionStore();
         var bindingCommands = new BindingCoordinator(workspace, chatStore.Object);
@@ -123,9 +123,11 @@ public sealed class ConversationActivationCoordinatorTests
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
-        var state = State.Value(this, () => ChatState.Empty with
+        var state = State.Value(new object(), () => ChatState.Empty with
         {
-            Binding = new ConversationBindingSlice("conv-1", "remote-1", "profile-1")
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty.Add(
+                "session-1",
+                new ConversationBindingSlice("session-1", "remote-1", "profile-1"))
         });
         var chatStore = CreateChatStore(state);
         var connectionStore = CreateConnectionStore();
@@ -175,7 +177,7 @@ public sealed class ConversationActivationCoordinatorTests
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
         workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-a");
 
-        var state = State.Value(this, () => ChatState.Empty);
+        var state = State.Value(new object(), () => ChatState.Empty);
         var chatStore = CreateChatStore(state);
         var connectionStore = CreateConnectionStore();
         var bindingCommands = new BindingCoordinator(workspace, chatStore.Object);
@@ -258,7 +260,9 @@ public sealed class ConversationActivationCoordinatorTests
 
         var state = State.Value(new object(), () => ChatState.Empty with
         {
-            Binding = new ConversationBindingSlice("session-1", "remote-1", "profile-a")
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty.Add(
+                "session-1",
+                new ConversationBindingSlice("session-1", "remote-1", "profile-a"))
         });
         var chatStore = CreateChatStore(state);
         var connectionStore = CreateConnectionStore("profile-b");
@@ -378,9 +382,15 @@ public sealed class ConversationActivationCoordinatorTests
     {
         var state = State.Value(new object(), () => ChatConnectionState.Empty with
         {
-            SelectedProfileId = selectedProfileId
+            SelectedProfileId = null
         });
-        return new ChatConnectionStore(state);
+        var store = new ChatConnectionStore(state);
+        if (!string.IsNullOrWhiteSpace(selectedProfileId))
+        {
+            store.Dispatch(new SetSelectedProfileAction(selectedProfileId)).AsTask().GetAwaiter().GetResult();
+        }
+
+        return store;
     }
 
     private static ChatConversationWorkspace CreateWorkspace(

@@ -77,8 +77,24 @@ public class ChatReducerTests
         var newState = ChatReducer.Reduce(initialState, new SetBindingSliceAction(binding));
 
         // Assert
-        Assert.Equal(binding, newState.Binding);
+        Assert.Equal(binding, newState.ResolveBinding("conv-1"));
         Assert.Equal(1, newState.Generation);
+    }
+
+    [Fact]
+    public void GivenMultipleBindings_WhenSelectingConversation_ThenMatchingBindingProjectsFromDictionary()
+    {
+        var initialState = ChatState.Empty with
+        {
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+                .Add("conv-2", new ConversationBindingSlice("conv-2", "remote-2", "profile-2"))
+        };
+
+        var newState = ChatReducer.Reduce(initialState, new SelectConversationAction("conv-2"));
+
+        Assert.Equal("conv-2", newState.HydratedConversationId);
+        Assert.Equal(new ConversationBindingSlice("conv-2", "remote-2", "profile-2"), newState.Binding);
     }
 
     [Fact]

@@ -17,9 +17,6 @@ public static class ChatReducer
             {
                 SelectedConversationId = null,
                 HydratedConversationId = selectConversation.ConversationId,
-                Binding = ShouldPreserveBinding(current.Binding, selectConversation.ConversationId)
-                    ? current.Binding
-                    : null,
                 Transcript = null,
                 PlanEntries = null,
                 ShowPlanPanel = false,
@@ -27,7 +24,10 @@ public static class ChatReducer
                 IsPromptInFlight = false,
                 IsThinking = false
             }),
-            SetBindingSliceAction setBinding => Mutate(current, current with { Binding = setBinding.Binding }),
+            SetBindingSliceAction setBinding => Mutate(current, current with
+            {
+                Bindings = UpdateBindings(current.Bindings, setBinding.Binding)
+            }),
             SelectProfileAction selectProfile => Mutate(current, current with { SelectedAcpProfileId = selectProfile.ProfileId }),
             SetDraftTextAction draftText => Mutate(current, current with { DraftText = draftText.Text }),
             SetPromptInFlightAction setPromptInFlight => Mutate(current, current with { IsPromptInFlight = setPromptInFlight.IsInFlight }),
@@ -108,10 +108,27 @@ public static class ChatReducer
         };
     }
 
-    private static bool ShouldPreserveBinding(ConversationBindingSlice? binding, string? conversationId)
-        => binding is not null
-            && !string.IsNullOrWhiteSpace(binding.ConversationId)
-            && string.Equals(binding.ConversationId, conversationId, StringComparison.Ordinal);
+    private static IImmutableDictionary<string, ConversationBindingSlice>? UpdateBindings(
+        IImmutableDictionary<string, ConversationBindingSlice>? bindings,
+        ConversationBindingSlice? binding)
+    {
+        if (binding is null || string.IsNullOrWhiteSpace(binding.ConversationId))
+        {
+            return bindings;
+        }
+
+        var current = bindings ?? ImmutableDictionary<string, ConversationBindingSlice>.Empty;
+        if (IsBindingEmpty(binding))
+        {
+            return current.Remove(binding.ConversationId);
+        }
+
+        return current.SetItem(binding.ConversationId, binding);
+    }
+
+    private static bool IsBindingEmpty(ConversationBindingSlice binding)
+        => string.IsNullOrWhiteSpace(binding.RemoteSessionId)
+            && string.IsNullOrWhiteSpace(binding.ProfileId);
 
     private static IImmutableList<ConversationMessageSnapshot> UpsertTranscript(
         IImmutableList<ConversationMessageSnapshot>? transcript,

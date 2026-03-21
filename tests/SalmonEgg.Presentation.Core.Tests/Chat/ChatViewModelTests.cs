@@ -861,11 +861,14 @@ public class ChatViewModelTests
     [Fact]
     public async Task StoreDraftText_ProjectsToCurrentPrompt()
     {
-        await using var fixture = CreateViewModel();
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
         var viewModel = fixture.ViewModel;
+        syncContext.RunAll();
 
         await fixture.DispatchAsync(new SetDraftTextAction("from store"));
         await Task.Delay(50);
+        syncContext.RunAll();
 
         Assert.Equal("from store", viewModel.CurrentPrompt);
     }

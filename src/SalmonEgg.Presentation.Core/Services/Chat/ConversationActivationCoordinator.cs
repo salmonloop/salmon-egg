@@ -48,7 +48,7 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
             }
 
             var currentState = await _chatStore.State ?? ChatState.Empty;
-            var shouldHydrate = ShouldHydrate(currentState);
+            var shouldHydrate = ShouldHydrate(currentState, sessionId);
             if (!string.Equals(currentState.HydratedConversationId, sessionId, StringComparison.Ordinal))
             {
                 await _chatStore.Dispatch(new SelectConversationAction(sessionId));
@@ -137,7 +137,7 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
         }
     }
 
-    private static bool ShouldHydrate(ChatState state)
+    private static bool ShouldHydrate(ChatState state, string sessionId)
     {
         ArgumentNullException.ThrowIfNull(state);
 
@@ -152,7 +152,7 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
             return false;
         }
 
-        if (!IsBindingEmpty(state.Binding))
+        if (!IsBindingEmpty(state.ResolveBinding(sessionId)))
         {
             return false;
         }
