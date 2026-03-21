@@ -258,7 +258,7 @@ public static class DependencyInjection
                 sp.GetRequiredService<ChatConversationWorkspace>(),
                 sp.GetRequiredService<IConversationBindingCommands>(),
                 sp.GetRequiredService<IChatStore>(),
-                sp.GetRequiredService<AppPreferencesViewModel>(),
+                sp.GetRequiredService<IChatConnectionStore>(),
                 sp.GetRequiredService<ILogger<ConversationActivationCoordinator>>()));
 
         // Main shell navigation (Start + Projects -> Sessions tree)

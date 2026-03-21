@@ -5,7 +5,6 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
-using SalmonEgg.Presentation.ViewModels.Settings;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 
@@ -14,20 +13,20 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
     private readonly ChatConversationWorkspace _conversationWorkspace;
     private readonly IConversationBindingCommands _bindingCommands;
     private readonly IChatStore _chatStore;
-    private readonly AppPreferencesViewModel _preferences;
+    private readonly IChatConnectionStore _chatConnectionStore;
     private readonly ILogger<ConversationActivationCoordinator> _logger;
 
     public ConversationActivationCoordinator(
         ChatConversationWorkspace conversationWorkspace,
         IConversationBindingCommands bindingCommands,
         IChatStore chatStore,
-        AppPreferencesViewModel preferences,
+        IChatConnectionStore chatConnectionStore,
         ILogger<ConversationActivationCoordinator> logger)
     {
         _conversationWorkspace = conversationWorkspace ?? throw new ArgumentNullException(nameof(conversationWorkspace));
         _bindingCommands = bindingCommands ?? throw new ArgumentNullException(nameof(bindingCommands));
         _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
-        _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
+        _chatConnectionStore = chatConnectionStore ?? throw new ArgumentNullException(nameof(chatConnectionStore));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -66,11 +65,6 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
                     snapshot?.PlanTitle)).ConfigureAwait(false);
             }
 
-            if (shouldHydrate)
-            {
-                await UpdateBindingSliceFromWorkspaceAsync(sessionId).ConfigureAwait(false);
-            }
-
             await NormalizeBindingForSelectedProfileAsync(sessionId).ConfigureAwait(false);
             return new ConversationActivationResult(true, sessionId, null);
         }
@@ -107,7 +101,8 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
 
     private async Task NormalizeBindingForSelectedProfileAsync(string conversationId)
     {
-        var selectedProfileId = _preferences.LastSelectedServerId;
+        var connectionState = await _chatConnectionStore.State ?? ChatConnectionState.Empty;
+        var selectedProfileId = connectionState.SelectedProfileId;
         if (string.IsNullOrWhiteSpace(selectedProfileId))
         {
             return;
@@ -119,8 +114,13 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
             return;
         }
 
-        var binding = _conversationWorkspace.GetRemoteBinding(conversationId);
-        var boundProfileId = binding?.BoundProfileId;
+        var binding = currentState.Binding;
+        if (binding is null || !string.Equals(binding.ConversationId, conversationId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var boundProfileId = binding.ProfileId;
         if (string.IsNullOrWhiteSpace(boundProfileId)
             || string.Equals(boundProfileId, selectedProfileId, StringComparison.Ordinal))
         {
@@ -135,15 +135,6 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
             throw new InvalidOperationException(
                 $"Failed to normalize conversation binding ({result.Status}): {result.ErrorMessage ?? "UnknownError"}");
         }
-    }
-
-    private async Task UpdateBindingSliceFromWorkspaceAsync(string conversationId)
-    {
-        var binding = _conversationWorkspace.GetRemoteBinding(conversationId);
-        var slice = binding is null
-            ? null
-            : new ConversationBindingSlice(binding.ConversationId, binding.RemoteSessionId, binding.BoundProfileId);
-        await _chatStore.Dispatch(new SetBindingSliceAction(slice)).ConfigureAwait(false);
     }
 
     private static bool ShouldHydrate(ChatState state)

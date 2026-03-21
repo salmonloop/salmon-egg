@@ -17,7 +17,9 @@ public static class ChatReducer
             {
                 SelectedConversationId = null,
                 HydratedConversationId = selectConversation.ConversationId,
-                Binding = null,
+                Binding = ShouldPreserveBinding(current.Binding, selectConversation.ConversationId)
+                    ? current.Binding
+                    : null,
                 Transcript = null,
                 PlanEntries = null,
                 ShowPlanPanel = false,
@@ -105,6 +107,11 @@ public static class ChatReducer
             Generation = checked(current.Generation + 1)
         };
     }
+
+    private static bool ShouldPreserveBinding(ConversationBindingSlice? binding, string? conversationId)
+        => binding is not null
+            && !string.IsNullOrWhiteSpace(binding.ConversationId)
+            && string.Equals(binding.ConversationId, conversationId, StringComparison.Ordinal);
 
     private static IImmutableList<ConversationMessageSnapshot> UpsertTranscript(
         IImmutableList<ConversationMessageSnapshot>? transcript,

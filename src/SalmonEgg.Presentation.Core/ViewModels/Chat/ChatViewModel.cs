@@ -308,7 +308,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 conversationWorkspace,
                 _bindingCommands,
                 chatStore,
-                preferences,
+                chatConnectionStore,
                 NullLogger<ConversationActivationCoordinator>.Instance);
         _conversationCatalogPresenter = conversationCatalogPresenter ?? throw new ArgumentNullException(nameof(conversationCatalogPresenter));
         _chatStateProjector = chatStateProjector ?? throw new ArgumentNullException(nameof(chatStateProjector));
@@ -1203,12 +1203,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         {
             await _acpProfiles.RefreshCommand.ExecuteAsync(null);
             _suppressAcpProfileConnect = true;
+            _suppressStoreProfileProjection = true;
             try
             {
                 SelectedAcpProfile = _acpProfiles.SelectedProfile;
             }
             finally
             {
+                _suppressStoreProfileProjection = false;
                 _suppressAcpProfileConnect = false;
             }
         }
@@ -1226,7 +1228,17 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             return;
         }
 
-        var profileId = _preferences.LastSelectedServerId;
+        var connectionState = await _chatConnectionStore.State ?? ChatConnectionState.Empty;
+        var profileId = connectionState.SelectedProfileId;
+        if (string.IsNullOrWhiteSpace(profileId))
+        {
+            profileId = _preferences.LastSelectedServerId;
+            if (!string.IsNullOrWhiteSpace(profileId))
+            {
+                await _chatConnectionStore.Dispatch(new SetSelectedProfileAction(profileId)).ConfigureAwait(false);
+            }
+        }
+
         if (string.IsNullOrWhiteSpace(profileId))
         {
             return;
@@ -1256,12 +1268,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             }
 
             _suppressAcpProfileConnect = true;
+            _suppressStoreProfileProjection = true;
             try
             {
                 SelectedAcpProfile = config;
             }
             finally
             {
+                _suppressStoreProfileProjection = false;
                 _suppressAcpProfileConnect = false;
             }
 
@@ -2589,7 +2603,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     public string? CurrentRemoteSessionId => _currentRemoteSessionId;
 
-    public string? SelectedProfileId => _selectedProfileIdFromStore ?? SelectedAcpProfile?.Id;
+    public string? SelectedProfileId => _selectedProfileIdFromStore;
 
     public void SelectProfile(ServerConfiguration profile)
     {
@@ -2625,7 +2639,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     public void UpdateConnectionState(bool isConnecting, bool isConnected, bool isInitialized, string? errorMessage)
     {
-        var profileId = SelectedAcpProfile?.Id ?? _selectedProfileIdFromStore;
+        var profileId = _selectedProfileIdFromStore;
         if (isConnecting)
         {
             _ = _acpConnectionCoordinator.SetConnectingAsync(profileId);

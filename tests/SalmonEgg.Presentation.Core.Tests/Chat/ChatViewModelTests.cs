@@ -417,6 +417,30 @@ public class ChatViewModelTests
     }
 
     [Fact]
+    public async Task SelectedProfileId_DoesNotFallBackToUiSelection_WhenStoreSelectionIsMissing()
+    {
+        await using var fixture = CreateViewModel();
+        var profile = new ServerConfiguration { Id = "profile-a", Name = "Profile A", Transport = TransportType.Stdio };
+        fixture.Profiles.Profiles.Add(profile);
+        var suppressField = typeof(ChatViewModel)
+            .GetField("_suppressStoreProfileProjection", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(suppressField);
+        suppressField!.SetValue(fixture.ViewModel, true);
+
+        try
+        {
+            fixture.ViewModel.SelectedAcpProfile = profile;
+            await Task.Delay(50);
+        }
+        finally
+        {
+            suppressField.SetValue(fixture.ViewModel, false);
+        }
+
+        Assert.Null(fixture.ViewModel.SelectedProfileId);
+    }
+
+    [Fact]
     public async Task TryAutoConnectAsync_CanceledToken_DoesNotStartConnection()
     {
         var commands = new Mock<IAcpConnectionCommands>();
@@ -448,6 +472,7 @@ public class ChatViewModelTests
     public async Task TryAutoConnectAsync_CanceledDuringConnect_AllowsLaterRetry()
     {
         var connectCalls = 0;
+        var firstStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var commands = new Mock<IAcpConnectionCommands>();
         commands
             .Setup(x => x.ConnectToProfileAsync(
@@ -460,6 +485,7 @@ public class ChatViewModelTests
                 var callNumber = Interlocked.Increment(ref connectCalls);
                 if (callNumber == 1)
                 {
+                    firstStarted.TrySetResult();
                     await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
                 }
 
@@ -477,6 +503,7 @@ public class ChatViewModelTests
 
         using var firstAttempt = new CancellationTokenSource();
         var firstTask = fixture.ViewModel.TryAutoConnectAsync(firstAttempt.Token);
+        await firstStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
         firstAttempt.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => firstTask);
