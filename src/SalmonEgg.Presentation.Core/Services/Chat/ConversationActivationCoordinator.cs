@@ -49,18 +49,27 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
             }
 
             var currentState = await _chatStore.State ?? ChatState.Empty;
+            var shouldHydrate = ShouldHydrate(currentState);
             if (!string.Equals(currentState.HydratedConversationId, sessionId, StringComparison.Ordinal))
             {
                 await _chatStore.Dispatch(new SelectConversationAction(sessionId));
             }
 
-            var snapshot = _conversationWorkspace.GetConversationSnapshot(sessionId);
-            await _chatStore.Dispatch(new HydrateConversationAction(
-                sessionId,
-                snapshot?.Transcript.ToImmutableList() ?? ImmutableList<ConversationMessageSnapshot>.Empty,
-                snapshot?.Plan.ToImmutableList() ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-                snapshot?.ShowPlanPanel ?? false,
-                snapshot?.PlanTitle)).ConfigureAwait(false);
+            if (shouldHydrate)
+            {
+                var snapshot = _conversationWorkspace.GetConversationSnapshot(sessionId);
+                await _chatStore.Dispatch(new HydrateConversationAction(
+                    sessionId,
+                    snapshot?.Transcript.ToImmutableList() ?? ImmutableList<ConversationMessageSnapshot>.Empty,
+                    snapshot?.Plan.ToImmutableList() ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                    snapshot?.ShowPlanPanel ?? false,
+                    snapshot?.PlanTitle)).ConfigureAwait(false);
+            }
+
+            if (shouldHydrate)
+            {
+                await UpdateBindingSliceFromWorkspaceAsync(sessionId).ConfigureAwait(false);
+            }
 
             await NormalizeBindingForSelectedProfileAsync(sessionId).ConfigureAwait(false);
             return new ConversationActivationResult(true, sessionId, null);
@@ -118,8 +127,63 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
             return;
         }
 
-        _bindingCommands.UpdateRemoteBinding(conversationId, remoteSessionId: null, boundProfileId: selectedProfileId);
-        _bindingCommands.ScheduleSave();
+        var result = await _bindingCommands
+            .UpdateBindingAsync(conversationId, remoteSessionId: null, boundProfileId: selectedProfileId)
+            .ConfigureAwait(false);
+        if (result.Status is not BindingUpdateStatus.Success)
+        {
+            throw new InvalidOperationException(
+                $"Failed to normalize conversation binding ({result.Status}): {result.ErrorMessage ?? "UnknownError"}");
+        }
+    }
+
+    private async Task UpdateBindingSliceFromWorkspaceAsync(string conversationId)
+    {
+        var binding = _conversationWorkspace.GetRemoteBinding(conversationId);
+        var slice = binding is null
+            ? null
+            : new ConversationBindingSlice(binding.ConversationId, binding.RemoteSessionId, binding.BoundProfileId);
+        await _chatStore.Dispatch(new SetBindingSliceAction(slice)).ConfigureAwait(false);
+    }
+
+    private static bool ShouldHydrate(ChatState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+
+        if (state.Generation != 0)
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(state.SelectedConversationId)
+            || !string.IsNullOrWhiteSpace(state.HydratedConversationId))
+        {
+            return false;
+        }
+
+        if (!IsBindingEmpty(state.Binding))
+        {
+            return false;
+        }
+
+        if (state.Transcript is { Count: > 0 } || state.PlanEntries is { Count: > 0 })
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsBindingEmpty(ConversationBindingSlice? binding)
+    {
+        if (binding is null)
+        {
+            return true;
+        }
+
+        return string.IsNullOrWhiteSpace(binding.ConversationId)
+            && string.IsNullOrWhiteSpace(binding.RemoteSessionId)
+            && string.IsNullOrWhiteSpace(binding.ProfileId);
     }
 
     private async Task<ConversationMutationResult> RemoveConversationAsync(

@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.ViewModels.Settings;
 
@@ -15,21 +16,7 @@ namespace SalmonEgg.Presentation.Core.Services.Chat;
 /// </summary>
 public interface IChatLaunchWorkflowChatFacade
 {
-    string? CurrentSessionId { get; }
-
-    bool IsConnected { get; }
-
-    bool IsConnecting { get; }
-
-    bool IsInitializing { get; }
-
     bool ShowTransportConfigPanel { get; set; }
-
-    Task TryAutoConnectAsync(CancellationToken cancellationToken = default);
-
-    bool CanSendPrompt();
-
-    void SendPrompt();
 
     Task<ChatLaunchConnectionOutcome> EnsureConnectedForLaunchAsync(CancellationToken cancellationToken = default);
 
@@ -129,19 +116,20 @@ public sealed class ChatLaunchWorkflow : IChatLaunchWorkflow
 public sealed class ChatLaunchWorkflowChatFacadeAdapter : IChatLaunchWorkflowChatFacade
 {
     private readonly ChatViewModel _chatViewModel;
+    private readonly IChatConnectionStore? _connectionStore;
 
     public ChatLaunchWorkflowChatFacadeAdapter(ChatViewModel chatViewModel)
+        : this(chatViewModel, connectionStore: null)
     {
-        _chatViewModel = chatViewModel ?? throw new ArgumentNullException(nameof(chatViewModel));
     }
 
-    public string? CurrentSessionId => _chatViewModel.CurrentSessionId;
-
-    public bool IsConnected => _chatViewModel.IsConnected;
-
-    public bool IsConnecting => _chatViewModel.IsConnecting;
-
-    public bool IsInitializing => _chatViewModel.IsInitializing;
+    public ChatLaunchWorkflowChatFacadeAdapter(
+        ChatViewModel chatViewModel,
+        IChatConnectionStore? connectionStore)
+    {
+        _chatViewModel = chatViewModel ?? throw new ArgumentNullException(nameof(chatViewModel));
+        _connectionStore = connectionStore;
+    }
 
     public bool ShowTransportConfigPanel
     {
@@ -149,34 +137,23 @@ public sealed class ChatLaunchWorkflowChatFacadeAdapter : IChatLaunchWorkflowCha
         set => _chatViewModel.ShowTransportConfigPanel = value;
     }
 
-    public Task TryAutoConnectAsync(CancellationToken cancellationToken = default) =>
-        _chatViewModel.TryAutoConnectAsync(cancellationToken);
-
-    public bool CanSendPrompt() => _chatViewModel.SendPromptCommand?.CanExecute(null) == true;
-
-    public void SendPrompt()
-    {
-        if (_chatViewModel.SendPromptCommand?.CanExecute(null) == true)
-        {
-            _chatViewModel.SendPromptCommand.Execute(null);
-        }
-    }
-
     public async Task<ChatLaunchConnectionOutcome> EnsureConnectedForLaunchAsync(CancellationToken cancellationToken = default)
     {
-        if (_chatViewModel.IsConnected)
+        var connectionState = await ReadConnectionStateAsync().ConfigureAwait(true);
+        if (connectionState.Phase == ConnectionPhase.Connected)
         {
             return ChatLaunchConnectionOutcome.Connected;
         }
 
         await _chatViewModel.TryAutoConnectAsync(cancellationToken).ConfigureAwait(true);
 
-        if (_chatViewModel.IsConnected)
+        connectionState = await ReadConnectionStateAsync().ConfigureAwait(true);
+        if (connectionState.Phase == ConnectionPhase.Connected)
         {
             return ChatLaunchConnectionOutcome.Connected;
         }
 
-        return _chatViewModel.IsConnecting || _chatViewModel.IsInitializing
+        return connectionState.Phase == ConnectionPhase.Connecting
             ? ChatLaunchConnectionOutcome.InProgress
             : ChatLaunchConnectionOutcome.RequiresConfiguration;
     }
@@ -190,5 +167,15 @@ public sealed class ChatLaunchWorkflowChatFacadeAdapter : IChatLaunchWorkflowCha
 
         _chatViewModel.SendPromptCommand.Execute(null);
         return true;
+    }
+
+    private async Task<ChatConnectionState> ReadConnectionStateAsync()
+    {
+        if (_connectionStore is null)
+        {
+            return ChatConnectionState.Empty;
+        }
+
+        return await _connectionStore.State ?? ChatConnectionState.Empty;
     }
 }

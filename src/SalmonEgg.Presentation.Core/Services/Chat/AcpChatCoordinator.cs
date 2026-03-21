@@ -18,15 +18,31 @@ namespace SalmonEgg.Presentation.Core.Services.Chat;
 /// </summary>
 public sealed class AcpChatCoordinator : IAcpConnectionCommands
 {
+    private const int DefaultSessionUpdateBufferLimit = 256;
+
     private readonly IAcpChatServiceFactory _chatServiceFactory;
+    private readonly IAcpConnectionCoordinator _connectionCoordinator;
     private readonly ILogger<AcpChatCoordinator> _logger;
+    private readonly int _sessionUpdateBufferLimit;
+    private AcpChatServiceAdapter? _activeChatServiceAdapter;
 
     public AcpChatCoordinator(
         IAcpChatServiceFactory chatServiceFactory,
-        ILogger<AcpChatCoordinator> logger)
+        ILogger<AcpChatCoordinator> logger,
+        IAcpConnectionCoordinator? connectionCoordinator = null,
+        int sessionUpdateBufferLimit = DefaultSessionUpdateBufferLimit)
     {
         _chatServiceFactory = chatServiceFactory ?? throw new ArgumentNullException(nameof(chatServiceFactory));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        if (sessionUpdateBufferLimit <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(sessionUpdateBufferLimit),
+                "Session update buffer limit must be positive.");
+        }
+
+        _connectionCoordinator = connectionCoordinator ?? NoopAcpConnectionCoordinator.Instance;
+        _sessionUpdateBufferLimit = sessionUpdateBufferLimit;
     }
 
     public async Task<AcpTransportApplyResult> ConnectToProfileAsync(
@@ -63,17 +79,16 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         var (isValid, errorMessage) = transportConfiguration.Validate();
         if (!isValid)
         {
-            sink.UpdateConnectionState(isConnecting: false, isConnected: false, isInitialized: false, errorMessage);
+            await _connectionCoordinator.SetDisconnectedAsync(errorMessage, cancellationToken).ConfigureAwait(false);
             throw new InvalidOperationException(errorMessage ?? "Invalid ACP transport configuration.");
         }
 
-        sink.UpdateConnectionState(isConnecting: true, isConnected: sink.IsConnected, isInitialized: sink.IsInitialized, errorMessage: null);
-        sink.UpdateInitializationState(isInitializing: true);
+        await _connectionCoordinator.SetConnectingAsync(sink.SelectedProfileId, cancellationToken).ConfigureAwait(false);
 
         var previousService = sink.CurrentChatService;
         try
         {
-            var newService = _chatServiceFactory.CreateChatService(
+            var createdService = _chatServiceFactory.CreateChatService(
                 transportConfiguration.SelectedTransportType,
                 transportConfiguration.SelectedTransportType == TransportType.Stdio ? transportConfiguration.StdioCommand : null,
                 transportConfiguration.SelectedTransportType == TransportType.Stdio ? transportConfiguration.StdioArgs : null,
@@ -84,6 +99,10 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
                 try
                 {
                     await previousService.DisconnectAsync().ConfigureAwait(false);
+                    if (previousService is IDisposable disposable)
+                    {
+                        disposable.Dispose();
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -91,23 +110,24 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
                 }
             }
 
-            sink.ReplaceChatService(newService);
+            var wrappedService = WrapChatService(createdService, sink, cancellationToken);
+            sink.ReplaceChatService(wrappedService);
+            _activeChatServiceAdapter = wrappedService;
+            TryMarkHydratedForCurrentState(sink, wrappedService);
 
-            var initializeResponse = await newService.InitializeAsync(CreateDefaultInitializeParams()).ConfigureAwait(false);
+            var initializeResponse = await wrappedService
+                .InitializeAsync(CreateDefaultInitializeParams())
+                .ConfigureAwait(false);
             sink.UpdateAgentIdentity(initializeResponse.AgentInfo?.Name, initializeResponse.AgentInfo?.Version);
-            sink.UpdateConnectionState(
-                isConnecting: false,
-                isConnected: newService.IsConnected,
-                isInitialized: newService.IsInitialized,
-                errorMessage: null);
-            sink.UpdateAuthenticationState(isRequired: false, hintMessage: null);
+            await _connectionCoordinator.SetConnectedAsync(sink.SelectedProfileId, cancellationToken).ConfigureAwait(false);
+            await _connectionCoordinator.ClearAuthenticationRequiredAsync(cancellationToken).ConfigureAwait(false);
 
             _logger.LogInformation(
                 "ACP transport applied. transport={TransportType} preserveConversation={PreserveConversation}",
                 transportConfiguration.SelectedTransportType,
                 preserveConversation);
 
-            return new AcpTransportApplyResult(newService, initializeResponse);
+            return new AcpTransportApplyResult(wrappedService, initializeResponse);
         }
         catch (Exception ex)
         {
@@ -116,6 +136,10 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
                 if (sink.CurrentChatService != null)
                 {
                     await sink.CurrentChatService.DisconnectAsync().ConfigureAwait(false);
+                    if (sink.CurrentChatService is IDisposable disposable)
+                    {
+                        disposable.Dispose();
+                    }
                 }
             }
             catch (Exception disconnectEx)
@@ -124,14 +148,11 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             }
 
             sink.ReplaceChatService(null);
+            _activeChatServiceAdapter = null;
             sink.UpdateAgentIdentity(null, null);
-            sink.UpdateConnectionState(isConnecting: false, isConnected: false, isInitialized: false, ex.Message);
+            await _connectionCoordinator.SetDisconnectedAsync(ex.Message, cancellationToken).ConfigureAwait(false);
             _logger.LogError(ex, "Failed to apply ACP transport configuration");
             throw;
-        }
-        finally
-        {
-            sink.UpdateInitializationState(isInitializing: false);
         }
     }
 
@@ -179,7 +200,8 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             response = await chatService.CreateSessionAsync(sessionParams).ConfigureAwait(false);
         }
 
-        sink.BindRemoteSession(response.SessionId, sink.SelectedProfileId, response, preserveConversation: true);
+        await UpdateBindingForCurrentConversationAsync(sink, response.SessionId, sink.SelectedProfileId).ConfigureAwait(false);
+        _activeChatServiceAdapter?.MarkHydrated();
         return new AcpRemoteSessionResult(response.SessionId, response, UsedExistingBinding: false);
     }
 
@@ -240,7 +262,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         }
         catch (Exception ex) when (IsRemoteSessionNotFound(ex))
         {
-            sink.ClearRemoteSessionBinding();
+            await ClearBindingForCurrentConversationAsync(sink).ConfigureAwait(false);
             var recreated = await EnsureRemoteSessionAsync(sink, authenticateAsync, cancellationToken).ConfigureAwait(false);
             promptParams.SessionId = recreated.RemoteSessionId;
 
@@ -278,14 +300,106 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         if (chatService != null)
         {
             await chatService.DisconnectAsync().ConfigureAwait(false);
+            if (chatService is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
         }
 
         sink.ReplaceChatService(null);
-        sink.ClearRemoteSessionBinding();
-        sink.UpdateAuthenticationState(isRequired: false, hintMessage: null);
+        _activeChatServiceAdapter = null;
+        await ClearBindingForCurrentConversationAsync(sink).ConfigureAwait(false);
         sink.UpdateAgentIdentity(null, null);
-        sink.UpdateInitializationState(isInitializing: false);
-        sink.UpdateConnectionState(isConnecting: false, isConnected: false, isInitialized: false, errorMessage: null);
+        await _connectionCoordinator.ResetAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private AcpChatServiceAdapter WrapChatService(
+        IChatService chatService,
+        IAcpChatCoordinatorSink sink,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(chatService);
+        ArgumentNullException.ThrowIfNull(sink);
+
+        AcpChatServiceAdapter? wrappedService = null;
+        var eventAdapter = new AcpEventAdapter(
+            update => wrappedService!.PublishBufferedUpdate(update),
+            sink.SessionUpdateSynchronizationContext,
+            _sessionUpdateBufferLimit,
+            resyncRequired: () => _ = HandleResyncRequiredAsync(sink, cancellationToken));
+        wrappedService = new AcpChatServiceAdapter(chatService, eventAdapter);
+        return wrappedService;
+    }
+
+    private async Task HandleResyncRequiredAsync(
+        IAcpChatCoordinatorSink sink,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogWarning(
+            "ACP update stream requested resync. remoteSessionId={RemoteSessionId}",
+            sink.CurrentRemoteSessionId);
+
+        await _connectionCoordinator.ResyncAsync(sink, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task UpdateBindingForCurrentConversationAsync(
+        IAcpChatCoordinatorSink sink,
+        string remoteSessionId,
+        string? profileId)
+    {
+        if (string.IsNullOrWhiteSpace(remoteSessionId))
+        {
+            throw new ArgumentException("Remote session id must not be empty.", nameof(remoteSessionId));
+        }
+
+        if (string.IsNullOrWhiteSpace(sink.CurrentSessionId))
+        {
+            throw new InvalidOperationException("Cannot update remote binding without an active local conversation.");
+        }
+
+        var result = await sink.ConversationBindingCommands
+            .UpdateBindingAsync(
+                sink.CurrentSessionId!,
+                remoteSessionId,
+                profileId)
+            .ConfigureAwait(false);
+
+        if (result.Status is not BindingUpdateStatus.Success)
+        {
+            throw new InvalidOperationException(
+                $"Failed to update conversation binding ({result.Status}): {result.ErrorMessage ?? "UnknownError"}");
+        }
+    }
+
+    private static async Task ClearBindingForCurrentConversationAsync(IAcpChatCoordinatorSink sink)
+    {
+        if (string.IsNullOrWhiteSpace(sink.CurrentSessionId))
+        {
+            return;
+        }
+
+        await sink.ConversationBindingCommands
+            .UpdateBindingAsync(
+                sink.CurrentSessionId!,
+                remoteSessionId: null,
+                sink.SelectedProfileId)
+            .ConfigureAwait(false);
+    }
+
+    private void TryMarkHydratedForCurrentState(
+        IAcpChatCoordinatorSink sink,
+        AcpChatServiceAdapter wrappedService)
+    {
+        if (!string.IsNullOrWhiteSpace(sink.CurrentRemoteSessionId) && sink.IsSessionActive)
+        {
+            wrappedService.MarkHydrated();
+            return;
+        }
+
+        if (sink.ConnectionGeneration > 0)
+        {
+            wrappedService.MarkHydrated(lowTrust: true, reason: "ConnectionGenerationAdvanced");
+        }
     }
 
     private static void ApplyProfileToTransportConfiguration(
@@ -325,6 +439,32 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         && (acp.ErrorCode == JsonRpcErrorCode.ResourceNotFound
             || (acp.Message.Contains("Session", StringComparison.OrdinalIgnoreCase)
                 && acp.Message.Contains("not found", StringComparison.OrdinalIgnoreCase)));
+
+    private sealed class NoopAcpConnectionCoordinator : IAcpConnectionCoordinator
+    {
+        public static NoopAcpConnectionCoordinator Instance { get; } = new();
+
+        public Task SetConnectingAsync(string? profileId, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task SetConnectedAsync(string? profileId, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task SetDisconnectedAsync(string? errorMessage = null, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task SetAuthenticationRequiredAsync(string? hintMessage, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task ClearAuthenticationRequiredAsync(CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task ResetAsync(CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task ResyncAsync(IAcpChatCoordinatorSink sink, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+    }
 
     private static InitializeParams CreateDefaultInitializeParams()
         => new()

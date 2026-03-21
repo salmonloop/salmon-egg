@@ -29,6 +29,11 @@ public sealed record UpdateMessageAction(ChatMessage Message) : ChatAction;
 public sealed record SelectConversationAction(string? ConversationId) : ChatAction;
 
 /// <summary>
+/// Dispatched to update the active conversation binding metadata in store state.
+/// </summary>
+public sealed record SetBindingSliceAction(ConversationBindingSlice? Binding) : ChatAction;
+
+/// <summary>
 /// Dispatched when the user selects a different ACP profile.
 /// </summary>
 public sealed record SelectProfileAction(string? ProfileId) : ChatAction;

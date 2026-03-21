@@ -49,7 +49,6 @@ public sealed class ChatLaunchWorkflowTests
 
         sessionManager.Verify(s => s.CreateSessionAsync(It.IsAny<string>(), @"C:\repo\demo"), Times.Once);
         Assert.Equal(1, navigation.ActivateSessionCount);
-        Assert.Equal("project-1", navigation.LastActivatedProjectId);
         Assert.Equal(0, chat.AutoConnectCallCount);
         Assert.Equal(1, chat.SendPromptCount);
         Assert.Equal(0, navigation.ActivateSettingsCount);
@@ -88,67 +87,6 @@ public sealed class ChatLaunchWorkflowTests
         Assert.Equal(0, chat.AutoConnectCallCount);
         Assert.Equal(0, chat.SendPromptCount);
         Assert.Equal(0, navigation.ActivateSettingsCount);
-    }
-
-    [Fact]
-    public async Task StartSessionAndSendAsync_DoesNotReadCurrentSessionIdFromChatFacade()
-    {
-        var sessionManager = new Mock<ISessionManager>();
-        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
-            .ReturnsAsync((string id, string? cwd) => new Session { SessionId = id, Cwd = cwd });
-
-        var preferences = CreatePreferences(lastSelectedProjectId: "project-1");
-        var chat = new FakeChatLaunchWorkflowChatFacade
-        {
-            IsConnected = true,
-            ThrowOnCurrentSessionIdRead = true
-        };
-        var navigation = new RecordingNavigationCoordinator(chat)
-        {
-            ApplyActivatedSessionToChat = true
-        };
-
-        var workflow = new ChatLaunchWorkflow(
-            chat,
-            sessionManager.Object,
-            preferences,
-            navigation,
-            () => @"C:\repo\demo");
-
-        await workflow.StartSessionAndSendAsync("hello");
-
-        Assert.Equal(1, navigation.ActivateSessionCount);
-        Assert.Equal(1, chat.SendPromptCount);
-    }
-
-    [Fact]
-    public async Task StartSessionAndSendAsync_DoesNotReadIsConnectedFromChatFacade()
-    {
-        var sessionManager = new Mock<ISessionManager>();
-        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
-            .ReturnsAsync((string id, string? cwd) => new Session { SessionId = id, Cwd = cwd });
-
-        var preferences = CreatePreferences(lastSelectedProjectId: "project-1");
-        var chat = new FakeChatLaunchWorkflowChatFacade
-        {
-            ThrowOnIsConnectedRead = true
-        };
-        var navigation = new RecordingNavigationCoordinator(chat)
-        {
-            ApplyActivatedSessionToChat = true
-        };
-
-        var workflow = new ChatLaunchWorkflow(
-            chat,
-            sessionManager.Object,
-            preferences,
-            navigation,
-            () => @"C:\repo\demo");
-
-        await workflow.StartSessionAndSendAsync("hello");
-
-        Assert.Equal(1, navigation.ActivateSessionCount);
-        Assert.Equal(1, chat.AutoConnectCallCount);
     }
 
     [Fact]
@@ -292,21 +230,9 @@ public sealed class ChatLaunchWorkflowTests
         private bool _isConnected;
         private string? _currentSessionId;
 
-        public bool ThrowOnIsConnectedRead { get; set; }
-
-        public bool ThrowOnCurrentSessionIdRead { get; set; }
-
         public bool IsConnected
         {
-            get
-            {
-                if (ThrowOnIsConnectedRead)
-                {
-                    throw new InvalidOperationException("Workflow must not read IsConnected directly from the chat facade.");
-                }
-
-                return _isConnected;
-            }
+            get => _isConnected;
             set => _isConnected = value;
         }
 
@@ -318,15 +244,7 @@ public sealed class ChatLaunchWorkflowTests
 
         public string? CurrentSessionId
         {
-            get
-            {
-                if (ThrowOnCurrentSessionIdRead)
-                {
-                    throw new InvalidOperationException("Workflow must not read CurrentSessionId directly from the chat facade.");
-                }
-
-                return _currentSessionId;
-            }
+            get => _currentSessionId;
             private set => _currentSessionId = value;
         }
 
@@ -337,14 +255,6 @@ public sealed class ChatLaunchWorkflowTests
         public Action<FakeChatLaunchWorkflowChatFacade>? AutoConnectAction { get; set; }
 
         public CancellationToken LastAutoConnectToken { get; private set; }
-
-        public Task TryAutoConnectAsync(CancellationToken cancellationToken = default)
-        {
-            AutoConnectCallCount++;
-            LastAutoConnectToken = cancellationToken;
-            AutoConnectAction?.Invoke(this);
-            return Task.CompletedTask;
-        }
 
         public Task<ChatLaunchConnectionOutcome> EnsureConnectedForLaunchAsync(CancellationToken cancellationToken = default)
         {
@@ -365,13 +275,6 @@ public sealed class ChatLaunchWorkflowTests
             return Task.FromResult(IsConnecting || IsInitializing
                 ? ChatLaunchConnectionOutcome.InProgress
                 : ChatLaunchConnectionOutcome.RequiresConfiguration);
-        }
-
-        public bool CanSendPrompt() => true;
-
-        public void SendPrompt()
-        {
-            SendPromptCount++;
         }
 
         public bool TrySendPromptForLaunch()

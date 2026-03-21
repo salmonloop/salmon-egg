@@ -67,6 +67,53 @@ public class ChatReducerTests
     }
 
     [Fact]
+    public void GivenEmptyState_WhenSetBindingSlice_ThenBindingAndGenerationAreUpdated()
+    {
+        // Arrange
+        var initialState = ChatState.Empty;
+        var binding = new ConversationBindingSlice("conv-1", "remote-1", "profile-1");
+
+        // Act
+        var newState = ChatReducer.Reduce(initialState, new SetBindingSliceAction(binding));
+
+        // Assert
+        Assert.Equal(binding, newState.Binding);
+        Assert.Equal(1, newState.Generation);
+    }
+
+    [Fact]
+    public void GivenState_WhenRuntimeMutationOccurs_ThenGenerationIncrements()
+    {
+        // Arrange
+        var initialState = ChatState.Empty with { Generation = 2 };
+
+        // Act
+        var newState = ChatReducer.Reduce(initialState, new SetDraftTextAction("hi"));
+
+        // Assert
+        Assert.Equal(3, newState.Generation);
+    }
+
+    [Fact]
+    public void GivenState_WhenGuardedActionIsNoOp_ThenGenerationDoesNotIncrement()
+    {
+        // Arrange
+        var initialState = ChatState.Empty with { HydratedConversationId = "conv-1", Generation = 5 };
+        var message = new ConversationMessageSnapshot
+        {
+            Id = "m-1",
+            ContentType = "text",
+            TextContent = "hello"
+        };
+
+        // Act
+        var newState = ChatReducer.Reduce(initialState, new UpsertTranscriptMessageAction("conv-2", message));
+
+        // Assert
+        Assert.Equal(initialState.Generation, newState.Generation);
+    }
+
+    [Fact]
     public void GivenConversationState_WhenSelectConversation_ThenConversationSliceIsCleared()
     {
         var initialState = new ChatState(
@@ -89,7 +136,7 @@ public class ChatReducerTests
     [Fact]
     public void GivenDifferentSelectedConversation_WhenHydrating_ThenReducerIgnoresStaleSnapshot()
     {
-        var initialState = new ChatState(HydratedConversationId: "conv-1");
+        var initialState = new ChatState(HydratedConversationId: "conv-1", Generation: 7);
         var action = new HydrateConversationAction(
             "conv-2",
             ImmutableList.Create(new ConversationMessageSnapshot { Id = "m-1", TextContent = "stale", ContentType = "text" }),
@@ -105,5 +152,6 @@ public class ChatReducerTests
         Assert.True(newState.PlanEntries is null or { Count: 0 });
         Assert.False(newState.ShowPlanPanel);
         Assert.Null(newState.PlanTitle);
+        Assert.Equal(initialState.Generation, newState.Generation);
     }
 }

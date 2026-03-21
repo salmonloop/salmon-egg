@@ -35,12 +35,14 @@ namespace SalmonEgg.Presentation.ViewModels.Chat;
 /// Orchestrates the lifecycle of conversations, ACP agent connectivity, and UI state projection.
 /// Follows the MVVM pattern where the View is driven strictly by this ViewModel and its projected state.
 /// </summary>
-public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCatalog, IConversationSessionSwitcher, IAcpChatCoordinatorSink
+public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCatalog, IAcpChatCoordinatorSink
 {
     private readonly ChatServiceFactory _chatServiceFactory;
     private readonly ChatConversationWorkspace _conversationWorkspace;
     private readonly IConversationActivationCoordinator _conversationActivationCoordinator;
+    private readonly IConversationBindingCommands _bindingCommands;
     private readonly IAcpConnectionCommands _acpConnectionCommands;
+    private readonly IAcpConnectionCoordinator _acpConnectionCoordinator;
     private readonly IConfigurationService _configurationService;
     private readonly AppPreferencesViewModel _preferences;
     private readonly AcpProfilesViewModel _acpProfiles;
@@ -66,7 +68,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private string? _currentRemoteSessionId;
     private IReadOnlyList<AuthMethodDefinition>? _advertisedAuthMethods;
     private bool _suppressMiniWindowSessionSync;
-    private bool _suppressStoreConversationProjection;
     private bool _suppressStoreProfileProjection;
     private bool _suppressStorePromptProjection;
     private bool _suppressProfileSyncFromStore;
@@ -74,6 +75,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private int _storeProjectionSequence;
     private readonly object _restoreSync = new();
     private Task? _restoreTask;
+    private long _connectionGeneration;
 
     /// <summary>
     /// Local conversation binding connects a stable UI ConversationId to a transient ACP RemoteSessionId.
@@ -86,8 +88,19 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     [ObservableProperty]
     private string _currentPrompt = string.Empty;
 
-    [ObservableProperty]
     private string? _currentSessionId;
+
+    public string? CurrentSessionId
+    {
+        get => _currentSessionId;
+        private set
+        {
+            if (SetProperty(ref _currentSessionId, value))
+            {
+                OnCurrentSessionIdChanged(value);
+            }
+        }
+    }
 
     [ObservableProperty]
     private ObservableCollection<MiniWindowConversationItemViewModel> _miniWindowSessions = new();
@@ -129,6 +142,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private string? _agentVersion;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsInitialized))]
+    [NotifyPropertyChangedFor(nameof(CanSendPromptUi))]
     private bool _isInitializing;
 
     [ObservableProperty]
@@ -167,6 +182,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanSendPromptUi))]
+    [NotifyPropertyChangedFor(nameof(IsInitialized))]
     private bool _isConnected;
 
     [ObservableProperty]
@@ -269,7 +285,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         ILogger<ChatViewModel> logger,
         SynchronizationContext? syncContext = null,
         IAcpConnectionCommands? acpConnectionCommands = null,
-        IConversationActivationCoordinator? conversationActivationCoordinator = null)
+        IConversationActivationCoordinator? conversationActivationCoordinator = null,
+        IConversationBindingCommands? bindingCommands = null,
+        IAcpConnectionCoordinator? acpConnectionCoordinator = null)
         : base(logger)
     {
         _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
@@ -280,10 +298,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
         _miniWindowCoordinator = miniWindowCoordinator ?? throw new ArgumentNullException(nameof(miniWindowCoordinator));
         _conversationWorkspace = conversationWorkspace ?? throw new ArgumentNullException(nameof(conversationWorkspace));
+        _bindingCommands = bindingCommands ?? new BindingCoordinator(conversationWorkspace, chatStore);
+        _acpConnectionCoordinator = acpConnectionCoordinator ?? NoopAcpConnectionCoordinator.Instance;
         _conversationActivationCoordinator = conversationActivationCoordinator
             ?? new ConversationActivationCoordinator(
                 conversationWorkspace,
-                conversationWorkspace,
+                _bindingCommands,
                 chatStore,
                 preferences,
                 NullLogger<ConversationActivationCoordinator>.Instance);
@@ -347,11 +367,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
                 await PostToUiAsync(() =>
                 {
-                    if (token.IsCancellationRequested || _disposed)
-                    {
-                        return;
-                    }
+                if (token.IsCancellationRequested || _disposed)
+                {
+                    return;
+                }
 
+                    _connectionGeneration = state.Generation;
                     if (projectionSequence != Volatile.Read(ref _storeProjectionSequence))
                     {
                         return;
@@ -360,7 +381,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                     var projection = CreateProjection(state);
                     SyncMessageHistory(projection.Transcript, projection.IsThinking);
                     ApplyStoreProjection(projection);
-                    PersistConversationState(state, scheduleSave: true);
                 }).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested || ct.IsCancellationRequested)
@@ -471,7 +491,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     private void ApplyStoreProjection(ChatUiProjection projection)
     {
-        _suppressStoreConversationProjection = true;
         _suppressStoreProfileProjection = true;
         _suppressStorePromptProjection = true;
         try
@@ -509,7 +528,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         {
             _suppressStorePromptProjection = false;
             _suppressStoreProfileProjection = false;
-            _suppressStoreConversationProjection = false;
         }
     }
 
@@ -624,7 +642,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         OnPropertyChanged(nameof(ShouldShowPlanEmpty));
     }
 
-    partial void OnCurrentSessionIdChanged(string? value)
+    private void OnCurrentSessionIdChanged(string? value)
     {
         // Keep the header name stable and decouple it from ACP sessionId.
         CurrentSessionDisplayName = ResolveSessionDisplayName(value);
@@ -652,7 +670,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
         if (!string.Equals(CurrentSessionId, value.ConversationId, StringComparison.Ordinal))
         {
-            _ = TrySwitchToSessionAsync(value.ConversationId);
+            _ = ActivateConversationAsync(value.ConversationId);
         }
     }
 
@@ -741,24 +759,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         try
         {
             await _conversationWorkspace.RestoreAsync().ConfigureAwait(false);
-            await PostToUiAsync(() =>
-            {
-                var restoredConversationId = _conversationWorkspace.LastActiveConversationId;
-                if (!string.IsNullOrWhiteSpace(restoredConversationId))
-                {
-                    _suppressStoreConversationProjection = true;
-                    CurrentSessionId = restoredConversationId;
-                    IsSessionActive = true;
-                    _suppressStoreConversationProjection = false;
-                }
-                else
-                {
-                    _suppressStoreConversationProjection = true;
-                    CurrentSessionId = null;
-                    IsSessionActive = false;
-                    _suppressStoreConversationProjection = false;
-                }
-            }).ConfigureAwait(false);
+            var restoredConversationId = _conversationWorkspace.LastActiveConversationId;
+            await _chatStore.Dispatch(new SelectConversationAction(restoredConversationId)).ConfigureAwait(false);
+            await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
 
             await SelectAndHydrateConversationAsync(_conversationWorkspace.LastActiveConversationId).ConfigureAwait(false);
         }
@@ -1014,53 +1017,19 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private ConversationWorkspaceSnapshot? TryGetConversationSnapshot(string? conversationId)
         => _conversationWorkspace.GetConversationSnapshot(conversationId);
 
-    private ConversationRemoteBindingState? TryGetRemoteBinding(string? conversationId)
-        => _conversationWorkspace.GetRemoteBinding(conversationId);
-
     private ChatUiProjection CreateProjection(ChatState state)
-        => _chatStateProjector.Apply(state, CurrentSessionId, TryGetRemoteBinding(CurrentSessionId));
+        => _chatStateProjector.Apply(
+            state,
+            state.HydratedConversationId,
+            ToBindingState(state.Binding));
 
-    private void PersistConversationState(ChatState state, bool scheduleSave)
-    {
-        if (string.IsNullOrWhiteSpace(state.HydratedConversationId))
-        {
-            return;
-        }
-
-        if (state.Transcript is null && state.PlanEntries is null)
-        {
-            return;
-        }
-
-        var conversationId = state.HydratedConversationId!;
-        var existing = _conversationWorkspace.GetConversationSnapshot(conversationId);
-        var transcript = (state.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty)
-            .Where(static message => !IsThinkingPlaceholder(message))
-            .Select(CloneSnapshot)
-            .ToArray();
-        var planEntries = (state.PlanEntries ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty)
-            .Select(ClonePlanEntrySnapshot)
-            .ToArray();
-
-        _conversationWorkspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
-            conversationId,
-            transcript,
-            planEntries,
-            state.ShowPlanPanel,
-            state.PlanTitle,
-            existing?.CreatedAt ?? DateTime.UtcNow,
-            DateTime.UtcNow));
-
-        if (scheduleSave)
-        {
-            _conversationWorkspace.ScheduleSave();
-        }
-    }
-
-    private void ScheduleConversationSave()
-    {
-        _conversationWorkspace.ScheduleSave();
-    }
+    private static ConversationRemoteBindingState? ToBindingState(ConversationBindingSlice? binding)
+        => binding is null || string.IsNullOrWhiteSpace(binding.ConversationId)
+            ? null
+            : new ConversationRemoteBindingState(
+                binding.ConversationId!,
+                binding.RemoteSessionId,
+                binding.ProfileId);
 
     private string ResolveSessionDisplayName(string? sessionId)
     {
@@ -1125,8 +1094,13 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             return;
         }
 
-        _conversationWorkspace.RenameConversation(conversationId, newDisplayName);
-        var finalName = ResolveSessionDisplayName(conversationId);
+        var sanitized = SessionNamePolicy.Sanitize(newDisplayName);
+        var finalName = string.IsNullOrWhiteSpace(sanitized)
+            ? SessionNamePolicy.CreateDefault(conversationId)
+            : sanitized;
+
+        _sessionManager.UpdateSession(conversationId, session => session.DisplayName = finalName, updateActivity: false);
+        NotifyConversationListChanged();
 
         if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
         {
@@ -1143,18 +1117,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
         try
         {
-            var mutationResult = _conversationActivationCoordinator
+            _ = _conversationActivationCoordinator
                 .ArchiveConversationAsync(conversationId, CurrentSessionId)
                 .GetAwaiter()
                 .GetResult();
-            if (mutationResult.ClearedActiveConversation)
-            {
-                _suppressSessionUpdatesToUi = true;
-                CurrentSessionId = null;
-                _currentRemoteSessionId = null;
-                IsSessionActive = false;
-                _suppressSessionUpdatesToUi = false;
-            }
         }
         catch (Exception ex)
         {
@@ -1171,18 +1137,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
         try
         {
-            var mutationResult = _conversationActivationCoordinator
+            _ = _conversationActivationCoordinator
                 .DeleteConversationAsync(conversationId, CurrentSessionId)
                 .GetAwaiter()
                 .GetResult();
-            if (mutationResult.ClearedActiveConversation)
-            {
-                _suppressSessionUpdatesToUi = true;
-                CurrentSessionId = null;
-                _currentRemoteSessionId = null;
-                IsSessionActive = false;
-                _suppressSessionUpdatesToUi = false;
-            }
         }
         catch (Exception ex)
         {
@@ -1294,8 +1252,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             _suppressAutoConnectFromPreferenceChange = true;
             _acpProfiles.MarkLastConnected(profile);
             _acpProfiles.SelectedProfile = profile;
-
-            await _chatStore.Dispatch(new SetConnectionLifecycleAction(true, IsConnected, IsInitializing, null));
             var result = await _acpConnectionCommands
                 .ConnectToProfileAsync(profile, TransportConfig, this, cancellationToken)
                 .ConfigureAwait(false);
@@ -1303,7 +1259,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             CacheAuthMethods(result.InitializeResponse);
             ClearAuthenticationRequirement();
             UpdateAgentInfo();
-            _ = _chatStore.Dispatch(new UpdateConnectionStatusAction(IsConnected, null));
             ShowTransportConfigPanel = false;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -1318,7 +1273,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         finally
         {
             _suppressAutoConnectFromPreferenceChange = false;
-            await _chatStore.Dispatch(new SetConnectionLifecycleAction(false, IsConnected, IsInitializing, ConnectionErrorMessage));
         }
     }
 
@@ -1335,50 +1289,29 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         /// </summary>
         private async Task ApplyTransportConfigCoreAsync(bool preserveConversation)
         {
-            await _chatStore.Dispatch(new SetConnectionLifecycleAction(
-                IsConnecting: true,
-                IsConnected: IsConnected,
-                IsInitialized: IsInitializing,
-                ErrorMessage: null));
             try
             {
                 var result = await _acpConnectionCommands
                     .ApplyTransportConfigurationAsync(TransportConfig, this, preserveConversation)
                     .ConfigureAwait(false);
 
-                CacheAuthMethods(result.InitializeResponse);
-                ClearAuthenticationRequirement();
-                UpdateAgentInfo();
+            CacheAuthMethods(result.InitializeResponse);
+            ClearAuthenticationRequirement();
+            UpdateAgentInfo();
 
                 if (string.IsNullOrWhiteSpace(CurrentSessionId))
                 {
                     var sessionId = Guid.NewGuid().ToString("N");
                     await _sessionManager.CreateSessionAsync(sessionId, GetActiveSessionCwdOrDefault()).ConfigureAwait(false);
-                    await _conversationWorkspace.TrySwitchToSessionAsync(sessionId).ConfigureAwait(false);
-                    await PostToUiAsync(() =>
-                    {
-                        CurrentSessionId = sessionId;
-                        IsSessionActive = true;
-                    }).ConfigureAwait(false);
+                    await ActivateConversationAsync(sessionId).ConfigureAwait(false);
                 }
 
-                _ = _chatStore.Dispatch(new UpdateConnectionStatusAction(IsConnected, null));
                 ShowTransportConfigPanel = false;
             }
-            catch (Exception ex)
-            {
-                _ = _chatStore.Dispatch(new UpdateConnectionStatusAction(false, $"Connection failed: {ex.Message}"));
-                Logger.LogError(ex, "Error during connection");
-                ClearRemoteSessionBindingForCurrentConversation();
-            }
-            finally
-            {
-                await _chatStore.Dispatch(new SetConnectionLifecycleAction(
-                    IsConnecting: false,
-                    IsConnected: IsConnected,
-                    IsInitialized: IsInitializing,
-                    ErrorMessage: ConnectionErrorMessage));
-            }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error during connection");
+        }
         }
 
     private void ApplySessionNewResponse(SessionNewResponse response)
@@ -1401,11 +1334,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             chatService.TerminalRequestReceived += OnTerminalRequestReceived;
             chatService.ErrorOccurred += OnErrorOccurred;
 
-           // Listen for initialization status changes.
-           if (chatService.IsInitialized)
-           {
-               UpdateAgentInfo();
-           }
+           UpdateAgentInfo();
        }
 
        private void UnsubscribeFromChatService(IChatService chatService)
@@ -1425,11 +1354,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
           {
               SubscribeToChatService(_chatService);
 
-              // Listen for initialization status changes.
-              if (_chatService.IsInitialized)
-              {
-                  UpdateAgentInfo();
-              }
+              UpdateAgentInfo();
 
           }
       }
@@ -1448,10 +1373,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 // SECURITY/PROTOCOL CHECK: Ensure updates only affect the currently active remote session.
                 // This prevents cross-talk if multiple agents or sessions are running.
                 var activeRemoteSessionId = _currentRemoteSessionId;
-                if (string.IsNullOrWhiteSpace(activeRemoteSessionId) && !string.IsNullOrWhiteSpace(CurrentSessionId))
-                {
-                    activeRemoteSessionId = _conversationWorkspace.GetRemoteBinding(CurrentSessionId)?.RemoteSessionId;
-                }
 
                 if (!string.IsNullOrWhiteSpace(activeRemoteSessionId) &&
                     !string.Equals(e.SessionId, activeRemoteSessionId, StringComparison.Ordinal))
@@ -1536,7 +1457,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         _ = _chatStore.Dispatch(new AppendTextDeltaAction(CurrentSessionId, chunk));
     }
 
-    public async Task<bool> TrySwitchToSessionAsync(string sessionId, CancellationToken cancellationToken = default)
+    private async Task<bool> ActivateConversationAsync(string sessionId, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(sessionId))
         {
@@ -1544,12 +1465,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         }
 
         await EnsureConversationWorkspaceRestoredAsync(cancellationToken).ConfigureAwait(false);
-
-        if (string.Equals(CurrentSessionId, sessionId, StringComparison.Ordinal))
-        {
-            await SelectAndHydrateConversationAsync(sessionId).ConfigureAwait(false);
-            return true;
-        }
 
         try
         {
@@ -1563,15 +1478,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 return false;
             }
 
-            // Switch local conversation first (UI stays stable even if not connected).
-            await PostToUiAsync(() =>
-            {
-                _suppressStoreConversationProjection = true;
-                CurrentSessionId = sessionId;
-                IsSessionActive = true;
-                _suppressStoreConversationProjection = false;
-            }).ConfigureAwait(false);
-
             await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
             NotifyConversationListChanged();
 
@@ -1583,7 +1489,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
             _syncContext.Post(_ =>
             {
-                ConnectionErrorMessage = $"Failed to switch session: {ex.Message}";
+                SetError($"Failed to switch session: {ex.Message}");
                 IsSessionActive = !string.IsNullOrWhiteSpace(CurrentSessionId);
             }, null);
 
@@ -1826,7 +1732,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     private void ClearAuthenticationRequirement()
     {
-        _ = _chatStore.Dispatch(new SetAuthenticationStateAction(false, null));
+        _ = _acpConnectionCoordinator.ClearAuthenticationRequiredAsync();
     }
 
     private void MarkAuthenticationRequired(AuthMethodDefinition? method, string? messageOverride = null)
@@ -1836,7 +1742,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             ?? method?.Description
             ?? "The agent requires authentication before it can respond.";
 
-        _ = _chatStore.Dispatch(new SetAuthenticationStateAction(true, message));
+        _ = _acpConnectionCoordinator.SetAuthenticationRequiredAsync(message);
 
         if (method != null)
         {
@@ -1856,7 +1762,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     private async Task<bool> TryAuthenticateAsync(CancellationToken cancellationToken)
     {
-        if (_chatService is not { IsConnected: true, IsInitialized: true })
+        if (_chatService is null || !IsInitialized)
         {
             return false;
         }
@@ -2153,7 +2059,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
        try
        {
-           await _chatStore.Dispatch(new SetConnectionLifecycleAction(IsConnecting, IsConnected, true, ConnectionErrorMessage));
            ClearError();
 
            // Initialize ACP client.
@@ -2191,10 +2096,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
            Logger.LogError(ex, "Initialization failed");
            SetError($"Initialization failed: {ex.Message}");
        }
-       finally
-       {
-           await _chatStore.Dispatch(new SetConnectionLifecycleAction(IsConnecting, IsConnected, false, ConnectionErrorMessage));
-       }
    }
 
     [RelayCommand]
@@ -2205,7 +2106,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
         try
         {
-            await _chatStore.Dispatch(new SetConnectionLifecycleAction(true, IsConnected, IsInitializing, ConnectionErrorMessage));
             ClearError();
 
             var sessionParams = new SessionNewParams
@@ -2236,13 +2136,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             }
 
             var localConversationId = Guid.NewGuid().ToString("N");
-            var switched = await TrySwitchToSessionAsync(localConversationId).ConfigureAwait(false);
+            var switched = await ActivateConversationAsync(localConversationId).ConfigureAwait(false);
             if (!switched)
             {
-                throw new InvalidOperationException("Failed to activate local conversation before binding remote session.");
+                throw new InvalidOperationException("Failed to activate local conversation before applying session response.");
             }
-
-            BindRemoteSession(response.SessionId, _preferences.LastSelectedServerId, response, preserveConversation: true);
+            ApplySessionNewResponse(response);
 
             // Load available modes (deprecated in favor of configOptions).
             if (response.Modes?.AvailableModes != null)
@@ -2289,10 +2188,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             Logger.LogError(ex, "Failed to create session");
             SetError($"Failed to create session: {ex.Message}");
         }
-        finally
-        {
-            await _chatStore.Dispatch(new SetConnectionLifecycleAction(false, IsConnected, IsInitializing, ConnectionErrorMessage));
-        }
     }
 
     /// <summary>
@@ -2322,7 +2217,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
         try
         {
-            _ = _chatStore.Dispatch(new UpdateConnectionStatusAction(IsConnected, null));
+            ClearError();
             await _chatStore.Dispatch(new SetPromptInFlightAction(true));
             await _chatStore.Dispatch(new SetIsThinkingAction(false));
 
@@ -2350,7 +2245,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         catch (TimeoutException ex)
         {
             Logger.LogError(ex, "SendPrompt timed out");
-            _ = _chatStore.Dispatch(new UpdateConnectionStatusAction(IsConnected, "Send timed out: Agent did not respond for a long time."));
+            SetError("Send timed out: Agent did not respond for a long time.");
 
             if (string.IsNullOrWhiteSpace(CurrentPrompt))
             {
@@ -2362,7 +2257,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         catch (Exception ex)
         {
             Logger.LogError(ex, "SendPrompt failed");
-            _ = _chatStore.Dispatch(new UpdateConnectionStatusAction(IsConnected, $"Send failed: {ex.Message}"));
+            SetError($"Send failed: {ex.Message}");
 
             // Restore text so the user can retry quickly.
             if (string.IsNullOrWhiteSpace(CurrentPrompt))
@@ -2383,7 +2278,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     private bool CanSendPrompt() =>
         IsSessionActive
-        && _chatService is { IsConnected: true, IsInitialized: true }
+        && _chatService is not null
+        && IsInitialized
         && !string.IsNullOrWhiteSpace(CurrentSessionId)
         && !string.IsNullOrWhiteSpace(CurrentPrompt)
         && !IsBusy
@@ -2488,20 +2384,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         }
     }
 
-    private void ClearRemoteSessionBindingForCurrentConversation()
-    {
-        if (string.IsNullOrWhiteSpace(CurrentSessionId))
-        {
-            _currentRemoteSessionId = null;
-            return;
-        }
-
-        _conversationWorkspace.UpdateRemoteBinding(CurrentSessionId, remoteSessionId: null, boundProfileId: _preferences.LastSelectedServerId);
-        _conversationWorkspace.ScheduleSave();
-        _currentRemoteSessionId = null;
-        _ = ApplyCurrentStoreProjectionAsync();
-    }
-
     [RelayCommand]
     private async Task SetModeAsync(SessionModeViewModel? mode)
     {
@@ -2602,14 +2484,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         {
             IsBusy = true;
             ClearError();
-
-            if (_chatService != null)
-            {
-                await _chatService.DisconnectAsync();
-            }
-            ClearRemoteSessionBindingForCurrentConversation();
-            await _chatStore.Dispatch(new SetConnectionLifecycleAction(false, false, false, null));
-            await _chatStore.Dispatch(new SetAgentIdentityAction(null, null));
+            await _acpConnectionCommands.DisconnectAsync(this);
             AvailableModes.Clear();
             SelectedMode = null;
         }
@@ -2657,14 +2532,18 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         OnPropertyChanged(nameof(CanSendPromptUi));
     }
 
-    public string? CurrentConversationId => CurrentSessionId;
-
     public Task RestoreAsync(CancellationToken cancellationToken = default)
         => EnsureConversationWorkspaceRestoredAsync(cancellationToken);
 
     public IChatService? CurrentChatService => _chatService;
 
-    public bool IsInitialized => _chatService?.IsInitialized == true;
+    public long ConnectionGeneration => Interlocked.Read(ref _connectionGeneration);
+
+    public SynchronizationContext SessionUpdateSynchronizationContext => _syncContext;
+
+    public IConversationBindingCommands ConversationBindingCommands => _bindingCommands;
+
+    public bool IsInitialized => IsConnected && !IsInitializing;
 
     public string? CurrentRemoteSessionId => _currentRemoteSessionId;
 
@@ -2704,17 +2583,35 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     public void UpdateConnectionState(bool isConnecting, bool isConnected, bool isInitialized, string? errorMessage)
     {
-        _ = _chatStore.Dispatch(new SetConnectionLifecycleAction(isConnecting, isConnected, isInitialized, errorMessage));
+        var profileId = SelectedAcpProfile?.Id ?? _selectedProfileIdFromStore;
+        if (isConnecting)
+        {
+            _ = _acpConnectionCoordinator.SetConnectingAsync(profileId);
+            return;
+        }
+
+        if (isConnected)
+        {
+            _ = _acpConnectionCoordinator.SetConnectedAsync(profileId);
+            return;
+        }
+
+        _ = _acpConnectionCoordinator.SetDisconnectedAsync(errorMessage);
     }
 
     public void UpdateInitializationState(bool isInitializing)
     {
-        _ = _chatStore.Dispatch(new SetConnectionLifecycleAction(IsConnecting, IsConnected, isInitializing, ConnectionErrorMessage));
     }
 
     public void UpdateAuthenticationState(bool isRequired, string? hintMessage)
     {
-        _ = _chatStore.Dispatch(new SetAuthenticationStateAction(isRequired, hintMessage));
+        if (isRequired)
+        {
+            _ = _acpConnectionCoordinator.SetAuthenticationRequiredAsync(hintMessage);
+            return;
+        }
+
+        _ = _acpConnectionCoordinator.ClearAuthenticationRequiredAsync();
     }
 
     public void UpdateAgentIdentity(string? agentName, string? agentVersion)
@@ -2722,30 +2619,30 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         _ = _chatStore.Dispatch(new SetAgentIdentityAction(agentName, agentVersion));
     }
 
-    public void BindRemoteSession(string remoteSessionId, string? profileId, SessionNewResponse response, bool preserveConversation)
+    private sealed class NoopAcpConnectionCoordinator : IAcpConnectionCoordinator
     {
-        if (string.IsNullOrWhiteSpace(CurrentSessionId))
-        {
-            throw new InvalidOperationException("Cannot bind a remote ACP session without an active local conversation.");
-        }
+        public static NoopAcpConnectionCoordinator Instance { get; } = new();
 
-        _conversationWorkspace.UpdateRemoteBinding(CurrentSessionId!, remoteSessionId, profileId);
-        _conversationWorkspace.ScheduleSave();
-        _currentRemoteSessionId = remoteSessionId;
-        ApplySessionNewResponse(response);
+        public Task SetConnectingAsync(string? profileId, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
 
-        if (!preserveConversation)
-        {
-            _ = SelectAndHydrateConversationAsync(CurrentSessionId);
-            return;
-        }
+        public Task SetConnectedAsync(string? profileId, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
 
-        _ = ApplyCurrentStoreProjectionAsync();
-    }
+        public Task SetDisconnectedAsync(string? errorMessage = null, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
 
-    public void ClearRemoteSessionBinding()
-    {
-        ClearRemoteSessionBindingForCurrentConversation();
+        public Task SetAuthenticationRequiredAsync(string? hintMessage, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task ClearAuthenticationRequiredAsync(CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task ResetAsync(CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task ResyncAsync(IAcpChatCoordinatorSink sink, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
     }
 
 

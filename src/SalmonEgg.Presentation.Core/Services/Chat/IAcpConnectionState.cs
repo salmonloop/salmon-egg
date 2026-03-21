@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Threading;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Protocol;
@@ -51,6 +52,13 @@ public interface IAcpChatCoordinatorSink : IAcpConnectionState
 
     string? SelectedProfileId => null;
 
+    long ConnectionGeneration => 0;
+
+    SynchronizationContext SessionUpdateSynchronizationContext
+        => SynchronizationContext.Current ?? new SynchronizationContext();
+
+    IConversationBindingCommands ConversationBindingCommands { get; }
+
     void SelectProfile(ServerConfiguration profile)
     {
     }
@@ -72,18 +80,6 @@ public interface IAcpChatCoordinatorSink : IAcpConnectionState
     }
 
     void UpdateAgentIdentity(string? agentName, string? agentVersion)
-    {
-    }
-
-    void BindRemoteSession(
-        string remoteSessionId,
-        string? profileId,
-        SessionNewResponse response,
-        bool preserveConversation)
-    {
-    }
-
-    void ClearRemoteSessionBinding()
     {
     }
 

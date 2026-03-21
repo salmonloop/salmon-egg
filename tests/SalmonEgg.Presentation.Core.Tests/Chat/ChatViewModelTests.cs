@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Immutable;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
@@ -109,93 +110,20 @@ public class ChatViewModelTests
                 vmLogger.Object,
                 syncContext,
                 acpConnectionCommands);
-            return new ViewModelFixture(viewModel, state, chatStore.Object, workspace, conversationStore, preferences, profiles);
+            return new ViewModelFixture(
+                viewModel,
+                state,
+                chatStore.Object,
+                workspace,
+                conversationStore,
+                preferences,
+                profiles,
+                chatStore);
         }
         finally
         {
             SynchronizationContext.SetSynchronizationContext(originalContext);
         }
-    }
-
-    [Fact]
-    public async System.Threading.Tasks.Task TrySwitchToSessionAsync_NewSession_DoesNotSeedRemoteSessionId()
-    {
-        await using var fixture = CreateViewModel();
-        var viewModel = fixture.ViewModel;
-        var localSessionId = Guid.NewGuid().ToString("N");
-
-        await viewModel.TrySwitchToSessionAsync(localSessionId);
-
-        var field = typeof(ChatViewModel).GetField("_conversationWorkspace", BindingFlags.Instance | BindingFlags.NonPublic);
-        var workspace = Assert.IsType<ChatConversationWorkspace>(field!.GetValue(viewModel));
-        var remote = workspace.GetRemoteBinding(localSessionId)?.RemoteSessionId;
-
-        Assert.Null(remote);
-    }
-
-    [Fact]
-    public async Task TrySwitchToSessionAsync_ProfileMismatch_RebindsWorkspaceAtViewModelLayer()
-    {
-        await using var fixture = CreateViewModel();
-        fixture.Preferences.LastSelectedServerId = "profile-b";
-        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
-            ConversationId: "session-1",
-            Transcript:
-            [
-                new ConversationMessageSnapshot
-                {
-                    Id = "m-1",
-                    TextContent = "hello",
-                    ContentType = "text",
-                    Timestamp = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
-                    IsOutgoing = false
-                }
-            ],
-            Plan: [],
-            ShowPlanPanel: false,
-            PlanTitle: null,
-            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
-            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
-        fixture.Workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-a");
-
-        var switched = await fixture.ViewModel.TrySwitchToSessionAsync("session-1");
-
-        Assert.True(switched);
-        var state = await fixture.GetStateAsync();
-        Assert.Null(state.SelectedConversationId);
-        Assert.Equal("session-1", state.HydratedConversationId);
-        var deadline = DateTime.UtcNow.AddSeconds(2);
-        ConversationRemoteBindingState? remoteBinding = fixture.Workspace.GetRemoteBinding("session-1");
-        var expectedProfileId = fixture.Preferences.LastSelectedServerId;
-        while ((remoteBinding == null || !string.Equals(remoteBinding?.BoundProfileId, expectedProfileId, StringComparison.Ordinal))
-            && DateTime.UtcNow < deadline)
-        {
-            await Task.Delay(10);
-            remoteBinding = fixture.Workspace.GetRemoteBinding("session-1");
-        }
-
-        Assert.NotNull(remoteBinding);
-        Assert.Equal(expectedProfileId, remoteBinding!.BoundProfileId);
-        Assert.Equal(remoteBinding.RemoteSessionId, fixture.ViewModel.CurrentRemoteSessionId);
-    }
-
-    [Fact]
-    public async Task TrySwitchToSessionAsync_DoesNotCommitSemanticSelectionIntoChatState()
-    {
-        await using var fixture = CreateViewModel();
-        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
-            ConversationId: "session-1",
-            Transcript: [],
-            Plan: [],
-            ShowPlanPanel: false,
-            PlanTitle: null,
-            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
-            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
-
-        var switched = await fixture.ViewModel.TrySwitchToSessionAsync("session-1");
-
-        Assert.True(switched);
-        Assert.Null((await fixture.GetStateAsync()).SelectedConversationId);
     }
 
     [Fact]
@@ -233,7 +161,7 @@ public class ChatViewModelTests
     }
 
     [Fact]
-    public async Task CreateNewSessionCommand_CreatesLocalConversationAndBindsRemoteSessionSeparately()
+    public async Task CreateNewSessionCommand_CreatesLocalConversationWithoutBinding()
     {
         await using var fixture = CreateViewModel();
         fixture.Preferences.LastSelectedServerId = "profile-1";
@@ -247,16 +175,14 @@ public class ChatViewModelTests
 
         Assert.False(string.IsNullOrWhiteSpace(fixture.ViewModel.CurrentSessionId));
         Assert.NotEqual("remote-1", fixture.ViewModel.CurrentSessionId);
-        Assert.Equal("remote-1", fixture.ViewModel.CurrentRemoteSessionId);
+        Assert.Null(fixture.ViewModel.CurrentRemoteSessionId);
 
         var state = await fixture.GetStateAsync();
         Assert.Null(state.SelectedConversationId);
         Assert.Equal(fixture.ViewModel.CurrentSessionId, state.HydratedConversationId);
 
         var remoteBinding = fixture.Workspace.GetRemoteBinding(fixture.ViewModel.CurrentSessionId!);
-        Assert.NotNull(remoteBinding);
-        Assert.Equal("remote-1", remoteBinding!.RemoteSessionId);
-        Assert.Equal("profile-1", remoteBinding.BoundProfileId);
+        Assert.Null(remoteBinding);
     }
 
     [Fact]
@@ -276,17 +202,6 @@ public class ChatViewModelTests
     }
 
     [Fact]
-    public async Task TrySwitchToSessionAsync_DoesNotOwnStoreSelectedConversationId()
-    {
-        await using var fixture = CreateViewModel();
-        var switched = await fixture.ViewModel.TrySwitchToSessionAsync("session-1");
-        Assert.True(switched);
-
-        var state = await fixture.GetStateAsync();
-        Assert.Null(state.SelectedConversationId);
-    }
-
-    [Fact]
     public async Task CreateNewSessionCommand_DoesNotOwnStoreSelectedConversationId()
     {
         await using var fixture = CreateViewModel();
@@ -302,6 +217,88 @@ public class ChatViewModelTests
     }
 
     [Fact]
+    public async Task StoreSelectedConversationId_DoesNotOverrideCurrentSessionIdProjection()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        syncContext.RunAll();
+
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "session-1" });
+        await Task.Delay(50);
+        syncContext.RunAll();
+
+        await fixture.UpdateStateAsync(state => state with { SelectedConversationId = "store-selection" });
+        await Task.Delay(50);
+        syncContext.RunAll();
+
+        var state = await fixture.GetStateAsync();
+        Assert.Equal("store-selection", state.SelectedConversationId);
+        Assert.Equal("session-1", fixture.ViewModel.CurrentSessionId);
+    }
+
+    [Fact]
+    public async Task ConnectionProjection_DrivesIsInitialized()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        syncContext.RunAll();
+
+        await fixture.DispatchAsync(new SetConnectionLifecycleAction(false, true, false, null));
+        await Task.Delay(50);
+        syncContext.RunAll();
+
+        Assert.True(fixture.ViewModel.IsConnected);
+        Assert.False(fixture.ViewModel.IsInitializing);
+        Assert.True(fixture.ViewModel.IsInitialized);
+    }
+
+    [Fact]
+    public async Task ConnectToAcpProfileCommand_DoesNotDispatchLegacyConnectionActions()
+    {
+        var commands = new Mock<IAcpConnectionCommands>();
+        var chatService = new Mock<IChatService>();
+        chatService.SetupGet(s => s.IsConnected).Returns(true);
+        chatService.SetupGet(s => s.IsInitialized).Returns(true);
+        commands
+            .Setup(x => x.ConnectToProfileAsync(
+                It.IsAny<ServerConfiguration>(),
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AcpTransportApplyResult(chatService.Object, new InitializeResponse()));
+
+        await using var fixture = CreateViewModel(acpConnectionCommands: commands.Object);
+        var profile = new ServerConfiguration
+        {
+            Id = "profile-1",
+            Name = "Profile 1",
+            Transport = TransportType.Stdio
+        };
+        fixture.Profiles.Profiles.Add(profile);
+
+        await fixture.ViewModel.ConnectToAcpProfileCommand.ExecuteAsync(profile);
+
+        AssertNoLegacyConnectionActionsDispatched(fixture.ChatStore);
+    }
+
+    [Fact]
+    public async Task CoordinatorSinkStateUpdates_DoNotDispatchLegacyConnectionActions()
+    {
+        await using var fixture = CreateViewModel();
+
+        fixture.ViewModel.UpdateConnectionState(
+            isConnecting: true,
+            isConnected: false,
+            isInitialized: false,
+            errorMessage: "connection error");
+        fixture.ViewModel.UpdateInitializationState(isInitializing: true);
+        fixture.ViewModel.UpdateAuthenticationState(isRequired: true, hintMessage: "auth required");
+        await Task.Delay(50);
+
+        AssertNoLegacyConnectionActionsDispatched(fixture.ChatStore);
+    }
+
+    [Fact]
     public async Task ArchiveConversation_CurrentSession_ClearsStoreSelection()
     {
         await using var fixture = CreateViewModel();
@@ -314,9 +311,11 @@ public class ChatViewModelTests
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
-        await fixture.ViewModel.TrySwitchToSessionAsync("session-1");
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "session-1" });
+        await Task.Delay(50);
 
         fixture.ViewModel.ArchiveConversation("session-1");
+        await Task.Delay(50);
 
         var state = await fixture.GetStateAsync();
         Assert.Null(fixture.ViewModel.CurrentSessionId);
@@ -337,9 +336,11 @@ public class ChatViewModelTests
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
-        await fixture.ViewModel.TrySwitchToSessionAsync("session-1");
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "session-1" });
+        await Task.Delay(50);
 
         fixture.ViewModel.DeleteConversation("session-1");
+        await Task.Delay(50);
 
         var state = await fixture.GetStateAsync();
         Assert.Null(fixture.ViewModel.CurrentSessionId);
@@ -467,163 +468,31 @@ public class ChatViewModelTests
     }
 
     [Fact]
-    public async Task TrySwitchToSessionAsync_WaitsForUiStateBeforeCompleting()
+    public async Task StoreTranscript_ProjectsToMessageHistory()
     {
         var syncContext = new QueueingSynchronizationContext();
         await using var fixture = CreateViewModel(syncContext);
-        var viewModel = fixture.ViewModel;
-        var sessionId = Guid.NewGuid().ToString("N");
-        var syncField = typeof(ChatViewModel).GetField("_syncContext", BindingFlags.Instance | BindingFlags.NonPublic);
-        var capturedContext = syncField?.GetValue(viewModel);
-        Assert.Same(syncContext, capturedContext);
+        syncContext.RunAll();
 
-        var switchTask = viewModel.TrySwitchToSessionAsync(sessionId);
-        await Task.Yield();
-        Assert.False(switchTask.IsCompleted);
-        var deadline = DateTime.UtcNow.AddSeconds(2);
-        while (!switchTask.IsCompleted && DateTime.UtcNow < deadline)
+        var snapshot = new ConversationMessageSnapshot
         {
-            syncContext.RunAll();
-            await Task.Delay(TimeSpan.FromMilliseconds(10));
-        }
+            Id = "m-1",
+            ContentType = "text",
+            TextContent = "hello",
+            Timestamp = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)
+        };
 
-        var completed = await Task.WhenAny(switchTask, Task.Delay(TimeSpan.FromSeconds(2)));
-        Assert.Same(switchTask, completed);
-        await switchTask;
-
-        Assert.Equal(sessionId, viewModel.CurrentSessionId);
-    }
-
-    [Fact]
-    public async Task TrySwitchToSessionAsync_HydratesTranscriptThroughStoreProjection()
-    {
-        var syncContext = new QueueingSynchronizationContext();
-        var state = State.Value(new object(), () => ChatState.Empty);
-        var chatStore = new Mock<IChatStore>();
-        chatStore.Setup(s => s.State).Returns(state);
-        chatStore.Setup(s => s.Dispatch(It.IsAny<ChatAction>()))
-            .Returns<ChatAction>(action => state.Update(s => ChatReducer.Reduce(s!, action), default));
-
-        var transportFactory = new Mock<ITransportFactory>();
-        var messageParser = new Mock<IMessageParser>();
-        var messageValidator = new Mock<IMessageValidator>();
-        var errorLogger = new Mock<IErrorLogger>();
-        var capabilityManager = new Mock<ICapabilityManager>();
-        var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
-        var sessionManager = new Mock<ISessionManager>();
-        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
-            .Returns<string, string?>((sessionId, cwd) =>
-            {
-                var session = new Session(sessionId, cwd);
-                sessions[sessionId] = session;
-                return Task.FromResult(session);
-            });
-        sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
-            .Returns<string>(sessionId => sessions.TryGetValue(sessionId, out var session) ? session : null);
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((sessionId, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(sessionId, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
-            });
-        var serilog = new Mock<SerilogLogger>();
-
-        var chatServiceFactory = new ChatServiceFactory(
-            transportFactory.Object,
-            messageParser.Object,
-            messageValidator.Object,
-            errorLogger.Object,
-            capabilityManager.Object,
-            sessionManager.Object,
-            serilog.Object);
-
-        var configService = new Mock<IConfigurationService>();
-        var appSettingsService = new Mock<IAppSettingsService>();
-        appSettingsService.Setup(s => s.LoadAsync()).ReturnsAsync(new AppSettings());
-        var startupService = new Mock<IAppStartupService>();
-        startupService.SetupGet(s => s.IsSupported).Returns(false);
-        var languageService = new Mock<IAppLanguageService>();
-        var capabilities = new Mock<IPlatformCapabilityService>();
-        var uiRuntime = new Mock<IUiRuntimeService>();
-        var preferences = new AppPreferencesViewModel(
-            appSettingsService.Object,
-            startupService.Object,
-            languageService.Object,
-            capabilities.Object,
-            uiRuntime.Object,
-            Mock.Of<ILogger<AppPreferencesViewModel>>());
-        var profiles = new AcpProfilesViewModel(configService.Object, preferences, Mock.Of<ILogger<AcpProfilesViewModel>>());
-        var conversationStore = new Mock<IConversationStore>();
-        conversationStore.Setup(s => s.LoadAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new ConversationDocument());
-        var workspace = new ChatConversationWorkspace(
-            sessionManager.Object,
-            conversationStore.Object,
-            new AppPreferencesConversationWorkspacePreferences(preferences),
-            Mock.Of<ILogger<ChatConversationWorkspace>>(),
-            syncContext);
-        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
-            "session-1",
-            [new ConversationMessageSnapshot { Id = "m-1", ContentType = "text", TextContent = "hello", Timestamp = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc) }],
-            [],
-            false,
-            null,
-            new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
-            new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
-        await sessionManager.Object.CreateSessionAsync("session-1", @"C:\repo\demo");
-
-        var originalContext = SynchronizationContext.Current;
-        try
+        await fixture.UpdateStateAsync(state => state with
         {
-            SynchronizationContext.SetSynchronizationContext(syncContext);
-            using var viewModel = new ChatViewModel(
-                chatStore.Object,
-                chatServiceFactory,
-                configService.Object,
-                preferences,
-                profiles,
-                sessionManager.Object,
-                new Mock<IMiniWindowCoordinator>().Object,
-                workspace,
-                new ConversationCatalogPresenter(),
-                null,
-                null,
-                Mock.Of<ILogger<ChatViewModel>>(),
-                syncContext);
+            HydratedConversationId = "session-1",
+            Transcript = ImmutableList<ConversationMessageSnapshot>.Empty.Add(snapshot)
+        });
 
-            var switchTask = viewModel.TrySwitchToSessionAsync("session-1");
-            var deadline = DateTime.UtcNow.AddSeconds(2);
-            while (!switchTask.IsCompleted && DateTime.UtcNow < deadline)
-            {
-                syncContext.RunAll();
-                await Task.Delay(TimeSpan.FromMilliseconds(10)).ConfigureAwait(false);
-            }
+        await Task.Delay(50);
+        syncContext.RunAll();
 
-            syncContext.RunAll();
-            await switchTask.ConfigureAwait(false);
-            syncContext.RunAll();
-
-            var currentState = await state;
-            Assert.Single(viewModel.MessageHistory);
-            Assert.Equal("hello", viewModel.MessageHistory[0].TextContent);
-            Assert.Single(currentState!.Transcript!);
-            Assert.Equal("hello", currentState.Transcript![0].TextContent);
-        }
-        finally
-        {
-            SynchronizationContext.SetSynchronizationContext(originalContext);
-            workspace.Dispose();
-            await state.DisposeAsync();
-        }
+        Assert.Single(fixture.ViewModel.MessageHistory);
+        Assert.Equal("hello", fixture.ViewModel.MessageHistory[0].TextContent);
     }
 
     [Fact]
@@ -943,39 +812,6 @@ public class ChatViewModelTests
     }
 
     [Fact]
-    public async Task TrySwitchToSessionAsync_OnTargetSynchronizationContext_CompletesWithoutDeadlock()
-    {
-        var syncContext = new QueueingSynchronizationContext();
-        await using var fixture = CreateViewModel(syncContext);
-        var viewModel = fixture.ViewModel;
-        syncContext.RunAll();
-        var sessionId = Guid.NewGuid().ToString("N");
-
-        var original = SynchronizationContext.Current;
-        try
-        {
-            SynchronizationContext.SetSynchronizationContext(syncContext);
-            var switchTask = viewModel.TrySwitchToSessionAsync(sessionId);
-            var deadline = DateTime.UtcNow.AddSeconds(2);
-            while (!switchTask.IsCompleted && DateTime.UtcNow < deadline)
-            {
-                syncContext.RunAll();
-                await Task.Delay(TimeSpan.FromMilliseconds(10)).ConfigureAwait(false);
-            }
-
-            var completed = await Task.WhenAny(switchTask, Task.Delay(TimeSpan.FromSeconds(1))).ConfigureAwait(false);
-
-            Assert.Same(switchTask, completed);
-            Assert.True(await switchTask.ConfigureAwait(false));
-            Assert.Equal(sessionId, viewModel.CurrentSessionId);
-        }
-        finally
-        {
-            SynchronizationContext.SetSynchronizationContext(original);
-        }
-    }
-
-    [Fact]
     public async Task PlanEntries_CollectionChanges_RaiseDerivedPropertyNotifications()
     {
         var syncContext = new QueueingSynchronizationContext();
@@ -1029,16 +865,31 @@ public class ChatViewModelTests
         }
     }
 
+    private static void AssertNoLegacyConnectionActionsDispatched(Mock<IChatStore> chatStore)
+    {
+        var dispatchedActions = chatStore.Invocations
+            .Where(invocation => string.Equals(invocation.Method.Name, nameof(IChatStore.Dispatch), StringComparison.Ordinal))
+            .SelectMany(invocation => invocation.Arguments)
+            .OfType<ChatAction>();
+
+        Assert.DoesNotContain(dispatchedActions, action =>
+            action is SetConnectionLifecycleAction
+            or UpdateConnectionStatusAction
+            or SetAuthenticationStateAction);
+    }
+
     private sealed class ViewModelFixture : IDisposable, IAsyncDisposable
     {
         private readonly IState<ChatState> _state;
         private readonly IChatStore _store;
         private readonly ChatConversationWorkspace _workspace;
+        private readonly Mock<IChatStore> _chatStore;
         public ChatViewModel ViewModel { get; }
         public Mock<IConversationStore> ConversationStore { get; }
         public ChatConversationWorkspace Workspace => _workspace;
         public AppPreferencesViewModel Preferences { get; }
         public AcpProfilesViewModel Profiles { get; }
+        public Mock<IChatStore> ChatStore => _chatStore;
 
         public ViewModelFixture(
             ChatViewModel viewModel,
@@ -1047,7 +898,8 @@ public class ChatViewModelTests
             ChatConversationWorkspace workspace,
             Mock<IConversationStore> conversationStore,
             AppPreferencesViewModel preferences,
-            AcpProfilesViewModel profiles)
+            AcpProfilesViewModel profiles,
+            Mock<IChatStore> chatStore)
         {
             ViewModel = viewModel;
             _state = state;
@@ -1056,11 +908,15 @@ public class ChatViewModelTests
             ConversationStore = conversationStore;
             Preferences = preferences;
             Profiles = profiles;
+            _chatStore = chatStore;
         }
 
         public async Task<ChatState> GetStateAsync() => await _state ?? ChatState.Empty;
 
         public ValueTask DispatchAsync(ChatAction action) => _store.Dispatch(action);
+
+        public ValueTask UpdateStateAsync(Func<ChatState, ChatState> update)
+            => _state.Update(update, CancellationToken.None);
 
         public async ValueTask DisposeAsync()
         {

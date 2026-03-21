@@ -39,7 +39,8 @@ public sealed partial class StartViewModel : ObservableObject
         INavigationCoordinator navigationCoordinator,
         MainNavigationViewModel nav,
         ILogger<StartViewModel> logger,
-        IChatLaunchWorkflow? chatLaunchWorkflow = null)
+        IChatLaunchWorkflow? chatLaunchWorkflow = null,
+        IChatConnectionStore? chatConnectionStore = null)
     {
         Chat = chatViewModel ?? throw new ArgumentNullException(nameof(chatViewModel));
         ArgumentNullException.ThrowIfNull(sessionManager);
@@ -47,9 +48,10 @@ public sealed partial class StartViewModel : ObservableObject
         ArgumentNullException.ThrowIfNull(navigationCoordinator);
         _nav = nav ?? throw new ArgumentNullException(nameof(nav));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        // DI stays untouched in this slice, so Start can fall back to a local workflow until the service is wired centrally.
         _chatLaunchWorkflow = chatLaunchWorkflow ?? new ChatLaunchWorkflow(
-            new ChatLaunchWorkflowChatFacadeAdapter(Chat),
+            new ChatLaunchWorkflowChatFacadeAdapter(
+                Chat,
+                chatConnectionStore ?? throw new ArgumentNullException(nameof(chatConnectionStore))),
             sessionManager,
             _preferences,
             navigationCoordinator,

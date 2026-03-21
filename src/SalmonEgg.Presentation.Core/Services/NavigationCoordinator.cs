@@ -13,6 +13,8 @@ public sealed class NavigationCoordinator : INavigationCoordinator
     private readonly IConversationActivationCoordinator _conversationActivationCoordinator;
     private readonly INavigationProjectSelectionStore _projectSelectionStore;
     private readonly IShellNavigationService _shellNavigationService;
+    private long _activationTokenCounter;
+    private long _latestActivationToken;
 
     public NavigationCoordinator(
         IShellSelectionMutationSink selectionSink,
@@ -30,8 +32,9 @@ public sealed class NavigationCoordinator : INavigationCoordinator
     {
         try
         {
-            var navigationResult = await _shellNavigationService.NavigateToStart().ConfigureAwait(true);
-            if (navigationResult.Succeeded)
+            var activationToken = BeginActivation();
+            var navigationResult = await NavigateToStartAsync(activationToken).ConfigureAwait(true);
+            if (navigationResult.Succeeded && IsLatestActivationToken(activationToken))
             {
                 _selectionSink.SetSelection(NavigationSelectionState.StartSelection);
             }
@@ -45,10 +48,12 @@ public sealed class NavigationCoordinator : INavigationCoordinator
     {
         try
         {
-            var navigationResult = await _shellNavigationService
-                .NavigateToSettings(string.IsNullOrWhiteSpace(settingsKey) ? "General" : settingsKey)
+            var activationToken = BeginActivation();
+            var navigationResult = await NavigateToSettingsAsync(
+                    string.IsNullOrWhiteSpace(settingsKey) ? "General" : settingsKey,
+                    activationToken)
                 .ConfigureAwait(true);
-            if (navigationResult.Succeeded)
+            if (navigationResult.Succeeded && IsLatestActivationToken(activationToken))
             {
                 _selectionSink.SetSelection(NavigationSelectionState.SettingsSelection);
             }
@@ -65,6 +70,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
             return false;
         }
 
+        var activationToken = BeginActivation();
         var activationResult = await _conversationActivationCoordinator
             .ActivateSessionAsync(sessionId)
             .ConfigureAwait(true);
@@ -75,8 +81,8 @@ public sealed class NavigationCoordinator : INavigationCoordinator
 
         try
         {
-            var navigationResult = await _shellNavigationService.NavigateToChat().ConfigureAwait(true);
-            if (!navigationResult.Succeeded)
+            var navigationResult = await NavigateToChatAsync(activationToken).ConfigureAwait(true);
+            if (!navigationResult.Succeeded || !IsLatestActivationToken(activationToken))
             {
                 return false;
             }
@@ -108,4 +114,42 @@ public sealed class NavigationCoordinator : INavigationCoordinator
                 return;
         }
     }
+
+    private long BeginActivation()
+    {
+        var activationToken = Interlocked.Increment(ref _activationTokenCounter);
+        Interlocked.Exchange(ref _latestActivationToken, activationToken);
+        return activationToken;
+    }
+
+    private bool IsLatestActivationToken(long activationToken)
+        => Interlocked.Read(ref _latestActivationToken) == activationToken;
+
+    private ValueTask<ShellNavigationResult> NavigateToStartAsync(long activationToken)
+    {
+        return _shellNavigationService is IActivationTokenShellNavigationService tokenAware
+            ? tokenAware.NavigateToStart(activationToken)
+            : _shellNavigationService.NavigateToStart();
+    }
+
+    private ValueTask<ShellNavigationResult> NavigateToChatAsync(long activationToken)
+    {
+        return _shellNavigationService is IActivationTokenShellNavigationService tokenAware
+            ? tokenAware.NavigateToChat(activationToken)
+            : _shellNavigationService.NavigateToChat();
+    }
+
+    private ValueTask<ShellNavigationResult> NavigateToSettingsAsync(string key, long activationToken)
+    {
+        return _shellNavigationService is IActivationTokenShellNavigationService tokenAware
+            ? tokenAware.NavigateToSettings(key, activationToken)
+            : _shellNavigationService.NavigateToSettings(key);
+    }
+}
+
+public interface IActivationTokenShellNavigationService
+{
+    ValueTask<ShellNavigationResult> NavigateToSettings(string key, long activationToken);
+    ValueTask<ShellNavigationResult> NavigateToChat(long activationToken);
+    ValueTask<ShellNavigationResult> NavigateToStart(long activationToken);
 }

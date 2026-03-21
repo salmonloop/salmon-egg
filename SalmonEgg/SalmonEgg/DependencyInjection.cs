@@ -1,3 +1,5 @@
+using System;
+using System.Threading;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -147,6 +149,12 @@ public static class DependencyInjection
         // MVUX Chat Store
         services.AddSingleton<IState<ChatState>>(sp => State.Value(sp, () => ChatState.Empty));
         services.AddSingleton<IChatStore, ChatStore>();
+        services.AddSingleton<IState<ChatConnectionState>>(sp => State.Value(sp, () => ChatConnectionState.Empty));
+        services.AddSingleton<IChatConnectionStore, ChatConnectionStore>();
+        services.AddSingleton<IAcpConnectionCoordinator>(sp =>
+            new AcpConnectionCoordinator(
+                sp.GetRequiredService<IChatConnectionStore>(),
+                sp.GetRequiredService<ILogger<AcpConnectionCoordinator>>()));
 
         // MVUX Shell Layout Store
         services.AddSingleton<IShellLayoutStore>(sp =>
@@ -206,7 +214,8 @@ public static class DependencyInjection
         services.AddTransient<ConfigurationEditorViewModel>();
         services.AddSingleton<IConversationWorkspacePreferences>(sp =>
             new AppPreferencesConversationWorkspacePreferences(sp.GetRequiredService<AppPreferencesViewModel>()));
-        services.AddSingleton<IChatStateProjector, ChatStateProjector>();
+        services.AddSingleton<IChatStateProjector>(sp =>
+            new ChatStateProjector(sp.GetRequiredService<IChatConnectionStore>()));
         services.AddSingleton<IAcpSessionUpdateProjector, AcpSessionUpdateProjector>();
 
         // New Chat ViewModel (refactored)
@@ -224,13 +233,27 @@ public static class DependencyInjection
         services.AddSingleton<ISettingsChatConnection>(sp =>
             new SettingsChatConnectionAdapter(sp.GetRequiredService<ChatViewModel>()));
         services.AddSingleton<IChatLaunchWorkflowChatFacade>(sp =>
-            new ChatLaunchWorkflowChatFacadeAdapter(sp.GetRequiredService<ChatViewModel>()));
+            new ChatLaunchWorkflowChatFacadeAdapter(
+                sp.GetRequiredService<ChatViewModel>(),
+                sp.GetRequiredService<IChatConnectionStore>()));
         services.AddSingleton<IChatSessionCatalog>(sp =>
             new ChatViewModelSessionCatalogAdapter(sp.GetRequiredService<IConversationCatalog>()));
 
         // Extracted workspace is still registered so ChatViewModel can delegate local conversation state.
         services.AddSingleton<ChatConversationWorkspace>();
-        services.AddSingleton<IConversationBindingCommands>(sp => sp.GetRequiredService<ChatConversationWorkspace>());
+        services.AddSingleton<BindingCoordinator>(sp =>
+            new BindingCoordinator(
+                sp.GetRequiredService<ChatConversationWorkspace>(),
+                sp.GetRequiredService<IChatStore>()));
+        services.AddSingleton<IConversationBindingCommands>(sp => sp.GetRequiredService<BindingCoordinator>());
+        services.AddSingleton<IWorkspaceWriter>(sp =>
+            new WorkspaceWriter(sp.GetRequiredService<ChatConversationWorkspace>()));
+        services.AddSingleton<Func<Action<SessionUpdateEventArgs>, SynchronizationContext, Action?, AcpEventAdapter>>(sp =>
+            (handler, syncContext, resyncRequired) => new AcpEventAdapter(
+                handler,
+                syncContext,
+                resyncRequired: resyncRequired,
+                logger: sp.GetService<ILogger<AcpEventAdapter>>()));
         services.AddSingleton<IConversationActivationCoordinator>(sp =>
             new ConversationActivationCoordinator(
                 sp.GetRequiredService<ChatConversationWorkspace>(),

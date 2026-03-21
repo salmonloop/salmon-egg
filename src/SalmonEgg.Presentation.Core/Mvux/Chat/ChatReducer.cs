@@ -7,85 +7,102 @@ namespace SalmonEgg.Presentation.Core.Mvux.Chat;
 
 public static class ChatReducer
 {
-    public static ChatState Reduce(ChatState state, ChatAction action)
+    public static ChatState Reduce(ChatState? state, ChatAction action)
     {
+        var current = state ?? ChatState.Empty;
+
         return action switch
         {
-            SelectConversationAction selectConversation => state with
+            SelectConversationAction selectConversation => Mutate(current, current with
             {
                 SelectedConversationId = null,
                 HydratedConversationId = selectConversation.ConversationId,
+                Binding = null,
                 Transcript = null,
                 PlanEntries = null,
                 ShowPlanPanel = false,
                 PlanTitle = null,
                 IsPromptInFlight = false,
                 IsThinking = false
-            },
-            SelectProfileAction selectProfile => state with { SelectedAcpProfileId = selectProfile.ProfileId },
-            SetDraftTextAction draftText => state with { DraftText = draftText.Text },
-            SetPromptInFlightAction setPromptInFlight => state with { IsPromptInFlight = setPromptInFlight.IsInFlight },
-            SetIsThinkingAction setIsThinking => state with { IsThinking = setIsThinking.IsThinking },
-            AddMessageAction addMessage => state with
+            }),
+            SetBindingSliceAction setBinding => Mutate(current, current with { Binding = setBinding.Binding }),
+            SelectProfileAction selectProfile => Mutate(current, current with { SelectedAcpProfileId = selectProfile.ProfileId }),
+            SetDraftTextAction draftText => Mutate(current, current with { DraftText = draftText.Text }),
+            SetPromptInFlightAction setPromptInFlight => Mutate(current, current with { IsPromptInFlight = setPromptInFlight.IsInFlight }),
+            SetIsThinkingAction setIsThinking => Mutate(current, current with { IsThinking = setIsThinking.IsThinking }),
+            AddMessageAction addMessage => Mutate(current, current with
             {
-                Transcript = UpsertTranscript(state.Transcript, ToSnapshot(addMessage.Message))
-            },
-            HydrateConversationAction hydrate when !string.Equals(hydrate.ConversationId, state.HydratedConversationId, StringComparison.Ordinal)
-                => state,
-            HydrateConversationAction hydrate => state with
+                Transcript = UpsertTranscript(current.Transcript, ToSnapshot(addMessage.Message))
+            }),
+            HydrateConversationAction hydrate when !string.Equals(hydrate.ConversationId, current.HydratedConversationId, StringComparison.Ordinal)
+                => current,
+            HydrateConversationAction hydrate => Mutate(current, current with
             {
                 Transcript = hydrate.Transcript,
                 PlanEntries = hydrate.PlanEntries,
                 ShowPlanPanel = hydrate.ShowPlanPanel,
                 PlanTitle = hydrate.PlanTitle
-            },
-            ReplacePlanEntriesAction replacePlan when !string.Equals(replacePlan.ConversationId, state.HydratedConversationId, StringComparison.Ordinal)
-                => state,
-            ReplacePlanEntriesAction replacePlan => state with
+            }),
+            ReplacePlanEntriesAction replacePlan when !string.Equals(replacePlan.ConversationId, current.HydratedConversationId, StringComparison.Ordinal)
+                => current,
+            ReplacePlanEntriesAction replacePlan => Mutate(current, current with
             {
                 PlanEntries = replacePlan.PlanEntries,
                 ShowPlanPanel = replacePlan.ShowPlanPanel,
                 PlanTitle = replacePlan.PlanTitle
-            },
-            UpsertTranscriptMessageAction upsertMessage when !string.Equals(upsertMessage.ConversationId, state.HydratedConversationId, StringComparison.Ordinal)
-                => state,
-            UpsertTranscriptMessageAction upsertMessage => state with
+            }),
+            UpsertTranscriptMessageAction upsertMessage when !string.Equals(upsertMessage.ConversationId, current.HydratedConversationId, StringComparison.Ordinal)
+                => current,
+            UpsertTranscriptMessageAction upsertMessage => Mutate(current, current with
             {
-                Transcript = UpsertTranscript(state.Transcript, upsertMessage.Message)
-            },
-            UpdateMessageAction updateMessage => state with
+                Transcript = UpsertTranscript(current.Transcript, upsertMessage.Message)
+            }),
+            UpdateMessageAction updateMessage => Mutate(current, current with
             {
-                Transcript = UpsertTranscript(state.Transcript, ToSnapshot(updateMessage.Message))
-            },
-            AppendTextDeltaAction appendDelta when !string.Equals(appendDelta.ConversationId, state.HydratedConversationId, StringComparison.Ordinal)
-                => state,
-            AppendTextDeltaAction appendDelta => state with
+                Transcript = UpsertTranscript(current.Transcript, ToSnapshot(updateMessage.Message))
+            }),
+            AppendTextDeltaAction appendDelta when !string.Equals(appendDelta.ConversationId, current.HydratedConversationId, StringComparison.Ordinal)
+                => current,
+            AppendTextDeltaAction appendDelta => Mutate(current, current with
             {
-                Transcript = AppendTranscriptDelta(state.Transcript, appendDelta.Delta)
-            },
-            SetConnectionLifecycleAction lifecycle => state with
+                Transcript = AppendTranscriptDelta(current.Transcript, appendDelta.Delta)
+            }),
+            SetConnectionLifecycleAction lifecycle => Mutate(current, current with
             {
                 IsConnecting = lifecycle.IsConnecting,
                 IsInitializing = lifecycle.IsInitialized,
                 ConnectionStatus = lifecycle.IsConnected ? "Connected" : "Disconnected",
                 ConnectionError = lifecycle.ErrorMessage
-            },
-            SetAuthenticationStateAction authentication => state with
+            }),
+            SetAuthenticationStateAction authentication => Mutate(current, current with
             {
                 IsAuthenticationRequired = authentication.IsRequired,
                 AuthenticationHintMessage = authentication.HintMessage
-            },
-            SetAgentIdentityAction identity => state with
+            }),
+            SetAgentIdentityAction identity => Mutate(current, current with
             {
                 AgentName = identity.AgentName,
                 AgentVersion = identity.AgentVersion
-            },
-            UpdateConnectionStatusAction updateStatus => state with
+            }),
+            UpdateConnectionStatusAction updateStatus => Mutate(current, current with
             {
                 ConnectionStatus = updateStatus.IsConnected ? "Connected" : "Disconnected",
                 ConnectionError = updateStatus.ErrorMessage
-            },
-            _ => state
+            }),
+            _ => current
+        };
+    }
+
+    private static ChatState Mutate(ChatState current, ChatState next)
+    {
+        if (current == next)
+        {
+            return current;
+        }
+
+        return next with
+        {
+            Generation = checked(current.Generation + 1)
         };
     }
 

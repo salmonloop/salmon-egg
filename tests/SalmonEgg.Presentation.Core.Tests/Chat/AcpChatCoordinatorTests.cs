@@ -11,6 +11,7 @@ using SalmonEgg.Domain.Models.Content;
 using SalmonEgg.Domain.Models.JsonRpc;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Models.Session;
+using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using Xunit;
 
@@ -19,6 +20,17 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
 public sealed class AcpChatCoordinatorTests
 {
     [Fact]
+    public void IAcpChatCoordinatorSink_RequiresExplicitConversationBindingCommands()
+    {
+        var getter = typeof(IAcpChatCoordinatorSink)
+            .GetProperty(nameof(IAcpChatCoordinatorSink.ConversationBindingCommands))?
+            .GetMethod;
+
+        Assert.NotNull(getter);
+        Assert.True(getter!.IsAbstract);
+    }
+
+    [Fact]
     public async Task ConnectToProfileAsync_MapsProfileToTransportAndInitializesService()
     {
         var transport = new FakeTransportConfiguration();
@@ -26,12 +38,16 @@ public sealed class AcpChatCoordinatorTests
         var service = CreateChatService();
         var factory = new Mock<IAcpChatServiceFactory>();
         var logger = new Mock<ILogger<AcpChatCoordinator>>();
+        var connectionCoordinator = new Mock<IAcpConnectionCoordinator>();
 
         factory
             .Setup(x => x.CreateChatService(TransportType.Stdio, "agent.exe", "--serve", null))
             .Returns(service.Object);
 
-        var sut = new AcpChatCoordinator(factory.Object, logger.Object);
+        var sut = new AcpChatCoordinator(
+            factory.Object,
+            logger.Object,
+            connectionCoordinator: connectionCoordinator.Object);
         var profile = new ServerConfiguration
         {
             Id = "profile-1",
@@ -47,14 +63,21 @@ public sealed class AcpChatCoordinatorTests
         Assert.Equal("agent.exe", transport.StdioCommand);
         Assert.Equal("--serve", transport.StdioArgs);
         Assert.Equal(string.Empty, transport.RemoteUrl);
-        Assert.Same(service.Object, sink.CurrentChatService);
+        Assert.IsType<AcpChatServiceAdapter>(sink.CurrentChatService);
         Assert.Equal("profile-1", sink.SelectedProfileId);
-        Assert.True(sink.IsConnected);
-        Assert.True(sink.IsInitialized);
         Assert.Equal("agent", sink.AgentName);
         Assert.Equal("1.0.0", sink.AgentVersion);
-        Assert.Same(service.Object, result.ChatService);
+        Assert.IsType<AcpChatServiceAdapter>(result.ChatService);
         service.Verify(x => x.InitializeAsync(It.IsAny<InitializeParams>()), Times.Once);
+        connectionCoordinator.Verify(
+            x => x.SetConnectingAsync("profile-1", It.IsAny<CancellationToken>()),
+            Times.Once);
+        connectionCoordinator.Verify(
+            x => x.SetConnectedAsync("profile-1", It.IsAny<CancellationToken>()),
+            Times.Once);
+        connectionCoordinator.Verify(
+            x => x.ClearAuthenticationRequiredAsync(It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]
@@ -83,8 +106,8 @@ public sealed class AcpChatCoordinatorTests
         var result = await sut.ApplyTransportConfigurationAsync(transport, sink, preserveConversation: true);
 
         oldService.Verify(x => x.DisconnectAsync(), Times.Once);
-        Assert.Same(newService.Object, sink.CurrentChatService);
-        Assert.Same(newService.Object, result.ChatService);
+        Assert.IsType<AcpChatServiceAdapter>(sink.CurrentChatService);
+        Assert.IsType<AcpChatServiceAdapter>(result.ChatService);
     }
 
     [Fact]
@@ -114,8 +137,9 @@ public sealed class AcpChatCoordinatorTests
 
         Assert.Equal("remote-session-1", result.RemoteSessionId);
         Assert.Equal("remote-session-1", sink.CurrentRemoteSessionId);
-        Assert.Single(sink.BoundRemoteSessions);
-        Assert.Equal("profile-1", sink.BoundRemoteSessions[0].ProfileId);
+        Assert.Single(sink.BindingCommands.Updates);
+        Assert.Equal("local-session-1", sink.BindingCommands.Updates[0].ConversationId);
+        Assert.Equal("profile-1", sink.BindingCommands.Updates[0].ProfileId);
     }
 
     [Fact]
@@ -162,8 +186,10 @@ public sealed class AcpChatCoordinatorTests
 
         Assert.True(result.RetriedAfterSessionRecovery);
         Assert.Equal("remote-session-2", result.RemoteSessionId);
-        Assert.Equal(1, sink.ClearedRemoteSessionBindings);
         Assert.Equal("remote-session-2", sink.CurrentRemoteSessionId);
+        Assert.Equal(2, sink.BindingCommands.Updates.Count);
+        Assert.Null(sink.BindingCommands.Updates[0].RemoteSessionId);
+        Assert.Equal("remote-session-2", sink.BindingCommands.Updates[1].RemoteSessionId);
         service.Verify(x => x.SendPromptAsync(It.IsAny<SessionPromptParams>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
@@ -203,20 +229,107 @@ public sealed class AcpChatCoordinatorTests
             CurrentChatService = service.Object,
             IsConnected = true,
             IsInitialized = true,
+            CurrentSessionId = "local-session-1",
             CurrentRemoteSessionId = "remote-session-3"
         };
         var factory = new Mock<IAcpChatServiceFactory>();
         var logger = new Mock<ILogger<AcpChatCoordinator>>();
-        var sut = new AcpChatCoordinator(factory.Object, logger.Object);
+        var connectionCoordinator = new Mock<IAcpConnectionCoordinator>();
+        var sut = new AcpChatCoordinator(
+            factory.Object,
+            logger.Object,
+            connectionCoordinator: connectionCoordinator.Object);
 
         await sut.DisconnectAsync(sink);
 
         service.Verify(x => x.DisconnectAsync(), Times.Once);
         Assert.Null(sink.CurrentChatService);
-        Assert.False(sink.IsConnected);
-        Assert.False(sink.IsInitialized);
         Assert.Null(sink.CurrentRemoteSessionId);
-        Assert.Equal(1, sink.ClearedRemoteSessionBindings);
+        Assert.Equal(1, sink.BindingCommands.ClearCalls);
+        connectionCoordinator.Verify(
+            x => x.ResetAsync(It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task ApplyTransportConfigurationAsync_BufferOverflow_DelegatesResyncToConnectionCoordinator()
+    {
+        var transport = new FakeTransportConfiguration
+        {
+            SelectedTransportType = TransportType.WebSocket,
+            RemoteUrl = "wss://agent.test"
+        };
+        var service = CreateChatService();
+        var sink = new FakeSink
+        {
+            IsSessionActive = true,
+            CurrentSessionId = "local-session-1"
+        };
+        var factory = new Mock<IAcpChatServiceFactory>();
+        var logger = new Mock<ILogger<AcpChatCoordinator>>();
+        var connectionCoordinator = new Mock<IAcpConnectionCoordinator>();
+
+        factory
+            .Setup(x => x.CreateChatService(TransportType.WebSocket, null, null, "wss://agent.test"))
+            .Returns(service.Object);
+
+        var sut = new AcpChatCoordinator(
+            factory.Object,
+            logger.Object,
+            connectionCoordinator: connectionCoordinator.Object,
+            sessionUpdateBufferLimit: 1);
+
+        await sut.ApplyTransportConfigurationAsync(transport, sink, preserveConversation: true);
+
+        service.Raise(
+            x => x.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs("remote-session-1", new PlanUpdate(title: "one")));
+        service.Raise(
+            x => x.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs("remote-session-1", new PlanUpdate(title: "two")));
+
+        connectionCoordinator.Verify(
+            x => x.ResyncAsync(sink, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task ApplyTransportConfigurationAsync_GenerationAdvanced_ReleasesBufferedUpdatesImmediately()
+    {
+        var transport = new FakeTransportConfiguration
+        {
+            SelectedTransportType = TransportType.WebSocket,
+            RemoteUrl = "wss://agent.test"
+        };
+        var service = CreateChatService();
+        var sink = new FakeSink
+        {
+            IsSessionActive = true,
+            CurrentSessionId = "local-session-1",
+            ConnectionGeneration = 1
+        };
+        var updates = new List<SessionUpdateEventArgs>();
+        var factory = new Mock<IAcpChatServiceFactory>();
+        var logger = new Mock<ILogger<AcpChatCoordinator>>();
+        var connectionCoordinator = new Mock<IAcpConnectionCoordinator>();
+
+        factory
+            .Setup(x => x.CreateChatService(TransportType.WebSocket, null, null, "wss://agent.test"))
+            .Returns(service.Object);
+
+        var sut = new AcpChatCoordinator(
+            factory.Object,
+            logger.Object,
+            connectionCoordinator: connectionCoordinator.Object);
+
+        await sut.ApplyTransportConfigurationAsync(transport, sink, preserveConversation: true);
+        sink.CurrentChatService!.SessionUpdateReceived += (_, args) => updates.Add(args);
+
+        service.Raise(
+            x => x.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs("remote-session-1", new PlanUpdate(title: "immediate")));
+
+        Assert.Single(updates);
     }
 
     private static Mock<IChatService> CreateChatService()
@@ -251,6 +364,11 @@ public sealed class AcpChatCoordinatorTests
 
     private sealed class FakeSink : IAcpChatCoordinatorSink
     {
+        public FakeSink()
+        {
+            BindingCommands = new FakeBindingCommands(this);
+        }
+
         public event PropertyChangedEventHandler? PropertyChanged
         {
             add { }
@@ -258,6 +376,7 @@ public sealed class AcpChatCoordinatorTests
         }
 
         public IChatService? CurrentChatService { get; set; }
+        public IConversationBindingCommands ConversationBindingCommands => BindingCommands;
         public bool IsConnected { get; set; }
         public bool IsInitialized { get; set; }
         public bool IsConnecting { get; private set; }
@@ -271,9 +390,12 @@ public sealed class AcpChatCoordinatorTests
         public string? CurrentSessionId { get; set; }
         public string? CurrentRemoteSessionId { get; set; }
         public string? SelectedProfileId { get; set; }
+        public SynchronizationContext SessionUpdateSynchronizationContext { get; set; } = new ImmediateSynchronizationContext();
+        public long ConnectionGeneration { get; set; }
         public string ActiveSessionCwd { get; set; } = string.Empty;
         public int ClearedRemoteSessionBindings { get; private set; }
         public List<(string RemoteSessionId, string? ProfileId, bool PreserveConversation)> BoundRemoteSessions { get; } = new();
+        public FakeBindingCommands BindingCommands { get; }
 
         public void SelectProfile(ServerConfiguration profile)
         {
@@ -323,5 +445,38 @@ public sealed class AcpChatCoordinatorTests
         }
 
         public string GetActiveSessionCwdOrDefault() => ActiveSessionCwd;
+    }
+
+    private sealed class FakeBindingCommands : IConversationBindingCommands
+    {
+        private readonly FakeSink _sink;
+
+        public FakeBindingCommands(FakeSink sink)
+        {
+            _sink = sink;
+        }
+
+        public List<(string ConversationId, string? RemoteSessionId, string? ProfileId)> Updates { get; } = new();
+
+        public int ClearCalls { get; private set; }
+
+        public ValueTask<BindingUpdateResult> UpdateBindingAsync(string conversationId, string? remoteSessionId, string? boundProfileId)
+        {
+            Updates.Add((conversationId, remoteSessionId, boundProfileId));
+            _sink.CurrentRemoteSessionId = remoteSessionId;
+            if (string.IsNullOrWhiteSpace(remoteSessionId))
+            {
+                ClearCalls++;
+            }
+            return ValueTask.FromResult(BindingUpdateResult.Success());
+        }
+    }
+
+    private sealed class ImmediateSynchronizationContext : SynchronizationContext
+    {
+        public override void Post(SendOrPostCallback d, object? state)
+        {
+            d(state);
+        }
     }
 }

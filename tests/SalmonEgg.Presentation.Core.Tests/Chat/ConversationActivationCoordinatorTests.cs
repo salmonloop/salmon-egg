@@ -25,6 +25,174 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
 public sealed class ConversationActivationCoordinatorTests
 {
     [Fact]
+    public async Task ActivateSessionAsync_SkipsHydrate_WhenGenerationIsNonZero()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var preferences = CreatePreferences(syncContext);
+        var workspaceStore = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
+        using var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript:
+            [
+                CreateTextMessage("m-1", "hello")
+            ],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+
+        var state = State.Value(this, () => ChatState.Empty with { Generation = 1 });
+        var chatStore = CreateChatStore(state);
+        var bindingCommands = new BindingCoordinator(workspace, chatStore.Object);
+        var coordinator = new ConversationActivationCoordinator(
+            workspace,
+            bindingCommands,
+            chatStore.Object,
+            preferences,
+            Mock.Of<ILogger<ConversationActivationCoordinator>>());
+
+        var result = await coordinator.ActivateSessionAsync("session-1");
+
+        Assert.True(result.Succeeded);
+        var currentState = await state;
+        Assert.Equal("session-1", currentState.HydratedConversationId);
+        Assert.True(currentState.Transcript is null or { Count: 0 });
+    }
+
+    [Fact]
+    public async Task ActivateSessionAsync_DoesNotRehydrateBindingFromWorkspace_WhenGenerationIsNonZero()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var preferences = CreatePreferences(syncContext);
+        var workspaceStore = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
+        using var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+        workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-a");
+
+        var state = State.Value(this, () => ChatState.Empty with { Generation = 1 });
+        var chatStore = CreateChatStore(state);
+        var bindingCommands = new BindingCoordinator(workspace, chatStore.Object);
+        var coordinator = new ConversationActivationCoordinator(
+            workspace,
+            bindingCommands,
+            chatStore.Object,
+            preferences,
+            Mock.Of<ILogger<ConversationActivationCoordinator>>());
+
+        var result = await coordinator.ActivateSessionAsync("session-1");
+
+        Assert.True(result.Succeeded);
+        var currentState = await state;
+        Assert.Equal("session-1", currentState.HydratedConversationId);
+        Assert.Null(currentState.Binding);
+    }
+
+    [Fact]
+    public async Task ActivateSessionAsync_SkipsHydrate_WhenStoreAlreadyHasBindingData()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var preferences = CreatePreferences(syncContext);
+        var workspaceStore = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
+        using var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript:
+            [
+                CreateTextMessage("m-1", "hello")
+            ],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+
+        var state = State.Value(this, () => ChatState.Empty with
+        {
+            Binding = new ConversationBindingSlice("conv-1", "remote-1", "profile-1")
+        });
+        var chatStore = CreateChatStore(state);
+        var bindingCommands = new BindingCoordinator(workspace, chatStore.Object);
+        var coordinator = new ConversationActivationCoordinator(
+            workspace,
+            bindingCommands,
+            chatStore.Object,
+            preferences,
+            Mock.Of<ILogger<ConversationActivationCoordinator>>());
+
+        var result = await coordinator.ActivateSessionAsync("session-1");
+
+        Assert.True(result.Succeeded);
+        var currentState = await state;
+        Assert.Equal("session-1", currentState.HydratedConversationId);
+        Assert.True(currentState.Transcript is null or { Count: 0 });
+    }
+
+    [Fact]
+    public async Task ActivateSessionAsync_HydratesSnapshot_WhenStoreIsEmptyAndGenerationIsZero()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var preferences = CreatePreferences(syncContext);
+        var workspaceStore = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
+        using var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript:
+            [
+                CreateTextMessage("m-1", "hello")
+            ],
+            Plan:
+            [
+                new ConversationPlanEntrySnapshot
+                {
+                    Content = "step-1",
+                    Status = PlanEntryStatus.InProgress,
+                    Priority = PlanEntryPriority.High
+                }
+            ],
+            ShowPlanPanel: true,
+            PlanTitle: "plan",
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+
+        var state = State.Value(this, () => ChatState.Empty);
+        var chatStore = CreateChatStore(state);
+        var bindingCommands = new BindingCoordinator(workspace, chatStore.Object);
+        var coordinator = new ConversationActivationCoordinator(
+            workspace,
+            bindingCommands,
+            chatStore.Object,
+            preferences,
+            Mock.Of<ILogger<ConversationActivationCoordinator>>());
+
+        var result = await coordinator.ActivateSessionAsync("session-1");
+
+        Assert.True(result.Succeeded);
+        var currentState = await state;
+        Assert.Equal("session-1", currentState.HydratedConversationId);
+        Assert.NotNull(currentState.Transcript);
+        Assert.Single(currentState.Transcript!);
+        Assert.NotNull(currentState.PlanEntries);
+        Assert.Single(currentState.PlanEntries!);
+    }
+
+    [Fact]
     public async Task ActivateSessionAsync_CommitsVisibleShellSelection_OnlyAfterActivationSucceeds()
     {
         var activationGate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -85,9 +253,10 @@ public sealed class ConversationActivationCoordinatorTests
 
         var state = State.Value(new object(), () => ChatState.Empty);
         var chatStore = CreateChatStore(state);
+        var bindingCommands = new BindingCoordinator(workspace, chatStore.Object);
         var coordinator = new ConversationActivationCoordinator(
             workspace,
-            workspace,
+            bindingCommands,
             chatStore.Object,
             preferences,
             Mock.Of<ILogger<ConversationActivationCoordinator>>());
@@ -99,10 +268,12 @@ public sealed class ConversationActivationCoordinatorTests
         var currentState = await state;
         Assert.Equal("session-1", currentState.HydratedConversationId);
         Assert.Null(currentState.SelectedConversationId);
-        var binding = workspace.GetRemoteBinding("session-1");
-        Assert.NotNull(binding);
-        Assert.Equal("profile-b", binding!.BoundProfileId);
-        Assert.Null(binding.RemoteSessionId);
+        Assert.Equal(new ConversationBindingSlice("session-1", null, "profile-b"), currentState.Binding);
+
+        var workspaceBinding = workspace.GetRemoteBinding("session-1");
+        Assert.NotNull(workspaceBinding);
+        Assert.Equal("profile-b", workspaceBinding!.BoundProfileId);
+        Assert.Null(workspaceBinding.RemoteSessionId);
     }
 
     [Fact]
@@ -126,9 +297,10 @@ public sealed class ConversationActivationCoordinatorTests
         var state = State.Value(new object(), () => ChatState.Empty);
         await state.Update(_ => ChatReducer.Reduce(ChatState.Empty, new SelectConversationAction("session-1")), default);
         var chatStore = CreateChatStore(state);
+        var bindingCommands = new BindingCoordinator(workspace, chatStore.Object);
         var coordinator = new ConversationActivationCoordinator(
             workspace,
-            workspace,
+            bindingCommands,
             chatStore.Object,
             preferences,
             Mock.Of<ILogger<ConversationActivationCoordinator>>());
@@ -164,9 +336,10 @@ public sealed class ConversationActivationCoordinatorTests
         var state = State.Value(new object(), () => ChatState.Empty);
         await state.Update(_ => ChatReducer.Reduce(ChatState.Empty, new SelectConversationAction("session-1")), default);
         var chatStore = CreateChatStore(state);
+        var bindingCommands = new BindingCoordinator(workspace, chatStore.Object);
         var coordinator = new ConversationActivationCoordinator(
             workspace,
-            workspace,
+            bindingCommands,
             chatStore.Object,
             preferences,
             Mock.Of<ILogger<ConversationActivationCoordinator>>());
