@@ -800,16 +800,60 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         try
         {
             await _conversationWorkspace.RestoreAsync().ConfigureAwait(false);
+            await RestoreConversationBindingsFromWorkspaceAsync().ConfigureAwait(false);
             var restoredConversationId = _conversationWorkspace.LastActiveConversationId;
-            await _chatStore.Dispatch(new SelectConversationAction(restoredConversationId)).ConfigureAwait(false);
-            await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
-
-            await SelectAndHydrateConversationAsync(_conversationWorkspace.LastActiveConversationId).ConfigureAwait(false);
+            await BootstrapSelectedProfileFromWorkspaceAsync(restoredConversationId).ConfigureAwait(false);
+            await SelectAndHydrateConversationAsync(restoredConversationId).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             Logger.LogDebug(ex, "Conversation workspace restore failed");
         }
+    }
+
+    private async Task RestoreConversationBindingsFromWorkspaceAsync()
+    {
+        foreach (var conversationId in _conversationWorkspace.GetKnownConversationIds())
+        {
+            var binding = _conversationWorkspace.GetRemoteBinding(conversationId);
+            if (binding is null)
+            {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(binding.RemoteSessionId) && string.IsNullOrWhiteSpace(binding.BoundProfileId))
+            {
+                continue;
+            }
+
+            await _chatStore.Dispatch(new SetBindingSliceAction(
+                new ConversationBindingSlice(
+                    binding.ConversationId,
+                    binding.RemoteSessionId,
+                    binding.BoundProfileId))).ConfigureAwait(false);
+        }
+    }
+
+    private async Task BootstrapSelectedProfileFromWorkspaceAsync(string? conversationId)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return;
+        }
+
+        var connectionState = await _chatConnectionStore.State ?? ChatConnectionState.Empty;
+        if (!string.IsNullOrWhiteSpace(connectionState.SelectedProfileId))
+        {
+            return;
+        }
+
+        var binding = _conversationWorkspace.GetRemoteBinding(conversationId);
+        if (string.IsNullOrWhiteSpace(binding?.BoundProfileId))
+        {
+            return;
+        }
+
+        await _chatConnectionStore.Dispatch(new SetSelectedProfileAction(binding.BoundProfileId)).ConfigureAwait(false);
     }
 
     private void NotifyConversationListChanged()

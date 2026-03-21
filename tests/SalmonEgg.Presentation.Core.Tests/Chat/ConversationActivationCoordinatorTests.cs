@@ -25,7 +25,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
 public sealed class ConversationActivationCoordinatorTests
 {
     [Fact]
-    public async Task ActivateSessionAsync_SkipsHydrate_WhenGenerationIsNonZero()
+    public async Task ActivateSessionAsync_HydratesSnapshot_WhenSwitchingSessions_EvenIfGenerationIsNonZero()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var preferences = CreatePreferences(syncContext);
@@ -61,7 +61,9 @@ public sealed class ConversationActivationCoordinatorTests
         Assert.True(result.Succeeded);
         var currentState = await state;
         Assert.Equal("session-1", currentState.HydratedConversationId);
-        Assert.True(currentState.Transcript is null or { Count: 0 });
+        Assert.NotNull(currentState.Transcript);
+        Assert.Single(currentState.Transcript!);
+        Assert.Equal("hello", currentState.Transcript[0].TextContent);
     }
 
     [Fact]
@@ -103,7 +105,7 @@ public sealed class ConversationActivationCoordinatorTests
     }
 
     [Fact]
-    public async Task ActivateSessionAsync_SkipsHydrate_WhenStoreAlreadyHasBindingData()
+    public async Task ActivateSessionAsync_HydratesSnapshot_WhenStoreAlreadyHasBindingData()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var preferences = CreatePreferences(syncContext);
@@ -144,7 +146,9 @@ public sealed class ConversationActivationCoordinatorTests
         Assert.True(result.Succeeded);
         var currentState = await state;
         Assert.Equal("session-1", currentState.HydratedConversationId);
-        Assert.True(currentState.Transcript is null or { Count: 0 });
+        Assert.NotNull(currentState.Transcript);
+        Assert.Single(currentState.Transcript!);
+        Assert.Equal("hello", currentState.Transcript[0].TextContent);
     }
 
     [Fact]

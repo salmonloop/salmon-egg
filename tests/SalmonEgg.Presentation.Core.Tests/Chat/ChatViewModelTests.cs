@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Immutable;
+using System.Collections.Generic;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
@@ -32,7 +33,8 @@ public class ChatViewModelTests
         SynchronizationContext? syncContext = null,
         Mock<IConversationStore>? conversationStore = null,
         IAcpConnectionCommands? acpConnectionCommands = null,
-        Mock<IConfigurationService>? configurationService = null)
+        Mock<IConfigurationService>? configurationService = null,
+        Mock<ISessionManager>? sessionManager = null)
     {
         var state = State.Value(new object(), () => ChatState.Empty);
         var connectionState = State.Value(new object(), () => ChatConnectionState.Empty);
@@ -46,7 +48,39 @@ public class ChatViewModelTests
         var messageValidator = new Mock<IMessageValidator>();
         var errorLogger = new Mock<IErrorLogger>();
         var capabilityManager = new Mock<ICapabilityManager>();
-        var sessionManager = new Mock<ISessionManager>();
+        var ownsSessionManager = sessionManager is null;
+        sessionManager ??= new Mock<ISessionManager>();
+        if (ownsSessionManager)
+        {
+            var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
+            sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+                .Returns<string, string?>((sessionId, cwd) =>
+                {
+                    var session = new Session(sessionId, cwd);
+                    sessions[sessionId] = session;
+                    return Task.FromResult(session);
+                });
+            sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
+                .Returns<string>(sessionId => sessions.TryGetValue(sessionId, out var session) ? session : null);
+            sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
+                .Returns<string, Action<Session>, bool>((sessionId, update, updateActivity) =>
+                {
+                    if (!sessions.TryGetValue(sessionId, out var session))
+                    {
+                        return false;
+                    }
+
+                    update(session);
+                    if (updateActivity)
+                    {
+                        session.UpdateActivity();
+                    }
+
+                    return true;
+                });
+            sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
+                .Returns<string>(sessionId => sessions.Remove(sessionId));
+        }
         var serilog = new Mock<SerilogLogger>();
 
         var chatServiceFactory = new ChatServiceFactory(
@@ -79,9 +113,13 @@ public class ChatViewModelTests
         var profilesLogger = new Mock<ILogger<AcpProfilesViewModel>>();
         var profiles = new AcpProfilesViewModel(configurationService.Object, preferences, profilesLogger.Object);
 
+        var ownsConversationStore = conversationStore is null;
         conversationStore ??= new Mock<IConversationStore>();
-        conversationStore.Setup(s => s.LoadAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ConversationDocument());
+        if (ownsConversationStore)
+        {
+            conversationStore.Setup(s => s.LoadAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ConversationDocument());
+        }
         var miniWindow = new Mock<IMiniWindowCoordinator>();
         var workspace = new ChatConversationWorkspace(
             sessionManager.Object,
@@ -147,6 +185,107 @@ public class ChatViewModelTests
         await fixture.ViewModel.RestoreAsync();
 
         conversationStore.Verify(s => s.LoadAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RestoreAsync_BootstrapsPersistedBindingsIntoStore()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
+        var sessionManager = new Mock<ISessionManager>();
+        sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.TryGetValue(id, out var session) ? session : null);
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .Returns<string, string?>((id, cwd) =>
+            {
+                var session = new Session(id, cwd);
+                sessions[id] = session;
+                return Task.FromResult(session);
+            });
+        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
+            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
+            {
+                if (!sessions.TryGetValue(id, out var session))
+                {
+                    return false;
+                }
+
+                update(session);
+                if (updateActivity)
+                {
+                    session.UpdateActivity();
+                }
+
+                return true;
+            });
+        sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.Remove(id));
+
+        var conversationStore = new Mock<IConversationStore>();
+        conversationStore.Setup(s => s.LoadAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConversationDocument
+            {
+                LastActiveConversationId = "session-1",
+                Conversations =
+                {
+                    new ConversationRecord
+                    {
+                        ConversationId = "session-1",
+                        DisplayName = "Session One",
+                        CreatedAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                        LastUpdatedAt = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+                        RemoteSessionId = "remote-1",
+                        BoundProfileId = "profile-a",
+                        Messages =
+                        {
+                            new ConversationMessageSnapshot
+                            {
+                                Id = "m-1",
+                                Timestamp = new DateTime(2026, 3, 2, 1, 0, 0, DateTimeKind.Utc),
+                                ContentType = "text",
+                                TextContent = "hello from restore"
+                            }
+                        }
+                    }
+                }
+            });
+
+        await using var fixture = CreateViewModel(
+            syncContext,
+            conversationStore: conversationStore,
+            sessionManager: sessionManager);
+
+        var restoreTask = fixture.ViewModel.RestoreAsync();
+        await syncContext.RunUntilCompletedAsync(restoreTask);
+        syncContext.RunAll();
+
+        conversationStore.Verify(s => s.LoadAsync(It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(new[] { "session-1" }, fixture.Workspace.GetKnownConversationIds());
+
+        var workspaceBinding = fixture.Workspace.GetRemoteBinding("session-1");
+        Assert.Equal("remote-1", workspaceBinding?.RemoteSessionId);
+        Assert.Equal("profile-a", workspaceBinding?.BoundProfileId);
+
+        var dispatchedActions = fixture.ChatStore.Invocations
+            .Where(invocation => string.Equals(invocation.Method.Name, nameof(IChatStore.Dispatch), StringComparison.Ordinal))
+            .SelectMany(invocation => invocation.Arguments)
+            .OfType<ChatAction>()
+            .ToArray();
+        Assert.Contains(dispatchedActions, action =>
+            action is SetBindingSliceAction
+            {
+                Binding: { ConversationId: "session-1", RemoteSessionId: "remote-1", ProfileId: "profile-a" }
+            });
+
+        var state = await fixture.GetStateAsync();
+        Assert.Equal(new ConversationBindingSlice("session-1", "remote-1", "profile-a"), state.ResolveBinding("session-1"));
+        Assert.NotNull(state.Transcript);
+        Assert.Single(state.Transcript!);
+        Assert.Equal("hello from restore", state.Transcript[0].TextContent);
+        Assert.Equal("session-1", fixture.ViewModel.CurrentSessionId);
+        Assert.Equal("remote-1", fixture.ViewModel.CurrentRemoteSessionId);
+        Assert.Single(fixture.ViewModel.MessageHistory);
+        Assert.Equal("hello from restore", fixture.ViewModel.MessageHistory[0].TextContent);
     }
 
     [Fact]
@@ -925,6 +1064,27 @@ public class ChatViewModelTests
                 callback(state);
             }
         }
+
+        public async Task RunUntilCompletedAsync(Task task, int spinDelayMs = 10)
+        {
+            while (!task.IsCompleted)
+            {
+                if (_work.Count == 0)
+                {
+                    await Task.Delay(spinDelayMs);
+                    continue;
+                }
+
+                RunAll();
+            }
+
+            await task;
+        }
+    }
+
+    private sealed class ImmediateSynchronizationContext : SynchronizationContext
+    {
+        public override void Post(SendOrPostCallback d, object? state) => d(state);
     }
 
     private static void AssertNoLegacyConnectionActionsDispatched(Mock<IChatStore> chatStore)
@@ -988,7 +1148,7 @@ public class ChatViewModelTests
         public ValueTask DispatchConnectionAsync(ChatConnectionAction action) => _connectionStore.Dispatch(action);
 
         public ValueTask UpdateStateAsync(Func<ChatState, ChatState> update)
-            => _state.Update(update, CancellationToken.None);
+            => _state.Update(current => update(current ?? ChatState.Empty), CancellationToken.None);
 
         public async ValueTask DisposeAsync()
         {

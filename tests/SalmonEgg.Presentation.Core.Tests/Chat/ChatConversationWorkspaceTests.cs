@@ -38,6 +38,8 @@ public sealed class ChatConversationWorkspaceTests
                         CreatedAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                         LastUpdatedAt = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
                         Cwd = @"C:\repo\one",
+                        RemoteSessionId = "remote-1",
+                        BoundProfileId = "profile-a",
                         Messages =
                         {
                             CreateTextMessage("m-1", "hello")
@@ -74,6 +76,10 @@ public sealed class ChatConversationWorkspaceTests
         Assert.NotNull(snapshot);
         Assert.Single(snapshot!.Transcript);
         Assert.Equal("hello", snapshot.Transcript[0].TextContent);
+        var remoteBinding = workspace.GetRemoteBinding("session-1");
+        Assert.NotNull(remoteBinding);
+        Assert.Equal("remote-1", remoteBinding!.RemoteSessionId);
+        Assert.Equal("profile-a", remoteBinding.BoundProfileId);
 
         var session = sessionManager.GetSession("session-1");
         Assert.NotNull(session);
@@ -233,6 +239,8 @@ public sealed class ChatConversationWorkspaceTests
             PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 3, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 4, 0, 0, 0, DateTimeKind.Utc)));
+        workspace.UpdateRemoteBinding("session-1", "remote-older", "profile-older");
+        workspace.UpdateRemoteBinding("session-2", "remote-newer", "profile-newer");
 
         await workspace.TrySwitchToSessionAsync("session-2");
         await workspace.SaveAsync();
@@ -242,10 +250,14 @@ public sealed class ChatConversationWorkspaceTests
         Assert.Equal(new[] { "session-2", "session-1" }, saved.Conversations.Select(c => c.ConversationId).ToArray());
         Assert.Equal("Newer", saved.Conversations[0].DisplayName);
         Assert.Equal(@"C:\repo\two", saved.Conversations[0].Cwd);
+        Assert.Equal("remote-newer", saved.Conversations[0].RemoteSessionId);
+        Assert.Equal("profile-newer", saved.Conversations[0].BoundProfileId);
         Assert.Single(saved.Conversations[0].Messages);
         Assert.Equal("newer", saved.Conversations[0].Messages[0].TextContent);
         Assert.Equal("Older", saved.Conversations[1].DisplayName);
         Assert.Equal(@"C:\repo\one", saved.Conversations[1].Cwd);
+        Assert.Equal("remote-older", saved.Conversations[1].RemoteSessionId);
+        Assert.Equal("profile-older", saved.Conversations[1].BoundProfileId);
         Assert.Single(saved.Conversations[1].Messages);
         Assert.Equal("older", saved.Conversations[1].Messages[0].TextContent);
     }

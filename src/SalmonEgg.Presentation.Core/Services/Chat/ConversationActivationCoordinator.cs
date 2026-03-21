@@ -140,41 +140,12 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
     private static bool ShouldHydrate(ChatState state, string sessionId)
     {
         ArgumentNullException.ThrowIfNull(state);
-
-        if (state.Generation != 0)
-        {
-            return false;
-        }
-
-        if (!string.IsNullOrWhiteSpace(state.SelectedConversationId)
-            || !string.IsNullOrWhiteSpace(state.HydratedConversationId))
-        {
-            return false;
-        }
-
-        if (!IsBindingEmpty(state.ResolveBinding(sessionId)))
-        {
-            return false;
-        }
-
-        if (state.Transcript is { Count: > 0 } || state.PlanEntries is { Count: > 0 })
-        {
-            return false;
-        }
-
-        return true;
-    }
-
-    private static bool IsBindingEmpty(ConversationBindingSlice? binding)
-    {
-        if (binding is null)
+        if (!string.Equals(state.HydratedConversationId, sessionId, StringComparison.Ordinal))
         {
             return true;
         }
 
-        return string.IsNullOrWhiteSpace(binding.ConversationId)
-            && string.IsNullOrWhiteSpace(binding.RemoteSessionId)
-            && string.IsNullOrWhiteSpace(binding.ProfileId);
+        return state.Transcript is null || state.PlanEntries is null;
     }
 
     private async Task<ConversationMutationResult> RemoveConversationAsync(

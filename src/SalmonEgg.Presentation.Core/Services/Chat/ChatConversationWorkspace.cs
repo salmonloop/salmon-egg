@@ -306,7 +306,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         ThrowIfDisposed();
         var document = new ConversationDocument
         {
-            Version = 1,
+            Version = 2,
             LastActiveConversationId = null
         };
 
@@ -320,7 +320,9 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 DisplayName = ResolveSessionDisplayName(binding.ConversationId),
                 CreatedAt = binding.CreatedAt,
                 LastUpdatedAt = binding.LastUpdatedAt,
-                Cwd = session?.Cwd
+                Cwd = session?.Cwd,
+                RemoteSessionId = binding.RemoteSessionId,
+                BoundProfileId = binding.BoundProfileId
             };
 
             foreach (var message in binding.Transcript)
@@ -365,6 +367,8 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             binding.Plan.Clear();
             binding.ShowPlanPanel = false;
             binding.PlanTitle = null;
+            binding.RemoteSessionId = conversation.RemoteSessionId;
+            binding.BoundProfileId = conversation.BoundProfileId;
 
             var displayName = string.IsNullOrWhiteSpace(conversation.DisplayName)
                 ? SessionNamePolicy.CreateDefault(conversation.ConversationId)
