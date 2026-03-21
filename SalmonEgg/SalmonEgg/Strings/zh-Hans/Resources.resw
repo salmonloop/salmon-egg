@@ -520,6 +520,18 @@
   <data name="BottomPanelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>底栏</value>
   </data>
+  <data name="DiffPanelButton.ToolTipService.ToolTip" xml:space="preserve">
+    <value>差异</value>
+  </data>
+  <data name="DiffPanelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>差异面板</value>
+  </data>
+  <data name="TodoPanelButton.ToolTipService.ToolTip" xml:space="preserve">
+    <value>待办</value>
+  </data>
+  <data name="TodoPanelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>待办面板</value>
+  </data>
   <data name="BottomPanelPlaceholder.Text" xml:space="preserve">
     <value>底栏占位</value>
   </data>

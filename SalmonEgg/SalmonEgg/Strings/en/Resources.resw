@@ -177,6 +177,18 @@
   <data name="BottomPanelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Bottom Panel</value>
   </data>
+  <data name="DiffPanelButton.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Diff</value>
+  </data>
+  <data name="DiffPanelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Diff Panel</value>
+  </data>
+  <data name="TodoPanelButton.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Todo</value>
+  </data>
+  <data name="TodoPanelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Todo Panel</value>
+  </data>
   <data name="BottomPanelPlaceholder.Text" xml:space="preserve">
     <value>Bottom panel placeholder</value>
   </data>

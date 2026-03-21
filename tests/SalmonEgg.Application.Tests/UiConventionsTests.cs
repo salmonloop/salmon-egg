@@ -191,4 +191,66 @@ public class UiConventionsTests
 
         Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
     }
+
+    [Fact]
+    public void AuxiliaryPanelButtons_ShouldUseLocalizedTooltipsAndAutomationNames()
+    {
+        var repoRoot = FindRepoRoot();
+        var mainPageXaml = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "MainPage.xaml");
+        var xamlText = File.ReadAllText(mainPageXaml);
+
+        Assert.Contains("x:Name=\"DiffPanelButton\"", xamlText);
+        Assert.Contains("x:Uid=\"DiffPanelButton\"", xamlText);
+        Assert.Contains("x:Name=\"TodoPanelButton\"", xamlText);
+        Assert.Contains("x:Uid=\"TodoPanelButton\"", xamlText);
+        Assert.DoesNotContain("ToolTipService.ToolTip=\"Diff\"", xamlText);
+        Assert.DoesNotContain("AutomationProperties.Name=\"Diff Panel\"", xamlText);
+        Assert.DoesNotContain("ToolTipService.ToolTip=\"Todo\"", xamlText);
+        Assert.DoesNotContain("AutomationProperties.Name=\"Todo Panel\"", xamlText);
+
+        var reswFiles = new[]
+        {
+            Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Strings", "en", "Resources.resw"),
+            Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Strings", "en-US", "Resources.resw"),
+            Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Strings", "zh-Hans", "Resources.resw")
+        };
+
+        var failures = new List<string>();
+        foreach (var file in reswFiles)
+        {
+            var text = File.ReadAllText(file);
+            if (!text.Contains("DiffPanelButton.ToolTipService.ToolTip", StringComparison.Ordinal))
+            {
+                failures.Add($"{file}: missing DiffPanelButton.ToolTipService.ToolTip");
+            }
+
+            if (!text.Contains("DiffPanelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name", StringComparison.Ordinal))
+            {
+                failures.Add($"{file}: missing DiffPanelButton automation name");
+            }
+
+            if (!text.Contains("TodoPanelButton.ToolTipService.ToolTip", StringComparison.Ordinal))
+            {
+                failures.Add($"{file}: missing TodoPanelButton.ToolTipService.ToolTip");
+            }
+
+            if (!text.Contains("TodoPanelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name", StringComparison.Ordinal))
+            {
+                failures.Add($"{file}: missing TodoPanelButton automation name");
+            }
+        }
+
+        Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
+    }
+
+    [Fact]
+    public void BottomPanelButton_ShouldUseExpectedGlyph()
+    {
+        var repoRoot = FindRepoRoot();
+        var mainPageXaml = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "MainPage.xaml");
+        var xamlText = File.ReadAllText(mainPageXaml);
+
+        Assert.Contains("x:Name=\"BottomPanelButton\"", xamlText);
+        Assert.Contains("Glyph=\"&#xE75B;\"", xamlText);
+    }
 }

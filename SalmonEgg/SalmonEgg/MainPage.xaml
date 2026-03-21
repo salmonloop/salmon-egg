@@ -486,24 +486,22 @@
                                        Click="OnBottomPanelButtonClick"
                                        IsChecked="{x:Bind LayoutVM.DesiredBottomPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Dock}">
                             <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                      Glyph="&#xE15F;" />
+                                      Glyph="&#xE75B;" />
                         </ToggleButton>
                         <ToggleButton x:Name="DiffPanelButton"
-                                       Tag="Diff"
-                                       Style="{StaticResource TitleBarToggleButtonStyle}"
-                                       ToolTipService.ToolTip="Diff"
-                                       AutomationProperties.Name="Diff Panel"
-                                       Click="OnRightPanelButtonClick"
-                                       IsChecked="{x:Bind LayoutVM.DesiredRightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Diff}">
+                                      x:Uid="DiffPanelButton"
+                                      Tag="Diff"
+                                      Style="{StaticResource TitleBarToggleButtonStyle}"
+                                      Click="OnRightPanelButtonClick"
+                                      IsChecked="{x:Bind LayoutVM.DesiredRightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Diff}">
                             <SymbolIcon Symbol="Preview" />
                         </ToggleButton>
                         <ToggleButton x:Name="TodoPanelButton"
-                                       Tag="Todo"
-                                       Style="{StaticResource TitleBarToggleButtonStyle}"
-                                       ToolTipService.ToolTip="Todo"
-                                       AutomationProperties.Name="Todo Panel"
-                                       Click="OnRightPanelButtonClick"
-                                       IsChecked="{x:Bind LayoutVM.DesiredRightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Todo}">
+                                      x:Uid="TodoPanelButton"
+                                      Tag="Todo"
+                                      Style="{StaticResource TitleBarToggleButtonStyle}"
+                                      Click="OnRightPanelButtonClick"
+                                      IsChecked="{x:Bind LayoutVM.DesiredRightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Todo}">
                             <SymbolIcon Symbol="Bullets" />
                         </ToggleButton>
                     </StackPanel>
