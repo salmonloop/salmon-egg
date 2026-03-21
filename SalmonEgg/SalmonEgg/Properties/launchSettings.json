@@ -47,6 +47,9 @@
       "executablePath": "powershell.exe",
       "commandLineArgs": "-NoLogo -NoProfile -ExecutionPolicy Bypass -File \"..\\\\..\\\\.tools\\\\debug-winui3-msix.ps1\" -Configuration Debug",
       "workingDirectory": "..\\\\.."
+    },
+    "SalmonEgg (Package)": {
+      "commandName": "MsixPackage"
     }
   }
 }
