@@ -52,7 +52,31 @@ Avoid legacy/unstable platform keys such as `SystemControlHighlightLowBrush`. Th
 
 Platform conditional compilation is acceptable for truly platform-specific integrations (system backdrops, windowing), but avoid it for core UI semantics (navigation/state/layout).
 
-## 5) Automated guardrails
+## 5) Use Lightweight Styling over ControlTemplate hacks
+
+When adjusting specific control states (such as changing a button's hover color or hiding a TextBox's focus border), **do not** extract and override the entire `ControlTemplate`, and **do not** use hacky visual tree manipulations from code-behind. This causes semantic drift from future OS updates and inflates the codebase.
+
+**Official Rationale (Non-Hack)**
+* **Microsoft Recommended Practice:** [Lightweight Styling](https://learn.microsoft.com/en-us/windows/apps/design/style/xaml-styles#lightweight-styling) is the official mechanism provided by WinUI/UWP to customize internal states of controls.
+* **Why it is elegant:** Instead of replacing a massive 500-line default `ControlTemplate` (which freezes the visual appearance to the current OS version), Lightweight Styling leverages standard XAML resource resolution. By safely injecting transparent brushes or zero-thickness values into the local `<Control.Resources>` scope, the framework natively picks up our local overrides while continuing to receive underlying layout/animation updates from the OS.
+
+**Rule**
+
+- Always use **Lightweight Styling** (轻量级样式) by overriding the specific `ThemeResource` keys locally in `<Control.Resources>`.
+
+**Good**
+
+```xml
+<TextBox>
+    <TextBox.Resources>
+        <!-- Elegantly override the system's focused background and bottom border thickness purely via resource scope -->
+        <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent" />
+        <Thickness x:Key="TextControlBorderThemeThicknessFocused">0</Thickness>
+    </TextBox.Resources>
+</TextBox>
+```
+
+## 6) Automated guardrails
 
 Unit tests under `tests/SalmonEgg.Application.Tests/UiConventionsTests.cs` enforce:
 
