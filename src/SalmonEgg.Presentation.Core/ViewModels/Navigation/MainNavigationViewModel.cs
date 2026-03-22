@@ -237,19 +237,6 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             : null;
     }
 
-    public void ToggleProjectExpanded(string projectId)
-    {
-        if (string.IsNullOrWhiteSpace(projectId))
-        {
-            return;
-        }
-
-        if (_projectIndex.TryGetValue(projectId, out var project))
-        {
-            project.IsExpanded = !project.IsExpanded;
-        }
-    }
-
     public async Task PrepareStartForProjectAsync(string projectId)
     {
         var normalizedId = string.Equals(projectId, UnclassifiedProjectId, StringComparison.Ordinal)

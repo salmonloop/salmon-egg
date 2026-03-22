@@ -89,9 +89,12 @@ public sealed class MainNavigationViewAdapter
             return true;
         }
 
-        if (NavItemTag.TryParseProject(tag, out var projectId))
+        if (NavItemTag.TryParseProject(tag, out _))
         {
-            _viewModel.ToggleProjectExpanded(projectId);
+            // The native NavigationViewItem with MenuItemsSource handles expand/collapse
+            // automatically when the content area is clicked. IsExpanded TwoWay binding
+            // in ProjectNavTemplate synchronizes the result back to the ViewModel.
+            // Calling ToggleProjectExpanded here would cause a double-toggle (cancel out).
             return true;
         }
 
