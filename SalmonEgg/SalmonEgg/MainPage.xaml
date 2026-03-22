@@ -483,109 +483,26 @@
                                        x:Uid="BottomPanelButton"
                                        Tag="BottomPanel"
                                        Style="{StaticResource TitleBarToggleButtonStyle}"
+                                       Content="Icon"
+                                       ContentTemplate="{x:Bind GetBottomPanelButtonIconTemplate(LayoutVM.BottomPanelMode), Mode=OneWay}"
                                        Click="OnBottomPanelButtonClick"
-                                       IsChecked="{x:Bind LayoutVM.DesiredBottomPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Dock}">
-                            <Grid Width="16" Height="16">
-                                <FontIcon x:Name="BottomPanelWindowsIcon"
-                                          x:Load="{x:Bind PreferWindowsAuxiliaryGlyphs}"
-                                          FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                          Glyph="&#xE75B;" />
-                                <Grid x:Name="BottomPanelFallbackIcon"
-                                      x:Load="{x:Bind PreferWindowsAuxiliaryGlyphs, Converter={StaticResource InverseBooleanConverter}}">
-                                    <Border BorderBrush="{ThemeResource TextFillColorPrimaryBrush}"
-                                            BorderThickness="1"
-                                            CornerRadius="2" />
-                                    <Rectangle Height="4"
-                                               Margin="2,0,2,2"
-                                               VerticalAlignment="Bottom"
-                                               RadiusX="1"
-                                               RadiusY="1"
-                                               Fill="{ThemeResource TextFillColorPrimaryBrush}" />
-                                </Grid>
-                            </Grid>
-                        </ToggleButton>
+                                       IsChecked="{x:Bind LayoutVM.BottomPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Dock}" />
                         <ToggleButton x:Name="DiffPanelButton"
                                       x:Uid="DiffPanelButton"
                                       Tag="Diff"
                                       Style="{StaticResource TitleBarToggleButtonStyle}"
+                                      Content="Icon"
+                                      ContentTemplate="{x:Bind GetDiffPanelButtonIconTemplate(LayoutVM.RightPanelMode), Mode=OneWay}"
                                       Click="OnRightPanelButtonClick"
-                                      IsChecked="{x:Bind LayoutVM.DesiredRightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Diff}">
-                            <Grid Width="16" Height="16">
-                                <FontIcon x:Name="DiffPanelWindowsIcon"
-                                          x:Load="{x:Bind PreferWindowsAuxiliaryGlyphs}"
-                                          FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                          Glyph="&#xE81E;" />
-                                <Rectangle x:Name="DiffPanelFallbackIcon"
-                                           x:Load="{x:Bind PreferWindowsAuxiliaryGlyphs, Converter={StaticResource InverseBooleanConverter}}"
-                                           RadiusX="1"
-                                           RadiusY="1"
-                                           Stroke="{ThemeResource TextFillColorPrimaryBrush}"
-                                           StrokeThickness="1"
-                                           StrokeDashArray="2,1" />
-                            </Grid>
-                        </ToggleButton>
+                                      IsChecked="{x:Bind LayoutVM.RightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Diff}" />
                         <ToggleButton x:Name="TodoPanelButton"
                                       x:Uid="TodoPanelButton"
                                       Tag="Todo"
                                       Style="{StaticResource TitleBarToggleButtonStyle}"
+                                      Content="Icon"
+                                      ContentTemplate="{x:Bind GetTodoPanelButtonIconTemplate(LayoutVM.RightPanelMode), Mode=OneWay}"
                                       Click="OnRightPanelButtonClick"
-                                      IsChecked="{x:Bind LayoutVM.DesiredRightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Todo}">
-                            <Grid Width="16" Height="16">
-                                <FontIcon x:Name="TodoPanelWindowsIcon"
-                                          x:Load="{x:Bind PreferWindowsAuxiliaryGlyphs}"
-                                          FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                          Glyph="&#xEA37;" />
-                                <Grid x:Name="TodoPanelFallbackIcon"
-                                      x:Load="{x:Bind PreferWindowsAuxiliaryGlyphs, Converter={StaticResource InverseBooleanConverter}}">
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-
-                                    <Ellipse Width="2.5" Height="2.5"
-                                             Fill="{ThemeResource TextFillColorPrimaryBrush}"
-                                             VerticalAlignment="Center" />
-                                    <Rectangle Grid.Column="1"
-                                               Height="1.5"
-                                               Margin="3,0,0,0"
-                                               RadiusX="0.75"
-                                               RadiusY="0.75"
-                                               Fill="{ThemeResource TextFillColorPrimaryBrush}"
-                                               VerticalAlignment="Center" />
-
-                                    <Ellipse Grid.Row="1"
-                                             Width="2.5" Height="2.5"
-                                             Margin="0,3,0,0"
-                                             Fill="{ThemeResource TextFillColorPrimaryBrush}"
-                                             VerticalAlignment="Center" />
-                                    <Rectangle Grid.Row="1" Grid.Column="1"
-                                               Height="1.5"
-                                               Margin="3,3,0,0"
-                                               RadiusX="0.75"
-                                               RadiusY="0.75"
-                                               Fill="{ThemeResource TextFillColorPrimaryBrush}"
-                                               VerticalAlignment="Center" />
-
-                                    <Ellipse Grid.Row="2"
-                                             Width="2.5" Height="2.5"
-                                             Margin="0,6,0,0"
-                                             Fill="{ThemeResource TextFillColorPrimaryBrush}"
-                                             VerticalAlignment="Center" />
-                                    <Rectangle Grid.Row="2" Grid.Column="1"
-                                               Height="1.5"
-                                               Margin="3,6,0,0"
-                                               RadiusX="0.75"
-                                               RadiusY="0.75"
-                                               Fill="{ThemeResource TextFillColorPrimaryBrush}"
-                                               VerticalAlignment="Center" />
-                                </Grid>
-                            </Grid>
-                        </ToggleButton>
+                                      IsChecked="{x:Bind LayoutVM.RightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Todo}" />
                     </StackPanel>
                 </Grid>
             </Grid>

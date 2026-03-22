@@ -244,18 +244,47 @@ public class UiConventionsTests
     }
 
     [Fact]
-    public void AuxiliaryPanelButtons_ShouldUseWindowsGlyphsWithCrossPlatformFallbacks()
+    public void AuxiliaryPanelButtons_ShouldUseDeterministicVectorIcons()
     {
         var repoRoot = FindRepoRoot();
         var mainPageXaml = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "MainPage.xaml");
+        var mainPageCodeBehind = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "MainPage.xaml.cs");
+        var appXaml = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "App.xaml");
+        var iconDictionaryXaml = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Styles", "AuxiliaryPanelIcons.xaml");
         var xamlText = File.ReadAllText(mainPageXaml);
+        var codeBehindText = File.ReadAllText(mainPageCodeBehind);
+        var appXamlText = File.ReadAllText(appXaml);
+        var iconDictionaryText = File.ReadAllText(iconDictionaryXaml);
 
         Assert.Contains("x:Name=\"BottomPanelButton\"", xamlText);
-        Assert.Contains("x:Bind PreferWindowsAuxiliaryGlyphs", xamlText);
-        Assert.Contains("Glyph=\"&#xE75B;\"", xamlText);
+        Assert.Contains("Style=\"{StaticResource TitleBarToggleButtonStyle}\"", xamlText);
+        Assert.Contains("ContentTemplate=\"{x:Bind GetBottomPanelButtonIconTemplate(LayoutVM.BottomPanelMode), Mode=OneWay}\"", xamlText);
+        Assert.Contains("IsChecked=\"{x:Bind LayoutVM.BottomPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Dock}\"", xamlText);
         Assert.Contains("x:Name=\"DiffPanelButton\"", xamlText);
-        Assert.Contains("Glyph=\"&#xE81E;\"", xamlText);
+        Assert.Contains("ContentTemplate=\"{x:Bind GetDiffPanelButtonIconTemplate(LayoutVM.RightPanelMode), Mode=OneWay}\"", xamlText);
+        Assert.Contains("IsChecked=\"{x:Bind LayoutVM.RightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Diff}\"", xamlText);
         Assert.Contains("x:Name=\"TodoPanelButton\"", xamlText);
-        Assert.Contains("Glyph=\"&#xEA37;\"", xamlText);
+        Assert.Contains("ContentTemplate=\"{x:Bind GetTodoPanelButtonIconTemplate(LayoutVM.RightPanelMode), Mode=OneWay}\"", xamlText);
+        Assert.Contains("IsChecked=\"{x:Bind LayoutVM.RightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Todo}\"", xamlText);
+        Assert.DoesNotContain("LayoutVM.DesiredRightPanelMode", xamlText, StringComparison.Ordinal);
+        Assert.DoesNotContain("LayoutVM.DesiredBottomPanelMode", xamlText, StringComparison.Ordinal);
+        Assert.DoesNotContain("BottomPanelVectorIcon", xamlText, StringComparison.Ordinal);
+        Assert.DoesNotContain("DiffPanelVectorIcon", xamlText, StringComparison.Ordinal);
+        Assert.DoesNotContain("TodoPanelVectorIcon", xamlText, StringComparison.Ordinal);
+        Assert.Contains("ms-appx:///Styles/AuxiliaryPanelIcons.xaml", appXamlText);
+        Assert.Contains("x:Key=\"BottomPanelTitleBarRegularIconTemplate\"", iconDictionaryText);
+        Assert.Contains("x:Key=\"BottomPanelTitleBarFilledIconTemplate\"", iconDictionaryText);
+        Assert.Contains("x:Key=\"DiffPanelTitleBarRegularIconTemplate\"", iconDictionaryText);
+        Assert.Contains("x:Key=\"DiffPanelTitleBarFilledIconTemplate\"", iconDictionaryText);
+        Assert.Contains("x:Key=\"TodoPanelTitleBarRegularIconTemplate\"", iconDictionaryText);
+        Assert.Contains("x:Key=\"TodoPanelTitleBarFilledIconTemplate\"", iconDictionaryText);
+        Assert.DoesNotContain("BottomPanelTitleBarToggleButtonStyle", iconDictionaryText, StringComparison.Ordinal);
+        Assert.DoesNotContain("DiffPanelTitleBarToggleButtonStyle", iconDictionaryText, StringComparison.Ordinal);
+        Assert.DoesNotContain("TodoPanelTitleBarToggleButtonStyle", iconDictionaryText, StringComparison.Ordinal);
+        Assert.Contains("GetBottomPanelButtonIconTemplate", codeBehindText);
+        Assert.Contains("GetDiffPanelButtonIconTemplate", codeBehindText);
+        Assert.Contains("GetTodoPanelButtonIconTemplate", codeBehindText);
+        Assert.Contains("GetAuxiliaryIconTemplate", codeBehindText);
+        Assert.DoesNotContain("PreferWindowsAuxiliaryGlyphs", xamlText);
     }
 }

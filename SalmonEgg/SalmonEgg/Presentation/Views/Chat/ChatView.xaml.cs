@@ -24,7 +24,10 @@ namespace SalmonEgg.Presentation.Views.Chat
         private readonly InitialScrollGate _initialScrollGate = new();
         private bool _isMotionSubscribed;
         private bool _autoScroll = true;
+        private const double BottomThreshold = 10;
+        private const int MaxInitialScrollAttempts = 8;
         private ScrollViewer? _scrollViewer;
+        private bool _suspendAutoScrollTracking;
 
         public ChatView()
         {
@@ -40,6 +43,8 @@ namespace SalmonEgg.Presentation.Views.Chat
         private async void OnLoaded(object sender, RoutedEventArgs e)
         {
             _isViewLoaded = true;
+            _autoScroll = true;
+            _initialScrollGate.MarkPending();
             SubscribeMotion();
             EnsureMessageTracking();
             RequestInitialScroll();
@@ -58,6 +63,7 @@ namespace SalmonEgg.Presentation.Views.Chat
         {
             _isViewLoaded = false;
             UnsubscribeMotion();
+            DetachScrollViewer();
             _initialScrollGate.CancelInFlight();
             if (_isTrackingMessages)
             {
@@ -127,6 +133,12 @@ namespace SalmonEgg.Presentation.Views.Chat
                 return;
             }
 
+            if (_initialScrollGate.HasPending && !_autoScroll)
+            {
+                _initialScrollGate.ClearPending();
+                return;
+            }
+
             if (RequestInitialScroll())
             {
                 return;
@@ -140,24 +152,44 @@ namespace SalmonEgg.Presentation.Views.Chat
 
         private void OnMessagesListLoaded(object sender, RoutedEventArgs e)
         {
+            DetachScrollViewer();
             _scrollViewer = FindScrollViewer(MessagesList);
             if (_scrollViewer != null)
             {
                 _scrollViewer.ViewChanged += ScrollViewer_ViewChanged;
+                _scrollViewer.PointerPressed += ScrollViewer_PointerPressed;
+                _scrollViewer.PointerWheelChanged += ScrollViewer_PointerWheelChanged;
             }
+
+            RequestInitialScroll();
         }
 
         private void ScrollViewer_ViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
         {
             if (_scrollViewer == null) return;
 
+            if (_suspendAutoScrollTracking && _initialScrollGate.HasPending)
+            {
+                return;
+            }
+
             // If user is at the bottom, enable auto-scroll.
             // Otherwise, if they scrolled up, disable it.
             var verticalOffset = _scrollViewer.VerticalOffset;
             var maxOffset = _scrollViewer.ScrollableHeight;
 
-            // Use a small threshold (10px) to account for precision issues.
-            _autoScroll = verticalOffset >= maxOffset - 10;
+            // Use a small threshold to account for precision issues.
+            _autoScroll = verticalOffset >= maxOffset - BottomThreshold;
+        }
+
+        private void ScrollViewer_PointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            StopInitialScrollForManualInteraction();
+        }
+
+        private void ScrollViewer_PointerWheelChanged(object sender, PointerRoutedEventArgs e)
+        {
+            StopInitialScrollForManualInteraction();
         }
 
         private static ScrollViewer? FindScrollViewer(DependencyObject element)
@@ -199,10 +231,16 @@ namespace SalmonEgg.Presentation.Views.Chat
             }
         }
 
-        private bool RequestInitialScroll()
+        private bool RequestInitialScroll(int attempt = 0)
         {
-            if (MessagesList is null)
+            if (!_isViewLoaded || MessagesList is null)
             {
+                return false;
+            }
+
+            if (ViewModel.MessageHistory.Count <= 0)
+            {
+                _initialScrollGate.ClearPending();
                 return false;
             }
 
@@ -211,30 +249,132 @@ namespace SalmonEgg.Presentation.Views.Chat
                 return false;
             }
 
-            if (!DispatcherQueue.TryEnqueue(() =>
-            {
-                if (!_isViewLoaded || MessagesList is null)
-                {
-                    _initialScrollGate.CancelInFlight();
-                    return;
-                }
+            var requestGeneration = _initialScrollGate.Generation;
 
-                var count = ViewModel.MessageHistory.Count;
-                if (!_initialScrollGate.TryComplete(count))
-                {
-                    return;
-                }
-
-                var last = ViewModel.MessageHistory[count - 1];
-                MessagesList.UpdateLayout();
-                MessagesList.ScrollIntoView(last);
-            }))
+            if (!DispatcherQueue.TryEnqueue(() => ExecuteInitialScrollAttempt(requestGeneration, attempt)))
             {
                 _initialScrollGate.CancelInFlight();
                 return false;
             }
 
             return true;
+        }
+
+        private void ExecuteInitialScrollAttempt(int requestGeneration, int attempt)
+        {
+            if (!_isViewLoaded || MessagesList is null || requestGeneration != _initialScrollGate.Generation)
+            {
+                _initialScrollGate.CancelInFlight();
+                return;
+            }
+
+            var count = ViewModel.MessageHistory.Count;
+            if (count <= 0)
+            {
+                _initialScrollGate.ClearPending();
+                return;
+            }
+
+            if (!_autoScroll)
+            {
+                _initialScrollGate.ClearPending();
+                return;
+            }
+
+            _suspendAutoScrollTracking = true;
+            var reachedBottom = TryScrollInitialLoadToBottom(count);
+
+            if (requestGeneration != _initialScrollGate.Generation)
+            {
+                _initialScrollGate.CancelInFlight();
+                return;
+            }
+
+            var outcome = InitialScrollAttemptPolicy.Decide(
+                hasMessages: count > 0,
+                autoScrollEnabled: _autoScroll,
+                reachedBottom: reachedBottom,
+                attempt: attempt,
+                maxAttempts: MaxInitialScrollAttempts);
+
+            switch (outcome)
+            {
+                case InitialScrollAttemptOutcome.Complete:
+                    _ = _initialScrollGate.TryComplete(true);
+                    ReleaseAutoScrollTracking();
+                    break;
+                case InitialScrollAttemptOutcome.Retry:
+                    _initialScrollGate.CancelInFlight();
+                    _autoScroll = true;
+                    RequestInitialScroll(attempt + 1);
+                    break;
+                default:
+                    _initialScrollGate.ClearPending();
+                    ReleaseAutoScrollTracking();
+                    break;
+            }
+        }
+
+        private bool TryScrollInitialLoadToBottom(int itemCount)
+        {
+            if (MessagesList is null || _scrollViewer is null)
+            {
+                return false;
+            }
+
+            MessagesList.UpdateLayout();
+            _scrollViewer.ChangeView(null, _scrollViewer.ScrollableHeight, null);
+            return IsInitialScrollReadyAndAtBottom(itemCount);
+        }
+
+        private bool IsInitialScrollReadyAndAtBottom(int itemCount)
+        {
+            if (MessagesList is null || itemCount <= 0)
+            {
+                return false;
+            }
+
+            if (MessagesList.ContainerFromIndex(itemCount - 1) is null)
+            {
+                return false;
+            }
+
+            if (_scrollViewer is null)
+            {
+                return false;
+            }
+
+            return _scrollViewer.VerticalOffset >= _scrollViewer.ScrollableHeight - BottomThreshold;
+        }
+
+        private void DetachScrollViewer()
+        {
+            if (_scrollViewer is null)
+            {
+                return;
+            }
+
+            _scrollViewer.ViewChanged -= ScrollViewer_ViewChanged;
+            _scrollViewer.PointerPressed -= ScrollViewer_PointerPressed;
+            _scrollViewer.PointerWheelChanged -= ScrollViewer_PointerWheelChanged;
+            _scrollViewer = null;
+        }
+
+        private void StopInitialScrollForManualInteraction()
+        {
+            if (!_initialScrollGate.HasPending)
+            {
+                return;
+            }
+
+            _suspendAutoScrollTracking = false;
+            _autoScroll = false;
+            _initialScrollGate.ClearPending();
+        }
+
+        private void ReleaseAutoScrollTracking()
+        {
+            _ = DispatcherQueue.TryEnqueue(() => _suspendAutoScrollTracking = false);
         }
 
         private void OnSessionNameClick(object sender, RoutedEventArgs e)

@@ -85,7 +85,6 @@ public sealed partial class MainPage : Page
     private readonly MainNavigationContentSyncAdapter _mainNavigationContentSyncAdapter;
     private readonly MainNavigationViewAdapter _mainNavigationViewAdapter;
     private readonly SalmonEgg.Presentation.Logic.SearchInteractionLogic _searchLogic = new();
-    public bool PreferWindowsAuxiliaryGlyphs { get; }
 
     public MainPage()
     {
@@ -100,7 +99,6 @@ public sealed partial class MainPage : Page
         _metricsProvider = App.ServiceProvider.GetRequiredService<WindowMetricsProvider>();
         _metricsSink = App.ServiceProvider.GetRequiredService<IShellLayoutMetricsSink>();
         _navigationCoordinator = App.ServiceProvider.GetRequiredService<INavigationCoordinator>();
-        PreferWindowsAuxiliaryGlyphs = OperatingSystem.IsWindows();
 
         this.InitializeComponent();
         _mainNavigationContentSyncAdapter = new MainNavigationContentSyncAdapter(_navigationCoordinator);
@@ -552,6 +550,31 @@ public sealed partial class MainPage : Page
             RightPanelMode.Todo => string.IsNullOrWhiteSpace(planTitle) ? "Todo" : planTitle,
             _ => "Panel"
         };
+    }
+
+    private DataTemplate GetBottomPanelButtonIconTemplate(BottomPanelMode mode)
+        => GetAuxiliaryIconTemplate(mode == BottomPanelMode.Dock
+            ? "BottomPanelTitleBarFilledIconTemplate"
+            : "BottomPanelTitleBarRegularIconTemplate");
+
+    private DataTemplate GetDiffPanelButtonIconTemplate(RightPanelMode mode)
+        => GetAuxiliaryIconTemplate(mode == RightPanelMode.Diff
+            ? "DiffPanelTitleBarFilledIconTemplate"
+            : "DiffPanelTitleBarRegularIconTemplate");
+
+    private DataTemplate GetTodoPanelButtonIconTemplate(RightPanelMode mode)
+        => GetAuxiliaryIconTemplate(mode == RightPanelMode.Todo
+            ? "TodoPanelTitleBarFilledIconTemplate"
+            : "TodoPanelTitleBarRegularIconTemplate");
+
+    private static DataTemplate GetAuxiliaryIconTemplate(string resourceKey)
+    {
+        if (Microsoft.UI.Xaml.Application.Current.Resources.TryGetValue(resourceKey, out var value) && value is DataTemplate template)
+        {
+            return template;
+        }
+
+        throw new InvalidOperationException($"Missing auxiliary icon template resource '{resourceKey}'.");
     }
 
     // Behavior notes:

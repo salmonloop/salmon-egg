@@ -1,0 +1,62 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+      Title bar auxiliary icons use Fluent regular/filled pairs so unchecked state
+      matches fluenticon.com outlined assets while checked state switches to filled.
+      Sources referenced:
+      - Checkmark Circle Square
+      - Item Compare
+      - Layout Row Two Split Bottom (used for BottomPanel semantics)
+    -->
+
+    <DataTemplate x:Key="BottomPanelTitleBarRegularIconTemplate">
+        <Path Width="20"
+              Height="20"
+              Stretch="Uniform"
+              Fill="{ThemeResource TextFillColorPrimaryBrush}"
+              Data="M3 6c0-1.657 1.343-3 3-3h8c1.657 0 3 1.343 3 3v8c0 1.657-1.343 3-3 3H6c-1.657 0-3-1.343-3-3V6zm3-2C4.895 4 4 4.895 4 6v3.5h12V6c0-1.105-0.895-2-2-2H6zm10 6.5h-5.5V16H14c1.105 0 2-0.895 2-2v-3.5zm-6.5 0H4V14c0 1.105 0.895 2 2 2h3.5v-5.5z" />
+    </DataTemplate>
+
+    <DataTemplate x:Key="BottomPanelTitleBarFilledIconTemplate">
+        <Path Width="20"
+              Height="20"
+              Stretch="Uniform"
+              Fill="{ThemeResource TextFillColorPrimaryBrush}"
+              Data="M6 3C4.343 3 3 4.343 3 6v3.5h14V6c0-1.657-1.343-3-3-3H6zm11 7.5h-6.5V17H14c1.657 0 3-1.343 3-3v-3.5zm-7.5 0H3V14c0 1.657 1.343 3 3 3h3.5v-6.5z" />
+    </DataTemplate>
+
+    <DataTemplate x:Key="DiffPanelTitleBarRegularIconTemplate">
+        <Path Width="20"
+              Height="20"
+              Stretch="Uniform"
+              Fill="{ThemeResource TextFillColorPrimaryBrush}"
+              Data="M10 2c0.276 0 0.5 0.224 0.5 0.5v15l-0.01 0.1C10.444 17.83 10.242 18 10 18s-0.444-0.171-0.49-0.4L9.5 17.5v-15C9.5 2.224 9.724 2 10 2zM6 6.5c1.105 0 2 0.895 2 2v3c0 1.105-0.895 2-2 2H3c-1.105 0-2-0.895-2-2v-3c0-1.105 0.895-2 2-2h3zm11 0c1.105 0 2 0.895 2 2v3c0 1.105-0.895 2-2 2h-3c-1.105 0-2-0.895-2-2v-3c0-1.105 0.895-2 2-2h3zm-14 1c-0.552 0-1 0.448-1 1v3c0 0.552 0.448 1 1 1h3c0.552 0 1-0.448 1-1v-3c0-0.552-0.448-1-1-1H3zm11 0c-0.552 0-1 0.448-1 1v3c0 0.552 0.448 1 1 1h3c0.552 0 1-0.448 1-1v-3c0-0.552-0.448-1-1-1h-3z" />
+    </DataTemplate>
+
+    <DataTemplate x:Key="DiffPanelTitleBarFilledIconTemplate">
+        <Path Width="20"
+              Height="20"
+              Stretch="Uniform"
+              Fill="{ThemeResource TextFillColorPrimaryBrush}"
+              Data="M10 2c0.276 0 0.5 0.224 0.5 0.5v15l-0.01 0.1C10.444 17.83 10.242 18 10 18s-0.444-0.171-0.49-0.4L9.5 17.5v-15C9.5 2.224 9.724 2 10 2zM6 6.5c1.105 0 2 0.895 2 2v3c0 1.105-0.895 2-2 2H3c-1.105 0-2-0.895-2-2v-3c0-1.105 0.895-2 2-2h3zm11 0c1.105 0 2 0.895 2 2v3c0 1.105-0.895 2-2 2h-3c-1.105 0-2-0.895-2-2v-3c0-1.105 0.895-2 2-2h3z" />
+    </DataTemplate>
+
+    <DataTemplate x:Key="TodoPanelTitleBarRegularIconTemplate">
+        <Path Width="20"
+              Height="20"
+              Stretch="Uniform"
+              Fill="{ThemeResource TextFillColorPrimaryBrush}"
+              Data="M12 7c0-2.761-2.239-5-5-5S2 4.239 2 7s2.239 5 5 5 5-2.239 5-5zm1 0c0 3.314-2.686 6-6 6s-6-2.686-6-6 2.686-6 6-6 6 2.686 6 6zm-5 9v-2.07c0.342-0.05 0.676-0.123 1-0.22V16c0 1.105 0.895 2 2 2h5c1.105 0 2-0.895 2-2v-5c0-1.105-0.895-2-2-2h-2.29c0.097-0.324 0.17-0.658 0.22-1H16c1.657 0 3 1.343 3 3v5c0 1.657-1.343 3-3 3h-5c-1.657 0-3-1.343-3-3zM9.854 5.146c0.195 0.196 0.195 0.512 0 0.708l-3 3c-0.196 0.195-0.512 0.195-0.708 0l-1.5-1.5c-0.195-0.196-0.195-0.512 0-0.708 0.196-0.195 0.512-0.195 0.708 0L6.5 7.793l2.646-2.647c0.196-0.195 0.512-0.195 0.707 0zm3.5 10.208l3-3c0.195-0.196 0.195-0.512 0-0.708-0.196-0.195-0.512-0.195-0.708 0L13 14.293l-1.146-1.147c-0.196-0.195-0.512-0.195-0.708 0-0.195 0.196-0.195 0.512 0 0.708l1.5 1.5c0.196 0.195 0.512 0.195 0.708 0z" />
+    </DataTemplate>
+
+    <DataTemplate x:Key="TodoPanelTitleBarFilledIconTemplate">
+        <Path Width="20"
+              Height="20"
+              Stretch="Uniform"
+              Fill="{ThemeResource TextFillColorPrimaryBrush}"
+              Data="M7 13c3.314 0 6-2.686 6-6s-2.686-6-6-6-6 2.686-6 6 2.686 6 6 6zm2.854-7.146l-3 3c-0.196 0.195-0.512 0.195-0.708 0l-1.5-1.5c-0.195-0.196-0.195-0.512 0-0.708 0.196-0.195 0.512-0.195 0.708 0L6.5 7.793l2.646-2.647c0.196-0.195 0.512-0.195 0.707 0 0.196 0.196 0.196 0.512 0 0.708zM8 13.928V16c0 1.657 1.343 3 3 3h5c1.657 0 3-1.343 3-3v-5c0-1.657-1.343-3-3-3h-2.07c-0.05 0.342-0.123 0.676-0.22 1H16c1.105 0 2 0.895 2 2v5c0 1.105-0.895 2-2 2h-5c-1.105 0-2-0.895-2-2v-2.29c-0.324 0.097-0.658 0.17-1 0.22zm8.354-1.575c0.195-0.196 0.195-0.512 0-0.708-0.196-0.195-0.512-0.195-0.708 0L13 14.293l-1.146-1.147c-0.196-0.195-0.512-0.195-0.708 0-0.195 0.196-0.195 0.512 0 0.708l1.5 1.5c0.196 0.195 0.512 0.195 0.708 0l3-3z" />
+    </DataTemplate>
+
+</ResourceDictionary>
