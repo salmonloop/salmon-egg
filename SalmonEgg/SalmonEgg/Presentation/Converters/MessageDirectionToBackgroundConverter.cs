@@ -25,7 +25,7 @@ namespace SalmonEgg.Presentation.Converters
                 }
                 else
                 {
-                    if (Microsoft.UI.Xaml.Application.Current.Resources.TryGetValue("CardBackgroundFillColorDefaultBrush", out var cardBrush))
+                    if (Microsoft.UI.Xaml.Application.Current.Resources.TryGetValue("ControlFillColorSecondaryBrush", out var cardBrush))
                     {
                         return cardBrush;
                     }

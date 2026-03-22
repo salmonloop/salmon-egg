@@ -12,15 +12,16 @@
     <converters:MessageDirectionToBackgroundConverter x:Key="MessageBackgroundConverter" />
     <converters:MessageDirectionToForegroundConverter x:Key="MessageForegroundConverter" />
     <converters:MessageDirectionToCornerRadiusConverter x:Key="MessageCornerRadiusConverter" />
+    <converters:MessageDirectionToBorderThicknessConverter x:Key="MessageBorderThicknessConverter" />
 
     <!-- 全局统一聊天气泡模板 -->
     <DataTemplate x:Key="MessageTemplate">
         <Grid Margin="0,8" HorizontalAlignment="{Binding IsOutgoing, Converter={StaticResource HorizontalAlignmentConverter}, Mode=OneWay}">
             <Border CornerRadius="{Binding IsOutgoing, Converter={StaticResource MessageCornerRadiusConverter}, Mode=OneWay}"
-                    Padding="12,8"
+                    Padding="16,10"
                     Background="{Binding IsOutgoing, Converter={StaticResource MessageBackgroundConverter}, Mode=OneWay}"
-                    BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                    BorderThickness="0">
+                    BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                    BorderThickness="{Binding IsOutgoing, Converter={StaticResource MessageBorderThicknessConverter}, Mode=OneWay}">
                 <StackPanel>
                     <!-- 消息标题 (如有) -->
                     <TextBlock Text="{Binding Title, Mode=OneWay}"

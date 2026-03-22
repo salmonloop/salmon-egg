@@ -14,7 +14,7 @@
 
     <Grid x:Name="RootGrid"
           RowDefinitions="Auto,*,Auto,Auto"
-          Background="Transparent">
+          Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="WindowWidthStates">
                 <VisualState x:Name="Narrow">
