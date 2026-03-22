@@ -95,13 +95,9 @@ public sealed class MainNavigationViewAdapter
             return true;
         }
 
-        if (string.Equals(tag, NavItemTag.SessionsHeader, StringComparison.Ordinal))
+        if (string.Equals(tag, NavItemTag.AddProject, StringComparison.Ordinal))
         {
-            if (!_viewModel.SessionsHeaderItem.IsPaneOpen)
-            {
-                _ = _viewModel.SessionsHeaderItem.AddProjectCommand.ExecuteAsync(null);
-            }
-
+            _ = _viewModel.AddProjectItem.AddProjectCommand.ExecuteAsync(null);
             return true;
         }
 

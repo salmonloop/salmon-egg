@@ -6,7 +6,9 @@ public static class MainNavigationAutomationIds
 {
     public static string StartItem() => "MainNav.Start";
 
-    public static string SessionsHeader() => "MainNav.SessionsHeader";
+    public static string SessionsLabel() => "MainNav.SessionsLabel";
+
+    public static string AddProject() => "MainNav.AddProject";
 
     public static string ProjectItem(string projectId) => WithSuffix("MainNav.Project", projectId);
 

@@ -51,25 +51,31 @@ public abstract partial class MainNavItemViewModel : ObservableObject, IDisposab
     }
 }
 
-public sealed partial class SessionsHeaderNavItemViewModel : MainNavItemViewModel
+/// <summary>
+/// Label-only VM rendered as <c>NavigationViewItemHeader</c> which natively
+/// collapses to zero height in compact mode.
+/// </summary>
+public sealed partial class SessionsLabelNavItemViewModel : MainNavItemViewModel
 {
     public string Title { get; } = "会话";
 
+    public SessionsLabelNavItemViewModel(INavigationPaneState navigationState)
+        : base(navigationState)
+    {
+    }
+}
+
+/// <summary>
+/// Action VM rendered as a standard <c>NavigationViewItem</c> with a static
+/// Add icon.  In compact mode only the icon is visible (same pattern as Start).
+/// </summary>
+public sealed partial class AddProjectNavItemViewModel : MainNavItemViewModel
+{
     public IAsyncRelayCommand AddProjectCommand { get; }
 
-    public bool ShowHeaderLabel => IsPaneOpen;
-
-    public bool ShowCompactButton => IsPaneClosed;
-
-    public SessionsHeaderNavItemViewModel(IAsyncRelayCommand addProjectCommand, INavigationPaneState navigationState)
+    public AddProjectNavItemViewModel(IAsyncRelayCommand addProjectCommand, INavigationPaneState navigationState)
         : base(navigationState)
     {
         AddProjectCommand = addProjectCommand;
-    }
-
-    protected override void OnPaneStateChanged()
-    {
-        OnPropertyChanged(nameof(ShowHeaderLabel));
-        OnPropertyChanged(nameof(ShowCompactButton));
     }
 }

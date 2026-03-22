@@ -51,7 +51,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     public ObservableCollection<MainNavItemViewModel> Items { get; } = new();
 
     public StartNavItemViewModel StartItem { get; }
-    public SessionsHeaderNavItemViewModel SessionsHeaderItem { get; }
+    public SessionsLabelNavItemViewModel SessionsLabelItem { get; }
+    public AddProjectNavItemViewModel AddProjectItem { get; }
 
     private object? _selectedItem;
     private NavigationViewProjection _projection = new(
@@ -112,10 +113,12 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         AddProjectCommand = new AsyncRelayCommand(AddProjectAsync);
 
         StartItem = new StartNavItemViewModel(_navigationState);
-        SessionsHeaderItem = new SessionsHeaderNavItemViewModel(AddProjectCommand, _navigationState);
+        SessionsLabelItem = new SessionsLabelNavItemViewModel(_navigationState);
+        AddProjectItem = new AddProjectNavItemViewModel(AddProjectCommand, _navigationState);
 
         Items.Add(StartItem);
-        Items.Add(SessionsHeaderItem);
+        Items.Add(SessionsLabelItem);
+        Items.Add(AddProjectItem);
 
         // Show a lightweight placeholder until conversations are restored.
         var placeholderProject = CreateUnclassifiedProject();
@@ -148,7 +151,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         _relativeTimeTimer.Dispose();
 
         DisposeItem(StartItem);
-        DisposeItem(SessionsHeaderItem);
+        DisposeItem(SessionsLabelItem);
+        DisposeItem(AddProjectItem);
         foreach (var item in Items)
         {
             DisposeItem(item);
@@ -387,12 +391,13 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             try
             {
                 // Ensure we have the base items
-                if (Items.Count < 2)
+                if (Items.Count < 3)
                 {
                     foreach (var item in Items) DisposeItem(item);
                     Items.Clear();
                     Items.Add(StartItem);
-                    Items.Add(SessionsHeaderItem);
+                    Items.Add(SessionsLabelItem);
+                    Items.Add(AddProjectItem);
                 }
 
                 _sessionIndex.Clear();
@@ -401,8 +406,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 var projects = GetProjectDefinitions();
                 var sessionsByProject = GetSessionsByProject(projects);
 
-                // Index of where project items start
-                int itemIndex = 2;
+                // Index of where project items start (after Start, SessionsLabel, AddProject)
+                int itemIndex = 3;
 
                 foreach (var (projectDef, isSystem) in projects)
                 {
@@ -658,7 +663,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     private void ApplyVisualSelectionState(NavigationViewProjection projection)
     {
         StartItem.IsLogicallySelected = CurrentSelection is NavigationSelectionState.Start;
-        SessionsHeaderItem.IsLogicallySelected = false;
+        SessionsLabelItem.IsLogicallySelected = false;
+        AddProjectItem.IsLogicallySelected = false;
 
         foreach (var project in _projectVms.Values)
         {

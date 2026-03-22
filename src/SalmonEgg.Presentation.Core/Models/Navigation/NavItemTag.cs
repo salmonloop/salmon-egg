@@ -5,7 +5,8 @@ namespace SalmonEgg.Presentation.Models.Navigation;
 public static class NavItemTag
 {
     public static string Start => "Start";
-    public static string SessionsHeader => "SessionsHeader";
+    public static string SessionsLabel => "SessionsLabel";
+    public static string AddProject => "AddProject";
 
     private const string SessionPrefix = "Session:";
     private const string ProjectPrefix = "Project:";

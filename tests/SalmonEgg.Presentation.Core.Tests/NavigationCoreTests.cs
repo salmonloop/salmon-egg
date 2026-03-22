@@ -93,7 +93,8 @@ public sealed class NavigationCoreTests
         Assert.Contains("AutomationProperties.AutomationId=\"MainNavView\"", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"TitleBar.ToggleSidebar\"", xaml, StringComparison.Ordinal);
         Assert.Contains("MainNavigationAutomationIds.StartItem()", xaml, StringComparison.Ordinal);
-        Assert.Contains("MainNavigationAutomationIds.SessionsHeader()", xaml, StringComparison.Ordinal);
+        Assert.Contains("MainNavigationAutomationIds.SessionsLabel()", xaml, StringComparison.Ordinal);
+        Assert.Contains("MainNavigationAutomationIds.AddProject()", xaml, StringComparison.Ordinal);
         Assert.Contains("MainNavigationAutomationIds.ProjectItem(ProjectId)", xaml, StringComparison.Ordinal);
         Assert.Contains("MainNavigationAutomationIds.SessionItem(SessionId)", xaml, StringComparison.Ordinal);
         Assert.Contains("MainNavigationAutomationIds.MoreItem(ProjectId)", xaml, StringComparison.Ordinal);
@@ -136,6 +137,26 @@ public sealed class NavigationCoreTests
         Assert.Contains("AutomationProperties.AutomationId=\"ChatView.CurrentSessionNameButton\"", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"ChatView.CurrentSessionNameEditor\"", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"ChatView.MessagesList\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MainNavigationXaml_UsesNativeNavigationViewItemHeaderForSessionsLabel()
+    {
+        var xaml = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml");
+
+        // SessionsLabel should use NavigationViewItemHeader, not NavigationViewItem
+        Assert.Contains("<NavigationViewItemHeader Content=\"{x:Bind Title, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MainNavigationAutomationIds.SessionsLabel()", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MainNavigationXaml_AddProjectUsesStaticAddIcon()
+    {
+        var xaml = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml");
+
+        Assert.Contains("MainNavigationAutomationIds.AddProject()", xaml, StringComparison.Ordinal);
+        Assert.Contains("<SymbolIcon Symbol=\"Add\" />", xaml, StringComparison.Ordinal);
+        Assert.Contains("NavItemTag.AddProject", xaml, StringComparison.Ordinal);
     }
 
     private static string LoadFile(string relativePath)

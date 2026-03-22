@@ -63,44 +63,25 @@
             </NavigationViewItem>
         </DataTemplate>
         
-        <DataTemplate x:Key="SessionsHeaderTemplate" x:DataType="nav:SessionsHeaderNavItemViewModel">
-            <NavigationViewItem MinHeight="{StaticResource NavSectionHeaderMinHeight}"
-                                HorizontalContentAlignment="Stretch"
-                                Padding="0"
-                                AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.SessionsHeader()}"
-                                Tag="{x:Bind navModels:NavItemTag.SessionsHeader}"
-                                SelectsOnInvoked="False">
-                <NavigationViewItem.Icon>
-                    <SymbolIcon Symbol="Add" 
-                                Visibility="{x:Bind ShowCompactButton, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
-                </NavigationViewItem.Icon>
+        <DataTemplate x:Key="SessionsLabelTemplate" x:DataType="nav:SessionsLabelNavItemViewModel">
+            <NavigationViewItemHeader Content="{x:Bind Title, Mode=OneWay}"
+                                      AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.SessionsLabel()}" />
+        </DataTemplate>
 
+        <DataTemplate x:Key="AddProjectTemplate" x:DataType="nav:AddProjectNavItemViewModel">
+            <NavigationViewItem SelectsOnInvoked="False"
+                                AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.AddProject()}"
+                                Tag="{x:Bind navModels:NavItemTag.AddProject}">
+                <NavigationViewItem.Icon>
+                    <SymbolIcon Symbol="Add" />
+                </NavigationViewItem.Icon>
                 <NavigationViewItem.Content>
-                    <Grid ColumnDefinitions="*,Auto"
-                          ColumnSpacing="8"
-                          Visibility="{x:Bind ShowHeaderLabel, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                        <TextBlock Text="{x:Bind Title, Mode=OneWay}"
-                                   Style="{StaticResource NavigationViewItemHeaderTextStyle}"
-                                   Foreground="{ThemeResource NavigationViewItemHeaderForeground}"
-                                   VerticalAlignment="Center"/>
-                        <Button Grid.Column="1"
-                                Width="{StaticResource NavSectionHeaderActionButtonSize}"
-                                Height="{StaticResource NavSectionHeaderActionButtonSize}"
-                                MinWidth="{StaticResource NavSectionHeaderActionButtonSize}"
-                                MinHeight="{StaticResource NavSectionHeaderActionButtonSize}"
-                                Padding="0"
-                                HorizontalAlignment="Right"
-                                CornerRadius="{ThemeResource ControlCornerRadius}"
-                                Background="{ThemeResource SubtleFillColorTransparentBrush}"
-                                BorderBrush="{ThemeResource SubtleFillColorTransparentBrush}"
-                                BorderThickness="0"
-                                ToolTipService.ToolTip="Add Project"
-                                Command="{x:Bind AddProjectCommand}"
-                                AutomationProperties.Name="Add Project">
-                            <FontIcon Glyph="&#xE710;"
-                                      FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                      FontSize="14" />
-                        </Button>
+                    <Grid Visibility="{x:Bind IsPaneOpen, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <TextBlock x:Uid="NavAddProjectLabel"
+                                   Text="添加项目"
+                                   TextTrimming="CharacterEllipsis"
+                                   MaxLines="1"
+                                   VerticalAlignment="Center" />
                     </Grid>
                 </NavigationViewItem.Content>
             </NavigationViewItem>
@@ -197,7 +178,8 @@
 
         <navViews:MainNavItemTemplateSelector x:Key="MainNavItemTemplateSelector"
                                               StartTemplate="{StaticResource StartNavTemplate}"
-                                              HeaderTemplate="{StaticResource SessionsHeaderTemplate}"
+                                              LabelTemplate="{StaticResource SessionsLabelTemplate}"
+                                              AddProjectTemplate="{StaticResource AddProjectTemplate}"
                                               ProjectTemplate="{StaticResource ProjectNavTemplate}"
                                               SessionTemplate="{StaticResource SessionNavTemplate}"
                                               MoreTemplate="{StaticResource MoreNavTemplate}" />

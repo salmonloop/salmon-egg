@@ -46,7 +46,7 @@ internal sealed class WindowsGuiAppSession : IDisposable
         var application = Application.Attach(existing);
         var mainWindow = RetryUntil(
             () => application.GetMainWindow(automation),
-            window => window != null && !window.IsOffscreen,
+            window => window != null && !TryGetIsOffscreen(window),
             TimeSpan.FromSeconds(20),
             "Timed out waiting for SalmonEgg main window.");
 
@@ -263,7 +263,7 @@ internal sealed class WindowsGuiAppSession : IDisposable
             var application = Application.Attach(process);
             var mainWindow = RetryUntil(
                 () => application.GetMainWindow(automation),
-                window => window != null && !window.IsOffscreen,
+                window => window != null && !TryGetIsOffscreen(window),
                 TimeSpan.FromSeconds(20),
                 "Timed out waiting for SalmonEgg main window.");
 
@@ -304,6 +304,18 @@ internal sealed class WindowsGuiAppSession : IDisposable
         try
         {
             return element.AutomationId?.StartsWith(prefix, StringComparison.Ordinal) == true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool TryGetIsOffscreen(AutomationElement element)
+    {
+        try
+        {
+            return element.IsOffscreen;
         }
         catch
         {
