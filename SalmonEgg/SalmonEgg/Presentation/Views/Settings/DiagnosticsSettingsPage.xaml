@@ -3,12 +3,18 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:SalmonEgg.Controls"
+    xmlns:converters="using:SalmonEgg.Presentation.Converters"
     xmlns:views="using:SalmonEgg.Presentation.Views"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
     Background="Transparent"
     AllowDrop="False">
+
+    <views:SettingsPageBase.Resources>
+        <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+        <converters:InverseBooleanConverter x:Key="InverseBooleanConverter" />
+    </views:SettingsPageBase.Resources>
 
     <ScrollViewer Padding="0"
                   HorizontalScrollBarVisibility="Disabled">
@@ -51,6 +57,60 @@
                             <Button x:Uid="Diagnostics_CopyLogSnippet" Content="复制最近日志片段" Command="{x:Bind ViewModel.CopyRecentLogSnippetCommand}" />
                             <Button x:Uid="Diagnostics_RefreshLogs" Content="刷新" Command="{x:Bind ViewModel.RefreshLatestLogFileCommand}" />
                         </StackPanel>
+
+                        <Expander IsExpanded="{x:Bind ViewModel.LiveLogViewer.IsExpanded, Mode=TwoWay}"
+                                  Background="Transparent"
+                                  HorizontalAlignment="Stretch"
+                                  HorizontalContentAlignment="Stretch"
+                                  Padding="0">
+                            <Expander.Header>
+                                <Grid Padding="12,8" HorizontalAlignment="Stretch">
+                                    <TextBlock x:Uid="Diagnostics_LiveLogHeader" Text="实时日志" FontWeight="SemiBold" />
+                                </Grid>
+                            </Expander.Header>
+
+                            <StackPanel Padding="12,0,0,0"
+                                        Spacing="12"
+                                        HorizontalAlignment="Stretch">
+                                <TextBlock Text="{x:Bind ViewModel.LiveLogViewer.StatusText, Mode=OneWay}"
+                                           FontWeight="Medium" />
+                                <TextBlock Text="{x:Bind ViewModel.LiveLogViewer.CurrentLogFilePath, Mode=OneWay}"
+                                           Opacity="0.7"
+                                           TextWrapping="Wrap" />
+
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button x:Uid="Diagnostics_LiveLogStart"
+                                            Content="启动"
+                                            Command="{x:Bind ViewModel.LiveLogViewer.OpenViewerCommand}"
+                                            Visibility="{x:Bind ViewModel.LiveLogViewer.CanStartStreaming, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                    <Button x:Uid="Diagnostics_LiveLogPause"
+                                            Content="暂停"
+                                            Command="{x:Bind ViewModel.LiveLogViewer.TogglePauseCommand}"
+                                            Visibility="{x:Bind ViewModel.LiveLogViewer.CanPauseStreaming, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                    <Button x:Uid="Diagnostics_LiveLogResume"
+                                            Content="继续"
+                                            Command="{x:Bind ViewModel.LiveLogViewer.TogglePauseCommand}"
+                                            Visibility="{x:Bind ViewModel.LiveLogViewer.CanResumeStreaming, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                    <Button x:Uid="Diagnostics_LiveLogClear"
+                                            Content="清空视图"
+                                            Command="{x:Bind ViewModel.LiveLogViewer.ClearVisibleLogCommand}" />
+                                </StackPanel>
+
+                                <TextBox x:Name="LiveLogTextBox"
+                                         Text="{x:Bind ViewModel.LiveLogViewer.VisibleLogText, Mode=OneWay}"
+                                         IsReadOnly="True"
+                                         AcceptsReturn="True"
+                                         TextChanged="OnLiveLogTextChanged"
+                                         TextWrapping="Wrap"
+                                         Height="320" />
+
+                                <TextBlock x:Uid="Diagnostics_LiveLogHint"
+                                           Text="离开页面后会自动停止实时打印。"
+                                           FontSize="12"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Expander>
                     </StackPanel>
                 </Border>
             </StackPanel>

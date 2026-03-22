@@ -49,19 +49,37 @@ public class NavigationStateServiceTests
         Assert.Equal(0, changedCount);
     }
 
+    [Fact]
+    public void Constructor_SeedsCurrentSnapshotImmediately()
+    {
+        using var store = new TestShellLayoutStore(
+            ShellLayoutState.Default with
+            {
+                WindowMetrics = new WindowMetrics(800, 720, 800, 720),
+                UserNavOpenIntent = false
+            });
+        using var service = new NavigationStateService(store);
+
+        Assert.False(service.IsPaneOpen);
+    }
+
     private sealed class TestShellLayoutStore : IShellLayoutStore, IDisposable
     {
         private readonly IState<ShellLayoutState> _state;
         private readonly IState<ShellLayoutSnapshot> _snapshot;
 
-        public TestShellLayoutStore()
+        public TestShellLayoutStore(ShellLayoutState? initialState = null)
         {
-            _state = Uno.Extensions.Reactive.State.Value(new object(), () => ShellLayoutState.Default);
-            _snapshot = Uno.Extensions.Reactive.State.Value(new object(), () => ShellLayoutPolicy.Compute(ShellLayoutState.Default));
+            CurrentState = initialState ?? ShellLayoutState.Default;
+            CurrentSnapshot = ShellLayoutPolicy.Compute(CurrentState);
+            _state = Uno.Extensions.Reactive.State.Value(new object(), () => CurrentState);
+            _snapshot = Uno.Extensions.Reactive.State.Value(new object(), () => CurrentSnapshot);
         }
 
         public IFeed<ShellLayoutState> State => _state;
         public IFeed<ShellLayoutSnapshot> Snapshot => _snapshot;
+        public ShellLayoutState CurrentState { get; private set; }
+        public ShellLayoutSnapshot CurrentSnapshot { get; private set; }
 
         public async ValueTask Dispatch(ShellLayoutAction action)
         {
@@ -78,6 +96,8 @@ public class NavigationStateServiceTests
                 return;
             }
 
+            CurrentState = reduced.State;
+            CurrentSnapshot = reduced.Snapshot;
             await _snapshot.Update(_ => reduced.Snapshot, default);
         }
 

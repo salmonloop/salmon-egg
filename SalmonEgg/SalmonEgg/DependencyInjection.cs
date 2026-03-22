@@ -140,6 +140,7 @@ public static class DependencyInjection
 
         // Diagnostics & platform shell
         services.AddSingleton<IDiagnosticsBundleService, SalmonEgg.Infrastructure.Services.DiagnosticsBundleService>();
+        services.AddSingleton<ILiveLogStreamService, SalmonEgg.Infrastructure.Services.LiveLogStreamService>();
         services.AddSingleton<IPlatformShellService, SalmonEgg.Infrastructure.Services.PlatformShellService>();
 
         }
@@ -159,9 +160,11 @@ public static class DependencyInjection
         // MVUX Shell Layout Store
         services.AddSingleton<IShellLayoutStore>(sp =>
         {
-            var state = State.Value(sp, () => ShellLayoutState.Default);
-            var snapshot = State.Value(sp, () => ShellLayoutPolicy.Compute(ShellLayoutState.Default));
-            return new ShellLayoutStore(state, snapshot);
+            var initialState = ShellLayoutState.Default;
+            var initialSnapshot = ShellLayoutPolicy.Compute(initialState);
+            var state = State.Value(sp, () => initialState);
+            var snapshot = State.Value(sp, () => initialSnapshot);
+            return new ShellLayoutStore(state, snapshot, initialState, initialSnapshot);
         });
         services.AddSingleton<IShellLayoutMetricsSink, ShellLayoutMetricsSink>();
 
@@ -323,6 +326,11 @@ public static class DependencyInjection
         // Settings pages (Data/Shortcuts/Diagnostics/About)
         services.AddSingleton<DataStorageSettingsViewModel>();
         services.AddSingleton<ShortcutsSettingsViewModel>();
+        services.AddSingleton<LiveLogViewerViewModel>(sp =>
+            new LiveLogViewerViewModel(
+                sp.GetRequiredService<ILiveLogStreamService>(),
+                sp.GetRequiredService<IAppDataService>().LogsDirectoryPath,
+                sp.GetRequiredService<ILogger<LiveLogViewerViewModel>>()));
         services.AddSingleton<DiagnosticsSettingsViewModel>();
         services.AddSingleton<AboutViewModel>();
 

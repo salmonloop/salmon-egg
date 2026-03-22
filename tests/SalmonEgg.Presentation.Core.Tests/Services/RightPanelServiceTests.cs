@@ -70,12 +70,16 @@ public class RightPanelServiceTests
 
         public TestShellLayoutStore()
         {
-            _state = Uno.Extensions.Reactive.State.Value(new object(), () => ShellLayoutState.Default);
-            _snapshot = Uno.Extensions.Reactive.State.Value(new object(), () => ShellLayoutPolicy.Compute(ShellLayoutState.Default));
+            CurrentState = ShellLayoutState.Default;
+            CurrentSnapshot = ShellLayoutPolicy.Compute(CurrentState);
+            _state = Uno.Extensions.Reactive.State.Value(new object(), () => CurrentState);
+            _snapshot = Uno.Extensions.Reactive.State.Value(new object(), () => CurrentSnapshot);
         }
 
         public IFeed<ShellLayoutState> State => _state;
         public IFeed<ShellLayoutSnapshot> Snapshot => _snapshot;
+        public ShellLayoutState CurrentState { get; private set; }
+        public ShellLayoutSnapshot CurrentSnapshot { get; private set; }
 
         public async ValueTask Dispatch(ShellLayoutAction action)
         {
@@ -92,6 +96,8 @@ public class RightPanelServiceTests
                 return;
             }
 
+            CurrentState = reduced.State;
+            CurrentSnapshot = reduced.Snapshot;
             await _snapshot.Update(_ => reduced.Snapshot, default);
         }
 

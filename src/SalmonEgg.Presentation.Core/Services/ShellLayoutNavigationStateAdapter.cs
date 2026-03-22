@@ -9,14 +9,14 @@ public sealed class ShellLayoutNavigationStateAdapter : INavigationPaneState, ID
 {
     private readonly IDisposable? _subscription;
     private readonly IState<ShellLayoutSnapshot>? _snapshotState;
-    private bool _isPaneOpen = ShellLayoutPolicy.Compute(ShellLayoutState.Default).IsNavPaneOpen;
+    private bool _isPaneOpen;
     public bool IsPaneOpen => _isPaneOpen;
     public event EventHandler? PaneStateChanged;
 
     public ShellLayoutNavigationStateAdapter(IShellLayoutStore store)
     {
+        _isPaneOpen = store.CurrentSnapshot.IsNavPaneOpen;
         _snapshotState = State.FromFeed(this, store.Snapshot);
-        // Using the ForEach overload that worked in ShellLayoutViewModel
         _snapshotState.ForEach(async (snapshot, ct) =>
         {
             if (snapshot is null) return;

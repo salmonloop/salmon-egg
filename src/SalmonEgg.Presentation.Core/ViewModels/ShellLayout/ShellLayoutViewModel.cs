@@ -43,8 +43,8 @@ public sealed partial class ShellLayoutViewModel : ObservableObject, IDisposable
     public ShellLayoutViewModel(IShellLayoutStore store, SynchronizationContext? syncContext = null)
     {
         _syncContext = syncContext ?? SynchronizationContext.Current ?? new SynchronizationContext();
-        ApplySnapshot(ShellLayoutPolicy.Compute(ShellLayoutState.Default));
-        ApplyDesiredState(ShellLayoutState.Default);
+        ApplySnapshot(store.CurrentSnapshot);
+        ApplyDesiredState(store.CurrentState);
         _desiredState = State.FromFeed(this, store.State);
         _snapshotState = State.FromFeed(this, store.Snapshot);
         _snapshotState.ForEach(async (snapshot, ct) =>

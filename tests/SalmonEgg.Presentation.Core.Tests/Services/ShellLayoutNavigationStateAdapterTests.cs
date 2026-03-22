@@ -18,19 +18,37 @@ public class ShellLayoutNavigationStateAdapterTests
         Assert.True(adapter.IsPaneOpen);
     }
 
+    [Fact]
+    public async Task Adapter_UsesCurrentSnapshotDuringConstruction()
+    {
+        await using var store = new TestShellLayoutStore(
+            ShellLayoutState.Default with
+            {
+                WindowMetrics = new WindowMetrics(800, 720, 800, 720),
+                UserNavOpenIntent = false
+            });
+        using var adapter = new ShellLayoutNavigationStateAdapter(store);
+
+        Assert.False(adapter.IsPaneOpen);
+    }
+
     private sealed class TestShellLayoutStore : IShellLayoutStore, IAsyncDisposable
     {
         private readonly IState<ShellLayoutState> _state;
         public IState<ShellLayoutSnapshot> SnapshotState { get; }
 
-        public TestShellLayoutStore()
+        public TestShellLayoutStore(ShellLayoutState? initialState = null)
         {
-            _state = Uno.Extensions.Reactive.State.Value(new object(), () => ShellLayoutState.Default);
-            SnapshotState = Uno.Extensions.Reactive.State.Value(new object(), () => ShellLayoutPolicy.Compute(ShellLayoutState.Default));
+            CurrentState = initialState ?? ShellLayoutState.Default;
+            CurrentSnapshot = ShellLayoutPolicy.Compute(CurrentState);
+            _state = Uno.Extensions.Reactive.State.Value(new object(), () => CurrentState);
+            SnapshotState = Uno.Extensions.Reactive.State.Value(new object(), () => CurrentSnapshot);
         }
 
         public IFeed<ShellLayoutState> State => _state;
         public IFeed<ShellLayoutSnapshot> Snapshot => SnapshotState;
+        public ShellLayoutState CurrentState { get; private set; }
+        public ShellLayoutSnapshot CurrentSnapshot { get; private set; }
 
         public ValueTask Dispatch(ShellLayoutAction action) => ValueTask.CompletedTask;
 

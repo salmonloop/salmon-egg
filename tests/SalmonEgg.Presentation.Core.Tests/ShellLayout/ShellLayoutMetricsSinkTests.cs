@@ -25,6 +25,8 @@ public class ShellLayoutMetricsSinkTests
         public IState<ShellLayoutSnapshot> SnapshotState { get; } = Uno.Extensions.Reactive.State.Value(new object(), () => ShellLayoutPolicy.Compute(ShellLayoutState.Default));
         public IFeed<ShellLayoutState> State => _state;
         public IFeed<ShellLayoutSnapshot> Snapshot => SnapshotState;
+        public ShellLayoutState CurrentState { get; } = ShellLayoutState.Default;
+        public ShellLayoutSnapshot CurrentSnapshot { get; } = ShellLayoutPolicy.Compute(ShellLayoutState.Default);
         public ShellLayoutAction? LastAction { get; private set; }
         public ValueTask Dispatch(ShellLayoutAction action) { LastAction = action; return ValueTask.CompletedTask; }
 

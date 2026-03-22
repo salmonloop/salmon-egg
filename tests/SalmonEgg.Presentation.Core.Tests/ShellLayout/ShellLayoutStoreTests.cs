@@ -10,9 +10,11 @@ public sealed class ShellLayoutStoreTests
     [Fact]
     public async Task Dispatch_Updates_Snapshot_After_Toggle()
     {
-        await using var state = State.Value(new object(), () => ShellLayoutState.Default);
-        await using var snapshot = State.Value(new object(), () => ShellLayoutPolicy.Compute(ShellLayoutState.Default));
-        var store = new ShellLayoutStore(state, snapshot);
+        var initialState = ShellLayoutState.Default;
+        var initialSnapshot = ShellLayoutPolicy.Compute(initialState);
+        await using var state = State.Value(new object(), () => initialState);
+        await using var snapshot = State.Value(new object(), () => initialSnapshot);
+        var store = new ShellLayoutStore(state, snapshot, initialState, initialSnapshot);
 
         var expected = ShellLayoutReducer.Reduce(ShellLayoutState.Default, new NavToggleRequested("Test")).Snapshot.IsNavPaneOpen;
 

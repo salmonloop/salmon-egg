@@ -26,6 +26,21 @@ public class ShellLayoutViewModelTests
     }
 
     [Fact]
+    public async Task ViewModel_SeedsCurrentStoreSnapshotImmediately()
+    {
+        var initialState = ShellLayoutState.Default with
+        {
+            WindowMetrics = new WindowMetrics(800, 720, 800, 720),
+            UserNavOpenIntent = false
+        };
+        await using var store = new FakeShellLayoutStore(initialState);
+        using var vm = new ShellLayoutViewModel(store);
+
+        Assert.Equal(NavigationPaneDisplayMode.Compact, vm.NavPaneDisplayMode);
+        Assert.False(vm.IsNavPaneOpen);
+    }
+
+    [Fact]
     public async Task ViewModel_ProjectsSnapshot()
     {
         await using var store = new FakeShellLayoutStore();
@@ -115,16 +130,20 @@ public class ShellLayoutViewModelTests
     {
         private readonly IState<ShellLayoutState> _state;
 
-        public FakeShellLayoutStore()
+        public FakeShellLayoutStore(ShellLayoutState? initialState = null)
         {
-            SnapshotState = Uno.Extensions.Reactive.State.Value(new object(), () => ShellLayoutPolicy.Compute(ShellLayoutState.Default));
-            _state = Uno.Extensions.Reactive.State.Value(new object(), () => ShellLayoutState.Default);
+            CurrentState = initialState ?? ShellLayoutState.Default;
+            CurrentSnapshot = ShellLayoutPolicy.Compute(CurrentState);
+            SnapshotState = Uno.Extensions.Reactive.State.Value(new object(), () => CurrentSnapshot);
+            _state = Uno.Extensions.Reactive.State.Value(new object(), () => CurrentState);
         }
 
         public IFeed<ShellLayoutState> State => _state;
         public IFeed<ShellLayoutSnapshot> Snapshot => SnapshotState;
         public IState<ShellLayoutSnapshot> SnapshotState { get; }
         public IState<ShellLayoutState> StateState => _state;
+        public ShellLayoutState CurrentState { get; private set; }
+        public ShellLayoutSnapshot CurrentSnapshot { get; private set; }
         public ValueTask Dispatch(ShellLayoutAction action) => ValueTask.CompletedTask;
 
         public async ValueTask DisposeAsync()

@@ -8,8 +8,8 @@ public sealed class RightPanelService : IRightPanelService, IDisposable
 {
     private readonly IDisposable? _subscription;
     private readonly IState<ShellLayoutSnapshot>? _snapshotState;
-    private RightPanelMode _currentMode = ShellLayoutPolicy.Compute(ShellLayoutState.Default).RightPanelMode;
-    private double _panelWidth = ShellLayoutPolicy.Compute(ShellLayoutState.Default).RightPanelWidth;
+    private RightPanelMode _currentMode;
+    private double _panelWidth;
 
     public RightPanelMode CurrentMode => _currentMode;
 
@@ -21,6 +21,8 @@ public sealed class RightPanelService : IRightPanelService, IDisposable
 
     public RightPanelService(IShellLayoutStore store)
     {
+        _currentMode = store.CurrentSnapshot.RightPanelMode;
+        _panelWidth = store.CurrentSnapshot.RightPanelWidth;
         _snapshotState = State.FromFeed(this, store.Snapshot);
         _snapshotState.ForEach(async (snapshot, ct) =>
         {

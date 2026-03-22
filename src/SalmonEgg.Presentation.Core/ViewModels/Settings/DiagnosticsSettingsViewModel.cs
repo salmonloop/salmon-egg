@@ -23,6 +23,8 @@ public sealed partial class DiagnosticsSettingsViewModel : ObservableObject
 
     public ChatViewModel Chat { get; }
 
+    public LiveLogViewerViewModel LiveLogViewer { get; }
+
     public string AppVersion => System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString()
         ?? System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString()
         ?? "unknown";
@@ -45,12 +47,14 @@ public sealed partial class DiagnosticsSettingsViewModel : ObservableObject
         IAppDataService paths,
         IDiagnosticsBundleService bundle,
         IPlatformShellService shell,
+        LiveLogViewerViewModel liveLogViewer,
         ILogger<DiagnosticsSettingsViewModel> logger)
     {
         Chat = chatViewModel ?? throw new ArgumentNullException(nameof(chatViewModel));
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         _bundle = bundle ?? throw new ArgumentNullException(nameof(bundle));
         _shell = shell ?? throw new ArgumentNullException(nameof(shell));
+        LiveLogViewer = liveLogViewer ?? throw new ArgumentNullException(nameof(liveLogViewer));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         RefreshLatestLogFile();
