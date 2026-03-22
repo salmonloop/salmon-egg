@@ -10,60 +10,6 @@
       AllowDrop="False">
 
     <Page.Resources>
-        <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
-        <converters:MessageDirectionToAlignmentConverter x:Key="HorizontalAlignmentConverter" />
-        <converters:TimeFormatConverter x:Key="TimeFormatConverter" />
-        <converters:MessageDirectionToBackgroundConverter x:Key="BackgroundConverter" />
-        <converters:MessageDirectionToForegroundConverter x:Key="ForegroundConverter" />
-        <converters:MessageDirectionToCornerRadiusConverter x:Key="CornerRadiusConverter" />
-
-        <DataTemplate x:Key="MessageTemplate" x:DataType="vm:ChatMessageViewModel">
-            <Grid Margin="0,8"
-                  HorizontalAlignment="{x:Bind IsOutgoing, Converter={StaticResource HorizontalAlignmentConverter}, Mode=OneWay}">
-                <Border CornerRadius="{x:Bind IsOutgoing, Converter={StaticResource CornerRadiusConverter}, Mode=OneWay}"
-                        Padding="12,8"
-                        Background="{x:Bind IsOutgoing, Converter={StaticResource BackgroundConverter}, Mode=OneWay}"
-                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                        BorderThickness="0">
-                    <StackPanel>
-                        <TextBlock Text="{x:Bind Title, Mode=OneWay}"
-                                   FontWeight="SemiBold"
-                                   FontSize="12"
-                                   Foreground="{x:Bind IsOutgoing, Converter={StaticResource ForegroundConverter}, Mode=OneWay}"
-                                   Visibility="{x:Bind HasTitle, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                                   Margin="0,0,0,4" />
-
-                        <StackPanel Visibility="{x:Bind IsThinkingPlaceholder, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                                    Orientation="Horizontal"
-                                    Spacing="8"
-                                    Margin="0,4">
-                            <ProgressRing IsActive="True"
-                                          Width="16"
-                                          Height="16"
-                                          Foreground="{x:Bind IsOutgoing, Converter={StaticResource ForegroundConverter}, Mode=OneWay}"
-                                          VerticalAlignment="Center" />
-                            <TextBlock Text="思考中..."
-                                       Opacity="0.6"
-                                       Foreground="{x:Bind IsOutgoing, Converter={StaticResource ForegroundConverter}, Mode=OneWay}"
-                                       VerticalAlignment="Center"
-                                       FontSize="12" />
-                        </StackPanel>
-
-                        <TextBlock Text="{x:Bind TextContent, Mode=OneWay}"
-                                   TextWrapping="Wrap"
-                                   Foreground="{x:Bind IsOutgoing, Converter={StaticResource ForegroundConverter}, Mode=OneWay}"
-                                   Visibility="{x:Bind HasTextContent, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
-
-                        <TextBlock Text="{x:Bind Timestamp, Mode=OneWay, Converter={StaticResource TimeFormatConverter}}"
-                                   FontSize="10"
-                                   Foreground="{x:Bind IsOutgoing, Converter={StaticResource ForegroundConverter}, Mode=OneWay}"
-                                   Opacity="0.5"
-                                   HorizontalAlignment="Right"
-                                   Margin="0,4,0,0" />
-                    </StackPanel>
-                </Border>
-            </Grid>
-        </DataTemplate>
     </Page.Resources>
 
     <Grid x:Name="RootGrid"

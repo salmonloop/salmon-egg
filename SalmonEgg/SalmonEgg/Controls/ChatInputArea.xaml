@@ -17,10 +17,9 @@
     <Border Padding="20,0,20,20"
             Background="Transparent">
         <Grid MaxWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}">
-            <Grid RowDefinitions="Auto,Auto,Auto">
+            <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
                 <!-- Slash commands menu -->
                 <Border Grid.Row="0"
-                        Margin="0,0,0,8"
                         Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                         BorderThickness="1"
@@ -53,14 +52,23 @@
                     </StackPanel>
                 </Border>
 
-                <StackPanel Grid.Row="1" Spacing="8">
-                    <InfoBar Severity="Error"
-                             IsClosable="True"
-                             IsOpen="{x:Bind ViewModel.ShowTransientNotification, Mode=TwoWay}"
-                             Message="{x:Bind ViewModel.TransientNotificationMessage, Mode=OneWay}"
-                             Visibility="{x:Bind ViewModel.ShowTransientNotification, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                <!-- Transient Notification -->
+                <InfoBar Grid.Row="1"
+                         Severity="Error"
+                         IsClosable="True"
+                         IsOpen="{x:Bind ViewModel.ShowTransientNotification, Mode=TwoWay}"
+                         Message="{x:Bind ViewModel.TransientNotificationMessage, Mode=OneWay}"
+                         Visibility="{x:Bind ViewModel.ShowTransientNotification, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
 
-                    <Grid>
+                <!-- Unified Input Area -->
+                <Border Grid.Row="2"
+                        Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="20"
+                        Padding="16,12">
+                    <Grid RowDefinitions="*,Auto" RowSpacing="12">
+                        <!-- TextBox Area -->
                         <Grid>
                             <!-- Ghost completion overlay -->
                             <TextBlock IsHitTestVisible="False"
@@ -80,77 +88,97 @@
                                       AcceptsReturn="True"
                                       TextWrapping="Wrap"
                                      MinHeight="44"
-                                     MaxHeight="120"
+                                     MaxHeight="240"
+                                     BorderThickness="0"
+                                     Background="Transparent"
                                      IsEnabled="{x:Bind ViewModel.IsInputEnabled, Mode=OneWay}"
                                      KeyboardAcceleratorPlacementMode="Hidden"
                                      KeyDown="OnInputKeyDown">
+                                <!-- SSOT Lightweight styling for TextBox focus states -->
+                                <TextBox.Resources>
+                                    <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent" />
+                                    <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent" />
+                                    <SolidColorBrush x:Key="TextControlBackground" Color="Transparent" />
+                                    <Thickness x:Key="TextControlBorderThemeThicknessFocused">0</Thickness>
+                                    <Thickness x:Key="TextControlBorderThemeThickness">0</Thickness>
+                                    <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="Transparent" />
+                                    <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="Transparent" />
+                                    <SolidColorBrush x:Key="TextControlBorderBrush" Color="Transparent" />
+                                </TextBox.Resources>
                                 <TextBox.KeyboardAccelerators>
                                     <KeyboardAccelerator Key="Enter" Invoked="OnSendAcceleratorInvoked"/>
                                     <KeyboardAccelerator Key="Enter" Modifiers="Control" Invoked="OnNewLineAcceleratorInvoked"/>
                                 </TextBox.KeyboardAccelerators>
                             </TextBox>
                         </Grid>
+
+                        <!-- Bottom Tools Strip -->
+                        <Grid Grid.Row="1" ColumnDefinitions="*,Auto">
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="8"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Center">
+                                <ComboBox x:Uid="ChatModeSelector"
+                                          MinWidth="120"
+                                          MaxWidth="240"
+                                          FontSize="12"
+                                          Background="Transparent"
+                                          BorderThickness="0"
+                                          HorizontalAlignment="Left"
+                                          ItemsSource="{x:Bind ViewModel.AvailableModes, Mode=OneWay}"
+                                          SelectedItem="{x:Bind ViewModel.SelectedMode, Mode=TwoWay}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:SessionModeViewModel">
+                                            <TextBlock Text="{x:Bind ModeName, Mode=OneWay}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       MaxLines="1"/>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+
+                                <!-- “娶她”功能占位：后续启用时复用同一输入区域组件 -->
+                                <Button x:Uid="MarryHerButton"
+                                        FontSize="12"
+                                        MinHeight="28"
+                                        Padding="12,0"
+                                        CornerRadius="8"
+                                        Style="{StaticResource SubtleButtonStyle}"
+                                        Visibility="{x:Bind models:UiFeatures.MarryHerEnabled, Mode=OneTime, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1"
+                                        Orientation="Horizontal"
+                                        Spacing="8"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center">
+                                <Button x:Name="SendButton"
+                                        x:Uid="SendButton"
+                                        Content="&#xE724;"
+                                        FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                        Width="36"
+                                        Height="36"
+                                        Padding="0"
+                                        CornerRadius="18"
+                                        Style="{StaticResource AccentButtonStyle}"
+                                        IsEnabled="{x:Bind CanSubmitUi, Mode=OneWay}"
+                                        Command="{x:Bind SubmitCommand}"
+                                        Visibility="{x:Bind ViewModel.IsPromptInFlight, Mode=OneWay, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+
+                                <Button x:Name="CancelButton"
+                                        x:Uid="CancelButton"
+                                        Content="&#xE711;"
+                                        FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                        Width="36"
+                                        Height="36"
+                                        Padding="0"
+                                        CornerRadius="18"
+                                        IsEnabled="{x:Bind ViewModel.IsPromptInFlight, Mode=OneWay}"
+                                        Command="{x:Bind ViewModel.CancelPromptCommand}"
+                                        Visibility="{x:Bind ViewModel.IsPromptInFlight, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                            </StackPanel>
+                        </Grid>
                     </Grid>
-                </StackPanel>
-
-                <Grid Grid.Row="2"
-                      ColumnDefinitions="*,Auto"
-                      ColumnSpacing="8"
-                      Margin="0,10,0,0">
-                    <StackPanel Orientation="Horizontal"
-                                Spacing="8"
-                                HorizontalAlignment="Left"
-                                VerticalAlignment="Center">
-                        <ComboBox x:Uid="ChatModeSelector"
-                                  MinWidth="120"
-                                  MaxWidth="240"
-                                  FontSize="12"
-                                  HorizontalAlignment="Left"
-                                  ItemsSource="{x:Bind ViewModel.AvailableModes, Mode=OneWay}"
-                                  SelectedItem="{x:Bind ViewModel.SelectedMode, Mode=TwoWay}">
-                            <ComboBox.ItemTemplate>
-                                <DataTemplate x:DataType="vm:SessionModeViewModel">
-                                    <TextBlock Text="{x:Bind ModeName, Mode=OneWay}"
-                                               TextTrimming="CharacterEllipsis"
-                                               MaxLines="1"/>
-                                </DataTemplate>
-                            </ComboBox.ItemTemplate>
-                        </ComboBox>
-
-                        <!-- “娶她”功能占位：后续启用时复用同一输入区域组件 -->
-                        <Button x:Uid="MarryHerButton"
-                                FontSize="12"
-                                MinHeight="28"
-                                Padding="12,0"
-                                CornerRadius="8"
-                                Visibility="{x:Bind models:UiFeatures.MarryHerEnabled, Mode=OneTime, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                    </StackPanel>
-
-                    <StackPanel Grid.Column="1"
-                                Orientation="Horizontal"
-                                Spacing="8"
-                                HorizontalAlignment="Right"
-                                VerticalAlignment="Center">
-                        <Button x:Name="SendButton"
-                                x:Uid="SendButton"
-                                Content="&#xE724;"
-                                FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                MinWidth="44"
-                                MinHeight="44"
-                                IsEnabled="{x:Bind CanSubmitUi, Mode=OneWay}"
-                                Command="{x:Bind SubmitCommand}"
-                                Visibility="{x:Bind ViewModel.IsPromptInFlight, Mode=OneWay, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
-
-                        <Button x:Name="CancelButton"
-                                x:Uid="CancelButton"
-                                Content="&#xE711;"
-                                FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                MinWidth="44"
-                                MinHeight="44"
-                                Command="{x:Bind ViewModel.CancelPromptCommand}"
-                                Visibility="{x:Bind ViewModel.IsPromptInFlight, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                    </StackPanel>
-                </Grid>
+                </Border>
             </Grid>
         </Grid>
     </Border>

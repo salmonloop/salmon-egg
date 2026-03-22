@@ -14,10 +14,6 @@
     AllowDrop="False">
 
     <Page.Resources>
-        <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
-        <converters:InverseBoolConverter x:Key="InverseBoolToVisibilityConverter"/>
-        <converters:MessageDirectionToAlignmentConverter x:Key="HorizontalAlignmentConverter"/>
-        <converters:TimeFormatConverter x:Key="TimeFormatConverter"/>
         <converters:GridLengthConverter x:Key="GridLengthConverter" />
 
         <Style x:Key="InlineHeaderButtonStyle" TargetType="Button">
@@ -63,60 +59,6 @@
                 </Setter.Value>
             </Setter>
         </Style>
-
-        <!-- 消息气泡模板 -->
-        <DataTemplate x:Key="MessageTemplate" x:DataType="vm:ChatMessageViewModel">
-            <Grid Margin="0,8" HorizontalAlignment="{x:Bind IsOutgoing, Converter={StaticResource HorizontalAlignmentConverter}, Mode=OneWay}">
-                <Border CornerRadius="12"
-                        Padding="12,8"
-                        Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                        BorderThickness="1">
-                    <StackPanel>
-                        <!-- 只有当有标题时显示 (例如工具调用) -->
-                        <TextBlock Text="{x:Bind Title, Mode=OneWay}"
-                                   FontWeight="Bold"
-                                   FontSize="12"
-                                   Visibility="{x:Bind HasTitle, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                                   Margin="0,0,0,4"/>
-
-                        <StackPanel Visibility="{x:Bind IsThinkingPlaceholder, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                                    Orientation="Horizontal" Spacing="8" Margin="0,4">
-                            <ProgressRing IsActive="True" Width="16" Height="16" VerticalAlignment="Center"/>
-                            <TextBlock Text="思考中..." Opacity="0.6" VerticalAlignment="Center" FontSize="12"/>
-                        </StackPanel>
-
-                        <TextBlock Text="{x:Bind TextContent, Mode=OneWay}"
-                                   TextWrapping="Wrap"
-                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                   Visibility="{x:Bind HasTextContent, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
-
-                        <StackPanel Visibility="{x:Bind HasToolCallJson, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                                    Margin="0,4,0,0" Spacing="4">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Border Background="{ThemeResource SystemAccentColor}" CornerRadius="4" Padding="4,1">
-                                    <TextBlock Text="{x:Bind ToolCallKindDisplayName, Mode=OneWay}" FontSize="10" Foreground="White"/>
-                                </Border>
-                                <TextBlock Text="{x:Bind ToolCallStatusDisplayName, Mode=OneWay}" FontSize="11" Opacity="0.7"/>
-                            </StackPanel>
-                            <Border Background="{ThemeResource ControlFillColorSecondaryBrush}" CornerRadius="4" Padding="8,4">
-                                <TextBlock Text="{x:Bind ToolCallJson, Mode=OneWay}"
-                                           FontSize="11"
-                                           FontFamily="Consolas, Monospace"
-                                           TextWrapping="Wrap"
-                                           Opacity="0.8"/>
-                            </Border>
-                        </StackPanel>
-
-                        <TextBlock Text="{x:Bind Timestamp, Converter={StaticResource TimeFormatConverter}, Mode=OneWay}"
-                                   FontSize="10"
-                                   Opacity="0.6"
-                                   HorizontalAlignment="Right"
-                                   Margin="0,4,0,0"/>
-                    </StackPanel>
-                </Border>
-            </Grid>
-        </DataTemplate>
     </Page.Resources>
 
     <Grid>

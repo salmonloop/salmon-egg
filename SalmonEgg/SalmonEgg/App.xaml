@@ -9,6 +9,7 @@
                     <!-- WinUI 3 default control resources (provides TextFillColorPrimaryBrush, etc.) -->
                     <controls:XamlControlsResources />
                     <ResourceDictionary Source="ms-appx:///Styles/AuxiliaryPanelIcons.xaml" />
+                    <ResourceDictionary Source="ms-appx:///Styles/ChatStyles.xaml" />
                 </ResourceDictionary.MergedDictionaries>
 
             <!-- 兼容性资源定义：确保在所有平台上都有回退项 -->

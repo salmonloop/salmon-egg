@@ -249,6 +249,11 @@ public sealed partial class MiniChatView : Page
         }
 
         EnsureScrollViewerAttached();
+        if (_scrollViewer == null)
+        {
+            return false;
+        }
+        
         MessagesList.UpdateLayout();
         _scrollViewer.ChangeView(null, _scrollViewer.ScrollableHeight, null);
         return _scrollViewer.VerticalOffset >= _scrollViewer.ScrollableHeight - BottomThreshold;

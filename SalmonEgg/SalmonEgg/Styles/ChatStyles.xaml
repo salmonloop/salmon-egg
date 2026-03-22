@@ -1,0 +1,77 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:SalmonEgg.Presentation.ViewModels.Chat"
+    xmlns:converters="using:SalmonEgg.Presentation.Converters">
+
+    <!-- SSOT Common Chat Converters -->
+    <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+    <converters:InverseBoolConverter x:Key="InverseBoolToVisibilityConverter"/>
+    <converters:TimeFormatConverter x:Key="TimeFormatConverter"/>
+    <converters:MessageDirectionToAlignmentConverter x:Key="HorizontalAlignmentConverter"/>
+    <converters:MessageDirectionToBackgroundConverter x:Key="MessageBackgroundConverter" />
+    <converters:MessageDirectionToForegroundConverter x:Key="MessageForegroundConverter" />
+    <converters:MessageDirectionToCornerRadiusConverter x:Key="MessageCornerRadiusConverter" />
+
+    <!-- 全局统一聊天气泡模板 -->
+    <DataTemplate x:Key="MessageTemplate">
+        <Grid Margin="0,8" HorizontalAlignment="{Binding IsOutgoing, Converter={StaticResource HorizontalAlignmentConverter}, Mode=OneWay}">
+            <Border CornerRadius="{Binding IsOutgoing, Converter={StaticResource MessageCornerRadiusConverter}, Mode=OneWay}"
+                    Padding="12,8"
+                    Background="{Binding IsOutgoing, Converter={StaticResource MessageBackgroundConverter}, Mode=OneWay}"
+                    BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                    BorderThickness="0">
+                <StackPanel>
+                    <!-- 消息标题 (如有) -->
+                    <TextBlock Text="{Binding Title, Mode=OneWay}"
+                               FontWeight="Bold"
+                               FontSize="12"
+                               Foreground="{Binding IsOutgoing, Converter={StaticResource MessageForegroundConverter}, Mode=OneWay}"
+                               Visibility="{Binding HasTitle, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                               Margin="0,0,0,4"/>
+
+                    <!-- Loading / Thinking 状态 -->
+                    <StackPanel Visibility="{Binding IsThinkingPlaceholder, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                Orientation="Horizontal" Spacing="8" Margin="0,4">
+                        <ProgressRing IsActive="True" Width="16" Height="16" Foreground="{Binding IsOutgoing, Converter={StaticResource MessageForegroundConverter}, Mode=OneWay}" VerticalAlignment="Center"/>
+                        <TextBlock Text="思考中..." Opacity="0.6" Foreground="{Binding IsOutgoing, Converter={StaticResource MessageForegroundConverter}, Mode=OneWay}" VerticalAlignment="Center" FontSize="12"/>
+                    </StackPanel>
+
+                    <!-- 正文 -->
+                    <TextBlock Text="{Binding TextContent, Mode=OneWay}"
+                               TextWrapping="Wrap"
+                               Foreground="{Binding IsOutgoing, Converter={StaticResource MessageForegroundConverter}, Mode=OneWay}"
+                               Visibility="{Binding HasTextContent, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                    <!-- ToolCall JSON / 高级系统调用信息 -->
+                    <StackPanel Visibility="{Binding HasToolCallJson, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                Margin="0,4,0,0" Spacing="4">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Border Background="{ThemeResource SystemAccentColor}" CornerRadius="4" Padding="4,1">
+                                <TextBlock Text="{Binding ToolCallKindDisplayName, Mode=OneWay}" FontSize="10" Foreground="White" />
+                            </Border>
+                            <TextBlock Text="{Binding ToolCallStatusDisplayName, Mode=OneWay}" FontSize="11" Opacity="0.7" Foreground="{Binding IsOutgoing, Converter={StaticResource MessageForegroundConverter}, Mode=OneWay}"/>
+                        </StackPanel>
+                        <!-- JSON 区域保持自己独立的块设计，但跟随一点圆角规约 -->
+                        <Border Background="{ThemeResource ControlFillColorSecondaryBrush}" CornerRadius="6" Padding="8,4">
+                            <TextBlock Text="{Binding ToolCallJson, Mode=OneWay}"
+                                       FontSize="11"
+                                       FontFamily="Consolas, Monospace"
+                                       TextWrapping="Wrap"
+                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                       Opacity="0.8"/>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- 时间戳 -->
+                    <TextBlock Text="{Binding Timestamp, Converter={StaticResource TimeFormatConverter}, Mode=OneWay}"
+                               FontSize="10"
+                               Foreground="{Binding IsOutgoing, Converter={StaticResource MessageForegroundConverter}, Mode=OneWay}"
+                               Opacity="0.6"
+                               HorizontalAlignment="Right"
+                               Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </DataTemplate>
+</ResourceDictionary>
