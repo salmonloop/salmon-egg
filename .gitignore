@@ -164,3 +164,5 @@ opencode.jsonc
 
 # Visual Studio packaging project dev certificate (generated locally)
 SalmonEgg/SalmonEgg.Package/*.pfx
+
+/*.txt
