@@ -45,10 +45,6 @@
         <x:Double x:Key="SearchBoxMinWidthMedium">180</x:Double>
         <x:Double x:Key="SearchBoxMaxWidthMedium">300</x:Double>
 
-        <Style TargetType="NavigationViewItem">
-            <Setter Property="ContentTransitions" Value="{x:Bind models:UiMotion.Current.NavItemTransitions, Mode=OneWay}" />
-        </Style>
-
         <DataTemplate x:Key="StartNavTemplate" x:DataType="nav:StartNavItemViewModel">
             <NavigationViewItem AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.StartItem()}"
                                 Tag="{x:Bind navModels:NavItemTag.Start}">

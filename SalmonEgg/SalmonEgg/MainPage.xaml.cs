@@ -580,7 +580,9 @@ public sealed partial class MainPage : Page
 
         UpdateBackButtonState();
         _mainNavigationContentSyncAdapter.OnFrameNavigated(e.SourcePageType);
-        _mainNavigationViewAdapter.ApplySelectionDeferred();
+        // Selection sync is handled by OnNavigationViewModelPropertyChanged
+        // when the coordinator updates the shell selection state. Calling
+        // ApplySelectionDeferred here would interrupt the indicator animation.
         UpdateRightPanelAvailability(IsChatPageType(e.SourcePageType));
     }
 
@@ -665,7 +667,10 @@ public sealed partial class MainPage : Page
     private void OnMainNavSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
         BootLogDebug($"MainNav SelectionChanged: selected={DescribeNavSelection(sender.SelectedItem)} settings={args.IsSettingsSelected}");
-        _mainNavigationViewAdapter.ApplySelectionDeferred();
+        // Do NOT re-drive SelectedItem here. The ViewModel-driven
+        // ApplySelection() (from OnNavigationViewModelPropertyChanged) is the
+        // authoritative path. Re-applying during NavigationView's own selection
+        // processing interrupts the native indicator slide animation.
     }
 
     private void OnNavigationViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)

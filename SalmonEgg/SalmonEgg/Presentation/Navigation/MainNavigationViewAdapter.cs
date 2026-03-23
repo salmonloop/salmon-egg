@@ -21,6 +21,16 @@ public sealed class MainNavigationViewAdapter
     private readonly MainNavigationViewModel _viewModel;
     private readonly INavigationCoordinator _navigationCoordinator;
 
+    /// <summary>
+    /// Set to <c>true</c> while <see cref="HandleItemInvokedAsync"/> is executing.
+    /// When active, <see cref="ApplySelection"/> defers to the next dispatcher tick
+    /// instead of immediately setting <see cref="NavigationView.SelectedItem"/>,
+    /// allowing the control's own click-driven selection pipeline to run its
+    /// native indicator slide animation without being preempted by a
+    /// programmatic <c>SelectedItem</c> assignment from the ViewModel round-trip.
+    /// </summary>
+    private bool _isProcessingItemInvoked;
+
     public MainNavigationViewAdapter(
         NavigationView navigationView,
         DispatcherQueue dispatcherQueue,
@@ -35,32 +45,39 @@ public sealed class MainNavigationViewAdapter
 
     public void ApplySelection()
     {
-        if (_viewModel.IsSettingsSelected)
+        // While processing a user click (ItemInvoked), the NavigationView is
+        // executing its own selection pipeline that includes the native indicator
+        // slide animation. Setting SelectedItem programmatically here would
+        // preempt that animation. Defer to the next dispatcher tick so the
+        // control can finish its own selection first.
+        if (_isProcessingItemInvoked)
         {
-            SetSelectedSettingsItemDeferred();
+            ApplySelectionDeferred();
             return;
         }
 
-        var target = _viewModel.ProjectedControlSelectedItem;
-        if (target is null)
-        {
-            return;
-        }
-
-        if (ReferenceEquals(_navigationView.SelectedItem, target))
-        {
-            return;
-        }
-
-        _navigationView.SelectedItem = target;
+        ApplySelectionCore();
     }
 
     public void ApplySelectionDeferred()
     {
-        _ = _dispatcherQueue.TryEnqueue(ApplySelection);
+        _ = _dispatcherQueue.TryEnqueue(ApplySelectionCore);
     }
 
     public async Task<bool> HandleItemInvokedAsync(NavigationViewItemInvokedEventArgs args)
+    {
+        _isProcessingItemInvoked = true;
+        try
+        {
+            return await HandleItemInvokedCoreAsync(args).ConfigureAwait(true);
+        }
+        finally
+        {
+            _isProcessingItemInvoked = false;
+        }
+    }
+
+    private async Task<bool> HandleItemInvokedCoreAsync(NavigationViewItemInvokedEventArgs args)
     {
         if (ReferenceEquals(args.InvokedItemContainer, _navigationView.SettingsItem))
         {
@@ -111,6 +128,28 @@ public sealed class MainNavigationViewAdapter
         }
 
         return false;
+    }
+
+    private void ApplySelectionCore()
+    {
+        if (_viewModel.IsSettingsSelected)
+        {
+            SetSelectedSettingsItemDeferred();
+            return;
+        }
+
+        var target = _viewModel.ProjectedControlSelectedItem;
+        if (target is null)
+        {
+            return;
+        }
+
+        if (ReferenceEquals(_navigationView.SelectedItem, target))
+        {
+            return;
+        }
+
+        _navigationView.SelectedItem = target;
     }
 
     private void SetSelectedSettingsItemDeferred()
