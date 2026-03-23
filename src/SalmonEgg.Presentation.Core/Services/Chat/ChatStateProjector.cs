@@ -32,13 +32,18 @@ public sealed class ChatStateProjector : IChatStateProjector
         var isAuthenticationRequired = connectionState.IsAuthenticationRequired;
         var authenticationHintMessage = connectionState.AuthenticationHintMessage;
 
+        var activeTurn = storeState.ActiveTurn;
+        var isTurnStatusVisible = activeTurn != null && activeTurn.Phase != ChatTurnPhase.Completed && activeTurn.Phase != ChatTurnPhase.Cancelled;
+        var turnStatusText = GetTurnStatusText(activeTurn);
+        var isTurnStatusRunning = isTurnStatusVisible && activeTurn?.Phase != ChatTurnPhase.Failed;
+
         return new ChatUiProjection(
             SelectedConversationId: currentConversationId,
             SelectedProfileId: selectedProfileId,
             RemoteSessionId: binding?.RemoteSessionId,
             IsSessionActive: !string.IsNullOrWhiteSpace(currentConversationId),
             IsPromptInFlight: storeState.IsPromptInFlight,
-            IsThinking: storeState.IsThinking,
+            IsThinking: activeTurn?.Phase == ChatTurnPhase.Thinking,
             IsConnecting: isConnecting,
             IsConnected: isConnected,
             IsInitializing: isInitializing,
@@ -53,7 +58,29 @@ public sealed class ChatStateProjector : IChatStateProjector
             Transcript: storeState.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty,
             ShowPlanPanel: storeState.ShowPlanPanel,
             PlanTitle: storeState.PlanTitle,
-            PlanEntries: storeState.PlanEntries ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty);
+            PlanEntries: storeState.PlanEntries ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+            IsTurnStatusVisible: isTurnStatusVisible,
+            TurnStatusText: turnStatusText,
+            IsTurnStatusRunning: isTurnStatusRunning,
+            TurnPhase: activeTurn?.Phase);
+    }
+
+    private static string GetTurnStatusText(ActiveTurnState? turn)
+    {
+        if (turn == null) return string.Empty;
+        return turn.Phase switch
+        {
+            ChatTurnPhase.CreatingRemoteSession => "Starting session...",
+            ChatTurnPhase.WaitingForAgent => "Waiting for agent...",
+            ChatTurnPhase.Thinking => "Thinking...",
+            ChatTurnPhase.ToolPending => "Preparing tool call...",
+            ChatTurnPhase.ToolRunning => $"Running tool: {turn.ToolTitle ?? "..."}",
+            ChatTurnPhase.Responding => "Responding...",
+            ChatTurnPhase.Completed => "Completed",
+            ChatTurnPhase.Failed => $"Failed: {turn.FailureMessage ?? "Unknown error"}",
+            ChatTurnPhase.Cancelled => "Cancelled",
+            _ => string.Empty
+        };
     }
 }
 
@@ -78,4 +105,8 @@ public sealed record ChatUiProjection(
     IImmutableList<ConversationMessageSnapshot> Transcript,
     bool ShowPlanPanel,
     string? PlanTitle,
-    IReadOnlyList<ConversationPlanEntrySnapshot> PlanEntries);
+    IReadOnlyList<ConversationPlanEntrySnapshot> PlanEntries,
+    bool IsTurnStatusVisible,
+    string TurnStatusText,
+    bool IsTurnStatusRunning,
+    ChatTurnPhase? TurnPhase);

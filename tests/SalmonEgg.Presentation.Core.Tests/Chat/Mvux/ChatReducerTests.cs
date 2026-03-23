@@ -155,4 +155,50 @@ public class ChatReducerTests
         Assert.Null(newState.PlanTitle);
         Assert.Equal(initialState.Generation, newState.Generation);
     }
+
+    [Fact]
+    public void BeginTurn_SetsActiveTurnAndGeneration()
+    {
+        var initialState = ChatState.Empty with { Generation = 10 };
+        var action = new BeginTurnAction("conv-1", "turn-1", ChatTurnPhase.WaitingForAgent);
+
+        var newState = ChatReducer.Reduce(initialState, action);
+
+        Assert.Equal(11, newState.Generation);
+        Assert.NotNull(newState.ActiveTurn);
+        Assert.Equal("turn-1", newState.ActiveTurn!.TurnId);
+        Assert.Equal(ChatTurnPhase.WaitingForAgent, newState.ActiveTurn.Phase);
+    }
+
+    [Fact]
+    public void AdvanceTurnPhase_IgnoresStaleTurnId()
+    {
+        var initialState = ChatState.Empty with
+        {
+            ActiveTurn = new ActiveTurnState("conv-1", "turn-current", ChatTurnPhase.Thinking, DateTime.UtcNow, DateTime.UtcNow),
+            Generation = 10
+        };
+        var action = new AdvanceTurnPhaseAction("conv-1", "turn-stale", ChatTurnPhase.Responding);
+
+        var newState = ChatReducer.Reduce(initialState, action);
+
+        Assert.Equal(10, newState.Generation);
+        Assert.Equal(ChatTurnPhase.Thinking, newState.ActiveTurn!.Phase);
+    }
+
+    [Fact]
+    public void SelectConversation_ClearsActiveTurnForPreviousConversation()
+    {
+        var initialState = ChatState.Empty with
+        {
+            HydratedConversationId = "conv-1",
+            ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Thinking, DateTime.UtcNow, DateTime.UtcNow)
+        };
+        var action = new SelectConversationAction("conv-2");
+
+        var newState = ChatReducer.Reduce(initialState, action);
+
+        Assert.Null(newState.ActiveTurn);
+        Assert.Equal("conv-2", newState.HydratedConversationId);
+    }
 }

@@ -22,7 +22,7 @@ public static class ChatReducer
                 ShowPlanPanel = false,
                 PlanTitle = null,
                 IsPromptInFlight = false,
-                IsThinking = false
+                ActiveTurn = null
             }),
             SetBindingSliceAction setBinding => Mutate(current, current with
             {
@@ -30,7 +30,30 @@ public static class ChatReducer
             }),
             SetDraftTextAction draftText => Mutate(current, current with { DraftText = draftText.Text }),
             SetPromptInFlightAction setPromptInFlight => Mutate(current, current with { IsPromptInFlight = setPromptInFlight.IsInFlight }),
-            SetIsThinkingAction setIsThinking => Mutate(current, current with { IsThinking = setIsThinking.IsThinking }),
+            BeginTurnAction begin => Mutate(current, current with
+            {
+                ActiveTurn = new ActiveTurnState(begin.ConversationId, begin.TurnId, begin.InitialPhase, DateTime.UtcNow, DateTime.UtcNow)
+            }),
+            AdvanceTurnPhaseAction advance when current.ActiveTurn?.TurnId == advance.TurnId => Mutate(current, current with
+            {
+                ActiveTurn = current.ActiveTurn with { Phase = advance.NewPhase, ToolCallId = advance.ToolCallId, ToolTitle = advance.ToolTitle, LastUpdatedAtUtc = DateTime.UtcNow }
+            }),
+            CompleteTurnAction complete when current.ActiveTurn?.TurnId == complete.TurnId => Mutate(current, current with
+            {
+                ActiveTurn = current.ActiveTurn with { Phase = ChatTurnPhase.Completed, LastUpdatedAtUtc = DateTime.UtcNow }
+            }),
+            FailTurnAction fail when current.ActiveTurn?.TurnId == fail.TurnId => Mutate(current, current with
+            {
+                ActiveTurn = current.ActiveTurn with { Phase = ChatTurnPhase.Failed, FailureMessage = fail.ErrorMessage, LastUpdatedAtUtc = DateTime.UtcNow }
+            }),
+            CancelTurnAction cancel when current.ActiveTurn?.TurnId == cancel.TurnId => Mutate(current, current with
+            {
+                ActiveTurn = current.ActiveTurn with { Phase = ChatTurnPhase.Cancelled, LastUpdatedAtUtc = DateTime.UtcNow }
+            }),
+            ClearTurnAction clear when current.ActiveTurn?.ConversationId == clear.ConversationId => Mutate(current, current with
+            {
+                ActiveTurn = null
+            }),
             AddMessageAction addMessage => Mutate(current, current with
             {
                 Transcript = UpsertTranscript(current.Transcript, ToSnapshot(addMessage.Message))

@@ -1019,7 +1019,7 @@ public class ChatViewModelTests
     [Fact]
     public async Task Dispose_CancelsStoreSubscription_DoesNotUpdateAfterDispose()
     {
-        var initialState = ChatState.Empty with { IsThinking = false };
+        var initialState = ChatState.Empty with { ActiveTurn = null };
         var chatStore = new Mock<IChatStore>();
         await using var state = State.Value(this, () => initialState);
         chatStore.Setup(s => s.State).Returns(state);
@@ -1100,7 +1100,7 @@ public class ChatViewModelTests
 
         viewModel.Dispose();
 
-        var newState = initialState with { IsThinking = true };
+        var newState = initialState with { ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Thinking, DateTime.UtcNow, DateTime.UtcNow) };
         await state.Update(_ => newState, CancellationToken.None);
 
         syncContext.RunAll();
@@ -1110,7 +1110,7 @@ public class ChatViewModelTests
     [Fact]
     public async Task Dispose_DropsAlreadyQueuedStoreProjection()
     {
-        var initialState = ChatState.Empty with { IsThinking = false };
+        var initialState = ChatState.Empty with { ActiveTurn = null };
         await using var state = State.Value(this, () => initialState);
         var chatStore = new Mock<IChatStore>();
         chatStore.Setup(s => s.State).Returns(state);
@@ -1187,7 +1187,7 @@ public class ChatViewModelTests
         syncContext.RunAll();
         Assert.False(viewModel.IsThinking);
 
-        await state.Update(_ => initialState with { IsThinking = true }, CancellationToken.None);
+        await state.Update(_ => initialState with { ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Thinking, DateTime.UtcNow, DateTime.UtcNow) }, CancellationToken.None);
         viewModel.Dispose();
 
         syncContext.RunAll();

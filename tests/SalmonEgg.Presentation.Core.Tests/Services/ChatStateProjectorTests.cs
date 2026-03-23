@@ -43,4 +43,22 @@ public sealed class ChatStateProjectorTests
         Assert.Null(projection.RemoteSessionId);
         Assert.Equal("profile-store", projection.SelectedProfileId);
     }
+
+    [Fact]
+    public void Apply_ProjectsTailStatusFromActiveTurn()
+    {
+        var projector = new ChatStateProjector();
+        var storeState = ChatState.Empty with
+        {
+            ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Thinking, DateTime.UtcNow, DateTime.UtcNow)
+        };
+
+        var projection = projector.Apply(storeState, ChatConnectionState.Empty, "conv-1", null);
+
+        Assert.True(projection.IsTurnStatusVisible);
+        Assert.Equal("Thinking...", projection.TurnStatusText);
+        Assert.True(projection.IsTurnStatusRunning);
+        Assert.Equal(ChatTurnPhase.Thinking, projection.TurnPhase);
+        Assert.True(projection.IsThinking);
+    }
 }

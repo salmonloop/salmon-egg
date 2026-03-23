@@ -1,5 +1,6 @@
-using SalmonEgg.Domain.Models.Conversation;
+using System;
 using System.Collections.Immutable;
+using SalmonEgg.Domain.Models.Conversation;
 
 namespace SalmonEgg.Presentation.Core.Mvux.Chat;
 
@@ -50,10 +51,21 @@ public sealed record SetAgentIdentityAction(string? AgentName, string? AgentVers
 /// </summary>
 public sealed record SetPromptInFlightAction(bool IsInFlight) : ChatAction;
 
-/// <summary>
-/// Dispatched to update the thinking status.
-/// </summary>
+public sealed record BeginTurnAction(string ConversationId, string TurnId, ChatTurnPhase InitialPhase) : ChatAction;
+
+public sealed record AdvanceTurnPhaseAction(string ConversationId, string TurnId, ChatTurnPhase NewPhase, string? ToolCallId = null, string? ToolTitle = null) : ChatAction;
+
+public sealed record CompleteTurnAction(string ConversationId, string TurnId) : ChatAction;
+
+public sealed record FailTurnAction(string ConversationId, string TurnId, string? ErrorMessage = null) : ChatAction;
+
+public sealed record CancelTurnAction(string ConversationId, string TurnId) : ChatAction;
+
+public sealed record ClearTurnAction(string ConversationId) : ChatAction;
+
+[Obsolete("Use BeginTurn/AdvanceTurnPhase instead")]
 public sealed record SetIsThinkingAction(bool IsThinking) : ChatAction;
+
 
 /// <summary>
 /// Dispatched when a text delta is received for the active streaming message.
