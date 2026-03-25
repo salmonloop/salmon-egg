@@ -10,7 +10,7 @@ public interface IChatStateProjector
     ChatUiProjection Apply(
         ChatState storeState,
         ChatConnectionState connectionState,
-        string? currentConversationId,
+        string? hydratedConversationId,
         ConversationRemoteBindingState? binding);
 }
 
@@ -19,7 +19,7 @@ public sealed class ChatStateProjector : IChatStateProjector
     public ChatUiProjection Apply(
         ChatState storeState,
         ChatConnectionState connectionState,
-        string? currentConversationId,
+        string? hydratedConversationId,
         ConversationRemoteBindingState? binding)
     {
         ArgumentNullException.ThrowIfNull(storeState);
@@ -32,7 +32,7 @@ public sealed class ChatStateProjector : IChatStateProjector
         var isAuthenticationRequired = connectionState.IsAuthenticationRequired;
         var authenticationHintMessage = connectionState.AuthenticationHintMessage;
 
-        var activeTurn = GetVisibleActiveTurn(storeState.ActiveTurn, currentConversationId);
+        var activeTurn = GetVisibleActiveTurn(storeState.ActiveTurn, hydratedConversationId);
         var isTurnStatusVisible = activeTurn is not null && activeTurn.Phase != ChatTurnPhase.Completed;
         var turnStatusText = GetTurnStatusText(activeTurn);
         var isTurnStatusRunning = activeTurn is not null
@@ -41,10 +41,10 @@ public sealed class ChatStateProjector : IChatStateProjector
             && activeTurn.Phase is not ChatTurnPhase.Cancelled;
 
         return new ChatUiProjection(
-            SelectedConversationId: currentConversationId,
+            HydratedConversationId: hydratedConversationId,
             SelectedProfileId: selectedProfileId,
             RemoteSessionId: binding?.RemoteSessionId,
-            IsSessionActive: !string.IsNullOrWhiteSpace(currentConversationId),
+            IsSessionActive: !string.IsNullOrWhiteSpace(hydratedConversationId),
             IsPromptInFlight: storeState.IsPromptInFlight,
             IsConnecting: isConnecting,
             IsConnected: isConnected,
@@ -71,14 +71,14 @@ public sealed class ChatStateProjector : IChatStateProjector
             TurnPhase: activeTurn?.Phase);
     }
 
-    private static ActiveTurnState? GetVisibleActiveTurn(ActiveTurnState? activeTurn, string? currentConversationId)
+    private static ActiveTurnState? GetVisibleActiveTurn(ActiveTurnState? activeTurn, string? hydratedConversationId)
     {
-        if (activeTurn is null || string.IsNullOrWhiteSpace(currentConversationId))
+        if (activeTurn is null || string.IsNullOrWhiteSpace(hydratedConversationId))
         {
             return null;
         }
 
-        return string.Equals(activeTurn.ConversationId, currentConversationId, StringComparison.Ordinal)
+        return string.Equals(activeTurn.ConversationId, hydratedConversationId, StringComparison.Ordinal)
             ? activeTurn
             : null;
     }
@@ -103,7 +103,7 @@ public sealed class ChatStateProjector : IChatStateProjector
 }
 
 public sealed record ChatUiProjection(
-    string? SelectedConversationId,
+    string? HydratedConversationId,
     string? SelectedProfileId,
     string? RemoteSessionId,
     bool IsSessionActive,

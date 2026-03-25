@@ -551,9 +551,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         _suppressStorePromptProjection = true;
         try
         {
-            if (!string.Equals(CurrentSessionId, projection.SelectedConversationId, StringComparison.Ordinal))
+            if (!string.Equals(CurrentSessionId, projection.HydratedConversationId, StringComparison.Ordinal))
             {
-                CurrentSessionId = projection.SelectedConversationId;
+                CurrentSessionId = projection.HydratedConversationId;
             }
 
             var draft = projection.CurrentPrompt;

@@ -8,6 +8,13 @@ namespace SalmonEgg.Presentation.Core.Tests.Services;
 public sealed class ChatStateProjectorTests
 {
     [Fact]
+    public void ChatUiProjection_DoesNotExposeLegacySelectedConversationIdProperty()
+    {
+        Assert.Null(typeof(ChatUiProjection).GetProperty("SelectedConversationId"));
+        Assert.NotNull(typeof(ChatUiProjection).GetProperty("HydratedConversationId"));
+    }
+
+    [Fact]
     public async Task Apply_SelectedProfilePrefersStoreOverBinding()
     {
         var binding = new ConversationRemoteBindingState("conv-1", "remote-1", "profile-binding");
