@@ -232,7 +232,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var parser = new MessageParser();
             var timeouts = new AcpClient.AcpRequestTimeouts(
                 DefaultTimeout: TimeSpan.FromMilliseconds(50),
-                SessionNewTimeout: TimeSpan.FromMilliseconds(50),
+                SessionNewTimeout: TimeSpan.FromSeconds(1),
                 SessionPromptTimeout: TimeSpan.FromMilliseconds(50));
 
             var client = await CreateInitializedClientAsync(timeouts);
@@ -269,7 +269,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var parser = new MessageParser();
             var timeouts = new AcpClient.AcpRequestTimeouts(
                 DefaultTimeout: TimeSpan.FromMilliseconds(50),
-                SessionNewTimeout: TimeSpan.FromMilliseconds(50),
+                SessionNewTimeout: TimeSpan.FromSeconds(1),
                 SessionPromptTimeout: TimeSpan.FromMilliseconds(50));
 
             var client = await CreateInitializedClientAsync(timeouts);

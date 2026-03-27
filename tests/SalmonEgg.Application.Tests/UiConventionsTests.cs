@@ -1,4 +1,6 @@
 using System.Text.RegularExpressions;
+using SalmonEgg.Application.Services.Chat;
+using SalmonEgg.Domain.Services;
 
 namespace SalmonEgg.Application.Tests;
 
@@ -91,6 +93,36 @@ public class UiConventionsTests
         Assert.Contains("AddSingleton<MainNavigationViewModel>(sp =>", text);
         Assert.Contains("AddSingleton<INavigationCoordinator>(sp =>", text);
         Assert.Contains("AddSingleton<AcpConnectionSettingsViewModel>(sp =>", text);
+    }
+
+    [Fact]
+    public void ChatServiceFactory_ShouldNotDependOnAppLevelCapabilityManager()
+    {
+        var constructor = typeof(ChatServiceFactory).GetConstructors().Single();
+
+        Assert.DoesNotContain(
+            constructor.GetParameters(),
+            parameter => parameter.ParameterType == typeof(ICapabilityManager));
+    }
+
+    [Fact]
+    public void DependencyInjection_ShouldNotRegisterCapabilityManagerAsApplicationSingleton()
+    {
+        var repoRoot = FindRepoRoot();
+        var diFile = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "DependencyInjection.cs");
+        var text = File.ReadAllText(diFile);
+
+        Assert.DoesNotContain("AddSingleton<ICapabilityManager", text);
+    }
+
+    [Fact]
+    public void AcpClient_ShouldNotInstantiateCapabilityManagerInternally()
+    {
+        var repoRoot = FindRepoRoot();
+        var clientFile = Path.Combine(repoRoot, "src", "SalmonEgg.Infrastructure", "Client", "AcpClient.cs");
+        var text = File.ReadAllText(clientFile);
+
+        Assert.DoesNotContain("new Services.CapabilityManager()", text);
     }
 
     [Theory]

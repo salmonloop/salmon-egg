@@ -18,7 +18,6 @@ public class ChatServiceFactory
     private readonly IMessageParser _messageParser;
     private readonly IMessageValidator _messageValidator;
     private readonly IErrorLogger _errorLogger;
-    private readonly ICapabilityManager _capabilityManager;
     private readonly ISessionManager _sessionManager;
     private readonly ILogger _logger;
 
@@ -29,14 +28,12 @@ public class ChatServiceFactory
     /// <param name="messageParser">消息解析器</param>
     /// <param name="messageValidator">消息验证器</param>
     /// <param name="errorLogger">错误日志器</param>
-    /// <param name="capabilityManager">能力管理器</param>
     /// <param name="logger">日志记录器</param>
     public ChatServiceFactory(
         ITransportFactory transportFactory,
         IMessageParser messageParser,
         IMessageValidator messageValidator,
         IErrorLogger errorLogger,
-        ICapabilityManager capabilityManager,
         ISessionManager sessionManager,
         ILogger logger)
     {
@@ -44,7 +41,6 @@ public class ChatServiceFactory
         _messageParser = messageParser ?? throw new ArgumentNullException(nameof(messageParser));
         _messageValidator = messageValidator ?? throw new ArgumentNullException(nameof(messageValidator));
         _errorLogger = errorLogger ?? throw new ArgumentNullException(nameof(errorLogger));
-        _capabilityManager = capabilityManager ?? throw new ArgumentNullException(nameof(capabilityManager));
         _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }

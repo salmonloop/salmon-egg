@@ -435,7 +435,6 @@ public sealed class NavigationCoordinatorTests
         var messageParser = new Mock<IMessageParser>();
         var messageValidator = new Mock<IMessageValidator>();
         var errorLogger = new Mock<IErrorLogger>();
-        var capabilityManager = new Mock<ICapabilityManager>();
         var serilog = new Mock<SerilogLogger>();
 
         var chatServiceFactory = new ChatServiceFactory(
@@ -443,7 +442,6 @@ public sealed class NavigationCoordinatorTests
             messageParser.Object,
             messageValidator.Object,
             errorLogger.Object,
-            capabilityManager.Object,
             sessionManager,
             serilog.Object);
 

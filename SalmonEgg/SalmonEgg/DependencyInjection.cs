@@ -77,9 +77,6 @@ public static class DependencyInjection
         services.AddSingleton<IMessageParser, MessageParser>();
         services.AddSingleton<IMessageValidator, MessageValidator>();
 
-        // Capability Manager
-        services.AddSingleton<ICapabilityManager, Infrastructure.Services.CapabilityManager>();
-
         // Session Manager
         services.AddSingleton<ISessionManager, Infrastructure.Services.SessionManager>();
 
@@ -184,10 +181,9 @@ public static class DependencyInjection
             var parser = sp.GetRequiredService<IMessageParser>();
             var validator = sp.GetRequiredService<IMessageValidator>();
             var errorLogger = sp.GetRequiredService<IErrorLogger>();
-            var capabilityManager = sp.GetRequiredService<ICapabilityManager>();
             var sessionManager = sp.GetRequiredService<ISessionManager>();
             var logger = sp.GetRequiredService<Serilog.ILogger>();
-            return new ChatServiceFactory(transportFactory, parser, validator, errorLogger, capabilityManager, sessionManager, logger);
+            return new ChatServiceFactory(transportFactory, parser, validator, errorLogger, sessionManager, logger);
         });
         services.AddSingleton<IAcpChatServiceFactory>(sp =>
             new AcpChatServiceFactoryAdapter(sp.GetRequiredService<ChatServiceFactory>()));

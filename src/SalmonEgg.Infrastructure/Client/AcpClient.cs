@@ -33,7 +33,6 @@ namespace SalmonEgg.Infrastructure.Client
         private readonly ITransport _transport;
         private readonly IMessageParser _parser;
         private readonly IMessageValidator _validator;
-        private readonly ICapabilityManager _capabilityManager;
         private readonly ISessionManager _sessionManager;
         private readonly IPathValidator _pathValidator;
         private readonly IPermissionManager _permissionManager;
@@ -127,7 +126,6 @@ namespace SalmonEgg.Infrastructure.Client
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
             _parser = parser ?? new MessageParser();
             _validator = validator ?? new MessageValidator();
-            _capabilityManager = new Services.CapabilityManager();
             _sessionManager = new Services.SessionManager();
             _pathValidator = new Services.Security.PathValidator();
             _permissionManager = new Services.Security.PermissionManager();
@@ -218,7 +216,6 @@ namespace SalmonEgg.Infrastructure.Client
             // 存储 Agent 信息
             _agentInfo = initializeResponse.AgentInfo;
             _agentCapabilities = initializeResponse.AgentCapabilities;
-            _capabilityManager.SetAgentCapabilities(initializeResponse.AgentCapabilities);
             _isInitialized = true;
 
             // 启动消息接收循环

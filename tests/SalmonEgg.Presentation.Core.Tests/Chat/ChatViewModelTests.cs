@@ -51,7 +51,6 @@ public class ChatViewModelTests
         var messageParser = new Mock<IMessageParser>();
         var messageValidator = new Mock<IMessageValidator>();
         var errorLogger = new Mock<IErrorLogger>();
-        var capabilityManager = new Mock<ICapabilityManager>();
         var ownsSessionManager = sessionManager is null;
         sessionManager ??= new Mock<ISessionManager>();
         if (ownsSessionManager)
@@ -92,7 +91,6 @@ public class ChatViewModelTests
             messageParser.Object,
             messageValidator.Object,
             errorLogger.Object,
-            capabilityManager.Object,
             sessionManager.Object,
             serilog.Object);
 
@@ -1297,7 +1295,6 @@ public class ChatViewModelTests
         var messageParser = new Mock<IMessageParser>();
         var messageValidator = new Mock<IMessageValidator>();
         var errorLogger = new Mock<IErrorLogger>();
-        var capabilityManager = new Mock<ICapabilityManager>();
         var sessionManager = new Mock<ISessionManager>();
         var serilog = new Mock<Serilog.ILogger>();
 
@@ -1306,7 +1303,6 @@ public class ChatViewModelTests
             messageParser.Object,
             messageValidator.Object,
             errorLogger.Object,
-            capabilityManager.Object,
             sessionManager.Object,
             serilog.Object);
 
@@ -1388,7 +1384,6 @@ public class ChatViewModelTests
         var messageParser = new Mock<IMessageParser>();
         var messageValidator = new Mock<IMessageValidator>();
         var errorLogger = new Mock<IErrorLogger>();
-        var capabilityManager = new Mock<ICapabilityManager>();
         var sessionManager = new Mock<ISessionManager>();
         var serilog = new Mock<Serilog.ILogger>();
 
@@ -1397,7 +1392,6 @@ public class ChatViewModelTests
             messageParser.Object,
             messageValidator.Object,
             errorLogger.Object,
-            capabilityManager.Object,
             sessionManager.Object,
             serilog.Object);
 
@@ -1474,7 +1468,6 @@ public class ChatViewModelTests
         var messageParser = new Mock<IMessageParser>();
         var messageValidator = new Mock<IMessageValidator>();
         var errorLogger = new Mock<IErrorLogger>();
-        var capabilityManager = new Mock<ICapabilityManager>();
         var serilog = new Mock<SerilogLogger>();
         var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
         var sessionManager = new Mock<ISessionManager>();
@@ -1511,7 +1504,6 @@ public class ChatViewModelTests
             messageParser.Object,
             messageValidator.Object,
             errorLogger.Object,
-            capabilityManager.Object,
             sessionManager.Object,
             serilog.Object);
 
