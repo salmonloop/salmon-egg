@@ -40,7 +40,8 @@ public class ChatViewModelTests
         IAcpConnectionCommands? acpConnectionCommands = null,
         Mock<IConfigurationService>? configurationService = null,
         Mock<ISessionManager>? sessionManager = null,
-        IConversationActivationCoordinator? conversationActivationCoordinator = null)
+        IConversationActivationCoordinator? conversationActivationCoordinator = null,
+        Func<IChatConnectionStore, IAcpConnectionCoordinator>? acpConnectionCoordinatorFactory = null)
     {
         var state = State.Value(new object(), () => ChatState.Empty);
         var connectionState = State.Value(new object(), () => ChatConnectionState.Empty);
@@ -155,7 +156,8 @@ public class ChatViewModelTests
                 vmLogger.Object,
                 syncContext,
                 acpConnectionCommands,
-                conversationActivationCoordinator: conversationActivationCoordinator);
+                conversationActivationCoordinator: conversationActivationCoordinator,
+                acpConnectionCoordinator: acpConnectionCoordinatorFactory?.Invoke(connectionStore));
             return new ViewModelFixture(
                 viewModel,
                 state,
@@ -472,6 +474,104 @@ public class ChatViewModelTests
             && parameters.ClientCapabilities.Fs == null
             && parameters.ClientCapabilities.SupportsExtension(ClientCapabilityMetadata.AskUserExtensionMethod))),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task InitializeAndConnectCommand_DrivesStoreBackedInitializingThenConnectedLifecycle()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var initializeStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var initializeRelease = new TaskCompletionSource<InitializeResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var fixture = CreateViewModel(
+            syncContext,
+            acpConnectionCoordinatorFactory: store => new AcpConnectionCoordinator(
+                store,
+                Mock.Of<ILogger<AcpConnectionCoordinator>>()));
+        var chatService = CreateConnectedChatService();
+
+        chatService
+            .Setup(service => service.InitializeAsync(It.IsAny<InitializeParams>()))
+            .Returns(async () =>
+            {
+                initializeStarted.TrySetResult(true);
+                return await initializeRelease.Task;
+            });
+
+        fixture.ViewModel.ReplaceChatService(chatService.Object);
+        await fixture.DispatchConnectionAsync(new SetSelectedProfileAction("profile-1"));
+        syncContext.RunAll();
+
+        var commandTask = fixture.ViewModel.InitializeAndConnectCommand.ExecuteAsync(null);
+        await initializeStarted.Task;
+
+        await WaitForConditionAsync(async () =>
+        {
+            syncContext.RunAll();
+            var connectionState = await fixture.GetConnectionStateAsync();
+            return connectionState.Phase == ConnectionPhase.Initializing
+                && string.Equals(connectionState.SelectedProfileId, "profile-1", StringComparison.Ordinal)
+                && fixture.ViewModel.IsInitializing
+                && !fixture.ViewModel.IsConnected;
+        });
+
+        initializeRelease.SetResult(new InitializeResponse(
+            1,
+            new AgentInfo("agent", "1.0.0"),
+            new AgentCapabilities()));
+
+        await syncContext.RunUntilCompletedAsync(commandTask);
+        syncContext.RunAll();
+
+        var finalConnectionState = await fixture.GetConnectionStateAsync();
+        Assert.Equal(ConnectionPhase.Connected, finalConnectionState.Phase);
+        Assert.Equal("profile-1", finalConnectionState.SelectedProfileId);
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(
+                !fixture.ViewModel.IsInitializing
+                && fixture.ViewModel.IsConnected
+                && !fixture.ViewModel.HasConnectionError
+                && string.Equals(fixture.ViewModel.CurrentConnectionStatus, "Connected", StringComparison.Ordinal));
+        });
+    }
+
+    [Fact]
+    public async Task InitializeAndConnectCommand_Failure_TransitionsToDisconnectedStoreError()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(
+            syncContext,
+            acpConnectionCoordinatorFactory: store => new AcpConnectionCoordinator(
+                store,
+                Mock.Of<ILogger<AcpConnectionCoordinator>>()));
+        var chatService = CreateConnectedChatService();
+
+        chatService
+            .Setup(service => service.InitializeAsync(It.IsAny<InitializeParams>()))
+            .ThrowsAsync(new InvalidOperationException("boom"));
+
+        fixture.ViewModel.ReplaceChatService(chatService.Object);
+        await fixture.DispatchConnectionAsync(new SetSelectedProfileAction("profile-1"));
+        syncContext.RunAll();
+
+        await fixture.ViewModel.InitializeAndConnectCommand.ExecuteAsync(null);
+        syncContext.RunAll();
+
+        var connectionState = await fixture.GetConnectionStateAsync();
+        Assert.Equal(ConnectionPhase.Disconnected, connectionState.Phase);
+        Assert.Equal("profile-1", connectionState.SelectedProfileId);
+        Assert.Equal("boom", connectionState.Error);
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(
+                !fixture.ViewModel.IsInitializing
+                && !fixture.ViewModel.IsConnected
+                && fixture.ViewModel.HasConnectionError
+                && string.Equals(fixture.ViewModel.ConnectionErrorMessage, "boom", StringComparison.Ordinal)
+                && string.Equals(fixture.ViewModel.CurrentConnectionStatus, "Disconnected", StringComparison.Ordinal));
+        });
     }
 
     [Fact]

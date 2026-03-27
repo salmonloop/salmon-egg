@@ -2908,10 +2908,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     }
 
    [RelayCommand]
-   private async Task InitializeAndConnectAsync()
-   {
-       if (IsInitializing || IsConnecting)
-           return;
+    private async Task InitializeAndConnectAsync()
+    {
+        if (IsInitializing || IsConnecting)
+            return;
 
        // If ChatService is not yet created, apply transport config first.
        if (_chatService == null)
@@ -2921,32 +2921,51 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
            return;
        }
 
-       try
-       {
-           ClearError();
+        try
+        {
+            ClearError();
+            var selectedProfileId = await ResolveSelectedProfileIdAsync().ConfigureAwait(false);
+            await _acpConnectionCoordinator
+                .SetInitializingAsync(selectedProfileId)
+                .ConfigureAwait(false);
 
             var initParams = AcpInitializeRequestFactory.CreateDefault();
 
-           if (_chatService == null)
-           {
+            if (_chatService == null)
+            {
                throw new InvalidOperationException("Chat service is not initialized");
            }
 
-           var initResponse = await _chatService.InitializeAsync(initParams);
-           UpdateAgentInfo();
-           CacheAuthMethods(initResponse);
-           ClearAuthenticationRequirement();
-       }
-       catch (Exception ex)
-       {
-           Logger.LogError(ex, "Initialization failed");
-           SetError($"Initialization failed: {ex.Message}");
-       }
-   }
+            var initResponse = await _chatService.InitializeAsync(initParams);
+            await _acpConnectionCoordinator
+                .SetConnectedAsync(selectedProfileId)
+                .ConfigureAwait(false);
+            UpdateAgentInfo();
+            CacheAuthMethods(initResponse);
+            await _acpConnectionCoordinator.ClearAuthenticationRequiredAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            await _acpConnectionCoordinator.SetDisconnectedAsync(ex.Message).ConfigureAwait(false);
+            Logger.LogError(ex, "Initialization failed");
+            SetError($"Initialization failed: {ex.Message}");
+        }
+    }
 
-    [RelayCommand]
-    private async Task CreateNewSessionAsync()
+    private async Task<string?> ResolveSelectedProfileIdAsync()
     {
+        if (!string.IsNullOrWhiteSpace(SelectedAcpProfile?.Id))
+        {
+            return SelectedAcpProfile!.Id;
+        }
+
+        var connectionState = await _chatConnectionStore.State ?? ChatConnectionState.Empty;
+        return connectionState.SelectedProfileId;
+    }
+
+     [RelayCommand]
+     private async Task CreateNewSessionAsync()
+     {
         if (IsConnecting)
             return;
 
