@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text.Json;
 using NUnit.Framework;
 using SalmonEgg.Domain.Models.Protocol;
@@ -168,11 +169,49 @@ public sealed class InitializeTypesTests
     }
 
     [Test]
+    public void ClientCapabilities_Meta_Should_Serialize_With_UnderscoreMeta()
+    {
+        var capabilities = new ClientCapabilities
+        {
+            Meta = new Dictionary<string, object?>
+            {
+                [ClientCapabilityMetadata.ExtensionsMetaKey] = new Dictionary<string, object?>
+                {
+                    [ClientCapabilityMetadata.AskUserExtensionMethod] = true
+                }
+            }
+        };
+
+        var json = JsonSerializer.Serialize(capabilities);
+        var parsed = JsonDocument.Parse(json);
+
+        Assert.That(parsed.RootElement.TryGetProperty("_meta", out var meta), Is.True);
+        Assert.That(meta.TryGetProperty(ClientCapabilityMetadata.ExtensionsMetaKey, out var extensions), Is.True);
+        Assert.That(
+            extensions.GetProperty(ClientCapabilityMetadata.AskUserExtensionMethod).ValueKind,
+            Is.EqualTo(JsonValueKind.True));
+    }
+
+    [Test]
     public void ClientCapabilityDefaults_Should_Not_Advertise_FileSystem_Or_Terminal()
     {
         var capabilities = ClientCapabilityDefaults.Create();
 
         Assert.That(capabilities.Terminal, Is.Null);
         Assert.That(capabilities.Fs, Is.Null);
+    }
+
+    [Test]
+    public void ClientCapabilityDefaults_Should_Advertise_AskUser_Extension_In_Meta()
+    {
+        var capabilities = ClientCapabilityDefaults.Create();
+
+        Assert.That(capabilities.Meta, Is.Not.Null);
+        Assert.That(capabilities.Meta!.TryGetValue(ClientCapabilityMetadata.ExtensionsMetaKey, out var extensions), Is.True);
+        Assert.That(extensions, Is.TypeOf<Dictionary<string, object?>>());
+
+        var extensionMap = (Dictionary<string, object?>)extensions!;
+        Assert.That(extensionMap.TryGetValue(ClientCapabilityMetadata.AskUserExtensionMethod, out var isSupported), Is.True);
+        Assert.That(isSupported, Is.EqualTo(true));
     }
 }

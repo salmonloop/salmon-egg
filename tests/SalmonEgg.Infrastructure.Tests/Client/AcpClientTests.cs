@@ -103,6 +103,51 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         [Fact]
+        public async Task InitializeAsync_SendsAskUserCapabilityMetadataInClientCapabilities()
+        {
+            var parser = new MessageParser();
+            var client = new AcpClient(_transportMock.Object, parser, null, _errorLoggerMock.Object);
+            string? sentInitialize = null;
+
+            _transportMock
+                .Setup(t => t.SendMessageAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .Callback<string, CancellationToken>((message, _) => sentInitialize = message)
+                .ReturnsAsync(true);
+
+            var initResponse = new InitializeResponse(
+                1,
+                new AgentInfo("TestAgent", "1.0.0"),
+                new AgentCapabilities());
+
+            var initTrigger = Task.Run(async () =>
+            {
+                await Task.Delay(10);
+                var response = new JsonRpcResponse(1, JsonSerializer.SerializeToElement(initResponse, parser.Options));
+                _transportMock.Raise(
+                    t => t.MessageReceived += null,
+                    new MessageReceivedEventArgs(parser.SerializeMessage(response)));
+            });
+
+            await client.InitializeAsync(new InitializeParams(
+                new ClientInfo("Test", "1.0.0"),
+                ClientCapabilityDefaults.Create()));
+            await initTrigger;
+
+            Assert.NotNull(sentInitialize);
+
+            using var document = JsonDocument.Parse(sentInitialize!);
+            var clientCapabilities = document.RootElement
+                .GetProperty("params")
+                .GetProperty("clientCapabilities");
+            var meta = clientCapabilities.GetProperty("_meta");
+            var extensions = meta.GetProperty(ClientCapabilityMetadata.ExtensionsMetaKey);
+
+            Assert.True(extensions.GetProperty(ClientCapabilityMetadata.AskUserExtensionMethod).GetBoolean());
+            Assert.False(clientCapabilities.TryGetProperty("fs", out _));
+            Assert.False(clientCapabilities.TryGetProperty("terminal", out _));
+        }
+
+        [Fact]
         public async Task NonPromptRequest_StillUsesDefaultTimeoutBudget()
         {
             var timeouts = new AcpClient.AcpRequestTimeouts(

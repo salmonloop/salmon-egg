@@ -117,6 +117,12 @@ namespace SalmonEgg.Domain.Models.Protocol
         public bool? Terminal { get; set; }
 
         /// <summary>
+        /// 扩展字段（_meta），用于声明自定义客户端能力。
+        /// </summary>
+        [JsonPropertyName("_meta")]
+        public Dictionary<string, object?>? Meta { get; set; }
+
+        /// <summary>
         /// 创建新的 ClientCapabilities 实例。
         /// </summary>
         public ClientCapabilities()
@@ -128,10 +134,15 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// </summary>
         /// <param name="fs">文件系统能力</param>
         /// <param name="terminal">终端能力</param>
-        public ClientCapabilities(FsCapability? fs = null, bool? terminal = null)
+        /// <param name="meta">扩展能力元数据</param>
+        public ClientCapabilities(
+            FsCapability? fs = null,
+            bool? terminal = null,
+            Dictionary<string, object?>? meta = null)
         {
             Fs = fs;
             Terminal = terminal;
+            Meta = meta;
         }
     }
 
