@@ -212,7 +212,7 @@ public sealed class ConversationActivationCoordinatorTests
         var projectSelectionStore = new RecordingProjectSelectionStore();
         var coordinator = new NavigationCoordinator(
             selectionStore,
-            new ControlledConversationActivationCoordinator(activationGate.Task),
+            new ControlledConversationSessionSwitcher(activationGate.Task),
             projectSelectionStore,
             new StubShellNavigationService(ShellNavigationResult.Success()));
 
@@ -569,31 +569,17 @@ public sealed class ConversationActivationCoordinatorTests
             => Task.FromResult(_sessions.ContainsKey(sessionId));
     }
 
-    private sealed class ControlledConversationActivationCoordinator : IConversationActivationCoordinator
+    private sealed class ControlledConversationSessionSwitcher : IConversationSessionSwitcher
     {
         private readonly Task<bool> _activationTask;
 
-        public ControlledConversationActivationCoordinator(Task<bool> activationTask)
+        public ControlledConversationSessionSwitcher(Task<bool> activationTask)
         {
             _activationTask = activationTask;
         }
 
-        public async Task<ConversationActivationResult> ActivateSessionAsync(string sessionId, CancellationToken cancellationToken = default)
-        {
-            var activated = await _activationTask.WaitAsync(cancellationToken);
-            return activated
-                ? new ConversationActivationResult(true, sessionId, null)
-                : new ConversationActivationResult(false, sessionId, "ActivationFailed");
-        }
-
-        public Task<ConversationMutationResult> ArchiveConversationAsync(string conversationId, string? activeConversationId, CancellationToken cancellationToken = default)
-            => Task.FromResult(new ConversationMutationResult(true, string.Equals(conversationId, activeConversationId, StringComparison.Ordinal), null));
-
-        public Task NormalizeBindingForSelectedProfileAsync(string conversationId, CancellationToken cancellationToken = default)
-            => Task.CompletedTask;
-
-        public Task<ConversationMutationResult> DeleteConversationAsync(string conversationId, string? activeConversationId, CancellationToken cancellationToken = default)
-            => Task.FromResult(new ConversationMutationResult(true, string.Equals(conversationId, activeConversationId, StringComparison.Ordinal), null));
+        public Task<bool> SwitchConversationAsync(string conversationId, CancellationToken cancellationToken = default)
+            => _activationTask.WaitAsync(cancellationToken);
     }
 
     private sealed class RecordingProjectSelectionStore : INavigationProjectSelectionStore

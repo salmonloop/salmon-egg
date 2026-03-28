@@ -6,6 +6,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:models="using:SalmonEgg.Presentation.Models"
     xmlns:converters="using:SalmonEgg.Presentation.Converters"
+    xmlns:domain="using:SalmonEgg.Domain.Models"
     xmlns:local_vm="using:SalmonEgg.Presentation.ViewModels.Start"
     mc:Ignorable="d"
     Background="Transparent">
@@ -141,39 +142,64 @@
                 BorderThickness="1"
                 CornerRadius="20"
                 Padding="16,12">
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                <TextBox x:Uid="ChatInputBox"
-                         Text="{x:Bind ViewModel.StartPrompt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         MinHeight="44"
-                         MaxLength="4000"
-                         BorderThickness="0"
-                         Background="Transparent"
-                         TextWrapping="Wrap"
-                         IsEnabled="{x:Bind ViewModel.IsInputEnabled, Mode=OneWay}">
-                    <TextBox.Resources>
-                        <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent" />
-                        <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent" />
-                        <SolidColorBrush x:Key="TextControlBackground" Color="Transparent" />
-                        <Thickness x:Key="TextControlBorderThemeThicknessFocused">0</Thickness>
-                        <Thickness x:Key="TextControlBorderThemeThickness">0</Thickness>
-                        <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="Transparent" />
-                        <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="Transparent" />
-                        <SolidColorBrush x:Key="TextControlBorderBrush" Color="Transparent" />
-                    </TextBox.Resources>
-                </TextBox>
+            <Grid RowDefinitions="Auto,Auto" RowSpacing="10">
+                <StackPanel Grid.Row="0" Spacing="6">
+                    <TextBlock x:Uid="StartAgentSelectorLabel"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               Opacity="0.72"/>
+                    <ComboBox x:Uid="StartAgentSelector"
+                              AutomationProperties.AutomationId="StartView.AgentSelector"
+                              ItemsSource="{x:Bind ViewModel.Chat.AcpProfileList, Mode=OneWay}"
+                              SelectedItem="{x:Bind ViewModel.Chat.SelectedAcpProfile, Mode=TwoWay}"
+                              MinWidth="220"
+                              MaxWidth="320"
+                              HorizontalAlignment="Left"
+                              IsEnabled="{x:Bind ViewModel.IsInputEnabled, Mode=OneWay}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="domain:ServerConfiguration">
+                                <TextBlock Text="{x:Bind Name, Mode=OneTime}"
+                                           TextTrimming="CharacterEllipsis"
+                                           MaxLines="1"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </StackPanel>
 
-                <Button Grid.Column="1"
-                        x:Uid="SendButton"
-                        Content="&#xE724;"
-                        FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                        Width="44"
-                        Height="44"
-                        MinWidth="44"
-                        MinHeight="44"
-                        Padding="0"
-                        CornerRadius="22"
-                        Style="{StaticResource AccentButtonStyle}"
-                        Command="{x:Bind ViewModel.StartSessionAndSendCommand}" />
+                <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                    <TextBox x:Uid="ChatInputBox"
+                             Text="{x:Bind ViewModel.StartPrompt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             MinHeight="44"
+                             MaxLength="4000"
+                             BorderThickness="0"
+                             Background="Transparent"
+                             TextWrapping="Wrap"
+                             IsEnabled="{x:Bind ViewModel.IsInputEnabled, Mode=OneWay}">
+                        <TextBox.Resources>
+                            <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent" />
+                            <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent" />
+                            <SolidColorBrush x:Key="TextControlBackground" Color="Transparent" />
+                            <Thickness x:Key="TextControlBorderThemeThicknessFocused">0</Thickness>
+                            <Thickness x:Key="TextControlBorderThemeThickness">0</Thickness>
+                            <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="Transparent" />
+                            <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="Transparent" />
+                            <SolidColorBrush x:Key="TextControlBorderBrush" Color="Transparent" />
+                        </TextBox.Resources>
+                    </TextBox>
+
+                    <Button Grid.Column="1"
+                            x:Uid="SendButton"
+                            Content="&#xE724;"
+                            FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                            Width="44"
+                            Height="44"
+                            MinWidth="44"
+                            MinHeight="44"
+                            Padding="0"
+                            CornerRadius="22"
+                            Style="{StaticResource AccentButtonStyle}"
+                            Command="{x:Bind ViewModel.StartSessionAndSendCommand}" />
+                </Grid>
             </Grid>
         </Border>
 

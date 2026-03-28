@@ -4,7 +4,6 @@
     xmlns:local="using:SalmonEgg.Presentation.Views.Chat"
     xmlns:chatVm="using:SalmonEgg.Presentation.ViewModels.Chat"
     xmlns:behaviors="using:SalmonEgg.Presentation.Behaviors"
-    xmlns:domain="using:SalmonEgg.Domain.Models"
     xmlns:converters="using:SalmonEgg.Presentation.Converters"
     xmlns:controls="using:SalmonEgg.Controls"
     xmlns:models="using:SalmonEgg.Presentation.Models"
@@ -139,25 +138,17 @@
                         </StackPanel>
                     </StackPanel>
 
-                    <ComboBox Grid.Column="1"
-                              x:Uid="ChatAcpProfileSelector"
-                              Width="140"
-                              FontSize="12"
-                              MinWidth="0"
-                              HorizontalAlignment="Right"
-                              VerticalAlignment="Center"
-                              ItemsSource="{x:Bind ViewModel.AcpProfileList, Mode=OneWay}"
-                              SelectedItem="{x:Bind ViewModel.SelectedAcpProfile, Mode=TwoWay}"
-                              PlaceholderText="Select ACP profile">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate x:DataType="domain:ServerConfiguration">
-                                <TextBlock Text="{x:Bind Name, Mode=OneTime}"
-                                           TextTrimming="CharacterEllipsis"
-                                           MaxLines="1"
-                                           VerticalAlignment="Center"/>
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
+                    <TextBlock Grid.Column="1"
+                               AutomationProperties.AutomationId="ChatView.CurrentAgentDisplay"
+                               Text="{x:Bind ViewModel.CurrentAgentDisplayText, Mode=OneWay}"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               Opacity="0.72"
+                               HorizontalAlignment="Right"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"
+                               MaxLines="1"
+                               MaxWidth="220"/>
                 </Grid>
             </Border>
 
@@ -298,18 +289,19 @@
                                    TabsSource="{x:Bind ViewModel.BottomPanelTabs, Mode=OneWay}"
                                    SelectedTab="{x:Bind ViewModel.SelectedBottomPanelTab, Mode=TwoWay}" />
 
-            <!-- 加载遮罩 -->
-            <Grid Grid.RowSpan="3"
-                  Background="{ThemeResource AppOverlayScrimBrush}"
-                  Visibility="{x:Bind ViewModel.IsOverlayVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="16">
-                    <ProgressRing IsActive="True" Width="48" Height="48"/>
-                    <TextBlock Text="{x:Bind ViewModel.OverlayStatusText, Mode=OneWay}"
-                               FontSize="14"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                               HorizontalAlignment="Center"/>
-                </StackPanel>
-            </Grid>
+        </Grid>
+
+        <!-- 加载遮罩：覆盖空态与会话态的整个聊天页生命周期 -->
+        <Grid AutomationProperties.AutomationId="ChatView.LoadingOverlay"
+              Background="{ThemeResource AppOverlayScrimBrush}"
+              Visibility="{x:Bind ViewModel.IsOverlayVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="16">
+                <ProgressRing IsActive="True" Width="48" Height="48"/>
+                <TextBlock Text="{x:Bind ViewModel.OverlayStatusText, Mode=OneWay}"
+                           FontSize="14"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           HorizontalAlignment="Center"/>
+            </StackPanel>
         </Grid>
     </Grid>
 </Page>

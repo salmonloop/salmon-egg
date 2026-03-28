@@ -156,6 +156,15 @@
   <data name="ProjectNavNewSessionItem.Text" xml:space="preserve">
     <value>New session</value>
   </data>
+  <data name="StartAgentSelectorLabel.Text" xml:space="preserve">
+    <value>Agent</value>
+  </data>
+  <data name="StartAgentSelector.PlaceholderText" xml:space="preserve">
+    <value>Select the agent for this new session</value>
+  </data>
+  <data name="StartAgentSelector.AutomationProperties.Name" xml:space="preserve">
+    <value>New session agent selector</value>
+  </data>
   <data name="SessionNavArchiveItem.Text" xml:space="preserve">
     <value>Archive...</value>
   </data>

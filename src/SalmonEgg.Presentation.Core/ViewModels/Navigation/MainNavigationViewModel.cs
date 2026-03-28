@@ -848,7 +848,10 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     }
 
     private static DateTime GetNavigationSortTimestamp(ConversationCatalogItem item)
-        => item.LastAccessedAt == default ? item.LastUpdatedAt : item.LastAccessedAt;
+        // Keep navigation order aligned with the timestamp we actually render in the UI.
+        // LastAccessedAt is still meaningful for restore/recency flows, but should not reorder
+        // the left nav when the conversation content itself has not changed.
+        => item.LastUpdatedAt == default ? item.CreatedAt : item.LastUpdatedAt;
 
     private IEnumerable<string> GetKnownConversationIds()
         => _conversationCatalogPresenter.Snapshot.Select(static item => item.ConversationId);

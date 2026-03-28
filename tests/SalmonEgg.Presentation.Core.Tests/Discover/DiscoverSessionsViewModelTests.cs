@@ -216,6 +216,131 @@ public sealed class DiscoverSessionsViewModelTests
         }
     }
 
+    [Fact]
+    public async Task LoadSessionAsync_WhileImportIsRunning_KeepsLifecycleLoadingVisible()
+    {
+        var syncContext = new CountingSynchronizationContext();
+        var originalContext = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var profile = CreateProfile();
+            var profilesViewModel = CreateProfilesViewModel(profile);
+            var allowImportCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var importStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var importCoordinator = new DelayedImportCoordinator(async () =>
+            {
+                importStarted.TrySetResult(null);
+                await allowImportCompletion.Task;
+                return new DiscoverSessionImportResult(true, "local-conversation-1", null);
+            });
+            using var viewModel = CreateViewModel(
+                profilesViewModel,
+                new FakeDiscoverSessionsConnectionFacade
+                {
+                    HydrateResult = true
+                },
+                importCoordinator,
+                new StubNavigationCoordinator
+                {
+                    ActivationResult = true
+                });
+
+            var loadTask = viewModel.LoadSessionCommand.ExecuteAsync(CreateSessionItem());
+
+            await importStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            Assert.True(viewModel.IsLoading);
+            Assert.Equal("正在导入会话...", viewModel.LoadingStatus);
+
+            allowImportCompletion.TrySetResult(null);
+            await loadTask;
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task LoadSessionAsync_WhileActivationAndHydrationAreRunning_KeepsLifecycleLoadingVisible()
+    {
+        var syncContext = new CountingSynchronizationContext();
+        var originalContext = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var profile = CreateProfile();
+            var profilesViewModel = CreateProfilesViewModel(profile);
+            var allowActivationCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var activationStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var allowHydrationCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var hydrationStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            var connectionFacade = new FakeDiscoverSessionsConnectionFacade
+            {
+                CurrentChatService = new FakeChatService
+                {
+                    SessionListResponse = new SessionListResponse
+                    {
+                        Sessions =
+                        {
+                            new AgentSessionInfo
+                            {
+                                SessionId = "remote-session-1",
+                                Title = "Remote Session",
+                                Description = "Imported from ACP",
+                                UpdatedAt = "2026-03-27T12:00:00+08:00",
+                                Cwd = @"C:\repo\remote"
+                            }
+                        }
+                    }
+                },
+                OnHydrateAsync = async cancellationToken =>
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    hydrationStarted.TrySetResult(null);
+                    await allowHydrationCompletion.Task.WaitAsync(cancellationToken);
+                    return true;
+                }
+            };
+
+            var navigationCoordinator = new DelayedNavigationCoordinator(async () =>
+            {
+                activationStarted.TrySetResult(null);
+                await allowActivationCompletion.Task;
+                return true;
+            });
+
+            using var viewModel = CreateViewModel(
+                profilesViewModel,
+                connectionFacade,
+                new RecordingImportCoordinator(new DiscoverSessionImportResult(true, "local-conversation-1", null)),
+                navigationCoordinator);
+
+            await viewModel.RefreshSessionsCommand.ExecuteAsync(null);
+            Assert.Equal(DiscoverSessionsLoadPhase.Loaded, viewModel.LoadPhase);
+
+            var loadTask = viewModel.LoadSessionCommand.ExecuteAsync(CreateSessionItem());
+
+            await activationStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            Assert.True(viewModel.IsLoading);
+            Assert.Equal("正在打开会话...", viewModel.LoadingStatus);
+
+            allowActivationCompletion.TrySetResult(null);
+
+            await hydrationStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            Assert.True(viewModel.IsLoading);
+            Assert.Equal("正在加载会话历史...", viewModel.LoadingStatus);
+
+            allowHydrationCompletion.TrySetResult(null);
+            await loadTask;
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
     private static DiscoverSessionsViewModel CreateViewModel(
         AcpProfilesViewModel profilesViewModel,
         IDiscoverSessionsConnectionFacade connectionFacade,
@@ -347,6 +472,8 @@ public sealed class DiscoverSessionsViewModelTests
 
         public bool HydrateCalledOnExpectedContext { get; private set; }
 
+        public Func<CancellationToken, Task<bool>>? OnHydrateAsync { get; set; }
+
         public async Task ConnectToProfileAsync(ServerConfiguration profile)
         {
             IsConnecting = true;
@@ -366,6 +493,11 @@ public sealed class DiscoverSessionsViewModelTests
             if (RequireExpectedSynchronizationContextForHydrate && !HydrateCalledOnExpectedContext)
             {
                 return Task.FromResult(false);
+            }
+
+            if (OnHydrateAsync != null)
+            {
+                return OnHydrateAsync(cancellationToken);
             }
 
             return Task.FromResult(HydrateResult);
@@ -459,6 +591,28 @@ public sealed class DiscoverSessionsViewModelTests
             LastActivation = (sessionId, projectId);
             return Task.FromResult(ActivationResult);
         }
+
+        public void SyncSelectionFromShellContent(ShellNavigationContent content)
+        {
+        }
+    }
+
+    private sealed class DelayedNavigationCoordinator : INavigationCoordinator
+    {
+        private readonly Func<Task<bool>> _activation;
+
+        public DelayedNavigationCoordinator(Func<Task<bool>> activation)
+        {
+            _activation = activation;
+        }
+
+        public Task ActivateStartAsync() => Task.CompletedTask;
+
+        public Task ActivateDiscoverSessionsAsync() => Task.CompletedTask;
+
+        public Task ActivateSettingsAsync(string settingsKey) => Task.CompletedTask;
+
+        public Task<bool> ActivateSessionAsync(string sessionId, string? projectId) => _activation();
 
         public void SyncSelectionFromShellContent(ShellNavigationContent content)
         {

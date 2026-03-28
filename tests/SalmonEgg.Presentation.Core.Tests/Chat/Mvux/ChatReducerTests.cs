@@ -147,6 +147,21 @@ public class ChatReducerTests
     }
 
     [Fact]
+    public void GivenHydratingConversation_WhenSelectConversation_ThenHydrationFlagIsCleared()
+    {
+        var initialState = ChatState.Empty with
+        {
+            HydratedConversationId = "conv-1",
+            IsHydrating = true
+        };
+
+        var newState = ChatReducer.Reduce(initialState, new SelectConversationAction("conv-2"));
+
+        Assert.Equal("conv-2", newState.HydratedConversationId);
+        Assert.False(newState.IsHydrating);
+    }
+
+    [Fact]
     public void SetConversationSessionState_ProjectsOnlyForHydratedConversation()
     {
         var initialState = ChatState.Empty with

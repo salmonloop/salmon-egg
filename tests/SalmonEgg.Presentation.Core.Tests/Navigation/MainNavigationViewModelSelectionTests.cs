@@ -264,7 +264,7 @@ public sealed class MainNavigationViewModelSelectionTests
     }
 
     [Fact]
-    public void RebuildTree_PrefersLastAccessedOrderingWhenAccessTimesChange()
+    public void RebuildTree_KeepsLastUpdatedOrderingWhenOnlyAccessTimesChange()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -342,7 +342,7 @@ public sealed class MainNavigationViewModelSelectionTests
                 .OfType<SessionNavItemViewModel>()
                 .Select(child => child.SessionId)
                 .ToArray();
-            Assert.Equal(new[] { "session-old", "session-new" }, orderedAfterAccess);
+            Assert.Equal(new[] { "session-new", "session-old" }, orderedAfterAccess);
         }
         finally
         {
@@ -351,7 +351,7 @@ public sealed class MainNavigationViewModelSelectionTests
     }
 
     [Fact]
-    public async Task ShowAllSessionsForProjectAsync_UsesLastAccessedOrderingForDialogItems()
+    public async Task ShowAllSessionsForProjectAsync_UsesLastUpdatedOrderingForDialogItems()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -407,7 +407,7 @@ public sealed class MainNavigationViewModelSelectionTests
 
             Assert.NotNull(capturedSessions);
             Assert.Equal(
-                new[] { "session-old", "session-new" },
+                new[] { "session-new", "session-old" },
                 capturedSessions!.Select(session => session.SessionId).ToArray());
         }
         finally

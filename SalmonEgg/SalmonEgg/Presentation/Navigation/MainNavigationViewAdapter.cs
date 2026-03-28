@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -20,16 +19,7 @@ public sealed class MainNavigationViewAdapter
     private readonly DispatcherQueue _dispatcherQueue;
     private readonly MainNavigationViewModel _viewModel;
     private readonly INavigationCoordinator _navigationCoordinator;
-
-    /// <summary>
-    /// Set to <c>true</c> while <see cref="HandleItemInvokedAsync"/> is executing.
-    /// When active, <see cref="ApplySelection"/> defers to the next dispatcher tick
-    /// instead of immediately setting <see cref="NavigationView.SelectedItem"/>,
-    /// allowing the control's own click-driven selection pipeline to run its
-    /// native indicator slide animation without being preempted by a
-    /// programmatic <c>SelectedItem</c> assignment from the ViewModel round-trip.
-    /// </summary>
-    private bool _isProcessingItemInvoked;
+    private readonly SelectionProjectionApplyGate _selectionApplyGate = new();
 
     public MainNavigationViewAdapter(
         NavigationView navigationView,
@@ -45,14 +35,9 @@ public sealed class MainNavigationViewAdapter
 
     public void ApplySelection()
     {
-        // While processing a user click (ItemInvoked), the NavigationView is
-        // executing its own selection pipeline that includes the native indicator
-        // slide animation. Setting SelectedItem programmatically here would
-        // preempt that animation. Defer to the next dispatcher tick so the
-        // control can finish its own selection first.
-        if (_isProcessingItemInvoked)
+        var decision = _selectionApplyGate.RequestApply();
+        if (decision is SelectionProjectionApplyDecision.Defer)
         {
-            ApplySelectionDeferred();
             return;
         }
 
@@ -61,19 +46,22 @@ public sealed class MainNavigationViewAdapter
 
     public void ApplySelectionDeferred()
     {
-        _ = _dispatcherQueue.TryEnqueue(ApplySelectionCore);
+        _ = _dispatcherQueue.TryEnqueue(ApplySelection);
     }
 
     public async Task<bool> HandleItemInvokedAsync(NavigationViewItemInvokedEventArgs args)
     {
-        _isProcessingItemInvoked = true;
+        _selectionApplyGate.BeginInteraction();
         try
         {
             return await HandleItemInvokedCoreAsync(args).ConfigureAwait(true);
         }
         finally
         {
-            _isProcessingItemInvoked = false;
+            if (_selectionApplyGate.EndInteraction())
+            {
+                ApplySelection();
+            }
         }
     }
 

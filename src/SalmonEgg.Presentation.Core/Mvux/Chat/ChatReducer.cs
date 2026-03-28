@@ -24,6 +24,7 @@ public static class ChatReducer
                 ShowConfigOptionsPanel = false,
                 ShowPlanPanel = false,
                 PlanTitle = null,
+                IsHydrating = false,
                 IsPromptInFlight = false,
                 ActiveTurn = null
             }),

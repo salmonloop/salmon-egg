@@ -505,6 +505,15 @@
   <data name="SendButton.AutomationProperties.Name" xml:space="preserve">
     <value>发送</value>
   </data>
+  <data name="StartAgentSelectorLabel.Text" xml:space="preserve">
+    <value>Agent</value>
+  </data>
+  <data name="StartAgentSelector.PlaceholderText" xml:space="preserve">
+    <value>选择新会话要使用的 Agent</value>
+  </data>
+  <data name="StartAgentSelector.AutomationProperties.Name" xml:space="preserve">
+    <value>新会话 Agent 选择</value>
+  </data>
   <data name="CancelButton.AutomationProperties.Name" xml:space="preserve">
     <value>取消发送</value>
   </data>

@@ -47,13 +47,19 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
     public bool IsLoading => LoadPhase is
         DiscoverSessionsLoadPhase.Connecting or
         DiscoverSessionsLoadPhase.Initializing or
-        DiscoverSessionsLoadPhase.ListingSessions;
+        DiscoverSessionsLoadPhase.ListingSessions or
+        DiscoverSessionsLoadPhase.ImportingSession or
+        DiscoverSessionsLoadPhase.ActivatingSession or
+        DiscoverSessionsLoadPhase.HydratingSession;
 
     public string? LoadingStatus => LoadPhase switch
     {
         DiscoverSessionsLoadPhase.Connecting => "正在连接到 Agent...",
         DiscoverSessionsLoadPhase.Initializing => "正在初始化 ACP 协议...",
         DiscoverSessionsLoadPhase.ListingSessions => "正在获取会话列表...",
+        DiscoverSessionsLoadPhase.ImportingSession => "正在导入会话...",
+        DiscoverSessionsLoadPhase.ActivatingSession => "正在打开会话...",
+        DiscoverSessionsLoadPhase.HydratingSession => "正在加载会话历史...",
         _ => null
     };
 
@@ -265,7 +271,11 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
 
         try
         {
-            await PostToUiAsync(() => ErrorMessage = null).ConfigureAwait(false);
+            await PostToUiAsync(() =>
+            {
+                ErrorMessage = null;
+                LoadPhase = DiscoverSessionsLoadPhase.ImportingSession;
+            }).ConfigureAwait(false);
 
             var importResult = await _importCoordinator
                 .ImportAsync(session.Id, session.SessionCwd, SelectedProfile.Id, session.Title)
@@ -282,6 +292,7 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
                 return;
             }
 
+            await PostToUiAsync(() => LoadPhase = DiscoverSessionsLoadPhase.ActivatingSession).ConfigureAwait(false);
             var activated = await RunOnUiContextAsync(
                     () => _navigationCoordinator.ActivateSessionAsync(importResult.LocalConversationId!, null))
                 .ConfigureAwait(false);
@@ -295,6 +306,7 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
                 return;
             }
 
+            await PostToUiAsync(() => LoadPhase = DiscoverSessionsLoadPhase.HydratingSession).ConfigureAwait(false);
             var hydrated = await RunOnUiContextAsync(
                     () => _connectionFacade.HydrateActiveConversationAsync())
                 .ConfigureAwait(false);
@@ -305,7 +317,12 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
                     ErrorMessage = "导入后的会话历史加载失败，请检查 ACP 连接状态。";
                     LoadPhase = DiscoverSessionsLoadPhase.Error;
                 }).ConfigureAwait(false);
+                return;
             }
+
+            await PostToUiAsync(() => LoadPhase = AgentSessions.Count == 0
+                ? DiscoverSessionsLoadPhase.Empty
+                : DiscoverSessionsLoadPhase.Loaded).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -420,9 +437,12 @@ public enum DiscoverSessionsLoadPhase
     Connecting = 1,
     Initializing = 2,
     ListingSessions = 3,
-    Loaded = 4,
-    Empty = 5,
-    Error = 6
+    ImportingSession = 4,
+    ActivatingSession = 5,
+    HydratingSession = 6,
+    Loaded = 7,
+    Empty = 8,
+    Error = 9
 }
 
 public sealed class DiscoverSessionItemViewModel

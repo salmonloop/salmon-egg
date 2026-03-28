@@ -10,7 +10,7 @@ namespace SalmonEgg.Presentation.Core.Services;
 public sealed class NavigationCoordinator : INavigationCoordinator
 {
     private readonly IShellSelectionMutationSink _selectionSink;
-    private readonly IConversationActivationCoordinator _conversationActivationCoordinator;
+    private readonly IConversationSessionSwitcher _conversationSessionSwitcher;
     private readonly INavigationProjectSelectionStore _projectSelectionStore;
     private readonly IShellNavigationService _shellNavigationService;
     private long _activationTokenCounter;
@@ -18,12 +18,12 @@ public sealed class NavigationCoordinator : INavigationCoordinator
 
     public NavigationCoordinator(
         IShellSelectionMutationSink selectionSink,
-        IConversationActivationCoordinator conversationActivationCoordinator,
+        IConversationSessionSwitcher conversationSessionSwitcher,
         INavigationProjectSelectionStore projectSelectionStore,
         IShellNavigationService shellNavigationService)
     {
         _selectionSink = selectionSink ?? throw new ArgumentNullException(nameof(selectionSink));
-        _conversationActivationCoordinator = conversationActivationCoordinator ?? throw new ArgumentNullException(nameof(conversationActivationCoordinator));
+        _conversationSessionSwitcher = conversationSessionSwitcher ?? throw new ArgumentNullException(nameof(conversationSessionSwitcher));
         _projectSelectionStore = projectSelectionStore ?? throw new ArgumentNullException(nameof(projectSelectionStore));
         _shellNavigationService = shellNavigationService ?? throw new ArgumentNullException(nameof(shellNavigationService));
     }
@@ -87,18 +87,19 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         }
 
         var activationToken = BeginActivation();
-        var activationResult = await _conversationActivationCoordinator
-            .ActivateSessionAsync(sessionId)
-            .ConfigureAwait(true);
-        if (!activationResult.Succeeded)
-        {
-            return false;
-        }
 
         try
         {
             var navigationResult = await NavigateToChatAsync(activationToken).ConfigureAwait(true);
             if (!navigationResult.Succeeded || !IsLatestActivationToken(activationToken))
+            {
+                return false;
+            }
+
+            var activated = await _conversationSessionSwitcher
+                .SwitchConversationAsync(sessionId)
+                .ConfigureAwait(true);
+            if (!activated || !IsLatestActivationToken(activationToken))
             {
                 return false;
             }
