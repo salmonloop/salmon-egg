@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -8,6 +9,7 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Services;
 
@@ -62,6 +64,8 @@ public partial class AppPreferencesViewModel : ObservableObject
     // Keep a single writer (AppPreferencesViewModel) to avoid settings overwrite races.
     public ObservableCollection<ProjectDefinition> Projects { get; } = new();
 
+    public ObservableCollection<ProjectPathMapping> ProjectPathMappings { get; } = new();
+
     [ObservableProperty]
     private string? _lastSelectedProjectId;
 
@@ -92,6 +96,7 @@ public partial class AppPreferencesViewModel : ObservableObject
         _syncContext = SynchronizationContext.Current ?? new SynchronizationContext();
         KeyBindings.CollectionChanged += OnKeyBindingsChanged;
         Projects.CollectionChanged += OnProjectsChanged;
+        ProjectPathMappings.CollectionChanged += OnProjectPathMappingsChanged;
         _ = LoadAsync();
     }
 
@@ -155,6 +160,12 @@ public partial class AppPreferencesViewModel : ObservableObject
                         Name = project.Name.Trim(),
                         RootPath = project.RootPath.Trim()
                     });
+                }
+
+                ProjectPathMappings.Clear();
+                foreach (var mapping in NormalizeProjectPathMappings(settings.ProjectPathMappings))
+                {
+                    ProjectPathMappings.Add(mapping);
                 }
 
                 KeyBindings.Clear();
@@ -222,6 +233,11 @@ public partial class AppPreferencesViewModel : ObservableObject
     partial void OnLastSelectedProjectIdChanged(string? value) => ScheduleSave();
 
     private void OnProjectsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        ScheduleSave();
+    }
+
+    private void OnProjectPathMappingsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         ScheduleSave();
     }
@@ -343,6 +359,7 @@ public partial class AppPreferencesViewModel : ObservableObject
                     HistoryRetentionDays = HistoryRetentionDays,
                     RememberRecentProjectPaths = RememberRecentProjectPaths,
                     CacheRetentionDays = CacheRetentionDays,
+                    ProjectPathMappings = NormalizeProjectPathMappings(ProjectPathMappings),
                     LastSelectedProjectId = LastSelectedProjectId,
                     Projects = Projects
                         .Where(p => !string.IsNullOrWhiteSpace(p.ProjectId)
@@ -390,5 +407,42 @@ public partial class AppPreferencesViewModel : ObservableObject
         {
             _logger.LogWarning(ex, "Failed to apply launch-on-startup setting");
         }
+    }
+
+    private static List<ProjectPathMapping> NormalizeProjectPathMappings(IEnumerable<ProjectPathMapping>? mappings)
+    {
+        var normalized = new List<ProjectPathMapping>();
+        if (mappings is null)
+        {
+            return normalized;
+        }
+
+        foreach (var mapping in mappings)
+        {
+            if (mapping is null)
+            {
+                continue;
+            }
+
+            var profileId = mapping.ProfileId?.Trim();
+            var remoteRoot = mapping.RemoteRootPath?.Trim();
+            var localRoot = mapping.LocalRootPath?.Trim();
+
+            if (string.IsNullOrWhiteSpace(profileId) ||
+                string.IsNullOrWhiteSpace(remoteRoot) ||
+                string.IsNullOrWhiteSpace(localRoot))
+            {
+                continue;
+            }
+
+            normalized.Add(new ProjectPathMapping
+            {
+                ProfileId = profileId,
+                RemoteRootPath = remoteRoot,
+                LocalRootPath = localRoot
+            });
+        }
+
+        return normalized;
     }
 }

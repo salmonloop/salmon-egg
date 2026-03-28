@@ -58,10 +58,7 @@ public sealed class DiscoverSessionImportCoordinator : IDiscoverSessionImportCoo
 
         try
         {
-            var cwd = string.IsNullOrWhiteSpace(remoteSessionCwd)
-                ? null
-                : remoteSessionCwd.Trim();
-            await _sessionManager.CreateSessionAsync(localConversationId, cwd).ConfigureAwait(false);
+            await _sessionManager.CreateSessionAsync(localConversationId, remoteSessionCwd).ConfigureAwait(false);
             var sanitizedTitle = SessionNamePolicy.Sanitize(remoteSessionTitle);
             if (!string.IsNullOrWhiteSpace(sanitizedTitle))
             {

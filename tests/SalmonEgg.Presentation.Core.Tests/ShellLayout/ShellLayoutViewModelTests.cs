@@ -51,7 +51,10 @@ public class ShellLayoutViewModelTests
             false, 0, 0, new LayoutPadding(4, 0, 4, 0), new LayoutPadding(0, 0, 0, 0), 60,
             false, false, 0, RightPanelMode.None, false, 0, BottomPanelMode.None, false, 0), default);
 
-        await Task.Delay(100);
+        await WaitForConditionAsync(
+            () => vm.NavPaneDisplayMode == NavigationPaneDisplayMode.Compact
+                && !vm.IsNavPaneOpen
+                && vm.TitleBarHeight == 60);
 
         Assert.Equal(NavigationPaneDisplayMode.Compact, vm.NavPaneDisplayMode);
         Assert.False(vm.IsNavPaneOpen);
@@ -90,7 +93,11 @@ public class ShellLayoutViewModelTests
             true, 220, 360, new LayoutPadding(0, 0, 0, 0), new LayoutPadding(0, 0, 0, 0), 48,
             true, false, 0, RightPanelMode.None, true, 240, BottomPanelMode.Dock, true, 294), default);
 
-        await Task.Delay(100);
+        await WaitForConditionAsync(
+            () => vm.BottomPanelVisible
+                && vm.BottomPanelHeight == 240
+                && vm.BottomPanelMode == BottomPanelMode.Dock
+                && vm.CanShowSimultaneousAuxiliaryPanels);
 
         Assert.True(vm.BottomPanelVisible);
         Assert.Equal(240, vm.BottomPanelHeight);
@@ -117,13 +124,34 @@ public class ShellLayoutViewModelTests
         await store.StateState.Update(_ => desired, default);
         await store.SnapshotState.Update(_ => ShellLayoutPolicy.Compute(desired), default);
 
-        await Task.Delay(100);
+        await WaitForConditionAsync(
+            () => vm.DesiredRightPanelMode == RightPanelMode.Diff
+                && vm.DesiredBottomPanelMode == BottomPanelMode.Dock
+                && vm.RightPanelMode == RightPanelMode.Diff
+                && vm.BottomPanelMode == BottomPanelMode.None
+                && !vm.BottomPanelVisible);
 
         Assert.Equal(RightPanelMode.Diff, vm.DesiredRightPanelMode);
         Assert.Equal(BottomPanelMode.Dock, vm.DesiredBottomPanelMode);
         Assert.Equal(RightPanelMode.Diff, vm.RightPanelMode);
         Assert.Equal(BottomPanelMode.None, vm.BottomPanelMode);
         Assert.False(vm.BottomPanelVisible);
+    }
+
+    private static async Task WaitForConditionAsync(
+        System.Func<bool> predicate,
+        int maxAttempts = 20,
+        int delayMs = 10)
+    {
+        for (var attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            if (predicate())
+            {
+                return;
+            }
+
+            await Task.Delay(delayMs);
+        }
     }
 
     private sealed class FakeShellLayoutStore : IShellLayoutStore, IAsyncDisposable
@@ -155,10 +183,15 @@ public class ShellLayoutViewModelTests
 
     private sealed class PumpingSynchronizationContext : SynchronizationContext
     {
-        private readonly Queue<(SendOrPostCallback Callback, object? State)> _queue = new();
+        private readonly Queue<(SendOrPostCallback? Callback, object? State)> _queue = new();
 
         public override void Post(SendOrPostCallback d, object? state)
         {
+            if (d is null)
+            {
+                return;
+            }
+
             _queue.Enqueue((d, state));
         }
 
@@ -167,7 +200,7 @@ public class ShellLayoutViewModelTests
             while (_queue.Count > 0)
             {
                 var work = _queue.Dequeue();
-                work.Callback(work.State);
+                work.Callback?.Invoke(work.State);
             }
         }
     }

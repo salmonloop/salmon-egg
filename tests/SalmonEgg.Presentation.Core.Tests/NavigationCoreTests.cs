@@ -159,6 +159,7 @@ public sealed class NavigationCoreTests
         Assert.Contains("<ContentControl x:Name=\"LoadingOverlayPresenter\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("<Grid AutomationProperties.AutomationId=\"ChatView.LoadingOverlay\"", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"ChatView.LoadingOverlayStatus\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("AutomationProperties.LiveSetting=\"Assertive\"", xaml, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -16,6 +16,7 @@ using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
+using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Core.Mvux.ShellLayout;
 using SalmonEgg.Presentation.ViewModels.Settings;
 
@@ -35,6 +36,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     private readonly IShellLayoutMetricsSink _metricsSink;
     private readonly NavigationSelectionProjector _selectionProjector;
     private readonly IConversationCatalogReadModel _conversationCatalogPresenter;
+    private readonly IProjectAffinityResolver _projectAffinityResolver;
     private readonly IShellSelectionReadModel _shellSelection;
     private readonly IShellSelectionMutationSink _shellSelectionMutations;
     private readonly SynchronizationContext _syncContext;
@@ -96,7 +98,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         IShellLayoutMetricsSink metricsSink,
         NavigationSelectionProjector selectionProjector,
         IShellSelectionReadModel shellSelection,
-        IConversationCatalogReadModel conversationCatalogPresenter)
+        IConversationCatalogReadModel conversationCatalogPresenter,
+        IProjectAffinityResolver projectAffinityResolver)
     {
         _chatSessionCatalogActions = conversationCatalog as IChatSessionCatalog ?? new ChatViewModelSessionCatalogAdapter(conversationCatalog);
         _projectPreferences = projectPreferences ?? throw new ArgumentNullException(nameof(projectPreferences));
@@ -111,6 +114,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         _shellSelectionMutations = shellSelection as IShellSelectionMutationSink
             ?? throw new ArgumentException("Shell selection read model must also support mutations.", nameof(shellSelection));
         _conversationCatalogPresenter = conversationCatalogPresenter ?? throw new ArgumentNullException(nameof(conversationCatalogPresenter));
+        _projectAffinityResolver = projectAffinityResolver ?? throw new ArgumentNullException(nameof(projectAffinityResolver));
         _syncContext = SynchronizationContext.Current ?? new SynchronizationContext();
         AddProjectCommand = new AsyncRelayCommand(AddProjectAsync);
 
@@ -137,6 +141,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         _shellSelection.PropertyChanged += OnShellSelectionPropertyChanged;
         _projectsChangedHandler = (_, _) => RebuildTree();
         ((INotifyCollectionChanged)_projectPreferences.Projects).CollectionChanged += _projectsChangedHandler;
+        ((INotifyCollectionChanged)_projectPreferences.ProjectPathMappings).CollectionChanged += _projectsChangedHandler;
 
         _relativeTimeTimer = new Timer(
             _ => _syncContext.Post(__ => RefreshRelativeTimes(), null),
@@ -153,6 +158,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         _conversationCatalogPresenter.PropertyChanged -= OnConversationCatalogPresenterPropertyChanged;
         _shellSelection.PropertyChanged -= OnShellSelectionPropertyChanged;
         ((INotifyCollectionChanged)_projectPreferences.Projects).CollectionChanged -= _projectsChangedHandler;
+        ((INotifyCollectionChanged)_projectPreferences.ProjectPathMappings).CollectionChanged -= _projectsChangedHandler;
         _relativeTimeTimer.Dispose();
 
         DisposeItem(StartItem);
@@ -594,15 +600,10 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     private Dictionary<string, List<ConversationCatalogItem>> GetSessionsByProject(List<(ProjectDefinition Project, bool IsSystem)> projects)
     {
-        var normalizedRoots = projects.ToDictionary(
-            p => p.Project.ProjectId!,
-            p => NavTimeFormatter.NormalizePathForPrefixMatch(p.Project.RootPath),
-            StringComparer.Ordinal);
-
         var sessions = GetConversationCatalogSnapshot();
 
         return sessions
-            .GroupBy(s => ProjectSessionClassifier.ClassifyProjectId(s.Cwd, normalizedRoots, UnclassifiedProjectId), StringComparer.Ordinal)
+            .GroupBy(session => ResolveEffectiveProjectId(session), StringComparer.Ordinal)
             .ToDictionary(
                 g => g.Key,
                 g => g.OrderByDescending(GetNavigationSortTimestamp)
@@ -631,7 +632,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(sessionSelection.SessionId) || !_sessionIndex.ContainsKey(sessionSelection.SessionId))
+        if (string.IsNullOrWhiteSpace(sessionSelection.SessionId))
         {
             _shellSelectionMutations.SetSelection(NavigationSelectionState.StartSelection);
         }
@@ -798,18 +799,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             return Array.Empty<SessionNavItemViewModel>();
         }
 
-        var projects = new List<ProjectDefinition>
-        {
-            new() { ProjectId = UnclassifiedProjectId, Name = "未归类", RootPath = string.Empty }
-        };
-        projects.AddRange(_projectPreferences.Projects);
-
-        var normalizedRoots = projects
-            .Where(p => !string.IsNullOrWhiteSpace(p.ProjectId))
-            .ToDictionary(p => p.ProjectId, p => NavTimeFormatter.NormalizePathForPrefixMatch(p.RootPath), StringComparer.Ordinal);
-
         var sessions = GetConversationCatalogSnapshot()
-            .Where(s => string.Equals(ProjectSessionClassifier.ClassifyProjectId(s.Cwd, normalizedRoots, UnclassifiedProjectId), projectId, StringComparison.Ordinal))
+            .Where(s => string.Equals(ResolveEffectiveProjectId(s), projectId, StringComparison.Ordinal))
             .OrderByDescending(GetNavigationSortTimestamp)
             .ThenByDescending(s => s.LastUpdatedAt)
             .ToList();
@@ -852,6 +843,23 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         // LastAccessedAt is still meaningful for restore/recency flows, but should not reorder
         // the left nav when the conversation content itself has not changed.
         => item.LastUpdatedAt == default ? item.CreatedAt : item.LastUpdatedAt;
+
+    private string ResolveEffectiveProjectId(ConversationCatalogItem item)
+        => ResolveProjectAffinity(item).EffectiveProjectId;
+
+    private ProjectAffinityResolution ResolveProjectAffinity(ConversationCatalogItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+
+        return _projectAffinityResolver.Resolve(new ProjectAffinityRequest(
+            RemoteCwd: item.Cwd,
+            BoundProfileId: item.BoundProfileId,
+            RemoteSessionId: item.RemoteSessionId,
+            OverrideProjectId: item.ProjectAffinityOverrideProjectId,
+            Projects: _projectPreferences.Projects,
+            PathMappings: _projectPreferences.ProjectPathMappings,
+            UnclassifiedProjectId: UnclassifiedProjectId));
+    }
 
     private IEnumerable<string> GetKnownConversationIds()
         => _conversationCatalogPresenter.Snapshot.Select(static item => item.ConversationId);

@@ -30,6 +30,7 @@ using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Core.Mvux.ShellLayout;
 using SalmonEgg.Presentation.Core.Services.Chat;
+using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Core.ViewModels.ShellLayout;
 using Uno.Extensions.Reactive;
 using SalmonEgg.Presentation.Core.Services;
@@ -221,6 +222,7 @@ public static class DependencyInjection
         services.AddSingleton<ConversationCatalogPresenter>();
         services.AddSingleton<IConversationCatalogReadModel>(sp =>
             sp.GetRequiredService<ConversationCatalogPresenter>());
+        services.AddSingleton<IProjectAffinityResolver, ProjectAffinityResolver>();
         services.AddSingleton<INavigationProjectPreferences>(sp =>
             new NavigationProjectPreferencesAdapter(sp.GetRequiredService<AppPreferencesViewModel>()));
         services.AddSingleton<INavigationProjectSelectionStore>(sp =>
@@ -287,7 +289,8 @@ public static class DependencyInjection
                 sp.GetRequiredService<IShellLayoutMetricsSink>(),
                 sp.GetRequiredService<NavigationSelectionProjector>(),
                 sp.GetRequiredService<IShellSelectionReadModel>(),
-                sp.GetRequiredService<IConversationCatalogReadModel>()));
+                sp.GetRequiredService<IConversationCatalogReadModel>(),
+                sp.GetRequiredService<IProjectAffinityResolver>()));
         services.AddSingleton<INavigationCoordinator>(sp =>
             new NavigationCoordinator(
                 sp.GetRequiredService<IShellSelectionMutationSink>(),

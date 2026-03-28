@@ -23,6 +23,8 @@ using SalmonEgg.Domain.Services;
 using SalmonEgg.Domain.Models.Tool;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
+using SalmonEgg.Presentation.Core.Services;
+using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.ViewModels.Settings;
@@ -975,7 +977,7 @@ public class ChatViewModelTests
     }
 
     [Fact]
-    public async Task SelectedAcpProfile_Change_ClearsActiveRemoteBindingBeforeReconnect()
+    public async Task SelectedAcpProfile_Change_PreservesActiveRemoteBindingUntilReconnectCompletes()
     {
         var connectGate = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
         var connectStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -1017,15 +1019,56 @@ public class ChatViewModelTests
         await WaitForConditionAsync(async () =>
         {
             var state = await fixture.GetStateAsync();
-            return state.ResolveBinding("session-1") == new ConversationBindingSlice("session-1", null, "profile-b")
-                && fixture.ViewModel.CurrentRemoteSessionId is null;
+            return state.ResolveBinding("session-1") == new ConversationBindingSlice("session-1", "remote-1", "profile-a")
+                && string.Equals(fixture.ViewModel.CurrentRemoteSessionId, "remote-1", StringComparison.Ordinal);
         });
 
         var state = await fixture.GetStateAsync();
-        Assert.Equal(new ConversationBindingSlice("session-1", null, "profile-b"), state.ResolveBinding("session-1"));
-        Assert.Null(fixture.ViewModel.CurrentRemoteSessionId);
+        Assert.Equal(new ConversationBindingSlice("session-1", "remote-1", "profile-a"), state.ResolveBinding("session-1"));
+        Assert.Equal("remote-1", fixture.ViewModel.CurrentRemoteSessionId);
 
         connectGate.TrySetResult(null);
+    }
+
+    [Fact]
+    public async Task SelectedAcpProfile_Change_WhenReconnectFails_PreservesActiveRemoteBinding()
+    {
+        var commands = new Mock<IAcpConnectionCommands>();
+        commands
+            .Setup(x => x.ConnectToProfileAsync(
+                It.IsAny<ServerConfiguration>(),
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("profile switch failed"));
+
+        await using var fixture = CreateViewModel(acpConnectionCommands: commands.Object);
+        var profileA = new ServerConfiguration { Id = "profile-a", Name = "Profile A", Transport = TransportType.Stdio };
+        var profileB = new ServerConfiguration { Id = "profile-b", Name = "Profile B", Transport = TransportType.Stdio };
+        fixture.Profiles.Profiles.Add(profileA);
+        fixture.Profiles.Profiles.Add(profileB);
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "session-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty.Add(
+                "session-1",
+                new ConversationBindingSlice("session-1", "remote-1", "profile-a"))
+        });
+        await WaitForConditionAsync(async () =>
+        {
+            var state = await fixture.GetStateAsync();
+            return state.ResolveBinding("session-1") == new ConversationBindingSlice("session-1", "remote-1", "profile-a");
+        });
+
+        fixture.ViewModel.SelectedAcpProfile = profileB;
+        await WaitForConditionAsync(() =>
+            Task.FromResult(!string.IsNullOrWhiteSpace(fixture.ViewModel.ConnectionErrorMessage)));
+
+        var state = await fixture.GetStateAsync();
+        Assert.Equal(new ConversationBindingSlice("session-1", "remote-1", "profile-a"), state.ResolveBinding("session-1"));
+        Assert.Equal("remote-1", fixture.ViewModel.CurrentRemoteSessionId);
+        Assert.Contains("profile switch failed", fixture.ViewModel.ConnectionErrorMessage ?? string.Empty, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2968,6 +3011,88 @@ public class ChatViewModelTests
     }
 
     [Fact]
+    public async Task HydrateActiveConversationAsync_WhenRemoteMetadataProvidesNewCwd_UsesRemoteCwdAsSsot()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
+        var sessionManager = new Mock<ISessionManager>();
+        sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.TryGetValue(id, out var session) ? session : null);
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .Returns<string, string?>((id, cwd) =>
+            {
+                var session = new Session(id, cwd);
+                sessions[id] = session;
+                return Task.FromResult(session);
+            });
+        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
+            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
+            {
+                if (!sessions.TryGetValue(id, out var session))
+                {
+                    return false;
+                }
+
+                update(session);
+                if (updateActivity)
+                {
+                    session.UpdateActivity();
+                }
+
+                return true;
+            });
+        sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.Remove(id));
+
+        await sessionManager.Object.CreateSessionAsync("conv-1", @"C:\repo\stale");
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
+
+        var chatService = CreateConnectedChatService();
+        chatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(
+            loadSession: true,
+            sessionCapabilities: new SessionCapabilities
+            {
+                List = new SessionListCapabilities()
+            }));
+        chatService.Setup(service => service.ListSessionsAsync(It.IsAny<SessionListParams>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SessionListResponse
+            {
+                Sessions =
+                [
+                    new AgentSessionInfo
+                    {
+                        SessionId = "remote-1",
+                        Cwd = @"C:\repo\fresh",
+                        Title = "Remote title",
+                        UpdatedAt = "2026-03-28T12:34:56Z"
+                    }
+                ]
+            });
+        SessionLoadParams? capturedParams = null;
+        chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>()))
+            .Callback<SessionLoadParams>(value => capturedParams = value)
+            .ReturnsAsync(SessionLoadResponse.Completed);
+        fixture.ViewModel.ReplaceChatService(chatService.Object);
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+        });
+
+        await WaitForConditionAsync(() =>
+            Task.FromResult(string.Equals(fixture.ViewModel.CurrentSessionId, "conv-1", StringComparison.Ordinal)));
+
+        var hydrated = await fixture.ViewModel.HydrateActiveConversationAsync();
+
+        Assert.True(hydrated);
+        Assert.NotNull(capturedParams);
+        Assert.Equal(@"C:\repo\fresh", capturedParams!.Cwd);
+        Assert.Equal(@"C:\repo\fresh", sessions["conv-1"].Cwd);
+    }
+
+    [Fact]
     public async Task ActivateConversationAsync_RemoteBoundConversation_LoadsRemoteSessionWhenConnected()
     {
         var syncContext = new ImmediateSynchronizationContext();
@@ -3023,6 +3148,7 @@ public class ChatViewModelTests
             {
                 sink.SelectProfile(profile);
                 sink.ReplaceChatService(chatService.Object);
+                await fixture!.DispatchConnectionAsync(new SetSelectedProfileAction(profile.Id));
                 await fixture!.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
                 return new AcpTransportApplyResult(chatService.Object, new InitializeResponse());
             });
@@ -3195,7 +3321,13 @@ public class ChatViewModelTests
         });
         await fixture.DispatchConnectionAsync(new SetSelectedProfileAction("profile-1"));
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
-        syncContext.RunAll();
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(
+                string.Equals(fixture.ViewModel.CurrentSessionId, "conv-1", StringComparison.Ordinal)
+                && string.Equals(fixture.ViewModel.CurrentRemoteSessionId, "remote-1", StringComparison.Ordinal));
+        });
 
         Assert.Equal("conv-1", fixture.ViewModel.CurrentSessionId);
         Assert.Equal("remote-1", fixture.ViewModel.CurrentRemoteSessionId);
@@ -4911,5 +5043,181 @@ public class ChatViewModelTests
         chatService.Verify(
             service => service.RespondToAskUserRequestAsync(It.IsAny<object>(), It.IsAny<IReadOnlyDictionary<string, string>>()),
             Times.Never);
+    }
+
+    [Fact]
+    public async Task ProjectAffinityCorrection_RemoteBoundUnclassifiedConversation_ShowsCorrectionAffordance()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+
+        fixture.Preferences.Projects.Add(new ProjectDefinition
+        {
+            ProjectId = "project-1",
+            Name = "Project One",
+            RootPath = @"C:\Repo\One"
+        });
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+        });
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(fixture.ViewModel.IsProjectAffinityCorrectionVisible);
+        });
+
+        Assert.Equal(NavigationProjectIds.Unclassified, fixture.ViewModel.EffectiveProjectAffinityProjectId);
+        Assert.Equal(ProjectAffinitySource.Unclassified, fixture.ViewModel.EffectiveProjectAffinitySource);
+        Assert.False(fixture.ViewModel.HasProjectAffinityOverride);
+        var option = Assert.Single(fixture.ViewModel.ProjectAffinityOverrideOptions);
+        Assert.Equal("project-1", option.ProjectId);
+    }
+
+    [Fact]
+    public async Task ApplyProjectAffinityOverrideCommand_SetsWorkspaceOverride_AndProjectsEffectiveOverride()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+
+        fixture.Preferences.Projects.Add(new ProjectDefinition
+        {
+            ProjectId = "project-1",
+            Name = "Project One",
+            RootPath = @"C:\Repo\One"
+        });
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+        });
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(fixture.ViewModel.IsProjectAffinityCorrectionVisible);
+        });
+
+        fixture.ViewModel.SelectedProjectAffinityOverrideProjectId = "project-1";
+        fixture.ViewModel.ApplyProjectAffinityOverrideCommand.Execute(null);
+        syncContext.RunAll();
+
+        Assert.Equal("project-1", fixture.Workspace.GetProjectAffinityOverride("conv-1")?.ProjectId);
+        Assert.True(fixture.ViewModel.HasProjectAffinityOverride);
+        Assert.Equal("project-1", fixture.ViewModel.EffectiveProjectAffinityProjectId);
+        Assert.Equal(ProjectAffinitySource.Override, fixture.ViewModel.EffectiveProjectAffinitySource);
+    }
+
+    [Fact]
+    public async Task ClearProjectAffinityOverrideCommand_ClearsWorkspaceOverride_AndRestoresUnclassifiedEffectiveAffinity()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+
+        fixture.Preferences.Projects.Add(new ProjectDefinition
+        {
+            ProjectId = "project-1",
+            Name = "Project One",
+            RootPath = @"C:\Repo\One"
+        });
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+        });
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(fixture.ViewModel.IsProjectAffinityCorrectionVisible);
+        });
+
+        fixture.ViewModel.SelectedProjectAffinityOverrideProjectId = "project-1";
+        fixture.ViewModel.ApplyProjectAffinityOverrideCommand.Execute(null);
+        syncContext.RunAll();
+
+        fixture.ViewModel.ClearProjectAffinityOverrideCommand.Execute(null);
+        syncContext.RunAll();
+
+        Assert.Null(fixture.Workspace.GetProjectAffinityOverride("conv-1"));
+        Assert.False(fixture.ViewModel.HasProjectAffinityOverride);
+        Assert.Equal(NavigationProjectIds.Unclassified, fixture.ViewModel.EffectiveProjectAffinityProjectId);
+        Assert.Equal(ProjectAffinitySource.Unclassified, fixture.ViewModel.EffectiveProjectAffinitySource);
+        Assert.True(fixture.ViewModel.IsProjectAffinityCorrectionVisible);
+    }
+
+    [Fact]
+    public async Task ProjectAffinityOverride_RestoreAndNavigationRebuild_KeepsOverrideProjected()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var conversationStore = new Mock<IConversationStore>();
+        conversationStore.Setup(s => s.LoadAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConversationDocument
+            {
+                LastActiveConversationId = "conv-1",
+                Conversations =
+                {
+                    new ConversationRecord
+                    {
+                        ConversationId = "conv-1",
+                        DisplayName = "Conversation One",
+                        CreatedAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                        LastUpdatedAt = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+                        RemoteSessionId = "remote-1",
+                        BoundProfileId = "profile-1",
+                        ProjectAffinityOverrideProjectId = "project-1"
+                    }
+                }
+            });
+
+        await using var fixture = CreateViewModel(syncContext, conversationStore: conversationStore);
+        fixture.Preferences.Projects.Add(new ProjectDefinition
+        {
+            ProjectId = "project-1",
+            Name = "Project One",
+            RootPath = @"C:\Repo\One"
+        });
+
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync());
+        syncContext.RunAll();
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+                .Add("conv-2", new ConversationBindingSlice("conv-2", "remote-2", "profile-1"))
+        });
+        syncContext.RunAll();
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(fixture.ViewModel.HasProjectAffinityOverride);
+        });
+
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "conv-2" });
+        syncContext.RunAll();
+
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "conv-1" });
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(
+                fixture.ViewModel.HasProjectAffinityOverride
+                && string.Equals(fixture.ViewModel.EffectiveProjectAffinityProjectId, "project-1", StringComparison.Ordinal)
+                && fixture.ViewModel.EffectiveProjectAffinitySource == ProjectAffinitySource.Override);
+        });
+
+        Assert.Equal("project-1", fixture.Workspace.GetProjectAffinityOverride("conv-1")?.ProjectId);
     }
 }

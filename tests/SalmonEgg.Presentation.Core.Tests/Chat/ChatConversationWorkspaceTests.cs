@@ -9,6 +9,7 @@ using Moq;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Domain.Models.Plan;
+using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services;
@@ -352,6 +353,99 @@ public sealed class ChatConversationWorkspaceTests
         Assert.Equal("profile-older", saved.Conversations[1].BoundProfileId);
         Assert.Single(saved.Conversations[1].Messages);
         Assert.Equal("older", saved.Conversations[1].Messages[0].TextContent);
+    }
+
+    [Fact]
+    public async Task SaveAsync_RoundTripsProjectAffinityOverride()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+
+        await workspace.RegisterConversationAsync("session-1");
+        workspace.UpdateProjectAffinityOverride("session-1", "project-override");
+
+        await workspace.SaveAsync();
+
+        var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
+        var record = Assert.Single(saved.Conversations);
+        Assert.Equal("project-override", record.ProjectAffinityOverrideProjectId);
+
+        var restoreStore = new CapturingConversationStore
+        {
+            LoadResult = saved
+        };
+        var restoreSessionManager = new FakeSessionManager();
+        var restorePreferences = CreatePreferences(syncContext);
+        using var restoredWorkspace = CreateWorkspace(restoreStore, restoreSessionManager, restorePreferences, syncContext);
+        await restoredWorkspace.RestoreAsync();
+
+        var overrideValue = restoredWorkspace.GetProjectAffinityOverride("session-1");
+        Assert.NotNull(overrideValue);
+        Assert.Equal("project-override", overrideValue!.ProjectId);
+    }
+
+    [Fact]
+    public async Task UpdateProjectAffinityOverride_UpdatesCatalogStateWithoutChangingRemoteBinding()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+
+        await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
+        await workspace.RegisterConversationAsync("session-1");
+        workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-1");
+
+        var beforeVersion = workspace.ConversationListVersion;
+        var beforeRemoteBinding = workspace.GetRemoteBinding("session-1");
+
+        workspace.UpdateProjectAffinityOverride("session-1", "project-override");
+
+        Assert.Equal(beforeVersion + 1, workspace.ConversationListVersion);
+        var afterRemoteBinding = workspace.GetRemoteBinding("session-1");
+        Assert.NotNull(afterRemoteBinding);
+        Assert.Equal(beforeRemoteBinding?.RemoteSessionId, afterRemoteBinding!.RemoteSessionId);
+        Assert.Equal(beforeRemoteBinding?.BoundProfileId, afterRemoteBinding.BoundProfileId);
+        var overrideValue = workspace.GetProjectAffinityOverride("session-1");
+        Assert.NotNull(overrideValue);
+        Assert.Equal("project-override", overrideValue!.ProjectId);
+    }
+
+    [Fact]
+    public async Task GetCatalog_IncludesRemoteBindingAndProjectAffinityOverrideMetadata()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-1", "/remote/repo/feature");
+
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript:
+            [
+                CreateTextMessage("m-1", "hello")
+            ],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+        workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-1");
+        workspace.UpdateProjectAffinityOverride("session-1", "project-override");
+
+        var catalog = Assert.Single(workspace.GetCatalog());
+
+        Assert.Equal("remote-1", catalog.RemoteSessionId);
+        Assert.Equal("profile-1", catalog.BoundProfileId);
+        Assert.Equal("project-override", catalog.ProjectAffinityOverrideProjectId);
     }
 
     [Fact]

@@ -23,9 +23,12 @@ using SalmonEgg.Domain.Models.Content;
 using SalmonEgg.Domain.Models.JsonRpc;
 using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
+using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
+using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Settings;
 
@@ -48,6 +51,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private readonly IConversationBindingCommands _bindingCommands;
     private readonly IAcpConnectionCommands _acpConnectionCommands;
     private readonly IAcpConnectionCoordinator _acpConnectionCoordinator;
+    private readonly IProjectAffinityResolver _projectAffinityResolver;
     private readonly IConfigurationService _configurationService;
     private readonly AppPreferencesViewModel _preferences;
     private readonly AcpProfilesViewModel _acpProfiles;
@@ -317,6 +321,88 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     [NotifyPropertyChangedFor(nameof(CurrentAgentDisplayText))]
     private ServerConfiguration? _selectedAcpProfile;
 
+    private bool _isProjectAffinityCorrectionVisible;
+
+    private string _projectAffinityCorrectionMessage = string.Empty;
+
+    private bool _hasProjectAffinityOverride;
+
+    private string? _selectedProjectAffinityOverrideProjectId;
+
+    private ObservableCollection<ProjectAffinityOverrideOptionViewModel> _projectAffinityOverrideOptions = new();
+
+    private string? _effectiveProjectAffinityProjectId;
+
+    private ProjectAffinitySource _effectiveProjectAffinitySource = ProjectAffinitySource.Unclassified;
+
+    public bool IsProjectAffinityCorrectionVisible
+    {
+        get => _isProjectAffinityCorrectionVisible;
+        private set => SetProperty(ref _isProjectAffinityCorrectionVisible, value);
+    }
+
+    public string ProjectAffinityCorrectionMessage
+    {
+        get => _projectAffinityCorrectionMessage;
+        private set => SetProperty(ref _projectAffinityCorrectionMessage, value);
+    }
+
+    public bool HasProjectAffinityOverride
+    {
+        get => _hasProjectAffinityOverride;
+        private set
+        {
+            if (SetProperty(ref _hasProjectAffinityOverride, value))
+            {
+                OnPropertyChanged(nameof(CanClearProjectAffinityOverride));
+                ClearProjectAffinityOverrideCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    public string? SelectedProjectAffinityOverrideProjectId
+    {
+        get => _selectedProjectAffinityOverrideProjectId;
+        set
+        {
+            if (SetProperty(ref _selectedProjectAffinityOverrideProjectId, value))
+            {
+                OnPropertyChanged(nameof(CanApplyProjectAffinityOverride));
+                ApplyProjectAffinityOverrideCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    public ObservableCollection<ProjectAffinityOverrideOptionViewModel> ProjectAffinityOverrideOptions
+    {
+        get => _projectAffinityOverrideOptions;
+        private set => SetProperty(ref _projectAffinityOverrideOptions, value);
+    }
+
+    public string? EffectiveProjectAffinityProjectId
+    {
+        get => _effectiveProjectAffinityProjectId;
+        private set => SetProperty(ref _effectiveProjectAffinityProjectId, value);
+    }
+
+    public ProjectAffinitySource EffectiveProjectAffinitySource
+    {
+        get => _effectiveProjectAffinitySource;
+        private set => SetProperty(ref _effectiveProjectAffinitySource, value);
+    }
+
+    public bool CanApplyProjectAffinityOverride
+        => !string.IsNullOrWhiteSpace(CurrentSessionId)
+            && !string.IsNullOrWhiteSpace(SelectedProjectAffinityOverrideProjectId);
+
+    public bool CanClearProjectAffinityOverride
+        => !string.IsNullOrWhiteSpace(CurrentSessionId)
+            && HasProjectAffinityOverride;
+
+    public IRelayCommand ApplyProjectAffinityOverrideCommand { get; }
+
+    public IRelayCommand ClearProjectAffinityOverrideCommand { get; }
+
     // Agent Configuration options (as defined by the protocol)
     [ObservableProperty]
     private ObservableCollection<ConfigOptionViewModel> _configOptions = new();
@@ -421,7 +507,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         IAcpConnectionCommands? acpConnectionCommands = null,
         IConversationActivationCoordinator? conversationActivationCoordinator = null,
         IConversationBindingCommands? bindingCommands = null,
-        IAcpConnectionCoordinator? acpConnectionCoordinator = null)
+        IAcpConnectionCoordinator? acpConnectionCoordinator = null,
+        IProjectAffinityResolver? projectAffinityResolver = null)
         : base(logger)
     {
         _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
@@ -445,7 +532,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         _chatStateProjector = chatStateProjector ?? throw new ArgumentNullException(nameof(chatStateProjector));
         _acpSessionUpdateProjector = acpSessionUpdateProjector ?? new AcpSessionUpdateProjector();
         _chatConnectionStore = chatConnectionStore ?? throw new ArgumentNullException(nameof(chatConnectionStore));
+        _projectAffinityResolver = projectAffinityResolver ?? new ProjectAffinityResolver();
         _syncContext = syncContext ?? SynchronizationContext.Current ?? new SynchronizationContext();
+        ApplyProjectAffinityOverrideCommand = new RelayCommand(ApplyProjectAffinityOverride, () => CanApplyProjectAffinityOverride);
+        ClearProjectAffinityOverrideCommand = new RelayCommand(ClearProjectAffinityOverride, () => CanClearProjectAffinityOverride);
         _acpConnectionCommands = acpConnectionCommands
             ?? new AcpChatCoordinator(
                 new ChatServiceFactoryAdapter(chatServiceFactory),
@@ -455,6 +545,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         _acpProfiles.PropertyChanged += OnAcpProfilesPropertyChanged;
         _acpProfiles.Profiles.CollectionChanged += OnAcpProfilesCollectionChanged;
         _preferences.PropertyChanged += OnPreferencesPropertyChanged;
+        _preferences.Projects.CollectionChanged += OnProjectAffinityPreferencesCollectionChanged;
+        _preferences.ProjectPathMappings.CollectionChanged += OnProjectAffinityPreferencesCollectionChanged;
         _conversationWorkspace.PropertyChanged += OnConversationWorkspacePropertyChanged;
         AttachPlanEntriesCollectionChanged(PlanEntries);
 
@@ -462,6 +554,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         ConversationListVersion = _conversationWorkspace.ConversationListVersion;
         _conversationCatalogPresenter.SetLoading(IsConversationListLoading);
         _conversationCatalogPresenter.Refresh(_conversationWorkspace.GetCatalog());
+        RefreshProjectAffinityCorrectionState();
 
     }
 
@@ -480,9 +573,13 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 _conversationCatalogPresenter.Refresh(_conversationWorkspace.GetCatalog());
                 OnPropertyChanged(nameof(GetKnownConversationIds));
                 RefreshMiniWindowSessions();
+                RefreshProjectAffinityCorrectionState();
                 break;
         }
     }
+
+    private void OnProjectAffinityPreferencesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        => RefreshProjectAffinityCorrectionState();
 
     private void StartStoreProjection()
     {
@@ -705,6 +802,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             SyncPlanEntries(projection.PlanEntries);
             SyncMessageHistory(projection.Transcript);
             TryCompletePendingHistoryOverlayDismissal(projection);
+            RefreshProjectAffinityCorrectionState(projection.HydratedConversationId);
+            ApplyProjectAffinityOverrideCommand.NotifyCanExecuteChanged();
+            ClearProjectAffinityOverrideCommand.NotifyCanExecuteChanged();
         }
         finally
         {
@@ -954,18 +1054,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             .Dispatch(new SetSelectedProfileAction(profile.Id))
             .ConfigureAwait(false);
         await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
-
-        var state = await _chatStore.State ?? ChatState.Empty;
-        var conversationId = ResolveActiveConversationId(state);
-        if (string.IsNullOrWhiteSpace(conversationId))
-        {
-            return;
-        }
-
-        await _conversationActivationCoordinator
-            .NormalizeBindingForSelectedProfileAsync(conversationId!, cancellationToken)
-            .ConfigureAwait(false);
-        await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
     }
 
     // Partial method implementations called by source-generated code.
@@ -1005,6 +1093,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         SyncMiniWindowSelectedSession();
         SyncBottomPanelState(value);
         SyncPendingAskUserRequestState(value);
+        RefreshProjectAffinityCorrectionState(value);
+        ApplyProjectAffinityOverrideCommand.NotifyCanExecuteChanged();
+        ClearProjectAffinityOverrideCommand.NotifyCanExecuteChanged();
     }
 
     partial void OnSelectedBottomPanelTabChanged(BottomPanelTabViewModel? value)
@@ -1472,6 +1563,130 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         }
 
         return SessionNamePolicy.CreateDefault(sessionId);
+    }
+
+    private void RefreshProjectAffinityCorrectionState(string? conversationId = null)
+    {
+        var activeConversationId = string.IsNullOrWhiteSpace(conversationId)
+            ? CurrentSessionId
+            : conversationId;
+        var options = BuildProjectAffinityOverrideOptions();
+        ProjectAffinityOverrideOptions = new ObservableCollection<ProjectAffinityOverrideOptionViewModel>(options);
+
+        if (string.IsNullOrWhiteSpace(activeConversationId))
+        {
+            IsProjectAffinityCorrectionVisible = false;
+            HasProjectAffinityOverride = false;
+            EffectiveProjectAffinityProjectId = null;
+            EffectiveProjectAffinitySource = ProjectAffinitySource.Unclassified;
+            ProjectAffinityCorrectionMessage = string.Empty;
+            SelectedProjectAffinityOverrideProjectId = null;
+            OnPropertyChanged(nameof(CanApplyProjectAffinityOverride));
+            OnPropertyChanged(nameof(CanClearProjectAffinityOverride));
+            return;
+        }
+
+        var binding = _conversationWorkspace.GetRemoteBinding(activeConversationId);
+        var remoteSessionId = binding?.RemoteSessionId;
+        var boundProfileId = binding?.BoundProfileId;
+        if (string.Equals(activeConversationId, CurrentSessionId, StringComparison.Ordinal))
+        {
+            remoteSessionId ??= _currentRemoteSessionId;
+            boundProfileId ??= SelectedAcpProfile?.Id;
+        }
+
+        var overrideProjectId = _conversationWorkspace.GetProjectAffinityOverride(activeConversationId)?.ProjectId;
+        var remoteCwd = _sessionManager.GetSession(activeConversationId)?.Cwd;
+        var projects = _preferences.Projects.ToArray();
+        var mappings = _preferences.ProjectPathMappings.ToArray();
+        var resolution = _projectAffinityResolver.Resolve(new ProjectAffinityRequest(
+            RemoteCwd: remoteCwd,
+            BoundProfileId: boundProfileId,
+            RemoteSessionId: remoteSessionId,
+            OverrideProjectId: overrideProjectId,
+            Projects: projects,
+            PathMappings: mappings,
+            UnclassifiedProjectId: NavigationProjectIds.Unclassified));
+
+        var isRemoteBound = !string.IsNullOrWhiteSpace(remoteSessionId)
+            || !string.IsNullOrWhiteSpace(boundProfileId);
+        IsProjectAffinityCorrectionVisible = isRemoteBound && resolution.Source is
+            ProjectAffinitySource.NeedsMapping or
+            ProjectAffinitySource.Unclassified or
+            ProjectAffinitySource.Override;
+        HasProjectAffinityOverride = !string.IsNullOrWhiteSpace(overrideProjectId);
+        EffectiveProjectAffinityProjectId = resolution.EffectiveProjectId;
+        EffectiveProjectAffinitySource = resolution.Source;
+        ProjectAffinityCorrectionMessage = resolution.Source switch
+        {
+            ProjectAffinitySource.Override => "已应用本地项目覆盖，可随时清除。",
+            ProjectAffinitySource.NeedsMapping => "远程会话未匹配到本地项目，请手动更正。",
+            _ => "当前会话归类为“未归类”，可手动更正。"
+        };
+
+        if (HasProjectAffinityOverride)
+        {
+            SelectedProjectAffinityOverrideProjectId = overrideProjectId;
+        }
+        else if (!string.IsNullOrWhiteSpace(SelectedProjectAffinityOverrideProjectId)
+            && !options.Any(option => string.Equals(option.ProjectId, SelectedProjectAffinityOverrideProjectId, StringComparison.Ordinal)))
+        {
+            SelectedProjectAffinityOverrideProjectId = null;
+        }
+
+        OnPropertyChanged(nameof(CanApplyProjectAffinityOverride));
+        OnPropertyChanged(nameof(CanClearProjectAffinityOverride));
+    }
+
+    private IReadOnlyList<ProjectAffinityOverrideOptionViewModel> BuildProjectAffinityOverrideOptions()
+    {
+        var options = new List<ProjectAffinityOverrideOptionViewModel>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var project in _preferences.Projects)
+        {
+            if (project is null
+                || string.IsNullOrWhiteSpace(project.ProjectId)
+                || string.IsNullOrWhiteSpace(project.Name)
+                || !seen.Add(project.ProjectId))
+            {
+                continue;
+            }
+
+            options.Add(new ProjectAffinityOverrideOptionViewModel(project.ProjectId, project.Name));
+        }
+
+        options.Sort((left, right) => string.Compare(left.DisplayName, right.DisplayName, StringComparison.Ordinal));
+        return options;
+    }
+
+    private void ApplyProjectAffinityOverride()
+    {
+        if (string.IsNullOrWhiteSpace(CurrentSessionId)
+            || string.IsNullOrWhiteSpace(SelectedProjectAffinityOverrideProjectId))
+        {
+            return;
+        }
+
+        _conversationWorkspace.UpdateProjectAffinityOverride(
+            CurrentSessionId,
+            SelectedProjectAffinityOverrideProjectId);
+        RefreshProjectAffinityCorrectionState(CurrentSessionId);
+        ApplyProjectAffinityOverrideCommand.NotifyCanExecuteChanged();
+        ClearProjectAffinityOverrideCommand.NotifyCanExecuteChanged();
+    }
+
+    private void ClearProjectAffinityOverride()
+    {
+        if (string.IsNullOrWhiteSpace(CurrentSessionId))
+        {
+            return;
+        }
+
+        _conversationWorkspace.UpdateProjectAffinityOverride(CurrentSessionId, null);
+        SelectedProjectAffinityOverrideProjectId = null;
+        RefreshProjectAffinityCorrectionState(CurrentSessionId);
+        ApplyProjectAffinityOverrideCommand.NotifyCanExecuteChanged();
+        ClearProjectAffinityOverrideCommand.NotifyCanExecuteChanged();
     }
 
     [RelayCommand]
@@ -2251,19 +2466,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             return;
         }
 
-        DateTime? updatedAtUtc = null;
-        if (!string.IsNullOrWhiteSpace(update.UpdatedAt)
-            && DateTimeOffset.TryParse(
-                update.UpdatedAt,
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
-                out var parsedUpdatedAt))
-        {
-            updatedAtUtc = parsedUpdatedAt.UtcDateTime;
-        }
-
         await _conversationWorkspace
-            .ApplySessionInfoUpdateAsync(conversationId, update.Title, updatedAtUtc)
+            .ApplySessionInfoUpdateAsync(conversationId, update.Title, updatedAtUtc: ParseSessionUpdatedAtUtc(update.UpdatedAt))
             .ConfigureAwait(true);
 
         if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
@@ -4127,15 +4331,23 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             var knownTranscriptGrowthGraceDeadlineUtc = DateTime.UtcNow + RemoteReplayKnownTranscriptGrowthGracePeriod;
             var replayBaseline = GetSessionUpdateObservationCount(binding.RemoteSessionId);
             var transcriptProjectionBaseline = GetTranscriptProjectionObservationCount(binding.RemoteSessionId);
+            var requiresTranscriptGrowthObservation = chatService is AcpChatServiceAdapter;
             if (ownsRemoteHydrationUi)
             {
                 await PostToUiAsync(() =>
                 {
                     IsRemoteHydrationPending = true;
                     _pendingHistoryOverlayDismissConversationId = null;
-                    _remoteHydrationKnownTranscriptBaselineCounts[conversationId] = transcriptBaselineCount;
-                    _remoteHydrationKnownTranscriptGrowthGraceDeadlineUtc[conversationId] =
-                        knownTranscriptGrowthGraceDeadlineUtc;
+                    if (requiresTranscriptGrowthObservation)
+                    {
+                        _remoteHydrationKnownTranscriptBaselineCounts[conversationId] = transcriptBaselineCount;
+                        _remoteHydrationKnownTranscriptGrowthGraceDeadlineUtc[conversationId] =
+                            knownTranscriptGrowthGraceDeadlineUtc;
+                    }
+                    else
+                    {
+                        ClearKnownTranscriptGrowthRequirement(conversationId);
+                    }
                     SetConversationOverlayOwners(
                         sessionSwitchConversationId: _sessionSwitchOverlayConversationId,
                         connectionLifecycleConversationId: _connectionLifecycleOverlayConversationId,
@@ -4152,12 +4364,13 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             }
 
             await _chatStore.Dispatch(new SelectConversationAction(conversationId)).ConfigureAwait(false);
+            await RefreshRemoteSessionMetadataFromSsotAsync(conversationId, binding, chatService, cancellationToken).ConfigureAwait(false);
             await ResetConversationProjectionForResyncAsync(conversationId, cancellationToken).ConfigureAwait(false);
             await chatService
                 .LoadSessionAsync(new SessionLoadParams(binding.RemoteSessionId!, GetSessionCwdOrDefault(conversationId)))
                 .ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
-            if (chatService is AcpChatServiceAdapter adapter)
+            if (requiresTranscriptGrowthObservation && chatService is AcpChatServiceAdapter adapter)
             {
                 adapter.MarkHydrated();
                 await AwaitRemoteReplayProjectionAsync(
@@ -4168,12 +4381,15 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                     .ConfigureAwait(false);
             }
 
-            await AwaitKnownTranscriptGrowthRequirementAsync(
-                    conversationId,
-                    transcriptBaselineCount,
-                    knownTranscriptGrowthGraceDeadlineUtc,
-                    cancellationToken)
-                .ConfigureAwait(false);
+            if (requiresTranscriptGrowthObservation)
+            {
+                await AwaitKnownTranscriptGrowthRequirementAsync(
+                        conversationId,
+                        transcriptBaselineCount,
+                        knownTranscriptGrowthGraceDeadlineUtc,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
 
             MarkConversationRemoteHydrated(conversationId, binding);
 
@@ -4649,6 +4865,99 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             ? IsLatestConversationActivationVersion(activationVersion.Value)
             : string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal);
 
+    private async Task RefreshRemoteSessionMetadataFromSsotAsync(
+        string conversationId,
+        ConversationBindingSlice binding,
+        IChatService chatService,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId)
+            || string.IsNullOrWhiteSpace(binding.RemoteSessionId)
+            || chatService.AgentCapabilities?.SessionCapabilities?.List is null)
+        {
+            return;
+        }
+
+        AgentSessionInfo? sessionInfo;
+        try
+        {
+            sessionInfo = await FindRemoteSessionInfoAsync(chatService, binding.RemoteSessionId!, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(
+                ex,
+                "Failed to refresh remote session metadata before hydration. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
+                conversationId,
+                binding.RemoteSessionId);
+            return;
+        }
+
+        if (sessionInfo is null)
+        {
+            return;
+        }
+
+        await _conversationWorkspace
+            .ApplySessionInfoUpdateAsync(
+                conversationId,
+                sessionInfo.Title,
+                cwd: sessionInfo.Cwd,
+                updatedAtUtc: ParseSessionUpdatedAtUtc(sessionInfo.UpdatedAt),
+                cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+
+        if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
+        {
+            CurrentSessionDisplayName = ResolveSessionDisplayName(conversationId);
+        }
+    }
+
+    private static DateTime? ParseSessionUpdatedAtUtc(string? updatedAt)
+    {
+        if (string.IsNullOrWhiteSpace(updatedAt)
+            || !DateTimeOffset.TryParse(
+                updatedAt,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                out var parsedUpdatedAt))
+        {
+            return null;
+        }
+
+        return parsedUpdatedAt.UtcDateTime;
+    }
+
+    private static async Task<AgentSessionInfo?> FindRemoteSessionInfoAsync(
+        IChatService chatService,
+        string remoteSessionId,
+        CancellationToken cancellationToken)
+    {
+        string? cursor = null;
+        do
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var response = await chatService
+                .ListSessionsAsync(new SessionListParams { Cursor = cursor }, cancellationToken)
+                .ConfigureAwait(false);
+            var match = response?.Sessions?.FirstOrDefault(session =>
+                string.Equals(session.SessionId, remoteSessionId, StringComparison.Ordinal));
+            if (match != null)
+            {
+                return match;
+            }
+
+            cursor = response?.NextCursor;
+        }
+        while (!string.IsNullOrWhiteSpace(cursor));
+
+        return null;
+    }
+
     private void SetConversationOverlayOwners(
         string? sessionSwitchConversationId,
         string? connectionLifecycleConversationId,
@@ -4835,6 +5144,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
            _acpProfiles.PropertyChanged -= OnAcpProfilesPropertyChanged;
            _acpProfiles.Profiles.CollectionChanged -= OnAcpProfilesCollectionChanged;
            _preferences.PropertyChanged -= OnPreferencesPropertyChanged;
+           _preferences.Projects.CollectionChanged -= OnProjectAffinityPreferencesCollectionChanged;
+           _preferences.ProjectPathMappings.CollectionChanged -= OnProjectAffinityPreferencesCollectionChanged;
            _conversationWorkspace.PropertyChanged -= OnConversationWorkspacePropertyChanged;
            AttachPlanEntriesCollectionChanged(null);
            if (_observedPendingAskUserRequest != null)
@@ -4885,6 +5196,19 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         OnPropertyChanged(nameof(ShouldShowPlanList));
         OnPropertyChanged(nameof(ShouldShowPlanEmpty));
     }
+}
+
+public sealed class ProjectAffinityOverrideOptionViewModel
+{
+    public ProjectAffinityOverrideOptionViewModel(string projectId, string displayName)
+    {
+        ProjectId = projectId ?? string.Empty;
+        DisplayName = displayName ?? string.Empty;
+    }
+
+    public string ProjectId { get; }
+
+    public string DisplayName { get; }
 }
 
 /// <summary>

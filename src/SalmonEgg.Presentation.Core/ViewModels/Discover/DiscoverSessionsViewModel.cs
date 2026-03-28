@@ -10,6 +10,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.ViewModels.Settings;
@@ -20,9 +21,11 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
 {
     private readonly ILogger<DiscoverSessionsViewModel> _logger;
     private readonly INavigationCoordinator _navigationCoordinator;
+    private readonly INavigationProjectPreferences _projectPreferences;
     private readonly AcpProfilesViewModel _profilesViewModel;
     private readonly IDiscoverSessionsConnectionFacade _connectionFacade;
     private readonly IDiscoverSessionImportCoordinator _importCoordinator;
+    private readonly IProjectAffinityResolver _projectAffinityResolver;
     private readonly SynchronizationContext _syncContext;
     private CancellationTokenSource? _refreshSessionsCts;
     private bool _disposed;
@@ -86,15 +89,19 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
     public DiscoverSessionsViewModel(
         ILogger<DiscoverSessionsViewModel> logger,
         INavigationCoordinator navigationCoordinator,
+        INavigationProjectPreferences projectPreferences,
         AcpProfilesViewModel profilesViewModel,
         IDiscoverSessionsConnectionFacade connectionFacade,
-        IDiscoverSessionImportCoordinator importCoordinator)
+        IDiscoverSessionImportCoordinator importCoordinator,
+        IProjectAffinityResolver? projectAffinityResolver = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _navigationCoordinator = navigationCoordinator ?? throw new ArgumentNullException(nameof(navigationCoordinator));
+        _projectPreferences = projectPreferences ?? throw new ArgumentNullException(nameof(projectPreferences));
         _profilesViewModel = profilesViewModel ?? throw new ArgumentNullException(nameof(profilesViewModel));
         _connectionFacade = connectionFacade ?? throw new ArgumentNullException(nameof(connectionFacade));
         _importCoordinator = importCoordinator ?? throw new ArgumentNullException(nameof(importCoordinator));
+        _projectAffinityResolver = projectAffinityResolver ?? new ProjectAffinityResolver();
         _syncContext = SynchronizationContext.Current ?? new SynchronizationContext();
 
         _profilesViewModel.PropertyChanged += OnProfilesViewModelPropertyChanged;
@@ -214,6 +221,14 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
             cancellationToken.ThrowIfCancellationRequested();
 
             var items = new List<DiscoverSessionItemViewModel>();
+            var projects = _projectPreferences.Projects
+                .Where(project => project != null
+                                  && !string.IsNullOrWhiteSpace(project.ProjectId)
+                                  && !string.IsNullOrWhiteSpace(project.Name))
+                .ToList();
+            var projectPathMappings = _projectPreferences.ProjectPathMappings
+                .Where(mapping => mapping != null)
+                .ToList();
             if (listResponse?.Sessions != null)
             {
                 foreach (var session in listResponse.Sessions)
@@ -225,12 +240,24 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
                         lastModified = parsed;
                     }
 
+                    var affinityResolution = _projectAffinityResolver.Resolve(new ProjectAffinityRequest(
+                        RemoteCwd: session.Cwd,
+                        BoundProfileId: profile.Id,
+                        RemoteSessionId: session.SessionId,
+                        OverrideProjectId: null,
+                        Projects: projects,
+                        PathMappings: projectPathMappings,
+                        UnclassifiedProjectId: NavigationProjectIds.Unclassified));
                     items.Add(new DiscoverSessionItemViewModel(
                         session.SessionId,
                         string.IsNullOrWhiteSpace(session.Title) ? "未命名会话" : session.Title,
                         string.IsNullOrWhiteSpace(session.Description) ? "暂无描述" : session.Description,
                         lastModified,
-                        session.Cwd));
+                        session.Cwd,
+                        ResolveAffinityBadgeText(affinityResolution, projects),
+                        ResolveAffinityStatusText(affinityResolution),
+                        affinityResolution.Source,
+                        affinityResolution.NeedsUserAttention));
                 }
             }
 
@@ -379,6 +406,53 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
         return $"无法获取会话列表: {ex.Message}";
     }
 
+    private static string ResolveAffinityBadgeText(
+        ProjectAffinityResolution resolution,
+        IReadOnlyList<ProjectDefinition> projects)
+    {
+        ArgumentNullException.ThrowIfNull(resolution);
+        ArgumentNullException.ThrowIfNull(projects);
+
+        if (resolution.Source == ProjectAffinitySource.NeedsMapping)
+        {
+            return "Needs mapping";
+        }
+
+        if (resolution.Source == ProjectAffinitySource.Unclassified)
+        {
+            return "Unclassified";
+        }
+
+        var effectiveProjectId = resolution.EffectiveProjectId;
+        if (string.IsNullOrWhiteSpace(effectiveProjectId))
+        {
+            return "Unclassified";
+        }
+
+        var projectName = projects
+            .FirstOrDefault(project => string.Equals(project.ProjectId, effectiveProjectId, StringComparison.Ordinal))
+            ?.Name;
+        return string.IsNullOrWhiteSpace(projectName)
+            ? effectiveProjectId
+            : projectName;
+    }
+
+    private static string ResolveAffinityStatusText(ProjectAffinityResolution resolution)
+    {
+        ArgumentNullException.ThrowIfNull(resolution);
+
+        return resolution.Source switch
+        {
+            ProjectAffinitySource.Override => "Using local project override.",
+            ProjectAffinitySource.PathMapping => "Mapped from remote path.",
+            ProjectAffinitySource.DirectMatch => "Matched by local project path.",
+            ProjectAffinitySource.NeedsMapping => "Remote working directory needs path mapping.",
+            ProjectAffinitySource.Unclassified when string.Equals(resolution.Reason, "MissingCwd", StringComparison.Ordinal) => "Remote metadata has no usable working directory.",
+            ProjectAffinitySource.Unclassified => "No matching local project.",
+            _ => "No project affinity information."
+        };
+    }
+
     private async Task PostToUiAsync(Action action)
     {
         if (SynchronizationContext.Current == _syncContext)
@@ -457,6 +531,14 @@ public sealed class DiscoverSessionItemViewModel
 
     public string? SessionCwd { get; }
 
+    public string ProjectAffinityBadgeText { get; }
+
+    public string AffinityStatusText { get; }
+
+    public ProjectAffinitySource AffinitySource { get; }
+
+    public bool NeedsUserAttention { get; }
+
     public string FormattedDate => LastModified.ToString("yyyy-MM-dd HH:mm");
 
     public DiscoverSessionItemViewModel(
@@ -464,12 +546,24 @@ public sealed class DiscoverSessionItemViewModel
         string title,
         string description,
         DateTime lastModified,
-        string? sessionCwd = null)
+        string? sessionCwd = null,
+        string? projectAffinityBadgeText = null,
+        string? affinityStatusText = null,
+        ProjectAffinitySource affinitySource = ProjectAffinitySource.Unclassified,
+        bool needsUserAttention = false)
     {
         Id = id;
         Title = title;
         Description = description;
         LastModified = lastModified;
-        SessionCwd = string.IsNullOrWhiteSpace(sessionCwd) ? null : sessionCwd.Trim();
+        SessionCwd = sessionCwd;
+        ProjectAffinityBadgeText = string.IsNullOrWhiteSpace(projectAffinityBadgeText)
+            ? "Unclassified"
+            : projectAffinityBadgeText;
+        AffinityStatusText = string.IsNullOrWhiteSpace(affinityStatusText)
+            ? "No project affinity information."
+            : affinityStatusText;
+        AffinitySource = affinitySource;
+        NeedsUserAttention = needsUserAttention;
     }
 }

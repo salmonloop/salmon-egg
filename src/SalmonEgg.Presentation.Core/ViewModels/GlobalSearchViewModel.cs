@@ -8,12 +8,11 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Session;
-using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services;
+using SalmonEgg.Presentation.Core.Services.Chat;
+using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Models.Search;
-using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.Utilities;
-using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Settings;
 
@@ -25,12 +24,11 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
     private const int MaxHistoryItems = 10;
     private const int MaxSuggestions = 5;
 
-    private readonly ChatViewModel _chatViewModel;
     private readonly MainNavigationViewModel _navViewModel;
     private readonly AppPreferencesViewModel _preferences;
-    private readonly IUiInteractionService _ui;
     private readonly INavigationCoordinator _navigationCoordinator;
-    private readonly ISessionManager _sessionManager;
+    private readonly IConversationCatalogReadModel _conversationCatalog;
+    private readonly IProjectAffinityResolver _projectAffinityResolver;
     private readonly ILogger<GlobalSearchViewModel> _logger;
 
     private readonly List<SearchHistoryItem> _searchHistory = new();
@@ -68,20 +66,18 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
     public IReadOnlyList<SearchHistoryItem> RecentSearches => _searchHistory.AsReadOnly();
 
     public GlobalSearchViewModel(
-        ChatViewModel chatViewModel,
         MainNavigationViewModel navViewModel,
         AppPreferencesViewModel preferences,
-        IUiInteractionService ui,
         INavigationCoordinator navigationCoordinator,
-        ISessionManager sessionManager,
+        IConversationCatalogReadModel conversationCatalog,
+        IProjectAffinityResolver projectAffinityResolver,
         ILogger<GlobalSearchViewModel> logger)
     {
-        _chatViewModel = chatViewModel ?? throw new ArgumentNullException(nameof(chatViewModel));
         _navViewModel = navViewModel ?? throw new ArgumentNullException(nameof(navViewModel));
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
-        _ui = ui ?? throw new ArgumentNullException(nameof(ui));
         _navigationCoordinator = navigationCoordinator ?? throw new ArgumentNullException(nameof(navigationCoordinator));
-        _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
+        _conversationCatalog = conversationCatalog ?? throw new ArgumentNullException(nameof(conversationCatalog));
+        _projectAffinityResolver = projectAffinityResolver ?? throw new ArgumentNullException(nameof(projectAffinityResolver));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -185,24 +181,18 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
             Priority = 100
         };
 
-        // 获取所有会话并过滤
-        var sessions = _chatViewModel.GetKnownConversationIds()
-            .Select(id => _sessionManager.GetSession(id))
-            .Where(s => s != null)
-            .Cast<Session>();
-
-        var matches = sessions
-            .Where(s => MatchScore(s.DisplayName ?? string.Empty, normalizedQuery) > 0
-                        || MatchScore(s.SessionId, normalizedQuery) > 0)
-            .OrderByDescending(s => MatchScore(s.DisplayName ?? string.Empty, normalizedQuery))
+        var matches = _conversationCatalog.Snapshot
+            .Where(session => MatchScore(session.DisplayName ?? string.Empty, normalizedQuery) > 0
+                || MatchScore(session.ConversationId, normalizedQuery) > 0)
+            .OrderByDescending(session => MatchScore(session.DisplayName ?? string.Empty, normalizedQuery))
             .Take(10);
 
         foreach (var session in matches)
         {
             group.Items.Add(new SearchResultItem
             {
-                Id = session.SessionId,
-                Title = session.DisplayName ?? SessionNamePolicy.CreateDefault(session.SessionId),
+                Id = session.ConversationId,
+                Title = session.DisplayName ?? SessionNamePolicy.CreateDefault(session.ConversationId),
                 Subtitle = session.Cwd,
                 Kind = SearchResultKind.Session,
                 IconGlyph = "\uE8BD", // Chat icon
@@ -392,8 +382,8 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
         switch (item.Kind)
         {
             case SearchResultKind.Session:
-                var session = _sessionManager.GetSession(item.Id);
-                await _navigationCoordinator.ActivateSessionAsync(item.Id, ResolveProjectId(session?.Cwd));
+                var session = FindConversation(item.Id);
+                await _navigationCoordinator.ActivateSessionAsync(item.Id, GetActivationProjectId(session));
                 break;
 
             case SearchResultKind.Project:
@@ -449,24 +439,32 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
         }
     }
 
-    private string? ResolveProjectId(string? cwd)
+    private ConversationCatalogItem? FindConversation(string conversationId)
     {
-        if (string.IsNullOrWhiteSpace(cwd))
+        if (string.IsNullOrWhiteSpace(conversationId))
         {
             return null;
         }
 
-        var normalized = NavTimeFormatter.NormalizePathForPrefixMatch(cwd);
-        foreach (var project in _preferences.Projects)
+        return _conversationCatalog.Snapshot
+            .FirstOrDefault(item => string.Equals(item.ConversationId, conversationId, StringComparison.Ordinal));
+    }
+
+    private string? GetActivationProjectId(ConversationCatalogItem? conversation)
+    {
+        if (conversation == null)
         {
-            var projectRoot = NavTimeFormatter.NormalizePathForPrefixMatch(project.RootPath);
-            if (normalized.StartsWith(projectRoot, StringComparison.OrdinalIgnoreCase))
-            {
-                return project.ProjectId;
-            }
+            return null;
         }
 
-        return MainNavigationViewModel.UnclassifiedProjectId;
+        return _projectAffinityResolver.Resolve(new ProjectAffinityRequest(
+            RemoteCwd: conversation.Cwd,
+            BoundProfileId: conversation.BoundProfileId,
+            RemoteSessionId: conversation.RemoteSessionId,
+            OverrideProjectId: conversation.ProjectAffinityOverrideProjectId,
+            Projects: _preferences.Projects,
+            PathMappings: _preferences.ProjectPathMappings,
+            UnclassifiedProjectId: MainNavigationViewModel.UnclassifiedProjectId)).EffectiveProjectId;
     }
 
     [RelayCommand]

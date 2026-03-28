@@ -7,11 +7,13 @@ using System.Threading;
 using Microsoft.Extensions.Logging;
 using Moq;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
+using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Settings;
@@ -249,7 +251,8 @@ public sealed class MainNavigationViewModelSelectionTests
                 metricsSink.Object,
                 new NavigationSelectionProjector(),
                 new ShellSelectionStateStore(),
-                presenter);
+                presenter,
+                new ProjectAffinityResolver());
 
             navVm.RebuildTree();
 
@@ -313,7 +316,8 @@ public sealed class MainNavigationViewModelSelectionTests
                 new Mock<IShellLayoutMetricsSink>().Object,
                 new NavigationSelectionProjector(),
                 new ShellSelectionStateStore(),
-                presenter);
+                presenter,
+                new ProjectAffinityResolver());
 
             navVm.RebuildTree();
 
@@ -343,6 +347,70 @@ public sealed class MainNavigationViewModelSelectionTests
                 .Select(child => child.SessionId)
                 .ToArray();
             Assert.Equal(new[] { "session-new", "session-old" }, orderedAfterAccess);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public void RebuildTree_GroupsRemoteConversationByResolverOutput()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var sessionManager = CreateSessionManager(new Session("session-remote", "/remote/worktrees/demo/feature")
+            {
+                DisplayName = "Remote Session"
+            });
+            var preferences = CreatePreferencesWithProject();
+            preferences.ProjectPathMappings.Add(new ProjectPathMapping
+            {
+                ProfileId = "profile-1",
+                RemoteRootPath = "/remote/worktrees",
+                LocalRootPath = @"C:\repo"
+            });
+
+            var chatCatalog = CreateChatSessionCatalog("session-remote");
+            var presenter = new ConversationCatalogPresenter();
+            presenter.SetLoading(false);
+            presenter.Refresh(
+            [
+                new ConversationCatalogItem(
+                    "session-remote",
+                    "Remote Session",
+                    "/remote/worktrees/demo/feature",
+                    new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                    new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+                    new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+                    RemoteSessionId: "remote-1",
+                    BoundProfileId: "profile-1",
+                    ProjectAffinityOverrideProjectId: null)
+            ]);
+
+            using var navVm = new MainNavigationViewModel(
+                chatCatalog,
+                CreateProjectPreferences(preferences),
+                new Mock<IUiInteractionService>().Object,
+                new Mock<IShellNavigationService>().Object,
+                new StubNavigationCoordinator(),
+                new Mock<ILogger<MainNavigationViewModel>>().Object,
+                navState,
+                new Mock<IShellLayoutMetricsSink>().Object,
+                new NavigationSelectionProjector(),
+                new ShellSelectionStateStore(),
+                presenter,
+                new ProjectAffinityResolver());
+
+            navVm.RebuildTree();
+
+            var project = Assert.Single(navVm.Items.OfType<ProjectNavItemViewModel>(), p => p.ProjectId == "project-1");
+            var session = Assert.Single(project.Children.OfType<SessionNavItemViewModel>());
+            Assert.Equal("session-remote", session.SessionId);
         }
         finally
         {
@@ -401,7 +469,8 @@ public sealed class MainNavigationViewModelSelectionTests
                 new Mock<IShellLayoutMetricsSink>().Object,
                 new NavigationSelectionProjector(),
                 new ShellSelectionStateStore(),
-                presenter);
+                presenter,
+                new ProjectAffinityResolver());
 
             await navVm.ShowAllSessionsForProjectAsync("project-1");
 
@@ -442,7 +511,8 @@ public sealed class MainNavigationViewModelSelectionTests
             metricsSink.Object,
             new NavigationSelectionProjector(),
             new ShellSelectionStateStore(),
-            presenter);
+            presenter,
+            new ProjectAffinityResolver());
     }
 
     private static Mock<ISessionManager> CreateSessionManager(params Session[] sessions)

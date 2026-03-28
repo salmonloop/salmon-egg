@@ -20,8 +20,30 @@ public sealed class ShellLayoutStoreTests
 
         await store.Dispatch(new NavToggleRequested("Test"));
 
-        var current = await snapshot;
+        Assert.Equal(expected, store.CurrentSnapshot.IsNavPaneOpen);
+
+        var current = await WaitForSnapshotAsync(snapshot, value => value?.IsNavPaneOpen == expected);
         Assert.NotNull(current);
         Assert.Equal(expected, current!.IsNavPaneOpen);
+    }
+
+    private static async Task<ShellLayoutSnapshot?> WaitForSnapshotAsync(
+        IState<ShellLayoutSnapshot> snapshot,
+        System.Func<ShellLayoutSnapshot?, bool> predicate,
+        int maxAttempts = 20,
+        int delayMs = 10)
+    {
+        for (var attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            var current = await snapshot;
+            if (predicate(current))
+            {
+                return current;
+            }
+
+            await Task.Delay(delayMs);
+        }
+
+        return await snapshot;
     }
 }

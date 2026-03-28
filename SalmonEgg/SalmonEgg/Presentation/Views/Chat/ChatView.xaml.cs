@@ -374,7 +374,7 @@ namespace SalmonEgg.Presentation.Views.Chat
             _isOverlayLayoutTracking = false;
         }
 
-        private void OnMessagesListLayoutUpdated(object sender, object e)
+        private void OnMessagesListLayoutUpdated(object? sender, object e)
         {
             if (!_isHoldingLoadingOverlay)
             {

@@ -388,6 +388,35 @@
                                                 Style="{ThemeResource CaptionTextBlockStyle}"
                                                 Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
                                         </StackPanel>
+
+                                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
+                                            <Border
+                                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="4"
+                                                Padding="6,2">
+                                                <TextBlock
+                                                    Text="{x:Bind ProjectAffinityBadgeText, Mode=OneTime}"
+                                                    Style="{ThemeResource CaptionTextBlockStyle}"
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            </Border>
+                                            <FontIcon
+                                                FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                                Glyph="&#xE7BA;"
+                                                FontSize="12"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                VerticalAlignment="Center"
+                                                Visibility="{x:Bind NeedsUserAttention, Mode=OneTime, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                        </StackPanel>
+
+                                        <TextBlock
+                                            Text="{x:Bind AffinityStatusText, Mode=OneTime}"
+                                            Style="{ThemeResource CaptionTextBlockStyle}"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Margin="0,4,0,0"
+                                            TextWrapping="WrapWholeWords"
+                                            MaxLines="2" />
                                     </StackPanel>
 
                                     <!-- Action -->

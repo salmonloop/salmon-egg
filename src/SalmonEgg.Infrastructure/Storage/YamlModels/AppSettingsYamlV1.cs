@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.Domain.Models.ProjectAffinity;
 
 namespace SalmonEgg.Infrastructure.Storage.YamlModels;
 
@@ -40,6 +41,8 @@ internal sealed class AppSettingsYamlV1
 
     // Projects (Navigation)
     public List<ProjectDefinition> Projects { get; set; } = new();
+
+    public List<ProjectPathMapping> ProjectPathMappings { get; set; } = new();
 
     public string LastSelectedProjectId { get; set; } = string.Empty;
 }

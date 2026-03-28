@@ -8,6 +8,7 @@ using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
+using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Navigation;
@@ -123,7 +124,8 @@ public sealed class MainNavigationViewModelPaneTests
             metricsSink.Object,
             new NavigationSelectionProjector(),
             new ShellSelectionStateStore(),
-            CreatePresenter((FakeChatSessionCatalog)chatCatalog));
+            CreatePresenter((FakeChatSessionCatalog)chatCatalog),
+            new ProjectAffinityResolver());
     }
 
     private static FakeChatSessionCatalog CreateChatSessionCatalog(params string[] conversationIds)

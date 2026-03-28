@@ -388,7 +388,7 @@ public sealed class ConversationActivationCoordinatorTests
         Assert.True(result.Succeeded);
         Assert.True(result.ClearedActiveConversation);
         Assert.DoesNotContain("session-1", workspace.GetKnownConversationIds());
-        var currentState = await state ?? ChatState.Empty;
+        var currentState = await WaitForStateAsync(state, current => current?.HydratedConversationId is null);
         Assert.Null(currentState.HydratedConversationId);
     }
 
@@ -427,7 +427,7 @@ public sealed class ConversationActivationCoordinatorTests
         Assert.True(result.Succeeded);
         Assert.True(result.ClearedActiveConversation);
         Assert.DoesNotContain("session-1", workspace.GetKnownConversationIds());
-        var currentState = await state ?? ChatState.Empty;
+        var currentState = await WaitForStateAsync(state, current => current?.HydratedConversationId is null);
         Assert.Null(currentState.HydratedConversationId);
     }
 
@@ -506,6 +506,26 @@ public sealed class ConversationActivationCoordinatorTests
             ContentType = "text",
             TextContent = text
         };
+
+    private static async Task<ChatState> WaitForStateAsync(
+        IState<ChatState> state,
+        Func<ChatState?, bool> predicate,
+        int maxAttempts = 20,
+        int delayMs = 10)
+    {
+        for (var attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            var current = await state ?? ChatState.Empty;
+            if (predicate(current))
+            {
+                return current;
+            }
+
+            await Task.Delay(delayMs);
+        }
+
+        return await state ?? ChatState.Empty;
+    }
 
     private sealed class ImmediateSynchronizationContext : SynchronizationContext
     {

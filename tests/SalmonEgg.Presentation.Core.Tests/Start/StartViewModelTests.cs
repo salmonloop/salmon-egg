@@ -11,6 +11,7 @@ using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
+using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.ViewModels.Navigation;
@@ -251,7 +252,8 @@ public sealed class StartViewModelTests
             metricsSink.Object,
             new NavigationSelectionProjector(),
             new ShellSelectionStateStore(),
-            chat.Presenter);
+            chat.Presenter,
+            new ProjectAffinityResolver());
     }
 
     private static StartViewModel CreateStartViewModel(

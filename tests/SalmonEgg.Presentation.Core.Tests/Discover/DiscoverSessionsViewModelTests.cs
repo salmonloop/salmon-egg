@@ -11,11 +11,13 @@ using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Content;
 using SalmonEgg.Domain.Models.Plan;
 using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Models.Tool;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
+using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Discover;
@@ -27,6 +29,73 @@ namespace SalmonEgg.Presentation.Core.Tests.Discover;
 [Collection("NonParallel")]
 public sealed class DiscoverSessionsViewModelTests
 {
+    [Fact]
+    public async Task RefreshSessionsAsync_ProjectsNeedsMappingAndUnclassifiedAffinityStatesPerRow()
+    {
+        var syncContext = new CountingSynchronizationContext();
+        var originalContext = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var profile = CreateProfile();
+            var profilesViewModel = CreateProfilesViewModel(profile);
+            var connectionFacade = new FakeDiscoverSessionsConnectionFacade
+            {
+                CurrentChatService = new FakeChatService
+                {
+                    SessionListResponse = new SessionListResponse
+                    {
+                        Sessions =
+                        {
+                            new AgentSessionInfo
+                            {
+                                SessionId = "remote-needs-mapping",
+                                Title = "Needs Mapping",
+                                Description = "No local project root match",
+                                UpdatedAt = "2026-03-28T10:00:00+08:00",
+                                Cwd = "/remote/worktree/service-a"
+                            },
+                            new AgentSessionInfo
+                            {
+                                SessionId = "remote-unclassified",
+                                Title = "Unclassified",
+                                Description = "No cwd from remote metadata",
+                                UpdatedAt = "2026-03-28T10:05:00+08:00",
+                                Cwd = null
+                            }
+                        }
+                    }
+                }
+            };
+            using var viewModel = CreateViewModel(
+                profilesViewModel,
+                connectionFacade,
+                new StubImportCoordinator(),
+                new StubNavigationCoordinator());
+
+            await viewModel.RefreshSessionsCommand.ExecuteAsync(null);
+
+            Assert.Equal(DiscoverSessionsLoadPhase.Loaded, viewModel.LoadPhase);
+            Assert.Equal(2, viewModel.AgentSessions.Count);
+
+            var needsMappingRow = Assert.Single(viewModel.AgentSessions.Where(row => row.Id == "remote-needs-mapping"));
+            Assert.Equal(ProjectAffinitySource.NeedsMapping, needsMappingRow.AffinitySource);
+            Assert.Equal("Needs mapping", needsMappingRow.ProjectAffinityBadgeText);
+            Assert.True(needsMappingRow.NeedsUserAttention);
+            Assert.Contains("mapping", needsMappingRow.AffinityStatusText, StringComparison.OrdinalIgnoreCase);
+
+            var unclassifiedRow = Assert.Single(viewModel.AgentSessions.Where(row => row.Id == "remote-unclassified"));
+            Assert.Equal(ProjectAffinitySource.Unclassified, unclassifiedRow.AffinitySource);
+            Assert.Equal("Unclassified", unclassifiedRow.ProjectAffinityBadgeText);
+            Assert.False(unclassifiedRow.NeedsUserAttention);
+            Assert.Contains("working directory", unclassifiedRow.AffinityStatusText, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
     [Fact]
     public async Task RefreshSessionsAsync_WhenRemoteListIsEmpty_UsesEmptyPhaseInsteadOfError()
     {
@@ -347,9 +416,11 @@ public sealed class DiscoverSessionsViewModelTests
         IDiscoverSessionImportCoordinator importCoordinator,
         INavigationCoordinator navigationCoordinator)
     {
+        var projectPreferences = new NavigationProjectPreferencesAdapter(CreatePreferences());
         return new DiscoverSessionsViewModel(
             Mock.Of<ILogger<DiscoverSessionsViewModel>>(),
             navigationCoordinator,
+            projectPreferences,
             profilesViewModel,
             connectionFacade,
             importCoordinator);

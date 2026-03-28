@@ -78,49 +78,86 @@
                     BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                     BorderThickness="0,0,0,1"
                     Padding="16,8">
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                    <StackPanel Orientation="Horizontal" Spacing="12">
-                        <FontIcon Glyph="&#xE8BD;" FontSize="16" Foreground="{ThemeResource AccentBrush}" VerticalAlignment="Center"/>
-                        <StackPanel VerticalAlignment="Center">
-                            <Grid>
-                                <Button Style="{StaticResource InlineHeaderButtonStyle}"
-                                        AutomationProperties.AutomationId="ChatView.CurrentSessionNameButton"
-                                        HorizontalAlignment="Left"
-                                        Visibility="{x:Bind ViewModel.IsEditingSessionName, Mode=OneWay, Converter={StaticResource InverseBoolToVisibilityConverter}}"
-                                        Click="OnSessionNameClick">
-                                    <TextBlock Text="{x:Bind ViewModel.CurrentSessionDisplayName, Mode=OneWay}"
-                                               FontWeight="SemiBold"
-                                               FontSize="14"/>
-                                </Button>
+                <StackPanel Spacing="8">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <FontIcon Glyph="&#xE8BD;" FontSize="16" Foreground="{ThemeResource AccentBrush}" VerticalAlignment="Center"/>
+                            <StackPanel VerticalAlignment="Center">
+                                <Grid>
+                                    <Button Style="{StaticResource InlineHeaderButtonStyle}"
+                                            AutomationProperties.AutomationId="ChatView.CurrentSessionNameButton"
+                                            HorizontalAlignment="Left"
+                                            Visibility="{x:Bind ViewModel.IsEditingSessionName, Mode=OneWay, Converter={StaticResource InverseBoolToVisibilityConverter}}"
+                                            Click="OnSessionNameClick">
+                                        <TextBlock Text="{x:Bind ViewModel.CurrentSessionDisplayName, Mode=OneWay}"
+                                                   FontWeight="SemiBold"
+                                                   FontSize="14"/>
+                                    </Button>
 
-                                <TextBox x:Name="SessionNameEditor"
-                                         AutomationProperties.AutomationId="ChatView.CurrentSessionNameEditor"
-                                         Text="{x:Bind ViewModel.EditingSessionName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                         FontWeight="SemiBold"
-                                         FontSize="14"
-                                         MinWidth="160"
-                                         Padding="6,2"
-                                         BorderThickness="1"
-                                         CornerRadius="6"
-                                         KeyDown="OnSessionNameEditorKeyDown"
-                                         LostFocus="OnSessionNameEditorLostFocus"
-                                         Visibility="{x:Bind ViewModel.IsEditingSessionName, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                            </Grid>
+                                    <TextBox x:Name="SessionNameEditor"
+                                             AutomationProperties.AutomationId="ChatView.CurrentSessionNameEditor"
+                                             Text="{x:Bind ViewModel.EditingSessionName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                             FontWeight="SemiBold"
+                                             FontSize="14"
+                                             MinWidth="160"
+                                             Padding="6,2"
+                                             BorderThickness="1"
+                                             CornerRadius="6"
+                                             KeyDown="OnSessionNameEditorKeyDown"
+                                             LostFocus="OnSessionNameEditorLostFocus"
+                                             Visibility="{x:Bind ViewModel.IsEditingSessionName, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                </Grid>
+                            </StackPanel>
                         </StackPanel>
-                    </StackPanel>
 
-                    <TextBlock Grid.Column="1"
-                               AutomationProperties.AutomationId="ChatView.CurrentAgentDisplay"
-                               Text="{x:Bind ViewModel.CurrentAgentDisplayText, Mode=OneWay}"
-                               FontSize="12"
-                               FontWeight="SemiBold"
-                               Opacity="0.72"
-                               HorizontalAlignment="Right"
-                               VerticalAlignment="Center"
-                               TextTrimming="CharacterEllipsis"
-                               MaxLines="1"
-                               MaxWidth="220"/>
-                </Grid>
+                        <TextBlock Grid.Column="1"
+                                   AutomationProperties.AutomationId="ChatView.CurrentAgentDisplay"
+                                   Text="{x:Bind ViewModel.CurrentAgentDisplayText, Mode=OneWay}"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   Opacity="0.72"
+                                   HorizontalAlignment="Right"
+                                   VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis"
+                                   MaxLines="1"
+                                   MaxWidth="220"/>
+                    </Grid>
+
+                    <Border AutomationProperties.AutomationId="ChatView.ProjectAffinityCorrectionPanel"
+                            Background="{ThemeResource LayerFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="10,8"
+                            Visibility="{x:Bind ViewModel.IsProjectAffinityCorrectionVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="{x:Bind ViewModel.ProjectAffinityCorrectionMessage, Mode=OneWay}"
+                                           FontSize="12"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextWrapping="WrapWholeWords"/>
+                                <ComboBox AutomationProperties.AutomationId="ChatView.ProjectAffinityCorrectionProjectSelector"
+                                          ItemsSource="{x:Bind ViewModel.ProjectAffinityOverrideOptions, Mode=OneWay}"
+                                          SelectedValuePath="ProjectId"
+                                          SelectedValue="{x:Bind ViewModel.SelectedProjectAffinityOverrideProjectId, Mode=TwoWay}"
+                                          DisplayMemberPath="DisplayName"
+                                          MinWidth="220"/>
+                            </StackPanel>
+
+                            <Button Grid.Column="1"
+                                    AutomationProperties.AutomationId="ChatView.ProjectAffinityCorrectionApplyButton"
+                                    VerticalAlignment="Bottom"
+                                    Content="应用"
+                                    Command="{x:Bind ViewModel.ApplyProjectAffinityOverrideCommand}"/>
+
+                            <Button Grid.Column="2"
+                                    AutomationProperties.AutomationId="ChatView.ProjectAffinityCorrectionClearButton"
+                                    VerticalAlignment="Bottom"
+                                    Content="清除"
+                                    Command="{x:Bind ViewModel.ClearProjectAffinityOverrideCommand}"/>
+                        </Grid>
+                    </Border>
+                </StackPanel>
             </Border>
 
             <Grid Grid.Row="1" RowDefinitions="*,Auto,Auto,Auto">
@@ -289,7 +326,6 @@
                                       Height="48"
                                       HorizontalAlignment="Center"/>
                         <TextBlock AutomationProperties.AutomationId="ChatView.LoadingOverlayStatus"
-                                   AutomationProperties.LiveSetting="Assertive"
                                    Text="{x:Bind ViewModel.OverlayStatusText, Mode=OneWay}"
                                    FontSize="14"
                                    FontWeight="SemiBold"

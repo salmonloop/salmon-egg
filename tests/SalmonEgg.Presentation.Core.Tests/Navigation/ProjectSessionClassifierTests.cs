@@ -68,4 +68,19 @@ public sealed class ProjectSessionClassifierTests
 
         Assert.Equal("__unclassified__", result);
     }
+
+    [Fact]
+    public void ClassifyProjectId_DoesNotMatchPathBoundaryMismatch()
+    {
+        var root = Path.Combine("C:", "Repo");
+        var roots = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["repo"] = NavTimeFormatter.NormalizePathForPrefixMatch(root)
+        };
+
+        var cwd = Path.Combine("C:", "Repo2", "Feature");
+        var result = ProjectSessionClassifier.ClassifyProjectId(cwd, roots, "__unclassified__");
+
+        Assert.Equal("__unclassified__", result);
+    }
 }

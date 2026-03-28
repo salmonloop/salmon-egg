@@ -198,6 +198,78 @@
                         </Border>
                     </StackPanel>
 
+                    <!-- Path mappings -->
+                    <StackPanel Spacing="12"
+                                AutomationProperties.AutomationId="Acp.PathMappings.Section">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock x:Uid="Acp_PathMappingsTitle"
+                                       Text="路径映射"
+                                       FontSize="18"
+                                       FontWeight="SemiBold"
+                                       Foreground="{ThemeResource AccentBrush}"
+                                       VerticalAlignment="Center"/>
+                            <Button Grid.Column="1"
+                                    x:Uid="Acp_PathMappingsAdd"
+                                    Content="新增映射"
+                                    Command="{x:Bind ViewModel.AddPathMappingCommand}"
+                                    AutomationProperties.AutomationId="Acp.PathMappings.Add"/>
+                        </Grid>
+
+                        <TextBlock x:Uid="Acp_PathMappingsHint"
+                                   Text="请先在上方 Agent 列表中选择一个配置，然后编辑远程到本地的路径映射。"
+                                   Opacity="0.7"
+                                   TextWrapping="Wrap"/>
+
+                        <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8">
+                            <ListView ItemsSource="{x:Bind ViewModel.PathMappingRows, Mode=OneWay}"
+                                      SelectionMode="None"
+                                      MinHeight="120"
+                                      Background="Transparent"
+                                      ItemContainerStyle="{StaticResource AgentListItemStyle}"
+                                      AutomationProperties.AutomationId="Acp.PathMappings.List">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:AcpPathMappingRowViewModel">
+                                        <Grid Padding="14,10"
+                                              ColumnDefinitions="*,Auto"
+                                              RowDefinitions="Auto,Auto"
+                                              ColumnSpacing="10"
+                                              RowSpacing="8">
+                                            <TextBox Grid.Row="0"
+                                                     Grid.Column="0"
+                                                     x:Uid="Acp_PathMappingsRemotePath"
+                                                     Header="远程根路径"
+                                                     PlaceholderText="/workspace/project"
+                                                     Text="{x:Bind RemoteRootPath, Mode=TwoWay}"/>
+
+                                            <TextBox Grid.Row="1"
+                                                     Grid.Column="0"
+                                                     x:Uid="Acp_PathMappingsLocalPath"
+                                                     Header="本地根路径"
+                                                     PlaceholderText="C:\project 或 /Users/name/project"
+                                                     Text="{x:Bind LocalRootPath, Mode=TwoWay}"/>
+
+                                            <Button Grid.Row="0"
+                                                    Grid.RowSpan="2"
+                                                    Grid.Column="1"
+                                                    x:Uid="Acp_PathMappingsRemove"
+                                                    Command="{x:Bind RemoveCommand}"
+                                                    VerticalAlignment="Center"
+                                                    Style="{StaticResource SubtleButtonStyle}">
+                                                <Button.Content>
+                                                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                                              Glyph="&#xE74D;"/>
+                                                </Button.Content>
+                                            </Button>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </Border>
+                    </StackPanel>
+
                     <!-- Diagnostics -->
                     <StackPanel Spacing="12">
                         <TextBlock x:Uid="Acp_DiagnosticsTitle"

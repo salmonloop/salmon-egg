@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models.Conversation;
+using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
 
@@ -132,7 +133,10 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 _sessionManager.GetSession(binding.ConversationId)?.Cwd,
                 binding.CreatedAt,
                 binding.LastUpdatedAt,
-                binding.LastAccessedAt == default ? binding.LastUpdatedAt : binding.LastAccessedAt))
+                binding.LastAccessedAt == default ? binding.LastUpdatedAt : binding.LastAccessedAt,
+                binding.RemoteSessionId,
+                binding.BoundProfileId,
+                binding.ProjectAffinityOverride?.ProjectId))
             .ToArray();
 
     public void RenameConversation(string conversationId, string newDisplayName)
@@ -238,6 +242,42 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         return new ConversationRemoteBindingState(binding.ConversationId, binding.RemoteSessionId, binding.BoundProfileId);
     }
 
+    public ProjectAffinityOverride? GetProjectAffinityOverride(string? conversationId)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId) || !_conversationBindings.TryGetValue(conversationId, out var binding))
+        {
+            return null;
+        }
+
+        return binding.ProjectAffinityOverride;
+    }
+
+    public void UpdateProjectAffinityOverride(string conversationId, string? projectId)
+    {
+        ThrowIfDisposed();
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return;
+        }
+
+        if (!_conversationBindings.TryGetValue(conversationId, out var binding))
+        {
+            binding = RegisterConversation(conversationId, default, DateTime.UtcNow, bumpVersion: true);
+        }
+
+        var normalizedProjectId = string.IsNullOrWhiteSpace(projectId) ? null : projectId.Trim();
+        var newOverride = normalizedProjectId is null ? null : new ProjectAffinityOverride(normalizedProjectId);
+        if (Equals(binding.ProjectAffinityOverride, newOverride))
+        {
+            return;
+        }
+
+        binding.ProjectAffinityOverride = newOverride;
+        binding.LastUpdatedAt = DateTime.UtcNow;
+        NotifyConversationListChanged();
+        ScheduleSave();
+    }
+
     public void UpsertConversationSnapshot(ConversationWorkspaceSnapshot snapshot)
     {
         ThrowIfDisposed();
@@ -287,6 +327,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         string conversationId,
         string? title,
         DateTime? updatedAtUtc,
+        string? cwd = null,
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
@@ -322,6 +363,17 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                     : sanitized;
 
                 if (_sessionManager.UpdateSession(conversationId, session => session.DisplayName = finalName, updateActivity: false))
+                {
+                    metadataChanged = true;
+                }
+            }
+
+            var normalizedCwd = string.IsNullOrWhiteSpace(cwd) ? null : cwd.Trim();
+            if (!string.IsNullOrWhiteSpace(normalizedCwd))
+            {
+                var existingCwd = _sessionManager.GetSession(conversationId)?.Cwd?.Trim();
+                if (!string.Equals(existingCwd, normalizedCwd, StringComparison.Ordinal)
+                    && _sessionManager.UpdateSession(conversationId, session => session.Cwd = normalizedCwd, updateActivity: false))
                 {
                     metadataChanged = true;
                 }
@@ -417,7 +469,8 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 LastAccessedAt = binding.LastAccessedAt == default ? binding.LastUpdatedAt : binding.LastAccessedAt,
                 Cwd = session?.Cwd,
                 RemoteSessionId = binding.RemoteSessionId,
-                BoundProfileId = binding.BoundProfileId
+                BoundProfileId = binding.BoundProfileId,
+                ProjectAffinityOverrideProjectId = binding.ProjectAffinityOverride?.ProjectId
             };
 
             record.Messages.AddRange(CloneMessages(binding.Transcript));
@@ -466,6 +519,9 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             binding.PlanTitle = null;
             binding.RemoteSessionId = conversation.RemoteSessionId;
             binding.BoundProfileId = conversation.BoundProfileId;
+            binding.ProjectAffinityOverride = string.IsNullOrWhiteSpace(conversation.ProjectAffinityOverrideProjectId)
+                ? null
+                : new ProjectAffinityOverride(conversation.ProjectAffinityOverrideProjectId);
 
             var displayName = string.IsNullOrWhiteSpace(conversation.DisplayName)
                 ? SessionNamePolicy.CreateDefault(conversation.ConversationId)
@@ -728,6 +784,8 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         public bool ShowPlanPanel { get; set; }
 
         public string? PlanTitle { get; set; }
+
+        public ProjectAffinityOverride? ProjectAffinityOverride { get; set; }
     }
 }
 

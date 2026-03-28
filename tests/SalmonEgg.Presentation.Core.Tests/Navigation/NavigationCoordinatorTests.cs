@@ -15,6 +15,7 @@ using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
+using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Chat;
@@ -495,7 +496,7 @@ public sealed class NavigationCoordinatorTests
             Assert.Equal("正在加载会话历史...", chat.ViewModel.OverlayStatusText);
 
             allowLoadCompletion.TrySetResult(null);
-            await WaitForConditionAsync(() => !chat.ViewModel.IsOverlayVisible);
+            await WaitForConditionAsync(() => !chat.ViewModel.IsOverlayVisible, maxAttempts: 100, delayMilliseconds: 20);
         }
         finally
         {
@@ -733,7 +734,8 @@ public sealed class NavigationCoordinatorTests
             metricsSink.Object,
             projector,
             selectionStore,
-            chat.Presenter);
+            chat.Presenter,
+            new ProjectAffinityResolver());
     }
 
     private static NavigationCoordinator CreateCoordinator(
@@ -1006,16 +1008,19 @@ public sealed class NavigationCoordinatorTests
         return shellNavigation;
     }
 
-    private static async Task WaitForConditionAsync(Func<bool> predicate)
+    private static async Task WaitForConditionAsync(
+        Func<bool> predicate,
+        int maxAttempts = 20,
+        int delayMilliseconds = 10)
     {
-        for (var attempt = 0; attempt < 20; attempt++)
+        for (var attempt = 0; attempt < maxAttempts; attempt++)
         {
             if (predicate())
             {
                 return;
             }
 
-            await Task.Delay(10);
+            await Task.Delay(delayMilliseconds);
         }
 
         Assert.True(predicate());

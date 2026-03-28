@@ -115,6 +115,61 @@ public sealed class DiscoverSessionImportCoordinatorTests
         Assert.Empty(sessionManager.GetAllSessions());
     }
 
+    [Fact]
+    public async Task ImportAsync_LeavesProjectAffinityOverrideEmpty()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var preferences = CreatePreferences();
+        var sessionManager = new FakeSessionManager();
+        using var workspace = CreateWorkspace(
+            sessionManager,
+            preferences,
+            syncContext);
+        await using var state = State.Value(new object(), () => ChatState.Empty);
+        var chatStore = new ChatStore(state);
+        var bindingCommands = new BindingCoordinator(workspace, chatStore);
+        var coordinator = new DiscoverSessionImportCoordinator(
+            sessionManager,
+            workspace,
+            bindingCommands,
+            Mock.Of<ILogger<DiscoverSessionImportCoordinator>>());
+
+        var result = await coordinator.ImportAsync("remote-session-42", @"C:\repo\remote", "profile-1");
+
+        Assert.True(result.Succeeded);
+        var localConversationId = Assert.IsType<string>(result.LocalConversationId);
+        var overrideValue = workspace.GetProjectAffinityOverride(localConversationId);
+        Assert.Null(overrideValue);
+    }
+
+    [Fact]
+    public async Task ImportAsync_PassesRemoteCwdThroughUntouched()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var preferences = CreatePreferences();
+        var sessionManager = new FakeSessionManager();
+        using var workspace = CreateWorkspace(
+            sessionManager,
+            preferences,
+            syncContext);
+        await using var state = State.Value(new object(), () => ChatState.Empty);
+        var chatStore = new ChatStore(state);
+        var bindingCommands = new BindingCoordinator(workspace, chatStore);
+        var coordinator = new DiscoverSessionImportCoordinator(
+            sessionManager,
+            workspace,
+            bindingCommands,
+            Mock.Of<ILogger<DiscoverSessionImportCoordinator>>());
+
+        const string remoteCwd = "  C:\\repo\\remote  ";
+        var result = await coordinator.ImportAsync("remote-session-42", remoteCwd, "profile-1");
+
+        Assert.True(result.Succeeded);
+        var localConversationId = Assert.IsType<string>(result.LocalConversationId);
+        var session = Assert.IsType<Session>(sessionManager.GetSession(localConversationId));
+        Assert.Equal(remoteCwd, session.Cwd);
+    }
+
     private static ChatConversationWorkspace CreateWorkspace(
         ISessionManager sessionManager,
         AppPreferencesViewModel preferences,

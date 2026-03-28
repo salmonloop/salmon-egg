@@ -1,10 +1,12 @@
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Moq;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Services;
@@ -167,6 +169,102 @@ public sealed class AcpConnectionSettingsViewModelTests
 
         // Assert
         Assert.Same(profile, chat.ConnectedProfiles[^1]);
+    }
+
+    [Fact]
+    public async Task PathMappingRows_SelectedProfile_ExposesOnlyProfileMappings()
+    {
+        // Arrange
+        var preferences = await CreatePreferencesAsync();
+        preferences.ProjectPathMappings.Add(new ProjectPathMapping
+        {
+            ProfileId = "profile-a",
+            RemoteRootPath = "/remote/a-1",
+            LocalRootPath = "C:\\work\\a-1"
+        });
+        preferences.ProjectPathMappings.Add(new ProjectPathMapping
+        {
+            ProfileId = "profile-a",
+            RemoteRootPath = "/remote/a-2",
+            LocalRootPath = "C:\\work\\a-2"
+        });
+        preferences.ProjectPathMappings.Add(new ProjectPathMapping
+        {
+            ProfileId = "profile-b",
+            RemoteRootPath = "/remote/b-1",
+            LocalRootPath = "C:\\work\\b-1"
+        });
+
+        var profiles = CreateProfiles(preferences);
+        profiles.Profiles.Add(new ServerConfiguration { Id = "profile-a", Name = "Profile A" });
+        profiles.Profiles.Add(new ServerConfiguration { Id = "profile-b", Name = "Profile B" });
+        profiles.SelectedProfile = profiles.Profiles[0];
+
+        var chat = new TestSettingsChatConnection();
+        var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
+
+        // Act
+        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, logger.Object);
+        var profileARows = viewModel.PathMappingRows.ToArray();
+        profiles.SelectedProfile = profiles.Profiles[1];
+        var profileBRows = viewModel.PathMappingRows.ToArray();
+
+        // Assert
+        Assert.Equal(2, profileARows.Length);
+        Assert.All(profileARows, row => Assert.Equal("profile-a", row.ProfileId));
+        Assert.Single(profileBRows);
+        Assert.Equal("profile-b", profileBRows[0].ProfileId);
+    }
+
+    [Fact]
+    public async Task PathMappingRows_AddUpdateRemove_UpdatesAppPreferencesMappings()
+    {
+        // Arrange
+        var preferences = await CreatePreferencesAsync();
+        var profiles = CreateProfiles(preferences);
+        profiles.Profiles.Add(new ServerConfiguration { Id = "profile-a", Name = "Profile A" });
+        profiles.SelectedProfile = profiles.Profiles[0];
+
+        var chat = new TestSettingsChatConnection();
+        var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
+
+        // Act
+        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, logger.Object);
+        viewModel.AddPathMappingCommand.Execute(null);
+        var row = Assert.Single(viewModel.PathMappingRows);
+        row.RemoteRootPath = " /remote/workspace ";
+        row.LocalRootPath = " C:\\work\\workspace ";
+
+        // Assert
+        var mapping = Assert.Single(preferences.ProjectPathMappings.Where(m => m.ProfileId == "profile-a"));
+        Assert.Equal("/remote/workspace", mapping.RemoteRootPath);
+        Assert.Equal("C:\\work\\workspace", mapping.LocalRootPath);
+
+        // Act
+        row.RemoveCommand.Execute(null);
+
+        // Assert
+        Assert.Empty(preferences.ProjectPathMappings.Where(m => m.ProfileId == "profile-a"));
+    }
+
+    [Fact]
+    public async Task AddPathMappingCommand_NoSelectedProfile_DisablesAndSkipsMutation()
+    {
+        // Arrange
+        var preferences = await CreatePreferencesAsync();
+        var profiles = CreateProfiles(preferences);
+        var chat = new TestSettingsChatConnection();
+        var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
+
+        // Act
+        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, logger.Object);
+        var canExecute = viewModel.AddPathMappingCommand.CanExecute(null);
+        viewModel.AddPathMappingCommand.Execute(null);
+
+        // Assert
+        Assert.False(canExecute);
+        Assert.Empty(viewModel.PathMappingRows);
+        Assert.Empty(preferences.ProjectPathMappings);
     }
 
     private static async Task<AppPreferencesViewModel> CreatePreferencesAsync()

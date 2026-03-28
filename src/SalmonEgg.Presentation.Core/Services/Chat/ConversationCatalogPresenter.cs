@@ -47,4 +47,7 @@ public sealed record ConversationCatalogItem(
     string? Cwd,
     DateTime CreatedAt,
     DateTime LastUpdatedAt,
-    DateTime LastAccessedAt);
+    DateTime LastAccessedAt,
+    string? RemoteSessionId = null,
+    string? BoundProfileId = null,
+    string? ProjectAffinityOverrideProjectId = null);

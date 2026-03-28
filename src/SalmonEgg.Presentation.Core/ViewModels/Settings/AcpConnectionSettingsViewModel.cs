@@ -1,12 +1,15 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.ViewModels.Chat;
 
@@ -19,6 +22,7 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
     private readonly ISettingsAcpConnectionState _connectionState;
     private readonly ISettingsAcpConnectionCommands _connectionCommands;
     private readonly ISettingsAcpTransportConfiguration _transportConfig;
+    private bool _suppressPathMappingProjection;
     private bool _disposed;
 
     public ISettingsChatConnection Chat { get; }
@@ -30,6 +34,10 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         new TransportOptionViewModel(TransportType.WebSocket, "WebSocket"),
         new TransportOptionViewModel(TransportType.HttpSse, "HTTP SSE"),
     };
+
+    public ObservableCollection<AcpPathMappingRowViewModel> PathMappingRows { get; } = new();
+
+    public bool CanEditPathMappings => !string.IsNullOrWhiteSpace(ResolveSelectedProfileId());
 
     [ObservableProperty]
     private TransportOptionViewModel? _selectedTransport;
@@ -135,13 +143,17 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
 
         _transportConfig.PropertyChanged += OnTransportConfigPropertyChanged;
         _connectionState.PropertyChanged += OnChatPropertyChanged;
+        Profiles.PropertyChanged += OnProfilesPropertyChanged;
         Profiles.Profiles.CollectionChanged += OnProfilesCollectionChanged;
         _preferences.PropertyChanged += OnPreferencesPropertyChanged;
+        _preferences.ProjectPathMappings.CollectionChanged += OnProjectPathMappingsCollectionChanged;
+        RefreshPathMappingRows();
     }
 
     private void OnProfilesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         OnPropertyChanged(nameof(AgentDisplayName));
+        RefreshPathMappingRows();
     }
 
     private void OnPreferencesPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -150,6 +162,28 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         {
             OnPropertyChanged(nameof(AgentDisplayName));
         }
+    }
+
+    private void OnProfilesPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(AcpProfilesViewModel.SelectedProfile))
+        {
+            return;
+        }
+
+        OnPropertyChanged(nameof(CanEditPathMappings));
+        AddPathMappingCommand.NotifyCanExecuteChanged();
+        RefreshPathMappingRows();
+    }
+
+    private void OnProjectPathMappingsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (_suppressPathMappingProjection)
+        {
+            return;
+        }
+
+        RefreshPathMappingRows();
     }
 
     private void OnChatPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -207,6 +241,23 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         }
     }
 
+    [RelayCommand(CanExecute = nameof(CanEditPathMappings))]
+    private void AddPathMapping()
+    {
+        var profileId = ResolveSelectedProfileId();
+        if (string.IsNullOrWhiteSpace(profileId))
+        {
+            return;
+        }
+
+        _preferences.ProjectPathMappings.Add(new ProjectPathMapping
+        {
+            ProfileId = profileId,
+            RemoteRootPath = string.Empty,
+            LocalRootPath = string.Empty
+        });
+    }
+
     public async Task ConnectToProfileAsync(ServerConfiguration? profile)
     {
         if (profile == null)
@@ -239,6 +290,107 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         return Profiles.Profiles.FirstOrDefault(p => p.Id == id)?.Name;
     }
 
+    private string? ResolveSelectedProfileId()
+    {
+        var id = Profiles.SelectedProfile?.Id?.Trim();
+        return string.IsNullOrWhiteSpace(id) ? null : id;
+    }
+
+    private void RefreshPathMappingRows()
+    {
+        var profileId = ResolveSelectedProfileId();
+        if (string.IsNullOrWhiteSpace(profileId))
+        {
+            PathMappingRows.Clear();
+            return;
+        }
+
+        var mappings = _preferences.ProjectPathMappings
+            .Where(m => string.Equals(m.ProfileId, profileId, StringComparison.Ordinal))
+            .ToList();
+        var existingRows = PathMappingRows.ToDictionary(row => row.Mapping);
+        var nextRows = new List<AcpPathMappingRowViewModel>(mappings.Count);
+
+        foreach (var mapping in mappings)
+        {
+            if (existingRows.TryGetValue(mapping, out var existing))
+            {
+                existing.SyncFromMapping();
+                nextRows.Add(existing);
+                continue;
+            }
+
+            nextRows.Add(new AcpPathMappingRowViewModel(mapping, this));
+        }
+
+        for (var i = PathMappingRows.Count - 1; i >= 0; i--)
+        {
+            if (!nextRows.Contains(PathMappingRows[i]))
+            {
+                PathMappingRows.RemoveAt(i);
+            }
+        }
+
+        for (var i = 0; i < nextRows.Count; i++)
+        {
+            if (i >= PathMappingRows.Count)
+            {
+                PathMappingRows.Add(nextRows[i]);
+                continue;
+            }
+
+            if (!ReferenceEquals(PathMappingRows[i], nextRows[i]))
+            {
+                PathMappingRows.Insert(i, nextRows[i]);
+                PathMappingRows.RemoveAt(i + 1);
+            }
+        }
+    }
+
+    internal void UpdatePathMapping(AcpPathMappingRowViewModel row)
+    {
+        var index = _preferences.ProjectPathMappings.IndexOf(row.Mapping);
+        if (index < 0)
+        {
+            return;
+        }
+
+        var updated = new ProjectPathMapping
+        {
+            ProfileId = row.Mapping.ProfileId,
+            RemoteRootPath = (row.RemoteRootPath ?? string.Empty).Trim(),
+            LocalRootPath = (row.LocalRootPath ?? string.Empty).Trim()
+        };
+
+        if (string.Equals(row.Mapping.RemoteRootPath, updated.RemoteRootPath, StringComparison.Ordinal) &&
+            string.Equals(row.Mapping.LocalRootPath, updated.LocalRootPath, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _suppressPathMappingProjection = true;
+        try
+        {
+            _preferences.ProjectPathMappings[index] = updated;
+        }
+        finally
+        {
+            _suppressPathMappingProjection = false;
+        }
+
+        row.ReplaceMapping(updated);
+    }
+
+    internal void RemovePathMapping(AcpPathMappingRowViewModel row)
+    {
+        if (row == null)
+        {
+            return;
+        }
+
+        _preferences.ProjectPathMappings.Remove(row.Mapping);
+    }
+
     public void Dispose()
     {
         if (_disposed)
@@ -249,8 +401,10 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         _disposed = true;
         _transportConfig.PropertyChanged -= OnTransportConfigPropertyChanged;
         _connectionState.PropertyChanged -= OnChatPropertyChanged;
+        Profiles.PropertyChanged -= OnProfilesPropertyChanged;
         Profiles.Profiles.CollectionChanged -= OnProfilesCollectionChanged;
         _preferences.PropertyChanged -= OnPreferencesPropertyChanged;
+        _preferences.ProjectPathMappings.CollectionChanged -= OnProjectPathMappingsCollectionChanged;
     }
 }
 
@@ -265,4 +419,77 @@ public sealed class TransportOptionViewModel
     public TransportType Type { get; }
 
     public string Name { get; }
+}
+
+public sealed partial class AcpPathMappingRowViewModel : ObservableObject
+{
+    private readonly AcpConnectionSettingsViewModel _owner;
+    private bool _isApplyingModel;
+
+    internal AcpPathMappingRowViewModel(ProjectPathMapping mapping, AcpConnectionSettingsViewModel owner)
+    {
+        Mapping = mapping ?? throw new ArgumentNullException(nameof(mapping));
+        _owner = owner ?? throw new ArgumentNullException(nameof(owner));
+        _remoteRootPath = mapping.RemoteRootPath;
+        _localRootPath = mapping.LocalRootPath;
+        RemoveCommand = new RelayCommand(Remove);
+    }
+
+    internal ProjectPathMapping Mapping { get; private set; }
+
+    public string ProfileId => Mapping.ProfileId;
+
+    [ObservableProperty]
+    private string _remoteRootPath;
+
+    [ObservableProperty]
+    private string _localRootPath;
+
+    public IRelayCommand RemoveCommand { get; }
+
+    partial void OnRemoteRootPathChanged(string value)
+    {
+        Commit();
+    }
+
+    partial void OnLocalRootPathChanged(string value)
+    {
+        Commit();
+    }
+
+    internal void ReplaceMapping(ProjectPathMapping mapping)
+    {
+        Mapping = mapping ?? throw new ArgumentNullException(nameof(mapping));
+        SyncFromMapping();
+        OnPropertyChanged(nameof(ProfileId));
+    }
+
+    internal void SyncFromMapping()
+    {
+        _isApplyingModel = true;
+        try
+        {
+            RemoteRootPath = Mapping.RemoteRootPath;
+            LocalRootPath = Mapping.LocalRootPath;
+        }
+        finally
+        {
+            _isApplyingModel = false;
+        }
+    }
+
+    private void Commit()
+    {
+        if (_isApplyingModel)
+        {
+            return;
+        }
+
+        _owner.UpdatePathMapping(this);
+    }
+
+    private void Remove()
+    {
+        _owner.RemovePathMapping(this);
+    }
 }

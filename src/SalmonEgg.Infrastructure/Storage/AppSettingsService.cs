@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Infrastructure.Storage.YamlModels;
 using YamlDotNet.Core;
@@ -51,6 +53,7 @@ public sealed class AppSettingsService : IAppSettingsService
                 CacheRetentionDays = model.CacheRetentionDays > 0 ? model.CacheRetentionDays : 7,
                 KeyBindings = model.KeyBindings ?? new(),
                 Projects = model.Projects ?? new(),
+                ProjectPathMappings = CloneProjectPathMappings(model.ProjectPathMappings),
                 LastSelectedProjectId = string.IsNullOrWhiteSpace(model.LastSelectedProjectId) ? null : model.LastSelectedProjectId
             };
         }
@@ -87,6 +90,7 @@ public sealed class AppSettingsService : IAppSettingsService
             CacheRetentionDays = settings.CacheRetentionDays > 0 ? settings.CacheRetentionDays : 7,
             KeyBindings = settings.KeyBindings ?? new(),
             Projects = settings.Projects ?? new(),
+            ProjectPathMappings = CloneProjectPathMappings(settings.ProjectPathMappings),
             LastSelectedProjectId = settings.LastSelectedProjectId ?? string.Empty
         };
 
@@ -119,6 +123,32 @@ public sealed class AppSettingsService : IAppSettingsService
         {
             throw new InvalidOperationException("Existing app.yaml is unreadable; refusing to overwrite.");
         }
+    }
+
+    private static List<ProjectPathMapping> CloneProjectPathMappings(IEnumerable<ProjectPathMapping>? mappings)
+    {
+        var clone = new List<ProjectPathMapping>();
+        if (mappings is null)
+        {
+            return clone;
+        }
+
+        foreach (var mapping in mappings)
+        {
+            if (mapping is null)
+            {
+                continue;
+            }
+
+            clone.Add(new ProjectPathMapping
+            {
+                ProfileId = mapping.ProfileId?.Trim() ?? string.Empty,
+                RemoteRootPath = mapping.RemoteRootPath?.Trim() ?? string.Empty,
+                LocalRootPath = mapping.LocalRootPath?.Trim() ?? string.Empty
+            });
+        }
+
+        return clone;
     }
 }
 

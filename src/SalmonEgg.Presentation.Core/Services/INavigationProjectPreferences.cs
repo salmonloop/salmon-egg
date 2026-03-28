@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.Linq;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Presentation.ViewModels.Settings;
 
 namespace SalmonEgg.Presentation.Core.Services;
@@ -9,6 +10,8 @@ namespace SalmonEgg.Presentation.Core.Services;
 public interface INavigationProjectPreferences
 {
     ReadOnlyObservableCollection<ProjectDefinition> Projects { get; }
+
+    ReadOnlyObservableCollection<ProjectPathMapping> ProjectPathMappings { get; }
 
     string? LastSelectedProjectId { get; set; }
 
@@ -21,14 +24,18 @@ public sealed class NavigationProjectPreferencesAdapter : INavigationProjectPref
 {
     private readonly AppPreferencesViewModel _preferences;
     private readonly ReadOnlyObservableCollection<ProjectDefinition> _projects;
+    private readonly ReadOnlyObservableCollection<ProjectPathMapping> _projectPathMappings;
 
     public NavigationProjectPreferencesAdapter(AppPreferencesViewModel preferences)
     {
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
         _projects = new ReadOnlyObservableCollection<ProjectDefinition>(_preferences.Projects);
+        _projectPathMappings = new ReadOnlyObservableCollection<ProjectPathMapping>(_preferences.ProjectPathMappings);
     }
 
     public ReadOnlyObservableCollection<ProjectDefinition> Projects => _projects;
+
+    public ReadOnlyObservableCollection<ProjectPathMapping> ProjectPathMappings => _projectPathMappings;
 
     public string? LastSelectedProjectId
     {

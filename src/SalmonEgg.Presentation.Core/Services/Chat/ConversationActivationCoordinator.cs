@@ -113,47 +113,6 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
             static (workspace, id) => workspace.DeleteConversation(id),
             cancellationToken);
 
-    public async Task NormalizeBindingForSelectedProfileAsync(
-        string conversationId,
-        CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        if (string.IsNullOrWhiteSpace(conversationId))
-        {
-            return;
-        }
-
-        var connectionState = await _chatConnectionStore.State ?? ChatConnectionState.Empty;
-        var selectedProfileId = connectionState.SelectedProfileId;
-        if (string.IsNullOrWhiteSpace(selectedProfileId))
-        {
-            return;
-        }
-
-        var currentState = await _chatStore.State ?? ChatState.Empty;
-        var binding = currentState.ResolveBinding(conversationId);
-        if (binding is null || !string.Equals(binding.ConversationId, conversationId, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        var boundProfileId = binding.ProfileId;
-        if (string.IsNullOrWhiteSpace(boundProfileId)
-            || string.Equals(boundProfileId, selectedProfileId, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        var result = await _bindingCommands
-            .UpdateBindingAsync(conversationId, remoteSessionId: null, boundProfileId: selectedProfileId)
-            .ConfigureAwait(false);
-        if (result.Status is not BindingUpdateStatus.Success)
-        {
-            throw new InvalidOperationException(
-                $"Failed to normalize conversation binding ({result.Status}): {result.ErrorMessage ?? "UnknownError"}");
-        }
-    }
-
     private async Task SyncSelectedProfileFromConversationBindingAsync(
         string conversationId,
         CancellationToken cancellationToken)

@@ -35,6 +35,8 @@ namespace SalmonEgg.Domain.Models.Conversation
 
         public string? BoundProfileId { get; set; }
 
+        public string? ProjectAffinityOverrideProjectId { get; set; }
+
         public List<ConversationMessageSnapshot> Messages { get; set; } = new();
     }
 
