@@ -128,13 +128,424 @@ public sealed class StartViewModelTests
             var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
 
             chat.ViewModel.CurrentPrompt = "chat draft";
+            startViewModel.OnComposerLoaded();
 
             var suggestion = startViewModel.Suggestions[0];
             startViewModel.ExecuteSuggestionCommand.Execute(suggestion);
 
             Assert.Equal("chat draft", chat.ViewModel.CurrentPrompt);
             Assert.Equal(suggestion.Prompt, startViewModel.StartPrompt);
+            Assert.Equal(StartComposerStage.ExpandedIdle, startViewModel.ComposerStage);
+            Assert.True(startViewModel.IsComposerExpanded);
             workflow.Verify(w => w.StartSessionAndSendAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public void ComposerLoaded_ProjectsCollapsedState()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+
+            startViewModel.OnComposerActivated();
+            startViewModel.OnComposerLoaded();
+
+            Assert.Equal(StartComposerStage.Collapsed, startViewModel.ComposerStage);
+            Assert.False(startViewModel.IsComposerExpanded);
+            Assert.True(startViewModel.ShowHeroSuggestions);
+            Assert.False(startViewModel.ShowPreflightSuggestions);
+            Assert.True(startViewModel.ShowHeroChrome);
+            Assert.False(startViewModel.FreezeComposerInteractions);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public void ComposerLoaded_WithExistingDraft_ProjectsExpandedIdle()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+
+            startViewModel.StartPrompt = "persisted draft";
+            startViewModel.OnComposerLoaded();
+
+            Assert.Equal(StartComposerStage.ExpandedIdle, startViewModel.ComposerStage);
+            Assert.True(startViewModel.IsComposerExpanded);
+            Assert.False(startViewModel.ShowHeroSuggestions);
+            Assert.True(startViewModel.ShowPreflightSuggestions);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public void StartPromptChanged_ProjectsExpandedIdleDraftState()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+
+            startViewModel.OnComposerLoaded();
+            startViewModel.StartPrompt = "prefilled draft";
+
+            Assert.Equal(StartComposerStage.ExpandedIdle, startViewModel.ComposerStage);
+            Assert.True(startViewModel.IsComposerExpanded);
+            Assert.False(startViewModel.ShowHeroSuggestions);
+            Assert.True(startViewModel.ShowPreflightSuggestions);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public void PopupOpened_KeepsComposerExpanded()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+
+            startViewModel.OnComposerLoaded();
+            startViewModel.OnComposerPopupOpened();
+            startViewModel.OnComposerFocusExited();
+
+            Assert.Equal(StartComposerStage.PopupEngaged, startViewModel.ComposerStage);
+            Assert.True(startViewModel.IsComposerExpanded);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public void PopupClosed_AfterFocusLeavesWithoutDraft_CollapsesComposer()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+
+            startViewModel.OnComposerLoaded();
+            startViewModel.OnComposerFocusEntered();
+            startViewModel.OnComposerPopupOpened();
+            startViewModel.OnComposerFocusExited();
+            startViewModel.OnComposerPopupClosed();
+
+            Assert.Equal(StartComposerStage.Collapsed, startViewModel.ComposerStage);
+            Assert.False(startViewModel.IsComposerExpanded);
+            Assert.True(startViewModel.ShowHeroSuggestions);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public void PopupClosed_WithFocusStillWithinComposer_KeepsPrimedStage()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+
+            var closeWithFocusMethod = typeof(StartViewModel).GetMethod(
+                nameof(StartViewModel.OnComposerPopupClosedWithFocusState),
+                new[] { typeof(bool) });
+
+            Assert.NotNull(closeWithFocusMethod);
+
+            startViewModel.OnComposerLoaded();
+            startViewModel.OnComposerFocusEntered();
+            startViewModel.OnComposerPopupOpened();
+
+            closeWithFocusMethod!.Invoke(startViewModel, new object[] { true });
+
+            Assert.Equal(StartComposerStage.Primed, startViewModel.ComposerStage);
+            Assert.True(startViewModel.IsComposerExpanded);
+            Assert.False(startViewModel.ShowHeroSuggestions);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public void ComposerUnloaded_PreservesDraftButClearsTransientInteraction()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+
+            startViewModel.OnComposerLoaded();
+            startViewModel.OnComposerFocusEntered();
+            startViewModel.StartPrompt = "hangar";
+            startViewModel.OnComposerPopupOpened();
+            startViewModel.OnComposerUnloaded();
+
+            Assert.Equal("hangar", startViewModel.StartPrompt);
+            Assert.Equal(StartComposerStage.ExpandedIdle, startViewModel.ComposerStage);
+            Assert.True(startViewModel.IsComposerExpanded);
+            Assert.False(startViewModel.FreezeComposerInteractions);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public void StartProjectSelection_DefaultsToUnclassifiedOption()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+
+            var option = Assert.Single(startViewModel.StartProjectOptions);
+
+            Assert.Equal(NavigationProjectIds.Unclassified, startViewModel.SelectedStartProjectId);
+            Assert.Equal(NavigationProjectIds.Unclassified, option.ProjectId);
+            Assert.Equal("未归类", option.DisplayName);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public void StartProjectSelection_SelectingProject_ProjectsToGlobalPreferences()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            preferences.Projects.Add(new ProjectDefinition { ProjectId = "project-b", Name = "Beta", RootPath = @"C:\Repo\Beta" });
+            preferences.Projects.Add(new ProjectDefinition { ProjectId = "project-a", Name = "Alpha", RootPath = @"C:\Repo\Alpha" });
+
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+
+            startViewModel.SelectedStartProjectId = "project-b";
+
+            Assert.Equal("project-b", preferences.LastSelectedProjectId);
+            Assert.Equal("project-b", startViewModel.SelectedStartProjectId);
+            Assert.Collection(
+                startViewModel.StartProjectOptions,
+                option => Assert.Equal(NavigationProjectIds.Unclassified, option.ProjectId),
+                option => Assert.Equal("project-a", option.ProjectId),
+                option => Assert.Equal("project-b", option.ProjectId));
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public void StartProjectSelection_SelectingUnclassified_ClearsGlobalPreferences()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            preferences.Projects.Add(new ProjectDefinition { ProjectId = "project-a", Name = "Alpha", RootPath = @"C:\Repo\Alpha" });
+            preferences.LastSelectedProjectId = "project-a";
+
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+
+            startViewModel.SelectedStartProjectId = NavigationProjectIds.Unclassified;
+
+            Assert.Null(preferences.LastSelectedProjectId);
+            Assert.Equal(NavigationProjectIds.Unclassified, startViewModel.SelectedStartProjectId);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public void StartProjectOptions_WhenPreferencesProjectsChange_RefreshesProjection()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+
+            preferences.Projects.Add(new ProjectDefinition { ProjectId = "project-c", Name = "Cargo", RootPath = @"C:\Repo\Cargo" });
+            preferences.Projects.Add(new ProjectDefinition { ProjectId = "project-a", Name = "Alpha", RootPath = @"C:\Repo\Alpha" });
+
+            Assert.Collection(
+                startViewModel.StartProjectOptions,
+                option => Assert.Equal(NavigationProjectIds.Unclassified, option.ProjectId),
+                option => Assert.Equal("project-a", option.ProjectId),
+                option => Assert.Equal("project-c", option.ProjectId));
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task StartSessionAndSendAsync_ProjectsSubmitting_ThenClearsBusyState()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var workflowStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var workflowCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            workflow.Setup(w => w.StartSessionAndSendAsync("launch", It.IsAny<CancellationToken>()))
+                .Returns(() =>
+                {
+                    workflowStarted.TrySetResult(null);
+                    return workflowCompletion.Task;
+                });
+
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+            startViewModel.OnComposerLoaded();
+            startViewModel.StartPrompt = "launch";
+
+            var executeTask = startViewModel.StartSessionAndSendCommand.ExecuteAsync(null);
+            await workflowStarted.Task;
+
+            Assert.True(startViewModel.IsStarting);
+            Assert.Equal(StartComposerStage.Submitting, startViewModel.ComposerStage);
+            Assert.True(startViewModel.FreezeComposerInteractions);
+            Assert.False(startViewModel.StartSessionAndSendCommand.CanExecute(null));
+
+            workflowCompletion.TrySetResult(null);
+            await executeTask;
+
+            Assert.False(startViewModel.IsStarting);
+            Assert.Equal(string.Empty, startViewModel.StartPrompt);
+            Assert.Equal(StartComposerStage.Collapsed, startViewModel.ComposerStage);
+            Assert.False(startViewModel.FreezeComposerInteractions);
+            Assert.False(startViewModel.StartSessionAndSendCommand.CanExecute(null));
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task StartSessionAndSendAsync_FailedWorkflow_PreservesDraftAndReturnsExpandedIdle()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            workflow.Setup(w => w.StartSessionAndSendAsync("launch", It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new InvalidOperationException("boom"));
+
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+            startViewModel.OnComposerLoaded();
+            startViewModel.StartPrompt = "launch";
+
+            await startViewModel.StartSessionAndSendCommand.ExecuteAsync(null);
+
+            Assert.False(startViewModel.IsStarting);
+            Assert.Equal("launch", startViewModel.StartPrompt);
+            Assert.Equal(StartComposerStage.ExpandedIdle, startViewModel.ComposerStage);
+            Assert.True(startViewModel.IsComposerExpanded);
+            Assert.False(startViewModel.FreezeComposerInteractions);
+            Assert.True(startViewModel.StartSessionAndSendCommand.CanExecute(null));
         }
         finally
         {
@@ -267,6 +678,8 @@ public sealed class StartViewModelTests
             chatViewModel: chatViewModel,
             sessionManager: Mock.Of<ISessionManager>(),
             preferences: preferences,
+            projectPreferences: new NavigationProjectPreferencesAdapter(preferences),
+            projectSelectionStore: new NavigationProjectSelectionStoreAdapter(preferences),
             navigationCoordinator: Mock.Of<INavigationCoordinator>(),
             nav: nav,
             logger: logger ?? Mock.Of<ILogger<StartViewModel>>(),

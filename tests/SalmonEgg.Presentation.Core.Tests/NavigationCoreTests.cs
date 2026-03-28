@@ -138,6 +138,18 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
+    public void StartViewXaml_ExposesProjectSelector_ForNewSessionLaunch()
+    {
+        var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Start\StartView.xaml");
+
+        Assert.Contains("AutomationProperties.AutomationId=\"StartView.ProjectSelector\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ItemsSource=\"{x:Bind ViewModel.StartProjectOptions, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("SelectedValue=\"{x:Bind ViewModel.SelectedStartProjectId, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("SelectedValuePath=\"ProjectId\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("DisplayMemberPath=\"DisplayName\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ChatViewXaml_ExposesStableAutomationIds_ForGuiTesting()
     {
         var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml");

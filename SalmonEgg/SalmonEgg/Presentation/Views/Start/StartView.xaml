@@ -14,167 +14,235 @@
     <Page.Resources>
         <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
 
-        <!-- 建议卡片基础样式：Premium Fluent 2 卡片 -->
-        <Style x:Key="SuggestionCardButtonStyle" TargetType="Button">
+        <Style x:Key="HeroSuggestionButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}"/>
-            <Setter Property="BorderBrush" Value="{ThemeResource ControlStrokeColorDefaultBrush}"/>
+            <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="12"/>
-            <Setter Property="Padding" Value="20,16"/>
-            <Setter Property="Width" Value="220"/>
-            <Setter Property="Height" Value="120"/>
-            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="CornerRadius" Value="14"/>
+            <Setter Property="Padding" Value="18,14"/>
+            <Setter Property="MinWidth" Value="216"/>
+            <Setter Property="MinHeight" Value="112"/>
             <Setter Property="HorizontalContentAlignment" Value="Left"/>
             <Setter Property="VerticalContentAlignment" Value="Top"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="RootBorder"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="{TemplateBinding CornerRadius}">
-                            <VisualStateManager.VisualStateGroups>
-                                <VisualStateGroup x:Name="CommonStates">
-                                    <VisualState x:Name="Normal" />
-                                    <VisualState x:Name="PointerOver">
-                                        <VisualState.Setters>
-                                            <Setter Target="RootBorder.Background" Value="{ThemeResource ControlFillColorSecondaryBrush}" />
-                                        </VisualState.Setters>
-                                    </VisualState>
-                                    <VisualState x:Name="Pressed">
-                                        <VisualState.Setters>
-                                            <Setter Target="RootBorder.Background" Value="{ThemeResource ControlFillColorTertiaryBrush}" />
-                                        </VisualState.Setters>
-                                    </VisualState>
-                                </VisualStateGroup>
-                            </VisualStateManager.VisualStateGroups>
-                            <ContentPresenter Content="{TemplateBinding Content}"
-                                              ContentTemplate="{TemplateBinding ContentTemplate}"
-                                              Padding="{TemplateBinding Padding}"
-                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
+
     </Page.Resources>
 
-    <Grid RowDefinitions="*,Auto,Auto"
+    <Grid x:Name="StartRoot"
+          RowDefinitions="*,Auto"
+          Background="Transparent"
+          Padding="24,20,24,24"
+          PointerPressed="OnRootPointerPressed"
           Transitions="{x:Bind Motion.PageTransitions, Mode=OneWay}">
-        
-        <!-- 英雄区：标题与标语 -->
-        <Grid Grid.Row="0"
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="ComposerLifecycleStates">
+                <VisualState x:Name="StageCollapsed">
+                    <VisualState.Setters>
+                        <Setter Target="ComposerShell.Padding" Value="16,12" />
+                        <Setter Target="StartPromptBox.MinHeight" Value="44" />
+                    </VisualState.Setters>
+                    <Storyboard>
+                        <DoubleAnimation Storyboard.TargetName="HeroLayer" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="HeroScaleTransform" Storyboard.TargetProperty="ScaleX" To="1" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="HeroScaleTransform" Storyboard.TargetProperty="ScaleY" To="1" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="HeroTranslateTransform" Storyboard.TargetProperty="Y" To="0" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="ComposerScaleTransform" Storyboard.TargetProperty="ScaleX" To="1" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="ComposerScaleTransform" Storyboard.TargetProperty="ScaleY" To="1" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="ComposerTranslateTransform" Storyboard.TargetProperty="Y" To="0" Duration="0:0:0.22" />
+                    </Storyboard>
+                </VisualState>
+                <VisualState x:Name="StagePrimed">
+                    <VisualState.Setters>
+                        <Setter Target="ComposerShell.Padding" Value="18,14" />
+                        <Setter Target="StartPromptBox.MinHeight" Value="52" />
+                    </VisualState.Setters>
+                    <Storyboard>
+                        <DoubleAnimation Storyboard.TargetName="HeroLayer" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="HeroScaleTransform" Storyboard.TargetProperty="ScaleX" To="1" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="HeroScaleTransform" Storyboard.TargetProperty="ScaleY" To="1" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="HeroTranslateTransform" Storyboard.TargetProperty="Y" To="-6" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="ComposerScaleTransform" Storyboard.TargetProperty="ScaleX" To="1.02" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="ComposerScaleTransform" Storyboard.TargetProperty="ScaleY" To="1.02" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="ComposerTranslateTransform" Storyboard.TargetProperty="Y" To="-6" Duration="0:0:0.22" />
+                    </Storyboard>
+                </VisualState>
+                <VisualState x:Name="StageInteracting">
+                    <VisualState.Setters>
+                        <Setter Target="ComposerShell.Padding" Value="20,16" />
+                        <Setter Target="StartPromptBox.MinHeight" Value="60" />
+                    </VisualState.Setters>
+                    <Storyboard>
+                        <DoubleAnimation Storyboard.TargetName="HeroLayer" Storyboard.TargetProperty="Opacity" To="0.98" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="HeroScaleTransform" Storyboard.TargetProperty="ScaleX" To="0.992" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="HeroScaleTransform" Storyboard.TargetProperty="ScaleY" To="0.992" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="HeroTranslateTransform" Storyboard.TargetProperty="Y" To="-12" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="ComposerScaleTransform" Storyboard.TargetProperty="ScaleX" To="1.045" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="ComposerScaleTransform" Storyboard.TargetProperty="ScaleY" To="1.045" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="ComposerTranslateTransform" Storyboard.TargetProperty="Y" To="-12" Duration="0:0:0.22" />
+                    </Storyboard>
+                </VisualState>
+                <VisualState x:Name="StagePopupEngaged">
+                    <VisualState.Setters>
+                        <Setter Target="ComposerShell.Padding" Value="20,16" />
+                        <Setter Target="StartPromptBox.MinHeight" Value="60" />
+                    </VisualState.Setters>
+                    <Storyboard>
+                        <DoubleAnimation Storyboard.TargetName="HeroLayer" Storyboard.TargetProperty="Opacity" To="0.96" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="HeroScaleTransform" Storyboard.TargetProperty="ScaleX" To="0.99" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="HeroScaleTransform" Storyboard.TargetProperty="ScaleY" To="0.99" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="HeroTranslateTransform" Storyboard.TargetProperty="Y" To="-14" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="ComposerScaleTransform" Storyboard.TargetProperty="ScaleX" To="1.05" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="ComposerScaleTransform" Storyboard.TargetProperty="ScaleY" To="1.05" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="ComposerTranslateTransform" Storyboard.TargetProperty="Y" To="-13" Duration="0:0:0.22" />
+                    </Storyboard>
+                </VisualState>
+                <VisualState x:Name="StageExpandedIdle">
+                    <VisualState.Setters>
+                        <Setter Target="ComposerShell.Padding" Value="20,16" />
+                        <Setter Target="StartPromptBox.MinHeight" Value="60" />
+                    </VisualState.Setters>
+                    <Storyboard>
+                        <DoubleAnimation Storyboard.TargetName="HeroLayer" Storyboard.TargetProperty="Opacity" To="0.98" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="HeroScaleTransform" Storyboard.TargetProperty="ScaleX" To="0.994" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="HeroScaleTransform" Storyboard.TargetProperty="ScaleY" To="0.994" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="HeroTranslateTransform" Storyboard.TargetProperty="Y" To="-10" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="ComposerScaleTransform" Storyboard.TargetProperty="ScaleX" To="1.04" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="ComposerScaleTransform" Storyboard.TargetProperty="ScaleY" To="1.04" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="ComposerTranslateTransform" Storyboard.TargetProperty="Y" To="-10" Duration="0:0:0.22" />
+                    </Storyboard>
+                </VisualState>
+                <VisualState x:Name="StageSubmitting">
+                    <VisualState.Setters>
+                        <Setter Target="ComposerShell.Padding" Value="20,16" />
+                        <Setter Target="StartPromptBox.MinHeight" Value="60" />
+                    </VisualState.Setters>
+                    <Storyboard>
+                        <DoubleAnimation Storyboard.TargetName="HeroLayer" Storyboard.TargetProperty="Opacity" To="0.94" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="HeroScaleTransform" Storyboard.TargetProperty="ScaleX" To="0.99" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="HeroScaleTransform" Storyboard.TargetProperty="ScaleY" To="0.99" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="HeroTranslateTransform" Storyboard.TargetProperty="Y" To="-10" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="ComposerScaleTransform" Storyboard.TargetProperty="ScaleX" To="1.035" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="ComposerScaleTransform" Storyboard.TargetProperty="ScaleY" To="1.035" Duration="0:0:0.22" />
+                        <DoubleAnimation Storyboard.TargetName="ComposerTranslateTransform" Storyboard.TargetProperty="Y" To="-9" Duration="0:0:0.22" />
+                    </Storyboard>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
+        <Grid x:Name="HeroLayer"
+              Grid.Row="0"
+              Margin="0,28,0,24"
               VerticalAlignment="Center"
-              Margin="20,0,20,40">
-            <StackPanel Spacing="16" HorizontalAlignment="Center">
-                <TextBlock Text="Salmon Egg"
-                           x:Uid="Start_Title"
-                           FontSize="64"
-                           FontWeight="Bold"
-                           HorizontalAlignment="Center"
-                           TextAlignment="Center"
-                           AutomationProperties.AutomationId="StartView.Title">
-                    <TextBlock.Foreground>
-                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                            <GradientStop Color="{ThemeResource SystemAccentColor}" Offset="0" />
-                            <GradientStop Color="{ThemeResource SystemAccentColorLight2}" Offset="1" />
-                        </LinearGradientBrush>
-                    </TextBlock.Foreground>
-                </TextBlock>
-                <TextBlock Text="你的 AI 好鲑鲑"
-                           FontSize="18"
-                           Opacity="0.6"
-                           FontWeight="Medium"
-                           HorizontalAlignment="Center"
-                           TextAlignment="Center" />
+              RenderTransformOrigin="0.5,0.5">
+            <Grid.RenderTransform>
+                <TransformGroup>
+                    <ScaleTransform x:Name="HeroScaleTransform" ScaleX="1" ScaleY="1" />
+                    <TranslateTransform x:Name="HeroTranslateTransform" Y="0" />
+                </TransformGroup>
+            </Grid.RenderTransform>
+            <StackPanel MaxWidth="980"
+                        HorizontalAlignment="Center"
+                        Spacing="28">
+                <StackPanel x:Name="HeroChromeHost"
+                            x:Load="{x:Bind ViewModel.ShowHeroChrome, Mode=OneWay}"
+                            HorizontalAlignment="Center"
+                            Spacing="12">
+                    <TextBlock x:Uid="Start_Title"
+                               Text="Salmon Egg"
+                               FontSize="60"
+                               FontWeight="SemiBold"
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"
+                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                               AutomationProperties.AutomationId="StartView.Title" />
+                    <TextBlock Text="准备好在机库里点火，启动你的下一段会话。"
+                               FontSize="16"
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+                <ScrollViewer HorizontalScrollMode="Enabled"
+                              HorizontalScrollBarVisibility="Hidden"
+                              VerticalScrollMode="Disabled"
+                              VerticalScrollBarVisibility="Disabled">
+                    <ItemsControl x:Name="HeroSuggestionsHost"
+                                  HorizontalAlignment="Center"
+                                  ItemsSource="{x:Bind ViewModel.Suggestions, Mode=OneWay}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal"
+                                            Spacing="14"
+                                            HorizontalAlignment="Center" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="local_vm:QuickSuggestionViewModel">
+                                <Button Style="{StaticResource HeroSuggestionButtonStyle}"
+                                        Command="{x:Bind ActionCommand}"
+                                        CommandParameter="{x:Bind}">
+                                    <StackPanel Spacing="10">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <FontIcon Glyph="{x:Bind Icon, Mode=OneWay}"
+                                                      FontSize="18"
+                                                      Foreground="{ThemeResource AccentBrush}" />
+                                            <TextBlock Text="Quick Launch"
+                                                       FontSize="12"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        </StackPanel>
+                                        <TextBlock Text="{x:Bind Title, Mode=OneWay}"
+                                                   FontSize="14"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                                        <TextBlock Text="{x:Bind Subtitle, Mode=OneWay}"
+                                                   FontSize="12"
+                                                   MaxLines="2"
+                                                   TextWrapping="WrapWholeWords"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
             </StackPanel>
         </Grid>
 
-        <!-- 智能推荐快速入口 (MVVM 驱动) -->
-        <ItemsControl Grid.Row="1"
-                      Margin="20,0,20,48"
-                      HorizontalAlignment="Center"
-                      ItemsSource="{x:Bind ViewModel.Suggestions, Mode=OneWay}">
-            <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <StackPanel Orientation="Horizontal"
-                                Spacing="16"
-                                HorizontalAlignment="Center" />
-                </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="local_vm:QuickSuggestionViewModel">
-                    <Button Style="{StaticResource SuggestionCardButtonStyle}"
-                            Command="{x:Bind ActionCommand}"
-                            CommandParameter="{x:Bind}">
-                        <StackPanel Spacing="12">
-                            <FontIcon Glyph="{x:Bind Icon, Mode=OneWay}" 
-                                      FontSize="24" 
-                                      Foreground="{ThemeResource AccentBrush}"
-                                      HorizontalAlignment="Left" />
-                            <StackPanel Spacing="4">
-                                <TextBlock Text="{x:Bind Title, Mode=OneWay}" 
-                                           FontWeight="SemiBold" 
-                                           FontSize="15"
-                                           TextTrimming="CharacterEllipsis"/>
-                                <TextBlock Text="{x:Bind Subtitle, Mode=OneWay}" 
-                                           Opacity="0.7" 
-                                           FontSize="12" 
-                                           TextWrapping="Wrap"
-                                           MaxLines="2"
-                                           TextTrimming="CharacterEllipsis"/>
-                            </StackPanel>
-                        </StackPanel>
-                    </Button>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
-
-        <!-- 底部输入区：Start 页独立草稿状态，避免复用聊天会话状态 -->
-        <Border Grid.Row="2"
-                Margin="20,0,20,20"
-                HorizontalAlignment="Center"
+        <Border x:Name="ComposerShell"
+                Grid.Row="1"
                 MaxWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}"
-                Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                HorizontalAlignment="Center"
                 BorderThickness="1"
+                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
                 CornerRadius="20"
-                Padding="16,12">
-            <Grid RowDefinitions="Auto,Auto" RowSpacing="10">
-                <StackPanel Grid.Row="0" Spacing="6">
-                    <TextBlock x:Uid="StartAgentSelectorLabel"
-                               FontSize="12"
-                               FontWeight="SemiBold"
-                               Opacity="0.72"/>
-                    <ComboBox x:Uid="StartAgentSelector"
-                              AutomationProperties.AutomationId="StartView.AgentSelector"
-                              ItemsSource="{x:Bind ViewModel.Chat.AcpProfileList, Mode=OneWay}"
-                              SelectedItem="{x:Bind ViewModel.Chat.SelectedAcpProfile, Mode=TwoWay}"
-                              MinWidth="220"
-                              MaxWidth="320"
-                              HorizontalAlignment="Left"
-                              IsEnabled="{x:Bind ViewModel.IsInputEnabled, Mode=OneWay}">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate x:DataType="domain:ServerConfiguration">
-                                <TextBlock Text="{x:Bind Name, Mode=OneTime}"
-                                           TextTrimming="CharacterEllipsis"
-                                           MaxLines="1"/>
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
-                </StackPanel>
-
-                <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                    <TextBox x:Uid="ChatInputBox"
+                Padding="16,12"
+                PointerPressed="OnComposerShellPointerPressed"
+                RenderTransformOrigin="0.5,1">
+            <Border.RenderTransform>
+                <TransformGroup>
+                    <ScaleTransform x:Name="ComposerScaleTransform" ScaleX="1" ScaleY="1" />
+                    <TranslateTransform x:Name="ComposerTranslateTransform" Y="0" />
+                </TransformGroup>
+            </Border.RenderTransform>
+            <Grid RowDefinitions="Auto,Auto"
+                  RowSpacing="12">
+                <Grid Grid.Row="0"
+                      ColumnDefinitions="*,Auto"
+                      ColumnSpacing="12">
+                    <TextBox x:Name="StartPromptBox"
+                             x:Uid="ChatInputBox"
                              Text="{x:Bind ViewModel.StartPrompt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             AcceptsReturn="True"
+                             TextWrapping="Wrap"
                              MinHeight="44"
+                             MaxHeight="240"
                              MaxLength="4000"
                              BorderThickness="0"
                              Background="Transparent"
-                             TextWrapping="Wrap"
-                             IsEnabled="{x:Bind ViewModel.IsInputEnabled, Mode=OneWay}">
+                             IsEnabled="{x:Bind ViewModel.IsInputEnabled, Mode=OneWay}"
+                             GotFocus="OnComposerInteractiveElementGotFocus"
+                             LostFocus="OnComposerInteractiveElementLostFocus">
                         <TextBox.Resources>
                             <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent" />
                             <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent" />
@@ -198,13 +266,83 @@
                             Padding="0"
                             CornerRadius="22"
                             Style="{StaticResource AccentButtonStyle}"
-                            Command="{x:Bind ViewModel.StartSessionAndSendCommand}" />
+                            Command="{x:Bind ViewModel.StartSessionAndSendCommand}"
+                            GotFocus="OnComposerInteractiveElementGotFocus"
+                            LostFocus="OnComposerInteractiveElementLostFocus" />
+                </Grid>
+
+                <Grid x:Name="ExpandedAgentRow"
+                      Grid.Row="1"
+                      x:Load="{x:Bind ViewModel.IsComposerExpanded, Mode=OneWay}"
+                      ColumnDefinitions="*,*,Auto"
+                      ColumnSpacing="10">
+                    <ComboBox x:Name="StartAgentSelector"
+                              Grid.Column="0"
+                              AutomationProperties.AutomationId="StartView.AgentSelector"
+                              ItemsSource="{x:Bind ViewModel.Chat.AcpProfileList, Mode=OneWay}"
+                              SelectedItem="{x:Bind ViewModel.Chat.SelectedAcpProfile, Mode=TwoWay}"
+                              MinWidth="160"
+                              MaxWidth="320"
+                              HorizontalAlignment="Stretch"
+                              VerticalAlignment="Center"
+                              FontSize="12"
+                              Background="Transparent"
+                              BorderThickness="0"
+                              DropDownOpened="OnComposerSelectorDropDownOpened"
+                              DropDownClosed="OnComposerSelectorDropDownClosed"
+                              GotFocus="OnComposerInteractiveElementGotFocus"
+                              LostFocus="OnComposerInteractiveElementLostFocus">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="domain:ServerConfiguration">
+                                <TextBlock Text="{x:Bind Name, Mode=OneTime}"
+                                           TextTrimming="CharacterEllipsis"
+                                           MaxLines="1" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <ComboBox x:Name="StartProjectSelector"
+                              Grid.Column="1"
+                              AutomationProperties.AutomationId="StartView.ProjectSelector"
+                              ItemsSource="{x:Bind ViewModel.StartProjectOptions, Mode=OneWay}"
+                              SelectedValuePath="ProjectId"
+                              SelectedValue="{x:Bind ViewModel.SelectedStartProjectId, Mode=TwoWay}"
+                              DisplayMemberPath="DisplayName"
+                              MinWidth="160"
+                              MaxWidth="320"
+                              HorizontalAlignment="Stretch"
+                              VerticalAlignment="Center"
+                              FontSize="12"
+                              Background="Transparent"
+                              BorderThickness="0"
+                              DropDownOpened="OnComposerSelectorDropDownOpened"
+                              DropDownClosed="OnComposerSelectorDropDownClosed"
+                              GotFocus="OnComposerInteractiveElementGotFocus"
+                              LostFocus="OnComposerInteractiveElementLostFocus" />
+
+                    <Border Grid.Column="2"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Center"
+                            Background="{ThemeResource ControlFillColorSecondaryBrush}"
+                            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="10"
+                            Padding="10,6"
+                            Visibility="{x:Bind ViewModel.FreezeComposerInteractions, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <ProgressRing IsActive="True"
+                                          Width="12"
+                                          Height="12" />
+                            <TextBlock Text="Launching"
+                                       FontSize="11"
+                                       FontWeight="SemiBold" />
+                        </StackPanel>
+                    </Border>
                 </Grid>
             </Grid>
         </Border>
 
-        <!-- 启动/连接遮罩 -->
-        <Grid Grid.RowSpan="3"
+        <Grid Grid.RowSpan="2"
               Background="{ThemeResource AppOverlayScrimBrush}"
               Visibility="{x:Bind ViewModel.IsStarting, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
             <ProgressRing IsActive="True" Width="48" Height="48"/>

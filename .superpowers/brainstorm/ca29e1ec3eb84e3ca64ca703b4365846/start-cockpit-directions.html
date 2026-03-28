@@ -1,0 +1,150 @@
+<h2>Start Composer Directions</h2>
+<p class="subtitle">首页输入区要像进入 AI cockpit 的启动页，同时保证展开/收起的生命周期闭环。</p>
+
+<div class="section">
+  <div class="mockup">
+    <div class="mockup-header">Shared lifecycle spine</div>
+    <div class="mockup-body">
+      <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;align-items:start;">
+        <div style="padding:12px;border:1px solid #d8d2c8;border-radius:14px;background:#f7f1e7;">
+          <div class="label">State 1</div>
+          <strong>Collapsed</strong>
+          <p style="margin:8px 0 0;">默认首页。英雄建议卡可见，输入区保持克制。</p>
+        </div>
+        <div style="padding:12px;border:1px solid #d8d2c8;border-radius:14px;background:#f6eee0;">
+          <div class="label">State 2</div>
+          <strong>Primed</strong>
+          <p style="margin:8px 0 0;">输入框获得焦点，容器放大，展开“任务预设/Agent/上下文”辅助区。</p>
+        </div>
+        <div style="padding:12px;border:1px solid #d8d2c8;border-radius:14px;background:#f5ead8;">
+          <div class="label">State 3</div>
+          <strong>Interacting</strong>
+          <p style="margin:8px 0 0;">焦点在输入框、Agent 下拉、附加组件、建议项之间移动时保持展开。</p>
+        </div>
+        <div style="padding:12px;border:1px solid #d8d2c8;border-radius:14px;background:#f4e5d1;">
+          <div class="label">State 4</div>
+          <strong>Submitting</strong>
+          <p style="margin:8px 0 0;">发送后锁定输入态，保留结构但压低动画与交互，避免抖动和误收起。</p>
+        </div>
+        <div style="padding:12px;border:1px solid #d8d2c8;border-radius:14px;background:#f2dfc8;">
+          <div class="label">State 5</div>
+          <strong>Reset / Return</strong>
+          <p style="margin:8px 0 0;">外部点击、导航离开、会话创建完成后回到明确状态，而不是悬挂中间态。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">A. Docked Hangar</div>
+        <div class="mockup-body" style="min-height:320px;background:linear-gradient(180deg,#f8f4ee 0%,#f1e7d9 100%);position:relative;overflow:hidden;">
+          <div style="position:absolute;top:26px;left:28px;font-size:34px;font-weight:800;letter-spacing:-0.04em;">Salmon Egg</div>
+          <div style="position:absolute;top:74px;left:28px;opacity:.68;max-width:240px;">英雄内容退到背景，底部输入区像机库控制台，展开时向上打开。</div>
+          <div style="position:absolute;left:28px;right:28px;bottom:148px;display:flex;gap:14px;opacity:.55;">
+            <div style="flex:1;height:92px;border-radius:18px;border:1px solid #d6cab9;background:#fbf7f0;"></div>
+            <div style="flex:1;height:92px;border-radius:18px;border:1px solid #d6cab9;background:#fbf7f0;"></div>
+            <div style="flex:1;height:92px;border-radius:18px;border:1px solid #d6cab9;background:#fbf7f0;"></div>
+          </div>
+          <div style="position:absolute;left:28px;right:28px;bottom:28px;border-radius:26px;border:1px solid #bda98d;background:#fff9f0;box-shadow:0 22px 50px rgba(74,52,26,.12);padding:18px;">
+            <div style="height:110px;border-radius:18px;background:#f8f1e5;border:1px solid #ddcfbb;margin-bottom:14px;"></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <div style="width:160px;height:34px;border-radius:999px;background:#efe4d2;"></div>
+              <div style="width:44px;height:44px;border-radius:999px;background:#c66a2b;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Docked Hangar</h3>
+      <p>最贴近当前 Start 页结构。输入区固定在底部，聚焦后像驾驶舱控制台向上开启，风险最低。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">B. Lifted Cockpit</div>
+        <div class="mockup-body" style="min-height:320px;background:radial-gradient(circle at 50% 12%,#f8f4ee 0%,#efe4d3 52%,#e6d6bd 100%);position:relative;overflow:hidden;">
+          <div style="position:absolute;top:32px;left:50%;transform:translateX(-50%);text-align:center;">
+            <div style="font-size:36px;font-weight:800;letter-spacing:-0.04em;">Salmon Egg</div>
+            <div style="margin-top:8px;opacity:.66;">进入任务舱前的预备页</div>
+          </div>
+          <div style="position:absolute;left:50%;top:138px;transform:translateX(-50%);width:82%;border-radius:30px;border:1px solid #b9a88e;background:rgba(255,250,243,.92);box-shadow:0 28px 60px rgba(79,57,29,.15);padding:18px;">
+            <div style="display:grid;grid-template-columns:1.1fr .9fr;gap:14px;margin-bottom:14px;">
+              <div style="height:96px;border-radius:18px;background:#f5ecdf;border:1px solid #ddcfbb;"></div>
+              <div style="height:96px;border-radius:18px;background:#f5ecdf;border:1px solid #ddcfbb;"></div>
+            </div>
+            <div style="height:96px;border-radius:20px;background:#faf4ea;border:1px solid #dac8af;margin-bottom:14px;"></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <div style="display:flex;gap:10px;">
+                <div style="width:126px;height:34px;border-radius:999px;background:#efe4d2;"></div>
+                <div style="width:88px;height:34px;border-radius:999px;background:#efe4d2;"></div>
+              </div>
+              <div style="width:46px;height:46px;border-radius:999px;background:#c66a2b;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Lifted Cockpit</h3>
+      <p>输入区从底部抬升到视觉中心，更有仪式感，但导航回弹、焦点恢复和空态切换会更复杂。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">C. Mission Console</div>
+        <div class="mockup-body" style="min-height:320px;background:linear-gradient(180deg,#f7f2ea 0%,#ede0cf 100%);position:relative;overflow:hidden;">
+          <div style="position:absolute;top:28px;left:28px;">
+            <div style="font-size:34px;font-weight:800;letter-spacing:-0.04em;">Salmon Egg</div>
+            <div style="margin-top:8px;opacity:.64;max-width:280px;">输入区是主舞台，右侧挂载任务辅助组件，像完整 chat 页的前置控制台。</div>
+          </div>
+          <div style="position:absolute;left:28px;right:28px;bottom:28px;display:grid;grid-template-columns:1.4fr .8fr;gap:14px;">
+            <div style="border-radius:26px;border:1px solid #bda98d;background:#fff9f0;box-shadow:0 22px 50px rgba(74,52,26,.12);padding:18px;">
+              <div style="height:104px;border-radius:18px;background:#f8f1e5;border:1px solid #ddcfbb;margin-bottom:14px;"></div>
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div style="width:170px;height:34px;border-radius:999px;background:#efe4d2;"></div>
+                <div style="width:44px;height:44px;border-radius:999px;background:#c66a2b;"></div>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-rows:repeat(3,1fr);gap:10px;">
+              <div style="border-radius:18px;border:1px solid #d6cab9;background:#fbf7f0;"></div>
+              <div style="border-radius:18px;border:1px solid #d6cab9;background:#fbf7f0;"></div>
+              <div style="border-radius:18px;border:1px solid #d6cab9;background:#fbf7f0;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Mission Console</h3>
+      <p>信息更强，但会把首页从“启动页”推向“小型工作台”，如果把握不好会太像 chat 页复制版。</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="pros-cons">
+    <div class="pros">
+      <h4>推荐方向</h4>
+      <ul>
+        <li><strong>A. Docked Hangar</strong> 最适合先落地。仪式感够强，又能复用当前 Start 页和完整 chat 页的结构关系。</li>
+        <li>它最容易承载完整生命周期：外部点击收起、Agent 下拉保持展开、发送中冻结、进入 chat 后干净退出。</li>
+      </ul>
+    </div>
+    <div class="cons">
+      <h4>设计重点</h4>
+      <ul>
+        <li>不要只做“放大一点”这种弱变化，要做成“英雄区退后，控制台升起”的空间感。</li>
+        <li>展开态里的辅助组件要控制数量，只保留和首次提问强相关的 2-3 类内容。</li>
+      </ul>
+    </div>
+  </div>
+</div>
