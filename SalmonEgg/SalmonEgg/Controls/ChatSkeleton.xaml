@@ -2,20 +2,26 @@
     x:Class="SalmonEgg.Controls.ChatSkeleton"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:SalmonEgg.Controls"
+    xmlns:models="using:SalmonEgg.Presentation.Models"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
     Background="Transparent">
 
     <UserControl.Resources>
-        <Style x:Key="SkeletonItemStyle" TargetType="Border">
-            <Setter Property="CornerRadius" Value="16"/>
-            <Setter Property="Height" Value="60"/>
-            <Setter Property="Margin" Value="0,8"/>
+        <Style x:Key="IncomingSkeletonItemStyle" TargetType="Border">
+            <Setter Property="CornerRadius" Value="12,12,12,0"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="BorderBrush" Value="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+            <Setter Property="BorderBrush" Value="{ThemeResource ControlStrokeColorDefaultBrush}"/>
             <Setter Property="Background" Value="{ThemeResource ControlFillColorSecondaryBrush}"/>
             <Setter Property="Opacity" Value="0.4"/>
+        </Style>
+
+        <Style x:Key="OutgoingSkeletonItemStyle" TargetType="Border">
+            <Setter Property="CornerRadius" Value="12,12,0,12"/>
+            <Setter Property="Background" Value="{ThemeResource AccentFillColorDefaultBrush}"/>
+            <Setter Property="Opacity" Value="0.22"/>
         </Style>
 
         <Storyboard x:Name="ShimmerStoryboard" RepeatBehavior="Forever">
@@ -53,46 +59,75 @@
         </Storyboard>
     </UserControl.Resources>
 
-    <Grid x:Name="RootGrid" Padding="20">
-        <Grid.Resources>
-            <LinearGradientBrush x:Key="ShimmerBrush" StartPoint="0,0" EndPoint="1,0">
-                <GradientStop x:Name="ShimmerLeadingStop" Color="Transparent" Offset="-0.8" />
-                <!-- GradientStop.Color must resolve to a Color resource, not a Brush resource. -->
-                <GradientStop x:Name="ShimmerHighlightStop" Color="{ThemeResource SystemAltHighColor}" Offset="-0.6" />
-                <GradientStop x:Name="ShimmerTrailingStop" Color="Transparent" Offset="-0.4" />
-            </LinearGradientBrush>
-        </Grid.Resources>
+    <controls:ResponsiveContentHost MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}">
+        <controls:ResponsiveContentHost.Child>
+            <Grid x:Name="RootGrid" Padding="20">
+                <Grid.Resources>
+                    <LinearGradientBrush x:Key="ShimmerBrush" StartPoint="0,0" EndPoint="1,0">
+                        <GradientStop x:Name="ShimmerLeadingStop" Color="Transparent" Offset="-0.8" />
+                        <!-- GradientStop.Color must resolve to a Color resource, not a Brush resource. -->
+                        <GradientStop x:Name="ShimmerHighlightStop" Color="{ThemeResource SystemAltHighColor}" Offset="-0.6" />
+                        <GradientStop x:Name="ShimmerTrailingStop" Color="Transparent" Offset="-0.4" />
+                    </LinearGradientBrush>
+                </Grid.Resources>
 
-        <StackPanel VerticalAlignment="Top" MaxWidth="600" HorizontalAlignment="Left">
-            <!-- Incoming 1 -->
-            <Grid HorizontalAlignment="Left" Width="280" Margin="0,0,0,16">
-                <Border Style="{StaticResource SkeletonItemStyle}" Margin="0"/>
-                <Border Style="{StaticResource SkeletonItemStyle}" Margin="0" Background="{StaticResource ShimmerBrush}"/>
-            </Grid>
-            
-            <!-- Incoming 2 (longer) -->
-            <Grid HorizontalAlignment="Left" Width="400" Margin="0,0,0,24">
-                <Border Style="{StaticResource SkeletonItemStyle}" Height="80" Margin="0"/>
-                <Border Style="{StaticResource SkeletonItemStyle}" Height="80" Margin="0" Background="{StaticResource ShimmerBrush}"/>
-            </Grid>
+                <StackPanel VerticalAlignment="Top" HorizontalAlignment="Stretch">
+                    <Grid Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="8*" />
+                            <ColumnDefinition Width="10*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid Grid.Column="0">
+                            <Border Style="{StaticResource IncomingSkeletonItemStyle}" Height="60"/>
+                            <Border Style="{StaticResource IncomingSkeletonItemStyle}" Height="60" Background="{StaticResource ShimmerBrush}"/>
+                        </Grid>
+                    </Grid>
 
-            <!-- Outgoing 1 -->
-            <Grid HorizontalAlignment="Right" Width="220" Margin="0,0,0,24" x:Name="Outgoing1">
-                <Border CornerRadius="12,12,0,12" Height="44" Background="{ThemeResource AccentFillColorSecondaryBrush}" Opacity="0.2"/>
-                <Border CornerRadius="12,12,0,12" Height="44" Background="{StaticResource ShimmerBrush}"/>
-            </Grid>
+                    <Grid Margin="0,0,0,24">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="11*" />
+                            <ColumnDefinition Width="7*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid Grid.Column="0">
+                            <Border Style="{StaticResource IncomingSkeletonItemStyle}" Height="80"/>
+                            <Border Style="{StaticResource IncomingSkeletonItemStyle}" Height="80" Background="{StaticResource ShimmerBrush}"/>
+                        </Grid>
+                    </Grid>
 
-            <!-- Incoming 3 -->
-            <Grid HorizontalAlignment="Left" Width="340" Margin="0,0,0,16">
-                <Border Style="{StaticResource SkeletonItemStyle}" Height="120" Margin="0"/>
-                <Border Style="{StaticResource SkeletonItemStyle}" Height="120" Margin="0" Background="{StaticResource ShimmerBrush}"/>
-            </Grid>
+                    <Grid Margin="0,0,0,24">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="11*" />
+                            <ColumnDefinition Width="7*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid Grid.Column="1">
+                            <Border Style="{StaticResource OutgoingSkeletonItemStyle}" Height="44"/>
+                            <Border Style="{StaticResource OutgoingSkeletonItemStyle}" Height="44" Background="{StaticResource ShimmerBrush}"/>
+                        </Grid>
+                    </Grid>
 
-            <!-- Outgoing 2 -->
-            <Grid HorizontalAlignment="Right" Width="280" Margin="0,0,0,8">
-                <Border CornerRadius="12,12,0,12" Height="60" Background="{ThemeResource AccentFillColorSecondaryBrush}" Opacity="0.2"/>
-                <Border CornerRadius="12,12,0,12" Height="60" Background="{StaticResource ShimmerBrush}"/>
+                    <Grid Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="9*" />
+                            <ColumnDefinition Width="9*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid Grid.Column="0">
+                            <Border Style="{StaticResource IncomingSkeletonItemStyle}" Height="120"/>
+                            <Border Style="{StaticResource IncomingSkeletonItemStyle}" Height="120" Background="{StaticResource ShimmerBrush}"/>
+                        </Grid>
+                    </Grid>
+
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="10*" />
+                            <ColumnDefinition Width="8*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid Grid.Column="1">
+                            <Border Style="{StaticResource OutgoingSkeletonItemStyle}" Height="60"/>
+                            <Border Style="{StaticResource OutgoingSkeletonItemStyle}" Height="60" Background="{StaticResource ShimmerBrush}"/>
+                        </Grid>
+                    </Grid>
+                </StackPanel>
             </Grid>
-        </StackPanel>
-    </Grid>
+        </controls:ResponsiveContentHost.Child>
+    </controls:ResponsiveContentHost>
 </UserControl>
