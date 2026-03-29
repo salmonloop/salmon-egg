@@ -10,8 +10,6 @@
     AutomationProperties.AutomationId="SessionProjectPickerDialog"
     Style="{ThemeResource DefaultContentDialogStyle}"
     Title="{x:Bind DialogTitle, Mode=OneWay}"
-    PrimaryButtonText="Move"
-    CloseButtonText="Cancel"
     DefaultButton="Primary"
     IsPrimaryButtonEnabled="{x:Bind HasSelection, Mode=OneWay}">
 
@@ -57,14 +55,14 @@
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="chat:ConversationProjectTargetOption">
                     <Grid Padding="6,4"
-                          AutomationProperties.Name="{x:Bind DisplayName, Mode=OneWay}">
+                          AutomationProperties.Name="{x:Bind DisplayName, Mode=OneTime}">
                         <StackPanel Spacing="2">
-                            <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}"
+                            <TextBlock Text="{x:Bind DisplayName, Mode=OneTime}"
                                        Style="{ThemeResource BodyStrongTextBlockStyle}"
                                        TextWrapping="WrapWholeWords"
                                        TextTrimming="CharacterEllipsis"
                                        MaxLines="2" />
-                            <TextBlock Text="{x:Bind ProjectId, Mode=OneWay}"
+                            <TextBlock Text="{x:Bind ProjectId, Mode=OneTime}"
                                        Style="{StaticResource CaptionTextBlockStyle}"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        TextTrimming="CharacterEllipsis"

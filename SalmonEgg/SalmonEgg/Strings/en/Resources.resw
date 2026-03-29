@@ -252,4 +252,256 @@
   <data name="Diagnostics_LiveLogHint.Text" xml:space="preserve">
     <value>Live streaming stops automatically when you leave this page.</value>
   </data>
+  <data name="SettingsBreadcrumbRoot" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="TitleBarBackButton.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Back</value>
+  </data>
+  <data name="TitleBarBackButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Back</value>
+  </data>
+  <data name="TitleBarToggleLeftNavButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Toggle sidebar</value>
+  </data>
+  <data name="TitleBarToggleLeftNavButtonCollapse.ToolTip" xml:space="preserve">
+    <value>Collapse sidebar</value>
+  </data>
+  <data name="TitleBarToggleLeftNavButtonExpand.ToolTip" xml:space="preserve">
+    <value>Expand sidebar</value>
+  </data>
+  <data name="TitleBarMiniWindowButton.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Open mini window</value>
+  </data>
+  <data name="TitleBarMiniWindowButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Open mini window</value>
+  </data>
+  <data name="NavAddProjectLabel.Text" xml:space="preserve">
+    <value>Add project</value>
+  </data>
+  <data name="SessionsDialog.CloseButtonText" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="SessionsDialogSearchBox.PlaceholderText" xml:space="preserve">
+    <value>Search sessions</value>
+  </data>
+  <data name="SessionsDialogSearchBox.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Search sessions</value>
+  </data>
+  <data name="SessionsDialogDefaultTitle" xml:space="preserve">
+    <value>Sessions</value>
+  </data>
+  <data name="ConfigurationEditorDialog.Title" xml:space="preserve">
+    <value>Edit configuration</value>
+  </data>
+  <data name="ConfigurationEditorDialog.PrimaryButtonText" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="ConfigurationEditorDialog.SecondaryButtonText" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="ConfigurationEditorDialogName.Header" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="ConfigurationEditorDialogName.PlaceholderText" xml:space="preserve">
+    <value>For example: Local Agent / Remote Test Environment</value>
+  </data>
+  <data name="ConfigurationEditorDialogTransport.Header" xml:space="preserve">
+    <value>Transport</value>
+  </data>
+  <data name="ConfigurationEditorDialogCommand.Header" xml:space="preserve">
+    <value>Command</value>
+  </data>
+  <data name="ConfigurationEditorDialogCommand.PlaceholderText" xml:space="preserve">
+    <value>For example: python / node / agent.exe</value>
+  </data>
+  <data name="ConfigurationEditorDialogArgs.Header" xml:space="preserve">
+    <value>Arguments</value>
+  </data>
+  <data name="ConfigurationEditorDialogArgs.PlaceholderText" xml:space="preserve">
+    <value>For example: server.py --port 8080</value>
+  </data>
+  <data name="ConfigurationEditorDialogServerUrl.Header" xml:space="preserve">
+    <value>Server URL</value>
+  </data>
+  <data name="ConfigurationEditorDialogServerUrl.PlaceholderText" xml:space="preserve">
+    <value>wss://example.com or http://localhost:8080/sse</value>
+  </data>
+  <data name="ConfigurationEditorDialogHint.Text" xml:space="preserve">
+    <value>Saved changes will automatically flow back to the configuration card.</value>
+  </data>
+  <data name="MiniChatSessionSelector.PlaceholderText" xml:space="preserve">
+    <value>Select session</value>
+  </data>
+  <data name="MiniChatReturnButton.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Return to main window</value>
+  </data>
+  <data name="MiniChatReturnButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Return to main window</value>
+  </data>
+  <data name="MiniChatInputBox.PlaceholderText" xml:space="preserve">
+    <value>Type a message</value>
+  </data>
+  <data name="MiniChatSendButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Send</value>
+  </data>
+  <data name="ChatViewAskUserTitle.Text" xml:space="preserve">
+    <value>Agent needs your input</value>
+  </data>
+  <data name="ChatViewAskUserSubmitButton.Content" xml:space="preserve">
+    <value>Submit answers</value>
+  </data>
+  <data name="ChatViewLoadingOverlay.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Session loading</value>
+  </data>
+  <data name="DataStorage_ClearCacheDialog.Title" xml:space="preserve">
+    <value>Clear cache</value>
+  </data>
+  <data name="DataStorage_ClearCacheDialog.Content" xml:space="preserve">
+    <value>This deletes all files in the local cache folder.</value>
+  </data>
+  <data name="DataStorage_ClearCacheDialog.PrimaryButtonText" xml:space="preserve">
+    <value>Clear</value>
+  </data>
+  <data name="DataStorage_ClearCacheDialog.SecondaryButtonText" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="DataStorage_ResetPreferencesDialog.Title" xml:space="preserve">
+    <value>Restore defaults</value>
+  </data>
+  <data name="DataStorage_ResetPreferencesDialog.Content" xml:space="preserve">
+    <value>This restores General, Appearance, Data &amp; Storage, Shortcuts, and related settings to their defaults.</value>
+  </data>
+  <data name="DataStorage_ResetPreferencesDialog.PrimaryButtonText" xml:space="preserve">
+    <value>Restore</value>
+  </data>
+  <data name="DataStorage_ResetPreferencesDialog.SecondaryButtonText" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="DataStorage_ClearAllLocalDataDialog.Title" xml:space="preserve">
+    <value>Clear all local data</value>
+  </data>
+  <data name="DataStorage_ClearAllLocalDataDialog.Content" xml:space="preserve">
+    <value>This deletes all local data, including configuration, logs, cache, and exports. This action cannot be undone.</value>
+  </data>
+  <data name="DataStorage_ClearAllLocalDataDialog.PrimaryButtonText" xml:space="preserve">
+    <value>Clear</value>
+  </data>
+  <data name="DataStorage_ClearAllLocalDataDialog.SecondaryButtonText" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="UiInteractionInfoDialogTitle" xml:space="preserve">
+    <value>Notice</value>
+  </data>
+  <data name="UiInteractionConfirmButtonText" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="UiInteractionCancelButtonText" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="UiInteractionPickFolderTitle" xml:space="preserve">
+    <value>Add project</value>
+  </data>
+  <data name="AgentProfileEditorPageTitleNew" xml:space="preserve">
+    <value>New</value>
+  </data>
+  <data name="AgentProfileEditorPageTitleEdit" xml:space="preserve">
+    <value>Edit</value>
+  </data>
+  <data name="AgentProfileEditorName.Header" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="AgentProfileEditorName.PlaceholderText" xml:space="preserve">
+    <value>For example: Local Agent / Remote Test Environment</value>
+  </data>
+  <data name="AgentProfileEditorTransport.Header" xml:space="preserve">
+    <value>Transport</value>
+  </data>
+  <data name="AgentProfileEditorCommand.Header" xml:space="preserve">
+    <value>Command</value>
+  </data>
+  <data name="AgentProfileEditorCommand.PlaceholderText" xml:space="preserve">
+    <value>For example: python / node / agent.exe</value>
+  </data>
+  <data name="AgentProfileEditorArgs.Header" xml:space="preserve">
+    <value>Arguments</value>
+  </data>
+  <data name="AgentProfileEditorArgs.PlaceholderText" xml:space="preserve">
+    <value>For example: server.py --port 8080</value>
+  </data>
+  <data name="AgentProfileEditorServerUrl.Header" xml:space="preserve">
+    <value>Server URL</value>
+  </data>
+  <data name="AgentProfileEditorServerUrl.PlaceholderText" xml:space="preserve">
+    <value>wss://example.com or http://localhost:8080/sse</value>
+  </data>
+  <data name="AgentProfileEditorAdvancedTitle.Text" xml:space="preserve">
+    <value>Advanced options</value>
+  </data>
+  <data name="AgentProfileEditorAuthTitle.Text" xml:space="preserve">
+    <value>Authentication</value>
+  </data>
+  <data name="AgentProfileEditorToken.Header" xml:space="preserve">
+    <value>Token (optional)</value>
+  </data>
+  <data name="AgentProfileEditorApiKey.Header" xml:space="preserve">
+    <value>API key (optional)</value>
+  </data>
+  <data name="AgentProfileEditorProxyTitle.Text" xml:space="preserve">
+    <value>Proxy</value>
+  </data>
+  <data name="AgentProfileEditorProxyEnabled.Header" xml:space="preserve">
+    <value>Enable proxy</value>
+  </data>
+  <data name="AgentProfileEditorProxyUrl.Header" xml:space="preserve">
+    <value>Proxy URL</value>
+  </data>
+  <data name="AgentProfileEditorProxyUrl.PlaceholderText" xml:space="preserve">
+    <value>http://proxy:8080</value>
+  </data>
+  <data name="AgentProfileEditorConnectionTitle.Text" xml:space="preserve">
+    <value>Connection</value>
+  </data>
+  <data name="AgentProfileEditorHeartbeat.Header" xml:space="preserve">
+    <value>Heartbeat interval (seconds)</value>
+  </data>
+  <data name="AgentProfileEditorTimeout.Header" xml:space="preserve">
+    <value>Connection timeout (seconds)</value>
+  </data>
+  <data name="AgentProfileEditorCancelButton.Content" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="AgentProfileEditorSaveButton.Content" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="DiscoverSessionsTitle.Text" xml:space="preserve">
+    <value>Discover sessions</value>
+  </data>
+  <data name="DiscoverSessionsSubtitle.Text" xml:space="preserve">
+    <value>Select a node to browse available sessions</value>
+  </data>
+  <data name="DiscoverSessionsNoSelectionTitle.Text" xml:space="preserve">
+    <value>No node selected</value>
+  </data>
+  <data name="DiscoverSessionsNoSelectionDescription.Text" xml:space="preserve">
+    <value>Select an agent node on the left to browse importable sessions.</value>
+  </data>
+  <data name="DiscoverSessionsImportableListLabel.Text" xml:space="preserve">
+    <value>Importable sessions</value>
+  </data>
+  <data name="DiscoverSessionsRefreshText.Text" xml:space="preserve">
+    <value>Refresh list</value>
+  </data>
+  <data name="DiscoverSessionsConnectionError.Title" xml:space="preserve">
+    <value>Service connection issue</value>
+  </data>
+  <data name="DiscoverSessionsEmptyTitle.Text" xml:space="preserve">
+    <value>No importable sessions for this node</value>
+  </data>
+  <data name="DiscoverSessionsEmptyDescription.Text" xml:space="preserve">
+    <value>Try refreshing later, or verify that this agent can list historical sessions.</value>
+  </data>
+  <data name="DiscoverSessionsImportButton.Content" xml:space="preserve">
+    <value>Import session</value>
+  </data>
 </root>

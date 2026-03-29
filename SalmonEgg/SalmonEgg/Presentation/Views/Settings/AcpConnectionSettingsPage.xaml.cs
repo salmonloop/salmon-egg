@@ -17,7 +17,7 @@ public sealed partial class AcpConnectionSettingsPage : SettingsPageBase
         ViewModel = App.ServiceProvider.GetRequiredService<AcpConnectionSettingsViewModel>();
         InitializeComponent();
         Loaded += OnLoaded;
-        SetSettingsBreadcrumb("Agent (ACP)");
+        SetSettingsBreadcrumbFromResource("SettingsNav_AgentAcp.Content", "Agent (ACP)");
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -94,31 +94,6 @@ public sealed partial class AcpConnectionSettingsPage : SettingsPageBase
             return;
         }
 
-        // Prevent re-entrant toggles while connecting.
-        if (ViewModel.Chat.IsConnecting || ViewModel.Chat.IsInitializing)
-        {
-            return;
-        }
-
-        try
-        {
-            if (toggle.IsOn)
-            {
-                if (!ViewModel.Chat.IsConnected)
-                {
-                    await ViewModel.Chat.InitializeAndConnectCommand.ExecuteAsync(null);
-                }
-            }
-            else
-            {
-                if (ViewModel.Chat.IsConnected)
-                {
-                    await ViewModel.Chat.DisconnectCommand.ExecuteAsync(null);
-                }
-            }
-        }
-        catch
-        {
-        }
+        await ViewModel.HandleConnectionToggleAsync(toggle.IsOn);
     }
 }

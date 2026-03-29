@@ -51,10 +51,10 @@
                 Padding="12,0">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
                 <ComboBox Grid.Column="0"
+                          x:Uid="MiniChatSessionSelector"
                           MinWidth="0"
                           ItemsSource="{x:Bind ViewModel.MiniWindowSessions, Mode=OneWay}"
                           SelectedItem="{x:Bind ViewModel.SelectedMiniWindowSession, Mode=TwoWay}"
-                          PlaceholderText="选择会话"
                           BorderThickness="0"
                           Background="Transparent"
                           VerticalAlignment="Center">
@@ -68,9 +68,8 @@
                 </ComboBox>
 
                 <Button Grid.Column="1"
+                        x:Uid="MiniChatReturnButton"
                         Style="{StaticResource TitleBarCommandButtonStyle}"
-                        ToolTipService.ToolTip="返回主窗口"
-                        AutomationProperties.Name="ReturnToWindow"
                         VerticalAlignment="Center"
                         Command="{x:Bind ViewModel.ReturnToMainWindowCommand}">
                     <!-- "BackToWindow" glyph (Segoe Fluent Icons / MDL2-compatible on WinUI) -->
@@ -121,8 +120,8 @@
                     Padding="12,4,4,4">
                 <Grid ColumnDefinitions="*,Auto">
                     <TextBox Grid.Column="0"
+                             x:Uid="MiniChatInputBox"
                              Text="{x:Bind ViewModel.CurrentPrompt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                             PlaceholderText="输入消息"
                              MinHeight="36"
                              BorderThickness="0"
                              Background="Transparent"
@@ -140,10 +139,11 @@
                     </TextBox>
                     
                     <Button Grid.Column="1"
+                            x:Uid="MiniChatSendButton"
                             VerticalAlignment="Bottom"
                             Margin="8,0,0,0"
-                            Width="36" Height="36"
-                            CornerRadius="18"
+                            Width="44" Height="44"
+                            CornerRadius="22"
                             Padding="0"
                             Style="{StaticResource AccentButtonStyle}"
                             Command="{x:Bind ViewModel.SendPromptCommand}"

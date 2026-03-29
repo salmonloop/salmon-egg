@@ -20,7 +20,7 @@ public sealed class PlatformShellService : IPlatformShellService
         return Task.CompletedTask;
     }
 
-    public Task CopyToClipboardAsync(string text)
+    public Task<bool> CopyToClipboardAsync(string text)
     {
 #if WINDOWS || WINDOWS_UWP
         try
@@ -28,12 +28,13 @@ public sealed class PlatformShellService : IPlatformShellService
             var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
             package.SetText(text ?? string.Empty);
             Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+            return Task.FromResult(true);
         }
         catch
         {
         }
 #endif
-        return Task.CompletedTask;
+        return Task.FromResult(false);
     }
 
     private static void TryOpenWithShell(string path)
@@ -68,4 +69,3 @@ public sealed class PlatformShellService : IPlatformShellService
         }
     }
 }
-

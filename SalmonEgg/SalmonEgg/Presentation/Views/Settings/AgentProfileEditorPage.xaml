@@ -35,11 +35,10 @@
                             CornerRadius="8"
                             Padding="16">
                         <StackPanel Spacing="14">
-                            <TextBox Header="名称"
-                                     PlaceholderText="例如：本地 Agent / 远程测试环境"
+                            <TextBox x:Uid="AgentProfileEditorName"
                                      Text="{x:Bind ViewModel.Name, Mode=TwoWay}"/>
 
-                            <ComboBox Header="传输协议"
+                            <ComboBox x:Uid="AgentProfileEditorTransport"
                                       ItemsSource="{x:Bind ViewModel.TransportOptions, Mode=OneWay}"
                                       SelectedItem="{x:Bind ViewModel.SelectedTransportOption, Mode=TwoWay}"
                                       DisplayMemberPath="Name"
@@ -47,18 +46,15 @@
 
                             <StackPanel Spacing="12"
                                         Visibility="{x:Bind ViewModel.IsStdio, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                                <TextBox Header="执行命令"
-                                         PlaceholderText="例如：python / node / agent.exe"
+                                <TextBox x:Uid="AgentProfileEditorCommand"
                                          Text="{x:Bind ViewModel.StdioCommand, Mode=TwoWay}"/>
-                                <TextBox Header="参数"
-                                         PlaceholderText="例如：server.py --port 8080"
+                                <TextBox x:Uid="AgentProfileEditorArgs"
                                          Text="{x:Bind ViewModel.StdioArgs, Mode=TwoWay}"/>
                             </StackPanel>
 
                             <StackPanel Spacing="12"
                                         Visibility="{x:Bind ViewModel.IsRemote, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                                <TextBox Header="服务器地址"
-                                         PlaceholderText="wss://example.com 或 http://localhost:8080/sse"
+                                <TextBox x:Uid="AgentProfileEditorServerUrl"
                                          Text="{x:Bind ViewModel.ServerUrl, Mode=TwoWay}"/>
                             </StackPanel>
                         </StackPanel>
@@ -76,41 +72,40 @@
                                   Padding="0">
                             <Expander.Header>
                                 <Grid Padding="16,12" HorizontalAlignment="Stretch">
-                                    <TextBlock Text="高级选项" FontWeight="SemiBold"/>
+                                    <TextBlock x:Uid="AgentProfileEditorAdvancedTitle" FontWeight="SemiBold"/>
                                 </Grid>
                             </Expander.Header>
 
                             <StackPanel Padding="16" Spacing="12" HorizontalAlignment="Stretch">
-                                <TextBlock Text="认证" FontWeight="SemiBold"/>
+                                <TextBlock x:Uid="AgentProfileEditorAuthTitle" FontWeight="SemiBold"/>
                                 <PasswordBox x:Name="TokenBox"
-                                             Header="Token（可选）"
+                                             x:Uid="AgentProfileEditorToken"
                                              HorizontalAlignment="Stretch"
                                              Password="{x:Bind ViewModel.Token, Mode=TwoWay}"/>
                                 <PasswordBox x:Name="ApiKeyBox"
-                                             Header="API Key（可选）"
+                                             x:Uid="AgentProfileEditorApiKey"
                                              HorizontalAlignment="Stretch"
                                              Password="{x:Bind ViewModel.ApiKey, Mode=TwoWay}"/>
 
-                                <TextBlock Text="代理" FontWeight="SemiBold" Margin="0,8,0,0"/>
-                                <ToggleSwitch Header="启用代理"
+                                <TextBlock x:Uid="AgentProfileEditorProxyTitle" FontWeight="SemiBold" Margin="0,8,0,0"/>
+                                <ToggleSwitch x:Uid="AgentProfileEditorProxyEnabled"
                                               HorizontalAlignment="Stretch"
                                               IsOn="{x:Bind ViewModel.ProxyEnabled, Mode=TwoWay}"/>
-                                <TextBox Header="代理 URL"
-                                         PlaceholderText="http://proxy:8080"
+                                <TextBox x:Uid="AgentProfileEditorProxyUrl"
                                          HorizontalAlignment="Stretch"
                                          IsEnabled="{x:Bind ViewModel.ProxyEnabled, Mode=OneWay}"
                                          Text="{x:Bind ViewModel.ProxyUrl, Mode=TwoWay}"/>
 
-                                <TextBlock Text="连接" FontWeight="SemiBold" Margin="0,8,0,0"/>
+                                <TextBlock x:Uid="AgentProfileEditorConnectionTitle" FontWeight="SemiBold" Margin="0,8,0,0"/>
                                 <NumberBox x:Name="HeartbeatBox"
-                                           Header="心跳间隔（秒）"
+                                           x:Uid="AgentProfileEditorHeartbeat"
                                            HorizontalAlignment="Stretch"
                                            Minimum="5"
                                            Maximum="300"
                                            SpinButtonPlacementMode="Inline"
                                            Value="{x:Bind ViewModel.HeartbeatInterval, Mode=TwoWay}"/>
                                 <NumberBox x:Name="TimeoutBox"
-                                           Header="连接超时（秒）"
+                                           x:Uid="AgentProfileEditorTimeout"
                                            HorizontalAlignment="Stretch"
                                            Minimum="5"
                                            Maximum="60"
@@ -121,10 +116,10 @@
                     </Border>
 
                     <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                        <Button Content="取消"
+                        <Button x:Uid="AgentProfileEditorCancelButton"
                                 Style="{StaticResource SubtleButtonStyle}"
                                 Click="OnCancelClick"/>
-                        <Button Content="保存"
+                        <Button x:Uid="AgentProfileEditorSaveButton"
                                 Style="{StaticResource AccentButtonStyle}"
                                 Click="OnSaveClick"
                                 IsEnabled="{x:Bind ViewModel.IsBusy, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"/>

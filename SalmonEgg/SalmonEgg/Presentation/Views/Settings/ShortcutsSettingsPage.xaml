@@ -64,8 +64,7 @@
                                                 x:Uid="Shortcuts_RestoreSingle"
                                                 Content="恢复"
                                                 Margin="12,0,0,0"
-                                                Click="OnRestoreSingleClick"
-                                                Tag="{x:Bind}" />
+                                                Command="{x:Bind RestoreDefaultCommand}" />
                                     </Grid>
                                 </DataTemplate>
                             </ListView.ItemTemplate>

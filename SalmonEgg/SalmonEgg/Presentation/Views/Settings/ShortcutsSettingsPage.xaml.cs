@@ -12,14 +12,6 @@ public sealed partial class ShortcutsSettingsPage : SettingsPageBase
     {
         ViewModel = App.ServiceProvider.GetRequiredService<ShortcutsSettingsViewModel>();
         InitializeComponent();
-        SetSettingsBreadcrumb("快捷键");
-    }
-
-    private void OnRestoreSingleClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is Button button && button.Tag is ShortcutEntryViewModel vm)
-        {
-            vm.Gesture = vm.DefaultGesture;
-        }
+        SetSettingsBreadcrumbFromResource("SettingsNav_Shortcuts.Content", "快捷键");
     }
 }

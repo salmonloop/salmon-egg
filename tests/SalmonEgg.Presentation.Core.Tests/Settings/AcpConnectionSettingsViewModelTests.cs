@@ -172,6 +172,75 @@ public sealed class AcpConnectionSettingsViewModelTests
     }
 
     [Fact]
+    public async Task HandleConnectionToggleAsync_ConnectsWhenRequestedAndCurrentlyDisconnected()
+    {
+        var preferences = await CreatePreferencesAsync();
+        var profiles = CreateProfiles(preferences);
+        var state = new TestConnectionState { IsConnected = false };
+        var commands = new TestConnectionCommands();
+        var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
+
+        using var viewModel = new AcpConnectionSettingsViewModel(
+            state,
+            commands,
+            new TestTransportConfiguration(),
+            profiles,
+            preferences,
+            logger.Object);
+
+        await viewModel.HandleConnectionToggleAsync(true);
+
+        Assert.Equal(1, commands.InitializeAndConnectCallCount);
+        Assert.Equal(0, commands.DisconnectCallCount);
+    }
+
+    [Fact]
+    public async Task HandleConnectionToggleAsync_DisconnectsWhenRequestedAndCurrentlyConnected()
+    {
+        var preferences = await CreatePreferencesAsync();
+        var profiles = CreateProfiles(preferences);
+        var state = new TestConnectionState { IsConnected = true };
+        var commands = new TestConnectionCommands();
+        var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
+
+        using var viewModel = new AcpConnectionSettingsViewModel(
+            state,
+            commands,
+            new TestTransportConfiguration(),
+            profiles,
+            preferences,
+            logger.Object);
+
+        await viewModel.HandleConnectionToggleAsync(false);
+
+        Assert.Equal(0, commands.InitializeAndConnectCallCount);
+        Assert.Equal(1, commands.DisconnectCallCount);
+    }
+
+    [Fact]
+    public async Task HandleConnectionToggleAsync_ReentrantState_DoesNothing()
+    {
+        var preferences = await CreatePreferencesAsync();
+        var profiles = CreateProfiles(preferences);
+        var state = new TestConnectionState { IsConnecting = true };
+        var commands = new TestConnectionCommands();
+        var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
+
+        using var viewModel = new AcpConnectionSettingsViewModel(
+            state,
+            commands,
+            new TestTransportConfiguration(),
+            profiles,
+            preferences,
+            logger.Object);
+
+        await viewModel.HandleConnectionToggleAsync(true);
+
+        Assert.Equal(0, commands.InitializeAndConnectCallCount);
+        Assert.Equal(0, commands.DisconnectCallCount);
+    }
+
+    [Fact]
     public async Task PathMappingRows_SelectedProfile_ExposesOnlyProfileMappings()
     {
         // Arrange
@@ -417,9 +486,28 @@ public sealed class AcpConnectionSettingsViewModelTests
 
     private sealed class TestConnectionCommands : ISettingsAcpConnectionCommands
     {
-        public IAsyncRelayCommand InitializeAndConnectCommand { get; } = new AsyncRelayCommand(() => Task.CompletedTask);
+        public TestConnectionCommands()
+        {
+            InitializeAndConnectCommand = new AsyncRelayCommand(() =>
+            {
+                InitializeAndConnectCallCount++;
+                return Task.CompletedTask;
+            });
 
-        public IAsyncRelayCommand DisconnectCommand { get; } = new AsyncRelayCommand(() => Task.CompletedTask);
+            DisconnectCommand = new AsyncRelayCommand(() =>
+            {
+                DisconnectCallCount++;
+                return Task.CompletedTask;
+            });
+        }
+
+        public IAsyncRelayCommand InitializeAndConnectCommand { get; }
+
+        public IAsyncRelayCommand DisconnectCommand { get; }
+
+        public int InitializeAndConnectCallCount { get; private set; }
+
+        public int DisconnectCallCount { get; private set; }
 
         public List<ServerConfiguration> ConnectedProfiles { get; } = new();
 

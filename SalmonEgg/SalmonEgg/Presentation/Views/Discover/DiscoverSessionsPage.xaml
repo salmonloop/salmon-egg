@@ -48,11 +48,11 @@
             <!-- Header -->
             <StackPanel Grid.Row="0" Margin="24,32,24,16" Spacing="8">
                 <TextBlock
-                    Text="发现会话"
+                    x:Uid="DiscoverSessionsTitle"
                     Style="{ThemeResource TitleLargeTextBlockStyle}"
                     FontWeight="SemiBold" />
                 <TextBlock
-                    Text="选择一个节点来浏览会话"
+                    x:Uid="DiscoverSessionsSubtitle"
                     Style="{ThemeResource BodyTextBlockStyle}"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
@@ -150,8 +150,8 @@
                         <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE716;" FontSize="56" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </Grid>
                     <StackPanel Spacing="8">
-                        <TextBlock Text="未选择节点" Style="{ThemeResource TitleTextBlockStyle}" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                        <TextBlock Text="请在左侧选择一个 Agent 节点以浏览其可导入的会话" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" />
+                        <TextBlock x:Uid="DiscoverSessionsNoSelectionTitle" Style="{ThemeResource TitleTextBlockStyle}" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                        <TextBlock x:Uid="DiscoverSessionsNoSelectionDescription" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" />
                     </StackPanel>
                 </StackPanel>
             </Grid>
@@ -175,7 +175,7 @@
                             <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4" Padding="6,2">
                                 <TextBlock Text="{x:Bind ViewModel.ProfilesViewModel.SelectedProfile.TransportDisplayName, Mode=OneWay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             </Border>
-                            <TextBlock Text="可导入的会话列表" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                            <TextBlock x:Uid="DiscoverSessionsImportableListLabel" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                         </StackPanel>
                     </StackPanel>
 
@@ -188,7 +188,7 @@
                         Padding="16,8">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE72C;" FontSize="14" />
-                            <TextBlock Text="刷新列表" />
+                            <TextBlock x:Uid="DiscoverSessionsRefreshText" />
                         </StackPanel>
                     </Button>
                 </Grid>
@@ -196,7 +196,7 @@
                 <!-- Loading & Error States Overlay -->
                 <Grid Grid.Row="1" Canvas.ZIndex="10">
                     <InfoBar
-                        Title="服务连接异常"
+                        x:Uid="DiscoverSessionsConnectionError"
                         Message="{x:Bind ViewModel.DisplayErrorMessage, Mode=OneWay}"
                         Severity="Error"
                         IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
@@ -210,10 +210,10 @@
                                       Glyph="&#xE8B7;"
                                       FontSize="48"
                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <TextBlock Text="当前节点没有可导入的会话"
+                            <TextBlock x:Uid="DiscoverSessionsEmptyTitle"
                                        Style="{ThemeResource TitleTextBlockStyle}"
                                        HorizontalAlignment="Center" />
-                            <TextBlock Text="可以稍后刷新列表，或确认该 Agent 是否支持列出历史会话。"
+                            <TextBlock x:Uid="DiscoverSessionsEmptyDescription"
                                        Style="{ThemeResource BodyTextBlockStyle}"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        HorizontalAlignment="Center"
@@ -423,7 +423,7 @@
                                     <Button
                                         x:Name="ActionBtn"
                                         Grid.Column="2"
-                                        Content="导入会话"
+                                        x:Uid="DiscoverSessionsImportButton"
                                         Style="{StaticResource AccentButtonStyle}"
                                         VerticalAlignment="Center"
                                         Click="OnLoadSessionClick"

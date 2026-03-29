@@ -11,7 +11,7 @@ public sealed partial class GeneralSettingsPage : SettingsPageBase
     {
         ViewModel = App.ServiceProvider.GetRequiredService<GeneralSettingsViewModel>();
         this.InitializeComponent();
-        SetSettingsBreadcrumb("常规");
+        SetSettingsBreadcrumbFromResource("SettingsNav_General.Content", "常规");
     }
 }
 }

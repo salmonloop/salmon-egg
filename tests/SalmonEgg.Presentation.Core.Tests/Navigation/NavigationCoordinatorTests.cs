@@ -180,7 +180,7 @@ public sealed class NavigationCoordinatorTests
             Action<string>? pickSession = null;
 
             ui.Setup(s => s.ShowSessionsListDialogAsync(
-                    "会话",
+                    It.IsAny<string>(),
                     It.IsAny<IReadOnlyList<SessionNavItemViewModel>>(),
                     It.IsAny<Action<string>>()))
                 .Callback<string, IReadOnlyList<SessionNavItemViewModel>, Action<string>>((_, _, onPickSession) => pickSession = onPickSession)

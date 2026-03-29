@@ -38,6 +38,7 @@ using SalmonEgg.Presentation.Utilities;
 using SalmonEgg.Presentation.Views;
 using SalmonEgg.Presentation.Views.Chat;
 using SalmonEgg.Presentation.Views.Start;
+using Windows.ApplicationModel.Resources;
 #if WINDOWS
 using SalmonEgg.Platforms.Windows;
 #endif
@@ -46,6 +47,7 @@ namespace SalmonEgg;
 
 public sealed partial class MainPage : Page
 {
+    private static readonly ResourceLoader ResourceLoader = ResourceLoader.GetForViewIndependentUse();
     private const double NavPaneMinWidth = 240;
     private const double NavPaneMaxWidth = 480;
     private const double NavPaneAnimationDurationMs = 180;
@@ -702,7 +704,11 @@ public sealed partial class MainPage : Page
         }
 
         var isOpen = isOpenOverride ?? LayoutVM.IsNavPaneOpen;
-        ToolTipService.SetToolTip(TitleBarToggleLeftNavButton, isOpen ? "Collapse Sidebar" : "Expand Sidebar");
+        ToolTipService.SetToolTip(
+            TitleBarToggleLeftNavButton,
+            ResolveResourceString(
+                isOpen ? "TitleBarToggleLeftNavButtonCollapse.ToolTip" : "TitleBarToggleLeftNavButtonExpand.ToolTip",
+                isOpen ? "Collapse Sidebar" : "Expand Sidebar"));
     }
 
     private void UpdateBackButtonState()
@@ -792,6 +798,12 @@ public sealed partial class MainPage : Page
         null => "<null>",
         _ => selection.GetType().Name
     };
+
+    private static string ResolveResourceString(string resourceKey, string fallback)
+    {
+        var value = ResourceLoader.GetString(resourceKey);
+        return string.IsNullOrWhiteSpace(value) ? fallback : value;
+    }
 
     private bool IsChatPageActive()
         => IsChatPageType(ContentFrame?.CurrentSourcePageType);

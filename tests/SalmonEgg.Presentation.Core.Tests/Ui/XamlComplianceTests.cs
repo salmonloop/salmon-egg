@@ -25,7 +25,9 @@ public sealed class XamlComplianceTests
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");
         var tag = FindElementTag(xaml, elementName);
 
-        Assert.Contains("AutomationProperties.Name", tag);
+        Assert.True(
+            tag.Contains("AutomationProperties.Name") || tag.Contains("x:Uid="),
+            $"{elementName} must expose an accessible name via AutomationProperties.Name or x:Uid localization.");
     }
 
     [Fact]
@@ -205,6 +207,15 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void ChatStyles_DoNotUseHardcodedWhiteForeground()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Styles\ChatStyles.xaml");
+
+        Assert.DoesNotContain("Foreground=\"White\"", xaml);
+        Assert.Contains("TextOnAccentFillColorPrimaryBrush", xaml);
+    }
+
+    [Fact]
     public void AppXaml_DoesNotDeclareASecondUiMotionInstance()
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\App.xaml");
@@ -291,6 +302,91 @@ public sealed class XamlComplianceTests
         Assert.Contains("return _options.Count > 0 ? _options[0] : null;", code);
         Assert.Contains("OnPropertyChanged(nameof(HasSelection));", code);
     }
+
+    [Fact]
+    public void ConversationProjectPickerDialog_ButtonsAreResourceDriven()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Navigation\ConversationProjectPickerDialog.xaml");
+
+        Assert.DoesNotContain("PrimaryButtonText=\"Move\"", xaml);
+        Assert.DoesNotContain("CloseButtonText=\"Cancel\"", xaml);
+        Assert.Contains("x:Uid=\"SessionProjectPickerDialog\"", xaml);
+    }
+
+    [Fact]
+    public void ChatView_AskUserAndLoadingOverlayTextsAreLocalized()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml");
+
+        Assert.DoesNotContain("Text=\"Agent 需要你的输入\"", xaml);
+        Assert.DoesNotContain("Content=\"提交答案\"", xaml);
+        Assert.DoesNotContain("AutomationProperties.Name=\"会话加载中\"", xaml);
+        Assert.Contains("x:Uid=\"ChatViewAskUserTitle\"", xaml);
+        Assert.Contains("x:Uid=\"ChatViewAskUserSubmitButton\"", xaml);
+        Assert.Contains("x:Uid=\"ChatViewLoadingOverlay\"", xaml);
+    }
+
+    [Fact]
+    public void SessionsListDialog_TextsAreLocalized()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Navigation\SessionsListDialog.xaml");
+
+        Assert.DoesNotContain("PlaceholderText=\"搜索会话\"", xaml);
+        Assert.Contains("x:Uid=\"SessionsDialog\"", xaml);
+        Assert.Contains("x:Uid=\"SessionsDialogSearchBox\"", xaml);
+    }
+
+    [Fact]
+    public void ConfigurationEditorDialog_TextsAreLocalized()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\ConfigurationEditorDialog.xaml");
+
+        Assert.DoesNotContain("Header=\"名称\"", xaml);
+        Assert.DoesNotContain("PlaceholderText=\"例如：本地 Agent / 远程测试环境\"", xaml);
+        Assert.DoesNotContain("Text=\"保存后会自动与“配置”卡片联动。\"", xaml);
+        Assert.Contains("x:Uid=\"ConfigurationEditorDialog\"", xaml);
+        Assert.Contains("x:Uid=\"ConfigurationEditorDialogName\"", xaml);
+        Assert.Contains("x:Uid=\"ConfigurationEditorDialogHint\"", xaml);
+    }
+
+    [Fact]
+    public void MiniChatView_TextsAreLocalized()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml");
+
+        Assert.DoesNotContain("PlaceholderText=\"选择会话\"", xaml);
+        Assert.DoesNotContain("PlaceholderText=\"输入消息\"", xaml);
+        Assert.Contains("x:Uid=\"MiniChatSessionSelector\"", xaml);
+        Assert.Contains("x:Uid=\"MiniChatReturnButton\"", xaml);
+        Assert.Contains("x:Uid=\"MiniChatInputBox\"", xaml);
+        Assert.Contains("x:Uid=\"MiniChatSendButton\"", xaml);
+    }
+
+    [Fact]
+    public void AgentProfileEditor_InteractiveTextsExposeLocalizationUids()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AgentProfileEditorPage.xaml");
+        var zhHans = LoadText(@"SalmonEgg\SalmonEgg\Strings\zh-Hans\Resources.resw");
+
+        Assert.Contains("x:Uid=\"AgentProfileEditorName\"", xaml);
+        Assert.Contains("x:Uid=\"AgentProfileEditorAdvancedTitle\"", xaml);
+        Assert.Contains("x:Uid=\"AgentProfileEditorCancelButton\"", xaml);
+        Assert.Contains("AgentProfileEditorName.Header", zhHans);
+        Assert.Contains("AgentProfileEditorPageTitleNew", zhHans);
+        Assert.Contains("AgentProfileEditorPageTitleEdit", zhHans);
+    }
+
+    [Fact]
+    public void DiscoverSessionsPage_UsesLocalizationUidsForVisibleCopy()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Discover\DiscoverSessionsPage.xaml");
+
+        Assert.Contains("x:Uid=\"DiscoverSessionsTitle\"", xaml);
+        Assert.Contains("x:Uid=\"DiscoverSessionsNoSelectionTitle\"", xaml);
+        Assert.Contains("x:Uid=\"DiscoverSessionsConnectionError\"", xaml);
+        Assert.Contains("x:Uid=\"DiscoverSessionsImportButton\"", xaml);
+    }
+
 
     private static string LoadXaml(string relativePath)
     {

@@ -595,4 +595,256 @@
   <data name="ChatAcpProfileSelector.PlaceholderText" xml:space="preserve">
     <value>选择 ACP 配置文件</value>
   </data>
+  <data name="SettingsBreadcrumbRoot" xml:space="preserve">
+    <value>设置</value>
+  </data>
+  <data name="TitleBarBackButton.ToolTipService.ToolTip" xml:space="preserve">
+    <value>返回</value>
+  </data>
+  <data name="TitleBarBackButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>返回</value>
+  </data>
+  <data name="TitleBarToggleLeftNavButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>切换侧边栏</value>
+  </data>
+  <data name="TitleBarToggleLeftNavButtonCollapse.ToolTip" xml:space="preserve">
+    <value>收起侧边栏</value>
+  </data>
+  <data name="TitleBarToggleLeftNavButtonExpand.ToolTip" xml:space="preserve">
+    <value>展开侧边栏</value>
+  </data>
+  <data name="TitleBarMiniWindowButton.ToolTipService.ToolTip" xml:space="preserve">
+    <value>打开迷你窗口</value>
+  </data>
+  <data name="TitleBarMiniWindowButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>打开迷你窗口</value>
+  </data>
+  <data name="NavAddProjectLabel.Text" xml:space="preserve">
+    <value>添加项目</value>
+  </data>
+  <data name="SessionsDialog.CloseButtonText" xml:space="preserve">
+    <value>关闭</value>
+  </data>
+  <data name="SessionsDialogSearchBox.PlaceholderText" xml:space="preserve">
+    <value>搜索会话</value>
+  </data>
+  <data name="SessionsDialogSearchBox.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>搜索会话</value>
+  </data>
+  <data name="SessionsDialogDefaultTitle" xml:space="preserve">
+    <value>会话</value>
+  </data>
+  <data name="ConfigurationEditorDialog.Title" xml:space="preserve">
+    <value>编辑配置</value>
+  </data>
+  <data name="ConfigurationEditorDialog.PrimaryButtonText" xml:space="preserve">
+    <value>保存</value>
+  </data>
+  <data name="ConfigurationEditorDialog.SecondaryButtonText" xml:space="preserve">
+    <value>取消</value>
+  </data>
+  <data name="ConfigurationEditorDialogName.Header" xml:space="preserve">
+    <value>名称</value>
+  </data>
+  <data name="ConfigurationEditorDialogName.PlaceholderText" xml:space="preserve">
+    <value>例如：本地 Agent / 远程测试环境</value>
+  </data>
+  <data name="ConfigurationEditorDialogTransport.Header" xml:space="preserve">
+    <value>传输协议</value>
+  </data>
+  <data name="ConfigurationEditorDialogCommand.Header" xml:space="preserve">
+    <value>执行命令</value>
+  </data>
+  <data name="ConfigurationEditorDialogCommand.PlaceholderText" xml:space="preserve">
+    <value>例如：python / node / agent.exe</value>
+  </data>
+  <data name="ConfigurationEditorDialogArgs.Header" xml:space="preserve">
+    <value>参数</value>
+  </data>
+  <data name="ConfigurationEditorDialogArgs.PlaceholderText" xml:space="preserve">
+    <value>例如：server.py --port 8080</value>
+  </data>
+  <data name="ConfigurationEditorDialogServerUrl.Header" xml:space="preserve">
+    <value>服务器地址</value>
+  </data>
+  <data name="ConfigurationEditorDialogServerUrl.PlaceholderText" xml:space="preserve">
+    <value>wss://example.com 或 http://localhost:8080/sse</value>
+  </data>
+  <data name="ConfigurationEditorDialogHint.Text" xml:space="preserve">
+    <value>保存后会自动与“配置”卡片联动。</value>
+  </data>
+  <data name="MiniChatSessionSelector.PlaceholderText" xml:space="preserve">
+    <value>选择会话</value>
+  </data>
+  <data name="MiniChatReturnButton.ToolTipService.ToolTip" xml:space="preserve">
+    <value>返回主窗口</value>
+  </data>
+  <data name="MiniChatReturnButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>返回主窗口</value>
+  </data>
+  <data name="MiniChatInputBox.PlaceholderText" xml:space="preserve">
+    <value>输入消息</value>
+  </data>
+  <data name="MiniChatSendButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>发送</value>
+  </data>
+  <data name="ChatViewAskUserTitle.Text" xml:space="preserve">
+    <value>Agent 需要你的输入</value>
+  </data>
+  <data name="ChatViewAskUserSubmitButton.Content" xml:space="preserve">
+    <value>提交答案</value>
+  </data>
+  <data name="ChatViewLoadingOverlay.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>会话加载中</value>
+  </data>
+  <data name="DataStorage_ClearCacheDialog.Title" xml:space="preserve">
+    <value>清理缓存</value>
+  </data>
+  <data name="DataStorage_ClearCacheDialog.Content" xml:space="preserve">
+    <value>将删除本地缓存目录下的所有文件。</value>
+  </data>
+  <data name="DataStorage_ClearCacheDialog.PrimaryButtonText" xml:space="preserve">
+    <value>清理</value>
+  </data>
+  <data name="DataStorage_ClearCacheDialog.SecondaryButtonText" xml:space="preserve">
+    <value>取消</value>
+  </data>
+  <data name="DataStorage_ResetPreferencesDialog.Title" xml:space="preserve">
+    <value>恢复默认设置</value>
+  </data>
+  <data name="DataStorage_ResetPreferencesDialog.Content" xml:space="preserve">
+    <value>将恢复常规、外观、数据与存储、快捷键等设置到默认值。</value>
+  </data>
+  <data name="DataStorage_ResetPreferencesDialog.PrimaryButtonText" xml:space="preserve">
+    <value>恢复</value>
+  </data>
+  <data name="DataStorage_ResetPreferencesDialog.SecondaryButtonText" xml:space="preserve">
+    <value>取消</value>
+  </data>
+  <data name="DataStorage_ClearAllLocalDataDialog.Title" xml:space="preserve">
+    <value>清空所有本地数据</value>
+  </data>
+  <data name="DataStorage_ClearAllLocalDataDialog.Content" xml:space="preserve">
+    <value>这将删除所有本地数据（配置、日志、缓存、导出等）。该操作不可撤销。</value>
+  </data>
+  <data name="DataStorage_ClearAllLocalDataDialog.PrimaryButtonText" xml:space="preserve">
+    <value>清空</value>
+  </data>
+  <data name="DataStorage_ClearAllLocalDataDialog.SecondaryButtonText" xml:space="preserve">
+    <value>取消</value>
+  </data>
+  <data name="UiInteractionInfoDialogTitle" xml:space="preserve">
+    <value>提示</value>
+  </data>
+  <data name="UiInteractionConfirmButtonText" xml:space="preserve">
+    <value>确定</value>
+  </data>
+  <data name="UiInteractionCancelButtonText" xml:space="preserve">
+    <value>取消</value>
+  </data>
+  <data name="UiInteractionPickFolderTitle" xml:space="preserve">
+    <value>添加项目</value>
+  </data>
+  <data name="AgentProfileEditorPageTitleNew" xml:space="preserve">
+    <value>新建</value>
+  </data>
+  <data name="AgentProfileEditorPageTitleEdit" xml:space="preserve">
+    <value>编辑</value>
+  </data>
+  <data name="AgentProfileEditorName.Header" xml:space="preserve">
+    <value>名称</value>
+  </data>
+  <data name="AgentProfileEditorName.PlaceholderText" xml:space="preserve">
+    <value>例如：本地 Agent / 远程测试环境</value>
+  </data>
+  <data name="AgentProfileEditorTransport.Header" xml:space="preserve">
+    <value>传输协议</value>
+  </data>
+  <data name="AgentProfileEditorCommand.Header" xml:space="preserve">
+    <value>执行命令</value>
+  </data>
+  <data name="AgentProfileEditorCommand.PlaceholderText" xml:space="preserve">
+    <value>例如：python / node / agent.exe</value>
+  </data>
+  <data name="AgentProfileEditorArgs.Header" xml:space="preserve">
+    <value>参数</value>
+  </data>
+  <data name="AgentProfileEditorArgs.PlaceholderText" xml:space="preserve">
+    <value>例如：server.py --port 8080</value>
+  </data>
+  <data name="AgentProfileEditorServerUrl.Header" xml:space="preserve">
+    <value>服务器地址</value>
+  </data>
+  <data name="AgentProfileEditorServerUrl.PlaceholderText" xml:space="preserve">
+    <value>wss://example.com 或 http://localhost:8080/sse</value>
+  </data>
+  <data name="AgentProfileEditorAdvancedTitle.Text" xml:space="preserve">
+    <value>高级选项</value>
+  </data>
+  <data name="AgentProfileEditorAuthTitle.Text" xml:space="preserve">
+    <value>认证</value>
+  </data>
+  <data name="AgentProfileEditorToken.Header" xml:space="preserve">
+    <value>Token（可选）</value>
+  </data>
+  <data name="AgentProfileEditorApiKey.Header" xml:space="preserve">
+    <value>API Key（可选）</value>
+  </data>
+  <data name="AgentProfileEditorProxyTitle.Text" xml:space="preserve">
+    <value>代理</value>
+  </data>
+  <data name="AgentProfileEditorProxyEnabled.Header" xml:space="preserve">
+    <value>启用代理</value>
+  </data>
+  <data name="AgentProfileEditorProxyUrl.Header" xml:space="preserve">
+    <value>代理 URL</value>
+  </data>
+  <data name="AgentProfileEditorProxyUrl.PlaceholderText" xml:space="preserve">
+    <value>http://proxy:8080</value>
+  </data>
+  <data name="AgentProfileEditorConnectionTitle.Text" xml:space="preserve">
+    <value>连接</value>
+  </data>
+  <data name="AgentProfileEditorHeartbeat.Header" xml:space="preserve">
+    <value>心跳间隔（秒）</value>
+  </data>
+  <data name="AgentProfileEditorTimeout.Header" xml:space="preserve">
+    <value>连接超时（秒）</value>
+  </data>
+  <data name="AgentProfileEditorCancelButton.Content" xml:space="preserve">
+    <value>取消</value>
+  </data>
+  <data name="AgentProfileEditorSaveButton.Content" xml:space="preserve">
+    <value>保存</value>
+  </data>
+  <data name="DiscoverSessionsTitle.Text" xml:space="preserve">
+    <value>发现会话</value>
+  </data>
+  <data name="DiscoverSessionsSubtitle.Text" xml:space="preserve">
+    <value>选择一个节点来浏览会话</value>
+  </data>
+  <data name="DiscoverSessionsNoSelectionTitle.Text" xml:space="preserve">
+    <value>未选择节点</value>
+  </data>
+  <data name="DiscoverSessionsNoSelectionDescription.Text" xml:space="preserve">
+    <value>请在左侧选择一个 Agent 节点以浏览其可导入的会话</value>
+  </data>
+  <data name="DiscoverSessionsImportableListLabel.Text" xml:space="preserve">
+    <value>可导入的会话列表</value>
+  </data>
+  <data name="DiscoverSessionsRefreshText.Text" xml:space="preserve">
+    <value>刷新列表</value>
+  </data>
+  <data name="DiscoverSessionsConnectionError.Title" xml:space="preserve">
+    <value>服务连接异常</value>
+  </data>
+  <data name="DiscoverSessionsEmptyTitle.Text" xml:space="preserve">
+    <value>当前节点没有可导入的会话</value>
+  </data>
+  <data name="DiscoverSessionsEmptyDescription.Text" xml:space="preserve">
+    <value>可以稍后刷新列表，或确认该 Agent 是否支持列出历史会话。</value>
+  </data>
+  <data name="DiscoverSessionsImportButton.Content" xml:space="preserve">
+    <value>导入会话</value>
+  </data>
 </root>

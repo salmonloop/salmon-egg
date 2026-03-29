@@ -5,14 +5,16 @@ using System.ComponentModel;
 using System.Linq;
 using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Presentation.ViewModels.Navigation;
+using Windows.ApplicationModel.Resources;
 
 namespace SalmonEgg.Presentation.Views.Navigation;
 
 public sealed partial class SessionsListDialog : ContentDialog, INotifyPropertyChanged
 {
+    private static readonly ResourceLoader ResourceLoader = ResourceLoader.GetForViewIndependentUse();
     private readonly IReadOnlyList<SessionNavItemViewModel> _allSessions;
     private string _filterText = string.Empty;
-    private string _dialogTitle = "会话";
+    private string _dialogTitle = ResolveResourceString("SessionsDialogDefaultTitle", "会话");
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -55,7 +57,9 @@ public sealed partial class SessionsListDialog : ContentDialog, INotifyPropertyC
     public SessionsListDialog(string title, IReadOnlyList<SessionNavItemViewModel> sessions)
     {
         _allSessions = sessions ?? Array.Empty<SessionNavItemViewModel>();
-        _dialogTitle = string.IsNullOrWhiteSpace(title) ? "会话" : title.Trim();
+        _dialogTitle = string.IsNullOrWhiteSpace(title)
+            ? ResolveResourceString("SessionsDialogDefaultTitle", "会话")
+            : title.Trim();
 
         InitializeComponent();
         ApplyFilter();
@@ -96,5 +100,10 @@ public sealed partial class SessionsListDialog : ContentDialog, INotifyPropertyC
 
     private void OnPropertyChanged(string propertyName)
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-}
 
+    private static string ResolveResourceString(string resourceKey, string fallback)
+    {
+        var value = ResourceLoader.GetString(resourceKey);
+        return string.IsNullOrWhiteSpace(value) ? fallback : value;
+    }
+}

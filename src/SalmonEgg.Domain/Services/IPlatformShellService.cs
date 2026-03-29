@@ -8,6 +8,5 @@ public interface IPlatformShellService
 
     Task OpenFileAsync(string path);
 
-    Task CopyToClipboardAsync(string text);
+    Task<bool> CopyToClipboardAsync(string text);
 }
-

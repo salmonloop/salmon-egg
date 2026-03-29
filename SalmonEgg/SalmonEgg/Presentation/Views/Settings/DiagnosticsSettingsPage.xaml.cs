@@ -16,7 +16,7 @@ public sealed partial class DiagnosticsSettingsPage : SettingsPageBase
     {
         ViewModel = App.ServiceProvider.GetRequiredService<DiagnosticsSettingsViewModel>();
         InitializeComponent();
-        SetSettingsBreadcrumb("诊断与日志");
+        SetSettingsBreadcrumbFromResource("SettingsNav_Diagnostics.Content", "诊断与日志");
         Unloaded += OnUnloaded;
     }
 

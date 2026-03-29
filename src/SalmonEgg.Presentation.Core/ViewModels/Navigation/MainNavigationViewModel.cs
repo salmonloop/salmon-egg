@@ -301,7 +301,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         {
             var all = BuildSessionItemsForProject(projectId, limit: null);
             await _ui.ShowSessionsListDialogAsync(
-                title: "会话",
+                title: string.Empty,
                 sessions: all,
                 onPickSession: id => ActivateSessionFromSessionsList(id, projectId)).ConfigureAwait(true);
         }

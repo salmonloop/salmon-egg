@@ -182,7 +182,7 @@
                                 BorderThickness="1">
                             <StackPanel Spacing="16">
                                 <StackPanel Spacing="4">
-                                    <TextBlock Text="Agent 需要你的输入"
+                                    <TextBlock x:Uid="ChatViewAskUserTitle"
                                                FontSize="14"
                                                FontWeight="SemiBold"
                                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
@@ -237,7 +237,7 @@
                                            TextWrapping="WrapWholeWords"/>
 
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                    <Button Content="提交答案"
+                                    <Button x:Uid="ChatViewAskUserSubmitButton"
                                             Command="{x:Bind ViewModel.AskUserSubmitCommand, Mode=OneWay}"
                                             Style="{StaticResource AccentButtonStyle}"/>
                                 </StackPanel>
@@ -266,8 +266,8 @@
 
         <!-- 加载遮罩：覆盖空态与会话态的整个聊天页生命周期 -->
         <ContentControl x:Name="LoadingOverlayPresenter"
+                        x:Uid="ChatViewLoadingOverlay"
                         AutomationProperties.AutomationId="ChatView.LoadingOverlay"
-                        AutomationProperties.Name="会话加载中"
                         HorizontalAlignment="Stretch"
                         VerticalAlignment="Stretch"
                         HorizontalContentAlignment="Stretch"

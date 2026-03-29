@@ -19,7 +19,7 @@ public sealed partial class AgentProfileEditorPage : SettingsPageBase
             nameof(PageTitle),
             typeof(string),
             typeof(AgentProfileEditorPage),
-            new PropertyMetadata("新建"));
+            new PropertyMetadata(string.Empty));
 
     public string PageTitle
     {
@@ -37,6 +37,7 @@ public sealed partial class AgentProfileEditorPage : SettingsPageBase
         _profiles = App.ServiceProvider.GetRequiredService<AcpProfilesViewModel>();
 
         InitializeComponent();
+        PageTitle = ResolveResourceString("AgentProfileEditorPageTitleNew", "新建");
         UpdateBreadcrumb();
     }
 
@@ -48,14 +49,14 @@ public sealed partial class AgentProfileEditorPage : SettingsPageBase
         {
             // Returning to this page should not keep any old input.
             ViewModel.LoadBlankConfiguration();
-            PageTitle = "新建";
+            PageTitle = ResolveResourceString("AgentProfileEditorPageTitleNew", "新建");
             UpdateBreadcrumb();
             return;
         }
 
         if (e.Parameter is AgentProfileEditorArgs args && args.IsEditing && !string.IsNullOrWhiteSpace(args.ProfileId))
         {
-            PageTitle = "编辑";
+            PageTitle = ResolveResourceString("AgentProfileEditorPageTitleEdit", "编辑");
             var config = await _configurationService.LoadConfigurationAsync(args.ProfileId);
             if (config != null)
             {
@@ -70,7 +71,7 @@ public sealed partial class AgentProfileEditorPage : SettingsPageBase
             return;
         }
 
-        PageTitle = "新建";
+        PageTitle = ResolveResourceString("AgentProfileEditorPageTitleNew", "新建");
         ViewModel.LoadBlankConfiguration();
         UpdateBreadcrumb();
     }
@@ -78,8 +79,8 @@ public sealed partial class AgentProfileEditorPage : SettingsPageBase
     private void UpdateBreadcrumb()
     {
         SetBreadcrumb(
-            SettingsBreadcrumbItem.Link("设置", "General"),
-            SettingsBreadcrumbItem.Link("Agent (ACP)", "AgentAcp"),
+            SettingsBreadcrumbItem.Link(ResolveResourceString("SettingsBreadcrumbRoot", "设置"), "General"),
+            SettingsBreadcrumbItem.Link(ResolveResourceString("SettingsNav_AgentAcp.Content", "Agent (ACP)"), "AgentAcp"),
             SettingsBreadcrumbItem.Current(PageTitle));
     }
 

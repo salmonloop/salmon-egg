@@ -98,12 +98,16 @@ public sealed partial class DiagnosticsSettingsViewModel : ObservableObject
             RefreshLatestLogFile();
             if (string.IsNullOrWhiteSpace(LatestLogFilePath) || !File.Exists(LatestLogFilePath))
             {
-                await _shell.CopyToClipboardAsync("No log file found.").ConfigureAwait(false);
+                _ = await _shell.CopyToClipboardAsync("No log file found.").ConfigureAwait(false);
                 return;
             }
 
             var text = await ReadTailAsync(LatestLogFilePath, 8000).ConfigureAwait(false);
-            await _shell.CopyToClipboardAsync(text).ConfigureAwait(false);
+            var copied = await _shell.CopyToClipboardAsync(text).ConfigureAwait(false);
+            if (!copied)
+            {
+                _logger.LogWarning("Clipboard copy is not supported on the current platform.");
+            }
         }
         catch (Exception ex)
         {

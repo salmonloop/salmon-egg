@@ -12,6 +12,6 @@ public sealed partial class AboutPage : SettingsPageBase
     {
         ViewModel = App.ServiceProvider.GetRequiredService<AboutViewModel>();
         InitializeComponent();
-        SetSettingsBreadcrumb("关于");
+        SetSettingsBreadcrumbFromResource("SettingsNav_About.Content", "关于");
     }
 }

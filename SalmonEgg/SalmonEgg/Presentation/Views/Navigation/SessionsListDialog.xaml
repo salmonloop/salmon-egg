@@ -7,15 +7,15 @@
     xmlns:nav="using:SalmonEgg.Presentation.ViewModels.Navigation"
     xmlns:navUi="using:SalmonEgg.Presentation.Navigation"
     mc:Ignorable="d"
+    x:Uid="SessionsDialog"
     AutomationProperties.AutomationId="SessionsDialog"
     Title="{x:Bind DialogTitle, Mode=OneWay}"
-    CloseButtonText="关闭"
     DefaultButton="Close">
 
     <Grid RowDefinitions="Auto,*"
           MinWidth="420"
           MaxHeight="560">
-        <TextBox PlaceholderText="搜索会话"
+        <TextBox x:Uid="SessionsDialogSearchBox"
                  AutomationProperties.AutomationId="SessionsDialog.SearchBox"
                  Text="{x:Bind FilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                  Margin="0,0,0,12"/>

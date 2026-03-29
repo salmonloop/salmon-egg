@@ -94,7 +94,6 @@
                 <NavigationViewItem.Content>
                     <Grid Visibility="{x:Bind IsPaneOpen, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                         <TextBlock x:Uid="NavAddProjectLabel"
-                                   Text="添加项目"
                                    TextTrimming="CharacterEllipsis"
                                    MaxLines="1"
                                    VerticalAlignment="Center" />
@@ -307,24 +306,21 @@
                                 Margin="8,0,0,0"
                                 VerticalAlignment="Center">
                         <Button x:Name="TitleBarBackButton"
+                                x:Uid="TitleBarBackButton"
                                 Style="{StaticResource TitleBarCommandButtonStyle}"
-                                ToolTipService.ToolTip="Back"
-                                AutomationProperties.Name="Back"
                                 Click="OnTitleBarBackClick">
                             <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE72B;"/>
                         </Button>
                         <Button x:Name="TitleBarToggleLeftNavButton"
+                                x:Uid="TitleBarToggleLeftNavButton"
                                 Style="{StaticResource TitleBarCommandButtonStyle}"
-                                ToolTipService.ToolTip="Collapse Sidebar"
                                 AutomationProperties.AutomationId="TitleBar.ToggleSidebar"
-                                AutomationProperties.Name="Toggle Sidebar"
                                 Click="OnToggleLeftNavClick">
                             <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE700;"/>
                         </Button>
                         <Button x:Name="TitleBarMiniWindowButton"
+                                x:Uid="TitleBarMiniWindowButton"
                                 Style="{StaticResource TitleBarCommandButtonStyle}"
-                                ToolTipService.ToolTip="Mini Window"
-                                AutomationProperties.Name="Mini Window"
                                 Visibility="{x:Bind Preferences.IsMiniWindowSupported, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                 Command="{x:Bind ChatVM.OpenMiniWindowCommand}">
                             <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xEE49;" FontSize="14" />

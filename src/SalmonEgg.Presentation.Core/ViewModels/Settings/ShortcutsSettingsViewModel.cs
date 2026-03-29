@@ -160,6 +160,7 @@ public sealed partial class ShortcutEntryViewModel : ObservableObject
         Name = name;
         DefaultGesture = defaultGesture;
         _gesture = defaultGesture;
+        RestoreDefaultCommand = new RelayCommand(RestoreDefault);
     }
 
     public string ActionId { get; }
@@ -167,6 +168,8 @@ public sealed partial class ShortcutEntryViewModel : ObservableObject
     public string Name { get; }
 
     public string DefaultGesture { get; }
+
+    public IRelayCommand RestoreDefaultCommand { get; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsGestureValid))]
@@ -208,6 +211,11 @@ public sealed partial class ShortcutEntryViewModel : ObservableObject
 
             return key.Length is >= 1 and <= 12;
         }
+    }
+
+    private void RestoreDefault()
+    {
+        Gesture = DefaultGesture;
     }
 }
 

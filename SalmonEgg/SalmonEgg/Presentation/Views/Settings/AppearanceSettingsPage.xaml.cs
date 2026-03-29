@@ -11,6 +11,6 @@ public sealed partial class AppearanceSettingsPage : SalmonEgg.Presentation.View
     {
         Preferences = App.ServiceProvider.GetRequiredService<AppPreferencesViewModel>();
         InitializeComponent();
-        SetSettingsBreadcrumb("外观");
+        SetSettingsBreadcrumbFromResource("SettingsNav_Appearance.Content", "外观");
     }
 }

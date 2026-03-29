@@ -78,8 +78,11 @@ public sealed partial class AboutViewModel : ObservableObject
         sb.AppendLine($"App: {AppName}");
         sb.AppendLine($"Version: {AppVersion}");
         sb.AppendLine($"Protocol: {ProtocolVersion}");
-        await _shell.CopyToClipboardAsync(sb.ToString()).ConfigureAwait(false);
-        await _ui.ShowInfoAsync("版本信息已复制到剪贴板。").ConfigureAwait(true);
+        var copied = await _shell.CopyToClipboardAsync(sb.ToString()).ConfigureAwait(false);
+        await _ui.ShowInfoAsync(copied
+                ? "版本信息已复制到剪贴板。"
+                : "当前平台暂不支持剪贴板复制。")
+            .ConfigureAwait(true);
     }
 
     private async Task NotifyMissingDocAsync(string path, string title)

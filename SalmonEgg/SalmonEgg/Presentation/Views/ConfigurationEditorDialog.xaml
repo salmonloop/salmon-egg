@@ -6,9 +6,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
-    Title="预设服务器"
-    PrimaryButtonText="保存"
-    SecondaryButtonText="取消"
+    x:Uid="ConfigurationEditorDialog"
     PrimaryButtonClick="OnSaveClick"
     SecondaryButtonClick="OnCancelClick">
 
@@ -17,40 +15,35 @@
     </ContentDialog.Resources>
 
     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Spacing="12" MinWidth="480" Padding="4">
+        <StackPanel Spacing="12" MinWidth="400" Padding="4">
             <InfoBar IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
                      Severity="Error"
                      IsClosable="True"
                      Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"/>
 
-            <TextBox Header="名称"
-                     PlaceholderText="例如：本地 Agent / 远程测试环境"
+            <TextBox x:Uid="ConfigurationEditorDialogName"
                      Text="{x:Bind ViewModel.Name, Mode=TwoWay}"/>
 
-            <ComboBox Header="传输协议"
+            <ComboBox x:Uid="ConfigurationEditorDialogTransport"
                       ItemsSource="{x:Bind ViewModel.TransportOptions, Mode=OneWay}"
                       SelectedItem="{x:Bind ViewModel.SelectedTransportOption, Mode=TwoWay}"
-                      DisplayMemberPath="Name"
-                      MinWidth="240"/>
+                      DisplayMemberPath="Name"/>
 
             <StackPanel Spacing="12"
                         Visibility="{x:Bind ViewModel.IsStdio, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                <TextBox Header="执行命令"
-                         PlaceholderText="例如：python / node / agent.exe"
+                <TextBox x:Uid="ConfigurationEditorDialogCommand"
                          Text="{x:Bind ViewModel.StdioCommand, Mode=TwoWay}"/>
-                <TextBox Header="参数"
-                         PlaceholderText="例如：server.py --port 8080"
+                <TextBox x:Uid="ConfigurationEditorDialogArgs"
                          Text="{x:Bind ViewModel.StdioArgs, Mode=TwoWay}"/>
             </StackPanel>
 
             <StackPanel Spacing="12"
                         Visibility="{x:Bind ViewModel.IsRemote, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                <TextBox Header="服务器地址"
-                         PlaceholderText="wss://example.com 或 http://localhost:8080/sse"
+                <TextBox x:Uid="ConfigurationEditorDialogServerUrl"
                          Text="{x:Bind ViewModel.ServerUrl, Mode=TwoWay}"/>
             </StackPanel>
 
-            <TextBlock Text="保存后会自动与“配置”卡片联动。"
+            <TextBlock x:Uid="ConfigurationEditorDialogHint"
                        Opacity="0.65"
                        FontSize="12"
                        TextWrapping="Wrap"/>

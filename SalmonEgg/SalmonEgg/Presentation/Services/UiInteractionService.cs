@@ -6,11 +6,14 @@ using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.Views.Navigation;
+using Windows.ApplicationModel.Resources;
 
 namespace SalmonEgg.Presentation.Services;
 
 public sealed class UiInteractionService : IUiInteractionService
 {
+    private static readonly ResourceLoader ResourceLoader = ResourceLoader.GetForViewIndependentUse();
+
     public async Task ShowInfoAsync(string message)
     {
         var xamlRoot = GetXamlRoot();
@@ -22,9 +25,9 @@ public sealed class UiInteractionService : IUiInteractionService
         var dialog = new ContentDialog
         {
             XamlRoot = xamlRoot,
-            Title = "提示",
+            Title = ResolveResourceString("UiInteractionInfoDialogTitle", "提示"),
             Content = message ?? string.Empty,
-            CloseButtonText = "确定"
+            CloseButtonText = ResolveResourceString("UiInteractionConfirmButtonText", "确定")
         };
 
         await dialog.ShowAsync();
@@ -43,8 +46,12 @@ public sealed class UiInteractionService : IUiInteractionService
             XamlRoot = xamlRoot,
             Title = title ?? string.Empty,
             Content = message ?? string.Empty,
-            PrimaryButtonText = string.IsNullOrWhiteSpace(primaryButtonText) ? "确定" : primaryButtonText,
-            CloseButtonText = string.IsNullOrWhiteSpace(closeButtonText) ? "取消" : closeButtonText,
+            PrimaryButtonText = string.IsNullOrWhiteSpace(primaryButtonText)
+                ? ResolveResourceString("UiInteractionConfirmButtonText", "确定")
+                : primaryButtonText,
+            CloseButtonText = string.IsNullOrWhiteSpace(closeButtonText)
+                ? ResolveResourceString("UiInteractionCancelButtonText", "取消")
+                : closeButtonText,
             DefaultButton = ContentDialogButton.Primary
         };
 
@@ -72,8 +79,12 @@ public sealed class UiInteractionService : IUiInteractionService
             XamlRoot = xamlRoot,
             Title = title ?? string.Empty,
             Content = input,
-            PrimaryButtonText = primaryButtonText ?? "确定",
-            CloseButtonText = closeButtonText ?? "取消",
+            PrimaryButtonText = string.IsNullOrWhiteSpace(primaryButtonText)
+                ? ResolveResourceString("UiInteractionConfirmButtonText", "确定")
+                : primaryButtonText,
+            CloseButtonText = string.IsNullOrWhiteSpace(closeButtonText)
+                ? ResolveResourceString("UiInteractionCancelButtonText", "取消")
+                : closeButtonText,
             DefaultButton = ContentDialogButton.Primary
         };
 
@@ -88,18 +99,19 @@ public sealed class UiInteractionService : IUiInteractionService
 
     public async Task<string?> PickFolderAsync()
     {
-#if WINDOWS
         try
         {
             var picker = new Windows.Storage.Pickers.FolderPicker();
             picker.FileTypeFilter.Add("*");
 
+#if WINDOWS
             var window = App.MainWindowInstance;
             if (window != null)
             {
                 var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
                 WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
             }
+#endif
 
             var folder = await picker.PickSingleFolderAsync();
             return folder?.Path;
@@ -108,12 +120,11 @@ public sealed class UiInteractionService : IUiInteractionService
         {
             // Fall back to manual input below.
         }
-#endif
 
         return await PromptTextAsync(
-            title: "添加项目",
-            primaryButtonText: "确定",
-            closeButtonText: "取消",
+            title: ResolveResourceString("UiInteractionPickFolderTitle", "添加项目"),
+            primaryButtonText: ResolveResourceString("UiInteractionConfirmButtonText", "确定"),
+            closeButtonText: ResolveResourceString("UiInteractionCancelButtonText", "取消"),
             initialText: "").ConfigureAwait(true);
     }
 
@@ -154,7 +165,7 @@ public sealed class UiInteractionService : IUiInteractionService
         {
             return;
         }
-        var dialog = new SessionsListDialog(title ?? "会话", sessions)
+        var dialog = new SessionsListDialog(string.IsNullOrWhiteSpace(title) ? string.Empty : title, sessions)
         {
             XamlRoot = xamlRoot
         };
@@ -187,5 +198,11 @@ public sealed class UiInteractionService : IUiInteractionService
         {
             return null;
         }
+    }
+
+    private static string ResolveResourceString(string resourceKey, string fallback)
+    {
+        var value = ResourceLoader.GetString(resourceKey);
+        return string.IsNullOrWhiteSpace(value) ? fallback : value;
     }
 }

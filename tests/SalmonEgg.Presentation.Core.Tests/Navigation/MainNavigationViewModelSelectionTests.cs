@@ -432,7 +432,7 @@ public sealed class MainNavigationViewModelSelectionTests
             var ui = new Mock<IUiInteractionService>();
             IReadOnlyList<SessionNavItemViewModel>? capturedSessions = null;
             ui.Setup(service => service.ShowSessionsListDialogAsync(
-                    "会话",
+                    It.IsAny<string>(),
                     It.IsAny<IReadOnlyList<SessionNavItemViewModel>>(),
                     It.IsAny<Action<string>>()))
                 .Callback<string, IReadOnlyList<SessionNavItemViewModel>, Action<string>>((_, sessions, _) => capturedSessions = sessions)

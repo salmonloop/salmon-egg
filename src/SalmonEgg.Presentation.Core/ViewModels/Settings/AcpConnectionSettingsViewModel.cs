@@ -279,6 +279,36 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         }
     }
 
+    public async Task HandleConnectionToggleAsync(bool shouldConnect)
+    {
+        if (_connectionState.IsConnecting || _connectionState.IsInitializing)
+        {
+            return;
+        }
+
+        try
+        {
+            if (shouldConnect)
+            {
+                if (!_connectionState.IsConnected)
+                {
+                    await _connectionCommands.InitializeAndConnectCommand.ExecuteAsync(null);
+                }
+
+                return;
+            }
+
+            if (_connectionState.IsConnected)
+            {
+                await _connectionCommands.DisconnectCommand.ExecuteAsync(null);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to handle ACP connection toggle (ShouldConnect={ShouldConnect})", shouldConnect);
+        }
+    }
+
     private string? ResolveConnectedProfileName()
     {
         var id = _preferences.LastSelectedServerId;
