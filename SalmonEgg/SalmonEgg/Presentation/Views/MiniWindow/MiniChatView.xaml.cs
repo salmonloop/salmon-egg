@@ -83,6 +83,25 @@ public sealed partial class MiniChatView : Page
         RequestInitialScroll();
     }
 
+    private void OnMessagesListLayoutUpdated(object? sender, object e)
+    {
+        if (!_initialScrollGate.HasPending || _userScrolledUp)
+        {
+            return;
+        }
+
+        var lastItemContainerGenerated = HasLastItemContainerGenerated(ViewModel.MessageHistory.Count);
+        if (TryCompletePendingInitialScroll(lastItemContainerGenerated))
+        {
+            return;
+        }
+
+        if (lastItemContainerGenerated)
+        {
+            RequestInitialScroll();
+        }
+    }
+
     private void EnsureViewModelTracking()
     {
         if (_isTrackingViewModel)
@@ -114,11 +133,6 @@ public sealed partial class MiniChatView : Page
             return;
         }
 
-        if (_suspendAutoScrollTracking && _initialScrollGate.HasPending)
-        {
-            return;
-        }
-
         // Only evaluate at-bottom when the scroll has settled (not intermediate).
         // During virtualization layout changes, intermediate frames have transient
         // ScrollableHeight values that cause false at-bottom detection.
@@ -127,13 +141,17 @@ public sealed partial class MiniChatView : Page
             return;
         }
 
-        var verticalOffset = _scrollViewer.VerticalOffset;
-        var maxOffset = _scrollViewer.ScrollableHeight;
-
-        if (verticalOffset >= maxOffset - BottomThreshold)
+        if (_initialScrollGate.HasPending && !_userScrolledUp && TryCompletePendingInitialScroll())
         {
-            _userScrolledUp = false;
+            return;
         }
+
+        if (_suspendAutoScrollTracking)
+        {
+            return;
+        }
+
+        _userScrolledUp = !IsScrollViewerAtBottom();
     }
 
     private void OnScrollViewerPointerPressed(object sender, PointerRoutedEventArgs e)
@@ -263,8 +281,7 @@ public sealed partial class MiniChatView : Page
                 RequestInitialScroll(attempt + 1);
                 break;
             default:
-                _initialScrollGate.ClearPending();
-                ReleaseAutoScrollTracking();
+                _initialScrollGate.CancelInFlight();
                 break;
         }
     }
@@ -287,17 +304,24 @@ public sealed partial class MiniChatView : Page
         {
             return false;
         }
-        
+
+        MessagesList.ScrollIntoView(ViewModel.MessageHistory[count - 1]);
+
         // Avoid synchronous UpdateLayout(); rely on virtualizer's async layout pass
         // and the retry mechanism in InitialScrollAttemptPolicy.
         _scrollViewer.ChangeView(null, _scrollViewer.ScrollableHeight, null);
-        return _scrollViewer.VerticalOffset >= _scrollViewer.ScrollableHeight - BottomThreshold;
+        return IsInitialScrollReadyAndAtBottom(count);
     }
 
     private void RequestScrollToBottom()
     {
         try
         {
+            if (ViewModel.MessageHistory.Count > 0)
+            {
+                MessagesList.ScrollIntoView(ViewModel.MessageHistory[^1]);
+            }
+
             EnsureScrollViewerAttached();
             if (_scrollViewer != null)
             {
@@ -305,10 +329,6 @@ public sealed partial class MiniChatView : Page
                 return;
             }
 
-            if (_isMessagesListLoaded && ViewModel.MessageHistory.Count > 0)
-            {
-                MessagesList.ScrollIntoView(ViewModel.MessageHistory[^1]);
-            }
         }
         catch
         {
@@ -368,6 +388,60 @@ public sealed partial class MiniChatView : Page
         }
 
         return null;
+    }
+
+    private bool HasLastItemContainerGenerated(int itemCount)
+    {
+        if (!_isMessagesListLoaded || itemCount <= 0)
+        {
+            return false;
+        }
+
+        return MessagesList.ContainerFromIndex(itemCount - 1) is not null;
+    }
+
+    private bool IsInitialScrollReadyAndAtBottom(int itemCount)
+    {
+        if (!HasLastItemContainerGenerated(itemCount))
+        {
+            return false;
+        }
+
+        return IsScrollViewerAtBottom();
+    }
+
+    private bool IsScrollViewerAtBottom()
+    {
+        if (_scrollViewer == null)
+        {
+            return false;
+        }
+
+        return _scrollViewer.VerticalOffset >= _scrollViewer.ScrollableHeight - BottomThreshold;
+    }
+
+    private bool TryCompletePendingInitialScroll(bool? lastItemContainerGenerated = null)
+    {
+        if (!_initialScrollGate.HasPending || _scrollViewer == null)
+        {
+            return false;
+        }
+
+        var itemCount = ViewModel.MessageHistory.Count;
+        if (itemCount <= 0)
+        {
+            return false;
+        }
+
+        var hasLastItemContainer = lastItemContainerGenerated ?? HasLastItemContainerGenerated(itemCount);
+        if (!hasLastItemContainer || !IsScrollViewerAtBottom())
+        {
+            return false;
+        }
+
+        _ = _initialScrollGate.TryComplete(true);
+        ReleaseAutoScrollTracking();
+        return true;
     }
 
     private void StopInitialScrollForManualInteraction()

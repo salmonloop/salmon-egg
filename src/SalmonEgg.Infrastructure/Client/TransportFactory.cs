@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Text;
 using Serilog;
 using SalmonEgg.Domain.Interfaces;
 using SalmonEgg.Domain.Interfaces.Transport;
@@ -80,11 +82,60 @@ public class TransportFactory : ITransportFactory
 
        _logger.Information("创建 Stdio 传输：Command={Command}, Args={Args}", command, args);
 
-       var argsArray = string.IsNullOrWhiteSpace(args)
-           ? Array.Empty<string>()
-           : args.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+       var argsArray = ParseCommandLineArguments(args);
 
        return new StdioTransport(command.Trim(), argsArray, System.Text.Encoding.UTF8);
+   }
+
+   private static string[] ParseCommandLineArguments(string? args)
+   {
+       if (string.IsNullOrWhiteSpace(args))
+       {
+           return Array.Empty<string>();
+       }
+
+       var results = new List<string>();
+       var current = new StringBuilder();
+       char? activeQuote = null;
+
+       foreach (var character in args)
+       {
+           if ((character == '"' || character == '\''))
+           {
+               if (activeQuote == character)
+               {
+                   activeQuote = null;
+                   continue;
+               }
+
+               if (activeQuote == null)
+               {
+                   activeQuote = character;
+                   continue;
+               }
+           }
+
+           if (char.IsWhiteSpace(character) && activeQuote == null)
+           {
+               if (current.Length == 0)
+               {
+                   continue;
+               }
+
+               results.Add(current.ToString());
+               current.Clear();
+               continue;
+           }
+
+           current.Append(character);
+       }
+
+       if (current.Length > 0)
+       {
+           results.Add(current.ToString());
+       }
+
+       return results.ToArray();
    }
 
    /// <summary>

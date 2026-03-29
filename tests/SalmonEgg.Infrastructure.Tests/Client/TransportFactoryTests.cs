@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using Moq;
 using Serilog;
 using SalmonEgg.Domain.Models;
@@ -40,6 +41,33 @@ public sealed class TransportFactoryTests
         var transport = factory.CreateTransport(TransportType.Stdio, command: "agent", args: "--mode test");
 
         Assert.IsType<StdioTransport>(transport);
+    }
+
+    [Fact]
+    public void CreateTransport_Stdio_Should_Preserve_Quoted_Path_Arguments()
+    {
+        var factory = new TransportFactory(_logger);
+        const string scriptPath = @"C:\Users\shang\Project\salmon-acp\tests\SalmonEgg.GuiTests.Windows\Fixtures\Slow Replay Agent.ps1";
+
+        var transport = factory.CreateTransport(
+            TransportType.Stdio,
+            command: "powershell.exe",
+            args: $"-NoLogo -NoProfile -File \"{scriptPath}\"");
+
+        var stdioTransport = Assert.IsType<StdioTransport>(transport);
+        var argsField = typeof(StdioTransport).GetField("_args", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(argsField);
+
+        var parsedArgs = Assert.IsType<string[]>(argsField!.GetValue(stdioTransport));
+        Assert.Equal(
+            new[]
+            {
+                "-NoLogo",
+                "-NoProfile",
+                "-File",
+                scriptPath
+            },
+            parsedArgs);
     }
 
     [Fact]

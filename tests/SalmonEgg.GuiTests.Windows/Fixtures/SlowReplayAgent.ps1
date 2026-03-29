@@ -1,0 +1,141 @@
+$ErrorActionPreference = 'Stop'
+
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::UTF8
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::UTF8
+
+$sessionId = if ([string]::IsNullOrWhiteSpace($env:SALMONEGG_GUI_FAKE_REMOTE_REPLAY_SESSION_ID))
+{
+    'gui-remote-session-01'
+}
+else
+{
+    $env:SALMONEGG_GUI_FAKE_REMOTE_REPLAY_SESSION_ID
+}
+
+$messageCount = 60
+if ([int]::TryParse($env:SALMONEGG_GUI_FAKE_REMOTE_REPLAY_MESSAGE_COUNT, [ref]$messageCount) -and $messageCount -gt 0)
+{
+}
+else
+{
+    $messageCount = 60
+}
+
+$replayStartDelayMs = 120
+$chunkDelayMs = 12
+
+function Write-JsonLine([hashtable]$payload)
+{
+    $json = $payload | ConvertTo-Json -Compress -Depth 12
+    [Console]::Out.WriteLine($json)
+    [Console]::Out.Flush()
+}
+
+function New-TextContent([string]$text)
+{
+    return @{
+        type = 'text'
+        text = $text
+    }
+}
+
+function Send-Response($id, [hashtable]$result)
+{
+    Write-JsonLine @{
+        jsonrpc = '2.0'
+        id = $id
+        result = $result
+    }
+}
+
+function Send-Error($id, [int]$code, [string]$message)
+{
+    Write-JsonLine @{
+        jsonrpc = '2.0'
+        id = $id
+        error = @{
+            code = $code
+            message = $message
+        }
+    }
+}
+
+function Send-SessionUpdate([hashtable]$update)
+{
+    Write-JsonLine @{
+        jsonrpc = '2.0'
+        method = 'session/update'
+        params = @{
+            sessionId = $sessionId
+            update = $update
+        }
+    }
+}
+
+while (($line = [Console]::In.ReadLine()) -ne $null)
+{
+    if ([string]::IsNullOrWhiteSpace($line))
+    {
+        continue
+    }
+
+    $message = $line | ConvertFrom-Json
+    $method = [string]$message.method
+
+    switch ($method)
+    {
+        'initialize'
+        {
+            Send-Response $message.id @{
+                protocolVersion = 1
+                agentInfo = @{
+                    name = 'gui-slow-replay-agent'
+                    title = 'GUI Slow Replay Agent'
+                    version = '1.0.0'
+                }
+                agentCapabilities = @{
+                    loadSession = $true
+                }
+            }
+            continue
+        }
+
+        'session/load'
+        {
+            Send-Response $message.id @{}
+            Start-Sleep -Milliseconds $replayStartDelayMs
+
+            Send-SessionUpdate @{
+                sessionUpdate = 'session_info_update'
+                title = 'GUI Remote Session 01'
+                updatedAt = '2026-03-29T12:00:00Z'
+            }
+
+            for ($index = 1; $index -le $messageCount; $index++)
+            {
+                $text = 'GUI Remote Session 01 replay {0:d3}' -f $index
+                $updateType = if (($index % 2) -eq 0) { 'agent_message_chunk' } else { 'user_message_chunk' }
+
+                Send-SessionUpdate @{
+                    sessionUpdate = $updateType
+                    content = (New-TextContent $text)
+                }
+
+                if ($chunkDelayMs -gt 0)
+                {
+                    Start-Sleep -Milliseconds $chunkDelayMs
+                }
+            }
+
+            continue
+        }
+
+        default
+        {
+            if ($null -ne $message.id)
+            {
+                Send-Error $message.id -32601 "Method '$method' is not supported by the GUI smoke agent."
+            }
+        }
+    }
+}

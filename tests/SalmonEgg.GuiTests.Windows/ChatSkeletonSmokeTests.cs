@@ -33,6 +33,84 @@ public sealed class ChatSkeletonSmokeTests
         Assert.Contains("GUI Session 01", chatHeader.Name, StringComparison.Ordinal);
     }
 
+    [SkippableFact]
+    public void SelectSessionWithLongTranscript_AutoScrollsToLatestMessageAfterLoad()
+    {
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData(
+            sessionCount: 1,
+            withContent: true,
+            messageCountPerSession: 60);
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-session-01");
+        session.ActivateElement(sessionItem);
+
+        if (session.TryFindByAutomationId("ChatView.LoadingOverlay", TimeSpan.FromSeconds(2)) is not null)
+        {
+            var isHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(10));
+            Assert.True(isHidden, "Loading overlay did not disappear after the long transcript should have loaded.");
+        }
+
+        var messagesList = session.FindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(10));
+        var lastMessageText = "GUI Session 01 message 060";
+
+        var lastMessageVisible = session.FindVisibleText(
+            lastMessageText,
+            messagesList,
+            TimeSpan.FromSeconds(4));
+
+        Assert.NotNull(lastMessageVisible);
+    }
+
+    [SkippableFact]
+    public void SelectRemoteSessionWithSlowReplay_AutoScrollsToLatestMessageAfterHydration()
+    {
+        var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
+        Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", "1500");
+
+        try
+        {
+            using var appData = GuiAppDataScope.CreateDeterministicSlowRemoteReplayData(
+                cachedMessageCount: 1,
+                replayMessageCount: 60);
+            using var session = WindowsGuiAppSession.LaunchFresh();
+
+            var sessionItem = session.FindByAutomationId("MainNav.Session.gui-remote-conversation-01", TimeSpan.FromSeconds(15));
+            session.ActivateElement(sessionItem);
+
+            var sawOverlayStatus = session.WaitUntilVisible("ChatView.LoadingOverlayStatus", TimeSpan.FromSeconds(10));
+            Assert.True(sawOverlayStatus, "Slow remote replay did not expose ChatView.LoadingOverlayStatus.");
+
+            var overlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(30));
+            Assert.True(overlayHidden, "Slow remote replay overlay did not disappear after the transcript should have hydrated.");
+
+            var messagesList = session.FindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(10));
+            var lastMessageVisible = session.TryFindVisibleText(
+                "GUI Remote Session 01 replay 060",
+                messagesList,
+                TimeSpan.FromSeconds(8));
+
+            if (lastMessageVisible is null)
+            {
+                var captureRoot = Path.Combine(Path.GetTempPath(), "SalmonEgg.GuiTests");
+                Directory.CreateDirectory(captureRoot);
+                var screenshotPath = Path.Combine(
+                    captureRoot,
+                    $"slow-remote-replay-scroll-{DateTime.UtcNow:yyyyMMddHHmmssfff}.png");
+                session.MainWindow.CaptureToFile(screenshotPath);
+
+                var visibleTexts = session.GetVisibleTexts(messagesList);
+                var bootLogTail = appData.ReadBootLogTail();
+                throw new Xunit.Sdk.XunitException(
+                    $"Latest replay message was not visible after slow remote hydration. Screenshot: {screenshotPath}{Environment.NewLine}Visible texts: [{string.Join(", ", visibleTexts)}]{Environment.NewLine}boot.log:{Environment.NewLine}{bootLogTail}");
+            }
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", previousSlowLoadDelay);
+        }
+    }
+
     private static AutomationElement WaitForLoadingOverlay(WindowsGuiAppSession session, string scenario)
     {
         var timeline = new List<string>();

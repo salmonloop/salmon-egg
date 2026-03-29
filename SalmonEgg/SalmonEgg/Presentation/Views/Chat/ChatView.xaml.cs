@@ -129,24 +129,28 @@ namespace SalmonEgg.Presentation.Views.Chat
 
         private void OnMessagesListLayoutUpdated(object? sender, object e)
         {
-            if (!ViewModel.IsLayoutLoading)
+            var lastItemContainerGenerated = HasLastItemContainerGenerated(ViewModel.MessageHistory.Count);
+            RefreshLayoutLoadingState(lastItemContainerGenerated);
+
+            if (!_initialScrollGate.HasPending || _userScrolledUp)
             {
                 return;
             }
 
-            var lastItemContainerGenerated = MessagesList.Items.Count > 0
-                && MessagesList.ContainerFromIndex(MessagesList.Items.Count - 1) is not null;
-            RefreshLayoutLoadingState(lastItemContainerGenerated);
+            if (TryCompletePendingInitialScroll(lastItemContainerGenerated))
+            {
+                return;
+            }
+
+            if (lastItemContainerGenerated)
+            {
+                RequestInitialScroll();
+            }
         }
 
         private void ScrollViewer_ViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
         {
             if (_scrollViewer == null) return;
-
-            if (_suspendAutoScrollTracking && _initialScrollGate.HasPending)
-            {
-                return;
-            }
 
             // Only evaluate at-bottom when the scroll has settled (not intermediate).
             // During virtualization layout changes, intermediate frames have transient
@@ -156,13 +160,17 @@ namespace SalmonEgg.Presentation.Views.Chat
                 return;
             }
 
-            var verticalOffset = _scrollViewer.VerticalOffset;
-            var maxOffset = _scrollViewer.ScrollableHeight;
-
-            if (verticalOffset >= maxOffset - BottomThreshold)
+            if (_initialScrollGate.HasPending && !_userScrolledUp && TryCompletePendingInitialScroll())
             {
-                _userScrolledUp = false;
+                return;
             }
+
+            if (_suspendAutoScrollTracking)
+            {
+                return;
+            }
+
+            _userScrolledUp = !IsScrollViewerAtBottom();
         }
 
         private void ScrollViewer_PointerPressed(object sender, PointerRoutedEventArgs e)
@@ -197,6 +205,11 @@ namespace SalmonEgg.Presentation.Views.Chat
 
         private void RequestScrollToBottom()
         {
+            if (MessagesList != null && ViewModel.MessageHistory.Count > 0)
+            {
+                MessagesList.ScrollIntoView(ViewModel.MessageHistory.Last());
+            }
+
             if (_scrollViewer != null)
             {
                 _scrollViewer.ChangeView(null, _scrollViewer.ScrollableHeight, null);
@@ -316,9 +329,8 @@ namespace SalmonEgg.Presentation.Views.Chat
                     RequestInitialScroll(attempt + 1);
                     break;
                 default:
-                    _initialScrollGate.ClearPending();
-                    ReleaseAutoScrollTracking();
-                    RefreshLayoutLoadingState();
+                    _initialScrollGate.CancelInFlight();
+                    RefreshLayoutLoadingState(HasLastItemContainerGenerated(count));
                     break;
             }
         }
@@ -329,6 +341,8 @@ namespace SalmonEgg.Presentation.Views.Chat
             {
                 return false;
             }
+
+            MessagesList.ScrollIntoView(ViewModel.MessageHistory[itemCount - 1]);
 
             // Avoid synchronous UpdateLayout(); rely on virtualizer's async layout pass
             // and the retry mechanism in InitialScrollAttemptPolicy.
@@ -343,17 +357,57 @@ namespace SalmonEgg.Presentation.Views.Chat
                 return false;
             }
 
-            if (MessagesList.ContainerFromIndex(itemCount - 1) is null)
+            if (!HasLastItemContainerGenerated(itemCount))
             {
                 return false;
             }
 
+            return IsScrollViewerAtBottom();
+        }
+
+        private bool HasLastItemContainerGenerated(int itemCount)
+        {
+            if (MessagesList is null || itemCount <= 0)
+            {
+                return false;
+            }
+
+            return MessagesList.ContainerFromIndex(itemCount - 1) is not null;
+        }
+
+        private bool IsScrollViewerAtBottom()
+        {
             if (_scrollViewer is null)
             {
                 return false;
             }
 
             return _scrollViewer.VerticalOffset >= _scrollViewer.ScrollableHeight - BottomThreshold;
+        }
+
+        private bool TryCompletePendingInitialScroll(bool? lastItemContainerGenerated = null)
+        {
+            if (!_initialScrollGate.HasPending || MessagesList is null || _scrollViewer is null)
+            {
+                return false;
+            }
+
+            var itemCount = ViewModel.MessageHistory.Count;
+            if (itemCount <= 0)
+            {
+                return false;
+            }
+
+            var hasLastItemContainer = lastItemContainerGenerated ?? HasLastItemContainerGenerated(itemCount);
+            if (!hasLastItemContainer || !IsScrollViewerAtBottom())
+            {
+                return false;
+            }
+
+            _ = _initialScrollGate.TryComplete(true);
+            ReleaseAutoScrollTracking();
+            RefreshLayoutLoadingState(true);
+            return true;
         }
 
         private void DetachScrollViewer()

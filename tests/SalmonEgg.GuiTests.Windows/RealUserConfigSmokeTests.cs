@@ -9,6 +9,44 @@ namespace SalmonEgg.GuiTests.Windows;
 public sealed partial class RealUserConfigSmokeTests
 {
     [SkippableFact]
+    public void SelectRemoteBoundSession_WithSlowSessionLoad_AutoScrollsToLatestMessageAfterHydration()
+    {
+        GuiTestGate.RequireEnabled();
+
+        var candidate = RealUserConfigProbe.LoadReplayBackedCandidates()
+            .OrderByDescending(item => item.LocalMessageCount)
+            .FirstOrDefault(item => item.LocalMessageCount >= 10);
+        Skip.If(candidate is null, "No replay-backed remote conversation with enough local transcript history was found to validate bottom auto-scroll.");
+
+        var lastTranscriptText = RealUserConfigProbe.TryLoadLastTranscriptText(candidate.ConversationId);
+        Skip.If(string.IsNullOrWhiteSpace(lastTranscriptText), $"Conversation {candidate.ConversationId} has no last transcript text to assert against.");
+
+        using var slowLoad = new EnvironmentVariableScope("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", "2000");
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var startItem = session.FindByAutomationId("MainNav.Start", TimeSpan.FromSeconds(10));
+        session.ActivateElement(startItem);
+        Thread.Sleep(500);
+
+        var sessionItem = session.FindByAutomationId(SessionAutomationId(candidate.ConversationId), TimeSpan.FromSeconds(10));
+        session.ActivateElement(sessionItem);
+
+        var sawOverlayStatus = session.WaitUntilVisible("ChatView.LoadingOverlayStatus", TimeSpan.FromSeconds(10));
+        Assert.True(sawOverlayStatus, $"Slow remote hydration never exposed ChatView.LoadingOverlayStatus for conversation {candidate.ConversationId}.");
+
+        var overlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(25));
+        Assert.True(overlayHidden, $"Slow remote hydration overlay did not finish for conversation {candidate.ConversationId}.");
+
+        var messagesList = session.FindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(10));
+        var lastMessageVisible = session.FindVisibleText(
+            lastTranscriptText!,
+            messagesList,
+            TimeSpan.FromSeconds(8));
+
+        Assert.NotNull(lastMessageVisible);
+    }
+
+    [SkippableFact]
     public void SelectRemoteBoundSession_FromStart_DoesNotSnapBackToStartSelection()
     {
         GuiTestGate.RequireEnabled();
@@ -453,6 +491,57 @@ public sealed partial class RealUserConfigSmokeTests
                 .ToArray();
         }
 
+        public static string? TryLoadLastTranscriptText(string conversationId)
+        {
+            if (string.IsNullOrWhiteSpace(conversationId))
+            {
+                return null;
+            }
+
+            var appDataRoot = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "SalmonEgg");
+            var conversationsPath = Path.Combine(appDataRoot, "conversations", "conversations.v1.json");
+            if (!File.Exists(conversationsPath))
+            {
+                return null;
+            }
+
+            using var document = JsonDocument.Parse(File.ReadAllText(conversationsPath));
+            if (!document.RootElement.TryGetProperty("conversations", out var conversationsElement)
+                || conversationsElement.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            foreach (var conversationElement in conversationsElement.EnumerateArray())
+            {
+                if (!string.Equals(ReadString(conversationElement, "conversationId"), conversationId, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (!conversationElement.TryGetProperty("messages", out var messagesElement)
+                    || messagesElement.ValueKind != JsonValueKind.Array)
+                {
+                    return null;
+                }
+
+                foreach (var messageElement in messagesElement.EnumerateArray().Reverse())
+                {
+                    var text = ReadString(messageElement, "textContent");
+                    if (!string.IsNullOrWhiteSpace(text))
+                    {
+                        return text;
+                    }
+                }
+
+                return null;
+            }
+
+            return null;
+        }
+
         private static HashSet<string> ReadReplayBackedRemoteSessionIds(string logsRoot)
         {
             var loadedSessionIds = new HashSet<string>(StringComparer.Ordinal);
@@ -544,6 +633,24 @@ public sealed partial class RealUserConfigSmokeTests
         catch
         {
             return false;
+        }
+    }
+
+    private sealed class EnvironmentVariableScope : IDisposable
+    {
+        private readonly string _name;
+        private readonly string? _previousValue;
+
+        public EnvironmentVariableScope(string name, string? value)
+        {
+            _name = name;
+            _previousValue = Environment.GetEnvironmentVariable(name);
+            Environment.SetEnvironmentVariable(name, value);
+        }
+
+        public void Dispose()
+        {
+            Environment.SetEnvironmentVariable(_name, _previousValue);
         }
     }
 }

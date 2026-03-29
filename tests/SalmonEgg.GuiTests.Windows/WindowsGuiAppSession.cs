@@ -148,6 +148,41 @@ internal sealed class WindowsGuiAppSession : IDisposable
             $"ControlType '{controlType}' was not found.")!;
     }
 
+    public AutomationElement? FindVisibleText(string text, AutomationElement? scope = null, TimeSpan? timeout = null)
+    {
+        return RetryUntil(
+            () => (scope ?? MainWindow)
+                .FindAllDescendants(cf => cf.ByControlType(ControlType.Text))
+                .FirstOrDefault(element =>
+                    !TryGetIsOffscreen(element)
+                    && string.Equals(element.Name, text, StringComparison.Ordinal)),
+            element => element != null,
+            timeout ?? TimeSpan.FromSeconds(3),
+            $"Visible text '{text}' was not found.");
+    }
+
+    public AutomationElement? TryFindVisibleText(string text, AutomationElement? scope = null, TimeSpan? timeout = null)
+    {
+        try
+        {
+            return FindVisibleText(text, scope, timeout);
+        }
+        catch (TimeoutException)
+        {
+            return null;
+        }
+    }
+
+    public IReadOnlyList<string> GetVisibleTexts(AutomationElement? scope = null)
+    {
+        return (scope ?? MainWindow)
+            .FindAllDescendants(cf => cf.ByControlType(ControlType.Text))
+            .Where(element => !TryGetIsOffscreen(element) && !string.IsNullOrWhiteSpace(element.Name))
+            .Select(element => element.Name)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+    }
+
     public bool WaitUntilHidden(string automationId, TimeSpan timeout)
     {
         var deadline = DateTime.UtcNow + timeout;

@@ -20,6 +20,7 @@ public class ChatServiceFactory
     private readonly IErrorLogger _errorLogger;
     private readonly ISessionManager _sessionManager;
     private readonly ILogger _logger;
+    private readonly Func<IChatService, IChatService> _decorateChatService;
 
     /// <summary>
     /// 创建 <see cref="ChatServiceFactory"/> 的新实例。
@@ -35,7 +36,8 @@ public class ChatServiceFactory
         IMessageValidator messageValidator,
         IErrorLogger errorLogger,
         ISessionManager sessionManager,
-        ILogger logger)
+        ILogger logger,
+        Func<IChatService, IChatService>? decorateChatService = null)
     {
         _transportFactory = transportFactory ?? throw new ArgumentNullException(nameof(transportFactory));
         _messageParser = messageParser ?? throw new ArgumentNullException(nameof(messageParser));
@@ -43,6 +45,7 @@ public class ChatServiceFactory
         _errorLogger = errorLogger ?? throw new ArgumentNullException(nameof(errorLogger));
         _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _decorateChatService = decorateChatService ?? (service => service);
     }
 
     /// <summary>
@@ -72,7 +75,7 @@ public class ChatServiceFactory
             _messageValidator);
 
         // 3. 创建 Chat 服务
-        return new ChatService(acpClient, _errorLogger, _sessionManager);
+        return _decorateChatService(new ChatService(acpClient, _errorLogger, _sessionManager));
     }
 
     /// <summary>

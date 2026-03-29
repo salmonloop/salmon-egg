@@ -43,6 +43,9 @@ namespace SalmonEgg;
 /// </summary>
 public static class DependencyInjection
 {
+    private const string GuiEnabledEnvVar = "SALMONEGG_GUI";
+    private const string GuiSlowSessionLoadMsEnvVar = "SALMONEGG_GUI_SLOW_SESSION_LOAD_MS";
+
     /// <summary>
     /// Configures all services and dependencies
     /// </summary>
@@ -145,6 +148,8 @@ public static class DependencyInjection
 
     private static void RegisterApplicationServices(IServiceCollection services)
     {
+        var chatServiceDecorator = CreateChatServiceDecorator();
+
         // MVUX Chat Store
         services.AddSingleton<IState<ChatState>>(sp => State.Value(sp, () => ChatState.Empty));
         services.AddSingleton<IChatStore, ChatStore>();
@@ -184,7 +189,14 @@ public static class DependencyInjection
             var errorLogger = sp.GetRequiredService<IErrorLogger>();
             var sessionManager = sp.GetRequiredService<ISessionManager>();
             var logger = sp.GetRequiredService<Serilog.ILogger>();
-            return new ChatServiceFactory(transportFactory, parser, validator, errorLogger, sessionManager, logger);
+            return new ChatServiceFactory(
+                transportFactory,
+                parser,
+                validator,
+                errorLogger,
+                sessionManager,
+                logger,
+                chatServiceDecorator);
         });
         services.AddSingleton<IAcpChatServiceFactory>(sp =>
             new AcpChatServiceFactoryAdapter(sp.GetRequiredService<ChatServiceFactory>()));
@@ -399,6 +411,23 @@ public static class DependencyInjection
 
             return SessionCwdResolver.Resolve(pending, lastSelectedRoot);
         };
+    }
+
+    private static Func<IChatService, IChatService>? CreateChatServiceDecorator()
+    {
+        if (!string.Equals(Environment.GetEnvironmentVariable(GuiEnabledEnvVar), "1", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var rawDelay = Environment.GetEnvironmentVariable(GuiSlowSessionLoadMsEnvVar);
+        if (!int.TryParse(rawDelay, out var delayMs) || delayMs <= 0)
+        {
+            return null;
+        }
+
+        var delay = TimeSpan.FromMilliseconds(delayMs);
+        return inner => new DelayedLoadChatService(inner, delay);
     }
 
     private sealed class AcpChatServiceFactoryAdapter : IAcpChatServiceFactory
