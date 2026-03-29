@@ -535,8 +535,26 @@
   <data name="SessionNavArchiveItem.Text" xml:space="preserve">
     <value>Archive...</value>
   </data>
+  <data name="SessionNavMoveItem.Text" xml:space="preserve">
+    <value>Move...</value>
+  </data>
   <data name="SessionNavRenameItem.Text" xml:space="preserve">
     <value>Rename...</value>
+  </data>
+  <data name="SessionProjectPickerDialog.PrimaryButtonText" xml:space="preserve">
+    <value>Move</value>
+  </data>
+  <data name="SessionProjectPickerDialog.CloseButtonText" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="SessionProjectPickerDialogSessionLabel.Text" xml:space="preserve">
+    <value>Session</value>
+  </data>
+  <data name="SessionProjectPickerDialogInstructionText.Text" xml:space="preserve">
+    <value>Select a target project to move this session to.</value>
+  </data>
+  <data name="SessionProjectPickerDialogOptionsList.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Project list</value>
   </data>
   <data name="DiffPanelPlaceholder.Text" xml:space="preserve">
     <value>Diff panel placeholder</value>

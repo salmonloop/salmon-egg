@@ -122,41 +122,6 @@
                                    MaxLines="1"
                                    MaxWidth="220"/>
                     </Grid>
-
-                    <Border AutomationProperties.AutomationId="ChatView.ProjectAffinityCorrectionPanel"
-                            Background="{ThemeResource LayerFillColorDefaultBrush}"
-                            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                            BorderThickness="1"
-                            CornerRadius="8"
-                            Padding="10,8"
-                            Visibility="{x:Bind ViewModel.IsProjectAffinityCorrectionVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-                            <StackPanel Spacing="6">
-                                <TextBlock Text="{x:Bind ViewModel.ProjectAffinityCorrectionMessage, Mode=OneWay}"
-                                           FontSize="12"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                           TextWrapping="WrapWholeWords"/>
-                                <ComboBox AutomationProperties.AutomationId="ChatView.ProjectAffinityCorrectionProjectSelector"
-                                          ItemsSource="{x:Bind ViewModel.ProjectAffinityOverrideOptions, Mode=OneWay}"
-                                          SelectedValuePath="ProjectId"
-                                          SelectedValue="{x:Bind ViewModel.SelectedProjectAffinityOverrideProjectId, Mode=TwoWay}"
-                                          DisplayMemberPath="DisplayName"
-                                          MinWidth="220"/>
-                            </StackPanel>
-
-                            <Button Grid.Column="1"
-                                    AutomationProperties.AutomationId="ChatView.ProjectAffinityCorrectionApplyButton"
-                                    VerticalAlignment="Bottom"
-                                    Content="应用"
-                                    Command="{x:Bind ViewModel.ApplyProjectAffinityOverrideCommand}"/>
-
-                            <Button Grid.Column="2"
-                                    AutomationProperties.AutomationId="ChatView.ProjectAffinityCorrectionClearButton"
-                                    VerticalAlignment="Bottom"
-                                    Content="清除"
-                                    Command="{x:Bind ViewModel.ClearProjectAffinityOverrideCommand}"/>
-                        </Grid>
-                    </Border>
                 </StackPanel>
             </Border>
 

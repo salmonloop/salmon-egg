@@ -24,7 +24,7 @@ public sealed class ProjectAffinityResolver : IProjectAffinityResolver
         var mappings = request.PathMappings ?? Array.Empty<ProjectPathMapping>();
         var overrideProjectId = NormalizeToken(request.OverrideProjectId);
 
-        var overrideResolution = ResolveOverride(request.RemoteCwd, overrideProjectId, projects);
+        var overrideResolution = ResolveOverride(request.RemoteCwd, overrideProjectId, unclassifiedProjectId, projects);
         if (overrideResolution != null)
         {
             return overrideResolution;
@@ -86,8 +86,22 @@ public sealed class ProjectAffinityResolver : IProjectAffinityResolver
     private static ProjectAffinityResolution? ResolveOverride(
         string? remoteCwd,
         string? overrideProjectId,
+        string unclassifiedProjectId,
         IReadOnlyList<ProjectDefinition> projects)
     {
+        if (string.Equals(overrideProjectId, unclassifiedProjectId, StringComparison.Ordinal))
+        {
+            return CreateResolution(
+                EffectiveProjectId: unclassifiedProjectId,
+                Source: ProjectAffinitySource.Override,
+                MatchedProjectId: null,
+                OverrideProjectId: overrideProjectId,
+                RemoteCwd: remoteCwd,
+                LocalResolvedPath: null,
+                NeedsUserAttention: false,
+                Reason: ReasonOverride);
+        }
+
         if (!TryResolveOverride(overrideProjectId, projects, out var overrideProject))
         {
             return null;

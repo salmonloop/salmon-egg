@@ -106,6 +106,7 @@ public sealed class XamlComplianceTests
         Assert.DoesNotContain("Text=\"等待 Agent 更新\"", xaml);
         Assert.Contains("x:Uid=\"ProjectNavNewSessionItem\"", xaml);
         Assert.Contains("x:Uid=\"SessionNavArchiveItem\"", xaml);
+        Assert.Contains("x:Uid=\"SessionNavMoveItem\"", xaml);
         Assert.Contains("x:Uid=\"SessionNavRenameItem\"", xaml);
         Assert.Contains("x:Uid=\"DiffPanelPlaceholder\"", xaml);
         Assert.Contains("x:Uid=\"PlanEmptyTitle\"", xaml);
@@ -243,6 +244,52 @@ public sealed class XamlComplianceTests
 
         Assert.DoesNotContain("Source=\"ms-appx:///Styles/ChatStyles.xaml\"", appXaml);
         Assert.Contains("x:Class=\"SalmonEgg.Styles.ChatStyles\"", chatStylesXaml);
+    }
+
+    [Fact]
+    public void ConversationProjectPickerDialog_Uids_DoNotShadowRootUidPropertyPaths()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Navigation\ConversationProjectPickerDialog.xaml");
+        var zhHans = LoadText(@"SalmonEgg\SalmonEgg\Strings\zh-Hans\Resources.resw");
+
+        Assert.Contains("x:Uid=\"SessionProjectPickerDialog\"", xaml);
+        Assert.DoesNotContain("x:Uid=\"SessionProjectPickerDialog.SessionLabel\"", xaml);
+        Assert.DoesNotContain("x:Uid=\"SessionProjectPickerDialog.InstructionText\"", xaml);
+        Assert.DoesNotContain("x:Uid=\"SessionProjectPickerDialog.OptionsList\"", xaml);
+        Assert.Contains("x:Uid=\"SessionProjectPickerDialogSessionLabel\"", xaml);
+        Assert.Contains("x:Uid=\"SessionProjectPickerDialogInstructionText\"", xaml);
+        Assert.Contains("x:Uid=\"SessionProjectPickerDialogOptionsList\"", xaml);
+
+        Assert.DoesNotContain("SessionProjectPickerDialog.SessionLabel.Text", zhHans);
+        Assert.DoesNotContain("SessionProjectPickerDialog.InstructionText.Text", zhHans);
+        Assert.DoesNotContain("SessionProjectPickerDialog.OptionsList.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name", zhHans);
+        Assert.Contains("SessionProjectPickerDialogSessionLabel.Text", zhHans);
+        Assert.Contains("SessionProjectPickerDialogInstructionText.Text", zhHans);
+        Assert.Contains("SessionProjectPickerDialogOptionsList.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name", zhHans);
+    }
+
+    [Fact]
+    public void ConversationProjectPickerDialog_UsesDefaultDialogStyleAndNativeListSelection()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Navigation\ConversationProjectPickerDialog.xaml");
+
+        Assert.Contains("Style=\"{ThemeResource DefaultContentDialogStyle}\"", xaml);
+        Assert.Contains("<ListView x:Name=\"OptionsList\"", xaml);
+        Assert.Contains("SelectedItem=\"{x:Bind SelectedOption, Mode=TwoWay}\"", xaml);
+        Assert.DoesNotContain("<RadioButtons", xaml);
+        Assert.DoesNotContain("<SymbolIcon Symbol=\"Folder\"", xaml);
+    }
+
+    [Fact]
+    public void ConversationProjectPickerDialog_PreservesSelectionFallbackAndPrimaryButtonGuard()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Navigation\ConversationProjectPickerDialog.xaml");
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Navigation\ConversationProjectPickerDialog.xaml.cs");
+
+        Assert.Contains("IsPrimaryButtonEnabled=\"{x:Bind HasSelection, Mode=OneWay}\"", xaml);
+        Assert.Contains("SelectedOption = ChooseDefaultOption(selectedProjectId);", code);
+        Assert.Contains("return _options.Count > 0 ? _options[0] : null;", code);
+        Assert.Contains("OnPropertyChanged(nameof(HasSelection));", code);
     }
 
     private static string LoadXaml(string relativePath)

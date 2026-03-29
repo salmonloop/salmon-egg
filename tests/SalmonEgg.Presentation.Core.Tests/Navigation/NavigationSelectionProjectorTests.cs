@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Presentation.Core.Services;
+using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Navigation;
@@ -110,6 +111,8 @@ public sealed class NavigationSelectionProjectorTests
         public Task<bool> ConfirmAsync(string title, string message, string primaryButtonText = "确定", string closeButtonText = "取消") => Task.FromResult(false);
         public Task<string?> PromptTextAsync(string title, string primaryButtonText, string closeButtonText, string initialText) => Task.FromResult<string?>(null);
         public Task ShowSessionsListDialogAsync(string title, IReadOnlyList<SessionNavItemViewModel> sessions, Action<string> onPickSession) => Task.CompletedTask;
+        public Task<string?> PickConversationProjectAsync(string title, string sessionTitle, IReadOnlyList<ConversationProjectTargetOption> options, string? selectedProjectId)
+            => Task.FromResult<string?>(null);
     }
 
     private sealed class FakeChatSessionCatalog : IChatSessionCatalog
@@ -137,6 +140,12 @@ public sealed class NavigationSelectionProjectorTests
         }
 
         public void DeleteConversation(string conversationId)
+        {
+        }
+
+        public IReadOnlyList<ConversationProjectTargetOption> GetConversationProjectTargets() => [];
+
+        public void MoveConversationToProject(string conversationId, string projectId)
         {
         }
     }

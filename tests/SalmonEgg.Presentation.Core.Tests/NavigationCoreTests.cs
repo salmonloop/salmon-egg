@@ -214,6 +214,26 @@ public sealed class NavigationCoreTests
         Assert.Contains("NavItemTag.AddProject", xaml, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void MainNavigation_SessionFlyout_DefersDialogCommandsUntilFlyoutCloses()
+    {
+        var xaml = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml");
+        var code = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
+
+        Assert.Contains("x:Uid=\"SessionNavMoveItem\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"OnSessionMoveMenuItemClick\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Uid=\"SessionNavMoveItem\"\r\n                                        Command=\"{x:Bind MoveCommand}\"", xaml, StringComparison.Ordinal);
+
+        Assert.Contains("x:Uid=\"SessionNavRenameItem\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"OnSessionRenameMenuItemClick\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Uid=\"SessionNavRenameItem\"\r\n                                        Command=\"{x:Bind RenameCommand}\"", xaml, StringComparison.Ordinal);
+
+        Assert.Contains("private void OnSessionMoveMenuItemClick(", code, StringComparison.Ordinal);
+        Assert.Contains("private void OnSessionRenameMenuItemClick(", code, StringComparison.Ordinal);
+        Assert.Contains("_moveOnFlyoutClosed.TryConsume(sessionId)", code, StringComparison.Ordinal);
+        Assert.Contains("_renameOnFlyoutClosed.TryConsume(sessionId)", code, StringComparison.Ordinal);
+    }
+
     private static string LoadFile(string relativePath)
     {
         var root = FindRepoRoot();

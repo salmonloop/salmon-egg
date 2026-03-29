@@ -1793,6 +1793,37 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         }
     }
 
+    public IReadOnlyList<ConversationProjectTargetOption> GetConversationProjectTargets()
+    {
+        var targets = new List<ConversationProjectTargetOption>
+        {
+            new(NavigationProjectIds.Unclassified, "未归类")
+        };
+
+        foreach (var option in BuildProjectAffinityOverrideOptions())
+        {
+            targets.Add(new ConversationProjectTargetOption(option.ProjectId, option.DisplayName));
+        }
+
+        return targets;
+    }
+
+    public void MoveConversationToProject(string conversationId, string projectId)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId) || string.IsNullOrWhiteSpace(projectId))
+        {
+            return;
+        }
+
+        _conversationWorkspace.UpdateProjectAffinityOverride(conversationId, projectId);
+        NotifyConversationListChanged();
+
+        if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
+        {
+            RefreshProjectAffinityCorrectionState(conversationId);
+        }
+    }
+
     public string[] GetKnownConversationIds() => _conversationWorkspace.GetKnownConversationIds();
 
     public async Task EnsureAcpProfilesLoadedAsync()

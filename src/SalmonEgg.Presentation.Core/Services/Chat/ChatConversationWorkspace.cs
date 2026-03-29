@@ -9,6 +9,7 @@ using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Presentation.Core.Services;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 
@@ -17,6 +18,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
     private readonly ISessionManager _sessionManager;
     private readonly IConversationStore _conversationStore;
     private readonly IConversationWorkspacePreferences _preferences;
+    private readonly INavigationProjectPreferences? _navigationProjectPreferences;
     private readonly ILogger<ChatConversationWorkspace> _logger;
     private readonly SynchronizationContext _syncContext;
     private readonly SemaphoreSlim _sessionSwitchGate = new(1, 1);
@@ -32,11 +34,13 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         IConversationStore conversationStore,
         IConversationWorkspacePreferences preferences,
         ILogger<ChatConversationWorkspace> logger,
-        SynchronizationContext? syncContext = null)
+        SynchronizationContext? syncContext = null,
+        INavigationProjectPreferences? navigationProjectPreferences = null)
     {
         _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
         _conversationStore = conversationStore ?? throw new ArgumentNullException(nameof(conversationStore));
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
+        _navigationProjectPreferences = navigationProjectPreferences;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _syncContext = syncContext ?? SynchronizationContext.Current ?? new SynchronizationContext();
     }
@@ -124,6 +128,39 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .ToArray();
 
+    public IReadOnlyList<ConversationProjectTargetOption> GetConversationProjectTargets()
+    {
+        var options = new List<ConversationProjectTargetOption>
+        {
+            new(NavigationProjectIds.Unclassified, "未归类")
+        };
+
+        if (_navigationProjectPreferences == null)
+        {
+            return options;
+        }
+
+        var seen = new HashSet<string>(StringComparer.Ordinal)
+        {
+            NavigationProjectIds.Unclassified
+        };
+        foreach (var project in _navigationProjectPreferences.Projects
+                     .Where(project => project != null
+                         && !string.IsNullOrWhiteSpace(project.ProjectId)
+                         && !string.IsNullOrWhiteSpace(project.Name))
+                     .OrderBy(project => project.Name, StringComparer.Ordinal))
+        {
+            if (!seen.Add(project.ProjectId))
+            {
+                continue;
+            }
+
+            options.Add(new ConversationProjectTargetOption(project.ProjectId, project.Name));
+        }
+
+        return options;
+    }
+
     public IReadOnlyList<ConversationCatalogItem> GetCatalog()
         => _conversationBindings.Values
             .OrderByDescending(binding => binding.LastUpdatedAt)
@@ -165,6 +202,9 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
 
         ScheduleSave();
     }
+
+    public void MoveConversationToProject(string conversationId, string projectId)
+        => UpdateProjectAffinityOverride(conversationId, projectId);
 
     public void ArchiveConversation(string conversationId)
         => RemoveConversation(conversationId);

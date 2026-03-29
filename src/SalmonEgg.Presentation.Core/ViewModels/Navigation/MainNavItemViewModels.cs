@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.Input;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Session;
+using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Chat;
 
@@ -110,6 +111,7 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
 
     public bool IsPlaceholder { get; }
 
+    public IAsyncRelayCommand MoveCommand { get; }
     public IAsyncRelayCommand RenameCommand { get; }
     public IAsyncRelayCommand ArchiveCommand { get; }
 
@@ -153,9 +155,13 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
         _chatSessionCatalog = chatSessionCatalog ?? throw new ArgumentNullException(nameof(chatSessionCatalog));
         IsPlaceholder = isPlaceholder;
 
+        MoveCommand = new AsyncRelayCommand(MoveAsync, CanMove);
         RenameCommand = new AsyncRelayCommand(RenameAsync, CanRename);
         ArchiveCommand = new AsyncRelayCommand(ArchiveAsync, CanArchive);
     }
+
+    private bool CanMove()
+        => !IsPlaceholder && !string.IsNullOrWhiteSpace(SessionId);
 
     private bool CanRename()
         => !IsPlaceholder && !string.IsNullOrWhiteSpace(SessionId);
@@ -177,6 +183,28 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
         }
 
         _chatSessionCatalog.ArchiveConversation(SessionId);
+    }
+
+    private async Task MoveAsync()
+    {
+        var options = _chatSessionCatalog.GetConversationProjectTargets();
+        if (options.Count == 0)
+        {
+            return;
+        }
+
+        var pickedProjectId = await _ui.PickConversationProjectAsync(
+            title: "移动会话",
+            sessionTitle: Title,
+            options: options,
+            selectedProjectId: ProjectId).ConfigureAwait(true);
+
+        if (string.IsNullOrWhiteSpace(pickedProjectId))
+        {
+            return;
+        }
+
+        _chatSessionCatalog.MoveConversationToProject(SessionId, pickedProjectId.Trim());
     }
 
     private async Task RenameAsync()

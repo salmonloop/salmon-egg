@@ -27,11 +27,17 @@ public sealed class ChatViewModelSessionCatalogAdapter : IChatSessionCatalog
 
     public string[] GetKnownConversationIds() => _conversationCatalog.GetKnownConversationIds();
 
+    public IReadOnlyList<ConversationProjectTargetOption> GetConversationProjectTargets()
+        => _conversationCatalog.GetConversationProjectTargets();
+
     public Task RestoreAsync(CancellationToken cancellationToken = default)
         => _conversationCatalog.RestoreAsync(cancellationToken);
 
     public void RenameConversation(string conversationId, string newName)
         => _conversationCatalog.RenameConversation(conversationId, newName);
+
+    public void MoveConversationToProject(string conversationId, string projectId)
+        => _conversationCatalog.MoveConversationToProject(conversationId, projectId);
 
     public void ArchiveConversation(string conversationId)
         => _conversationCatalog.ArchiveConversation(conversationId);

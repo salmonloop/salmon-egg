@@ -198,6 +198,30 @@ public sealed class ProjectAffinityResolverTests
     }
 
     [Fact]
+    public void Resolve_ExplicitUnclassifiedOverride_WinsOverOtherMatches()
+    {
+        var resolver = new ProjectAffinityResolver();
+        var projects = new[]
+        {
+            new ProjectDefinition
+            {
+                ProjectId = "direct",
+                RootPath = @"C:\Local\Repo"
+            }
+        };
+        var request = CreateRequest(
+            remoteCwd: @"C:\Local\Repo\Sub",
+            overrideProjectId: NavigationProjectIds.Unclassified,
+            projects: projects);
+
+        var result = resolver.Resolve(request);
+
+        Assert.Equal(NavigationProjectIds.Unclassified, result.EffectiveProjectId);
+        Assert.Equal(ProjectAffinitySource.Override, result.Source);
+        Assert.Equal(NavigationProjectIds.Unclassified, result.OverrideProjectId);
+    }
+
+    [Fact]
     public void Resolve_DeletedOverride_FallsBackToDirectMatch()
     {
         var resolver = new ProjectAffinityResolver();

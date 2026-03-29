@@ -172,8 +172,12 @@
                                         Click="OnSessionArchiveMenuItemClick"
                                         CommandParameter="{x:Bind}"
                                         IsEnabled="{x:Bind IsPlaceholder, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}" />
+                        <MenuFlyoutItem x:Uid="SessionNavMoveItem"
+                                        Click="OnSessionMoveMenuItemClick"
+                                        CommandParameter="{x:Bind}" />
                         <MenuFlyoutItem x:Uid="SessionNavRenameItem"
-                                        Command="{x:Bind RenameCommand}" />
+                                        Click="OnSessionRenameMenuItemClick"
+                                        CommandParameter="{x:Bind}" />
                     </MenuFlyout>
                 </NavigationViewItem.ContextFlyout>
             </NavigationViewItem>

@@ -62,7 +62,11 @@ public sealed partial class MainPage : Page
     private bool _isNavItemsSubscribed;
     private readonly List<ObservableCollection<MainNavItemViewModel>> _projectChildCollections = new();
     private readonly DeferredActionGate<string> _archiveOnFlyoutClosed = new(StringComparer.Ordinal);
+    private readonly DeferredActionGate<string> _moveOnFlyoutClosed = new(StringComparer.Ordinal);
+    private readonly DeferredActionGate<string> _renameOnFlyoutClosed = new(StringComparer.Ordinal);
     private string? _pendingArchiveSessionId;
+    private string? _pendingMoveSessionId;
+    private string? _pendingRenameSessionId;
 #if WINDOWS
     private TrayIconManager? _trayIcon;
     private bool _allowClose;
@@ -354,14 +358,64 @@ public sealed partial class MainPage : Page
 
     private void OnSessionNavFlyoutClosed(object sender, object e)
     {
-        if (string.IsNullOrWhiteSpace(_pendingArchiveSessionId))
+        if (!string.IsNullOrWhiteSpace(_pendingArchiveSessionId))
+        {
+            var sessionId = _pendingArchiveSessionId;
+            _pendingArchiveSessionId = null;
+            _archiveOnFlyoutClosed.TryConsume(sessionId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(_pendingMoveSessionId))
+        {
+            var sessionId = _pendingMoveSessionId;
+            _pendingMoveSessionId = null;
+            _moveOnFlyoutClosed.TryConsume(sessionId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(_pendingRenameSessionId))
+        {
+            var sessionId = _pendingRenameSessionId;
+            _pendingRenameSessionId = null;
+            _renameOnFlyoutClosed.TryConsume(sessionId);
+        }
+    }
+
+    private void OnSessionMoveMenuItemClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuFlyoutItem item || item.CommandParameter is not SessionNavItemViewModel session)
         {
             return;
         }
 
-        var sessionId = _pendingArchiveSessionId;
-        _pendingArchiveSessionId = null;
-        _archiveOnFlyoutClosed.TryConsume(sessionId);
+        if (session.IsPlaceholder || string.IsNullOrWhiteSpace(session.SessionId))
+        {
+            return;
+        }
+
+        _pendingMoveSessionId = session.SessionId;
+        _moveOnFlyoutClosed.Request(session.SessionId, () =>
+        {
+            _ = DispatcherQueue.TryEnqueue(() => _ = session.MoveCommand.ExecuteAsync(null));
+        });
+    }
+
+    private void OnSessionRenameMenuItemClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuFlyoutItem item || item.CommandParameter is not SessionNavItemViewModel session)
+        {
+            return;
+        }
+
+        if (session.IsPlaceholder || string.IsNullOrWhiteSpace(session.SessionId))
+        {
+            return;
+        }
+
+        _pendingRenameSessionId = session.SessionId;
+        _renameOnFlyoutClosed.Request(session.SessionId, () =>
+        {
+            _ = DispatcherQueue.TryEnqueue(() => _ = session.RenameCommand.ExecuteAsync(null));
+        });
     }
 
     private void EnsureChatContent()

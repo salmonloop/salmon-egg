@@ -197,6 +197,13 @@ public sealed class MainNavigationViewModelPaneTests
         {
         }
 
+        public IReadOnlyList<ConversationProjectTargetOption> GetConversationProjectTargets()
+            => [new(NavigationProjectIds.Unclassified, "未归类")];
+
+        public void MoveConversationToProject(string conversationId, string projectId)
+        {
+        }
+
         public void RaiseConversationListChanged()
         {
             ConversationListVersion++;

@@ -418,6 +418,25 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
+    public async Task MoveConversationToProject_AllowsExplicitUnclassifiedOverride()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+
+        await workspace.RegisterConversationAsync("session-1");
+
+        workspace.MoveConversationToProject("session-1", NavigationProjectIds.Unclassified);
+
+        var overrideValue = workspace.GetProjectAffinityOverride("session-1");
+        Assert.NotNull(overrideValue);
+        Assert.Equal(NavigationProjectIds.Unclassified, overrideValue!.ProjectId);
+    }
+
+    [Fact]
     public async Task GetCatalog_IncludesRemoteBindingAndProjectAffinityOverrideMetadata()
     {
         var syncContext = new ImmediateSynchronizationContext();
@@ -702,6 +721,7 @@ public sealed class ChatConversationWorkspaceTests
 
         var facade = new ConversationCatalogFacade(
             workspace,
+            new NavigationProjectPreferencesAdapter(preferences),
             activationCoordinator.Object,
             selection.Object,
             Mock.Of<INavigationCoordinator>(),
@@ -744,6 +764,7 @@ public sealed class ChatConversationWorkspaceTests
 
         var facade = new ConversationCatalogFacade(
             workspace,
+            new NavigationProjectPreferencesAdapter(preferences),
             activationCoordinator.Object,
             selection.Object,
             navigation.Object,
