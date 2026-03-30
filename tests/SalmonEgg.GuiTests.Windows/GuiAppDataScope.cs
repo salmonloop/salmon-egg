@@ -107,7 +107,8 @@ internal sealed class GuiAppDataScope : IDisposable
         int cachedMessageCount = 1,
         int replayMessageCount = 60,
         bool includeLocalConversation = false,
-        int localMessageCount = 3)
+        int localMessageCount = 3,
+        int remoteConversationCount = 1)
     {
         if (cachedMessageCount < 0)
         {
@@ -122,6 +123,11 @@ internal sealed class GuiAppDataScope : IDisposable
         if (includeLocalConversation && localMessageCount <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(localMessageCount));
+        }
+
+        if (remoteConversationCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(remoteConversationCount));
         }
 
         GuiTestGate.RequireEnabled();
@@ -162,7 +168,8 @@ internal sealed class GuiAppDataScope : IDisposable
             cachedMessageCount,
             replayMessageCount,
             includeLocalConversation,
-            localMessageCount);
+            localMessageCount,
+            remoteConversationCount);
         return scope;
     }
 
@@ -222,6 +229,23 @@ internal sealed class GuiAppDataScope : IDisposable
         }
     }
 
+    public string ReadConversationsJson()
+    {
+        if (!File.Exists(_conversationsPath))
+        {
+            return "<conversations missing>";
+        }
+
+        try
+        {
+            return File.ReadAllText(_conversationsPath);
+        }
+        catch (Exception ex)
+        {
+            return $"<conversations unreadable: {ex.Message}>";
+        }
+    }
+
     private void Seed(int sessionCount, bool withContent = false, int messageCountPerSession = 2)
     {
         Directory.CreateDirectory(_configDirectory);
@@ -240,7 +264,8 @@ internal sealed class GuiAppDataScope : IDisposable
         int cachedMessageCount,
         int replayMessageCount,
         bool includeLocalConversation,
-        int localMessageCount)
+        int localMessageCount,
+        int remoteConversationCount)
     {
         if (string.IsNullOrWhiteSpace(_serverYamlPath))
         {
@@ -265,7 +290,8 @@ internal sealed class GuiAppDataScope : IDisposable
                 profileId,
                 cachedMessageCount,
                 includeLocalConversation,
-                localMessageCount),
+                localMessageCount,
+                remoteConversationCount),
             Encoding.UTF8);
         File.WriteAllText(
             _serverYamlPath,
@@ -373,7 +399,8 @@ internal sealed class GuiAppDataScope : IDisposable
         string profileId,
         int cachedMessageCount,
         bool includeLocalConversation,
-        int localMessageCount)
+        int localMessageCount,
+        int remoteConversationCount)
     {
         var remoteTimestamp = new DateTimeOffset(2026, 03, 29, 12, 00, 00, TimeSpan.Zero);
         var cachedMessages = cachedMessageCount <= 0
@@ -416,17 +443,23 @@ internal sealed class GuiAppDataScope : IDisposable
             });
         }
 
-        conversations.Add(new
+        for (var remoteIndex = 1; remoteIndex <= remoteConversationCount; remoteIndex++)
         {
-            conversationId = "gui-remote-conversation-01",
-            displayName = "GUI Remote Session 01",
-            createdAt = remoteTimestamp,
-            lastUpdatedAt = remoteTimestamp,
-            cwd = projectRootPath,
-            remoteSessionId = "gui-remote-session-01",
-            boundProfileId = profileId,
-            messages = cachedMessages
-        });
+            var suffix = remoteIndex.ToString("00");
+            var conversationId = $"gui-remote-conversation-{suffix}";
+            var sessionId = $"gui-remote-session-{suffix}";
+            conversations.Add(new
+            {
+                conversationId,
+                displayName = $"GUI Remote Session {suffix}",
+                createdAt = remoteTimestamp.AddSeconds(remoteIndex),
+                lastUpdatedAt = remoteTimestamp.AddSeconds(remoteIndex),
+                cwd = projectRootPath,
+                remoteSessionId = sessionId,
+                boundProfileId = profileId,
+                messages = cachedMessages
+            });
+        }
 
         var document = new
         {

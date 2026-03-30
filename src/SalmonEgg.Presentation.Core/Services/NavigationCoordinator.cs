@@ -1,6 +1,8 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Services;
@@ -13,19 +15,28 @@ public sealed class NavigationCoordinator : INavigationCoordinator
     private readonly IConversationSessionSwitcher _conversationSessionSwitcher;
     private readonly INavigationProjectSelectionStore _projectSelectionStore;
     private readonly IShellNavigationService _shellNavigationService;
+    private readonly ILogger<NavigationCoordinator> _logger;
+    private readonly SemaphoreSlim _sessionActivationGate = new(1, 1);
+    private readonly object _sessionActivationSync = new();
+    private CancellationTokenSource? _sessionActivationCts;
     private long _activationTokenCounter;
     private long _latestActivationToken;
+    private string? _desiredSessionId;
+    private string? _committedSessionId;
+    private bool _isSessionActivationInProgress;
 
     public NavigationCoordinator(
         IShellSelectionMutationSink selectionSink,
         IConversationSessionSwitcher conversationSessionSwitcher,
         INavigationProjectSelectionStore projectSelectionStore,
-        IShellNavigationService shellNavigationService)
+        IShellNavigationService shellNavigationService,
+        ILogger<NavigationCoordinator>? logger = null)
     {
         _selectionSink = selectionSink ?? throw new ArgumentNullException(nameof(selectionSink));
         _conversationSessionSwitcher = conversationSessionSwitcher ?? throw new ArgumentNullException(nameof(conversationSessionSwitcher));
         _projectSelectionStore = projectSelectionStore ?? throw new ArgumentNullException(nameof(projectSelectionStore));
         _shellNavigationService = shellNavigationService ?? throw new ArgumentNullException(nameof(shellNavigationService));
+        _logger = logger ?? NullLogger<NavigationCoordinator>.Instance;
     }
 
     public async Task ActivateStartAsync()
@@ -79,37 +90,129 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         }
     }
 
-    public async Task<bool> ActivateSessionAsync(string sessionId, string? projectId)
+    public Task<bool> ActivateSessionAsync(string sessionId, string? projectId)
     {
         if (string.IsNullOrWhiteSpace(sessionId))
         {
-            return false;
+            return Task.FromResult(false);
         }
 
-        var activationToken = BeginActivation();
+        CancellationTokenSource? previousActivation;
+        SessionActivationRequest request;
+        lock (_sessionActivationSync)
+        {
+            var isDuplicatePending = _isSessionActivationInProgress
+                && string.Equals(_desiredSessionId, sessionId, StringComparison.Ordinal);
+            var isDuplicateCommitted = !_isSessionActivationInProgress
+                && string.Equals(_committedSessionId, sessionId, StringComparison.Ordinal);
+            if (isDuplicatePending || isDuplicateCommitted)
+            {
+                _logger.LogInformation(
+                    "Navigation activation ignored duplicate intent. sessionId={SessionId} state={State}",
+                    sessionId,
+                    isDuplicatePending ? "InProgress" : "Committed");
+                return Task.FromResult(true);
+            }
+
+            previousActivation = _sessionActivationCts;
+            request = new SessionActivationRequest(
+                sessionId,
+                projectId,
+                BeginActivation(),
+                new CancellationTokenSource());
+            _sessionActivationCts = request.CancellationTokenSource;
+            _desiredSessionId = sessionId;
+            _isSessionActivationInProgress = true;
+        }
 
         try
         {
-            var navigationResult = await NavigateToChatAsync(activationToken).ConfigureAwait(true);
-            if (!navigationResult.Succeeded || !IsLatestActivationToken(activationToken))
+            previousActivation?.Cancel();
+            if (previousActivation != null)
+            {
+                _logger.LogInformation(
+                    "Navigation activation canceled previous request. sessionId={SessionId} version={Version}",
+                    sessionId,
+                    request.Version);
+            }
+        }
+        finally
+        {
+            previousActivation?.Dispose();
+        }
+
+        _logger.LogInformation(
+            "Navigation activation started. sessionId={SessionId} version={Version}",
+            sessionId,
+            request.Version);
+        return ActivateSessionCoreAsync(request);
+    }
+
+    private async Task<bool> ActivateSessionCoreAsync(SessionActivationRequest request)
+    {
+        var activationGateEntered = false;
+        var committed = false;
+
+        try
+        {
+            var navigationResult = await NavigateToChatAsync(request.Version).ConfigureAwait(true);
+            if (!navigationResult.Succeeded
+                || !IsLatestActivationToken(request.Version)
+                || request.CancellationToken.IsCancellationRequested)
+            {
+                return false;
+            }
+
+            await _sessionActivationGate
+                .WaitAsync(request.CancellationToken)
+                .ConfigureAwait(true);
+            activationGateEntered = true;
+            if (!IsLatestActivationToken(request.Version) || request.CancellationToken.IsCancellationRequested)
             {
                 return false;
             }
 
             var activated = await _conversationSessionSwitcher
-                .SwitchConversationAsync(sessionId)
+                .SwitchConversationAsync(request.SessionId, request.CancellationToken)
                 .ConfigureAwait(true);
-            if (!activated || !IsLatestActivationToken(activationToken))
+            if (!activated || !IsLatestActivationToken(request.Version) || request.CancellationToken.IsCancellationRequested)
             {
                 return false;
             }
 
-            _projectSelectionStore.RememberSelectedProject(projectId);
-            _selectionSink.SetSelection(new NavigationSelectionState.Session(sessionId));
+            _projectSelectionStore.RememberSelectedProject(request.ProjectId);
+            _selectionSink.SetSelection(new NavigationSelectionState.Session(request.SessionId));
+            committed = true;
+            _logger.LogInformation(
+                "Navigation activation committed. sessionId={SessionId} version={Version}",
+                request.SessionId,
+                request.Version);
             return true;
         }
-        catch
+        catch (OperationCanceledException) when (request.CancellationToken.IsCancellationRequested)
         {
+            _logger.LogInformation(
+                "Navigation activation canceled. sessionId={SessionId} version={Version}",
+                request.SessionId,
+                request.Version);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Navigation activation failed. sessionId={SessionId} version={Version}",
+                request.SessionId,
+                request.Version);
+        }
+        finally
+        {
+            if (activationGateEntered)
+            {
+                _sessionActivationGate.Release();
+            }
+
+            EndSessionActivationRequest(request, committed);
         }
 
         return false;
@@ -143,6 +246,25 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         return activationToken;
     }
 
+    private void EndSessionActivationRequest(SessionActivationRequest request, bool committed)
+    {
+        lock (_sessionActivationSync)
+        {
+            if (ReferenceEquals(_sessionActivationCts, request.CancellationTokenSource)
+                && IsLatestActivationToken(request.Version))
+            {
+                _sessionActivationCts = null;
+                _isSessionActivationInProgress = false;
+                if (committed)
+                {
+                    _committedSessionId = request.SessionId;
+                }
+            }
+        }
+
+        request.CancellationTokenSource.Dispose();
+    }
+
     private bool IsLatestActivationToken(long activationToken)
         => Interlocked.Read(ref _latestActivationToken) == activationToken;
 
@@ -172,6 +294,15 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         return _shellNavigationService is IActivationTokenShellNavigationService tokenAware
             ? tokenAware.NavigateToDiscoverSessions(activationToken)
             : _shellNavigationService.NavigateToDiscoverSessions();
+    }
+
+    private sealed record SessionActivationRequest(
+        string SessionId,
+        string? ProjectId,
+        long Version,
+        CancellationTokenSource CancellationTokenSource)
+    {
+        public CancellationToken CancellationToken => CancellationTokenSource.Token;
     }
 }
 

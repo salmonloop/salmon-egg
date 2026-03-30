@@ -226,7 +226,7 @@ namespace SalmonEgg.Infrastructure.Network
                     // Disconnect if still connected
                     if (_client != null && _client.IsRunning)
                     {
-                        DisconnectAsync().GetAwaiter().GetResult();
+                        _ = DisconnectAsync();
                     }
 
                     // Dispose the WebSocket client

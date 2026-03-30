@@ -10,6 +10,7 @@ public sealed class SelectionProjectionApplyGate
 {
     private int _interactionDepth;
     private bool _hasDeferredApply;
+    private bool _hasScheduledDeferredApply;
 
     public void BeginInteraction()
     {
@@ -25,6 +26,22 @@ public sealed class SelectionProjectionApplyGate
 
         _hasDeferredApply = true;
         return SelectionProjectionApplyDecision.Defer;
+    }
+
+    public bool TryScheduleDeferredApply()
+    {
+        if (_hasScheduledDeferredApply)
+        {
+            return false;
+        }
+
+        _hasScheduledDeferredApply = true;
+        return true;
+    }
+
+    public void ReleaseScheduledDeferredApply()
+    {
+        _hasScheduledDeferredApply = false;
     }
 
     public bool EndInteraction()

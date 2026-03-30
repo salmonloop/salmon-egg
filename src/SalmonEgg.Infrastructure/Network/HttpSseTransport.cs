@@ -274,7 +274,7 @@ namespace SalmonEgg.Infrastructure.Network
                     // Disconnect if still connected
                     if (_connectionCts != null && !_connectionCts.IsCancellationRequested)
                     {
-                        DisconnectAsync().GetAwaiter().GetResult();
+                        _ = DisconnectAsync();
                     }
 
                     // Dispose resources

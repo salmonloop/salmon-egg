@@ -24,6 +24,7 @@ public sealed partial class MiniChatView : Page
     private const int MaxInitialScrollAttempts = 8;
     private bool _suspendAutoScrollTracking;
     private bool _manualScrollIntentPending;
+    private bool _wasOverlayVisible;
 
     public MiniChatView()
     {
@@ -54,6 +55,7 @@ public sealed partial class MiniChatView : Page
         _isLoaded = true;
         _userScrolledUp = false;
         _manualScrollIntentPending = false;
+        _wasOverlayVisible = ViewModel.IsOverlayVisible;
         _initialScrollGate.MarkPending();
         EnsureViewModelTracking();
         RequestInitialScroll();
@@ -209,8 +211,15 @@ public sealed partial class MiniChatView : Page
             || e.PropertyName == nameof(ChatViewModel.IsSessionActive))
         {
             ResetAutoScrollStateForConversationChange();
+            _wasOverlayVisible = ViewModel.IsOverlayVisible;
             _initialScrollGate.MarkPending();
             RequestInitialScroll();
+            return;
+        }
+
+        if (e.PropertyName == nameof(ChatViewModel.IsOverlayVisible))
+        {
+            HandleOverlayVisibilityChanged();
         }
     }
 
@@ -291,7 +300,10 @@ public sealed partial class MiniChatView : Page
                 RequestInitialScroll(attempt + 1);
                 break;
             default:
-                _initialScrollGate.CancelInFlight();
+                // Mirror ChatView termination semantics so the mini window cannot
+                // restart initial-scroll cycles indefinitely from LayoutUpdated.
+                _initialScrollGate.ClearPending();
+                ReleaseAutoScrollTracking();
                 break;
         }
     }
@@ -475,5 +487,25 @@ public sealed partial class MiniChatView : Page
         _userScrolledUp = false;
         _suspendAutoScrollTracking = false;
         _manualScrollIntentPending = false;
+    }
+
+    private void HandleOverlayVisibilityChanged()
+    {
+        var isOverlayVisible = ViewModel.IsOverlayVisible;
+        var overlayJustDismissed = _wasOverlayVisible && !isOverlayVisible;
+        _wasOverlayVisible = isOverlayVisible;
+
+        if (!overlayJustDismissed
+            || _userScrolledUp
+            || !_isLoaded
+            || MessagesList is null
+            || ViewModel.MessageHistory.Count <= 0)
+        {
+            return;
+        }
+
+        _initialScrollGate.MarkPending();
+        RequestScrollToBottom();
+        RequestInitialScroll();
     }
 }

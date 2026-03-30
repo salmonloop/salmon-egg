@@ -49,6 +49,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     private readonly Dictionary<string, ProjectNavItemViewModel> _projectVms = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ConversationCatalogItem> _conversationCatalogIndex = new(StringComparer.Ordinal);
     private string? _pendingProjectIdForNewSession;
+    private int _rebuildPending;
+    private int _rebuildScheduled;
 
     public ObservableCollection<MainNavItemViewModel> Items { get; } = new();
     public ObservableCollection<MainNavItemViewModel> FooterItems { get; } = new();
@@ -390,94 +392,129 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     public void RebuildTree()
     {
-        _syncContext.Post(_ =>
+        Interlocked.Exchange(ref _rebuildPending, 1);
+        ScheduleRebuildTreeProcessing();
+    }
+
+    private void ScheduleRebuildTreeProcessing()
+    {
+        if (Interlocked.CompareExchange(ref _rebuildScheduled, 1, 0) != 0)
         {
-            try
+            return;
+        }
+
+        _syncContext.Post(_ => ProcessRebuildTreeRequests(), null);
+    }
+
+    private void ProcessRebuildTreeRequests()
+    {
+        try
+        {
+            Interlocked.Exchange(ref _rebuildPending, 0);
+            RebuildTreeCore();
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _rebuildScheduled, 0);
+            if (Volatile.Read(ref _rebuildPending) != 0)
             {
-                // Ensure we have the base items
-                if (Items.Count < 3)
+                ScheduleRebuildTreeProcessing();
+            }
+        }
+    }
+
+    private void RebuildTreeCore()
+    {
+        try
+        {
+            // Ensure we have the base items
+            if (Items.Count < 3)
+            {
+                foreach (var item in Items) DisposeItem(item);
+                Items.Clear();
+                Items.Add(StartItem);
+                Items.Add(SessionsLabelItem);
+                Items.Add(AddProjectItem);
+            }
+
+            _sessionIndex.Clear();
+            _projectIndex.Clear();
+
+            var projects = GetProjectDefinitions();
+            var sessionsByProject = GetSessionsByProject(projects);
+
+            // Index of where project items start (after Start, SessionsLabel, AddProject)
+            int itemIndex = 3;
+
+            foreach (var (projectDef, isSystem) in projects)
+            {
+                var projectId = projectDef.ProjectId!;
+                if (!_projectVms.TryGetValue(projectId, out var projectVm))
                 {
-                    foreach (var item in Items) DisposeItem(item);
-                    Items.Clear();
-                    Items.Add(StartItem);
-                    Items.Add(SessionsLabelItem);
-                    Items.Add(AddProjectItem);
+                    projectVm = new ProjectNavItemViewModel(projectDef, isSystem, PrepareStartForProjectAsync, _navigationState)
+                    {
+                        IsExpanded = true
+                    };
+                    _projectVms[projectId] = projectVm;
+                }
+                else
+                {
+                    // Update existing VM properties if they changed
+                    projectVm.Title = projectDef.Name ?? string.Empty;
                 }
 
-                _sessionIndex.Clear();
-                _projectIndex.Clear();
+                _projectIndex[projectId] = projectVm;
 
-                var projects = GetProjectDefinitions();
-                var sessionsByProject = GetSessionsByProject(projects);
-
-                // Index of where project items start (after Start, SessionsLabel, AddProject)
-                int itemIndex = 3;
-
-                foreach (var (projectDef, isSystem) in projects)
+                // Ensure the project VM is at the correct position in the Items collection
+                if (itemIndex < Items.Count)
                 {
-                    var projectId = projectDef.ProjectId!;
-                    if (!_projectVms.TryGetValue(projectId, out var projectVm))
+                    if (!ReferenceEquals(Items[itemIndex], projectVm))
                     {
-                        projectVm = new ProjectNavItemViewModel(projectDef, isSystem, PrepareStartForProjectAsync, _navigationState)
+                        // If it's elsewhere, remove it first (should be rare)
+                        int existingIndex = Items.IndexOf(projectVm);
+                        if (existingIndex != -1)
                         {
-                            IsExpanded = true
-                        };
-                        _projectVms[projectId] = projectVm;
-                    }
-                    else
-                    {
-                        // Update existing VM properties if they changed
-                        projectVm.Title = projectDef.Name ?? string.Empty;
-                    }
-
-                    _projectIndex[projectId] = projectVm;
-
-                    // Ensure the project VM is at the correct position in the Items collection
-                    if (itemIndex < Items.Count)
-                    {
-                        if (!ReferenceEquals(Items[itemIndex], projectVm))
-                        {
-                            // If it's elsewhere, remove it first (should be rare)
-                            int existingIndex = Items.IndexOf(projectVm);
-                            if (existingIndex != -1)
-                            {
-                                // Note: We don't dispose projectVm here because it's still being used (moved)
-                                Items.RemoveAt(existingIndex);
-                            }
-                            Items.Insert(itemIndex, projectVm);
+                            // Note: We don't dispose projectVm here because it's still being used (moved)
+                            Items.RemoveAt(existingIndex);
                         }
+
+                        Items.Insert(itemIndex, projectVm);
                     }
-                    else
-                    {
-                        Items.Add(projectVm);
-                    }
-
-                    SyncSessions(projectVm, sessionsByProject.TryGetValue(projectId, out var s) ? s : new List<ConversationCatalogItem>());
-                    itemIndex++;
                 }
-
-                // Remove orphans
-                while (Items.Count > itemIndex)
+                else
                 {
-                    DisposeAndRemoveAt(Items, Items.Count - 1);
+                    Items.Add(projectVm);
                 }
 
-                // Cleanup _projectVms for projects that no longer exist
-                var currentProjectIds = new HashSet<string>(projects.Select(p => p.Project.ProjectId!), StringComparer.Ordinal);
-                var toRemove = _projectVms.Keys.Where(id => !currentProjectIds.Contains(id)).ToList();
-                foreach (var id in toRemove)
-                {
-                    if (_projectVms.TryGetValue(id, out var vm)) DisposeItem(vm);
-                    _projectVms.Remove(id);
-                }
-
-                NormalizeSelectionAfterRebuild();
+                SyncSessions(projectVm, sessionsByProject.TryGetValue(projectId, out var s) ? s : new List<ConversationCatalogItem>());
+                itemIndex++;
             }
-            catch (Exception ex)
+
+            // Remove orphans
+            while (Items.Count > itemIndex)
             {
-                _logger.LogWarning(ex, "导航树重建过程中发生异常，已拦截以防止闪退");
+                DisposeAndRemoveAt(Items, Items.Count - 1);
             }
-        }, null);
+
+            // Cleanup _projectVms for projects that no longer exist
+            var currentProjectIds = new HashSet<string>(projects.Select(p => p.Project.ProjectId!), StringComparer.Ordinal);
+            var toRemove = _projectVms.Keys.Where(id => !currentProjectIds.Contains(id)).ToList();
+            foreach (var id in toRemove)
+            {
+                if (_projectVms.TryGetValue(id, out var vm))
+                {
+                    DisposeItem(vm);
+                }
+
+                _projectVms.Remove(id);
+            }
+
+            NormalizeSelectionAfterRebuild();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "导航树重建过程中发生异常，已拦截以防止闪退");
+        }
     }
 
     private void SyncSessions(ProjectNavItemViewModel projectVm, List<ConversationCatalogItem> sessions)

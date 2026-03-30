@@ -72,6 +72,22 @@ function Send-SessionUpdate([string]$targetSessionId, [hashtable]$update)
     }
 }
 
+function Resolve-SessionSuffix([string]$targetSessionId)
+{
+    if ([string]::IsNullOrWhiteSpace($targetSessionId))
+    {
+        return '01'
+    }
+
+    $match = [System.Text.RegularExpressions.Regex]::Match($targetSessionId, '(\d{2})$')
+    if ($match.Success)
+    {
+        return $match.Groups[1].Value
+    }
+
+    return '01'
+}
+
 while (($line = [Console]::In.ReadLine()) -ne $null)
 {
     if ([string]::IsNullOrWhiteSpace($line))
@@ -107,18 +123,20 @@ while (($line = [Console]::In.ReadLine()) -ne $null)
             {
                 $requestedSessionId = $sessionId
             }
+            $sessionSuffix = Resolve-SessionSuffix $requestedSessionId
+            $sessionLabel = "GUI Remote Session $sessionSuffix"
 
             Start-Sleep -Milliseconds $replayStartDelayMs
 
             Send-SessionUpdate $requestedSessionId @{
                 sessionUpdate = 'session_info_update'
-                title = 'GUI Remote Session 01'
+                title = $sessionLabel
                 updatedAt = '2026-03-29T12:00:00Z'
             }
 
             for ($index = 1; $index -le $messageCount; $index++)
             {
-                $text = 'GUI Remote Session 01 replay {0:d3}' -f $index
+                $text = "$sessionLabel replay {0:d3}" -f $index
                 $updateType = if (($index % 2) -eq 0) { 'agent_message_chunk' } else { 'user_message_chunk' }
 
                 Send-SessionUpdate $requestedSessionId @{

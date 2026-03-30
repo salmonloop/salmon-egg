@@ -267,6 +267,41 @@ public sealed class MainNavigationViewModelSelectionTests
     }
 
     [Fact]
+    public void RebuildTree_MultipleRapidCalls_CoalesceToSinglePostedWorkItem()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new QueuedSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var sessionManager = CreateSessionManager(new Session("session-1", @"C:\repo\demo")
+            {
+                DisplayName = "Session 1"
+            });
+            var preferences = CreatePreferencesWithProject();
+
+            var chatCatalog = CreateChatSessionCatalog("session-1");
+            using var navVm = CreateNavigationViewModel(chatCatalog, sessionManager.Object, preferences, navState);
+
+            var baselinePending = syncContext.PendingPostCount;
+            navVm.RebuildTree();
+            navVm.RebuildTree();
+            navVm.RebuildTree();
+
+            Assert.Equal(baselinePending + 1, syncContext.PendingPostCount);
+
+            syncContext.DrainAll();
+
+            Assert.Equal(0, syncContext.PendingPostCount);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public void RebuildTree_KeepsLastUpdatedOrderingWhenOnlyAccessTimesChange()
     {
         var originalContext = SynchronizationContext.Current;
@@ -546,6 +581,51 @@ public sealed class MainNavigationViewModelSelectionTests
     private sealed class ImmediateSynchronizationContext : SynchronizationContext
     {
         public override void Post(SendOrPostCallback d, object? state) => d(state);
+    }
+
+    private sealed class QueuedSynchronizationContext : SynchronizationContext
+    {
+        private readonly Queue<(SendOrPostCallback Callback, object? State)> _queue = new();
+
+        public int PendingPostCount
+        {
+            get
+            {
+                lock (_queue)
+                {
+                    return _queue.Count;
+                }
+            }
+        }
+
+        public override void Post(SendOrPostCallback d, object? state)
+        {
+            lock (_queue)
+            {
+                _queue.Enqueue((d, state));
+            }
+        }
+
+        public void DrainAll(int maxIterations = 64)
+        {
+            for (var i = 0; i < maxIterations; i++)
+            {
+                (SendOrPostCallback Callback, object? State) workItem;
+                lock (_queue)
+                {
+                    if (_queue.Count == 0)
+                    {
+                        return;
+                    }
+
+                    workItem = _queue.Dequeue();
+                }
+
+                workItem.Callback(workItem.State);
+            }
+
+            throw new InvalidOperationException("SynchronizationContext queue did not drain within the expected iteration budget.");
+        }
     }
 
     private static FakeChatSessionCatalog CreateChatSessionCatalog(params string[] conversationIds)

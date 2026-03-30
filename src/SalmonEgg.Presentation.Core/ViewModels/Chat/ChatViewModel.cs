@@ -71,6 +71,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private CancellationTokenSource? _transientNotificationCts;
     private CancellationTokenSource? _storeStateCts;
     private readonly object _selectedProfileConnectSync = new();
+    private readonly object _ambientConnectionRequestSync = new();
     private Task? _selectedProfileConnectTask;
     private ServerConfiguration? _pendingSelectedProfileConnect;
     private IDisposable? _storeStateSubscription;
@@ -89,7 +90,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private readonly object _conversationActivationSync = new();
     private readonly SemaphoreSlim _conversationActivationGate = new(1, 1);
     private readonly SemaphoreSlim _remoteConversationActivationGate = new(1, 1);
+
     private CancellationTokenSource? _conversationActivationCts;
+    private CancellationTokenSource? _ambientConnectionRequestCts;
     private long _conversationActivationVersion;
     private long _connectionGeneration;
     private readonly Dictionary<string, BottomPanelState> _bottomPanelStateByConversation = new(StringComparer.Ordinal);
@@ -785,6 +788,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             if (!string.Equals(CurrentSessionId, projection.HydratedConversationId, StringComparison.Ordinal))
             {
                 CurrentSessionId = projection.HydratedConversationId;
+                MessageHistory.Clear();
+                PlanEntries.Clear();
             }
 
             var draft = projection.CurrentPrompt;
@@ -836,15 +841,42 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     private void SyncPlanEntries(IReadOnlyList<ConversationPlanEntrySnapshot> planEntries)
     {
-        PlanEntries.Clear();
-        foreach (var entry in planEntries)
+        var entries = planEntries ?? Array.Empty<ConversationPlanEntrySnapshot>();
+        for (int i = 0; i < entries.Count; i++)
         {
-            PlanEntries.Add(new PlanEntryViewModel
+            var entry = entries[i];
+            if (i < PlanEntries.Count)
             {
-                Content = entry.Content ?? string.Empty,
-                Status = entry.Status,
-                Priority = entry.Priority
-            });
+                if (PlanEntries[i].Content != (entry.Content ?? string.Empty))
+                {
+                    while (PlanEntries.Count > i) PlanEntries.RemoveAt(i);
+                    PlanEntries.Add(new PlanEntryViewModel
+                    {
+                        Content = entry.Content ?? string.Empty,
+                        Status = entry.Status,
+                        Priority = entry.Priority
+                    });
+                }
+                else
+                {
+                    PlanEntries[i].Status = entry.Status;
+                    PlanEntries[i].Priority = entry.Priority;
+                }
+            }
+            else
+            {
+                PlanEntries.Add(new PlanEntryViewModel
+                {
+                    Content = entry.Content ?? string.Empty,
+                    Status = entry.Status,
+                    Priority = entry.Priority
+                });
+            }
+        }
+
+        while (PlanEntries.Count > entries.Count)
+        {
+            PlanEntries.RemoveAt(PlanEntries.Count - 1);
         }
     }
 
@@ -1074,10 +1106,67 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             {
                 await ConnectToAcpProfileCoreAsync(profile, CancellationToken.None).ConfigureAwait(false);
             }
+            catch (OperationCanceledException)
+            {
+            }
             catch (Exception ex)
             {
                 Logger.LogWarning(ex, "Queued ACP profile switch failed (ProfileId={ProfileId})", profile.Id);
             }
+        }
+    }
+
+    private CancellationTokenSource BeginAmbientConnectionRequest(CancellationToken cancellationToken)
+    {
+        CancellationTokenSource? previousRequest;
+        var currentRequest = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        lock (_ambientConnectionRequestSync)
+        {
+            previousRequest = _ambientConnectionRequestCts;
+            _ambientConnectionRequestCts = currentRequest;
+        }
+
+        try
+        {
+            previousRequest?.Cancel();
+        }
+        finally
+        {
+            previousRequest?.Dispose();
+        }
+
+        return currentRequest;
+    }
+
+    private void EndAmbientConnectionRequest(CancellationTokenSource request)
+    {
+        lock (_ambientConnectionRequestSync)
+        {
+            if (ReferenceEquals(_ambientConnectionRequestCts, request))
+            {
+                _ambientConnectionRequestCts = null;
+            }
+        }
+
+        request.Dispose();
+    }
+
+    private void CancelAmbientConnectionRequest()
+    {
+        CancellationTokenSource? currentRequest;
+        lock (_ambientConnectionRequestSync)
+        {
+            currentRequest = _ambientConnectionRequestCts;
+            _ambientConnectionRequestCts = null;
+        }
+
+        try
+        {
+            currentRequest?.Cancel();
+        }
+        finally
+        {
+            currentRequest?.Dispose();
         }
     }
 
@@ -2001,10 +2090,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             cancellationToken.ThrowIfCancellationRequested();
             await ConnectToAcpProfileCoreAsync(config, cancellationToken);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
             _autoConnectAttempted = false;
-            throw;
+            return;
         }
         catch
         {
@@ -2022,18 +2111,62 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             return;
         }
 
+        var ambientConnectionRequest = BeginAmbientConnectionRequest(cancellationToken);
         try
         {
+            await ConnectToAcpProfileCoreAsync(
+                    profile,
+                    AcpConnectionContext.None,
+                    ambientConnectionRequest.Token)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ambientConnectionRequest.IsCancellationRequested)
+        {
+            if (_chatService is not { IsConnected: true })
+            {
+                await _chatConnectionStore
+                    .Dispatch(new SetConnectionPhaseAction(ConnectionPhase.Disconnected))
+                    .ConfigureAwait(false);
+            }
+
+            throw;
+        }
+        finally
+        {
+            EndAmbientConnectionRequest(ambientConnectionRequest);
+        }
+    }
+
+    private async Task ConnectToAcpProfileCoreAsync(
+        ServerConfiguration? profile,
+        AcpConnectionContext connectionContext,
+        CancellationToken cancellationToken)
+    {
+        if (profile == null)
+        {
+            return;
+        }
+
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
             await PrepareSelectedProfileConnectionAsync(profile, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             await PostToUiAsync(() =>
             {
                 _suppressAutoConnectFromPreferenceChange = true;
                 _acpProfiles.MarkLastConnected(profile);
                 _acpProfiles.SelectedProfile = ResolveLoadedProfileSelection(profile);
             }).ConfigureAwait(false);
-            var result = await _acpConnectionCommands
-                .ConnectToProfileAsync(profile, TransportConfig, this, cancellationToken)
-                .ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            var result = connectionContext.Equals(AcpConnectionContext.None)
+                ? await _acpConnectionCommands
+                    .ConnectToProfileAsync(profile, TransportConfig, this, cancellationToken)
+                    .ConfigureAwait(false)
+                : await _acpConnectionCommands
+                    .ConnectToProfileAsync(profile, TransportConfig, this, connectionContext, cancellationToken)
+                    .ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
 
             await PostToUiAsync(() =>
             {
@@ -2042,6 +2175,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 UpdateAgentInfo();
                 ShowTransportConfigPanel = false;
             }).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -2080,9 +2214,17 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         {
             try
             {
-                var result = await _acpConnectionCommands
-                    .ApplyTransportConfigurationAsync(TransportConfig, this, preserveConversation)
-                    .ConfigureAwait(false);
+                var result = preserveConversation
+                    ? await _acpConnectionCommands
+                        .ApplyTransportConfigurationAsync(
+                            TransportConfig,
+                            this,
+                            new AcpConnectionContext(CurrentSessionId, PreserveConversation: true),
+                            CancellationToken.None)
+                        .ConfigureAwait(false)
+                    : await _acpConnectionCommands
+                        .ApplyTransportConfigurationAsync(TransportConfig, this, preserveConversation)
+                        .ConfigureAwait(false);
 
             CacheAuthMethods(result.InitializeResponse);
             ClearAuthenticationRequirement();
@@ -2768,6 +2910,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
+
             var remoteConnectionReady = await EnsureActiveConversationRemoteConnectionReadyAsync(
                     sessionId,
                     activationVersion,
@@ -2800,6 +2943,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     private ConversationActivationLease BeginConversationActivation(CancellationToken cancellationToken)
     {
+        CancelAmbientConnectionRequest();
+
         CancellationTokenSource? previousCts;
         var currentCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var version = Interlocked.Increment(ref _conversationActivationVersion);
@@ -2842,6 +2987,21 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     private bool IsLatestConversationActivationVersion(long activationVersion)
         => Volatile.Read(ref _conversationActivationVersion) == activationVersion;
+
+    private bool IsActivationContextStale(long? activationVersion, CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return true;
+        }
+
+        if (!activationVersion.HasValue)
+        {
+            return false;
+        }
+
+        return !IsLatestConversationActivationVersion(activationVersion.Value);
+    }
 
     private async Task ResetRemoteHydrationUiStateAsync(long activationVersion)
     {
@@ -4328,6 +4488,15 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     public ValueTask<ConversationRemoteBindingState?> GetCurrentRemoteBindingAsync(CancellationToken cancellationToken = default)
         => ResolveActiveConversationBindingAsync(cancellationToken);
 
+    public async ValueTask<ConversationRemoteBindingState?> GetConversationRemoteBindingAsync(
+        string conversationId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var binding = await ResolveConversationBindingAsync(conversationId, cancellationToken).ConfigureAwait(false);
+        return ToBindingState(binding);
+    }
+
     public bool IsInitialized => IsConnected && !IsInitializing;
 
     public string? CurrentRemoteSessionId => _currentRemoteSessionId;
@@ -4465,12 +4634,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
         try
         {
+            var adapter = chatService as AcpChatServiceAdapter;
+            adapter?.BeginHydrationBuffering(binding.RemoteSessionId);
             var ownsRemoteHydrationUi = ShouldOwnRemoteHydrationUi(conversationId, activationVersion);
             var transcriptBaselineCount = await GetProjectedTranscriptCountAsync(conversationId).ConfigureAwait(false);
             var knownTranscriptGrowthGraceDeadlineUtc = DateTime.UtcNow + RemoteReplayKnownTranscriptGrowthGracePeriod;
             var replayBaseline = GetSessionUpdateObservationCount(binding.RemoteSessionId);
             var transcriptProjectionBaseline = GetTranscriptProjectionObservationCount(binding.RemoteSessionId);
-            var requiresTranscriptGrowthObservation = chatService is AcpChatServiceAdapter;
+            var requiresTranscriptGrowthObservation = adapter != null;
             if (ownsRemoteHydrationUi)
             {
                 await PostToUiAsync(() =>
@@ -4511,9 +4682,13 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                     cancellationToken)
                 .ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
-            if (requiresTranscriptGrowthObservation && chatService is AcpChatServiceAdapter adapter)
+            if (adapter != null)
             {
                 adapter.MarkHydrated();
+            }
+
+            if (requiresTranscriptGrowthObservation)
+            {
                 await AwaitRemoteReplayProjectionAsync(
                         binding.RemoteSessionId!,
                         replayBaseline,
@@ -4538,14 +4713,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         }
         catch (OperationCanceledException)
         {
+            (chatService as AcpChatServiceAdapter)?.SuppressBufferedUpdates("RemoteHydrationCanceled");
             throw;
         }
         catch (Exception ex)
         {
-            if (chatService is AcpChatServiceAdapter adapter)
-            {
-                adapter.MarkHydrated(lowTrust: true, reason: "DiscoverImportLoadSessionFailed");
-            }
+            (chatService as AcpChatServiceAdapter)?.SuppressBufferedUpdates("DiscoverImportLoadSessionFailed");
 
             Logger.LogError(ex, "Failed to hydrate active conversation from remote session");
             SetError($"Failed to load session: {ex.Message}");
@@ -4751,8 +4924,18 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             return false;
         }
 
+        if (IsActivationContextStale(activationVersion, cancellationToken))
+        {
+            return false;
+        }
+
         var ownsConnectionLifecycleOverlay = false;
         var binding = await ResolveConversationBindingAsync(conversationId, cancellationToken).ConfigureAwait(false);
+        if (IsActivationContextStale(activationVersion, cancellationToken))
+        {
+            return false;
+        }
+
         try
         {
             if (string.IsNullOrWhiteSpace(binding?.RemoteSessionId))
@@ -4792,16 +4975,23 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                     || string.Equals(binding.ProfileId, pendingProfileId, StringComparison.Ordinal)))
             {
                 var becameReady = await WaitForRemoteConnectionReadyAsync(binding.ProfileId, cancellationToken).ConfigureAwait(false);
-                if (!becameReady)
+                if (IsActivationContextStale(activationVersion, cancellationToken))
                 {
-                    await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
-                    var finalConnectionState = await _chatConnectionStore.State ?? ChatConnectionState.Empty;
-                    SetError(string.IsNullOrWhiteSpace(finalConnectionState.Error)
-                        ? "Failed to load session: ACP profile connection did not become ready."
-                        : $"Failed to load session: {finalConnectionState.Error}");
+                    return false;
                 }
 
-                return becameReady;
+                if (becameReady)
+                {
+                    return true;
+                }
+
+                var finalConnectionState = await _chatConnectionStore.State ?? ChatConnectionState.Empty;
+                if (!string.IsNullOrWhiteSpace(finalConnectionState.Error))
+                {
+                    await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
+                    SetError($"Failed to load session: {finalConnectionState.Error}");
+                    return false;
+                }
             }
 
             if (string.IsNullOrWhiteSpace(binding.ProfileId))
@@ -4821,8 +5011,23 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 return false;
             }
 
-            await ConnectToAcpProfileCoreAsync(profile, cancellationToken).ConfigureAwait(false);
+            var connectionContext = CreateConversationConnectionContext(
+                conversationId,
+                binding,
+                profile.Id,
+                preserveConversation: true);
+            await ConnectToAcpProfileCoreAsync(profile, connectionContext, cancellationToken).ConfigureAwait(false);
+            if (IsActivationContextStale(activationVersion, cancellationToken))
+            {
+                return false;
+            }
+
             var readyAfterConnect = await IsRemoteConnectionReadyAsync(binding.ProfileId, cancellationToken).ConfigureAwait(false);
+            if (IsActivationContextStale(activationVersion, cancellationToken))
+            {
+                return false;
+            }
+
             if (!readyAfterConnect)
             {
                 await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
@@ -4933,6 +5138,25 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 workspaceBinding.ConversationId,
                 workspaceBinding.RemoteSessionId,
                 workspaceBinding.BoundProfileId);
+    }
+
+    private static AcpConnectionContext CreateConversationConnectionContext(
+        string? conversationId,
+        ConversationBindingSlice? binding,
+        string? profileId,
+        bool preserveConversation)
+    {
+        if (!preserveConversation || string.IsNullOrWhiteSpace(conversationId))
+        {
+            return new AcpConnectionContext(conversationId, PreserveConversation: false);
+        }
+
+        var hasMatchingRemoteBinding =
+            !string.IsNullOrWhiteSpace(binding?.RemoteSessionId)
+            && !string.IsNullOrWhiteSpace(binding?.ProfileId)
+            && string.Equals(binding?.ProfileId, profileId, StringComparison.Ordinal);
+
+        return new AcpConnectionContext(conversationId, hasMatchingRemoteBinding);
     }
 
     private async Task<int> GetProjectedTranscriptCountAsync(string conversationId)

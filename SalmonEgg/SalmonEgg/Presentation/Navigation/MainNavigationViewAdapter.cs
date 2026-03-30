@@ -46,7 +46,19 @@ public sealed class MainNavigationViewAdapter
 
     public void ApplySelectionDeferred()
     {
-        _ = _dispatcherQueue.TryEnqueue(ApplySelection);
+        if (!_selectionApplyGate.TryScheduleDeferredApply())
+        {
+            return;
+        }
+
+        if (!_dispatcherQueue.TryEnqueue(() =>
+            {
+                _selectionApplyGate.ReleaseScheduledDeferredApply();
+                ApplySelection();
+            }))
+        {
+            _selectionApplyGate.ReleaseScheduledDeferredApply();
+        }
     }
 
     public async Task<bool> HandleItemInvokedAsync(NavigationViewItemInvokedEventArgs args)
@@ -96,6 +108,9 @@ public sealed class MainNavigationViewAdapter
                 ? sessionItem.ProjectId
                 : _viewModel.TryGetProjectIdForSession(sessionId);
 
+            // Apply the user's latest intent immediately so projection does not briefly
+            // snap back to the previous session while activation is still in flight.
+            _viewModel.SelectSession(sessionId);
             await _navigationCoordinator.ActivateSessionAsync(sessionId, sessionProjectId).ConfigureAwait(true);
             return true;
         }
@@ -173,4 +188,5 @@ public sealed class MainNavigationViewAdapter
             _navigationView.SelectedItem = _navigationView.SettingsItem;
         });
     }
+
 }

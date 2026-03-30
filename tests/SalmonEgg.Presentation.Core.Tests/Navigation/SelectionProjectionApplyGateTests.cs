@@ -55,4 +55,19 @@ public sealed class SelectionProjectionApplyGateTests
         Assert.False(shouldApplyAfterInnerInteraction);
         Assert.True(shouldApplyAfterOuterInteraction);
     }
+
+    [Fact]
+    public void TryScheduleDeferredApply_CoalescesUntilReleased()
+    {
+        var gate = new SelectionProjectionApplyGate();
+
+        var firstAttempt = gate.TryScheduleDeferredApply();
+        var secondAttempt = gate.TryScheduleDeferredApply();
+        gate.ReleaseScheduledDeferredApply();
+        var thirdAttempt = gate.TryScheduleDeferredApply();
+
+        Assert.True(firstAttempt);
+        Assert.False(secondAttempt);
+        Assert.True(thirdAttempt);
+    }
 }

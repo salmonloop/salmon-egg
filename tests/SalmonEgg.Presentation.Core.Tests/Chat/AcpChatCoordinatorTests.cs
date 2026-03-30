@@ -119,6 +119,162 @@ public sealed class AcpChatCoordinatorTests
     }
 
     [Fact]
+    public async Task ApplyTransportConfigurationAsync_CancelledBeforeCandidateCommit_DiscardsCandidateAndKeepsExistingService()
+    {
+        var transport = new FakeTransportConfiguration
+        {
+            SelectedTransportType = TransportType.WebSocket,
+            RemoteUrl = "wss://agent.test"
+        };
+        var previousService = CreateChatService();
+        var candidateService = CreateChatService();
+        var initializeStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowInitializeCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var previousDisposed = false;
+        var candidateDisposed = false;
+        previousService.As<IDisposable>()
+            .Setup(x => x.Dispose())
+            .Callback(() => previousDisposed = true);
+        candidateService.As<IDisposable>()
+            .Setup(x => x.Dispose())
+            .Callback(() => candidateDisposed = true);
+        var sink = new FakeSink
+        {
+            CurrentChatService = previousService.Object,
+            IsConnected = true,
+            IsInitialized = true,
+            CurrentSessionId = "local-session-1",
+            SelectedProfileId = "profile-1"
+        };
+        var factory = new Mock<IAcpChatServiceFactory>();
+        var logger = new Mock<ILogger<AcpChatCoordinator>>();
+        var connectionCoordinator = new Mock<IAcpConnectionCoordinator>();
+
+        candidateService
+            .Setup(x => x.InitializeAsync(It.IsAny<InitializeParams>()))
+            .Returns(async () =>
+            {
+                initializeStarted.TrySetResult(null);
+                await allowInitializeCompletion.Task;
+                return new InitializeResponse(1, new AgentInfo("agent", "1.0.0"), new AgentCapabilities());
+            });
+
+        factory
+            .Setup(x => x.CreateChatService(TransportType.WebSocket, null, null, "wss://agent.test"))
+            .Returns(candidateService.Object);
+
+        var sut = new AcpChatCoordinator(
+            factory.Object,
+            logger.Object,
+            connectionCoordinator: connectionCoordinator.Object);
+        using var cancellation = new CancellationTokenSource();
+
+        var applyTask = sut.ApplyTransportConfigurationAsync(
+            transport,
+            sink,
+            new AcpConnectionContext("local-session-1", PreserveConversation: false),
+            cancellation.Token);
+        await initializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        cancellation.Cancel();
+        allowInitializeCompletion.TrySetResult(null);
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => applyTask);
+
+        Assert.Same(previousService.Object, sink.CurrentChatService);
+        Assert.Empty(sink.ReplaceChatServiceCalls);
+        previousService.Verify(x => x.DisconnectAsync(), Times.Never);
+        candidateService.Verify(x => x.DisconnectAsync(), Times.Once);
+        Assert.False(previousDisposed);
+        Assert.True(candidateDisposed);
+        connectionCoordinator.Verify(
+            x => x.SetConnectingAsync("profile-1", It.IsAny<CancellationToken>()),
+            Times.Once);
+        connectionCoordinator.Verify(
+            x => x.SetInitializingAsync("profile-1", It.IsAny<CancellationToken>()),
+            Times.Once);
+        connectionCoordinator.Verify(
+            x => x.SetConnectedAsync("profile-1", It.IsAny<CancellationToken>()),
+            Times.Once);
+        connectionCoordinator.Verify(
+            x => x.SetDisconnectedAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task ApplyTransportConfigurationAsync_CancelledBeforeCandidateCommit_WithoutPreviousConnection_RestoresDisconnectedState()
+    {
+        var transport = new FakeTransportConfiguration
+        {
+            SelectedTransportType = TransportType.WebSocket,
+            RemoteUrl = "wss://agent.test"
+        };
+        var candidateService = CreateChatService();
+        var initializeStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowInitializeCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var candidateDisposed = false;
+        candidateService.As<IDisposable>()
+            .Setup(x => x.Dispose())
+            .Callback(() => candidateDisposed = true);
+        var sink = new FakeSink
+        {
+            CurrentSessionId = "local-session-1",
+            SelectedProfileId = "profile-2"
+        };
+        var factory = new Mock<IAcpChatServiceFactory>();
+        var logger = new Mock<ILogger<AcpChatCoordinator>>();
+        var connectionCoordinator = new Mock<IAcpConnectionCoordinator>();
+
+        candidateService
+            .Setup(x => x.InitializeAsync(It.IsAny<InitializeParams>()))
+            .Returns(async () =>
+            {
+                initializeStarted.TrySetResult(null);
+                await allowInitializeCompletion.Task;
+                return new InitializeResponse(1, new AgentInfo("agent", "1.0.0"), new AgentCapabilities());
+            });
+
+        factory
+            .Setup(x => x.CreateChatService(TransportType.WebSocket, null, null, "wss://agent.test"))
+            .Returns(candidateService.Object);
+
+        var sut = new AcpChatCoordinator(
+            factory.Object,
+            logger.Object,
+            connectionCoordinator: connectionCoordinator.Object);
+        using var cancellation = new CancellationTokenSource();
+
+        var applyTask = sut.ApplyTransportConfigurationAsync(
+            transport,
+            sink,
+            new AcpConnectionContext("local-session-1", PreserveConversation: false),
+            cancellation.Token);
+        await initializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        cancellation.Cancel();
+        allowInitializeCompletion.TrySetResult(null);
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => applyTask);
+
+        Assert.Null(sink.CurrentChatService);
+        Assert.Empty(sink.ReplaceChatServiceCalls);
+        candidateService.Verify(x => x.DisconnectAsync(), Times.Once);
+        Assert.True(candidateDisposed);
+        connectionCoordinator.Verify(
+            x => x.SetConnectingAsync("profile-2", It.IsAny<CancellationToken>()),
+            Times.Once);
+        connectionCoordinator.Verify(
+            x => x.SetInitializingAsync("profile-2", It.IsAny<CancellationToken>()),
+            Times.Once);
+        connectionCoordinator.Verify(
+            x => x.SetDisconnectedAsync(null, It.IsAny<CancellationToken>()),
+            Times.Once);
+        connectionCoordinator.Verify(
+            x => x.SetConnectedAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task ApplyTransportConfigurationAsync_PreserveConversationWithExistingBinding_ResyncsWhenLoadSessionCapabilityIsAdvertised()
     {
         var transport = new FakeTransportConfiguration
@@ -665,6 +821,7 @@ public sealed class AcpChatCoordinatorTests
         public ConversationRemoteBindingState? ResolvedBinding { get; set; }
         public int ClearedRemoteSessionBindings { get; private set; }
         public List<(string RemoteSessionId, string? ProfileId, bool PreserveConversation)> BoundRemoteSessions { get; } = new();
+        public List<IChatService?> ReplaceChatServiceCalls { get; } = new();
         public FakeBindingCommands BindingCommands { get; }
         public int ResetHydratedConversationForResyncCalls { get; private set; }
 
@@ -681,6 +838,7 @@ public sealed class AcpChatCoordinatorTests
 
         public void ReplaceChatService(IChatService? chatService)
         {
+            ReplaceChatServiceCalls.Add(chatService);
             CurrentChatService = chatService;
         }
 

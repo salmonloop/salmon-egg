@@ -132,6 +132,12 @@ public sealed class AcpChatServiceAdapter : IChatService, IDisposable
         SessionUpdateReceived?.Invoke(this, update);
     }
 
+    public void BeginHydrationBuffering(string? sessionId)
+        => _eventAdapter.BeginHydrationBuffering(sessionId);
+
+    public void SuppressBufferedUpdates(string? reason = null)
+        => _eventAdapter.SuppressBufferedUpdates(reason);
+
     public void MarkHydrated(bool lowTrust = false, string? reason = null)
         => _eventAdapter.MarkHydrated(lowTrust, reason);
 

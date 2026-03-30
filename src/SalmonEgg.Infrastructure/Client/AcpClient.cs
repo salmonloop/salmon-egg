@@ -1245,7 +1245,7 @@ namespace SalmonEgg.Infrastructure.Client
             _disposed = true;
             _messageLoopCts?.Cancel();
             _terminalSessionManager.Dispose();
-            _transport.DisconnectAsync().Wait();
+            _ = _transport.DisconnectAsync();
             _transport.MessageReceived -= OnMessageReceived;
             _transport.ErrorOccurred -= OnTransportError;
             GC.SuppressFinalize(this);

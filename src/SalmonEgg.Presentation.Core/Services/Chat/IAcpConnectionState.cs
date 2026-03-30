@@ -74,6 +74,20 @@ public interface IAcpChatCoordinatorSink : IAcpConnectionState
                     SelectedProfileId));
     }
 
+    ValueTask<ConversationRemoteBindingState?> GetConversationRemoteBindingAsync(
+        string conversationId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(conversationId)
+            || !string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
+        {
+            return ValueTask.FromResult<ConversationRemoteBindingState?>(null);
+        }
+
+        return GetCurrentRemoteBindingAsync(cancellationToken);
+    }
+
     void SelectProfile(ServerConfiguration profile)
     {
     }

@@ -79,6 +79,57 @@ public sealed class AcpChatServiceAdapterTests
         Assert.Equal("remote-1", updates[0].SessionId);
     }
 
+    [Fact]
+    public void BeginHydrationBuffering_WhenAlreadyHydrated_BuffersOnlyTargetSessionReplay()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var inner = new FakeChatService();
+        using var adapter = BuildAdapter(inner, syncContext);
+        var updates = new List<SessionUpdateEventArgs>();
+        adapter.SessionUpdateReceived += (_, args) => updates.Add(args);
+
+        adapter.MarkHydrated();
+        inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-previous", new PlanUpdate(title: "before")));
+        Assert.Single(updates);
+
+        adapter.BeginHydrationBuffering("remote-next");
+        inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-previous", new PlanUpdate(title: "stale")));
+        inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-next", new PlanUpdate(title: "fresh")));
+
+        Assert.Single(updates);
+
+        adapter.MarkHydrated();
+
+        Assert.Equal(2, updates.Count);
+        Assert.Equal("remote-next", updates[1].SessionId);
+        Assert.Equal("fresh", Assert.IsType<PlanUpdate>(updates[1].Update).Title);
+    }
+
+    [Fact]
+    public void SuppressBufferedUpdates_DropsStaleReplayUntilNextHydrationAttempt()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var inner = new FakeChatService();
+        using var adapter = BuildAdapter(inner, syncContext);
+        var updates = new List<SessionUpdateEventArgs>();
+        adapter.SessionUpdateReceived += (_, args) => updates.Add(args);
+
+        adapter.BeginHydrationBuffering("remote-1");
+        inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-1", new PlanUpdate(title: "discard-me")));
+
+        adapter.SuppressBufferedUpdates();
+        adapter.MarkHydrated();
+        Assert.Empty(updates);
+
+        adapter.BeginHydrationBuffering("remote-1");
+        inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-1", new PlanUpdate(title: "keep-me")));
+        adapter.MarkHydrated();
+
+        var update = Assert.Single(updates);
+        Assert.Equal("remote-1", update.SessionId);
+        Assert.Equal("keep-me", Assert.IsType<PlanUpdate>(update.Update).Title);
+    }
+
     private static AcpChatServiceAdapter BuildAdapter(
         IChatService inner,
         SynchronizationContext synchronizationContext,

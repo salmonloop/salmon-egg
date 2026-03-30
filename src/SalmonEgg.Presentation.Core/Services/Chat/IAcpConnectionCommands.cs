@@ -20,6 +20,15 @@ public readonly record struct AcpPromptDispatchResult(
     SessionPromptResponse Response,
     bool RetriedAfterSessionRecovery);
 
+public readonly record struct AcpConnectionContext(
+    string? ConversationId,
+    bool PreserveConversation)
+{
+    public static AcpConnectionContext None { get; } = new(null, PreserveConversation: false);
+
+    public bool HasConversationTarget => !string.IsNullOrWhiteSpace(ConversationId);
+}
+
 /// <summary>
 /// ACP coordinator command surface.
 /// This is intentionally service-oriented so ChatViewModel can delegate behavior without a MVUX rewrite.
@@ -32,10 +41,23 @@ public interface IAcpConnectionCommands
         IAcpChatCoordinatorSink sink,
         CancellationToken cancellationToken = default);
 
+    Task<AcpTransportApplyResult> ConnectToProfileAsync(
+        ServerConfiguration profile,
+        IAcpTransportConfiguration transportConfiguration,
+        IAcpChatCoordinatorSink sink,
+        AcpConnectionContext connectionContext,
+        CancellationToken cancellationToken = default);
+
     Task<AcpTransportApplyResult> ApplyTransportConfigurationAsync(
         IAcpTransportConfiguration transportConfiguration,
         IAcpChatCoordinatorSink sink,
         bool preserveConversation,
+        CancellationToken cancellationToken = default);
+
+    Task<AcpTransportApplyResult> ApplyTransportConfigurationAsync(
+        IAcpTransportConfiguration transportConfiguration,
+        IAcpChatCoordinatorSink sink,
+        AcpConnectionContext connectionContext,
         CancellationToken cancellationToken = default);
 
     Task<AcpRemoteSessionResult> EnsureRemoteSessionAsync(

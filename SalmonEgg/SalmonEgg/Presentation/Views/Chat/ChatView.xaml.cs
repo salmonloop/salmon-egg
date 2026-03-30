@@ -26,6 +26,7 @@ namespace SalmonEgg.Presentation.Views.Chat
         private ScrollViewer? _scrollViewer;
         private bool _suspendAutoScrollTracking;
         private bool _manualScrollIntentPending;
+        private bool _wasOverlayVisible;
 
         public ChatView()
         {
@@ -42,6 +43,7 @@ namespace SalmonEgg.Presentation.Views.Chat
             _isViewLoaded = true;
             _userScrolledUp = false;
             _manualScrollIntentPending = false;
+            _wasOverlayVisible = ViewModel.IsOverlayVisible;
             _initialScrollGate.MarkPending();
             EnsureMessageTracking();
             BeginLayoutLoadingIfPendingMessages();
@@ -238,9 +240,16 @@ namespace SalmonEgg.Presentation.Views.Chat
                 || e.PropertyName == nameof(ChatViewModel.IsSessionActive))
             {
                 ResetAutoScrollStateForConversationChange();
+                _wasOverlayVisible = ViewModel.IsOverlayVisible;
                 _initialScrollGate.MarkPending();
                 BeginLayoutLoadingIfPendingMessages();
                 RequestInitialScroll();
+                return;
+            }
+
+            if (e.PropertyName == nameof(ChatViewModel.IsOverlayVisible))
+            {
+                HandleOverlayVisibilityChanged();
             }
         }
 
@@ -339,7 +348,11 @@ namespace SalmonEgg.Presentation.Views.Chat
                     RequestInitialScroll(attempt + 1);
                     break;
                 default:
-                    _initialScrollGate.CancelInFlight();
+                    // Stop the initial-load cycle after the retry budget is exhausted.
+                    // Leaving the gate pending would let LayoutUpdated restart the whole
+                    // sequence from attempt 0 forever and starve the UI thread.
+                    _initialScrollGate.ClearPending();
+                    ReleaseAutoScrollTracking();
                     RefreshLayoutLoadingState(HasLastItemContainerGenerated(count));
                     break;
             }
@@ -456,6 +469,27 @@ namespace SalmonEgg.Presentation.Views.Chat
             _userScrolledUp = false;
             _suspendAutoScrollTracking = false;
             _manualScrollIntentPending = false;
+        }
+
+        private void HandleOverlayVisibilityChanged()
+        {
+            var isOverlayVisible = ViewModel.IsOverlayVisible;
+            var overlayJustDismissed = _wasOverlayVisible && !isOverlayVisible;
+            _wasOverlayVisible = isOverlayVisible;
+
+            if (!overlayJustDismissed
+                || _userScrolledUp
+                || !_isViewLoaded
+                || MessagesList is null
+                || ViewModel.MessageHistory.Count <= 0)
+            {
+                return;
+            }
+
+            _initialScrollGate.MarkPending();
+            RefreshLayoutLoadingState(HasLastItemContainerGenerated(ViewModel.MessageHistory.Count));
+            RequestScrollToBottom();
+            RequestInitialScroll();
         }
 
         private void OnSessionNameClick(object sender, RoutedEventArgs e)

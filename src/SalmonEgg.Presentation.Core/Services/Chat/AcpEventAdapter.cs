@@ -21,6 +21,7 @@ public sealed class AcpEventAdapter
     private readonly Queue<SessionUpdateEventArgs> _buffer = new();
     private readonly object _gate = new();
     private readonly int _bufferLimit;
+    private string? _bufferingSessionId;
     private bool _isHydrated;
     private bool _isSuppressing;
     private bool _resyncRaised;
@@ -81,6 +82,13 @@ public sealed class AcpEventAdapter
                 return;
             }
 
+            if (!_isHydrated
+                && !string.IsNullOrWhiteSpace(_bufferingSessionId)
+                && !string.Equals(_bufferingSessionId, update.SessionId, StringComparison.Ordinal))
+            {
+                return;
+            }
+
             if (_buffer.Count >= _bufferLimit)
             {
                 (resync, resyncSessionId) = TriggerResyncLocked(update);
@@ -126,6 +134,7 @@ public sealed class AcpEventAdapter
             _isHydrated = true;
             _isSuppressing = false;
             _resyncRaised = false;
+            _bufferingSessionId = null;
 
             if (lowTrust && bufferedCount > 0 && !_lowTrustReleaseLogged)
             {
@@ -156,6 +165,46 @@ public sealed class AcpEventAdapter
         {
             PostDrain();
         }
+    }
+
+    public void BeginHydrationBuffering(string? sessionId)
+    {
+        var droppedBufferedCount = 0;
+        lock (_gate)
+        {
+            droppedBufferedCount = _buffer.Count;
+            _buffer.Clear();
+            _isHydrated = false;
+            _isSuppressing = false;
+            _resyncRaised = false;
+            _lowTrustReleaseLogged = false;
+            _bufferingSessionId = string.IsNullOrWhiteSpace(sessionId) ? null : sessionId;
+        }
+
+        _logger?.LogDebug(
+            "ACP hydration buffering armed. sessionId={SessionId} droppedBufferedCount={DroppedBufferedCount}",
+            _bufferingSessionId,
+            droppedBufferedCount);
+    }
+
+    public void SuppressBufferedUpdates(string? reason = null)
+    {
+        var droppedBufferedCount = 0;
+        lock (_gate)
+        {
+            droppedBufferedCount = _buffer.Count;
+            _buffer.Clear();
+            _isHydrated = false;
+            _isSuppressing = true;
+            _resyncRaised = false;
+            _lowTrustReleaseLogged = false;
+            _bufferingSessionId = null;
+        }
+
+        _logger?.LogInformation(
+            "ACP buffered session updates suppressed. droppedBufferedCount={DroppedBufferedCount} reason={Reason}",
+            droppedBufferedCount,
+            string.IsNullOrWhiteSpace(reason) ? "Unknown" : reason);
     }
 
     private (Action<string?>? Callback, string? SessionId) TriggerResyncLocked(SessionUpdateEventArgs update)

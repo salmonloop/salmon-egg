@@ -425,7 +425,7 @@ namespace SalmonEgg.Infrastructure.Transport
             }
 
             _disposed = true;
-            DisconnectAsync().Wait();
+            _ = DisconnectAsync();
             GC.SuppressFinalize(this);
         }
     }
