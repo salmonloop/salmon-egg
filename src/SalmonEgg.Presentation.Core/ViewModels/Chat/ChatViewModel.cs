@@ -39,7 +39,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat;
 /// Orchestrates the lifecycle of conversations, ACP agent connectivity, and UI state projection.
 /// Follows the MVVM pattern where the View is driven strictly by this ViewModel and its projected state.
 /// </summary>
-public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCatalog, IAcpChatCoordinatorSink, IConversationSessionSwitcher
+public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCatalog, IAcpChatCoordinatorSink, IConversationSessionSwitcher, IConversationActivationPreview
 {
     private static readonly TimeSpan RemoteReplayStartTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan RemoteReplaySettleQuietPeriod = TimeSpan.FromSeconds(2);
@@ -114,6 +114,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private string? _connectionLifecycleOverlayConversationId;
     private string? _historyOverlayConversationId;
     private string? _pendingHistoryOverlayDismissConversationId;
+    private string? _sessionSwitchPreviewConversationId;
 
     /// <summary>
     /// Local conversation binding connects a stable UI ConversationId to a transient ACP RemoteSessionId.
@@ -177,6 +178,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private bool IsSessionSwitchOverlayVisible
         => IsSessionSwitching && !string.IsNullOrWhiteSpace(_sessionSwitchOverlayConversationId);
 
+    private bool IsSessionSwitchPreviewVisible
+        => !string.IsNullOrWhiteSpace(_sessionSwitchPreviewConversationId);
+
     private bool ShouldShowConnectionLifecycleOverlay
         => IsOverlayOwnedByCurrentSession(_connectionLifecycleOverlayConversationId)
             && (IsConnecting || IsInitializing);
@@ -194,6 +198,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             || ShouldShowHistoryOverlay
             || ShouldShowProjectedHydrationOverlay
             || IsSessionSwitchOverlayVisible
+            || IsSessionSwitchPreviewVisible
             || IsLayoutLoading;
 
     public bool HasVisibleTranscriptContent => MessageHistory.Count > 0;
@@ -212,7 +217,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         IsConnecting && ShouldShowConnectionLifecycleOverlay ? "正在连接到 Agent..." :
         IsInitializing && ShouldShowConnectionLifecycleOverlay ? "正在初始化 ACP 协议..." :
         (ShouldShowHistoryOverlay || ShouldShowProjectedHydrationOverlay) ? "正在加载会话历史..." :
-        IsSessionSwitchOverlayVisible ? "正在准备会话..." : string.Empty;
+        (IsSessionSwitchOverlayVisible || IsSessionSwitchPreviewVisible) ? "正在准备会话..." : string.Empty;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsOverlayVisible))]
@@ -482,6 +487,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasPendingAskUserRequest))]
+    [NotifyPropertyChangedFor(nameof(AskUserPrompt))]
+    [NotifyPropertyChangedFor(nameof(AskUserQuestions))]
+    [NotifyPropertyChangedFor(nameof(AskUserHasError))]
+    [NotifyPropertyChangedFor(nameof(AskUserErrorMessage))]
+    [NotifyPropertyChangedFor(nameof(AskUserSubmitCommand))]
     [NotifyPropertyChangedFor(nameof(IsInputEnabled))]
     [NotifyPropertyChangedFor(nameof(CanSendPromptUi))]
     private AskUserRequestViewModel? _pendingAskUserRequest;
@@ -695,7 +705,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 }
 
                 var projection = CreateProjection(state, connectionState);
-                SyncMessageHistory(projection.Transcript);
                 ApplyStoreProjection(projection);
             }).ConfigureAwait(false);
         }
@@ -787,6 +796,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         {
             if (!string.Equals(CurrentSessionId, projection.HydratedConversationId, StringComparison.Ordinal))
             {
+                // Set the session ID without triggering OnCurrentSessionIdChanged immediately
+                // if we want to avoid multiple overlay state changes, but here we actually
+                // WANT consistent behavior. By moving session clearing before other updates,
+                // we ensure the "empty" state is correctly identified as "loading" if hydrating.
                 CurrentSessionId = projection.HydratedConversationId;
                 MessageHistory.Clear();
                 PlanEntries.Clear();
@@ -800,16 +813,30 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
             ApplySelectedProfileFromStore(projection.SelectedProfileId);
             _currentRemoteSessionId = projection.RemoteSessionId;
+
+            // CRITICAL: Sync transcript BEFORE notifying IsSessionActive/IsHydrating.
+            // This ensures that when the UI thread reacts to the active session,
+            // MessageHistory already reflects the projected state.
+            SyncMessageHistory(projection.Transcript);
+
+            // Update hydration state BEFORE session active so the UI thread's IsOverlayVisible
+            // logic (which depends on IsHydrating) sees the hydration state as soon as
+            // the session becomes active. This prevents the "flash of empty chat interface".
+            IsHydrating = projection.IsHydrating;
             IsSessionActive = projection.IsSessionActive;
             IsPromptInFlight = projection.IsPromptInFlight;
             IsTurnStatusVisible = projection.IsTurnStatusVisible;
-            IsHydrating = projection.IsHydrating;
             TurnStatusText = projection.TurnStatusText;
             IsTurnStatusRunning = projection.IsTurnStatusRunning;
             TurnPhase = projection.TurnPhase;
             IsConnecting = projection.IsConnecting;
             IsConnected = projection.IsConnected;
             IsInitializing = projection.IsInitializing;
+
+            ShowPlanPanel = projection.ShowPlanPanel;
+            CurrentPlanTitle = projection.PlanTitle;
+            SyncPlanEntries(projection.PlanEntries);
+
             RaiseOverlayStateChanged();
             Interlocked.Exchange(ref _connectionGeneration, projection.ConnectionGeneration);
             CurrentConnectionStatus = projection.ConnectionStatus;
@@ -823,10 +850,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 projection.SelectedModeId,
                 projection.ConfigOptions,
                 projection.ShowConfigOptionsPanel);
-            ShowPlanPanel = projection.ShowPlanPanel;
-            CurrentPlanTitle = projection.PlanTitle;
-            SyncPlanEntries(projection.PlanEntries);
-            SyncMessageHistory(projection.Transcript);
             TryCompletePendingHistoryOverlayDismissal(projection);
             RefreshProjectAffinityCorrectionState(projection.HydratedConversationId);
             ApplyProjectAffinityOverrideCommand.NotifyCanExecuteChanged();
@@ -1295,7 +1318,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             }
 
             await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
-            keepLayoutLoading = IsSessionActive && MessageHistory.Count > 0;
+
+            // Re-evaluate if we should keep loading after projection applied.
+            // If the session is active and we're hydrating (even if count is 0), keep loading.
+            keepLayoutLoading = IsSessionActive && (MessageHistory.Count > 0 || IsHydrating || IsRemoteHydrationPending);
         }
         finally
         {
@@ -1319,7 +1345,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 return;
             }
 
-            SyncMessageHistory(projection.Transcript);
+            // Note: ApplyStoreProjection now internally calls SyncMessageHistory
+            // before notifying state changes to avoid race conditions on the UI thread.
             ApplyStoreProjection(projection);
         }).ConfigureAwait(false);
     }
@@ -2787,6 +2814,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         var completionOwnedByBackground = false;
         try
         {
+            ((IConversationActivationPreview)this).ClearSessionSwitchPreview(sessionId);
             SetConversationOverlayOwners(
                 sessionSwitchConversationId: sessionId,
                 connectionLifecycleConversationId: null,
@@ -3193,6 +3221,67 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     Task<bool> IConversationSessionSwitcher.SwitchConversationAsync(string conversationId, CancellationToken cancellationToken)
         => ActivateConversationCoreAsync(conversationId, awaitRemoteHydration: false, cancellationToken);
+
+    private void ApplySessionSwitchPreview(string conversationId)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _sessionSwitchPreviewConversationId = conversationId;
+        RaiseOverlayStateChanged();
+    }
+
+    private void ApplySessionSwitchPreviewClear(string conversationId)
+    {
+        if (_disposed
+            || !string.Equals(_sessionSwitchPreviewConversationId, conversationId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _sessionSwitchPreviewConversationId = null;
+        RaiseOverlayStateChanged();
+    }
+
+    void IConversationActivationPreview.PrimeSessionSwitchPreview(string conversationId)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return;
+        }
+
+        if (SynchronizationContext.Current == _syncContext)
+        {
+            ApplySessionSwitchPreview(conversationId);
+            return;
+        }
+
+        _syncContext.Send(_ =>
+        {
+            ApplySessionSwitchPreview(conversationId);
+        }, null);
+    }
+
+    void IConversationActivationPreview.ClearSessionSwitchPreview(string conversationId)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return;
+        }
+
+        if (SynchronizationContext.Current == _syncContext)
+        {
+            ApplySessionSwitchPreviewClear(conversationId);
+            return;
+        }
+
+        _syncContext.Post(_ =>
+        {
+            ApplySessionSwitchPreviewClear(conversationId);
+        }, null);
+    }
 
     private void OnAskUserRequestReceived(object? sender, AskUserRequestEventArgs e)
     {

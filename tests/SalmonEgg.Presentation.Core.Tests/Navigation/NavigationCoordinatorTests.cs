@@ -337,6 +337,56 @@ public sealed class NavigationCoordinatorTests
     }
 
     [Fact]
+    public async Task ActivateSessionAsync_FromStart_RemoteConversation_PrimesLoadingOverlayBeforeChatNavigationCompletes()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var sessionManager = CreateSessionManager(
+                new Session("session-2", @"C:\repo\two") { DisplayName = "Imported Session" });
+            var preferences = CreatePreferencesWithProject();
+            var shellNavigation = new TokenAwareShellNavigationService();
+
+            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
+            await chat.ViewModel.RestoreAsync();
+
+            var bindResult = await chat.ViewModel.ConversationBindingCommands
+                .UpdateBindingAsync("session-2", "remote-2", null);
+            Assert.Equal(BindingUpdateStatus.Success, bindResult.Status);
+
+            var chatService = new Mock<IChatService>();
+            chatService.SetupGet(service => service.IsConnected).Returns(true);
+            chatService.SetupGet(service => service.IsInitialized).Returns(true);
+            chatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
+            chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(SessionLoadResponse.Completed);
+            chat.ViewModel.ReplaceChatService(chatService.Object);
+
+            var selectionStore = new ShellSelectionStateStore();
+            var coordinator = CreateCoordinator(selectionStore, (IConversationSessionSwitcher)chat.ViewModel, preferences, shellNavigation);
+
+            var activationTask = coordinator.ActivateSessionAsync("session-2", "project-1");
+
+            await WaitForConditionAsync(() => chat.ViewModel.ShouldShowBlockingLoadingMask, maxAttempts: 20, delayMilliseconds: 10);
+
+            Assert.False(activationTask.IsCompleted);
+            Assert.True(chat.ViewModel.IsOverlayVisible);
+            Assert.True(chat.ViewModel.ShouldShowBlockingLoadingMask);
+            Assert.Equal("正在准备会话...", chat.ViewModel.OverlayStatusText);
+
+            shellNavigation.CompleteFirst(ShellNavigationResult.Success());
+
+            Assert.True(await activationTask);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public void SyncSelectionFromShellContent_Start_SelectsStart()
     {
         var originalContext = SynchronizationContext.Current;

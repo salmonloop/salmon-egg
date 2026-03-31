@@ -13,6 +13,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
 {
     private readonly IShellSelectionMutationSink _selectionSink;
     private readonly IConversationSessionSwitcher _conversationSessionSwitcher;
+    private readonly IConversationActivationPreview? _conversationActivationPreview;
     private readonly INavigationProjectSelectionStore _projectSelectionStore;
     private readonly IShellNavigationService _shellNavigationService;
     private readonly ILogger<NavigationCoordinator> _logger;
@@ -34,6 +35,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
     {
         _selectionSink = selectionSink ?? throw new ArgumentNullException(nameof(selectionSink));
         _conversationSessionSwitcher = conversationSessionSwitcher ?? throw new ArgumentNullException(nameof(conversationSessionSwitcher));
+        _conversationActivationPreview = conversationSessionSwitcher as IConversationActivationPreview;
         _projectSelectionStore = projectSelectionStore ?? throw new ArgumentNullException(nameof(projectSelectionStore));
         _shellNavigationService = shellNavigationService ?? throw new ArgumentNullException(nameof(shellNavigationService));
         _logger = logger ?? NullLogger<NavigationCoordinator>.Instance;
@@ -155,6 +157,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
 
         try
         {
+            _conversationActivationPreview?.PrimeSessionSwitchPreview(request.SessionId);
             var navigationResult = await NavigateToChatAsync(request.Version).ConfigureAwait(true);
             if (!navigationResult.Succeeded
                 || !IsLatestActivationToken(request.Version)
@@ -207,6 +210,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         }
         finally
         {
+            _conversationActivationPreview?.ClearSessionSwitchPreview(request.SessionId);
             if (activationGateEntered)
             {
                 _sessionActivationGate.Release();

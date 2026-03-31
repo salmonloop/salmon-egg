@@ -114,6 +114,52 @@ public sealed class ChatSkeletonSmokeTests
     }
 
     [SkippableFact]
+    public void SelectRemoteSessionFromStart_ShowsLoadingOverlayBeforeChatShell()
+    {
+        var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
+        Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", "1800");
+
+        try
+        {
+            using var appData = GuiAppDataScope.CreateDeterministicSlowRemoteReplayData(
+                cachedMessageCount: 1,
+                replayMessageCount: 24);
+            using var session = WindowsGuiAppSession.LaunchFresh();
+
+            var sessionItem = session.FindByAutomationId("MainNav.Session.gui-remote-conversation-01", TimeSpan.FromSeconds(15));
+            session.ActivateElement(sessionItem);
+
+            WaitForLoadingOverlayBeforeChatShell(
+                session,
+                appData,
+                expectedHeaderText: "GUI Remote Session 01",
+                scenario: "start-to-remote-overlay-before-shell");
+
+            var overlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(30));
+            Assert.True(overlayHidden, "Remote session loading overlay did not disappear after hydration should have completed.");
+
+            var messagesList = session.FindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(10));
+            var lastMessageVisible = session.TryFindVisibleText(
+                "GUI Remote Session 01 replay 024",
+                messagesList,
+                TimeSpan.FromSeconds(8));
+
+            if (lastMessageVisible is null)
+            {
+                ThrowWithScreenshot(
+                    session,
+                    appData,
+                    "start-to-remote-overlay-before-shell-scroll",
+                    $"Latest replay message was not visible after start-to-remote hydration. Visible texts: [{string.Join(", ", session.GetVisibleTexts(messagesList))}]");
+            }
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", previousSlowLoadDelay);
+        }
+    }
+
+    [SkippableFact]
     public void SelectRemoteSession_RepeatedClicksWithLocalDetour_DoesNotHangAndHydratesLatestSelection()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
@@ -707,6 +753,49 @@ public sealed class ChatSkeletonSmokeTests
 
         throw new Xunit.Sdk.XunitException(
             $"Loading overlay was not found for scenario '{scenario}'. Screenshot: {screenshotPath}{Environment.NewLine}{string.Join(Environment.NewLine, timeline)}");
+    }
+
+    private static void WaitForLoadingOverlayBeforeChatShell(
+        WindowsGuiAppSession session,
+        GuiAppDataScope appData,
+        string expectedHeaderText,
+        string scenario)
+    {
+        var timeline = new List<string>();
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(6);
+
+        while (DateTime.UtcNow < deadline)
+        {
+            var overlayVisible = session.TryFindByAutomationId("ChatView.LoadingOverlay", TimeSpan.FromMilliseconds(50)) is not null;
+            var header = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(50));
+            var messagesVisible = session.TryFindByAutomationId("ChatView.MessagesList", TimeSpan.FromMilliseconds(50)) is not null;
+            var headerName = header?.Name ?? "<missing>";
+
+            timeline.Add(
+                $"{DateTime.UtcNow:HH:mm:ss.fff} overlay={overlayVisible} header={headerName} messages={messagesVisible}");
+
+            if (overlayVisible)
+            {
+                return;
+            }
+
+            if ((header is not null && headerName.Contains(expectedHeaderText, StringComparison.Ordinal)) || messagesVisible)
+            {
+                ThrowWithScreenshot(
+                    session,
+                    appData,
+                    scenario,
+                    $"Chat shell became visible before the loading overlay. Timeline:{Environment.NewLine}{string.Join(Environment.NewLine, timeline)}");
+            }
+
+            Thread.Sleep(40);
+        }
+
+        ThrowWithScreenshot(
+            session,
+            appData,
+            scenario,
+            $"Loading overlay did not become visible before timeout.{Environment.NewLine}{string.Join(Environment.NewLine, timeline)}");
     }
 
     private static string? TryGetAutomationId(AutomationElement element)

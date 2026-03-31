@@ -264,7 +264,9 @@ namespace SalmonEgg.Presentation.Views.Chat
                 isSessionActive: ViewModel.IsSessionActive,
                 messageCount: ViewModel.MessageHistory.Count,
                 hasPendingInitialScroll: _initialScrollGate.HasPending,
-                lastItemContainerGenerated: lastItemContainerGenerated);
+                lastItemContainerGenerated: lastItemContainerGenerated,
+                isHydrating: ViewModel.IsHydrating,
+                isRemoteHydrationPending: ViewModel.IsRemoteHydrationPending);
         }
 
         private bool RequestInitialScroll(int attempt = 0)

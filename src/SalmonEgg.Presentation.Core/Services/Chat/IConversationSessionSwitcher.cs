@@ -12,3 +12,14 @@ public interface IConversationSessionSwitcher
 {
     Task<bool> SwitchConversationAsync(string conversationId, CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// Optional shell-facing preview surface for priming the chat loading state before ChatView becomes visible.
+/// This keeps first-frame UX smooth without committing conversation state ahead of SSOT activation.
+/// </summary>
+public interface IConversationActivationPreview
+{
+    void PrimeSessionSwitchPreview(string conversationId);
+
+    void ClearSessionSwitchPreview(string conversationId);
+}

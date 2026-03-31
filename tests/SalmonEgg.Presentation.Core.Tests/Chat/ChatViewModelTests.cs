@@ -3949,6 +3949,39 @@ public class ChatViewModelTests
     }
 
     [Fact]
+    public async Task ConversationActivationPreview_WhenCalledOnCapturedUiContext_AppliesSynchronously()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new QueueingSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            await using var fixture = CreateViewModel(syncContext);
+            var preview = (IConversationActivationPreview)fixture.ViewModel;
+            var pendingBeforePrime = syncContext.PendingCount;
+
+            preview.PrimeSessionSwitchPreview("conv-1");
+
+            Assert.Equal(pendingBeforePrime, syncContext.PendingCount);
+            Assert.True(fixture.ViewModel.IsOverlayVisible);
+            Assert.True(fixture.ViewModel.ShouldShowBlockingLoadingMask);
+            Assert.Equal("正在准备会话...", fixture.ViewModel.OverlayStatusText);
+
+            var pendingBeforeClear = syncContext.PendingCount;
+            preview.ClearSessionSwitchPreview("conv-1");
+
+            Assert.Equal(pendingBeforeClear, syncContext.PendingCount);
+            Assert.False(fixture.ViewModel.IsOverlayVisible);
+            Assert.False(fixture.ViewModel.ShouldShowBlockingLoadingMask);
+            Assert.Equal(string.Empty, fixture.ViewModel.OverlayStatusText);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public async Task SelectAndHydrateConversationAsync_WhenActivationFails_ClearsLayoutLoadingState()
     {
         var syncContext = new ImmediateSynchronizationContext();

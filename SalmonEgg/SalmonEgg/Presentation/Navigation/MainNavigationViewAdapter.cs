@@ -110,8 +110,15 @@ public sealed class MainNavigationViewAdapter
 
             // Apply the user's latest intent immediately so projection does not briefly
             // snap back to the previous session while activation is still in flight.
+            //
+            // IMPORTANT: We MUST call ActivateSessionAsync BEFORE SelectSession.
+            // ActivateSessionAsync (via NavigationCoordinator) calls PrimeSessionSwitchPreview,
+            // which sets the ViewModel's preview loading state. If we SelectSession first,
+            // the ViewModel might briefly project the session as "Active" but "Not Loading"
+            // (since the preview hasn't started yet), causing the "flash of empty chat".
+            var activationTask = _navigationCoordinator.ActivateSessionAsync(sessionId, sessionProjectId);
             _viewModel.SelectSession(sessionId);
-            await _navigationCoordinator.ActivateSessionAsync(sessionId, sessionProjectId).ConfigureAwait(true);
+            await activationTask.ConfigureAwait(true);
             return true;
         }
 
