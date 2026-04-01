@@ -374,7 +374,7 @@ public sealed class NavigationCoordinatorTests
             Assert.False(activationTask.IsCompleted);
             Assert.True(chat.ViewModel.IsOverlayVisible);
             Assert.True(chat.ViewModel.ShouldShowBlockingLoadingMask);
-            Assert.Equal("正在准备会话...", chat.ViewModel.OverlayStatusText);
+            Assert.Equal("正在切换会话...", chat.ViewModel.OverlayStatusText);
 
             shellNavigation.CompleteFirst(ShellNavigationResult.Success());
 
@@ -585,7 +585,13 @@ public sealed class NavigationCoordinatorTests
             var selection = Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
             Assert.Equal("session-2", selection.SessionId);
             Assert.True(chat.ViewModel.IsOverlayVisible);
-            Assert.Equal("正在加载会话历史...", chat.ViewModel.OverlayStatusText);
+            Assert.True(
+                chat.ViewModel.OverlayStatusText.StartsWith("正在加载聊天记录", StringComparison.Ordinal)
+                || chat.ViewModel.OverlayStatusText.StartsWith("正在打开会话", StringComparison.Ordinal)
+                || chat.ViewModel.OverlayStatusText.StartsWith("正在读取历史消息", StringComparison.Ordinal)
+                || chat.ViewModel.OverlayStatusText.StartsWith("正在整理消息", StringComparison.Ordinal)
+                || chat.ViewModel.OverlayStatusText.StartsWith("正在同步最新消息", StringComparison.Ordinal)
+                || chat.ViewModel.OverlayStatusText.StartsWith("马上就好", StringComparison.Ordinal));
 
             allowLoadCompletion.TrySetResult(null);
             await WaitForConditionAsync(() => !chat.ViewModel.IsOverlayVisible, maxAttempts: 100, delayMilliseconds: 20);
@@ -651,7 +657,13 @@ public sealed class NavigationCoordinatorTests
             var selection = Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
             Assert.Equal("session-2", selection.SessionId);
             Assert.True(chat.ViewModel.IsOverlayVisible);
-            Assert.Equal("正在加载会话历史...", chat.ViewModel.OverlayStatusText);
+            Assert.True(
+                chat.ViewModel.OverlayStatusText.StartsWith("正在加载聊天记录", StringComparison.Ordinal)
+                || chat.ViewModel.OverlayStatusText.StartsWith("正在打开会话", StringComparison.Ordinal)
+                || chat.ViewModel.OverlayStatusText.StartsWith("正在读取历史消息", StringComparison.Ordinal)
+                || chat.ViewModel.OverlayStatusText.StartsWith("正在整理消息", StringComparison.Ordinal)
+                || chat.ViewModel.OverlayStatusText.StartsWith("正在同步最新消息", StringComparison.Ordinal)
+                || chat.ViewModel.OverlayStatusText.StartsWith("马上就好", StringComparison.Ordinal));
 
             allowLoadCompletion.TrySetResult(null);
             await WaitForConditionAsync(() => !chat.ViewModel.IsOverlayVisible);

@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 using System.Threading;
 using FlaUI.Core.AutomationElements;
 using Xunit;
@@ -82,6 +83,30 @@ public sealed class ChatSkeletonSmokeTests
 
             var sawOverlayStatus = session.WaitUntilVisible("ChatView.LoadingOverlayStatus", TimeSpan.FromSeconds(10));
             Assert.True(sawOverlayStatus, "Slow remote replay did not expose ChatView.LoadingOverlayStatus.");
+            var protocolStageStatus = WaitForOverlayStatus(
+                session,
+                appData,
+                status => status.StartsWith("正在打开会话", StringComparison.Ordinal)
+                    || status.StartsWith("正在读取历史消息", StringComparison.Ordinal),
+                TimeSpan.FromSeconds(20),
+                "slow-remote-replay-protocol-stage-pill");
+            Assert.True(
+                protocolStageStatus.StartsWith("正在打开会话", StringComparison.Ordinal)
+                || protocolStageStatus.StartsWith("正在读取历史消息", StringComparison.Ordinal));
+            var hydrationProgressStatus = WaitForOverlayStatus(
+                session,
+                appData,
+                status =>
+                    status.Contains("已", StringComparison.Ordinal)
+                    && status.Contains("条", StringComparison.Ordinal)
+                    && (status.StartsWith("正在读取历史消息", StringComparison.Ordinal)
+                        || status.StartsWith("正在整理消息", StringComparison.Ordinal)
+                        || status.StartsWith("正在同步最新消息", StringComparison.Ordinal)
+                        || status.StartsWith("正在加载聊天记录", StringComparison.Ordinal)
+                        || status.StartsWith("马上就好", StringComparison.Ordinal)),
+                TimeSpan.FromSeconds(20),
+                "slow-remote-replay-progress-pill");
+            Assert.Matches(new Regex(@"已(读取|加载) \d+ 条", RegexOptions.CultureInvariant), hydrationProgressStatus);
 
             var overlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(30));
             Assert.True(overlayHidden, "Slow remote replay overlay did not disappear after the transcript should have hydrated.");
@@ -938,5 +963,39 @@ public sealed class ChatSkeletonSmokeTests
                 $"Expected element '{automationId}' was not found. Error: {ex.Message}");
             throw;
         }
+    }
+
+    private static string WaitForOverlayStatus(
+        WindowsGuiAppSession session,
+        GuiAppDataScope appData,
+        Func<string, bool> predicate,
+        TimeSpan timeout,
+        string scenario)
+    {
+        var timeline = new List<string>();
+        var deadline = DateTime.UtcNow + timeout;
+
+        while (DateTime.UtcNow < deadline)
+        {
+            var statusElement = session.TryFindByAutomationId("ChatView.LoadingOverlayStatus", TimeSpan.FromMilliseconds(120));
+            var statusText = statusElement?.Name?.Trim() ?? string.Empty;
+            var overlayVisible = session.TryFindByAutomationId("ChatView.LoadingOverlay", TimeSpan.FromMilliseconds(120)) is not null;
+
+            timeline.Add($"{DateTime.UtcNow:HH:mm:ss.fff} overlay={overlayVisible} status={statusText}");
+
+            if (!string.IsNullOrWhiteSpace(statusText) && predicate(statusText))
+            {
+                return statusText;
+            }
+
+            Thread.Sleep(120);
+        }
+
+        ThrowWithScreenshot(
+            session,
+            appData,
+            scenario,
+            $"Timed out waiting for loading pill status match. Timeline:{Environment.NewLine}{string.Join(Environment.NewLine, timeline)}");
+        throw new Xunit.Sdk.XunitException("Unreachable");
     }
 }

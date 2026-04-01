@@ -3393,7 +3393,7 @@ public class ChatViewModelTests
         await loadStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
         Assert.True(fixture.ViewModel.IsOverlayVisible);
-        Assert.Equal("正在加载会话历史...", fixture.ViewModel.OverlayStatusText);
+        Assert.StartsWith("正在打开会话", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
 
         allowLoadCompletion.TrySetResult(null);
         var hydrated = await hydrationTask;
@@ -3526,7 +3526,7 @@ public class ChatViewModelTests
             hydrationTask.IsCompleted,
             "Remote hydration should stay pending after session/load returns when replay has not started yet.");
         Assert.True(fixture.ViewModel.IsOverlayVisible);
-        Assert.Equal("正在加载会话历史...", fixture.ViewModel.OverlayStatusText);
+        Assert.StartsWith("正在读取历史消息", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
 
         innerChatService.RaiseSessionUpdate(new SessionUpdateEventArgs(
             "remote-1",
@@ -3560,7 +3560,41 @@ public class ChatViewModelTests
         syncContext.RunAll();
 
         Assert.True(fixture.ViewModel.IsOverlayVisible);
-        Assert.Equal("正在加载会话历史...", fixture.ViewModel.OverlayStatusText);
+        Assert.StartsWith("正在加载聊天记录", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Overlay_WhenHydratingAndTranscriptHasProjectedMessages_ShowsLoadedMessageCountInStatus()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            IsHydrating = true,
+            Transcript = ImmutableList.Create(
+                new ConversationMessageSnapshot
+                {
+                    Id = "msg-1",
+                    Timestamp = new DateTime(2026, 3, 30, 0, 0, 0, DateTimeKind.Utc),
+                    ContentType = "text",
+                    TextContent = "first replay chunk"
+                },
+                new ConversationMessageSnapshot
+                {
+                    Id = "msg-2",
+                    Timestamp = new DateTime(2026, 3, 30, 0, 0, 1, DateTimeKind.Utc),
+                    ContentType = "text",
+                    TextContent = "second replay chunk"
+                })
+        });
+        syncContext.RunAll();
+        await Task.Delay(50);
+        syncContext.RunAll();
+
+        Assert.True(fixture.ViewModel.IsOverlayVisible);
+        Assert.Equal("正在加载聊天记录（已加载 2 条）", fixture.ViewModel.OverlayStatusText);
     }
 
     [Fact]
@@ -3965,7 +3999,7 @@ public class ChatViewModelTests
             Assert.Equal(pendingBeforePrime, syncContext.PendingCount);
             Assert.True(fixture.ViewModel.IsOverlayVisible);
             Assert.True(fixture.ViewModel.ShouldShowBlockingLoadingMask);
-            Assert.Equal("正在准备会话...", fixture.ViewModel.OverlayStatusText);
+            Assert.Equal("正在切换会话...", fixture.ViewModel.OverlayStatusText);
 
             var pendingBeforeClear = syncContext.PendingCount;
             preview.ClearSessionSwitchPreview("conv-1");
@@ -4309,6 +4343,40 @@ public class ChatViewModelTests
     }
 
     [Fact]
+    public async Task Overlay_HydratingHistoryStatus_ReportsLoadedMessageCount()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync());
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            IsHydrating = true,
+            Transcript = ImmutableList<ConversationMessageSnapshot>.Empty
+        });
+
+        Assert.Equal("正在加载聊天记录...", fixture.ViewModel.OverlayStatusText);
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            Transcript =
+            [
+                new ConversationMessageSnapshot
+                {
+                    Id = "hydrated-1",
+                    Timestamp = new DateTime(2026, 3, 25, 0, 0, 0, DateTimeKind.Utc),
+                    IsOutgoing = false,
+                    ContentType = "text",
+                    TextContent = "hydrated message"
+                }
+            ]
+        });
+
+        Assert.Equal("正在加载聊天记录（已加载 1 条）", fixture.ViewModel.OverlayStatusText);
+    }
+
+    [Fact]
     [Trait("Suite", "Smoke")]
     public async Task ConversationSessionSwitcherContract_RemoteBoundConversation_CompletesAfterLocalActivationWhileRemoteHydrationContinues()
     {
@@ -4398,7 +4466,9 @@ public class ChatViewModelTests
         Assert.True(await activationTask);
         Assert.Equal("conv-2", fixture.ViewModel.CurrentSessionId);
         Assert.True(fixture.ViewModel.IsOverlayVisible);
-        Assert.Equal("正在加载会话历史...", fixture.ViewModel.OverlayStatusText);
+        Assert.True(
+            IsUserFriendlyHydrationOverlayStatus(fixture.ViewModel.OverlayStatusText),
+            $"Unexpected hydration overlay status: {fixture.ViewModel.OverlayStatusText}");
 
         allowLoadCompletion.TrySetResult(null);
         await WaitForConditionAsync(() => Task.FromResult(!fixture.ViewModel.IsOverlayVisible), timeoutMilliseconds: 7000);
@@ -4640,7 +4710,9 @@ public class ChatViewModelTests
         Assert.True(
             fixture.ViewModel.IsOverlayVisible,
             "Loading overlay should remain visible after the local switch commits when remote replay has not projected yet.");
-        Assert.Equal("正在加载会话历史...", fixture.ViewModel.OverlayStatusText);
+        Assert.True(
+            IsUserFriendlyHydrationOverlayStatus(fixture.ViewModel.OverlayStatusText),
+            $"Unexpected hydration overlay status: {fixture.ViewModel.OverlayStatusText}");
 
         innerChatService.RaiseSessionUpdate(new SessionUpdateEventArgs(
             "remote-2",
@@ -6475,5 +6547,20 @@ public class ChatViewModelTests
         });
 
         Assert.Equal("project-1", fixture.Workspace.GetProjectAffinityOverride("conv-1")?.ProjectId);
+    }
+
+    private static bool IsUserFriendlyHydrationOverlayStatus(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status))
+        {
+            return false;
+        }
+
+        return status.StartsWith("正在打开会话", StringComparison.Ordinal)
+            || status.StartsWith("正在读取历史消息", StringComparison.Ordinal)
+            || status.StartsWith("正在整理消息", StringComparison.Ordinal)
+            || status.StartsWith("正在同步最新消息", StringComparison.Ordinal)
+            || status.StartsWith("马上就好", StringComparison.Ordinal)
+            || status.StartsWith("正在加载聊天记录", StringComparison.Ordinal);
     }
 }

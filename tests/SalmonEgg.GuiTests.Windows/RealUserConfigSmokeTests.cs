@@ -358,6 +358,9 @@ public sealed partial class RealUserConfigSmokeTests
 
     private static class RealUserConfigProbe
     {
+        private static readonly TimeSpan ReplayEvidenceRecencyWindow = TimeSpan.FromDays(14);
+        private const int ReplayEvidenceLogScanLimit = 20;
+
         public static IReadOnlyList<RealReplayCandidate> LoadReplayBackedCandidates()
         {
             var appDataRoot = Path.Combine(
@@ -546,9 +549,20 @@ public sealed partial class RealUserConfigSmokeTests
         {
             var loadedSessionIds = new HashSet<string>(StringComparer.Ordinal);
             var updatedSessionIds = new HashSet<string>(StringComparer.Ordinal);
+            var recentThresholdUtc = DateTime.UtcNow - ReplayEvidenceRecencyWindow;
             var logFiles = Directory.EnumerateFiles(logsRoot, "app-*.log")
                 .OrderByDescending(File.GetLastWriteTimeUtc)
-                .Take(2);
+                .Where(logFile => File.GetLastWriteTimeUtc(logFile) >= recentThresholdUtc)
+                .Take(ReplayEvidenceLogScanLimit)
+                .ToArray();
+
+            if (logFiles.Length == 0)
+            {
+                logFiles = Directory.EnumerateFiles(logsRoot, "app-*.log")
+                    .OrderByDescending(File.GetLastWriteTimeUtc)
+                    .Take(ReplayEvidenceLogScanLimit)
+                    .ToArray();
+            }
 
             foreach (var logFile in logFiles)
             {

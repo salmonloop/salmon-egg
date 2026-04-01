@@ -41,6 +41,26 @@ namespace SalmonEgg.Presentation.ViewModels.Chat;
 /// </summary>
 public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCatalog, IAcpChatCoordinatorSink, IConversationSessionSwitcher, IConversationActivationPreview
 {
+    public enum LoadingOverlayStage
+    {
+        None = 0,
+        Connecting = 1,
+        InitializingProtocol = 2,
+        HydratingHistory = 3,
+        PreparingSession = 4
+    }
+
+    private enum HydrationOverlayPhase
+    {
+        None = 0,
+        RequestingSessionLoad = 1,
+        AwaitingReplayStart = 2,
+        ReplayingSessionUpdates = 3,
+        ProjectingTranscript = 4,
+        SettlingReplay = 5,
+        FinalizingProjection = 6
+    }
+
     private static readonly TimeSpan RemoteReplayStartTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan RemoteReplaySettleQuietPeriod = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan RemoteReplayKnownTranscriptGrowthGracePeriod = TimeSpan.FromSeconds(5);
@@ -107,6 +127,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private readonly Dictionary<string, DateTime> _sessionUpdateLastObservedAtUtc = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> _remoteHydrationKnownTranscriptBaselineCounts = new(StringComparer.Ordinal);
     private readonly Dictionary<string, DateTime> _remoteHydrationKnownTranscriptGrowthGraceDeadlineUtc = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, long> _remoteHydrationSessionUpdateBaselineCounts = new(StringComparer.Ordinal);
+    private HydrationOverlayPhase _hydrationOverlayPhase = HydrationOverlayPhase.None;
+    private string? _hydrationOverlayPhaseConversationId;
     private int _pendingSessionUpdateCount;
     private ObservableCollection<PlanEntryViewModel>? _observedPlanEntries;
     private AskUserRequestViewModel? _observedPendingAskUserRequest;
@@ -158,16 +181,19 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsOverlayVisible))]
+    [NotifyPropertyChangedFor(nameof(OverlayLoadingStage))]
     [NotifyPropertyChangedFor(nameof(OverlayStatusText))]
     private bool _isHydrating;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsOverlayVisible))]
+    [NotifyPropertyChangedFor(nameof(OverlayLoadingStage))]
     [NotifyPropertyChangedFor(nameof(OverlayStatusText))]
     private bool _isRemoteHydrationPending;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsOverlayVisible))]
+    [NotifyPropertyChangedFor(nameof(OverlayLoadingStage))]
     [NotifyPropertyChangedFor(nameof(OverlayStatusText))]
     private bool _isSessionSwitching;
 
@@ -213,11 +239,204 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     public bool ShouldShowLoadingOverlayPresenter
         => ShouldShowBlockingLoadingMask || ShouldShowLoadingOverlayStatusPill;
 
+    public LoadingOverlayStage OverlayLoadingStage =>
+        ResolveOverlayLoadingStage();
+
     public string OverlayStatusText =>
-        IsConnecting && ShouldShowConnectionLifecycleOverlay ? "正在连接到 Agent..." :
-        IsInitializing && ShouldShowConnectionLifecycleOverlay ? "正在初始化 ACP 协议..." :
-        (ShouldShowHistoryOverlay || ShouldShowProjectedHydrationOverlay) ? "正在加载会话历史..." :
-        (IsSessionSwitchOverlayVisible || IsSessionSwitchPreviewVisible) ? "正在准备会话..." : string.Empty;
+        OverlayLoadingStage switch
+        {
+            LoadingOverlayStage.Connecting => "正在连接助手...",
+            LoadingOverlayStage.InitializingProtocol => "正在准备会话环境...",
+            LoadingOverlayStage.HydratingHistory => BuildHydrationStatusText(),
+            LoadingOverlayStage.PreparingSession => "正在切换会话...",
+            _ => string.Empty
+        };
+
+    private LoadingOverlayStage ResolveOverlayLoadingStage()
+    {
+        // ACP lifecycle precedence: transport connect -> protocol initialize -> session replay hydration.
+        if (IsConnecting && ShouldShowConnectionLifecycleOverlay)
+        {
+            return LoadingOverlayStage.Connecting;
+        }
+
+        if (IsInitializing && ShouldShowConnectionLifecycleOverlay)
+        {
+            return LoadingOverlayStage.InitializingProtocol;
+        }
+
+        if (ShouldShowHistoryOverlay || ShouldShowProjectedHydrationOverlay)
+        {
+            return LoadingOverlayStage.HydratingHistory;
+        }
+
+        if (IsSessionSwitchOverlayVisible || IsSessionSwitchPreviewVisible)
+        {
+            return LoadingOverlayStage.PreparingSession;
+        }
+
+        return LoadingOverlayStage.None;
+    }
+
+    private string BuildHydrationStatusText()
+    {
+        var updateCount = ResolveHydrationObservedUpdateCount();
+        var loadedCount = ResolveHydrationLoadedMessageCount();
+        return _hydrationOverlayPhase switch
+        {
+            HydrationOverlayPhase.RequestingSessionLoad => "正在打开会话...",
+            HydrationOverlayPhase.AwaitingReplayStart => "正在读取历史消息...",
+            HydrationOverlayPhase.ReplayingSessionUpdates => updateCount > 0
+                ? $"正在读取历史消息（已读取 {updateCount} 条）"
+                : "正在读取历史消息...",
+            HydrationOverlayPhase.ProjectingTranscript => loadedCount > 0
+                ? $"正在整理消息（已加载 {loadedCount} 条）"
+                : "正在整理消息...",
+            HydrationOverlayPhase.SettlingReplay => loadedCount > 0
+                ? $"正在同步最新消息（已加载 {loadedCount} 条）"
+                : "正在同步最新消息...",
+            HydrationOverlayPhase.FinalizingProjection => loadedCount > 0
+                ? $"马上就好（已加载 {loadedCount} 条）"
+                : "马上就好...",
+            _ => loadedCount > 0
+                ? $"正在加载聊天记录（已加载 {loadedCount} 条）"
+                : "正在加载聊天记录..."
+        };
+    }
+
+    private long ResolveHydrationObservedUpdateCount()
+    {
+        var conversationId = !string.IsNullOrWhiteSpace(_historyOverlayConversationId)
+            ? _historyOverlayConversationId
+            : CurrentSessionId;
+        if (string.IsNullOrWhiteSpace(conversationId)
+            || !_remoteHydrationSessionUpdateBaselineCounts.TryGetValue(conversationId, out var replayBaseline))
+        {
+            return 0;
+        }
+
+        var remoteSessionId = _conversationWorkspace.GetRemoteBinding(conversationId)?.RemoteSessionId;
+        if (string.IsNullOrWhiteSpace(remoteSessionId))
+        {
+            return 0;
+        }
+
+        var observedCount = GetSessionUpdateObservationCount(remoteSessionId);
+        return Math.Max(0L, observedCount - replayBaseline);
+    }
+
+    private long ResolveHydrationLoadedMessageCount()
+    {
+        var renderedCount = MessageHistory.Count;
+        var conversationId = !string.IsNullOrWhiteSpace(_historyOverlayConversationId)
+            ? _historyOverlayConversationId
+            : CurrentSessionId;
+        if (string.IsNullOrWhiteSpace(conversationId)
+            || !_remoteHydrationSessionUpdateBaselineCounts.TryGetValue(conversationId, out var replayBaseline))
+        {
+            return renderedCount;
+        }
+
+        var remoteSessionId = _conversationWorkspace.GetRemoteBinding(conversationId)?.RemoteSessionId;
+        if (string.IsNullOrWhiteSpace(remoteSessionId))
+        {
+            return renderedCount;
+        }
+
+        var observedCount = GetSessionUpdateObservationCount(remoteSessionId);
+        var replayLoadedCount = Math.Max(0L, observedCount - replayBaseline);
+        return Math.Max(renderedCount, replayLoadedCount);
+    }
+
+    private bool TryResolveCurrentHydrationConversationForRemoteSession(
+        string? remoteSessionId,
+        out string conversationId)
+    {
+        conversationId = string.Empty;
+        if (string.IsNullOrWhiteSpace(remoteSessionId))
+        {
+            return false;
+        }
+
+        var currentConversationId = CurrentSessionId;
+        if (string.IsNullOrWhiteSpace(currentConversationId)
+            || !string.Equals(_historyOverlayConversationId, currentConversationId, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var activeBinding = _conversationWorkspace.GetRemoteBinding(currentConversationId);
+        if (!string.Equals(activeBinding?.RemoteSessionId, remoteSessionId, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        conversationId = currentConversationId;
+        return true;
+    }
+
+    private void ResetHydrationOverlayPhaseIfOwnerChanged(string? historyConversationId)
+    {
+        var shouldReset =
+            string.IsNullOrWhiteSpace(historyConversationId)
+            || !string.Equals(_hydrationOverlayPhaseConversationId, historyConversationId, StringComparison.Ordinal);
+
+        if (!shouldReset
+            || _hydrationOverlayPhase == HydrationOverlayPhase.None)
+        {
+            return;
+        }
+
+        _hydrationOverlayPhase = HydrationOverlayPhase.None;
+        _hydrationOverlayPhaseConversationId = historyConversationId;
+        OnPropertyChanged(nameof(OverlayStatusText));
+    }
+
+    private void SetHydrationOverlayPhase(string conversationId, HydrationOverlayPhase phase)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return;
+        }
+
+        if (!string.Equals(_historyOverlayConversationId, conversationId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (!string.Equals(_hydrationOverlayPhaseConversationId, conversationId, StringComparison.Ordinal))
+        {
+            _hydrationOverlayPhaseConversationId = conversationId;
+            _hydrationOverlayPhase = HydrationOverlayPhase.None;
+        }
+
+        if (phase != HydrationOverlayPhase.None
+            && phase <= _hydrationOverlayPhase)
+        {
+            return;
+        }
+
+        if (_hydrationOverlayPhase == phase)
+        {
+            return;
+        }
+
+        _hydrationOverlayPhase = phase;
+        OnPropertyChanged(nameof(OverlayStatusText));
+    }
+
+    private Task SetHydrationOverlayPhaseAsync(
+        string conversationId,
+        long? activationVersion,
+        HydrationOverlayPhase phase)
+    {
+        if (!ShouldOwnRemoteHydrationUi(conversationId, activationVersion))
+        {
+            return Task.CompletedTask;
+        }
+
+        return PostToUiAsync(() => SetHydrationOverlayPhase(conversationId, phase));
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsOverlayVisible))]
@@ -261,11 +480,13 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     [NotifyPropertyChangedFor(nameof(IsInitialized))]
     [NotifyPropertyChangedFor(nameof(CanSendPromptUi))]
     [NotifyPropertyChangedFor(nameof(IsOverlayVisible))]
+    [NotifyPropertyChangedFor(nameof(OverlayLoadingStage))]
     [NotifyPropertyChangedFor(nameof(OverlayStatusText))]
     private bool _isInitializing;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsOverlayVisible))]
+    [NotifyPropertyChangedFor(nameof(OverlayLoadingStage))]
     [NotifyPropertyChangedFor(nameof(OverlayStatusText))]
     private bool _isConnecting;
 
@@ -1545,6 +1766,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         if (previousCount != MessageHistory.Count)
         {
             OnPropertyChanged(nameof(HasVisibleTranscriptContent));
+            OnPropertyChanged(nameof(OverlayStatusText));
             OnPropertyChanged(nameof(ShouldShowBlockingLoadingMask));
             OnPropertyChanged(nameof(ShouldShowLoadingOverlayPresenter));
         }
@@ -2324,10 +2546,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     private void OnSessionUpdateReceived(object? sender, SessionUpdateEventArgs e)
     {
-        RecordSessionUpdateObservation(e.SessionId);
-
         if (SynchronizationContext.Current == _syncContext)
         {
+            RecordSessionUpdateObservation(e.SessionId);
             TrackPendingSessionUpdate(ProcessSessionUpdateAsync(e));
             return;
         }
@@ -2335,6 +2556,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         _syncContext.Post(static state =>
         {
             var (viewModel, args) = ((ChatViewModel ViewModel, SessionUpdateEventArgs Args))state!;
+            viewModel.RecordSessionUpdateObservation(args.SessionId);
             viewModel.TrackPendingSessionUpdate(viewModel.ProcessSessionUpdateAsync(args));
         }, (this, e));
     }
@@ -2456,6 +2678,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private void RaiseOverlayStateChanged()
     {
         OnPropertyChanged(nameof(IsOverlayVisible));
+        OnPropertyChanged(nameof(OverlayLoadingStage));
         OnPropertyChanged(nameof(OverlayStatusText));
         OnPropertyChanged(nameof(ShouldShowBlockingLoadingMask));
         OnPropertyChanged(nameof(ShouldShowLoadingOverlayStatusPill));
@@ -2559,6 +2782,17 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                     : 1;
             _sessionUpdateLastObservedAtUtc[sessionId] = DateTime.UtcNow;
         }
+
+        if (OverlayLoadingStage != LoadingOverlayStage.HydratingHistory)
+        {
+            return;
+        }
+
+        if (TryResolveCurrentHydrationConversationForRemoteSession(sessionId, out var conversationId))
+        {
+            SetHydrationOverlayPhase(conversationId, HydrationOverlayPhase.ReplayingSessionUpdates);
+            OnPropertyChanged(nameof(OverlayStatusText));
+        }
     }
 
     private void RecordTranscriptProjectionObservation(string? sessionId)
@@ -2574,6 +2808,17 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 _sessionTranscriptProjectionObservationCounts.TryGetValue(sessionId, out var current)
                     ? checked(current + 1)
                     : 1;
+        }
+
+        if (OverlayLoadingStage != LoadingOverlayStage.HydratingHistory)
+        {
+            return;
+        }
+
+        if (TryResolveCurrentHydrationConversationForRemoteSession(sessionId, out var conversationId))
+        {
+            SetHydrationOverlayPhase(conversationId, HydrationOverlayPhase.ProjectingTranscript);
+            OnPropertyChanged(nameof(OverlayStatusText));
         }
     }
 
@@ -2656,12 +2901,20 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     }
 
     private async Task AwaitRemoteReplayProjectionAsync(
+        string conversationId,
+        long? activationVersion,
         string remoteSessionId,
         long replayBaseline,
         long transcriptProjectionBaseline,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        await SetHydrationOverlayPhaseAsync(
+                conversationId,
+                activationVersion,
+                HydrationOverlayPhase.AwaitingReplayStart)
+            .ConfigureAwait(false);
+
         var replayStartTimeoutAt = DateTime.UtcNow + RemoteReplayStartTimeout;
 
         while (GetSessionUpdateObservationCount(remoteSessionId) <= replayBaseline
@@ -2669,6 +2922,15 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         {
             cancellationToken.ThrowIfCancellationRequested();
             await Task.Delay(RemoteReplayPollDelayMilliseconds, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (GetSessionUpdateObservationCount(remoteSessionId) > replayBaseline)
+        {
+            await SetHydrationOverlayPhaseAsync(
+                    conversationId,
+                    activationVersion,
+                    HydrationOverlayPhase.ReplayingSessionUpdates)
+                .ConfigureAwait(false);
         }
 
         var transcriptTimeoutAt = DateTime.UtcNow + RemoteReplayStartTimeout;
@@ -2681,8 +2943,24 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
         if (GetTranscriptProjectionObservationCount(remoteSessionId) > transcriptProjectionBaseline)
         {
+            await SetHydrationOverlayPhaseAsync(
+                    conversationId,
+                    activationVersion,
+                    HydrationOverlayPhase.ProjectingTranscript)
+                .ConfigureAwait(false);
+            await SetHydrationOverlayPhaseAsync(
+                    conversationId,
+                    activationVersion,
+                    HydrationOverlayPhase.SettlingReplay)
+                .ConfigureAwait(false);
             await AwaitRemoteReplaySettleQuietPeriodAsync(remoteSessionId, replayBaseline, cancellationToken).ConfigureAwait(false);
         }
+
+        await SetHydrationOverlayPhaseAsync(
+                conversationId,
+                activationVersion,
+                HydrationOverlayPhase.FinalizingProjection)
+            .ConfigureAwait(false);
 
 #if DEBUG
         Logger.LogInformation(
@@ -3042,6 +3320,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         await PostToUiAsync(() =>
         {
             IsRemoteHydrationPending = false;
+            _remoteHydrationSessionUpdateBaselineCounts.Clear();
             _remoteHydrationKnownTranscriptBaselineCounts.Clear();
             _remoteHydrationKnownTranscriptGrowthGraceDeadlineUtc.Clear();
             SetConversationOverlayOwners(
@@ -3258,7 +3537,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             return;
         }
 
-        _syncContext.Send(_ =>
+        _syncContext.Post(_ =>
         {
             ApplySessionSwitchPreview(conversationId);
         }, null);
@@ -4737,6 +5016,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 {
                     IsRemoteHydrationPending = true;
                     _pendingHistoryOverlayDismissConversationId = null;
+                    _remoteHydrationSessionUpdateBaselineCounts[conversationId] = replayBaseline;
                     if (requiresTranscriptGrowthObservation)
                     {
                         _remoteHydrationKnownTranscriptBaselineCounts[conversationId] = transcriptBaselineCount;
@@ -4751,6 +5031,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                         sessionSwitchConversationId: _sessionSwitchOverlayConversationId,
                         connectionLifecycleConversationId: _connectionLifecycleOverlayConversationId,
                         historyConversationId: conversationId);
+                    SetHydrationOverlayPhase(conversationId, HydrationOverlayPhase.RequestingSessionLoad);
                 }).ConfigureAwait(false);
 #if DEBUG
                 Logger.LogInformation(
@@ -4765,6 +5046,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             await _chatStore.Dispatch(new SelectConversationAction(conversationId)).ConfigureAwait(false);
             await RefreshRemoteSessionMetadataFromSsotAsync(conversationId, binding, chatService, cancellationToken).ConfigureAwait(false);
             await ResetConversationProjectionForResyncAsync(conversationId, cancellationToken).ConfigureAwait(false);
+            await SetHydrationOverlayPhaseAsync(
+                    conversationId,
+                    activationVersion,
+                    HydrationOverlayPhase.RequestingSessionLoad)
+                .ConfigureAwait(false);
             await chatService
                 .LoadSessionAsync(
                     new SessionLoadParams(binding.RemoteSessionId!, GetSessionCwdOrDefault(conversationId)),
@@ -4779,10 +5065,20 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             if (requiresTranscriptGrowthObservation)
             {
                 await AwaitRemoteReplayProjectionAsync(
+                        conversationId,
+                        activationVersion,
                         binding.RemoteSessionId!,
                         replayBaseline,
                         transcriptProjectionBaseline,
                         cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                await SetHydrationOverlayPhaseAsync(
+                        conversationId,
+                        activationVersion,
+                        HydrationOverlayPhase.FinalizingProjection)
                     .ConfigureAwait(false);
             }
 
@@ -4888,6 +5184,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         }
 
         _remoteHydrationStampsByConversation.Clear();
+        _remoteHydrationSessionUpdateBaselineCounts.Clear();
+        _remoteHydrationKnownTranscriptBaselineCounts.Clear();
+        _remoteHydrationKnownTranscriptGrowthGraceDeadlineUtc.Clear();
+        _hydrationOverlayPhase = HydrationOverlayPhase.None;
+        _hydrationOverlayPhaseConversationId = null;
         _pendingAskUserRequestsByConversation.Clear();
         PendingAskUserRequest = null;
         _chatService = chatService;
@@ -4896,6 +5197,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             SubscribeToChatService(chatService);
         }
 
+        OnPropertyChanged(nameof(OverlayStatusText));
         OnPropertyChanged(nameof(CurrentChatService));
         OnPropertyChanged(nameof(IsInitialized));
     }
@@ -5500,6 +5802,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 _pendingHistoryOverlayDismissConversationId = null;
             }
         }
+
+        ResetHydrationOverlayPhaseIfOwnerChanged(historyConversationId);
 #if DEBUG
         Logger.LogInformation(
             "Overlay owners updated. currentSession={CurrentSessionId} sessionSwitch={SessionSwitchConversationId} connectionLifecycle={ConnectionLifecycleConversationId} history={HistoryConversationId} pendingHistoryDismiss={PendingHistoryDismissConversationId} isHydrating={IsHydrating} isRemoteHydrationPending={IsRemoteHydrationPending}",
@@ -5593,6 +5897,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             return;
         }
 
+        _remoteHydrationSessionUpdateBaselineCounts.Remove(conversationId);
         _remoteHydrationKnownTranscriptBaselineCounts.Remove(conversationId);
         _remoteHydrationKnownTranscriptGrowthGraceDeadlineUtc.Remove(conversationId);
     }
