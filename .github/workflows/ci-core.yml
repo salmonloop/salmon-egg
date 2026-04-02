@@ -33,12 +33,15 @@ jobs:
         run: dotnet build SalmonEgg.sln --configuration ${{ env.CONFIGURATION }} --no-restore
 
       - name: Test
+        timeout-minutes: 20
         run: >
           dotnet test SalmonEgg.sln
           --configuration ${{ env.CONFIGURATION }}
           --no-build
           --verbosity normal
           --collect:"XPlat Code Coverage"
+          --blame-hang
+          --blame-hang-timeout 5m
           --logger "trx;LogFilePrefix=results"
           --results-directory ${{ env.TEST_RESULTS_DIR }}
 
