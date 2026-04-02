@@ -1110,6 +1110,7 @@ namespace SalmonEgg.Infrastructure.Client
                     return;
                 }
 
+                var messageId = request.Id;
                 var requestId = request.Id?.ToString() ?? string.Empty;
                 if (!string.IsNullOrWhiteSpace(requestId))
                 {
@@ -1120,7 +1121,7 @@ namespace SalmonEgg.Infrastructure.Client
                 {
                     RemovePendingInboundTracking(requestId);
                     _ = SendResponseAsync(new JsonRpcResponse(
-                        request.Id,
+                        messageId,
                         new JsonRpcError(
                             JsonRpcErrorCode.CapabilityNotSupported,
                             "Ask-user requests are not supported.")));
@@ -1128,9 +1129,9 @@ namespace SalmonEgg.Infrastructure.Client
                 }
 
                 var eventArgs = new AskUserRequestEventArgs(
-                    request.Id,
+                    messageId,
                     askUserRequest,
-                    answers => RespondToAskUserRequestAsync(request.Id, answers));
+                    answers => RespondToAskUserRequestAsync(messageId, answers));
 
                 AskUserRequestReceived.Invoke(this, eventArgs);
             }

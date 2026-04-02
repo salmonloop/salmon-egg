@@ -510,10 +510,14 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 Cwd = session?.Cwd,
                 RemoteSessionId = binding.RemoteSessionId,
                 BoundProfileId = binding.BoundProfileId,
-                ProjectAffinityOverrideProjectId = binding.ProjectAffinityOverride?.ProjectId
+                ProjectAffinityOverrideProjectId = binding.ProjectAffinityOverride?.ProjectId,
+                SelectedModeId = binding.SelectedModeId,
+                ShowConfigOptionsPanel = binding.ShowConfigOptionsPanel
             };
 
             record.Messages.AddRange(CloneMessages(binding.Transcript));
+            record.AvailableModes.AddRange(binding.AvailableModes.Select(CloneModeOption));
+            record.ConfigOptions.AddRange(binding.ConfigOptions.Select(CloneConfigOption));
 
             document.Conversations.Add(record);
         }
@@ -552,9 +556,11 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             binding.Transcript.AddRange(CloneMessages(conversation.Messages));
             binding.Plan.Clear();
             binding.AvailableModes.Clear();
-            binding.SelectedModeId = null;
+            binding.AvailableModes.AddRange((conversation.AvailableModes ?? []).Select(CloneModeOption));
+            binding.SelectedModeId = conversation.SelectedModeId;
             binding.ConfigOptions.Clear();
-            binding.ShowConfigOptionsPanel = false;
+            binding.ConfigOptions.AddRange((conversation.ConfigOptions ?? []).Select(CloneConfigOption));
+            binding.ShowConfigOptionsPanel = conversation.ShowConfigOptionsPanel;
             binding.ShowPlanPanel = false;
             binding.PlanTitle = null;
             binding.RemoteSessionId = conversation.RemoteSessionId;

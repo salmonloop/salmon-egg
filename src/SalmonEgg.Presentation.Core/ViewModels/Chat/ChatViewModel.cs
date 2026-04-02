@@ -2480,6 +2480,15 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             delta.AvailableModes?.Count ?? 0);
     }
 
+    private async Task ApplySessionLoadResponseAsync(string conversationId, SessionLoadResponse response)
+    {
+        var delta = _acpSessionUpdateProjector.ProjectSessionLoad(response);
+        await ApplySessionUpdateDeltaAsync(conversationId, delta).ConfigureAwait(true);
+        Logger.LogInformation(
+            "Session load state projected: {Count}",
+            delta.AvailableModes?.Count ?? 0);
+    }
+
     [RelayCommand]
     private void ToggleTransportConfigPanel()
     {
@@ -4965,12 +4974,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             return false;
         }
 
-        if (chatService.AgentCapabilities?.LoadSession != true)
-        {
-            SetError("Failed to load session: the current agent does not support loading existing sessions.");
-            return false;
-        }
-
         if (string.IsNullOrWhiteSpace(binding.RemoteSessionId))
         {
             SetError("Failed to load session: no remote session binding is available for the active conversation.");
@@ -5028,11 +5031,13 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                     activationVersion,
                     HydrationOverlayPhase.RequestingSessionLoad)
                 .ConfigureAwait(false);
-            await chatService
+            var sessionLoadResponse = await chatService
                 .LoadSessionAsync(
                     new SessionLoadParams(binding.RemoteSessionId!, GetSessionCwdOrDefault(conversationId)),
                     cancellationToken)
                 .ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            await ApplySessionLoadResponseAsync(conversationId, sessionLoadResponse).ConfigureAwait(true);
             cancellationToken.ThrowIfCancellationRequested();
             if (adapter != null)
             {

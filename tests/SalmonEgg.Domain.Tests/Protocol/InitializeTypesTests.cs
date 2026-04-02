@@ -190,6 +190,9 @@ public sealed class InitializeTypesTests
         Assert.That(
             extensions.GetProperty(ClientCapabilityMetadata.AskUserExtensionMethod).ValueKind,
             Is.EqualTo(JsonValueKind.True));
+        Assert.That(
+            extensions.TryGetProperty(ClientCapabilityMetadata.LegacyAskUserExtensionMethod, out _),
+            Is.False);
     }
 
     [Test]
@@ -213,6 +216,7 @@ public sealed class InitializeTypesTests
         var extensionMap = (Dictionary<string, object?>)extensions!;
         Assert.That(extensionMap.TryGetValue(ClientCapabilityMetadata.AskUserExtensionMethod, out var isSupported), Is.True);
         Assert.That(isSupported, Is.EqualTo(true));
+        Assert.That(extensionMap.TryGetValue(ClientCapabilityMetadata.LegacyAskUserExtensionMethod, out _), Is.False);
     }
 
     [Test]
@@ -223,6 +227,9 @@ public sealed class InitializeTypesTests
         Assert.That(
             capabilities.SupportsExtension(ClientCapabilityMetadata.AskUserExtensionMethod),
             Is.True);
+        Assert.That(
+            capabilities.SupportsExtension(ClientCapabilityMetadata.LegacyAskUserExtensionMethod),
+            Is.False);
     }
 
     [Test]
@@ -235,5 +242,8 @@ public sealed class InitializeTypesTests
         Assert.That(
             capabilities!.SupportsExtension(ClientCapabilityMetadata.AskUserExtensionMethod),
             Is.True);
+        Assert.That(
+            capabilities.SupportsExtension(ClientCapabilityMetadata.LegacyAskUserExtensionMethod),
+            Is.False);
     }
 }

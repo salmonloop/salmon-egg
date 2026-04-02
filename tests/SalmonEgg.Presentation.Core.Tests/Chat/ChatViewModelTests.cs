@@ -3204,6 +3204,49 @@ public class ChatViewModelTests
     }
 
     [Fact]
+    public async Task HydrateActiveConversationAsync_WhenSessionLoadReturnsModeAndConfig_ProjectsVisibleSessionState()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+
+        var chatService = CreateConnectedChatService();
+        chatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
+        chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SessionLoadResponse(
+                modes: new SessionModesState
+                {
+                    CurrentModeId = "agent",
+                    AvailableModes =
+                    [
+                        new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "agent", Name = "Agent", Description = "Agent mode" },
+                        new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "plan", Name = "Plan", Description = "Plan mode" }
+                    ]
+                },
+                configOptions: CreateModeConfigOptions("agent")));
+        fixture.ViewModel.ReplaceChatService(chatService.Object);
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+        });
+        await fixture.DispatchConnectionAsync(new SetSelectedProfileAction("profile-1"));
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+
+        var hydrated = await fixture.ViewModel.HydrateActiveConversationAsync();
+
+        Assert.True(hydrated);
+        Assert.False(fixture.ViewModel.IsOverlayVisible);
+        Assert.Equal(2, fixture.ViewModel.AvailableModes.Count);
+        Assert.Equal("agent", fixture.ViewModel.SelectedMode?.ModeId);
+        Assert.Single(fixture.ViewModel.ConfigOptions);
+        Assert.Equal("mode", fixture.ViewModel.ConfigOptions[0].Id);
+        Assert.Equal("agent", fixture.ViewModel.ConfigOptions[0].Value);
+        Assert.True(fixture.ViewModel.ShowConfigOptionsPanel);
+    }
+
+    [Fact]
     public async Task ActivateConversationAsync_RemoteBoundConversation_LoadsRemoteSessionWhenConnected()
     {
         var syncContext = new ImmediateSynchronizationContext();
@@ -6375,8 +6418,45 @@ public class ChatViewModelTests
 
         var chatService = CreateConnectedChatService();
         chatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
-        chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(SessionLoadResponse.Completed);
+        chatService.SetupSequence(service => service.LoadSessionAsync(
+                It.Is<SessionLoadParams>(parameters => string.Equals(parameters.SessionId, "remote-1", StringComparison.Ordinal)),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SessionLoadResponse(
+                modes: new SessionModesState
+                {
+                    CurrentModeId = "agent",
+                    AvailableModes =
+                    [
+                        new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "agent", Name = "Agent" },
+                        new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "plan", Name = "Plan" }
+                    ]
+                },
+                configOptions: CreateModeConfigOptions("agent")))
+            .ReturnsAsync(new SessionLoadResponse(
+                modes: new SessionModesState
+                {
+                    CurrentModeId = "plan",
+                    AvailableModes =
+                    [
+                        new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "agent", Name = "Agent" },
+                        new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "plan", Name = "Plan" }
+                    ]
+                },
+                configOptions: CreateModeConfigOptions("plan")));
+        chatService.Setup(service => service.LoadSessionAsync(
+                It.Is<SessionLoadParams>(parameters => string.Equals(parameters.SessionId, "remote-2", StringComparison.Ordinal)),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SessionLoadResponse(
+                modes: new SessionModesState
+                {
+                    CurrentModeId = "debug",
+                    AvailableModes =
+                    [
+                        new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "debug", Name = "Debug" },
+                        new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "review", Name = "Review" }
+                    ]
+                },
+                configOptions: CreateModeConfigOptions("debug")));
         fixture.ViewModel.ReplaceChatService(chatService.Object);
 
         await fixture.UpdateStateAsync(state => state with
@@ -6393,9 +6473,20 @@ public class ChatViewModelTests
 
         var initialHydrated = await fixture.ViewModel.HydrateActiveConversationAsync();
         Assert.True(initialHydrated);
+        Assert.Equal("agent", fixture.ViewModel.SelectedMode?.ModeId);
+        Assert.Equal("agent", fixture.ViewModel.ConfigOptions[0].Value);
 
         await InvokePrivateTaskAsync(fixture.ViewModel, "ActivateConversationAsync", "conv-2", CancellationToken.None);
         await InvokePrivateTaskAsync(fixture.ViewModel, "ActivateConversationAsync", "conv-1", CancellationToken.None);
+
+        await WaitForConditionAsync(() =>
+        {
+            return Task.FromResult(
+                fixture.ViewModel.AvailableModes.Count == 2
+                && string.Equals(fixture.ViewModel.SelectedMode?.ModeId, "plan", StringComparison.Ordinal)
+                && fixture.ViewModel.ConfigOptions.Count == 1
+                && string.Equals(fixture.ViewModel.ConfigOptions[0].Value?.ToString(), "plan", StringComparison.Ordinal));
+        }, timeoutMilliseconds: 5000);
 
         chatService.Verify(
             service => service.LoadSessionAsync(
@@ -6411,6 +6502,8 @@ public class ChatViewModelTests
                     && string.Equals(parameters.Cwd, @"C:\repo\two", StringComparison.Ordinal)),
                 It.IsAny<CancellationToken>()),
             Times.Once);
+        Assert.Equal("plan", fixture.ViewModel.SelectedMode?.ModeId);
+        Assert.Equal("plan", fixture.ViewModel.ConfigOptions[0].Value);
     }
 
     [Fact]

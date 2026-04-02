@@ -132,7 +132,7 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
-    public async Task SaveAsync_DoesNotPersistConversationSessionState()
+    public async Task SaveAsync_PersistsConversationSessionState()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var store = new CapturingConversationStore();
@@ -187,11 +187,90 @@ public sealed class ChatConversationWorkspaceTests
 
         var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
         var conversation = Assert.Single(saved.Conversations);
-        Assert.NotNull(conversation);
-        Assert.Null(typeof(ConversationRecord).GetProperty("SelectedModeId"));
-        Assert.Null(typeof(ConversationRecord).GetProperty("ShowConfigOptionsPanel"));
-        Assert.Null(typeof(ConversationRecord).GetProperty("AvailableModes"));
-        Assert.Null(typeof(ConversationRecord).GetProperty("ConfigOptions"));
+        Assert.Equal("plan", conversation.SelectedModeId);
+        Assert.True(conversation.ShowConfigOptionsPanel);
+        var availableMode = Assert.Single(conversation.AvailableModes);
+        Assert.Equal("plan", availableMode.ModeId);
+        var configOption = Assert.Single(conversation.ConfigOptions);
+        Assert.Equal("mode", configOption.Id);
+        Assert.Equal("plan", configOption.SelectedValue);
+    }
+
+    [Fact]
+    public async Task RestoreAsync_RestoresConversationSessionState()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore
+        {
+            LoadResult = new ConversationDocument
+            {
+                Conversations =
+                {
+                    new ConversationRecord
+                    {
+                        ConversationId = "session-1",
+                        DisplayName = "Session One",
+                        CreatedAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                        LastUpdatedAt = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+                        AvailableModes =
+                        {
+                            new ConversationModeOptionSnapshot
+                            {
+                                ModeId = "agent",
+                                ModeName = "Agent",
+                                Description = "Agent mode"
+                            },
+                            new ConversationModeOptionSnapshot
+                            {
+                                ModeId = "plan",
+                                ModeName = "Plan",
+                                Description = "Plan mode"
+                            }
+                        },
+                        SelectedModeId = "plan",
+                        ConfigOptions =
+                        {
+                            new ConversationConfigOptionSnapshot
+                            {
+                                Id = "mode",
+                                Name = "Mode",
+                                Category = "mode",
+                                ValueType = "select",
+                                SelectedValue = "plan",
+                                Options =
+                                {
+                                    new ConversationConfigOptionChoiceSnapshot
+                                    {
+                                        Value = "agent",
+                                        Name = "Agent"
+                                    },
+                                    new ConversationConfigOptionChoiceSnapshot
+                                    {
+                                        Value = "plan",
+                                        Name = "Plan"
+                                    }
+                                }
+                            }
+                        },
+                        ShowConfigOptionsPanel = true
+                    }
+                }
+            }
+        };
+
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+
+        await workspace.RestoreAsync();
+
+        var snapshot = workspace.GetConversationSnapshot("session-1");
+        Assert.NotNull(snapshot);
+        Assert.Equal("plan", snapshot!.SelectedModeId);
+        Assert.True(snapshot.ShowConfigOptionsPanel);
+        Assert.Equal(2, snapshot.AvailableModes?.Count);
+        Assert.Single(snapshot.ConfigOptions ?? Array.Empty<ConversationConfigOptionSnapshot>());
+        Assert.Equal("plan", snapshot.ConfigOptions![0].SelectedValue);
     }
 
     [Fact]

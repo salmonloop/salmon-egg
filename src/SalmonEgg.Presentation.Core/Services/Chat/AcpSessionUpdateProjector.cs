@@ -13,6 +13,8 @@ public interface IAcpSessionUpdateProjector
     AcpSessionUpdateDelta Project(SessionUpdateEventArgs args);
 
     AcpSessionUpdateDelta ProjectSessionNew(SessionNewResponse response);
+
+    AcpSessionUpdateDelta ProjectSessionLoad(SessionLoadResponse response);
 }
 
 public sealed class AcpSessionUpdateProjector : IAcpSessionUpdateProjector
@@ -39,31 +41,19 @@ public sealed class AcpSessionUpdateProjector : IAcpSessionUpdateProjector
     {
         ArgumentNullException.ThrowIfNull(response);
 
-        var configDelta = BuildConfigDelta(response.ConfigOptions);
-        var hasModeConfigProjection =
-            (configDelta.AvailableModes?.Count ?? 0) > 0
-            || !string.IsNullOrWhiteSpace(configDelta.SelectedModeId);
-        var availableModes = hasModeConfigProjection
-            ? configDelta.AvailableModes?.ToArray() ?? Array.Empty<AcpModeOption>()
-            : response.Modes?.AvailableModes?
-                .Where(static mode => mode is not null)
-                .Select(mode => new AcpModeOption(
-                    mode!.Id ?? string.Empty,
-                    mode.Name ?? string.Empty,
-                    mode.Description ?? string.Empty))
-                .ToArray() ?? Array.Empty<AcpModeOption>();
+        return BuildSessionProjection(response.Modes, response.ConfigOptions);
+    }
 
-        var selectedModeId = hasModeConfigProjection
-            ? configDelta.SelectedModeId ?? availableModes.FirstOrDefault()?.ModeId
-            : string.IsNullOrWhiteSpace(response.Modes?.CurrentModeId)
-                ? configDelta.SelectedModeId ?? availableModes.FirstOrDefault()?.ModeId
-                : response.Modes!.CurrentModeId;
+    public AcpSessionUpdateDelta ProjectSessionLoad(SessionLoadResponse response)
+    {
+        ArgumentNullException.ThrowIfNull(response);
 
-        return configDelta with
+        if (response.Modes == null && response.ConfigOptions == null)
         {
-            AvailableModes = availableModes,
-            SelectedModeId = selectedModeId
-        };
+            return AcpSessionUpdateDelta.Empty;
+        }
+
+        return BuildSessionProjection(response.Modes, response.ConfigOptions);
     }
 
     private static AcpSessionUpdateDelta BuildConfigDelta(IReadOnlyList<ConfigOption>? configOptions)
@@ -86,6 +76,37 @@ public sealed class AcpSessionUpdateProjector : IAcpSessionUpdateProjector
             SelectedModeId: modeOption?.SelectedValue,
             ConfigOptions: projectedOptions,
             ShowConfigOptionsPanel: projectedOptions.Length > 0);
+    }
+
+    private static AcpSessionUpdateDelta BuildSessionProjection(
+        SessionModesState? modes,
+        IReadOnlyList<ConfigOption>? configOptions)
+    {
+        var configDelta = BuildConfigDelta(configOptions);
+        var hasModeConfigProjection =
+            (configDelta.AvailableModes?.Count ?? 0) > 0
+            || !string.IsNullOrWhiteSpace(configDelta.SelectedModeId);
+        var availableModes = hasModeConfigProjection
+            ? configDelta.AvailableModes?.ToArray() ?? Array.Empty<AcpModeOption>()
+            : modes?.AvailableModes?
+                .Where(static mode => mode is not null)
+                .Select(mode => new AcpModeOption(
+                    mode!.Id ?? string.Empty,
+                    mode.Name ?? string.Empty,
+                    mode.Description ?? string.Empty))
+                .ToArray() ?? Array.Empty<AcpModeOption>();
+
+        var selectedModeId = hasModeConfigProjection
+            ? configDelta.SelectedModeId ?? availableModes.FirstOrDefault()?.ModeId
+            : string.IsNullOrWhiteSpace(modes?.CurrentModeId)
+                ? configDelta.SelectedModeId ?? availableModes.FirstOrDefault()?.ModeId
+                : modes!.CurrentModeId;
+
+        return configDelta with
+        {
+            AvailableModes = availableModes,
+            SelectedModeId = selectedModeId
+        };
     }
 
     private static IReadOnlyList<ConversationPlanEntrySnapshot> MapPlanEntries(IReadOnlyList<PlanEntry>? entries)

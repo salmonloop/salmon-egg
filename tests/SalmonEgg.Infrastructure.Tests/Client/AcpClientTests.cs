@@ -143,7 +143,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var extensions = meta.GetProperty(ClientCapabilityMetadata.ExtensionsMetaKey);
 
             Assert.True(extensions.GetProperty(ClientCapabilityMetadata.AskUserExtensionMethod).GetBoolean());
-            Assert.True(extensions.GetProperty(ClientCapabilityMetadata.LegacyAskUserExtensionMethod).GetBoolean());
+            Assert.False(extensions.TryGetProperty(ClientCapabilityMetadata.LegacyAskUserExtensionMethod, out _));
             Assert.False(clientCapabilities.TryGetProperty("fs", out _));
             Assert.False(clientCapabilities.TryGetProperty("terminal", out _));
         }
@@ -248,6 +248,46 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         [Fact]
+        public async Task LoadSessionAsync_WhenAgentDoesNotAdvertiseLoadSession_DoesNotSendProtocolRequest()
+        {
+            var client = await CreateInitializedClientAsync();
+            typeof(AcpClient)
+                .GetField("_agentCapabilities", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.SetValue(client, new AgentCapabilities());
+
+            var result = await client.LoadSessionAsync(new SessionLoadParams("session-123", "cwd", null));
+
+            Assert.Same(SessionLoadResponse.Completed, result);
+            _transportMock.Verify(
+                t => t.SendMessageAsync(It.IsRegex("session/load"), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
+        public async Task LoadSessionAsync_WhenResultIsNull_CompletesWithoutParseFailure()
+        {
+            var parser = new MessageParser();
+            var client = await CreateInitializedClientAsync();
+
+            _transportMock.Setup(t => t.SendMessageAsync(It.IsRegex("session/load"), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(true);
+
+            var responseTrigger = Task.Run(async () =>
+            {
+                await Task.Delay(10);
+                var response = new JsonRpcResponse(
+                    2,
+                    JsonSerializer.SerializeToElement<object?>(null, parser.Options));
+                _transportMock.Raise(t => t.MessageReceived += null, new MessageReceivedEventArgs(parser.SerializeMessage(response)));
+            });
+
+            var result = await client.LoadSessionAsync(new SessionLoadParams("session-123", "cwd", null));
+            await responseTrigger;
+
+            Assert.Same(SessionLoadResponse.Completed, result);
+        }
+
+        [Fact]
         public async Task LoadSessionAsync_ParsesModesAndConfigOptionsFromResponse()
         {
             var parser = new MessageParser();
@@ -314,6 +354,32 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             Assert.Single(result.ConfigOptions!);
             Assert.Equal("mode", result.ConfigOptions![0].Id);
             Assert.Equal("plan", result.ConfigOptions[0].CurrentValue);
+        }
+
+        [Fact]
+        public async Task LoadSessionAsync_WhenPayloadHasNoModesOrConfigOptions_TreatsResponseAsCompatibleEmptyResult()
+        {
+            var parser = new MessageParser();
+            var client = await CreateInitializedClientAsync();
+
+            _transportMock.Setup(t => t.SendMessageAsync(It.IsRegex("session/load"), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(true);
+
+            var responseTrigger = Task.Run(async () =>
+            {
+                await Task.Delay(10);
+                var response = new JsonRpcResponse(
+                    2,
+                    JsonSerializer.SerializeToElement(new { }, parser.Options));
+                _transportMock.Raise(t => t.MessageReceived += null, new MessageReceivedEventArgs(parser.SerializeMessage(response)));
+            });
+
+            var result = await client.LoadSessionAsync(new SessionLoadParams("session-123", "cwd", null));
+            await responseTrigger;
+
+            Assert.NotNull(result);
+            Assert.Null(result.Modes);
+            Assert.Null(result.ConfigOptions);
         }
 
         [Fact]

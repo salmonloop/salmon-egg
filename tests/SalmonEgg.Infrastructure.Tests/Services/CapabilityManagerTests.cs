@@ -12,7 +12,7 @@ public sealed class CapabilityManagerTests
         var manager = new CapabilityManager(ClientCapabilityDefaults.Create());
 
         Assert.True(manager.IsClientCapabilitySupported(ClientCapabilityMetadata.AskUserExtensionMethod));
-        Assert.True(manager.IsClientCapabilitySupported(ClientCapabilityMetadata.LegacyAskUserExtensionMethod));
+        Assert.False(manager.IsClientCapabilitySupported(ClientCapabilityMetadata.LegacyAskUserExtensionMethod));
     }
 
     [Fact]
@@ -22,9 +22,9 @@ public sealed class CapabilityManagerTests
         var capabilities = manager.GetClientCapabilities();
 
         Assert.True(capabilities.SupportsExtension(ClientCapabilityMetadata.AskUserExtensionMethod));
-        Assert.True(capabilities.SupportsExtension(ClientCapabilityMetadata.LegacyAskUserExtensionMethod));
         Assert.True(manager.IsCapabilitySupported(ClientCapabilityMetadata.AskUserExtensionMethod));
-        Assert.True(manager.IsCapabilitySupported(ClientCapabilityMetadata.LegacyAskUserExtensionMethod));
+        Assert.False(capabilities.SupportsExtension(ClientCapabilityMetadata.LegacyAskUserExtensionMethod));
+        Assert.False(manager.IsCapabilitySupported(ClientCapabilityMetadata.LegacyAskUserExtensionMethod));
         Assert.False(manager.IsClientCapabilitySupported("fs"));
         Assert.False(manager.IsClientCapabilitySupported("terminal"));
     }

@@ -20,8 +20,7 @@ namespace SalmonEgg.Domain.Models.Protocol
             {
                 [ExtensionsMetaKey] = new Dictionary<string, object?>(StringComparer.Ordinal)
                 {
-                    [AskUserExtensionMethod] = true,
-                    [LegacyAskUserExtensionMethod] = true
+                    [AskUserExtensionMethod] = true
                 }
             };
     }

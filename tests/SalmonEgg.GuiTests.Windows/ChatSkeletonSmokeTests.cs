@@ -6,6 +6,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Threading;
+using FlaUI.Core.Definitions;
 using FlaUI.Core.AutomationElements;
 using Xunit;
 
@@ -723,6 +724,81 @@ public sealed class ChatSkeletonSmokeTests
                     appData,
                     "mixed-deterministic-final-local-scroll",
                     $"Final local transcript did not surface expected latest message after deterministic mixed burst. Visible texts: [{string.Join(", ", session.GetVisibleTexts(messagesList))}]");
+            }
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", previousSlowLoadDelay);
+        }
+    }
+
+    [SkippableFact]
+    public void SelectRemoteSessionWithSlowReplay_PersistsLoadedModeAfterHydration()
+    {
+        var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
+        Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", "1500");
+
+        try
+        {
+            using var appData = GuiAppDataScope.CreateDeterministicSlowRemoteReplayData(
+                cachedMessageCount: 1,
+                replayMessageCount: 18);
+            using var session = WindowsGuiAppSession.LaunchFresh();
+            if (session.MainWindow.Patterns.Window.IsSupported)
+            {
+                session.MainWindow.Patterns.Window.Pattern.SetWindowVisualState(WindowVisualState.Maximized);
+            }
+
+            var sessionItem = session.FindByAutomationId("MainNav.Session.gui-remote-conversation-01", TimeSpan.FromSeconds(15));
+            session.ActivateElement(sessionItem);
+
+            var overlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(30));
+            Assert.True(overlayHidden, "Remote session loading overlay did not disappear after hydration should have completed.");
+
+            var remoteHeader = WaitForSessionHeader(
+                session,
+                expectedTitle: "GUI Remote Session 01",
+                scenario: "remote-hydration-load-mode-visible",
+                appData);
+            Assert.Contains("GUI Remote Session 01", remoteHeader.Name, StringComparison.Ordinal);
+
+            var messagesList = session.FindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(10));
+            var lastMessageVisible = session.TryFindVisibleText(
+                "GUI Remote Session 01 replay 018",
+                messagesList,
+                TimeSpan.FromSeconds(8));
+
+            if (lastMessageVisible is null)
+            {
+                ThrowWithScreenshot(
+                    session,
+                    appData,
+                    "remote-hydration-load-mode-visible-missing-message",
+                    $"Latest remote replay message was not visible after hydration. Visible texts: [{string.Join(", ", session.GetVisibleTexts(messagesList))}]");
+            }
+
+            var persistenceDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+            var conversationsJson = appData.ReadConversationsJson();
+            while (DateTime.UtcNow < persistenceDeadline)
+            {
+                if (conversationsJson.Contains("\"selectedModeId\":\"planner\"", StringComparison.Ordinal)
+                    && conversationsJson.Contains("\"selectedValue\":\"planner\"", StringComparison.Ordinal))
+                {
+                    break;
+                }
+
+                Thread.Sleep(250);
+                conversationsJson = appData.ReadConversationsJson();
+            }
+
+            if (!conversationsJson.Contains("\"selectedModeId\":\"planner\"", StringComparison.Ordinal)
+                || !conversationsJson.Contains("\"selectedValue\":\"planner\"", StringComparison.Ordinal))
+            {
+                ThrowWithScreenshot(
+                    session,
+                    appData,
+                    "remote-hydration-load-mode-persistence-missing",
+                    $"Hydrated remote session did not persist loaded mode/config state. conversations.json: {conversationsJson}");
             }
         }
         finally

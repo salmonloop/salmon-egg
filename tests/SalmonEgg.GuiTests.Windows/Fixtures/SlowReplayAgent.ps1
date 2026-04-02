@@ -88,6 +88,46 @@ function Resolve-SessionSuffix([string]$targetSessionId)
     return '01'
 }
 
+function New-LoadResult([string]$sessionSuffix)
+{
+    return @{
+        modes = @{
+            currentModeId = 'planner'
+            availableModes = @(
+                @{
+                    id = 'agent'
+                    name = "Agent $sessionSuffix"
+                    description = 'General conversation mode'
+                },
+                @{
+                    id = 'planner'
+                    name = "Planner $sessionSuffix"
+                    description = 'Structured planning mode'
+                }
+            )
+        }
+        configOptions = @(
+            @{
+                id = 'mode'
+                name = 'Mode'
+                description = 'Conversation mode'
+                type = 'select'
+                currentValue = 'planner'
+                options = @(
+                    @{
+                        value = 'agent'
+                        name = "Agent $sessionSuffix"
+                    },
+                    @{
+                        value = 'planner'
+                        name = "Planner $sessionSuffix"
+                    }
+                )
+            }
+        )
+    }
+}
+
 while (($line = [Console]::In.ReadLine()) -ne $null)
 {
     if ([string]::IsNullOrWhiteSpace($line))
@@ -150,7 +190,7 @@ while (($line = [Console]::In.ReadLine()) -ne $null)
                 }
             }
 
-            Send-Response $message.id @{}
+            Send-Response $message.id (New-LoadResult $sessionSuffix)
 
             continue
         }
