@@ -159,6 +159,16 @@ public static class DependencyInjection
             new AcpConnectionCoordinator(
                 sp.GetRequiredService<IChatConnectionStore>(),
                 sp.GetRequiredService<ILogger<AcpConnectionCoordinator>>()));
+        services.AddSingleton<IAcpConnectionSessionRegistry, InMemoryAcpConnectionSessionRegistry>();
+        services.AddSingleton<AcpConnectionEvictionOptions>();
+        services.AddSingleton<IAcpConnectionEvictionPolicy>(sp =>
+            new ConservativeAcpConnectionEvictionPolicy(
+                sp.GetRequiredService<AcpConnectionEvictionOptions>()));
+        services.AddSingleton<IAcpConnectionSessionCleaner>(sp =>
+            new AcpConnectionSessionCleaner(
+                sp.GetRequiredService<IAcpConnectionSessionRegistry>(),
+                sp.GetRequiredService<IAcpConnectionEvictionPolicy>(),
+                sp.GetRequiredService<ILogger<AcpConnectionSessionCleaner>>()));
 
         // MVUX Shell Layout Store
         services.AddSingleton<IShellLayoutStore>(sp =>
@@ -200,7 +210,13 @@ public static class DependencyInjection
         });
         services.AddSingleton<IAcpChatServiceFactory>(sp =>
             new AcpChatServiceFactoryAdapter(sp.GetRequiredService<ChatServiceFactory>()));
-        services.AddSingleton<IAcpConnectionCommands, AcpChatCoordinator>();
+        services.AddSingleton<IAcpConnectionCommands>(sp =>
+            new AcpChatCoordinator(
+                sp.GetRequiredService<IAcpChatServiceFactory>(),
+                sp.GetRequiredService<ILogger<AcpChatCoordinator>>(),
+                sp.GetRequiredService<IAcpConnectionCoordinator>(),
+                sp.GetRequiredService<IAcpConnectionSessionRegistry>(),
+                sp.GetRequiredService<IAcpConnectionSessionCleaner>()));
 
         // Chat Service (default instance using default transport)
         services.AddSingleton<IChatService>(sp =>

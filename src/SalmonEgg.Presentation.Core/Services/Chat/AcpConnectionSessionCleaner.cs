@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -14,24 +15,29 @@ public interface IAcpConnectionSessionCleaner
 {
     Task<AcpConnectionSessionCleanupResult> CleanupStaleAsync(
         IChatService? activeService,
+        Func<AcpConnectionSession, bool>? isPinned = null,
         CancellationToken cancellationToken = default);
 }
 
 public sealed class AcpConnectionSessionCleaner : IAcpConnectionSessionCleaner
 {
     private readonly IAcpConnectionSessionRegistry _sessionRegistry;
+    private readonly IAcpConnectionEvictionPolicy _evictionPolicy;
     private readonly ILogger<AcpConnectionSessionCleaner> _logger;
 
     public AcpConnectionSessionCleaner(
         IAcpConnectionSessionRegistry sessionRegistry,
+        IAcpConnectionEvictionPolicy evictionPolicy,
         ILogger<AcpConnectionSessionCleaner> logger)
     {
         _sessionRegistry = sessionRegistry ?? throw new ArgumentNullException(nameof(sessionRegistry));
+        _evictionPolicy = evictionPolicy ?? throw new ArgumentNullException(nameof(evictionPolicy));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task<AcpConnectionSessionCleanupResult> CleanupStaleAsync(
         IChatService? activeService,
+        Func<AcpConnectionSession, bool>? isPinned = null,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -78,7 +84,52 @@ public sealed class AcpConnectionSessionCleaner : IAcpConnectionSessionCleaner
             }
         }
 
-        return new AcpConnectionSessionCleanupResult(removed.Count, disposeFailureCount);
+        var warmCandidates = _sessionRegistry.GetSnapshot()
+            .Where(session =>
+                session.Service.IsConnected
+                && session.Service.IsInitialized
+                && !ReferenceEquals(activeService, session.Service)
+                && !(isPinned?.Invoke(session) ?? false))
+            .ToArray();
+
+        var evictProfiles = _evictionPolicy.GetProfilesToEvict(
+            warmCandidates,
+            new AcpConnectionEvictionContext(DateTime.UtcNow, warmCandidates.Length));
+        var evictProfileSet = evictProfiles.ToHashSet(StringComparer.Ordinal);
+        var sessionsToEvict = warmCandidates
+            .Where(session => evictProfileSet.Contains(session.ProfileId))
+            .ToArray();
+        var removedWarmCount = 0;
+
+        foreach (var session in sessionsToEvict)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!_sessionRegistry.RemoveByProfile(session.ProfileId))
+            {
+                continue;
+            }
+
+            removedWarmCount++;
+            if (ReferenceEquals(activeService, session.Service))
+            {
+                continue;
+            }
+
+            try
+            {
+                await DisconnectAndDisposeAsync(session.Service).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                disposeFailureCount++;
+                _logger.LogDebug(
+                    ex,
+                    "Failed to dispose evicted cached ACP session. profileId={ProfileId}",
+                    session.ProfileId);
+            }
+        }
+
+        return new AcpConnectionSessionCleanupResult(removed.Count + removedWarmCount, disposeFailureCount);
     }
 
     private static async Task DisconnectAndDisposeAsync(IChatService service)

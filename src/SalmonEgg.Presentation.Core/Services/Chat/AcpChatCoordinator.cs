@@ -52,6 +52,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         _sessionRegistry = sessionRegistry ?? new InMemoryAcpConnectionSessionRegistry();
         _sessionCleaner = sessionCleaner ?? new AcpConnectionSessionCleaner(
             _sessionRegistry,
+            new ConservativeAcpConnectionEvictionPolicy(new AcpConnectionEvictionOptions()),
             NullLogger<AcpConnectionSessionCleaner>.Instance);
         _sessionUpdateBufferLimit = sessionUpdateBufferLimit;
     }
@@ -124,8 +125,12 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             throw new InvalidOperationException(errorMessage ?? "Invalid ACP transport configuration.");
         }
 
+        var selectedProfileId = sink.SelectedProfileId;
         var cleanupResult = await _sessionCleaner
-            .CleanupStaleAsync(sink.CurrentChatService, cancellationToken)
+            .CleanupStaleAsync(
+                sink.CurrentChatService,
+                isPinned: session => IsPinnedSession(session, selectedProfileId),
+                cancellationToken)
             .ConfigureAwait(false);
         if (cleanupResult.RemovedCount > 0 || cleanupResult.DisposeFailureCount > 0)
         {
@@ -142,7 +147,6 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         var previousConnectionState = CaptureConnectionState(sink);
         await _connectionCoordinator.SetConnectingAsync(sink.SelectedProfileId, applyToken).ConfigureAwait(false);
 
-        var selectedProfileId = sink.SelectedProfileId;
         if (!string.IsNullOrWhiteSpace(selectedProfileId)
             && _sessionRegistry.TryGetByProfile(selectedProfileId!, out var cachedSession)
             && cachedSession.ConnectionReuseKey == currentConnectionReuseKey
@@ -154,6 +158,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             var currentService = sink.CurrentChatService;
             await sink.ReplaceChatServiceAsync(cachedSession.Service, applyToken).ConfigureAwait(false);
             _activeChatServiceAdapter = cachedSession.Service;
+            _sessionRegistry.Touch(selectedProfileId!);
             sink.UpdateAgentIdentity(
                 cachedSession.InitializeResponse.AgentInfo?.Name,
                 cachedSession.InitializeResponse.AgentInfo?.Version);
@@ -242,7 +247,10 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
                     selectedProfileId!,
                     wrappedService,
                     initializeResponse,
-                    currentConnectionReuseKey));
+                    currentConnectionReuseKey)
+                {
+                    LastUsedUtc = DateTime.UtcNow
+                });
             }
             await _connectionCoordinator.SetConnectedAsync(sink.SelectedProfileId, applyToken).ConfigureAwait(false);
             await _connectionCoordinator.ClearAuthenticationRequiredAsync(applyToken).ConfigureAwait(false);
@@ -781,6 +789,17 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
 
         return _sessionRegistry.TryGetProfileId(service, out var currentProfileId)
             && !string.Equals(currentProfileId, targetProfileId, StringComparison.Ordinal);
+    }
+
+    private static bool IsPinnedSession(AcpConnectionSession session, string? selectedProfileId)
+    {
+        if (!string.IsNullOrWhiteSpace(selectedProfileId)
+            && string.Equals(session.ProfileId, selectedProfileId, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return session.InitializeResponse.AgentCapabilities?.LoadSession != true;
     }
 
     private static AcpConnectionReuseKey BuildConnectionReuseKey(IAcpTransportConfiguration transportConfiguration)

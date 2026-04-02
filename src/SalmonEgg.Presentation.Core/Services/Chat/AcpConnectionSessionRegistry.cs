@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Models.Protocol;
 
@@ -9,7 +10,10 @@ public sealed record AcpConnectionSession(
     string ProfileId,
     AcpChatServiceAdapter Service,
     InitializeResponse InitializeResponse,
-    AcpConnectionReuseKey ConnectionReuseKey);
+    AcpConnectionReuseKey ConnectionReuseKey)
+{
+    public DateTime LastUsedUtc { get; init; } = DateTime.UtcNow;
+}
 
 public interface IAcpConnectionSessionRegistry
 {
@@ -24,6 +28,10 @@ public interface IAcpConnectionSessionRegistry
     bool RemoveByService(IChatService service, out string profileId);
 
     IReadOnlyList<AcpConnectionSession> RemoveWhere(Func<AcpConnectionSession, bool> predicate);
+
+    bool Touch(string profileId, DateTime? usedAtUtc = null);
+
+    IReadOnlyList<AcpConnectionSession> GetSnapshot();
 }
 
 public sealed class InMemoryAcpConnectionSessionRegistry : IAcpConnectionSessionRegistry
@@ -63,7 +71,10 @@ public sealed class InMemoryAcpConnectionSessionRegistry : IAcpConnectionSession
         ArgumentNullException.ThrowIfNull(session);
         lock (_gate)
         {
-            _sessionsByProfile[session.ProfileId] = session;
+            _sessionsByProfile[session.ProfileId] = session with
+            {
+                LastUsedUtc = session.LastUsedUtc == default ? DateTime.UtcNow : session.LastUsedUtc
+            };
         }
     }
 
@@ -121,5 +132,27 @@ public sealed class InMemoryAcpConnectionSessionRegistry : IAcpConnectionSession
         }
 
         return removed;
+    }
+
+    public bool Touch(string profileId, DateTime? usedAtUtc = null)
+    {
+        lock (_gate)
+        {
+            if (!_sessionsByProfile.TryGetValue(profileId, out var session))
+            {
+                return false;
+            }
+
+            _sessionsByProfile[profileId] = session with { LastUsedUtc = usedAtUtc ?? DateTime.UtcNow };
+            return true;
+        }
+    }
+
+    public IReadOnlyList<AcpConnectionSession> GetSnapshot()
+    {
+        lock (_gate)
+        {
+            return _sessionsByProfile.Values.ToArray();
+        }
     }
 }
