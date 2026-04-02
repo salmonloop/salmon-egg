@@ -25,6 +25,8 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
     private readonly ILogger<AcpChatCoordinator> _logger;
     private readonly int _sessionUpdateBufferLimit;
     private AcpChatServiceAdapter? _activeChatServiceAdapter;
+    private readonly object _applyScopeLock = new();
+    private CancellationTokenSource? _activeApplyScopeCts;
 
     public AcpChatCoordinator(
         IAcpChatServiceFactory chatServiceFactory,
@@ -113,8 +115,11 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             throw new InvalidOperationException(errorMessage ?? "Invalid ACP transport configuration.");
         }
 
+        using var applyScope = EnterApplyScope(cancellationToken);
+        var applyToken = applyScope.Token;
+
         var previousConnectionState = CaptureConnectionState(sink);
-        await _connectionCoordinator.SetConnectingAsync(sink.SelectedProfileId, cancellationToken).ConfigureAwait(false);
+        await _connectionCoordinator.SetConnectingAsync(sink.SelectedProfileId, applyToken).ConfigureAwait(false);
 
         var previousService = sink.CurrentChatService;
         IChatService? candidateService = null;
@@ -132,10 +137,10 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
                 transportConfiguration.SelectedTransportType,
                 connectionContext.ConversationId,
                 connectionContext.PreserveConversation);
-            cancellationToken.ThrowIfCancellationRequested();
+            applyToken.ThrowIfCancellationRequested();
 
-            wrappedService = WrapChatService(candidateService, sink, cancellationToken);
-            await _connectionCoordinator.SetInitializingAsync(sink.SelectedProfileId, cancellationToken).ConfigureAwait(false);
+            wrappedService = WrapChatService(candidateService, sink, applyToken);
+            await _connectionCoordinator.SetInitializingAsync(sink.SelectedProfileId, applyToken).ConfigureAwait(false);
 
             var initializeResponse = await wrappedService
                 .InitializeAsync(CreateDefaultInitializeParams())
@@ -144,26 +149,26 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
                 "ACP candidate initialized. transport={TransportType} conversationId={ConversationId}",
                 transportConfiguration.SelectedTransportType,
                 connectionContext.ConversationId);
-            cancellationToken.ThrowIfCancellationRequested();
+            applyToken.ThrowIfCancellationRequested();
 
-            await sink.ReplaceChatServiceAsync(wrappedService, cancellationToken).ConfigureAwait(false);
+            await sink.ReplaceChatServiceAsync(wrappedService, applyToken).ConfigureAwait(false);
             _activeChatServiceAdapter = wrappedService;
             committed = true;
             await DisconnectServiceQuietlyAsync(previousService).ConfigureAwait(false);
 
             sink.UpdateAgentIdentity(initializeResponse.AgentInfo?.Name, initializeResponse.AgentInfo?.Version);
-            await _connectionCoordinator.SetConnectedAsync(sink.SelectedProfileId, cancellationToken).ConfigureAwait(false);
-            await _connectionCoordinator.ClearAuthenticationRequiredAsync(cancellationToken).ConfigureAwait(false);
+            await _connectionCoordinator.SetConnectedAsync(sink.SelectedProfileId, applyToken).ConfigureAwait(false);
+            await _connectionCoordinator.ClearAuthenticationRequiredAsync(applyToken).ConfigureAwait(false);
 
             var hasExistingRemoteBinding = await HasExistingRemoteBindingAsync(
                 sink,
                 connectionContext,
-                cancellationToken).ConfigureAwait(false);
+                applyToken).ConfigureAwait(false);
             if (connectionContext.PreserveConversation
                 && hasExistingRemoteBinding
                 && wrappedService.AgentCapabilities?.LoadSession == true)
             {
-                await _connectionCoordinator.ResyncAsync(sink, cancellationToken).ConfigureAwait(false);
+                await _connectionCoordinator.ResyncAsync(sink, applyToken).ConfigureAwait(false);
             }
             else
             {
@@ -171,7 +176,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
                     sink,
                     wrappedService,
                     connectionContext,
-                    cancellationToken).ConfigureAwait(false);
+                    applyToken).ConfigureAwait(false);
             }
 
             _logger.LogInformation(
@@ -182,18 +187,30 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
 
             return new AcpTransportApplyResult(wrappedService, initializeResponse);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
             if (!committed)
             {
                 await DisposeServiceAsync(candidateService).ConfigureAwait(false);
-                await RestoreConnectionStateAfterDiscardAsync(previousConnectionState).ConfigureAwait(false);
-                _logger.LogInformation(
-                    "ACP candidate discarded as stale before commit. transport={TransportType} conversationId={ConversationId} restoredPhase={RestoredPhase} restoredProfileId={RestoredProfileId}",
-                    transportConfiguration.SelectedTransportType,
-                    connectionContext.ConversationId,
-                    previousConnectionState.PhaseName,
-                    previousConnectionState.SelectedProfileId);
+                wrappedService?.SuppressBufferedUpdates("ApplySupersededBeforeCommit");
+
+                if (applyScope.IsSuperseded(cancellationToken))
+                {
+                    _logger.LogInformation(
+                        "ACP candidate superseded before commit. transport={TransportType} conversationId={ConversationId}",
+                        transportConfiguration.SelectedTransportType,
+                        connectionContext.ConversationId);
+                }
+                else
+                {
+                    await RestoreConnectionStateAfterDiscardAsync(previousConnectionState).ConfigureAwait(false);
+                    _logger.LogInformation(
+                        "ACP candidate discarded before commit. transport={TransportType} conversationId={ConversationId} restoredPhase={RestoredPhase} restoredProfileId={RestoredProfileId}",
+                        transportConfiguration.SelectedTransportType,
+                        connectionContext.ConversationId,
+                        previousConnectionState.PhaseName,
+                        previousConnectionState.SelectedProfileId);
+                }
             }
 
             throw;
@@ -203,8 +220,20 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             if (!committed)
             {
                 await DisposeServiceAsync(candidateService).ConfigureAwait(false);
-                await _connectionCoordinator.SetDisconnectedAsync(ex.Message, cancellationToken).ConfigureAwait(false);
-                _logger.LogError(ex, "Failed to initialize ACP candidate before commit");
+                wrappedService?.SuppressBufferedUpdates("ApplySupersededBeforeCommitError");
+                if (applyScope.IsSuperseded(cancellationToken))
+                {
+                    _logger.LogInformation(
+                        ex,
+                        "ACP candidate superseded before commit after fault. transport={TransportType} conversationId={ConversationId}",
+                        transportConfiguration.SelectedTransportType,
+                        connectionContext.ConversationId);
+                }
+                else
+                {
+                    await _connectionCoordinator.SetDisconnectedAsync(ex.Message, cancellationToken).ConfigureAwait(false);
+                    _logger.LogError(ex, "Failed to initialize ACP candidate before commit");
+                }
                 throw;
             }
 
@@ -414,7 +443,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
     private AcpChatServiceAdapter WrapChatService(
         IChatService chatService,
         IAcpChatCoordinatorSink sink,
-        CancellationToken cancellationToken)
+        CancellationToken applyScopeToken)
     {
         ArgumentNullException.ThrowIfNull(chatService);
         ArgumentNullException.ThrowIfNull(sink);
@@ -428,7 +457,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
                 sink,
                 wrappedService!,
                 sourceSessionId,
-                cancellationToken));
+                applyScopeToken));
         wrappedService = new AcpChatServiceAdapter(chatService, eventAdapter);
         return wrappedService;
     }
@@ -437,15 +466,22 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         IAcpChatCoordinatorSink sink,
         AcpChatServiceAdapter sourceService,
         string? sourceSessionId,
-        CancellationToken cancellationToken)
+        CancellationToken applyScopeToken)
     {
+        if (applyScopeToken.IsCancellationRequested)
+        {
+            sourceService.SuppressBufferedUpdates("StaleApplyScope");
+            _logger.LogDebug("Ignoring ACP resync request from stale apply scope.");
+            return;
+        }
+
         if (!ReferenceEquals(sink.CurrentChatService, sourceService))
         {
             _logger.LogDebug("Ignoring ACP resync request from stale chat service instance.");
             return;
         }
 
-        var currentBinding = await sink.GetCurrentRemoteBindingAsync(cancellationToken).ConfigureAwait(false);
+        var currentBinding = await sink.GetCurrentRemoteBindingAsync(applyScopeToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(sourceSessionId)
             || !string.Equals(currentBinding?.RemoteSessionId, sourceSessionId, StringComparison.Ordinal))
         {
@@ -460,7 +496,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             "ACP update stream requested resync. remoteSessionId={RemoteSessionId}",
             currentBinding?.RemoteSessionId);
 
-        await _connectionCoordinator.ResyncAsync(sink, cancellationToken).ConfigureAwait(false);
+        await _connectionCoordinator.ResyncAsync(sink, applyScopeToken).ConfigureAwait(false);
     }
 
     private static async Task<bool> HasExistingRemoteBindingAsync(
@@ -623,6 +659,55 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         if (service is IDisposable disposable)
         {
             disposable.Dispose();
+        }
+    }
+
+    private ApplyScope EnterApplyScope(CancellationToken callerToken)
+    {
+        var scopeCts = new CancellationTokenSource();
+        CancellationTokenSource? previousScope;
+        lock (_applyScopeLock)
+        {
+            previousScope = _activeApplyScopeCts;
+            _activeApplyScopeCts = scopeCts;
+        }
+
+        previousScope?.Cancel();
+        previousScope?.Dispose();
+
+        return new ApplyScope(this, scopeCts, callerToken);
+    }
+
+    private sealed class ApplyScope : IDisposable
+    {
+        private readonly AcpChatCoordinator _owner;
+        private readonly CancellationTokenSource _scopeCts;
+        private readonly CancellationTokenSource _linkedCts;
+
+        public ApplyScope(AcpChatCoordinator owner, CancellationTokenSource scopeCts, CancellationToken callerToken)
+        {
+            _owner = owner;
+            _scopeCts = scopeCts;
+            _linkedCts = CancellationTokenSource.CreateLinkedTokenSource(callerToken, scopeCts.Token);
+        }
+
+        public CancellationToken Token => _linkedCts.Token;
+
+        public bool IsSuperseded(CancellationToken callerToken)
+            => _scopeCts.IsCancellationRequested && !callerToken.IsCancellationRequested;
+
+        public void Dispose()
+        {
+            lock (_owner._applyScopeLock)
+            {
+                if (ReferenceEquals(_owner._activeApplyScopeCts, _scopeCts))
+                {
+                    _owner._activeApplyScopeCts = null;
+                }
+            }
+
+            _linkedCts.Dispose();
+            _scopeCts.Dispose();
         }
     }
 

@@ -2461,6 +2461,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
                 ShowTransportConfigPanel = false;
             }
+        catch (OperationCanceledException)
+        {
+            Logger.LogDebug("Transport apply was superseded by a newer request.");
+        }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error during connection");
