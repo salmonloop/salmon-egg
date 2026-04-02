@@ -414,6 +414,115 @@ public sealed partial class RealUserConfigSmokeTests
         }
     }
 
+    [SkippableFact]
+    public void RandomSwitchAcrossProfilesAndLocal_ForExtendedDuration_RemainsInteractive()
+    {
+        GuiTestGate.RequireEnabled();
+
+        var remoteCandidates = RealUserConfigProbe.LoadReplayBackedCandidates();
+        var localCandidates = RealUserConfigProbe.LoadPureLocalCandidates();
+        Skip.If(remoteCandidates.Count == 0, "No replay-backed remote conversation candidates were found in the current SalmonEgg app data.");
+        Skip.If(localCandidates.Count == 0, "No pure local conversation candidates were found in the current SalmonEgg app data.");
+
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var startId = "MainNav.Start";
+        var visibleRemoteCandidates = remoteCandidates
+            .Where(item => session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null)
+            .ToArray();
+        var profileGroups = visibleRemoteCandidates
+            .Where(item => !string.IsNullOrWhiteSpace(item.BoundProfileId))
+            .GroupBy(item => item.BoundProfileId!, StringComparer.Ordinal)
+            .OrderByDescending(group => group.Count())
+            .ToArray();
+        Skip.If(profileGroups.Length < 2, "Need at least two visible replay-backed remote conversations bound to different profiles for cross-profile soak switching.");
+
+        var remoteA = profileGroups[0]
+            .OrderByDescending(item => item.LocalMessageCount)
+            .ThenByDescending(item => item.LastUpdatedAtUtc)
+            .First();
+        var remoteB = profileGroups[1]
+            .OrderByDescending(item => item.LocalMessageCount)
+            .ThenByDescending(item => item.LastUpdatedAtUtc)
+            .First();
+        Skip.If(string.Equals(remoteA.ConversationId, remoteB.ConversationId, StringComparison.Ordinal), "Cross-profile soak requires two distinct remote conversations.");
+
+        var localCandidate = localCandidates
+            .FirstOrDefault(item =>
+                !string.Equals(item.ConversationId, remoteA.ConversationId, StringComparison.Ordinal)
+                && !string.Equals(item.ConversationId, remoteB.ConversationId, StringComparison.Ordinal)
+                && session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null);
+        Skip.If(localCandidate is null, "No visible pure local conversation candidate is available for cross-profile soak switching.");
+
+        var remoteAId = SessionAutomationId(remoteA.ConversationId);
+        var remoteBId = SessionAutomationId(remoteB.ConversationId);
+        var localId = SessionAutomationId(localCandidate.ConversationId);
+        var targets = new[] { remoteAId, remoteBId, localId, startId };
+        var random = new Random(20260402);
+        var timeline = new List<string>();
+
+        // Long-running stress contract: random switching across profile boundaries should remain responsive.
+        for (var index = 0; index < 40; index++)
+        {
+            var targetId = targets[random.Next(targets.Length)];
+            var selectedBefore = $"start={session.TryGetIsSelected(startId) == true},local={session.TryGetIsSelected(localId) == true},remoteA={session.TryGetIsSelected(remoteAId) == true},remoteB={session.TryGetIsSelected(remoteBId) == true}";
+
+            var target = session.FindByAutomationId(targetId, TimeSpan.FromSeconds(8));
+            session.ActivateElement(target);
+            Thread.Sleep(900);
+
+            var selectedAfter = $"start={session.TryGetIsSelected(startId) == true},local={session.TryGetIsSelected(localId) == true},remoteA={session.TryGetIsSelected(remoteAId) == true},remoteB={session.TryGetIsSelected(remoteBId) == true}";
+            timeline.Add($"{DateTime.UtcNow:HH:mm:ss.fff} step={index:00} target={targetId} before={selectedBefore} after={selectedAfter}");
+        }
+
+        var startItem = session.FindByAutomationId(startId, TimeSpan.FromSeconds(10));
+        session.ActivateElement(startItem);
+        Thread.Sleep(500);
+        var startSelected = session.TryGetIsSelected(startId) == true;
+        var startViewVisible = session.TryFindByAutomationId("StartView.Title", TimeSpan.FromSeconds(4)) is not null;
+        timeline.Add($"{DateTime.UtcNow:HH:mm:ss.fff} final-start selected={startSelected} startView={startViewVisible}");
+
+        var remoteAItem = session.FindByAutomationId(remoteAId, TimeSpan.FromSeconds(10));
+        session.ActivateElement(remoteAItem);
+        Thread.Sleep(900);
+        var remoteASelected = session.TryGetIsSelected(remoteAId) == true;
+        var remoteAHeaderVisible = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(4)) is not null;
+        timeline.Add($"{DateTime.UtcNow:HH:mm:ss.fff} final-remoteA selected={remoteASelected} header={remoteAHeaderVisible}");
+
+        var localItem = session.FindByAutomationId(localId, TimeSpan.FromSeconds(10));
+        session.ActivateElement(localItem);
+        Thread.Sleep(900);
+        var localSelected = session.TryGetIsSelected(localId) == true;
+        var localHeaderVisible = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(4)) is not null;
+        timeline.Add($"{DateTime.UtcNow:HH:mm:ss.fff} final-local selected={localSelected} header={localHeaderVisible}");
+
+        var remainedInteractive =
+            startSelected
+            && startViewVisible
+            && (remoteASelected || remoteAHeaderVisible)
+            && (localSelected || localHeaderVisible);
+        if (!remainedInteractive)
+        {
+            var captureRoot = Path.Combine(Path.GetTempPath(), "SalmonEgg.GuiTests");
+            Directory.CreateDirectory(captureRoot);
+            var capturePath = Path.Combine(
+                captureRoot,
+                $"cross-profile-soak-interactivity-{DateTime.UtcNow:yyyyMMddHHmmssfff}.png");
+            session.MainWindow.CaptureToFile(capturePath);
+
+            var appDataRoot = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "SalmonEgg");
+            var bootLogPath = Path.Combine(appDataRoot, "boot.log");
+            var bootTail = File.Exists(bootLogPath)
+                ? string.Join(Environment.NewLine, File.ReadLines(bootLogPath).TakeLast(30))
+                : "<boot.log missing>";
+
+            throw new Xunit.Sdk.XunitException(
+                $"Interactivity freeze suspected after cross-profile long-duration random switching.{Environment.NewLine}Screenshot: {capturePath}{Environment.NewLine}{string.Join(Environment.NewLine, timeline)}{Environment.NewLine}boot.log:{Environment.NewLine}{bootTail}");
+        }
+    }
+
     private static int CountVisibleTranscriptText(AutomationElement? messagesList)
     {
         if (messagesList is null)
@@ -443,6 +552,7 @@ public sealed partial class RealUserConfigSmokeTests
 
     private sealed record RealReplayCandidate(
         string ConversationId,
+        string BoundProfileId,
         string RemoteSessionId,
         int LocalMessageCount,
         DateTimeOffset LastUpdatedAtUtc);
@@ -521,6 +631,7 @@ public sealed partial class RealUserConfigSmokeTests
 
                 candidates.Add(new RealReplayCandidate(
                     conversationId,
+                    boundProfileId!,
                     remoteSessionId,
                     messageCount,
                     lastUpdatedAt));

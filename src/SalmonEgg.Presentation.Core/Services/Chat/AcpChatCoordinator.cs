@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Models;
@@ -23,6 +24,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
     private readonly IAcpChatServiceFactory _chatServiceFactory;
     private readonly IAcpConnectionCoordinator _connectionCoordinator;
     private readonly IAcpConnectionSessionRegistry _sessionRegistry;
+    private readonly IAcpConnectionSessionCleaner _sessionCleaner;
     private readonly ILogger<AcpChatCoordinator> _logger;
     private readonly int _sessionUpdateBufferLimit;
     private AcpChatServiceAdapter? _activeChatServiceAdapter;
@@ -34,6 +36,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         ILogger<AcpChatCoordinator> logger,
         IAcpConnectionCoordinator? connectionCoordinator = null,
         IAcpConnectionSessionRegistry? sessionRegistry = null,
+        IAcpConnectionSessionCleaner? sessionCleaner = null,
         int sessionUpdateBufferLimit = DefaultSessionUpdateBufferLimit)
     {
         _chatServiceFactory = chatServiceFactory ?? throw new ArgumentNullException(nameof(chatServiceFactory));
@@ -47,6 +50,9 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
 
         _connectionCoordinator = connectionCoordinator ?? NoopAcpConnectionCoordinator.Instance;
         _sessionRegistry = sessionRegistry ?? new InMemoryAcpConnectionSessionRegistry();
+        _sessionCleaner = sessionCleaner ?? new AcpConnectionSessionCleaner(
+            _sessionRegistry,
+            NullLogger<AcpConnectionSessionCleaner>.Instance);
         _sessionUpdateBufferLimit = sessionUpdateBufferLimit;
     }
 
@@ -118,7 +124,16 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             throw new InvalidOperationException(errorMessage ?? "Invalid ACP transport configuration.");
         }
 
-        await PruneStaleCachedSessionsAsync(sink, cancellationToken).ConfigureAwait(false);
+        var cleanupResult = await _sessionCleaner
+            .CleanupStaleAsync(sink.CurrentChatService, cancellationToken)
+            .ConfigureAwait(false);
+        if (cleanupResult.RemovedCount > 0 || cleanupResult.DisposeFailureCount > 0)
+        {
+            _logger.LogDebug(
+                "Pruned stale cached ACP sessions before apply. removedCount={RemovedCount} disposeFailureCount={DisposeFailureCount}",
+                cleanupResult.RemovedCount,
+                cleanupResult.DisposeFailureCount);
+        }
 
         using var applyScope = EnterApplyScope(cancellationToken);
         var applyToken = applyScope.Token;
@@ -777,52 +792,6 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             transportConfiguration.StdioCommand ?? string.Empty,
             transportConfiguration.StdioArgs ?? string.Empty,
             transportConfiguration.RemoteUrl ?? string.Empty);
-    }
-
-    private async Task PruneStaleCachedSessionsAsync(
-        IAcpChatCoordinatorSink sink,
-        CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var removed = _sessionRegistry.RemoveWhere(session =>
-            !session.Service.IsConnected
-            || !session.Service.IsInitialized);
-
-        foreach (var session in removed)
-        {
-            if (ReferenceEquals(sink.CurrentChatService, session.Service))
-            {
-                continue;
-            }
-
-            try
-            {
-                await DisposeServiceAsync(session.Service).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(
-                    ex,
-                    "Failed to dispose stale cached ACP session. profileId={ProfileId}",
-                    session.ProfileId);
-
-                if (session.Service is IDisposable disposable)
-                {
-                    try
-                    {
-                        disposable.Dispose();
-                    }
-                    catch (Exception disposeEx)
-                    {
-                        _logger.LogDebug(
-                            disposeEx,
-                            "Failed to release stale cached ACP session after disconnect failure. profileId={ProfileId}",
-                            session.ProfileId);
-                    }
-                }
-            }
-        }
     }
 
     private sealed class ApplyScope : IDisposable
