@@ -289,6 +289,7 @@ public static class DependencyInjection
         services.AddSingleton<ShellSelectionStateStore>();
         services.AddSingleton<IShellSelectionReadModel>(sp => sp.GetRequiredService<ShellSelectionStateStore>());
         services.AddSingleton<IShellSelectionMutationSink>(sp => sp.GetRequiredService<ShellSelectionStateStore>());
+        services.AddSingleton<IShellNavigationRuntimeState>(sp => sp.GetRequiredService<ShellSelectionStateStore>());
         services.AddSingleton<MainNavigationViewModel>(sp =>
             new MainNavigationViewModel(
                 sp.GetRequiredService<IConversationCatalog>(),
@@ -306,6 +307,7 @@ public static class DependencyInjection
         services.AddSingleton<INavigationCoordinator>(sp =>
             new NavigationCoordinator(
                 sp.GetRequiredService<IShellSelectionMutationSink>(),
+                sp.GetRequiredService<IShellNavigationRuntimeState>(),
                 sp.GetRequiredService<IConversationSessionSwitcher>(),
                 sp.GetRequiredService<INavigationProjectSelectionStore>(),
                 sp.GetRequiredService<IShellNavigationService>()));

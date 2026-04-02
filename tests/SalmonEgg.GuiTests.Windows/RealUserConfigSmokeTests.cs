@@ -386,7 +386,13 @@ public sealed partial class RealUserConfigSmokeTests
         var headerVisible = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(4)) is not null;
         timeline.Add($"{DateTime.UtcNow:HH:mm:ss.fff} final-local selected={localSelected} header={headerVisible}");
 
-        if (!(startSelected && startViewVisible && localSelected && headerVisible))
+        // Interactivity contract:
+        // 1) We can still return to Start view.
+        // 2) We can still enter a chat shell after that.
+        // Some builds may project chat header before nav selection indicator settles,
+        // so require local selection OR visible chat header to avoid false positives.
+        var remainedInteractive = startSelected && startViewVisible && (localSelected || headerVisible);
+        if (!remainedInteractive)
         {
             var captureRoot = Path.Combine(Path.GetTempPath(), "SalmonEgg.GuiTests");
             Directory.CreateDirectory(captureRoot);

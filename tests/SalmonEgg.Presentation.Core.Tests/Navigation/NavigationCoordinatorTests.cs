@@ -893,8 +893,12 @@ public sealed class NavigationCoordinatorTests
         AppPreferencesViewModel preferences,
         IShellNavigationService shellNavigationService)
     {
+        var runtimeState = selectionSink as IShellNavigationRuntimeState
+            ?? throw new InvalidOperationException("Selection sink must implement IShellNavigationRuntimeState for coordinator tests.");
+
         return new NavigationCoordinator(
             selectionSink,
+            runtimeState,
             activationCoordinator,
             new NavigationProjectSelectionStoreAdapter(preferences),
             shellNavigationService);
