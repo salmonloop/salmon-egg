@@ -82,6 +82,9 @@ public partial class AppPreferencesViewModel : ObservableObject
     [ObservableProperty]
     private int? _acpMaxPinnedProfiles;
 
+    [ObservableProperty]
+    private bool _isLoaded;
+
     public ObservableCollection<KeyBindingPairViewModel> KeyBindings { get; } = new();
 
     public bool IsLaunchOnStartupSupported => _capabilities.SupportsLaunchOnStartup;
@@ -208,7 +211,11 @@ public partial class AppPreferencesViewModel : ObservableObject
         }
         finally
         {
-            _suppressSave = false;
+            _syncContext.Post(_ =>
+            {
+                IsLoaded = true;
+                _suppressSave = false;
+            }, null);
         }
     }
 

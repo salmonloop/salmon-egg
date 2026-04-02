@@ -20,8 +20,11 @@ public sealed class AcpConnectionEvictionOptionsBridge : IDisposable
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-        ApplyFromPreferences();
         _preferences.PropertyChanged += OnPreferencesPropertyChanged;
+        if (_preferences.IsLoaded)
+        {
+            ApplyFromPreferences();
+        }
     }
 
     private void OnPreferencesPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -29,8 +32,14 @@ public sealed class AcpConnectionEvictionOptionsBridge : IDisposable
         if (e.PropertyName is nameof(AppPreferencesViewModel.AcpEnableConnectionEviction)
             or nameof(AppPreferencesViewModel.AcpConnectionIdleTtlMinutes)
             or nameof(AppPreferencesViewModel.AcpMaxWarmProfiles)
-            or nameof(AppPreferencesViewModel.AcpMaxPinnedProfiles))
+            or nameof(AppPreferencesViewModel.AcpMaxPinnedProfiles)
+            or nameof(AppPreferencesViewModel.IsLoaded))
         {
+            if (!_preferences.IsLoaded)
+            {
+                return;
+            }
+
             ApplyFromPreferences();
         }
     }
@@ -56,4 +65,3 @@ public sealed class AcpConnectionEvictionOptionsBridge : IDisposable
         _preferences.PropertyChanged -= OnPreferencesPropertyChanged;
     }
 }
-

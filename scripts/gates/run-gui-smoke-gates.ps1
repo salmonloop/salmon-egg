@@ -6,6 +6,10 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+if (-not $IsWindows) {
+    throw "GUI smoke gates require Windows (WinUI/FlaUI). Current platform is not Windows."
+}
+
 function Stop-StaleSalmonEggProcesses {
     $names = @("SalmonEgg", "SalmonEgg.GuiTests.Windows")
     foreach ($name in $names) {
@@ -50,4 +54,3 @@ Invoke-DotNetTestWithRetry -Filter "FullyQualifiedName~SelectAcrossProfilesAndLo
 Invoke-DotNetTestWithRetry -Filter "FullyQualifiedName~SelectRemoteSession_RepeatedClicksWithLocalDetour_DoesNotHangAndHydratesLatestSelection"
 
 Write-Host "[gate] GUI smoke gates passed"
-
