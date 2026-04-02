@@ -731,6 +731,124 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
+    [SkippableFact]
+    public void SelectAcrossProfilesAndLocal_LongRandomSwitch_RemainsInteractive()
+    {
+        var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
+        Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", "2800");
+
+        try
+        {
+            using var appData = GuiAppDataScope.CreateDeterministicCrossProfileRemoteReplayData(
+                cachedMessageCount: 1,
+                replayMessageCount: 40,
+                localMessageCount: 6);
+            using var session = WindowsGuiAppSession.LaunchFresh();
+
+            const string remoteOneId = "MainNav.Session.gui-remote-conversation-01";
+            const string remoteTwoId = "MainNav.Session.gui-remote-conversation-02";
+            const string localId = "MainNav.Session.gui-local-conversation-01";
+            const string startId = "MainNav.Start";
+
+            session.FindByAutomationId(remoteOneId, TimeSpan.FromSeconds(15));
+            session.FindByAutomationId(remoteTwoId, TimeSpan.FromSeconds(15));
+            session.FindByAutomationId(localId, TimeSpan.FromSeconds(15));
+
+            ActivateNavItem(session, appData, remoteOneId, "cross-profile-long-random-prime");
+            Assert.True(
+                session.WaitUntilVisible("ChatView.LoadingOverlayStatus", TimeSpan.FromSeconds(10)),
+                "Initial cross-profile remote selection did not expose ChatView.LoadingOverlayStatus before random switching.");
+
+            var random = new Random(20260402);
+            var targets = new[] { remoteOneId, remoteTwoId, localId, remoteTwoId, remoteOneId, localId };
+            for (var index = 0; index < 90; index++)
+            {
+                var target = targets[random.Next(targets.Length)];
+                ActivateNavItem(session, appData, target, $"cross-profile-long-random-{index}");
+                if (index % 10 == 0)
+                {
+                    ActivateNavItem(session, appData, target, $"cross-profile-long-random-double-{index}");
+                }
+
+                Thread.Sleep(index % 3 == 0 ? 22 : 34);
+            }
+
+            // Final intent: settle on remote #2 first (cross-profile target), then verify we can still navigate to Start and Local.
+            ActivateNavItem(session, appData, remoteTwoId, "cross-profile-long-random-final-remote-1");
+            ActivateNavItem(session, appData, remoteTwoId, "cross-profile-long-random-final-remote-2");
+
+            var remoteHeader = WaitForSessionHeader(
+                session,
+                expectedTitle: "GUI Remote Session 02",
+                scenario: "cross-profile-long-random-final-remote-header",
+                appData);
+            Assert.Contains("GUI Remote Session 02", remoteHeader.Name, StringComparison.Ordinal);
+
+            var overlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(60));
+            if (!overlayHidden)
+            {
+                ThrowWithScreenshot(
+                    session,
+                    appData,
+                    "cross-profile-long-random-overlay-stuck",
+                    $"Cross-profile long random switching stayed stuck behind loading overlay. Visible texts: [{string.Join(", ", session.GetVisibleTexts())}]");
+            }
+
+            var remoteMessages = FindElementOrThrowWithScreenshot(
+                session,
+                appData,
+                "ChatView.MessagesList",
+                TimeSpan.FromSeconds(10),
+                "cross-profile-long-random-remote-messages-list");
+            var remoteLatestVisible = session.TryFindVisibleText(
+                "GUI Remote Session 02 replay 040",
+                remoteMessages,
+                TimeSpan.FromSeconds(10));
+            if (remoteLatestVisible is null)
+            {
+                ThrowWithScreenshot(
+                    session,
+                    appData,
+                    "cross-profile-long-random-remote-scroll",
+                    $"Cross-profile final remote transcript did not surface expected latest replay message. Visible texts: [{string.Join(", ", session.GetVisibleTexts(remoteMessages))}]");
+            }
+
+            var startItem = FindElementOrThrowWithScreenshot(
+                session,
+                appData,
+                startId,
+                TimeSpan.FromSeconds(8),
+                "cross-profile-long-random-start-item");
+            session.ActivateElement(startItem);
+            Thread.Sleep(600);
+
+            var startSelected = session.TryGetIsSelected(startId) == true;
+            var startVisible = session.TryFindByAutomationId("StartView.Title", TimeSpan.FromSeconds(4)) is not null;
+            if (!startSelected || !startVisible)
+            {
+                ThrowWithScreenshot(
+                    session,
+                    appData,
+                    "cross-profile-long-random-start-not-interactive",
+                    $"Start view was not interactive after cross-profile long random switching. startSelected={startSelected} startVisible={startVisible}");
+            }
+
+            ActivateNavItem(session, appData, localId, "cross-profile-long-random-final-local-1");
+            ActivateNavItem(session, appData, localId, "cross-profile-long-random-final-local-2");
+
+            var localHeader = WaitForSessionHeader(
+                session,
+                expectedTitle: "GUI Local Session 01",
+                scenario: "cross-profile-long-random-final-local-header",
+                appData);
+            Assert.Contains("GUI Local Session 01", localHeader.Name, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", previousSlowLoadDelay);
+        }
+    }
+
     private static AutomationElement WaitForLoadingOverlay(WindowsGuiAppSession session, string scenario)
     {
         var timeline = new List<string>();

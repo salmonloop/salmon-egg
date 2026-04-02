@@ -13,12 +13,15 @@ internal sealed class GuiAppDataScope : IDisposable
     private readonly string _appYamlPath;
     private readonly string _conversationsPath;
     private readonly string? _serverYamlPath;
+    private readonly string? _secondaryServerYamlPath;
     private readonly byte[]? _originalAppYaml;
     private readonly byte[]? _originalConversations;
     private readonly byte[]? _originalServerYaml;
+    private readonly byte[]? _originalSecondaryServerYaml;
     private readonly bool _appYamlExisted;
     private readonly bool _conversationsExisted;
     private readonly bool _serverYamlExisted;
+    private readonly bool _secondaryServerYamlExisted;
     private readonly string _projectRootPath;
     private readonly string? _previousGuiAppDataRootOverride;
     private readonly string? _previousFakeReplaySessionId;
@@ -30,12 +33,15 @@ internal sealed class GuiAppDataScope : IDisposable
         string appYamlPath,
         string conversationsPath,
         string? serverYamlPath,
+        string? secondaryServerYamlPath,
         byte[]? originalAppYaml,
         bool appYamlExisted,
         byte[]? originalConversations,
         bool conversationsExisted,
         byte[]? originalServerYaml,
         bool serverYamlExisted,
+        byte[]? originalSecondaryServerYaml,
+        bool secondaryServerYamlExisted,
         string projectRootPath,
         string? previousGuiAppDataRootOverride,
         string? previousFakeReplaySessionId = null,
@@ -48,12 +54,15 @@ internal sealed class GuiAppDataScope : IDisposable
         _appYamlPath = appYamlPath;
         _conversationsPath = conversationsPath;
         _serverYamlPath = serverYamlPath;
+        _secondaryServerYamlPath = secondaryServerYamlPath;
         _originalAppYaml = originalAppYaml;
         _appYamlExisted = appYamlExisted;
         _originalConversations = originalConversations;
         _conversationsExisted = conversationsExisted;
         _originalServerYaml = originalServerYaml;
         _serverYamlExisted = serverYamlExisted;
+        _originalSecondaryServerYaml = originalSecondaryServerYaml;
+        _secondaryServerYamlExisted = secondaryServerYamlExisted;
         _projectRootPath = projectRootPath;
         _previousGuiAppDataRootOverride = previousGuiAppDataRootOverride;
         _previousFakeReplaySessionId = previousFakeReplaySessionId;
@@ -90,12 +99,15 @@ internal sealed class GuiAppDataScope : IDisposable
             appYamlPath,
             conversationsPath,
             serverYamlPath: null,
+            secondaryServerYamlPath: null,
             File.Exists(appYamlPath) ? File.ReadAllBytes(appYamlPath) : null,
             File.Exists(appYamlPath),
             File.Exists(conversationsPath) ? File.ReadAllBytes(conversationsPath) : null,
             File.Exists(conversationsPath),
             originalServerYaml: null,
             serverYamlExisted: false,
+            originalSecondaryServerYaml: null,
+            secondaryServerYamlExisted: false,
             projectRootPath,
             previousGuiAppDataRootOverride);
 
@@ -152,12 +164,15 @@ internal sealed class GuiAppDataScope : IDisposable
             appYamlPath,
             conversationsPath,
             serverYamlPath,
+            secondaryServerYamlPath: null,
             File.Exists(appYamlPath) ? File.ReadAllBytes(appYamlPath) : null,
             File.Exists(appYamlPath),
             File.Exists(conversationsPath) ? File.ReadAllBytes(conversationsPath) : null,
             File.Exists(conversationsPath),
             File.Exists(serverYamlPath) ? File.ReadAllBytes(serverYamlPath) : null,
             File.Exists(serverYamlPath),
+            originalSecondaryServerYaml: null,
+            secondaryServerYamlExisted: false,
             projectRootPath,
             previousGuiAppDataRootOverride,
             previousFakeReplaySessionId,
@@ -170,6 +185,73 @@ internal sealed class GuiAppDataScope : IDisposable
             includeLocalConversation,
             localMessageCount,
             remoteConversationCount);
+        return scope;
+    }
+
+    public static GuiAppDataScope CreateDeterministicCrossProfileRemoteReplayData(
+        int cachedMessageCount = 1,
+        int replayMessageCount = 40,
+        int localMessageCount = 6)
+    {
+        if (cachedMessageCount < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(cachedMessageCount));
+        }
+
+        if (replayMessageCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(replayMessageCount));
+        }
+
+        if (localMessageCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(localMessageCount));
+        }
+
+        GuiTestGate.RequireEnabled();
+        WindowsGuiAppSession.StopAllRunningInstances();
+
+        const string profileA = "gui-slow-remote-profile-a";
+        const string profileB = "gui-slow-remote-profile-b";
+        const string fakeReplaySessionIdEnvVar = "SALMONEGG_GUI_FAKE_REMOTE_REPLAY_SESSION_ID";
+        const string fakeReplayMessageCountEnvVar = "SALMONEGG_GUI_FAKE_REMOTE_REPLAY_MESSAGE_COUNT";
+        var appDataRoot = ResolveAppDataRoot();
+        var previousGuiAppDataRootOverride = Environment.GetEnvironmentVariable(AppDataRootEnvVar);
+        var previousFakeReplaySessionId = Environment.GetEnvironmentVariable(fakeReplaySessionIdEnvVar);
+        var previousFakeReplayMessageCount = Environment.GetEnvironmentVariable(fakeReplayMessageCountEnvVar);
+        Environment.SetEnvironmentVariable(AppDataRootEnvVar, appDataRoot);
+
+        var appYamlPath = Path.Combine(appDataRoot, "config", "app.yaml");
+        var conversationsPath = Path.Combine(appDataRoot, "conversations", "conversations.v1.json");
+        var serverYamlPathA = Path.Combine(appDataRoot, "config", "servers", profileA + ".yaml");
+        var serverYamlPathB = Path.Combine(appDataRoot, "config", "servers", profileB + ".yaml");
+        var projectRootPath = Path.Combine(Path.GetTempPath(), "SalmonEgg.GuiTests", "cross-profile-project-1");
+
+        var scope = new GuiAppDataScope(
+            appDataRoot,
+            appYamlPath,
+            conversationsPath,
+            serverYamlPathA,
+            serverYamlPathB,
+            File.Exists(appYamlPath) ? File.ReadAllBytes(appYamlPath) : null,
+            File.Exists(appYamlPath),
+            File.Exists(conversationsPath) ? File.ReadAllBytes(conversationsPath) : null,
+            File.Exists(conversationsPath),
+            File.Exists(serverYamlPathA) ? File.ReadAllBytes(serverYamlPathA) : null,
+            File.Exists(serverYamlPathA),
+            File.Exists(serverYamlPathB) ? File.ReadAllBytes(serverYamlPathB) : null,
+            File.Exists(serverYamlPathB),
+            projectRootPath,
+            previousGuiAppDataRootOverride,
+            previousFakeReplaySessionId,
+            previousFakeReplayMessageCount);
+
+        scope.SeedCrossProfileRemoteReplay(
+            profileA,
+            profileB,
+            cachedMessageCount,
+            replayMessageCount,
+            localMessageCount);
         return scope;
     }
 
@@ -187,6 +269,10 @@ internal sealed class GuiAppDataScope : IDisposable
         if (!string.IsNullOrWhiteSpace(_serverYamlPath))
         {
             RestoreFile(_serverYamlPath, _originalServerYaml, _serverYamlExisted);
+        }
+        if (!string.IsNullOrWhiteSpace(_secondaryServerYamlPath))
+        {
+            RestoreFile(_secondaryServerYamlPath, _originalSecondaryServerYaml, _secondaryServerYamlExisted);
         }
         DeleteDirectoryIfEmpty(_configDirectory);
         DeleteDirectoryIfEmpty(_conversationsDirectory);
@@ -296,6 +382,52 @@ internal sealed class GuiAppDataScope : IDisposable
         File.WriteAllText(
             _serverYamlPath,
             BuildServerYaml(profileId, "powershell.exe", $"-NoLogo -NoProfile -ExecutionPolicy Bypass -File {QuoteCommandLineArgument(agentScriptPath)}"),
+            Encoding.UTF8);
+
+        Environment.SetEnvironmentVariable("SALMONEGG_GUI_FAKE_REMOTE_REPLAY_SESSION_ID", "gui-remote-session-01");
+        Environment.SetEnvironmentVariable("SALMONEGG_GUI_FAKE_REMOTE_REPLAY_MESSAGE_COUNT", replayMessageCount.ToString());
+    }
+
+    private void SeedCrossProfileRemoteReplay(
+        string profileA,
+        string profileB,
+        int cachedMessageCount,
+        int replayMessageCount,
+        int localMessageCount)
+    {
+        if (string.IsNullOrWhiteSpace(_serverYamlPath) || string.IsNullOrWhiteSpace(_secondaryServerYamlPath))
+        {
+            throw new InvalidOperationException("Cross-profile replay seed requires two server YAML paths.");
+        }
+
+        Directory.CreateDirectory(_configDirectory);
+        Directory.CreateDirectory(_conversationsDirectory);
+        Directory.CreateDirectory(_serversDirectory);
+        Directory.CreateDirectory(_projectRootPath);
+
+        var agentScriptPath = ResolveSlowReplayAgentScriptPath();
+        var agentArgs = $"-NoLogo -NoProfile -ExecutionPolicy Bypass -File {QuoteCommandLineArgument(agentScriptPath)}";
+
+        File.WriteAllText(
+            _appYamlPath,
+            BuildAppYaml(_projectRootPath, profileA),
+            Encoding.UTF8);
+        File.WriteAllText(
+            _conversationsPath,
+            BuildCrossProfileRemoteReplayConversationsJson(
+                _projectRootPath,
+                profileA,
+                profileB,
+                cachedMessageCount,
+                localMessageCount),
+            Encoding.UTF8);
+        File.WriteAllText(
+            _serverYamlPath,
+            BuildServerYaml(profileA, "powershell.exe", agentArgs),
+            Encoding.UTF8);
+        File.WriteAllText(
+            _secondaryServerYamlPath,
+            BuildServerYaml(profileB, "powershell.exe", agentArgs),
             Encoding.UTF8);
 
         Environment.SetEnvironmentVariable("SALMONEGG_GUI_FAKE_REMOTE_REPLAY_SESSION_ID", "gui-remote-session-01");
@@ -466,6 +598,97 @@ internal sealed class GuiAppDataScope : IDisposable
             version = 1,
             lastActiveConversationId = (string?)null,
             conversations = conversations.ToArray()
+        };
+
+        return JsonSerializer.Serialize(document);
+    }
+
+    private static string BuildCrossProfileRemoteReplayConversationsJson(
+        string projectRootPath,
+        string profileA,
+        string profileB,
+        int cachedMessageCount,
+        int localMessageCount)
+    {
+        var remoteTimestamp = new DateTimeOffset(2026, 03, 29, 12, 00, 00, TimeSpan.Zero);
+        var cachedMessagesForRemote1 = cachedMessageCount <= 0
+            ? Array.Empty<object>()
+            : Enumerable.Range(1, cachedMessageCount)
+                .Select(messageIndex => new
+                {
+                    id = $"remote1-cached-{messageIndex}",
+                    timestamp = remoteTimestamp.AddSeconds(messageIndex),
+                    contentType = "text",
+                    textContent = $"GUI Remote Session 01 cached {messageIndex:000}",
+                    isOutgoing = messageIndex % 2 != 0
+                })
+                .Cast<object>()
+                .ToArray();
+        var cachedMessagesForRemote2 = cachedMessageCount <= 0
+            ? Array.Empty<object>()
+            : Enumerable.Range(1, cachedMessageCount)
+                .Select(messageIndex => new
+                {
+                    id = $"remote2-cached-{messageIndex}",
+                    timestamp = remoteTimestamp.AddSeconds(30 + messageIndex),
+                    contentType = "text",
+                    textContent = $"GUI Remote Session 02 cached {messageIndex:000}",
+                    isOutgoing = messageIndex % 2 == 0
+                })
+                .Cast<object>()
+                .ToArray();
+
+        var localTimestamp = remoteTimestamp.AddMinutes(-1);
+        var conversations = new object[]
+        {
+            new
+            {
+                conversationId = "gui-local-conversation-01",
+                displayName = "GUI Local Session 01",
+                createdAt = localTimestamp,
+                lastUpdatedAt = localTimestamp,
+                cwd = projectRootPath,
+                messages = Enumerable.Range(1, localMessageCount)
+                    .Select(messageIndex => new
+                    {
+                        id = $"local-{messageIndex}",
+                        timestamp = localTimestamp.AddSeconds(messageIndex),
+                        contentType = "text",
+                        textContent = $"GUI Local Session 01 message {messageIndex:000}",
+                        isOutgoing = messageIndex % 2 == 0
+                    })
+                    .Cast<object>()
+                    .ToArray()
+            },
+            new
+            {
+                conversationId = "gui-remote-conversation-01",
+                displayName = "GUI Remote Session 01",
+                createdAt = remoteTimestamp.AddSeconds(1),
+                lastUpdatedAt = remoteTimestamp.AddSeconds(1),
+                cwd = projectRootPath,
+                remoteSessionId = "gui-remote-session-01",
+                boundProfileId = profileA,
+                messages = cachedMessagesForRemote1
+            },
+            new
+            {
+                conversationId = "gui-remote-conversation-02",
+                displayName = "GUI Remote Session 02",
+                createdAt = remoteTimestamp.AddSeconds(2),
+                lastUpdatedAt = remoteTimestamp.AddSeconds(2),
+                cwd = projectRootPath,
+                remoteSessionId = "gui-remote-session-02",
+                boundProfileId = profileB,
+                messages = cachedMessagesForRemote2
+            }
+        };
+
+        var document = new
+        {
+            version = 1,
+            lastActiveConversationId = (string?)null,
+            conversations
         };
 
         return JsonSerializer.Serialize(document);
