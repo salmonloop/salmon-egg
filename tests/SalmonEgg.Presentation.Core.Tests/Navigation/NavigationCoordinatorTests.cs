@@ -295,6 +295,63 @@ public sealed class NavigationCoordinatorTests
     }
 
     [Fact]
+    public async Task ActivateSessionAsync_SameCommittedSessionLatestIntent_IgnoresDuplicateWithoutRenavigation()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferencesWithProject();
+            var selectionStore = new ShellSelectionStateStore();
+            var activationCoordinator = new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(true));
+            var shellNavigation = CreateShellNavigationService();
+            var coordinator = CreateCoordinator(selectionStore, activationCoordinator, preferences, shellNavigation.Object);
+
+            Assert.True(await coordinator.ActivateSessionAsync("session-1", "project-1"));
+            Assert.True(await coordinator.ActivateSessionAsync("session-1", "project-1"));
+
+            Assert.Equal(1, activationCoordinator.ActivatedSessionIds.Count(id => string.Equals(id, "session-1", StringComparison.Ordinal)));
+            shellNavigation.As<IActivationTokenShellNavigationService>()
+                .Verify(s => s.NavigateToChat(It.IsAny<long>()), Times.Once);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task ActivateSessionAsync_SameSessionAfterStartNavigation_DoesNotTreatCommittedSelectionAsDuplicate()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferencesWithProject();
+            var selectionStore = new ShellSelectionStateStore();
+            var activationCoordinator = new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(true));
+            var shellNavigation = CreateShellNavigationService();
+            var coordinator = CreateCoordinator(selectionStore, activationCoordinator, preferences, shellNavigation.Object);
+
+            Assert.True(await coordinator.ActivateSessionAsync("session-1", "project-1"));
+            await coordinator.ActivateStartAsync();
+            Assert.True(await coordinator.ActivateSessionAsync("session-1", "project-1"));
+
+            Assert.Equal(2, activationCoordinator.ActivatedSessionIds.Count(id => string.Equals(id, "session-1", StringComparison.Ordinal)));
+            shellNavigation.As<IActivationTokenShellNavigationService>()
+                .Verify(s => s.NavigateToStart(It.IsAny<long>()), Times.Once);
+            shellNavigation.As<IActivationTokenShellNavigationService>()
+                .Verify(s => s.NavigateToChat(It.IsAny<long>()), Times.Exactly(2));
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public async Task ActivateSessionAsync_SlowSessionSwitch_NavigatesToChatBeforeSwitchCompletes()
     {
         var originalContext = SynchronizationContext.Current;

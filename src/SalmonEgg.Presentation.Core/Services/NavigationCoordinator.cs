@@ -22,9 +22,12 @@ public sealed class NavigationCoordinator : INavigationCoordinator
     private CancellationTokenSource? _sessionActivationCts;
     private long _activationTokenCounter;
     private long _latestActivationToken;
+    private long _activeSessionActivationVersion;
+    private long _committedSessionActivationVersion;
     private string? _desiredSessionId;
     private string? _committedSessionId;
     private bool _isSessionActivationInProgress;
+    private ShellNavigationContent _latestShellContent = ShellNavigationContent.Start;
 
     public NavigationCoordinator(
         IShellSelectionMutationSink selectionSink,
@@ -46,9 +49,11 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         try
         {
             var activationToken = BeginActivation();
+            CancelInFlightSessionActivation();
             var navigationResult = await NavigateToStartAsync(activationToken).ConfigureAwait(true);
             if (navigationResult.Succeeded && IsLatestActivationToken(activationToken))
             {
+                _latestShellContent = ShellNavigationContent.Start;
                 _selectionSink.SetSelection(NavigationSelectionState.StartSelection);
             }
         }
@@ -62,9 +67,11 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         try
         {
             var activationToken = BeginActivation();
+            CancelInFlightSessionActivation();
             var navigationResult = await NavigateToDiscoverSessionsAsync(activationToken).ConfigureAwait(true);
             if (navigationResult.Succeeded && IsLatestActivationToken(activationToken))
             {
+                _latestShellContent = ShellNavigationContent.DiscoverSessions;
                 _selectionSink.SetSelection(NavigationSelectionState.DiscoverSessionsSelection);
             }
         }
@@ -78,12 +85,14 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         try
         {
             var activationToken = BeginActivation();
+            CancelInFlightSessionActivation();
             var navigationResult = await NavigateToSettingsAsync(
                     string.IsNullOrWhiteSpace(settingsKey) ? "General" : settingsKey,
                     activationToken)
                 .ConfigureAwait(true);
             if (navigationResult.Succeeded && IsLatestActivationToken(activationToken))
             {
+                _latestShellContent = ShellNavigationContent.Settings;
                 _selectionSink.SetSelection(NavigationSelectionState.SettingsSelection);
             }
         }
@@ -105,14 +114,22 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         {
             var isDuplicatePending = _isSessionActivationInProgress
                 && string.Equals(_desiredSessionId, sessionId, StringComparison.Ordinal);
+            var duplicatePendingIsLatestIntent = isDuplicatePending
+                && _activeSessionActivationVersion == Interlocked.Read(ref _latestActivationToken);
+            var duplicatePendingOnChatShell = duplicatePendingIsLatestIntent
+                && _latestShellContent == ShellNavigationContent.Chat;
             var isDuplicateCommitted = !_isSessionActivationInProgress
                 && string.Equals(_committedSessionId, sessionId, StringComparison.Ordinal);
-            if (isDuplicatePending || isDuplicateCommitted)
+            var duplicateCommittedIsLatestIntent = isDuplicateCommitted
+                && _committedSessionActivationVersion == Interlocked.Read(ref _latestActivationToken);
+            var duplicateCommittedOnChatShell = duplicateCommittedIsLatestIntent
+                && _latestShellContent == ShellNavigationContent.Chat;
+            if (duplicatePendingOnChatShell || duplicateCommittedOnChatShell)
             {
                 _logger.LogInformation(
                     "Navigation activation ignored duplicate intent. sessionId={SessionId} state={State}",
                     sessionId,
-                    isDuplicatePending ? "InProgress" : "Committed");
+                    duplicatePendingOnChatShell ? "InProgressOnChat" : "CommittedOnChat");
                 return Task.FromResult(true);
             }
 
@@ -124,13 +141,13 @@ public sealed class NavigationCoordinator : INavigationCoordinator
                 new CancellationTokenSource());
             _sessionActivationCts = request.CancellationTokenSource;
             _desiredSessionId = sessionId;
+            _activeSessionActivationVersion = request.Version;
             _isSessionActivationInProgress = true;
         }
 
         try
         {
-            previousActivation?.Cancel();
-            if (previousActivation != null)
+            if (TryCancelActivation(previousActivation))
             {
                 _logger.LogInformation(
                     "Navigation activation canceled previous request. sessionId={SessionId} version={Version}",
@@ -165,6 +182,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
             {
                 return false;
             }
+            _latestShellContent = ShellNavigationContent.Chat;
 
             await _sessionActivationGate
                 .WaitAsync(request.CancellationToken)
@@ -224,6 +242,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
 
     public void SyncSelectionFromShellContent(ShellNavigationContent content)
     {
+        _latestShellContent = content;
         switch (content)
         {
             case ShellNavigationContent.Start:
@@ -259,9 +278,11 @@ public sealed class NavigationCoordinator : INavigationCoordinator
             {
                 _sessionActivationCts = null;
                 _isSessionActivationInProgress = false;
+                _activeSessionActivationVersion = 0;
                 if (committed)
                 {
                     _committedSessionId = request.SessionId;
+                    _committedSessionActivationVersion = request.Version;
                 }
             }
         }
@@ -271,6 +292,35 @@ public sealed class NavigationCoordinator : INavigationCoordinator
 
     private bool IsLatestActivationToken(long activationToken)
         => Interlocked.Read(ref _latestActivationToken) == activationToken;
+
+    private void CancelInFlightSessionActivation()
+    {
+        CancellationTokenSource? pendingActivation = null;
+        lock (_sessionActivationSync)
+        {
+            pendingActivation = _sessionActivationCts;
+        }
+
+        TryCancelActivation(pendingActivation);
+    }
+
+    private static bool TryCancelActivation(CancellationTokenSource? activation)
+    {
+        if (activation is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            activation.Cancel();
+            return true;
+        }
+        catch (ObjectDisposedException)
+        {
+            return false;
+        }
+    }
 
     private ValueTask<ShellNavigationResult> NavigateToStartAsync(long activationToken)
     {

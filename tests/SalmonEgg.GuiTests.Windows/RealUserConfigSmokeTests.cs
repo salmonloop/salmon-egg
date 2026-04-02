@@ -330,6 +330,84 @@ public sealed partial class RealUserConfigSmokeTests
             $"Remote loading status pill leaked after selecting pure local conversation {localCandidate.ConversationId} while remote conversation {remoteCandidate.ConversationId} was still loading.{Environment.NewLine}Capture: {capturePath ?? "<none>"}{Environment.NewLine}{string.Join(Environment.NewLine, timeline)}");
     }
 
+    [SkippableFact]
+    public void RandomSwitchBetweenLocalRemote_WithOneSecondCadence_RemainsInteractive()
+    {
+        GuiTestGate.RequireEnabled();
+
+        var remoteCandidates = RealUserConfigProbe.LoadReplayBackedCandidates();
+        var localCandidates = RealUserConfigProbe.LoadPureLocalCandidates();
+        Skip.If(remoteCandidates.Count == 0, "No replay-backed remote conversation candidates were found in the current SalmonEgg app data.");
+        Skip.If(localCandidates.Count == 0, "No pure local conversation candidates were found in the current SalmonEgg app data.");
+
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var startId = "MainNav.Start";
+        var remoteCandidate = remoteCandidates
+            .FirstOrDefault(item => session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null);
+        var localCandidate = localCandidates
+            .FirstOrDefault(item => session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null);
+        Skip.If(remoteCandidate is null, $"No replay-backed remote candidate is currently visible in the left navigation. Candidates: {string.Join(", ", remoteCandidates.Select(c => c.ConversationId))}");
+        Skip.If(localCandidate is null, $"No pure local candidate is currently visible in the left navigation. Candidates: {string.Join(", ", localCandidates.Select(c => c.ConversationId))}");
+
+        var remoteId = SessionAutomationId(remoteCandidate.ConversationId);
+        var localId = SessionAutomationId(localCandidate.ConversationId);
+        var targets = new[] { remoteId, localId, startId };
+        var timeline = new List<string>();
+        var random = new Random(20260402);
+
+        // Reproduce user's report: random switching with ~1s interval.
+        for (var index = 0; index < 15; index++)
+        {
+            var targetId = targets[random.Next(targets.Length)];
+            var selectedBefore = DescribeSelectionSnapshot(session, startId, localId, remoteId);
+
+            var target = session.FindByAutomationId(targetId, TimeSpan.FromSeconds(8));
+            session.ActivateElement(target);
+            Thread.Sleep(1000);
+
+            var selectedAfter = DescribeSelectionSnapshot(session, startId, localId, remoteId);
+            timeline.Add(
+                $"{DateTime.UtcNow:HH:mm:ss.fff} step={index:00} target={targetId} before={selectedBefore} after={selectedAfter}");
+        }
+
+        // Liveness assertion: after burst, navigation must still respond to fresh interactions.
+        var startItem = session.FindByAutomationId(startId, TimeSpan.FromSeconds(10));
+        session.ActivateElement(startItem);
+        Thread.Sleep(500);
+        var startSelected = session.TryGetIsSelected(startId) == true;
+        var startViewVisible = session.TryFindByAutomationId("StartView.Title", TimeSpan.FromSeconds(4)) is not null;
+        timeline.Add($"{DateTime.UtcNow:HH:mm:ss.fff} final-start selected={startSelected} startView={startViewVisible}");
+
+        var localItem = session.FindByAutomationId(localId, TimeSpan.FromSeconds(10));
+        session.ActivateElement(localItem);
+        Thread.Sleep(700);
+        var localSelected = session.TryGetIsSelected(localId) == true;
+        var headerVisible = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(4)) is not null;
+        timeline.Add($"{DateTime.UtcNow:HH:mm:ss.fff} final-local selected={localSelected} header={headerVisible}");
+
+        if (!(startSelected && startViewVisible && localSelected && headerVisible))
+        {
+            var captureRoot = Path.Combine(Path.GetTempPath(), "SalmonEgg.GuiTests");
+            Directory.CreateDirectory(captureRoot);
+            var capturePath = Path.Combine(
+                captureRoot,
+                $"random-switch-interactivity-{DateTime.UtcNow:yyyyMMddHHmmssfff}.png");
+            session.MainWindow.CaptureToFile(capturePath);
+
+            var appDataRoot = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "SalmonEgg");
+            var bootLogPath = Path.Combine(appDataRoot, "boot.log");
+            var bootTail = File.Exists(bootLogPath)
+                ? string.Join(Environment.NewLine, File.ReadLines(bootLogPath).TakeLast(30))
+                : "<boot.log missing>";
+
+            throw new Xunit.Sdk.XunitException(
+                $"Interactivity freeze suspected after random 1s cadence switching.{Environment.NewLine}Screenshot: {capturePath}{Environment.NewLine}{string.Join(Environment.NewLine, timeline)}{Environment.NewLine}boot.log:{Environment.NewLine}{bootTail}");
+        }
+    }
+
     private static int CountVisibleTranscriptText(AutomationElement? messagesList)
     {
         if (messagesList is null)
@@ -344,6 +422,18 @@ public sealed partial class RealUserConfigSmokeTests
 
     private static string SessionAutomationId(string conversationId)
         => $"MainNav.Session.{conversationId}";
+
+    private static string DescribeSelectionSnapshot(
+        WindowsGuiAppSession session,
+        string startId,
+        string localId,
+        string remoteId)
+    {
+        var start = session.TryGetIsSelected(startId) == true;
+        var local = session.TryGetIsSelected(localId) == true;
+        var remote = session.TryGetIsSelected(remoteId) == true;
+        return $"start={start},local={local},remote={remote}";
+    }
 
     private sealed record RealReplayCandidate(
         string ConversationId,
