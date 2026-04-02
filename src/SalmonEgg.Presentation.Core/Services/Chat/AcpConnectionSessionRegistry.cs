@@ -22,6 +22,8 @@ public interface IAcpConnectionSessionRegistry
     bool RemoveByProfile(string profileId);
 
     bool RemoveByService(IChatService service, out string profileId);
+
+    IReadOnlyList<AcpConnectionSession> RemoveWhere(Func<AcpConnectionSession, bool> predicate);
 }
 
 public sealed class InMemoryAcpConnectionSessionRegistry : IAcpConnectionSessionRegistry
@@ -91,5 +93,33 @@ public sealed class InMemoryAcpConnectionSessionRegistry : IAcpConnectionSession
 
         profileId = string.Empty;
         return false;
+    }
+
+    public IReadOnlyList<AcpConnectionSession> RemoveWhere(Func<AcpConnectionSession, bool> predicate)
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+
+        var removed = new List<AcpConnectionSession>();
+        lock (_gate)
+        {
+            var keysToRemove = new List<string>();
+            foreach (var pair in _sessionsByProfile)
+            {
+                if (!predicate(pair.Value))
+                {
+                    continue;
+                }
+
+                keysToRemove.Add(pair.Key);
+                removed.Add(pair.Value);
+            }
+
+            foreach (var key in keysToRemove)
+            {
+                _sessionsByProfile.Remove(key);
+            }
+        }
+
+        return removed;
     }
 }

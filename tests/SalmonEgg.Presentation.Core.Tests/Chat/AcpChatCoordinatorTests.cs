@@ -239,6 +239,114 @@ public sealed class AcpChatCoordinatorTests
     }
 
     [Fact]
+    public async Task ConnectToProfileAsync_WhenCachedSessionBecomesInvalid_RecreatesAndReusesFreshSession()
+    {
+        var transport = new FakeTransportConfiguration();
+        var sink = new FakeSink();
+        var staleService = CreateChatService();
+        var freshService = CreateChatService();
+        var factory = new Mock<IAcpChatServiceFactory>();
+        var logger = new Mock<ILogger<AcpChatCoordinator>>();
+        var staleConnected = true;
+
+        staleService.SetupGet(x => x.IsConnected).Returns(() => staleConnected);
+        staleService
+            .Setup(x => x.InitializeAsync(It.IsAny<InitializeParams>()))
+            .ReturnsAsync(new InitializeResponse(1, new AgentInfo("agent-stale", "1.0.0"), new AgentCapabilities()));
+        freshService
+            .Setup(x => x.InitializeAsync(It.IsAny<InitializeParams>()))
+            .ReturnsAsync(new InitializeResponse(1, new AgentInfo("agent-fresh", "1.0.0"), new AgentCapabilities()));
+
+        factory
+            .SetupSequence(x => x.CreateChatService(TransportType.Stdio, "agent.exe", "--serve", null))
+            .Returns(staleService.Object)
+            .Returns(freshService.Object);
+
+        var sut = new AcpChatCoordinator(factory.Object, logger.Object);
+        var profile = new ServerConfiguration
+        {
+            Id = "profile-1",
+            Name = "Agent",
+            Transport = TransportType.Stdio,
+            StdioCommand = "agent.exe",
+            StdioArgs = "--serve"
+        };
+
+        var first = await sut.ConnectToProfileAsync(profile, transport, sink);
+        staleConnected = false;
+
+        var second = await sut.ConnectToProfileAsync(profile, transport, sink);
+        var third = await sut.ConnectToProfileAsync(profile, transport, sink);
+
+        Assert.NotSame(first.ChatService, second.ChatService);
+        Assert.Same(second.ChatService, third.ChatService);
+        Assert.Equal("agent-fresh", sink.AgentName);
+        staleService.Verify(x => x.DisconnectAsync(), Times.Once);
+        factory.Verify(x => x.CreateChatService(TransportType.Stdio, "agent.exe", "--serve", null), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task ConnectToProfileAsync_WhenPruningStaleBackgroundSessionFails_DoesNotBlockActiveProfileReuse()
+    {
+        var transport = new FakeTransportConfiguration();
+        var sink = new FakeSink();
+        var staleBackgroundService = CreateChatService();
+        var activeService = CreateChatService();
+        var factory = new Mock<IAcpChatServiceFactory>();
+        var logger = new Mock<ILogger<AcpChatCoordinator>>();
+        var staleConnected = true;
+
+        staleBackgroundService.SetupGet(x => x.IsConnected).Returns(() => staleConnected);
+        staleBackgroundService
+            .Setup(x => x.InitializeAsync(It.IsAny<InitializeParams>()))
+            .ReturnsAsync(new InitializeResponse(1, new AgentInfo("agent-p1", "1.0.0"), new AgentCapabilities()));
+        activeService
+            .Setup(x => x.InitializeAsync(It.IsAny<InitializeParams>()))
+            .ReturnsAsync(new InitializeResponse(1, new AgentInfo("agent-p2", "1.0.0"), new AgentCapabilities()));
+
+        factory
+            .Setup(x => x.CreateChatService(TransportType.Stdio, "agent-1.exe", "--serve-1", null))
+            .Returns(staleBackgroundService.Object);
+        factory
+            .Setup(x => x.CreateChatService(TransportType.Stdio, "agent-2.exe", "--serve-2", null))
+            .Returns(activeService.Object);
+
+        var sut = new AcpChatCoordinator(factory.Object, logger.Object);
+
+        var profile1 = new ServerConfiguration
+        {
+            Id = "profile-1",
+            Name = "Agent 1",
+            Transport = TransportType.Stdio,
+            StdioCommand = "agent-1.exe",
+            StdioArgs = "--serve-1"
+        };
+        var profile2 = new ServerConfiguration
+        {
+            Id = "profile-2",
+            Name = "Agent 2",
+            Transport = TransportType.Stdio,
+            StdioCommand = "agent-2.exe",
+            StdioArgs = "--serve-2"
+        };
+
+        await sut.ConnectToProfileAsync(profile1, transport, sink);
+        var second = await sut.ConnectToProfileAsync(profile2, transport, sink);
+        staleConnected = false;
+        staleBackgroundService
+            .Setup(x => x.DisconnectAsync())
+            .ThrowsAsync(new InvalidOperationException("stale cleanup failure"));
+
+        var third = await sut.ConnectToProfileAsync(profile2, transport, sink);
+
+        Assert.Same(second.ChatService, third.ChatService);
+        Assert.Equal("agent-p2", sink.AgentName);
+        staleBackgroundService.Verify(x => x.DisconnectAsync(), Times.Once);
+        factory.Verify(x => x.CreateChatService(TransportType.Stdio, "agent-1.exe", "--serve-1", null), Times.Once);
+        factory.Verify(x => x.CreateChatService(TransportType.Stdio, "agent-2.exe", "--serve-2", null), Times.Once);
+    }
+
+    [Fact]
     public async Task ApplyTransportConfigurationAsync_DisconnectsExistingServiceBeforeReplacingIt()
     {
         var transport = new FakeTransportConfiguration

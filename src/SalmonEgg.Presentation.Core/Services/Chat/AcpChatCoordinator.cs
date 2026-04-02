@@ -118,6 +118,8 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             throw new InvalidOperationException(errorMessage ?? "Invalid ACP transport configuration.");
         }
 
+        await PruneStaleCachedSessionsAsync(sink, cancellationToken).ConfigureAwait(false);
+
         using var applyScope = EnterApplyScope(cancellationToken);
         var applyToken = applyScope.Token;
         var currentConnectionSignature = BuildConnectionSignature(transportConfiguration);
@@ -775,6 +777,52 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             transportConfiguration.StdioCommand ?? string.Empty,
             transportConfiguration.StdioArgs ?? string.Empty,
             transportConfiguration.RemoteUrl ?? string.Empty);
+    }
+
+    private async Task PruneStaleCachedSessionsAsync(
+        IAcpChatCoordinatorSink sink,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var removed = _sessionRegistry.RemoveWhere(session =>
+            !session.Service.IsConnected
+            || !session.Service.IsInitialized);
+
+        foreach (var session in removed)
+        {
+            if (ReferenceEquals(sink.CurrentChatService, session.Service))
+            {
+                continue;
+            }
+
+            try
+            {
+                await DisposeServiceAsync(session.Service).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(
+                    ex,
+                    "Failed to dispose stale cached ACP session. profileId={ProfileId}",
+                    session.ProfileId);
+
+                if (session.Service is IDisposable disposable)
+                {
+                    try
+                    {
+                        disposable.Dispose();
+                    }
+                    catch (Exception disposeEx)
+                    {
+                        _logger.LogDebug(
+                            disposeEx,
+                            "Failed to release stale cached ACP session after disconnect failure. profileId={ProfileId}",
+                            session.ProfileId);
+                    }
+                }
+            }
+        }
     }
 
     private sealed class ApplyScope : IDisposable
