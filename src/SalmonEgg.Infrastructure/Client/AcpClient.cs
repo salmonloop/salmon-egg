@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -43,6 +44,8 @@ namespace SalmonEgg.Infrastructure.Client
         private readonly ConcurrentDictionary<string, TaskCompletionSource<JsonRpcResponse>> _pendingRequests = new();
         // Inbound tool requests (agent -> client) are correlated by request id so we can format responses correctly.
         private readonly ConcurrentDictionary<string, string> _pendingInboundRequestMethods = new();
+        private readonly ConcurrentDictionary<string, object?> _pendingInboundRequestMessageIds = new();
+        private readonly ConcurrentDictionary<string, string> _pendingInboundRequestSessions = new();
         private readonly ConcurrentDictionary<string, AskUserRequest> _pendingAskUserRequests = new();
 
         private readonly object _lock = new();
@@ -202,15 +205,25 @@ namespace SalmonEgg.Infrastructure.Client
                 throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse initialize response");
             }
 
-            // 验证协议版本
-            var serverVersionStr = initializeResponse.ProtocolVersion.ToString();
-            var clientVersionStr = @params.ProtocolVersion.ToString();
-            
-            if (serverVersionStr != clientVersionStr)
+            // Validate protocol compatibility.
+            // We allow older server versions but reject newer versions that this client cannot understand.
+            var serverVersion = initializeResponse.ProtocolVersion;
+            var clientVersion = @params.ProtocolVersion;
+
+            if (serverVersion > clientVersion)
             {
                 throw new AcpException(
                     JsonRpcErrorCode.ProtocolVersionMismatch,
-                    $"Protocol version mismatch. Expected: {clientVersionStr}, Actual: {serverVersionStr}");
+                    $"Protocol version mismatch. Max supported by client: {clientVersion}, Server: {serverVersion}");
+            }
+
+            if (serverVersion < clientVersion)
+            {
+                _errorLogger.LogError(new ErrorLogEntry(
+                    "PROTOCOL_VERSION_DOWNLEVEL",
+                    $"Server protocol version {serverVersion} is older than client requested {clientVersion}. Proceeding in compatibility mode.",
+                    ErrorSeverity.Info,
+                    nameof(InitializeAsync)));
             }
 
             // 存储 Agent 信息
@@ -437,6 +450,8 @@ namespace SalmonEgg.Infrastructure.Client
                 _parser.SerializeMessage(notification),
                 cancellationToken).ConfigureAwait(false);
 
+            await CancelPendingInboundRequestsForSessionAsync(@params.SessionId).ConfigureAwait(false);
+
             // 更新会话状态
             await _sessionManager.CancelSessionAsync(@params.SessionId, @params.Reason).ConfigureAwait(false);
 
@@ -518,6 +533,7 @@ namespace SalmonEgg.Infrastructure.Client
             {
                 return false;
             }
+            RemovePendingInboundSessionTracking(idStr);
 
             // ACP schema: result = { outcome: { outcome: "selected"|"cancelled", optionId? } }
             object outcomePayload = string.IsNullOrWhiteSpace(optionId)
@@ -537,6 +553,7 @@ namespace SalmonEgg.Infrastructure.Client
             {
                 return false;
             }
+            RemovePendingInboundSessionTracking(idStr);
 
             if (!success)
             {
@@ -573,6 +590,7 @@ namespace SalmonEgg.Infrastructure.Client
             {
                 return false;
             }
+            RemovePendingInboundSessionTracking(idStr);
 
             if (!_pendingAskUserRequests.TryRemove(idStr, out var request))
             {
@@ -760,6 +778,7 @@ namespace SalmonEgg.Infrastructure.Client
                     if (!string.IsNullOrWhiteSpace(requestIdStr))
                     {
                         _pendingInboundRequestMethods[requestIdStr] = request.Method;
+                        _pendingInboundRequestMessageIds[requestIdStr] = request.Id;
                         ScheduleInboundRequestTimeout(request.Id, TimeSpan.FromSeconds(30), defaultKind: "permission");
                     }
                     HandlePermissionRequest(request);
@@ -769,6 +788,7 @@ namespace SalmonEgg.Infrastructure.Client
                     if (!string.IsNullOrWhiteSpace(requestIdStr))
                     {
                         _pendingInboundRequestMethods[requestIdStr] = request.Method;
+                        _pendingInboundRequestMessageIds[requestIdStr] = request.Id;
                         ScheduleInboundRequestTimeout(request.Id, TimeSpan.FromSeconds(30), defaultKind: "fs");
                     }
                     HandleFileSystemRequest(request);
@@ -781,6 +801,7 @@ namespace SalmonEgg.Infrastructure.Client
                     if (!string.IsNullOrWhiteSpace(requestIdStr))
                     {
                         _pendingInboundRequestMethods[requestIdStr] = request.Method;
+                        _pendingInboundRequestMessageIds[requestIdStr] = request.Id;
                         ScheduleInboundRequestTimeout(request.Id, TimeSpan.FromSeconds(30), defaultKind: "terminal");
                     }
                     _ = HandleTerminalRequestAsync(request);
@@ -789,13 +810,14 @@ namespace SalmonEgg.Infrastructure.Client
                     if (!string.IsNullOrWhiteSpace(requestIdStr))
                     {
                         _pendingInboundRequestMethods[requestIdStr] = request.Method;
+                        _pendingInboundRequestMessageIds[requestIdStr] = request.Id;
                         ScheduleInboundRequestTimeout(request.Id, TimeSpan.FromSeconds(30), defaultKind: "ask_user");
                     }
                     HandleAskUserRequest(request);
                     break;
                 default:
                     // Best-effort: respond with "method not found" so the agent doesn't hang waiting.
-                    _pendingInboundRequestMethods.TryRemove(request.Id?.ToString() ?? string.Empty, out _);
+                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
                     _ = SendResponseAsync(new JsonRpcResponse(
                         request.Id,
                         JsonRpcError.CreateMethodNotFound(request.Method)));
@@ -831,6 +853,7 @@ namespace SalmonEgg.Infrastructure.Client
                 {
                     _pendingAskUserRequests.TryRemove(idStr, out _);
                 }
+                RemovePendingInboundSessionTracking(idStr);
 
                 if (defaultKind == "permission")
                 {
@@ -884,7 +907,7 @@ namespace SalmonEgg.Infrastructure.Client
             {
                 if (!request.Params.HasValue)
                 {
-                    _pendingInboundRequestMethods.TryRemove(request.Id?.ToString() ?? string.Empty, out _);
+                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
                     _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Missing params")));
                     return;
                 }
@@ -892,12 +915,18 @@ namespace SalmonEgg.Infrastructure.Client
                 var rawParams = request.Params.Value;
                 if (!rawParams.TryGetProperty("sessionId", out var sessionIdProp))
                 {
-                    _pendingInboundRequestMethods.TryRemove(request.Id?.ToString() ?? string.Empty, out _);
+                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
                     _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Missing sessionId")));
                     return;
                 }
 
                 var sessionId = sessionIdProp.GetString() ?? string.Empty;
+                var messageId = request.Id ?? string.Empty;
+                var requestId = request.Id?.ToString() ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(requestId))
+                {
+                    _pendingInboundRequestSessions[requestId] = sessionId;
+                }
                 var toolCall = rawParams.TryGetProperty("toolCall", out var toolCallProp) ? toolCallProp : default;
                 var optionsProp = rawParams.TryGetProperty("options", out var options) ? options : default;
 
@@ -920,10 +949,10 @@ namespace SalmonEgg.Infrastructure.Client
                 }
 
                 var permissionResponseFunc = new Func<string, string?, Task>((outcome, optionId) =>
-                    RespondToPermissionRequestAsync(request.Id, outcome, optionId));
+                    RespondToPermissionRequestAsync(messageId, outcome, optionId));
 
                 var eventArgs = new PermissionRequestEventArgs(
-                    request.Id,
+                    messageId,
                     sessionId,
                     toolCall,
                     optionsList,
@@ -953,7 +982,7 @@ namespace SalmonEgg.Infrastructure.Client
             {
                 if (!request.Params.HasValue)
                 {
-                    _pendingInboundRequestMethods.TryRemove(request.Id?.ToString() ?? string.Empty, out _);
+                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
                     _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Missing params")));
                     return;
                 }
@@ -962,12 +991,18 @@ namespace SalmonEgg.Infrastructure.Client
                 if (!rawParams.TryGetProperty("sessionId", out var sessionIdProp) ||
                     !rawParams.TryGetProperty("path", out var pathProp))
                 {
-                    _pendingInboundRequestMethods.TryRemove(request.Id?.ToString() ?? string.Empty, out _);
+                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
                     _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Missing sessionId or path")));
                     return;
                 }
 
                 var sessionId = sessionIdProp.GetString() ?? string.Empty;
+                var messageId = request.Id ?? string.Empty;
+                var requestId = request.Id?.ToString() ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(requestId))
+                {
+                    _pendingInboundRequestSessions[requestId] = sessionId;
+                }
                 var path = pathProp.GetString() ?? string.Empty;
                 var content = rawParams.TryGetProperty("content", out var cont) ? cont.GetString() : null;
 
@@ -981,10 +1016,10 @@ namespace SalmonEgg.Infrastructure.Client
                 var encoding = (string?)null;
 
                 var fileSystemResponseFunc = new Func<bool, string?, string?, Task>((success, respContent, respMessage) =>
-                RespondToFileSystemRequestAsync(request.Id, success, respContent, respMessage));
+                RespondToFileSystemRequestAsync(messageId, success, respContent, respMessage));
 
                 var eventArgs = new FileSystemRequestEventArgs(
-                request.Id,
+                messageId,
                 sessionId,
                 operation,
                 path,
@@ -995,7 +1030,7 @@ namespace SalmonEgg.Infrastructure.Client
                 if (FileSystemRequestReceived == null)
                 {
                     // No UI hooked up; deny to avoid deadlock.
-                    _ = RespondToFileSystemRequestAsync(request.Id, success: false, content: null, message: "File system requests are not supported.");
+                    _ = RespondToFileSystemRequestAsync(messageId, success: false, content: null, message: "File system requests are not supported.");
                     return;
                 }
 
@@ -1016,7 +1051,7 @@ namespace SalmonEgg.Infrastructure.Client
             {
                 if (!request.Params.HasValue)
                 {
-                    _pendingInboundRequestMethods.TryRemove(request.Id?.ToString() ?? string.Empty, out _);
+                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
                     _pendingAskUserRequests.TryRemove(request.Id?.ToString() ?? string.Empty, out _);
                     _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Missing params")));
                     return;
@@ -1025,7 +1060,7 @@ namespace SalmonEgg.Infrastructure.Client
                 var askUserRequest = JsonSerializer.Deserialize<AskUserRequest>(request.Params.Value.GetRawText(), _parser.Options);
                 if (askUserRequest == null)
                 {
-                    _pendingInboundRequestMethods.TryRemove(request.Id?.ToString() ?? string.Empty, out _);
+                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
                     _pendingAskUserRequests.TryRemove(request.Id?.ToString() ?? string.Empty, out _);
                     _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Failed to deserialize ask_user request.")));
                     return;
@@ -1037,11 +1072,12 @@ namespace SalmonEgg.Infrastructure.Client
                 if (!string.IsNullOrWhiteSpace(requestId))
                 {
                     _pendingAskUserRequests[requestId] = askUserRequest;
+                    _pendingInboundRequestSessions[requestId] = askUserRequest.SessionId;
                 }
 
                 if (AskUserRequestReceived == null)
                 {
-                    _pendingInboundRequestMethods.TryRemove(requestId, out _);
+                    RemovePendingInboundTracking(requestId);
                     _pendingAskUserRequests.TryRemove(requestId, out _);
                     _ = SendResponseAsync(new JsonRpcResponse(
                         request.Id,
@@ -1060,13 +1096,13 @@ namespace SalmonEgg.Infrastructure.Client
             }
             catch (InvalidOperationException ex)
             {
-                _pendingInboundRequestMethods.TryRemove(request.Id?.ToString() ?? string.Empty, out _);
+                RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
                 _pendingAskUserRequests.TryRemove(request.Id?.ToString() ?? string.Empty, out _);
                 _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams(ex.Message)));
             }
             catch (Exception ex)
             {
-                _pendingInboundRequestMethods.TryRemove(request.Id?.ToString() ?? string.Empty, out _);
+                RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
                 _pendingAskUserRequests.TryRemove(request.Id?.ToString() ?? string.Empty, out _);
                 OnErrorOccurred($"Failed to process ask_user request: {ex.Message}");
                 _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInternalError(ex.Message)));
@@ -1082,7 +1118,7 @@ namespace SalmonEgg.Infrastructure.Client
             {
                 if (!request.Params.HasValue)
                 {
-                    _pendingInboundRequestMethods.TryRemove(request.Id?.ToString() ?? string.Empty, out _);
+                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
                     _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Missing params")));
                     return;
                 }
@@ -1090,7 +1126,7 @@ namespace SalmonEgg.Infrastructure.Client
                 var rawParams = request.Params.Value;
                 if (!rawParams.TryGetProperty("sessionId", out var sessionIdProp))
                 {
-                    _pendingInboundRequestMethods.TryRemove(request.Id?.ToString() ?? string.Empty, out _);
+                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
                     _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Missing sessionId")));
                     return;
                 }
@@ -1098,9 +1134,16 @@ namespace SalmonEgg.Infrastructure.Client
                 var sessionId = sessionIdProp.GetString() ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(sessionId))
                 {
-                    _pendingInboundRequestMethods.TryRemove(request.Id?.ToString() ?? string.Empty, out _);
+                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
                     _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Missing sessionId")));
                     return;
+                }
+
+                var messageId = request.Id ?? string.Empty;
+                var requestId = request.Id?.ToString() ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(requestId))
+                {
+                    _pendingInboundRequestSessions[requestId] = sessionId;
                 }
 
                 string? terminalId = null;
@@ -1112,7 +1155,7 @@ namespace SalmonEgg.Infrastructure.Client
                 TerminalRequestReceived?.Invoke(
                     this,
                     new TerminalRequestEventArgs(
-                        request.Id,
+                        messageId,
                         sessionId,
                         terminalId,
                         request.Method,
@@ -1162,33 +1205,101 @@ namespace SalmonEgg.Infrastructure.Client
                         break;
 
                     default:
-                        _pendingInboundRequestMethods.TryRemove(request.Id?.ToString() ?? string.Empty, out _);
+                        RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
                         await SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateMethodNotFound(request.Method))).ConfigureAwait(false);
                         break;
                 }
             }
             catch (KeyNotFoundException ex)
             {
-                _pendingInboundRequestMethods.TryRemove(request.Id?.ToString() ?? string.Empty, out _);
+                RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
                 await SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams(ex.Message))).ConfigureAwait(false);
             }
             catch (ArgumentException ex)
             {
-                _pendingInboundRequestMethods.TryRemove(request.Id?.ToString() ?? string.Empty, out _);
+                RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
                 await SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams(ex.Message))).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 OnErrorOccurred($"Failed to process terminal request: {ex.Message}");
-                _pendingInboundRequestMethods.TryRemove(request.Id?.ToString() ?? string.Empty, out _);
+                RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
                 await SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInternalError(ex.Message))).ConfigureAwait(false);
             }
         }
 
         private async Task SendTerminalSuccessResponseAsync(object? messageId, object result)
         {
-            _pendingInboundRequestMethods.TryRemove(messageId?.ToString() ?? string.Empty, out _);
+            RemovePendingInboundTracking(messageId?.ToString() ?? string.Empty);
             await SendResponseAsync(new JsonRpcResponse(messageId, JsonSerializer.SerializeToElement(result, _parser.Options))).ConfigureAwait(false);
+        }
+
+        private async Task CancelPendingInboundRequestsForSessionAsync(string sessionId)
+        {
+            if (string.IsNullOrWhiteSpace(sessionId))
+            {
+                return;
+            }
+
+            var pendingIds = _pendingInboundRequestSessions
+                .Where(pair => string.Equals(pair.Value, sessionId, StringComparison.Ordinal))
+                .Select(pair => pair.Key)
+                .ToArray();
+
+            foreach (var pendingId in pendingIds)
+            {
+                if (!_pendingInboundRequestMethods.TryGetValue(pendingId, out var method))
+                {
+                    RemovePendingInboundTracking(pendingId);
+                    continue;
+                }
+
+                if (!_pendingInboundRequestMessageIds.TryGetValue(pendingId, out var messageId))
+                {
+                    RemovePendingInboundTracking(pendingId);
+                    continue;
+                }
+
+                if (string.Equals(method, "session/request_permission", StringComparison.Ordinal))
+                {
+                    await TrySendPermissionOutcomeResponseAsync(messageId, "cancelled", null).ConfigureAwait(false);
+                    continue;
+                }
+
+                if (string.Equals(method, "interaction.ask_user", StringComparison.Ordinal))
+                {
+                    _pendingAskUserRequests.TryRemove(pendingId, out _);
+                }
+
+                RemovePendingInboundTracking(pendingId);
+                await SendResponseAsync(new JsonRpcResponse(
+                    messageId,
+                    new JsonRpcError(
+                        JsonRpcErrorCode.MethodNotAllowed,
+                        "Session was cancelled before the client completed this request."))).ConfigureAwait(false);
+            }
+        }
+
+        private void RemovePendingInboundTracking(string idStr)
+        {
+            if (string.IsNullOrWhiteSpace(idStr))
+            {
+                return;
+            }
+
+            _pendingInboundRequestMethods.TryRemove(idStr, out _);
+            RemovePendingInboundSessionTracking(idStr);
+        }
+
+        private void RemovePendingInboundSessionTracking(string idStr)
+        {
+            if (string.IsNullOrWhiteSpace(idStr))
+            {
+                return;
+            }
+
+            _pendingInboundRequestMessageIds.TryRemove(idStr, out _);
+            _pendingInboundRequestSessions.TryRemove(idStr, out _);
         }
 
         /// <summary>

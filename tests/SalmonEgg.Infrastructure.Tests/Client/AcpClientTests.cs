@@ -148,6 +148,39 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         [Fact]
+        public async Task InitializeAsync_WhenServerProtocolIsOlder_UsesCompatibilityMode()
+        {
+            var parser = new MessageParser();
+            var client = new AcpClient(_transportMock.Object, parser, null, _errorLoggerMock.Object);
+
+            _transportMock
+                .Setup(t => t.SendMessageAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(true);
+
+            var initResponse = new InitializeResponse(
+                0,
+                new AgentInfo("TestAgent", "1.0.0"),
+                new AgentCapabilities());
+
+            var initTrigger = Task.Run(async () =>
+            {
+                await Task.Delay(10);
+                var response = new JsonRpcResponse(1, JsonSerializer.SerializeToElement(initResponse, parser.Options));
+                _transportMock.Raise(
+                    t => t.MessageReceived += null,
+                    new MessageReceivedEventArgs(parser.SerializeMessage(response)));
+            });
+
+            var response = await client.InitializeAsync(new InitializeParams(
+                new ClientInfo("Test", "1.0.0"),
+                ClientCapabilityDefaults.Create()));
+            await initTrigger;
+
+            Assert.True(client.IsInitialized);
+            Assert.Equal(0, response.ProtocolVersion);
+        }
+
+        [Fact]
         public async Task NonPromptRequest_StillUsesDefaultTimeoutBudget()
         {
             var timeouts = new AcpClient.AcpRequestTimeouts(
@@ -327,6 +360,55 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             _transportMock.Raise(t => t.MessageReceived += null, new MessageReceivedEventArgs(parser.SerializeMessage(sameSessionUpdate)));
 
             await Assert.ThrowsAsync<TimeoutException>(() => promptTask);
+        }
+
+        [Fact]
+        public async Task CancelSessionAsync_WhenPermissionPromptIsPending_SendsCancelledOutcomeImmediately()
+        {
+            var parser = new MessageParser();
+            var client = await CreateInitializedClientAsync();
+            var sentMessages = new ConcurrentQueue<string>();
+
+            _transportMock
+                .Setup(t => t.SendMessageAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .Callback<string, CancellationToken>((message, _) => sentMessages.Enqueue(message))
+                .ReturnsAsync(true);
+
+            client.PermissionRequestReceived += (_, _) =>
+            {
+                // Keep it pending to verify session/cancel actively drains it.
+            };
+
+            var request = new JsonRpcRequest(
+                301,
+                "session/request_permission",
+                JsonSerializer.SerializeToElement(
+                    new
+                    {
+                        sessionId = "session-1",
+                        toolCall = new { toolName = "fs/read_text_file" },
+                        options = new[]
+                        {
+                            new { optionId = "allow", name = "Allow", kind = "allow_once" }
+                        }
+                    },
+                    parser.Options));
+
+            _transportMock.Raise(
+                t => t.MessageReceived += null,
+                new MessageReceivedEventArgs(parser.SerializeMessage(request)));
+
+            await client.CancelSessionAsync(new SessionCancelParams("session-1", "User cancelled"));
+
+            var permissionResponse = await WaitForResponseAsync(parser, sentMessages, responseId: 301);
+            Assert.False(permissionResponse.IsError);
+            Assert.True(permissionResponse.Result.HasValue);
+
+            var resultJson = permissionResponse.Result!.Value.GetRawText();
+            using var resultDoc = JsonDocument.Parse(resultJson);
+            Assert.Equal(
+                "cancelled",
+                resultDoc.RootElement.GetProperty("outcome").GetProperty("outcome").GetString());
         }
 
         [Fact]
