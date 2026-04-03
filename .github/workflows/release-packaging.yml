@@ -119,6 +119,8 @@ jobs:
           light `
             -ext WixUIExtension `
             -cultures:en-us `
+            -sice:ICE38 `
+            -sice:ICE64 `
             -out $msiPath `
             (Join-Path $wixObjDir "Product.wixobj") `
             (Join-Path $wixObjDir "Harvest.wixobj")
