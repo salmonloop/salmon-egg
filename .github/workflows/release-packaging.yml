@@ -156,9 +156,11 @@ jobs:
     name: Publish Release Assets
     needs: [package-wasm, package-desktop, package-macos]
     runs-on: ubuntu-latest
-    if: github.event_name == 'release'
+    if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || github.ref_name }}
     steps:
       - name: Download WebAssembly artifact
         uses: actions/download-artifact@v5
@@ -179,11 +181,23 @@ jobs:
           path: macos-bundle
 
       - name: Download macOS .dmg artifact
-        if: github.event_name == 'release' && env.MACOS_APP_CODESIGN_KEY != '' && env.MACOS_DMG_CODESIGN_KEY != ''
+        if: env.MACOS_APP_CODESIGN_KEY != '' && env.MACOS_DMG_CODESIGN_KEY != ''
         uses: actions/download-artifact@v5
         with:
           name: desktop-macos-dmg
           path: macos-dmg
+
+      - name: Ensure GitHub release exists
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            exit 0
+          fi
+
+          gh release create "${RELEASE_TAG}" --verify-tag --generate-notes
 
       - name: Prepare release bundles
         shell: bash
@@ -230,7 +244,6 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
           gh release upload "${RELEASE_TAG}" release-assets/* --clobber
