@@ -17,10 +17,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -30,7 +30,7 @@ jobs:
           dotnet publish -f net10.0-browserwasm -c ${{ env.CONFIGURATION }} -o ../../publish/wasm
 
       - name: Upload WebAssembly artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: wasm-build
           path: publish/wasm
@@ -40,10 +40,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -53,7 +53,7 @@ jobs:
           dotnet publish -f net10.0-desktop -c ${{ env.CONFIGURATION }} -o ../../publish/desktop-windows
 
       - name: Upload Desktop artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: desktop-windows-build
           path: publish/desktop-windows
@@ -63,10 +63,10 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -87,13 +87,13 @@ jobs:
           hdiutil create -volname "SalmonEgg" -srcfolder "$APP_PATH" -ov -format UDZO "publish/dmg/$DMG_NAME"
 
       - name: Upload macOS .app artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: desktop-macos-app
           path: publish/desktop-macos/*.app
 
       - name: Upload macOS .dmg artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: desktop-macos-dmg
           path: publish/dmg/*.dmg
@@ -103,68 +103,75 @@ jobs:
     needs: [package-wasm, package-desktop, package-macos]
     runs-on: ubuntu-latest
     if: github.event_name == 'release'
+    permissions:
+      contents: write
     steps:
       - name: Download WebAssembly artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: wasm-build
           path: wasm
 
       - name: Download Desktop artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: desktop-windows-build
           path: desktop
 
       - name: Download macOS .app artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: desktop-macos-app
           path: macos-app
 
       - name: Download macOS .dmg artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: desktop-macos-dmg
           path: macos-dmg
 
-      - name: Upload Release Asset (WASM)
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./wasm/wwwroot/SalmonEgg.zip
-          asset_name: SalmonEgg-wasm.zip
-          asset_content_type: application/zip
+      - name: Prepare release bundles
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
 
-      - name: Upload Release Asset (Desktop)
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./desktop/SalmonEgg.zip
-          asset_name: SalmonEgg-desktop.zip
-          asset_content_type: application/zip
+          # Zip WebAssembly payload
+          if [ ! -d "wasm" ]; then
+            echo "Missing wasm artifact directory"
+            exit 1
+          fi
+          (cd wasm && zip -r ../release-assets/SalmonEgg-wasm.zip .)
 
-      - name: Upload Release Asset (macOS .app)
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./macos-app/SalmonEgg.app
-          asset_name: SalmonEgg-macos.app
-          asset_content_type: application/octet-stream
+          # Zip Windows desktop payload
+          if [ ! -d "desktop" ]; then
+            echo "Missing desktop artifact directory"
+            exit 1
+          fi
+          (cd desktop && zip -r ../release-assets/SalmonEgg-desktop.zip .)
 
-      - name: Upload Release Asset (macOS .dmg)
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./macos-dmg/SalmonEgg-macos.dmg
-          asset_name: SalmonEgg-macos.dmg
-          asset_content_type: application/x-apple-diskimage
+          # Zip macOS app bundle
+          APP_PATH=$(find macos-app -maxdepth 1 -name "*.app" -print -quit)
+          if [ -z "${APP_PATH}" ]; then
+            echo "No .app bundle found in macos-app artifact"
+            exit 1
+          fi
+          APP_NAME=$(basename "${APP_PATH}")
+          (cd macos-app && zip -r "../release-assets/${APP_NAME}.zip" "${APP_NAME}")
 
+          # Copy DMG as-is
+          DMG_PATH=$(find macos-dmg -maxdepth 1 -name "*.dmg" -print -quit)
+          if [ -z "${DMG_PATH}" ]; then
+            echo "No .dmg file found in macos-dmg artifact"
+            exit 1
+          fi
+          cp "${DMG_PATH}" release-assets/
+
+      - name: Upload release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          gh release upload "${RELEASE_TAG}" release-assets/* --clobber

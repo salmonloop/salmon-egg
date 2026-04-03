@@ -249,7 +249,9 @@ public sealed class ConversationActivationCoordinatorTests
             ConversationActivationHydrationMode.SelectionOnly);
 
         Assert.True(result.Succeeded);
-        var currentState = Assert.IsType<ChatState>(await state);
+        var currentState = await WaitForStateAsync(
+            state,
+            current => string.Equals(current?.HydratedConversationId, "session-1", StringComparison.Ordinal));
         Assert.Equal("session-1", currentState.HydratedConversationId);
         Assert.Null(currentState.Transcript);
         Assert.Null(currentState.PlanEntries);
