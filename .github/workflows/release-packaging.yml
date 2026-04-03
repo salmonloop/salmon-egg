@@ -76,28 +76,32 @@ jobs:
           cd SalmonEgg/SalmonEgg
           dotnet publish -f net10.0-desktop -c ${{ env.CONFIGURATION }} -o ../../publish/desktop-macos
 
-      - name: Create DMG
+      - name: Prepare macOS assets
         run: |
-          mkdir -p publish/dmg
+          set -euo pipefail
+          mkdir -p publish/macos-bundle publish/dmg
           APP_PATH=$(find publish/desktop-macos -maxdepth 1 -name "*.app" -print -quit)
           if [ -z "$APP_PATH" ]; then
-            echo "No .app bundle found in publish/desktop-macos"
-            exit 1
+            echo "No .app bundle found; creating zip from desktop output."
+            (cd publish/desktop-macos && zip -r ../macos-bundle/SalmonEgg-macos.zip .)
+            exit 0
           fi
+          cp -R "$APP_PATH" publish/macos-bundle/
           DMG_NAME="SalmonEgg-macos.dmg"
           hdiutil create -volname "SalmonEgg" -srcfolder "$APP_PATH" -ov -format UDZO "publish/dmg/$DMG_NAME"
 
-      - name: Upload macOS .app artifact
+      - name: Upload macOS bundle artifact
         uses: actions/upload-artifact@v5
         with:
-          name: desktop-macos-app
-          path: publish/desktop-macos/*.app
+          name: desktop-macos-bundle
+          path: publish/macos-bundle/*
 
       - name: Upload macOS .dmg artifact
         uses: actions/upload-artifact@v5
         with:
           name: desktop-macos-dmg
           path: publish/dmg/*.dmg
+          if-no-files-found: ignore
 
   publish-release-assets:
     name: Publish Release Assets
@@ -119,11 +123,11 @@ jobs:
           name: desktop-windows-build
           path: desktop
 
-      - name: Download macOS .app artifact
+      - name: Download macOS bundle artifact
         uses: actions/download-artifact@v5
         with:
-          name: desktop-macos-app
-          path: macos-app
+          name: desktop-macos-bundle
+          path: macos-bundle
 
       - name: Download macOS .dmg artifact
         uses: actions/download-artifact@v5
@@ -151,14 +155,12 @@ jobs:
           fi
           (cd desktop && zip -r ../release-assets/SalmonEgg-desktop.zip .)
 
-          # Zip macOS app bundle
-          APP_PATH=$(find macos-app -maxdepth 1 -name "*.app" -print -quit)
-          if [ -z "${APP_PATH}" ]; then
-            echo "No .app bundle found in macos-app artifact"
+          # Collect macOS bundle artifacts (.app or pre-zipped fallback)
+          if [ ! -d "macos-bundle" ]; then
+            echo "Missing macos-bundle artifact directory"
             exit 1
           fi
-          APP_NAME=$(basename "${APP_PATH}")
-          (cd macos-app && zip -r "../release-assets/${APP_NAME}.zip" "${APP_NAME}")
+          cp -R macos-bundle/* release-assets/
 
           # Copy DMG as-is
           DMG_PATH=$(find macos-dmg -maxdepth 1 -name "*.dmg" -print -quit)
