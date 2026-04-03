@@ -80,7 +80,10 @@ jobs:
         shell: pwsh
         run: |
           cd SalmonEgg/SalmonEgg
-          dotnet restore -f net10.0-desktop -r $env:MACOS_RID
+          dotnet restore `
+            .\SalmonEgg.csproj `
+            -p:TargetFramework=net10.0-desktop `
+            -r $env:MACOS_RID
 
       - name: Publish macOS app bundle
         shell: pwsh
