@@ -218,30 +218,12 @@ jobs:
     env:
       RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || github.ref_name }}
     steps:
-      - name: Download WebAssembly artifact
-        uses: actions/download-artifact@v5
-        with:
-          name: wasm-build
-          path: wasm
-
-      - name: Download Desktop artifact
-        uses: actions/download-artifact@v5
-        with:
-          name: desktop-windows-build
-          path: desktop
-
       - name: Download Windows MSIX artifact
         if: needs.package-windows-msix.result == 'success'
         uses: actions/download-artifact@v5
         with:
           name: desktop-windows-msix
           path: windows-msix
-
-      - name: Download macOS bundle artifact
-        uses: actions/download-artifact@v5
-        with:
-          name: desktop-macos-bundle
-          path: macos-bundle
 
       - name: Download macOS .dmg artifact
         if: env.MACOS_APP_CODESIGN_KEY != '' && env.MACOS_DMG_CODESIGN_KEY != ''
@@ -269,20 +251,6 @@ jobs:
           set -euo pipefail
           mkdir -p release-assets
 
-          # Zip WebAssembly payload
-          if [ ! -d "wasm" ]; then
-            echo "Missing wasm artifact directory"
-            exit 1
-          fi
-          (cd wasm && zip -r ../release-assets/SalmonEgg-wasm.zip .)
-
-          # Zip Windows desktop payload
-          if [ ! -d "desktop" ]; then
-            echo "Missing desktop artifact directory"
-            exit 1
-          fi
-          (cd desktop && zip -r ../release-assets/SalmonEgg-desktop.zip .)
-
           # Copy Windows MSIX package when available
           if [ -d "windows-msix" ]; then
             MSIX_PATH=$(find windows-msix -name "*.msix" -print -quit)
@@ -290,19 +258,6 @@ jobs:
               cp "${MSIX_PATH}" release-assets/
             fi
           fi
-
-          # Zip macOS app bundle for release distribution
-          if [ ! -d "macos-bundle" ]; then
-            echo "Missing macos-bundle artifact directory"
-            exit 1
-          fi
-          APP_PATH=$(find macos-bundle -maxdepth 1 -name "*.app" -print -quit)
-          if [ -z "${APP_PATH}" ]; then
-            echo "No .app bundle found in macos-bundle artifact"
-            exit 1
-          fi
-          APP_NAME=$(basename "${APP_PATH}")
-          (cd macos-bundle && zip -r "../release-assets/${APP_NAME}.zip" "${APP_NAME}")
 
           # Copy DMG when signing is configured
           if [ -d "macos-dmg" ]; then
