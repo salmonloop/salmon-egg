@@ -62,14 +62,38 @@ jobs:
       - name: Publish Windows MSIX
         shell: pwsh
         run: |
-          cd SalmonEgg/SalmonEgg
-          dotnet publish `
-            -f net10.0-windows10.0.26100.0 `
+          $appProject = "SalmonEgg/SalmonEgg/SalmonEgg.csproj"
+          $presentationCoreProject = "src/SalmonEgg.Presentation.Core/SalmonEgg.Presentation.Core.csproj"
+          $tfm = "net10.0-windows10.0.26100.0"
+
+          dotnet msbuild `
+            $appProject `
+            /t:Restore `
+            /p:Configuration=${{ env.CONFIGURATION }} `
+            /p:TargetFramework=$tfm `
+            /p:EnableWinUIBuild=true `
+            /p:IsolatedMsixBuild=true `
+            /p:BuildProjectReferences=false `
+            /v:minimal
+
+          dotnet build `
+            $presentationCoreProject `
             -c ${{ env.CONFIGURATION }} `
-            -p:PublishProfile=Properties/PublishProfiles/win-msix-x64.pubxml `
-            -p:EnableWinUIBuild=true `
-            -p:IsolatedMsixBuild=true `
-            -p:BuildProjectReferences=false
+            -f net10.0 `
+            -nodeReuse:false `
+            -v:minimal
+
+          dotnet msbuild `
+            $appProject `
+            /t:Publish `
+            /p:Configuration=${{ env.CONFIGURATION }} `
+            /p:TargetFramework=$tfm `
+            /p:PublishProfile=Properties/PublishProfiles/win-msix-x64.pubxml `
+            /p:EnableWinUIBuild=true `
+            /p:IsolatedMsixBuild=true `
+            /p:BuildProjectReferences=false `
+            /p:Restore=false `
+            /v:minimal
 
       - name: Upload Windows MSIX artifact
         uses: actions/upload-artifact@v5
