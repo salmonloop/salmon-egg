@@ -76,15 +76,6 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Restore macOS publish dependencies
-        shell: pwsh
-        run: |
-          cd SalmonEgg/SalmonEgg
-          dotnet restore `
-            .\SalmonEgg.csproj `
-            -p:TargetFramework=net10.0-desktop `
-            -r $env:MACOS_RID
-
       - name: Publish macOS app bundle
         shell: pwsh
         run: |
@@ -100,6 +91,7 @@ jobs:
             -c ${{ env.CONFIGURATION }} `
             -r $env:MACOS_RID `
             -p:PackageFormat=app `
+            -p:TargetFrameworks=net10.0-desktop `
             @codesignArgs
 
       - name: Collect macOS app bundle
@@ -130,6 +122,7 @@ jobs:
             -r $env:MACOS_RID `
             -p:SelfContained=true `
             -p:PackageFormat=dmg `
+            -p:TargetFrameworks=net10.0-desktop `
             -p:CodesignKey=$env:MACOS_APP_CODESIGN_KEY `
             -p:DiskImageSigningKey=$env:MACOS_DMG_CODESIGN_KEY `
             @notaryArgs
