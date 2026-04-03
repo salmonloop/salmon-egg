@@ -7,7 +7,6 @@ on:
 
 env:
   SALMONEGG_GUI: "1"
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   deterministic-gui-smokes:

@@ -10,7 +10,6 @@ env:
   DOTNET_VERSION: "10.0.x"
   CONFIGURATION: "Release"
   TEST_RESULTS_DIR: "TestResults"
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   build-and-test:
