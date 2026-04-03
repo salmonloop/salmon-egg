@@ -72,6 +72,7 @@ jobs:
           heat dir $desktopDir `
             -cg SalmonEggDesktopFiles `
             -dr INSTALLFOLDER `
+            -var var.DesktopPublishDir `
             -srd `
             -sreg `
             -sfrag `
@@ -109,6 +110,7 @@ jobs:
 
           candle `
             -ext WixUIExtension `
+            -dDesktopPublishDir="$desktopDir" `
             -out (Join-Path $wixObjDir "") `
             $productPath `
             $harvestPath
