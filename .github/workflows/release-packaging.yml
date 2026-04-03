@@ -62,7 +62,6 @@ jobs:
   package-windows-msix:
     name: Package Windows MSIX
     runs-on: windows-latest
-    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -72,15 +71,42 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: Restore WinUI app for isolated MSIX build
+        shell: pwsh
+        run: |
+          dotnet msbuild `
+            SalmonEgg/SalmonEgg/SalmonEgg.csproj `
+            /t:Restore `
+            /p:Configuration=${{ env.CONFIGURATION }} `
+            /p:TargetFramework=net10.0-windows10.0.26100.0 `
+            /p:EnableWinUIBuild=true `
+            /p:IsolatedMsixBuild=true `
+            /p:BuildProjectReferences=false `
+            /v:minimal
+
+      - name: Build net10.0 references
+        shell: pwsh
+        run: |
+          dotnet build `
+            src/SalmonEgg.Presentation.Core/SalmonEgg.Presentation.Core.csproj `
+            -c ${{ env.CONFIGURATION }} `
+            -f net10.0 `
+            -v minimal
+
       - name: Publish Windows MSIX
         shell: pwsh
         run: |
-          dotnet publish `
+          dotnet msbuild `
             SalmonEgg/SalmonEgg/SalmonEgg.csproj `
-            -f net10.0-windows10.0.26100.0 `
-            -c ${{ env.CONFIGURATION }} `
-            -p:PublishProfile=Properties/PublishProfiles/win-msix-x64.pubxml `
-            -p:EnableWinUIBuild=true
+            /t:Publish `
+            /p:Configuration=${{ env.CONFIGURATION }} `
+            /p:TargetFramework=net10.0-windows10.0.26100.0 `
+            /p:PublishProfile=Properties/PublishProfiles/win-msix-x64.pubxml `
+            /p:EnableWinUIBuild=true `
+            /p:IsolatedMsixBuild=true `
+            /p:BuildProjectReferences=false `
+            /p:Restore=false `
+            /v:minimal
 
       - name: Upload Windows MSIX artifact
         uses: actions/upload-artifact@v5
