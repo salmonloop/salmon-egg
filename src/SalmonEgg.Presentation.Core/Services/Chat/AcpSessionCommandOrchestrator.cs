@@ -5,7 +5,6 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Models.Content;
-using SalmonEgg.Domain.Models.JsonRpc;
 using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Models.Protocol;
 
@@ -83,7 +82,7 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
         {
             response = await chatService.CreateSessionAsync(sessionParams).ConfigureAwait(false);
         }
-        catch (Exception ex) when (IsAuthenticationRequiredError(ex))
+        catch (Exception ex) when (AcpErrorClassifier.IsAuthenticationRequired(ex))
         {
             var authenticated = await authenticateAsync(cancellationToken).ConfigureAwait(false);
             if (!authenticated)
@@ -172,7 +171,7 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
             var response = await chatService.SendPromptAsync(promptParams, cancellationToken).ConfigureAwait(false);
             return new AcpPromptDispatchResult(promptParams.SessionId, response, RetriedAfterSessionRecovery: false);
         }
-        catch (Exception ex) when (IsAuthenticationRequiredError(ex))
+        catch (Exception ex) when (AcpErrorClassifier.IsAuthenticationRequired(ex))
         {
             var authenticated = await authenticateAsync(cancellationToken).ConfigureAwait(false);
             if (!authenticated)
@@ -185,7 +184,7 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
             var response = await chatService.SendPromptAsync(promptParams, cancellationToken).ConfigureAwait(false);
             return new AcpPromptDispatchResult(promptParams.SessionId, response, RetriedAfterSessionRecovery: false);
         }
-        catch (Exception ex) when (IsRemoteSessionNotFound(ex))
+        catch (Exception ex) when (AcpErrorClassifier.IsRemoteSessionNotFound(ex))
         {
             _logger.LogWarning(ex, "Remote session {RemoteSessionId} not found. Attempting recovery...", remoteSessionId);
             await ClearBindingForCurrentConversationAsync(sink).ConfigureAwait(false);
@@ -278,13 +277,5 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
         return chatService;
     }
 
-    private static bool IsAuthenticationRequiredError(Exception ex) =>
-        ex is AcpException acp && acp.ErrorCode == JsonRpcErrorCode.AuthenticationRequired;
-
-    private static bool IsRemoteSessionNotFound(Exception ex) =>
-        ex is AcpException acp
-        && (acp.ErrorCode == JsonRpcErrorCode.ResourceNotFound
-            || (acp.Message.Contains("Session", StringComparison.OrdinalIgnoreCase)
-                && acp.Message.Contains("not found", StringComparison.OrdinalIgnoreCase)));
 }
 

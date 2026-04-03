@@ -7,7 +7,6 @@ using Microsoft.Extensions.Logging;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Content;
-using SalmonEgg.Domain.Models.JsonRpc;
 using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Models.Protocol;
 
@@ -760,15 +759,6 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
 
         return chatService;
     }
-
-    private static bool IsAuthenticationRequiredError(Exception ex) =>
-        ex is AcpException acp && acp.ErrorCode == JsonRpcErrorCode.AuthenticationRequired;
-
-    private static bool IsRemoteSessionNotFound(Exception ex) =>
-        ex is AcpException acp
-        && (acp.ErrorCode == JsonRpcErrorCode.ResourceNotFound
-            || (acp.Message.Contains("Session", StringComparison.OrdinalIgnoreCase)
-                && acp.Message.Contains("not found", StringComparison.OrdinalIgnoreCase)));
 
     private readonly record struct AcpConnectionStateSnapshot(
         string? SelectedProfileId,

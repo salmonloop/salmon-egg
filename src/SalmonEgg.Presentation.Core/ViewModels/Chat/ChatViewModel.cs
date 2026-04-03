@@ -5087,6 +5087,16 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         {
             (chatService as AcpChatServiceAdapter)?.SuppressBufferedUpdates("DiscoverImportLoadSessionFailed");
 
+            if (AcpErrorClassifier.IsRemoteSessionNotFound(ex))
+            {
+                Logger.LogWarning(
+                    ex,
+                    "Remote session binding became stale during hydration. Clearing binding. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
+                    conversationId,
+                    binding.RemoteSessionId);
+                await ClearRemoteBindingAsync(conversationId, binding.ProfileId).ConfigureAwait(false);
+            }
+
             Logger.LogError(ex, "Failed to hydrate active conversation from remote session");
             SetError($"Failed to load session: {ex.Message}");
             return false;
@@ -5111,6 +5121,56 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 await AwaitBufferedSessionReplayProjectionAsync(cancellationToken).ConfigureAwait(false);
                 await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
             }
+        }
+    }
+
+    private async Task ClearRemoteBindingAsync(string conversationId, string? boundProfileId)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return;
+        }
+
+        var result = await _bindingCommands
+            .UpdateBindingAsync(conversationId, remoteSessionId: null, boundProfileId)
+            .ConfigureAwait(false);
+        if (result.Status is BindingUpdateStatus.Success)
+        {
+            return;
+        }
+
+        if (result.Status is BindingUpdateStatus.Error
+            && string.Equals(result.ErrorMessage, "BindingProjectionTimeout", StringComparison.Ordinal))
+        {
+            Logger.LogWarning(
+                "Binding projection timed out while clearing stale remote binding. Applying local fallback. ConversationId={ConversationId}",
+                conversationId);
+            await ApplyLocalBindingClearFallbackAsync(conversationId, boundProfileId).ConfigureAwait(false);
+            return;
+        }
+
+        Logger.LogWarning(
+            "Failed to clear stale remote binding after hydration error. ConversationId={ConversationId} Status={Status} Error={Error}",
+            conversationId,
+            result.Status,
+            result.ErrorMessage);
+    }
+
+    private async Task ApplyLocalBindingClearFallbackAsync(string conversationId, string? boundProfileId)
+    {
+        try
+        {
+            var clearedBinding = new ConversationBindingSlice(conversationId, null, boundProfileId);
+            await _chatStore.Dispatch(new SetBindingSliceAction(clearedBinding)).ConfigureAwait(false);
+            _conversationWorkspace.UpdateRemoteBinding(conversationId, remoteSessionId: null, boundProfileId);
+            _conversationWorkspace.ScheduleSave();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(
+                ex,
+                "Failed to apply local fallback after stale binding clear timeout. ConversationId={ConversationId}",
+                conversationId);
         }
     }
 
