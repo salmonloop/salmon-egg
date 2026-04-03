@@ -62,6 +62,7 @@ jobs:
   package-windows-msix:
     name: Package Windows MSIX
     runs-on: windows-latest
+    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -203,6 +204,7 @@ jobs:
           path: desktop
 
       - name: Download Windows MSIX artifact
+        if: needs.package-windows-msix.result == 'success'
         uses: actions/download-artifact@v5
         with:
           name: desktop-windows-msix
@@ -254,17 +256,13 @@ jobs:
           fi
           (cd desktop && zip -r ../release-assets/SalmonEgg-desktop.zip .)
 
-          # Copy Windows MSIX package
-          if [ ! -d "windows-msix" ]; then
-            echo "Missing windows-msix artifact directory"
-            exit 1
+          # Copy Windows MSIX package when available
+          if [ -d "windows-msix" ]; then
+            MSIX_PATH=$(find windows-msix -maxdepth 1 -name "*.msix" -print -quit)
+            if [ -n "${MSIX_PATH}" ]; then
+              cp "${MSIX_PATH}" release-assets/
+            fi
           fi
-          MSIX_PATH=$(find windows-msix -maxdepth 1 -name "*.msix" -print -quit)
-          if [ -z "${MSIX_PATH}" ]; then
-            echo "No .msix found in windows-msix artifact"
-            exit 1
-          fi
-          cp "${MSIX_PATH}" release-assets/
 
           # Zip macOS app bundle for release distribution
           if [ ! -d "macos-bundle" ]; then
