@@ -58,7 +58,10 @@ public sealed class AppSettingsService : IAppSettingsService
                 AcpEnableConnectionEviction = model.AcpEnableConnectionEviction,
                 AcpConnectionIdleTtlMinutes = model.AcpConnectionIdleTtlMinutes,
                 AcpMaxWarmProfiles = model.AcpMaxWarmProfiles,
-                AcpMaxPinnedProfiles = model.AcpMaxPinnedProfiles
+                AcpMaxPinnedProfiles = model.AcpMaxPinnedProfiles,
+                AcpHydrationCompletionMode = string.IsNullOrWhiteSpace(model.AcpHydrationCompletionMode)
+                    ? "StrictReplay"
+                    : model.AcpHydrationCompletionMode.Trim()
             };
         }
         catch (YamlException)
@@ -99,7 +102,10 @@ public sealed class AppSettingsService : IAppSettingsService
             AcpEnableConnectionEviction = settings.AcpEnableConnectionEviction,
             AcpConnectionIdleTtlMinutes = settings.AcpConnectionIdleTtlMinutes,
             AcpMaxWarmProfiles = settings.AcpMaxWarmProfiles,
-            AcpMaxPinnedProfiles = settings.AcpMaxPinnedProfiles
+            AcpMaxPinnedProfiles = settings.AcpMaxPinnedProfiles,
+            AcpHydrationCompletionMode = string.IsNullOrWhiteSpace(settings.AcpHydrationCompletionMode)
+                ? "StrictReplay"
+                : settings.AcpHydrationCompletionMode.Trim()
         };
 
         var yaml = YamlSerialization.CreateSerializer().Serialize(model);

@@ -1,5 +1,7 @@
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Core.Services.Chat;
+using System.Collections.Immutable;
+using SalmonEgg.Domain.Models.Conversation;
 using Uno.Extensions.Reactive;
 using Xunit;
 
@@ -101,4 +103,43 @@ public sealed class ChatStateProjectorTests
         Assert.Equal(ChatTurnPhase.Cancelled, projection.TurnPhase);
         Assert.Equal("Cancelled", projection.TurnStatusText);
     }
+
+    [Fact]
+    public void Apply_ProjectsHydratedConversationSlicesInsteadOfOnlyTopLevelCache()
+    {
+        var projector = new ChatStateProjector();
+        var storeState = ChatState.Empty with
+        {
+            HydratedConversationId = "conv-2",
+            Transcript = ImmutableList.Create(new ConversationMessageSnapshot { Id = "stale", ContentType = "text", TextContent = "stale" }),
+            PlanEntries = ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+            ConversationContents = ImmutableDictionary<string, ConversationContentSlice>.Empty.Add(
+                "conv-2",
+                new ConversationContentSlice(
+                    ImmutableList.Create(new ConversationMessageSnapshot { Id = "fresh", ContentType = "text", TextContent = "fresh" }),
+                    ImmutableList.Create(new ConversationPlanEntrySnapshot { Content = "step-1" }),
+                    true,
+                    "plan")),
+            ConversationSessionStates = ImmutableDictionary<string, ConversationSessionStateSlice>.Empty.Add(
+                "conv-2",
+                new ConversationSessionStateSlice(
+                    ImmutableList.Create(new ConversationModeOptionSnapshot { ModeId = "agent", ModeName = "Agent" }),
+                    "agent",
+                    ImmutableList.Create(new ConversationConfigOptionSnapshot { Id = "mode", Name = "Mode", SelectedValue = "agent" }),
+                    true))
+        };
+
+        var projection = projector.Apply(storeState, ChatConnectionState.Empty, "conv-2", null);
+
+        Assert.Single(projection.Transcript);
+        Assert.Equal("fresh", projection.Transcript[0].TextContent);
+        Assert.Single(projection.PlanEntries);
+        Assert.True(projection.ShowPlanPanel);
+        Assert.Equal("plan", projection.PlanTitle);
+        Assert.Single(projection.AvailableModes);
+        Assert.Equal("agent", projection.SelectedModeId);
+        Assert.Single(projection.ConfigOptions);
+        Assert.True(projection.ShowConfigOptionsPanel);
+    }
+
 }

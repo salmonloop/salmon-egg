@@ -16,7 +16,7 @@ namespace SalmonEgg.Presentation.Core.Services.Chat;
 /// Wraps IChatService so ACP session updates are serialized through AcpEventAdapter
 /// before being published to UI subscribers.
 /// </summary>
-public sealed class AcpChatServiceAdapter : IChatService, IDisposable
+public sealed class AcpChatServiceAdapter : IChatService, IAcpSessionUpdateBufferController, IDisposable
 {
     private readonly IChatService _inner;
     private readonly AcpEventAdapter _eventAdapter;
@@ -132,14 +132,26 @@ public sealed class AcpChatServiceAdapter : IChatService, IDisposable
         SessionUpdateReceived?.Invoke(this, update);
     }
 
-    public void BeginHydrationBuffering(string? sessionId)
+    public long BeginHydrationBufferingScope(string? sessionId)
         => _eventAdapter.BeginHydrationBuffering(sessionId);
 
     public void SuppressBufferedUpdates(string? reason = null)
         => _eventAdapter.SuppressBufferedUpdates(reason);
 
-    public void MarkHydrated(bool lowTrust = false, string? reason = null)
+    public void SuppressBufferedUpdates(long hydrationAttemptId, string? reason = null)
+        => _eventAdapter.SuppressBufferedUpdates(hydrationAttemptId, reason);
+
+    public bool MarkHydrated(bool lowTrust = false, string? reason = null)
         => _eventAdapter.MarkHydrated(lowTrust, reason);
+
+    public bool MarkHydrated(long hydrationAttemptId, bool lowTrust = false, string? reason = null)
+        => _eventAdapter.MarkHydrated(hydrationAttemptId, lowTrust, reason);
+
+    public bool TryMarkHydrated(long hydrationAttemptId, bool lowTrust = false, string? reason = null)
+        => _eventAdapter.MarkHydrated(hydrationAttemptId, lowTrust, reason);
+
+    public Task WaitForBufferedUpdatesDrainedAsync(long hydrationAttemptId, CancellationToken cancellationToken = default)
+        => _eventAdapter.WaitForDrainIdleAsync(hydrationAttemptId, cancellationToken);
 
     public void Dispose()
     {

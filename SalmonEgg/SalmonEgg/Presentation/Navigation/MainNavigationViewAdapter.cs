@@ -118,7 +118,10 @@ public sealed class MainNavigationViewAdapter
             // (since the preview hasn't started yet), causing the "flash of empty chat".
             var activationTask = _navigationCoordinator.ActivateSessionAsync(sessionId, sessionProjectId);
             _viewModel.SelectSession(sessionId);
-            await activationTask.ConfigureAwait(true);
+            // Never await remote session activation on the NavigationView UI event pipeline.
+            // If we await here, the UI thread stays occupied until activation completes,
+            // which causes multi-second "click has no response" freezes.
+            _ = ObserveSessionActivationAsync(activationTask);
             return true;
         }
 
@@ -144,6 +147,18 @@ public sealed class MainNavigationViewAdapter
         }
 
         return false;
+    }
+
+    private static async Task ObserveSessionActivationAsync(Task<bool> activationTask)
+    {
+        try
+        {
+            await activationTask.ConfigureAwait(false);
+        }
+        catch
+        {
+            // Navigation coordinator already handles logging/fault state.
+        }
     }
 
     private void ApplySelectionCore()

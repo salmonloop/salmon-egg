@@ -46,16 +46,55 @@ public sealed class WorkspaceWriterTests
 
         writer.Enqueue(new ChatState(
             HydratedConversationId: "session-1",
-            Transcript: ImmutableList<ConversationMessageSnapshot>.Empty.Add(message),
-            PlanEntries: ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-            ShowPlanPanel: false,
-            PlanTitle: null,
+            ConversationContents: ImmutableDictionary<string, ConversationContentSlice>.Empty.Add(
+                "session-1",
+                new ConversationContentSlice(
+                    ImmutableList<ConversationMessageSnapshot>.Empty.Add(message),
+                    ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                    false,
+                    null)),
             Generation: 1), scheduleSave: false);
         await writer.FlushAsync();
 
         var snapshot = workspace.GetConversationSnapshot("session-1");
         Assert.NotNull(snapshot);
         Assert.Equal(originalUpdatedAt, snapshot!.LastUpdatedAt);
+    }
+
+    [Fact]
+    public async Task FlushAsync_BackgroundConversationSlices_ArePersistedToWorkspace()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        using var writer = new WorkspaceWriter(workspace, TimeSpan.Zero, syncContext);
+
+        writer.Enqueue(new ChatState(
+            HydratedConversationId: "session-active",
+            ConversationContents: ImmutableDictionary<string, ConversationContentSlice>.Empty.Add(
+                "session-bg",
+                new ConversationContentSlice(
+                    ImmutableList.Create(CreateTextMessage("bg-1", "background")),
+                    ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                    false,
+                    null)),
+            ConversationSessionStates: ImmutableDictionary<string, ConversationSessionStateSlice>.Empty.Add(
+                "session-bg",
+                new ConversationSessionStateSlice(
+                    ImmutableList.Create(new ConversationModeOptionSnapshot { ModeId = "agent", ModeName = "Agent" }),
+                    "agent",
+                    ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+                    false)),
+            Generation: 1), scheduleSave: false);
+        await writer.FlushAsync();
+
+        var snapshot = workspace.GetConversationSnapshot("session-bg");
+        Assert.NotNull(snapshot);
+        Assert.Single(snapshot!.Transcript);
+        Assert.Equal("background", snapshot.Transcript[0].TextContent);
+        Assert.Equal("agent", snapshot.SelectedModeId);
     }
 
     private static ChatConversationWorkspace CreateWorkspace(

@@ -145,13 +145,39 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
     private static bool ShouldHydrate(ChatState state, string sessionId)
     {
         ArgumentNullException.ThrowIfNull(state);
-        if (!string.Equals(state.HydratedConversationId, sessionId, StringComparison.Ordinal))
+        var content = state.ResolveContentSlice(sessionId)
+            ?? new ConversationContentSlice(
+                ImmutableList<ConversationMessageSnapshot>.Empty,
+                ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                false,
+                null);
+        var sessionState = state.ResolveSessionStateSlice(sessionId)
+            ?? new ConversationSessionStateSlice(
+                ImmutableList<ConversationModeOptionSnapshot>.Empty,
+                null,
+                ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+                false);
+
+        var runtimeState = state.ResolveRuntimeState(sessionId);
+        if (runtimeState?.Phase == ConversationRuntimePhase.Warm)
         {
-            return true;
+            return false;
         }
 
-        return state.Transcript is null || state.PlanEntries is null;
+        return !HasProjectedConversationData(content, sessionState);
     }
+
+    private static bool HasProjectedConversationData(
+        ConversationContentSlice content,
+        ConversationSessionStateSlice sessionState)
+        => content.Transcript.Count > 0
+            || content.PlanEntries.Count > 0
+            || content.ShowPlanPanel
+            || !string.IsNullOrWhiteSpace(content.PlanTitle)
+            || sessionState.AvailableModes.Count > 0
+            || sessionState.ConfigOptions.Count > 0
+            || sessionState.ShowConfigOptionsPanel
+            || !string.IsNullOrWhiteSpace(sessionState.SelectedModeId);
 
     private async Task<ConversationMutationResult> RemoveConversationAsync(
         string conversationId,

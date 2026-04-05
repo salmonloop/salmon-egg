@@ -72,7 +72,7 @@ public class ChatStoreTests
     }
 
     [Fact]
-    public async Task GivenStore_WhenDispatchDoesNotChangeState_ThenWorkspaceWriterSkipsStaleGeneration()
+    public async Task GivenStore_WhenBackgroundConversationSliceChanges_ThenWorkspaceWriterTracksNewGenerationWithoutChangingActiveProjection()
     {
         // Arrange
         await using var state = State.Value(new object(), () => ChatState.Empty);
@@ -91,8 +91,8 @@ public class ChatStoreTests
         await store.Dispatch(new UpsertTranscriptMessageAction("conv-2", message));
 
         // Assert
-        Assert.Equal(1, writer.EnqueueCount);
-        Assert.Equal(new long[] { 1L }, writer.EnqueuedGenerations);
+        Assert.Equal(2, writer.EnqueueCount);
+        Assert.Equal(new long[] { 1L, 2L }, writer.EnqueuedGenerations);
     }
 
     private sealed class FakeWorkspaceWriter : IWorkspaceWriter

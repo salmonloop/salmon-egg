@@ -46,6 +46,6 @@ public sealed partial class DiscoverSessionsPage : Page
 
     private void OnUnloaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {
-        ViewModel.Dispose();
+        SkeletonPulse?.Stop();
     }
 }

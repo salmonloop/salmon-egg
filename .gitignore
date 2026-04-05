@@ -166,3 +166,4 @@ opencode.jsonc
 SalmonEgg/SalmonEgg.Package/*.pfx
 
 /*.txt
+.dotnet-home/

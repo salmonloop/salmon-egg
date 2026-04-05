@@ -36,13 +36,22 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
     };
 
     public ObservableCollection<AcpPathMappingRowViewModel> PathMappingRows { get; } = new();
+    public ObservableCollection<HydrationCompletionModeOptionViewModel> HydrationCompletionModeOptions { get; } = new()
+    {
+        new("StrictReplay", "StrictReplay", "Complete hydration after replay projection reaches a stable state."),
+        new("LoadResponse", "LoadResponse", "Complete hydration right after session/load; replay projects asynchronously.")
+    };
 
     public bool CanEditPathMappings => !string.IsNullOrWhiteSpace(ResolveSelectedProfileId());
 
     [ObservableProperty]
     private TransportOptionViewModel? _selectedTransport;
 
+    [ObservableProperty]
+    private HydrationCompletionModeOptionViewModel? _selectedHydrationCompletionMode;
+
     public string SelectedTransportName => SelectedTransport?.Name ?? string.Empty;
+    public string SelectedHydrationCompletionModeDescription => SelectedHydrationCompletionMode?.Description ?? string.Empty;
 
     public string AgentDisplayName =>
         ResolveConnectedProfileName()
@@ -147,6 +156,7 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         Profiles.Profiles.CollectionChanged += OnProfilesCollectionChanged;
         _preferences.PropertyChanged += OnPreferencesPropertyChanged;
         _preferences.ProjectPathMappings.CollectionChanged += OnProjectPathMappingsCollectionChanged;
+        SelectedHydrationCompletionMode = ResolveHydrationCompletionModeOption(_preferences.AcpHydrationCompletionMode);
         RefreshPathMappingRows();
     }
 
@@ -161,6 +171,15 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         if (e.PropertyName == nameof(AppPreferencesViewModel.LastSelectedServerId))
         {
             OnPropertyChanged(nameof(AgentDisplayName));
+        }
+
+        if (e.PropertyName == nameof(AppPreferencesViewModel.AcpHydrationCompletionMode))
+        {
+            var option = ResolveHydrationCompletionModeOption(_preferences.AcpHydrationCompletionMode);
+            if (!ReferenceEquals(SelectedHydrationCompletionMode, option))
+            {
+                SelectedHydrationCompletionMode = option;
+            }
         }
     }
 
@@ -238,6 +257,20 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to change transport type");
+        }
+    }
+
+    partial void OnSelectedHydrationCompletionModeChanged(HydrationCompletionModeOptionViewModel? value)
+    {
+        OnPropertyChanged(nameof(SelectedHydrationCompletionModeDescription));
+        if (value == null)
+        {
+            return;
+        }
+
+        if (!string.Equals(_preferences.AcpHydrationCompletionMode, value.Value, StringComparison.Ordinal))
+        {
+            _preferences.AcpHydrationCompletionMode = value.Value;
         }
     }
 
@@ -324,6 +357,21 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
     {
         var id = Profiles.SelectedProfile?.Id?.Trim();
         return string.IsNullOrWhiteSpace(id) ? null : id;
+    }
+
+    private HydrationCompletionModeOptionViewModel ResolveHydrationCompletionModeOption(string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            var match = HydrationCompletionModeOptions.FirstOrDefault(
+                option => string.Equals(option.Value, value, StringComparison.OrdinalIgnoreCase));
+            if (match != null)
+            {
+                return match;
+            }
+        }
+
+        return HydrationCompletionModeOptions[0];
     }
 
     private void RefreshPathMappingRows()
@@ -449,6 +497,22 @@ public sealed class TransportOptionViewModel
     public TransportType Type { get; }
 
     public string Name { get; }
+}
+
+public sealed class HydrationCompletionModeOptionViewModel
+{
+    public HydrationCompletionModeOptionViewModel(string value, string name, string description)
+    {
+        Value = value;
+        Name = name;
+        Description = description;
+    }
+
+    public string Value { get; }
+
+    public string Name { get; }
+
+    public string Description { get; }
 }
 
 public sealed partial class AcpPathMappingRowViewModel : ObservableObject

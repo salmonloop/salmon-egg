@@ -10,6 +10,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -64,7 +65,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private static readonly TimeSpan RemoteReplayStartTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan RemoteReplaySettleQuietPeriod = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan RemoteReplayKnownTranscriptGrowthGracePeriod = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan RemoteSessionLoadTimeout = TimeSpan.FromSeconds(45);
+    private static readonly TimeSpan RemoteReplayDrainTimeout = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan LoadResponseHydrationMinimumVisibleDuration = TimeSpan.FromMilliseconds(600);
     private const int RemoteReplayPollDelayMilliseconds = 50;
+    private AcpHydrationCompletionMode _hydrationCompletionMode = AcpHydrationCompletionMode.StrictReplay;
     private readonly ChatServiceFactory _chatServiceFactory;
     private readonly ChatConversationWorkspace _conversationWorkspace;
     private readonly IConversationActivationCoordinator _conversationActivationCoordinator;
@@ -117,7 +122,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private long _connectionGeneration;
     private readonly Dictionary<string, BottomPanelState> _bottomPanelStateByConversation = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AskUserRequestViewModel> _pendingAskUserRequestsByConversation = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, RemoteConversationHydrationStamp> _remoteHydrationStampsByConversation = new(StringComparer.Ordinal);
     private readonly ObservableCollection<AskUserQuestionViewModel> _emptyAskUserQuestions = new();
     private readonly object _sessionUpdateTrackingSync = new();
     private TaskCompletionSource<object?>? _sessionUpdatesDrainedTcs;
@@ -773,6 +777,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         _acpProfiles.PropertyChanged += OnAcpProfilesPropertyChanged;
         _acpProfiles.Profiles.CollectionChanged += OnAcpProfilesCollectionChanged;
         _preferences.PropertyChanged += OnPreferencesPropertyChanged;
+        _hydrationCompletionMode = ResolveHydrationCompletionMode(_preferences.AcpHydrationCompletionMode);
         _preferences.Projects.CollectionChanged += OnProjectAffinityPreferencesCollectionChanged;
         _preferences.ProjectPathMappings.CollectionChanged += OnProjectAffinityPreferencesCollectionChanged;
         _conversationWorkspace.PropertyChanged += OnConversationWorkspacePropertyChanged;
@@ -950,6 +955,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             // LastSelectedServerId is hydrated. Re-attempt once it becomes available.
             _ = TryAutoConnectAsync();
         }
+
+        if (e.PropertyName == nameof(AppPreferencesViewModel.AcpHydrationCompletionMode))
+        {
+            _hydrationCompletionMode = ResolveHydrationCompletionMode(_preferences.AcpHydrationCompletionMode);
+        }
     }
 
     protected override void OnIsBusyChangedCore(bool value)
@@ -982,21 +992,33 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         }
     }
 
-    private void ApplyStoreProjection(ChatUiProjection projection)
+    private void ApplyStoreProjection(
+        ChatUiProjection projection,
+        IReadOnlyList<ChatMessageViewModel>? preparedTranscript = null)
     {
+        var projectionApplyStopwatch = Stopwatch.StartNew();
+        var sessionChanged = false;
         _suppressStoreProfileProjection = true;
         _suppressStorePromptProjection = true;
         try
         {
-            if (!string.Equals(CurrentSessionId, projection.HydratedConversationId, StringComparison.Ordinal))
+            sessionChanged = !string.Equals(CurrentSessionId, projection.HydratedConversationId, StringComparison.Ordinal);
+            if (sessionChanged)
             {
                 // Set the session ID without triggering OnCurrentSessionIdChanged immediately
                 // if we want to avoid multiple overlay state changes, but here we actually
                 // WANT consistent behavior. By moving session clearing before other updates,
                 // we ensure the "empty" state is correctly identified as "loading" if hydrating.
                 CurrentSessionId = projection.HydratedConversationId;
-                MessageHistory.Clear();
-                PlanEntries.Clear();
+                if (preparedTranscript is { Count: > 0 })
+                {
+                    ReplaceMessageHistory(preparedTranscript);
+                }
+                else
+                {
+                    ReplaceMessageHistory(projection.Transcript);
+                }
+                ReplacePlanEntries(projection.PlanEntries);
             }
 
             var draft = projection.CurrentPrompt;
@@ -1011,7 +1033,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             // CRITICAL: Sync transcript BEFORE notifying IsSessionActive/IsHydrating.
             // This ensures that when the UI thread reacts to the active session,
             // MessageHistory already reflects the projected state.
-            SyncMessageHistory(projection.Transcript);
+            if (!sessionChanged)
+            {
+                SyncMessageHistory(projection.Transcript);
+            }
 
             // Update hydration state BEFORE session active so the UI thread's IsOverlayVisible
             // logic (which depends on IsHydrating) sees the hydration state as soon as
@@ -1029,7 +1054,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
             ShowPlanPanel = projection.ShowPlanPanel;
             CurrentPlanTitle = projection.PlanTitle;
-            SyncPlanEntries(projection.PlanEntries);
+            if (!sessionChanged)
+            {
+                SyncPlanEntries(projection.PlanEntries);
+            }
 
             RaiseOverlayStateChanged();
             Interlocked.Exchange(ref _connectionGeneration, projection.ConnectionGeneration);
@@ -1051,8 +1079,22 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         }
         finally
         {
+            projectionApplyStopwatch.Stop();
             _suppressStorePromptProjection = false;
             _suppressStoreProfileProjection = false;
+
+            const int slowUiProjectionThresholdMs = 800;
+            if (projectionApplyStopwatch.ElapsedMilliseconds >= slowUiProjectionThresholdMs)
+            {
+                Logger.LogWarning(
+                    "Slow UI projection detected. elapsedMs={ElapsedMs} sessionChanged={SessionChanged} conversationId={ConversationId} transcriptCount={TranscriptCount} isHydrating={IsHydrating} isRemoteHydrationPending={IsRemoteHydrationPending}",
+                    projectionApplyStopwatch.ElapsedMilliseconds,
+                    sessionChanged,
+                    projection.HydratedConversationId,
+                    projection.Transcript.Count,
+                    IsHydrating,
+                    IsRemoteHydrationPending);
+            }
         }
     }
 
@@ -1406,6 +1448,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         OnPropertyChanged(nameof(ShouldShowPlanEmpty));
     }
 
+    partial void OnIsHydratingChanged(bool value) => RaiseOverlayStateChanged();
+
+    partial void OnIsRemoteHydrationPendingChanged(bool value) => RaiseOverlayStateChanged();
+
+    partial void OnIsSessionSwitchingChanged(bool value) => RaiseOverlayStateChanged();
+
+    partial void OnIsLayoutLoadingChanged(bool value) => RaiseOverlayStateChanged();
+
     partial void OnPlanEntriesChanged(ObservableCollection<PlanEntryViewModel> value)
     {
         AttachPlanEntriesCollectionChanged(value);
@@ -1474,10 +1524,18 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             return;
         }
 
-        if (!string.Equals(CurrentSessionId, value.ConversationId, StringComparison.Ordinal))
+        StartChatSurfaceConversationSwitch(value.ConversationId);
+    }
+
+    private void StartChatSurfaceConversationSwitch(string? conversationId)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId)
+            || string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
         {
-            _ = ActivateConversationAsync(value.ConversationId);
+            return;
         }
+
+        _ = ((IConversationSessionSwitcher)this).SwitchConversationAsync(conversationId);
     }
 
     private async Task SelectAndHydrateConversationAsync(string? conversationId)
@@ -1514,8 +1572,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
 
             // Re-evaluate if we should keep loading after projection applied.
-            // If the session is active and we're hydrating (even if count is 0), keep loading.
-            keepLayoutLoading = IsSessionActive && (MessageHistory.Count > 0 || IsHydrating || IsRemoteHydrationPending);
+            // Layout loading is only a bridge until the active conversation is fully
+            // projected. Once hydration/pending replay has ended, visible transcript
+            // content should not keep the layout overlay alive on its own.
+            keepLayoutLoading = IsSessionActive && (IsHydrating || IsRemoteHydrationPending);
         }
         finally
         {
@@ -1531,6 +1591,20 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         var state = await _chatStore.State ?? ChatState.Empty;
         var connectionState = await _chatConnectionStore.State ?? ChatConnectionState.Empty;
         var projection = CreateProjection(state, connectionState);
+        var shouldPrebuildTranscript =
+            !string.Equals(CurrentSessionId, projection.HydratedConversationId, StringComparison.Ordinal)
+            && projection.Transcript.Count >= 200;
+        IReadOnlyList<ChatMessageViewModel>? preparedTranscript = null;
+        if (shouldPrebuildTranscript)
+        {
+            var prebuildStopwatch = Stopwatch.StartNew();
+            preparedTranscript = projection.Transcript.Select(FromSnapshot).ToArray();
+            Logger.LogInformation(
+                "Prebuilt transcript view-models off UI thread. conversationId={ConversationId} messageCount={MessageCount} elapsedMs={ElapsedMs}",
+                projection.HydratedConversationId,
+                preparedTranscript.Count,
+                prebuildStopwatch.ElapsedMilliseconds);
+        }
 
         await PostToUiAsync(() =>
         {
@@ -1541,7 +1615,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
             // Note: ApplyStoreProjection now internally calls SyncMessageHistory
             // before notifying state changes to avoid race conditions on the UI thread.
-            ApplyStoreProjection(projection);
+            ApplyStoreProjection(projection, preparedTranscript);
         }).ConfigureAwait(false);
     }
 
@@ -2551,12 +2625,17 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     {
         try
         {
-            // SECURITY/PROTOCOL CHECK: Only the store-authoritative binding for the active
-            // conversation may mutate the visible transcript.
+            // SECURITY/PROTOCOL CHECK: Only store-authoritative bindings can project updates.
+            // Projection targets the bound conversation slice (SSOT), while visible transcript
+            // mutation still follows the currently hydrated conversation projection.
             var storeState = await _chatStore.State ?? ChatState.Empty;
-            var activeConversationId = storeState.HydratedConversationId;
+            var activeConversationId = storeState.ActiveTurn?.ConversationId ?? storeState.HydratedConversationId;
             var activeBinding = storeState.ResolveBinding(activeConversationId);
-            var boundConversationId = ResolveConversationIdForRemoteSession(storeState, e.SessionId);
+            var boundConversationId = ResolveConversationIdForRemoteSession(storeState, e.SessionId)
+                ?? (!string.IsNullOrWhiteSpace(activeConversationId)
+                    && string.Equals(activeBinding?.RemoteSessionId, e.SessionId, StringComparison.Ordinal)
+                        ? activeConversationId
+                        : null);
 
             if (e.Update is SessionInfoUpdate sessionInfoUpdate)
             {
@@ -2568,18 +2647,25 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(activeBinding?.RemoteSessionId)
-                || !string.Equals(e.SessionId, activeBinding.RemoteSessionId, StringComparison.Ordinal))
+            if (string.IsNullOrWhiteSpace(boundConversationId))
             {
                 return;
             }
 
-            var activeTurn = ResolveSessionUpdateTurn(storeState, activeConversationId, e.SessionId);
+            var targetConversationId = boundConversationId!;
+            var isActiveTarget =
+                !string.IsNullOrWhiteSpace(activeConversationId)
+                && string.Equals(activeConversationId, targetConversationId, StringComparison.Ordinal)
+                && !string.IsNullOrWhiteSpace(activeBinding?.RemoteSessionId)
+                && string.Equals(e.SessionId, activeBinding.RemoteSessionId, StringComparison.Ordinal);
+            var activeTurn = isActiveTarget
+                ? ResolveSessionUpdateTurn(storeState, activeConversationId, e.SessionId)
+                : null;
 
             if (e.Update is AgentMessageUpdate messageUpdate && messageUpdate.Content != null)
             {
                 await AdvanceActiveTurnPhaseAsync(activeTurn, ChatTurnPhase.Responding).ConfigureAwait(true);
-                await HandleAgentContentChunkAsync(activeConversationId, messageUpdate.Content).ConfigureAwait(true);
+                await HandleAgentContentChunkAsync(targetConversationId, messageUpdate.Content).ConfigureAwait(true);
                 RecordTranscriptProjectionObservation(e.SessionId);
             }
             else if (e.Update is AgentThoughtUpdate)
@@ -2589,7 +2675,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             }
             else if (e.Update is UserMessageUpdate userMessageUpdate && userMessageUpdate.Content != null)
             {
-                await AddMessageToHistoryAsync(activeConversationId, userMessageUpdate.Content, isOutgoing: true).ConfigureAwait(true);
+                await AddMessageToHistoryAsync(targetConversationId, userMessageUpdate.Content, isOutgoing: true).ConfigureAwait(true);
                 RecordTranscriptProjectionObservation(e.SessionId);
             }
             else if (e.Update is ToolCallUpdate toolCallUpdate)
@@ -2600,7 +2686,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                     toolCallUpdate.ToolCallId,
                     toolCallUpdate.Title).ConfigureAwait(true);
 
-                await UpsertTranscriptSnapshotAsync(activeConversationId, CreateToolCallSnapshot(toolCallUpdate)).ConfigureAwait(true);
+                await UpsertTranscriptSnapshotAsync(targetConversationId, CreateToolCallSnapshot(toolCallUpdate)).ConfigureAwait(true);
                 RecordTranscriptProjectionObservation(e.SessionId);
             }
             else if (e.Update is ToolCallStatusUpdate toolCallStatusUpdate)
@@ -2614,31 +2700,35 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                     _ => ChatTurnPhase.ToolPending
                 };
                 await AdvanceActiveTurnPhaseAsync(activeTurn, phase, toolCallStatusUpdate.ToolCallId).ConfigureAwait(true);
-                await UpdateToolCallStatusAsync(activeConversationId, toolCallStatusUpdate).ConfigureAwait(true);
+                if (toolCallStatusUpdate.Status == Domain.Models.Tool.ToolCallStatus.Cancelled)
+                {
+                    await PreemptivelyCancelTurnAsync(expectedConversationId: targetConversationId).ConfigureAwait(true);
+                }
+                await UpdateToolCallStatusAsync(targetConversationId, toolCallStatusUpdate).ConfigureAwait(true);
                 RecordTranscriptProjectionObservation(e.SessionId);
             }
             else if (e.Update is PlanUpdate planUpdate)
             {
                 await ApplySessionUpdateDeltaAsync(
-                    activeConversationId!,
+                    targetConversationId,
                     _acpSessionUpdateProjector.Project(new SessionUpdateEventArgs(e.SessionId, planUpdate))).ConfigureAwait(true);
             }
             else if (e.Update is CurrentModeUpdate modeChange)
             {
                 await ApplySessionUpdateDeltaAsync(
-                    activeConversationId!,
+                    targetConversationId,
                     _acpSessionUpdateProjector.Project(new SessionUpdateEventArgs(e.SessionId, modeChange))).ConfigureAwait(true);
             }
             else if (e.Update is ConfigUpdateUpdate configUpdate)
             {
                 await ApplySessionUpdateDeltaAsync(
-                    activeConversationId!,
+                    targetConversationId,
                     _acpSessionUpdateProjector.Project(new SessionUpdateEventArgs(e.SessionId, configUpdate))).ConfigureAwait(true);
             }
             else if (e.Update is ConfigOptionUpdate optionUpdate)
             {
                 await ApplySessionUpdateDeltaAsync(
-                    activeConversationId!,
+                    targetConversationId,
                     _acpSessionUpdateProjector.Project(new SessionUpdateEventArgs(e.SessionId, optionUpdate))).ConfigureAwait(true);
             }
             else if (e.Update is UsageUpdate)
@@ -2647,7 +2737,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             }
             else if (e.Update is AvailableCommandsUpdate commandsUpdate)
             {
-                UpdateSlashCommands(commandsUpdate);
+                if (isActiveTarget)
+                {
+                    UpdateSlashCommands(commandsUpdate);
+                }
             }
             else if (e.Update != null)
             {
@@ -2736,11 +2829,28 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         }
     }
 
-    private async Task AwaitBufferedSessionReplayProjectionAsync(CancellationToken cancellationToken)
+    private async Task AwaitBufferedSessionReplayProjectionAsync(
+        CancellationToken cancellationToken,
+        long? hydrationAttemptId = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
         await PostToUiAsync(static () => { }).ConfigureAwait(false);
+        if (_chatService is IAcpSessionUpdateBufferController adapter
+            && hydrationAttemptId.HasValue)
+        {
+            await adapter
+                .WaitForBufferedUpdatesDrainedAsync(hydrationAttemptId.Value, cancellationToken)
+                .WaitAsync(RemoteReplayDrainTimeout, cancellationToken)
+                .ConfigureAwait(false);
+
+            // Draining the adapter can synchronously raise SessionUpdateReceived, and the
+            // ViewModel intentionally reposts those updates onto the UI context for ordered
+            // projection. Yield one more UI turn so those reposted callbacks have a chance
+            // to register their pending-work counters before we snapshot pending state.
+            await PostToUiAsync(static () => { }).ConfigureAwait(false);
+        }
+
         var pendingUpdates = WaitForPendingSessionUpdatesAsync();
         if (!pendingUpdates.IsCompleted)
         {
@@ -2892,6 +3002,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         string remoteSessionId,
         long replayBaseline,
         long transcriptProjectionBaseline,
+        long? hydrationAttemptId,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -2959,7 +3070,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             DateTime.UtcNow >= replayStartTimeoutAt,
             DateTime.UtcNow >= transcriptTimeoutAt);
 #endif
-        await AwaitBufferedSessionReplayProjectionAsync(cancellationToken).ConfigureAwait(false);
+        await AwaitBufferedSessionReplayProjectionAsync(cancellationToken, hydrationAttemptId).ConfigureAwait(false);
     }
 
     private static ActiveTurnState? ResolveSessionUpdateTurn(ChatState storeState, string? activeConversationId, string remoteSessionId)
@@ -3073,22 +3184,56 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             return false;
         }
 
+        if (await CanReuseWarmCurrentConversationAsync(sessionId, cancellationToken).ConfigureAwait(false))
+        {
+            Logger.LogInformation(
+                "Skipping redundant conversation activation because the current session is already warm. ConversationId={ConversationId}",
+                sessionId);
+            return true;
+        }
+
+        await SetConversationRuntimeStateAsync(
+                sessionId,
+                ConversationRuntimePhase.Selecting,
+                reason: "ActivationStarted",
+                cancellationToken)
+            .ConfigureAwait(false);
+        var activationStopwatch = Stopwatch.StartNew();
+
         var activationLease = BeginConversationActivation(cancellationToken);
         var activationGateEntered = false;
         var completionOwnedByBackground = false;
         try
         {
             ((IConversationActivationPreview)this).ClearSessionSwitchPreview(sessionId);
-            SetConversationOverlayOwners(
-                sessionSwitchConversationId: sessionId,
-                connectionLifecycleConversationId: null,
-                historyConversationId: null);
-            IsSessionSwitching = true;
+            await PostToUiAsync(() =>
+            {
+                SetConversationOverlayOwners(
+                    sessionSwitchConversationId: sessionId,
+                    connectionLifecycleConversationId: null,
+                    historyConversationId: null);
+                IsSessionSwitching = true;
+            }).ConfigureAwait(false);
+            Logger.LogInformation(
+                "Conversation activation phase completed. phase=OverlayPrimed conversationId={ConversationId} activationVersion={ActivationVersion} elapsedMs={ElapsedMs}",
+                sessionId,
+                activationLease.Version,
+                activationStopwatch.ElapsedMilliseconds);
             await _conversationActivationGate.WaitAsync(activationLease.CancellationToken).ConfigureAwait(false);
             activationGateEntered = true;
             activationLease.CancellationToken.ThrowIfCancellationRequested();
+            Logger.LogInformation(
+                "Conversation activation phase completed. phase=ActivationGateEntered conversationId={ConversationId} activationVersion={ActivationVersion} elapsedMs={ElapsedMs}",
+                sessionId,
+                activationLease.Version,
+                activationStopwatch.ElapsedMilliseconds);
             await EnsureConversationWorkspaceRestoredAsync(activationLease.CancellationToken).ConfigureAwait(false);
             activationLease.CancellationToken.ThrowIfCancellationRequested();
+            Logger.LogInformation(
+                "Conversation activation phase completed. phase=WorkspaceRestored conversationId={ConversationId} activationVersion={ActivationVersion} elapsedMs={ElapsedMs}",
+                sessionId,
+                activationLease.Version,
+                activationStopwatch.ElapsedMilliseconds);
 
             var activationHydrationMode = await ResolveConversationActivationHydrationModeAsync(
                     sessionId,
@@ -3103,13 +3248,58 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                     .ConfigureAwait(false);
             if (!activationResult.Succeeded)
             {
+                await SetConversationRuntimeStateAsync(
+                        sessionId,
+                        ConversationRuntimePhase.Faulted,
+                        reason: activationResult.FailureReason,
+                        cancellationToken)
+                    .ConfigureAwait(false);
                 return false;
             }
+            Logger.LogInformation(
+                "Conversation activation phase completed. phase=ActivationCoordinatorSelected conversationId={ConversationId} activationVersion={ActivationVersion} elapsedMs={ElapsedMs}",
+                sessionId,
+                activationLease.Version,
+                activationStopwatch.ElapsedMilliseconds);
+
+            if (IsActivationContextStale(activationLease.Version, activationLease.CancellationToken))
+            {
+                return false;
+            }
+
+            await SetConversationRuntimeStateAsync(
+                    sessionId,
+                    ConversationRuntimePhase.Selected,
+                    reason: "WorkspaceProjectionReady",
+                    cancellationToken)
+                .ConfigureAwait(false);
 
             activationLease.CancellationToken.ThrowIfCancellationRequested();
             await ResetRemoteHydrationUiStateAsync(activationLease.Version).ConfigureAwait(false);
             activationLease.CancellationToken.ThrowIfCancellationRequested();
+            if (IsActivationContextStale(activationLease.Version, activationLease.CancellationToken))
+            {
+                return false;
+            }
             await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
+            Logger.LogInformation(
+                "Conversation activation phase completed. phase=InitialProjectionApplied conversationId={ConversationId} activationVersion={ActivationVersion} elapsedMs={ElapsedMs}",
+                sessionId,
+                activationLease.Version,
+                activationStopwatch.ElapsedMilliseconds);
+            const int slowSelectionActivationThresholdMs = 1200;
+            if (activationStopwatch.ElapsedMilliseconds >= slowSelectionActivationThresholdMs)
+            {
+                Logger.LogWarning(
+                    "Slow conversation selection detected. conversationId={ConversationId} activationVersion={ActivationVersion} elapsedMs={ElapsedMs}",
+                    sessionId,
+                    activationLease.Version,
+                    activationStopwatch.ElapsedMilliseconds);
+            }
+            Logger.LogInformation(
+                "Conversation activation selected phase completed. ConversationId={ConversationId} ElapsedMs={ElapsedMs}",
+                sessionId,
+                activationStopwatch.ElapsedMilliseconds);
             if (activationHydrationMode == ConversationActivationHydrationMode.WorkspaceSnapshot)
             {
                 await DismissSessionSwitchOverlayAsync(activationLease.Version, sessionId).ConfigureAwait(false);
@@ -3119,6 +3309,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             if (!awaitRemoteHydration)
             {
                 completionOwnedByBackground = true;
+                Logger.LogInformation(
+                    "Conversation activation handed off to background remote phase. ConversationId={ConversationId} ElapsedMs={ElapsedMs}",
+                    sessionId,
+                    activationStopwatch.ElapsedMilliseconds);
                 _ = ContinueConversationActivationAsync(sessionId, activationLease);
                 return true;
             }
@@ -3135,6 +3329,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
             activationLease.CancellationToken.ThrowIfCancellationRequested();
             NotifyConversationListChanged();
+            Logger.LogInformation(
+                "Conversation activation fully completed. ConversationId={ConversationId} ElapsedMs={ElapsedMs}",
+                sessionId,
+                activationStopwatch.ElapsedMilliseconds);
 
             return true;
         }
@@ -3198,6 +3396,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        var remotePhaseStopwatch = Stopwatch.StartNew();
         await _remoteConversationActivationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -3210,11 +3409,34 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 .ConfigureAwait(false);
             if (!remoteConnectionReady)
             {
+                Logger.LogInformation(
+                    "Conversation remote activation failed before hydration. ConversationId={ConversationId} ElapsedMs={ElapsedMs}",
+                    sessionId,
+                    remotePhaseStopwatch.ElapsedMilliseconds);
+                await SetConversationRuntimeStateAsync(
+                        sessionId,
+                        ConversationRuntimePhase.Faulted,
+                        reason: "RemoteConnectionNotReady",
+                        cancellationToken)
+                    .ConfigureAwait(false);
                 return false;
             }
 
+            await SetConversationRuntimeStateAsync(
+                    sessionId,
+                    ConversationRuntimePhase.RemoteConnectionReady,
+                    reason: "RemoteConnectionReady",
+                    cancellationToken)
+                .ConfigureAwait(false);
+
             cancellationToken.ThrowIfCancellationRequested();
-            return await EnsureActiveConversationRemoteHydratedAsync(sessionId, activationVersion, cancellationToken).ConfigureAwait(false);
+            var hydrated = await EnsureActiveConversationRemoteHydratedAsync(sessionId, activationVersion, cancellationToken).ConfigureAwait(false);
+            Logger.LogInformation(
+                "Conversation remote activation completed. ConversationId={ConversationId} Succeeded={Succeeded} ElapsedMs={ElapsedMs}",
+                sessionId,
+                hydrated,
+                remotePhaseStopwatch.ElapsedMilliseconds);
+            return hydrated;
         }
         finally
         {
@@ -3472,7 +3694,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
         _bottomPanelStateByConversation.Remove(conversationId);
         RemovePendingAskUserRequestState(conversationId);
-        _remoteHydrationStampsByConversation.Remove(conversationId);
+        _ = _chatStore.Dispatch(new ClearConversationRuntimeStateAction(conversationId));
 
         if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
         {
@@ -3933,7 +4155,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         }
 
         var state = await _chatStore.State ?? ChatState.Empty;
-        var currentTranscript = state.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+        var currentTranscript = state.ResolveContentSlice(conversationId)?.Transcript
+            ?? ImmutableList<ConversationMessageSnapshot>.Empty;
         var existing = currentTranscript.LastOrDefault(message =>
             string.Equals(message.ToolCallId, toolCallStatusUpdate.ToolCallId, StringComparison.Ordinal)
             && string.Equals(message.ContentType, "tool_call", StringComparison.Ordinal));
@@ -4067,7 +4290,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             return;
         }
 
-        var transcript = state.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+        var transcript = state.ResolveContentSlice(activeTurn.ConversationId)?.Transcript
+            ?? (string.Equals(state.HydratedConversationId, activeTurn.ConversationId, StringComparison.Ordinal)
+                ? state.Transcript
+                : null)
+            ?? ImmutableList<ConversationMessageSnapshot>.Empty;
         var cutoff = activeTurn.StartedAtUtc == default ? DateTime.MinValue : activeTurn.StartedAtUtc;
         var pendingToolCalls = transcript
             .Where(message =>
@@ -4552,6 +4779,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         try
         {
             await PreemptivelyCancelTurnAsync().ConfigureAwait(false);
+            var activeBinding = await ResolveActiveConversationBindingAsync().ConfigureAwait(false);
+            await CancelPendingPermissionRequestAsync(activeBinding?.RemoteSessionId).ConfigureAwait(false);
             await _acpConnectionCommands.CancelPromptAsync(this, "User cancelled").ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -4711,6 +4940,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             if (_chatService != null)
             {
                 await PreemptivelyCancelTurnAsync().ConfigureAwait(true);
+                await CancelPendingPermissionRequestAsync(activeBinding.RemoteSessionId).ConfigureAwait(true);
                 await _chatService.CancelSessionAsync(cancelParams);
             }
         }
@@ -4749,7 +4979,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             IsBusy = true;
             ClearError();
             await _acpConnectionCommands.DisconnectAsync(this);
-            _remoteHydrationStampsByConversation.Clear();
+            await _chatStore.Dispatch(new ResetConversationRuntimeStatesAction()).ConfigureAwait(false);
             _pendingAskUserRequestsByConversation.Clear();
             PendingAskUserRequest = null;
         }
@@ -4903,7 +5133,13 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         }
 
         var binding = await ResolveConversationBindingAsync(conversationId, cancellationToken).ConfigureAwait(false);
-        MarkConversationRemoteHydrated(conversationId!, binding);
+        await SetConversationRuntimeStateAsync(
+                conversationId!,
+                ConversationRuntimePhase.Warm,
+                binding,
+                reason: "MarkedHydrated",
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public async Task MarkConversationRemoteHydratedAsync(
@@ -4917,7 +5153,22 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         }
 
         var binding = await ResolveConversationBindingAsync(conversationId, cancellationToken).ConfigureAwait(false);
-        MarkConversationRemoteHydrated(conversationId, binding);
+        await SetConversationRuntimeStateAsync(
+                conversationId,
+                ConversationRuntimePhase.Warm,
+                binding,
+                reason: "MarkedHydrated",
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public Task ApplyConversationSessionLoadResponseAsync(
+        string conversationId,
+        SessionLoadResponse response,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ApplySessionLoadResponseAsync(conversationId, response);
     }
 
     public async Task ResetConversationForResyncAsync(
@@ -4929,6 +5180,15 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         {
             return;
         }
+
+        var binding = await ResolveConversationBindingAsync(conversationId, cancellationToken).ConfigureAwait(false);
+        await SetConversationRuntimeStateAsync(
+                conversationId,
+                ConversationRuntimePhase.RemoteHydrating,
+                binding,
+                reason: "ResyncResetStarted",
+                cancellationToken: CancellationToken.None)
+            .ConfigureAwait(false);
 
         await ResetConversationProjectionForResyncAsync(conversationId, cancellationToken).ConfigureAwait(false);
     }
@@ -4980,16 +5240,42 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             return false;
         }
 
+        await SetConversationRuntimeStateAsync(
+                conversationId,
+                ConversationRuntimePhase.RemoteHydrating,
+                binding,
+                reason: "SessionLoadStarted",
+                cancellationToken)
+            .ConfigureAwait(false);
+        var hydrationStopwatch = Stopwatch.StartNew();
+        var adapter = chatService as IAcpSessionUpdateBufferController;
+        long? hydrationAttemptId = null;
+        Logger.LogInformation(
+            "Starting conversation hydration. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId} CompletionMode={CompletionMode}",
+            conversationId,
+            binding.RemoteSessionId,
+            _hydrationCompletionMode);
+
         try
         {
-            var adapter = chatService as AcpChatServiceAdapter;
-            adapter?.BeginHydrationBuffering(binding.RemoteSessionId);
+            hydrationAttemptId = adapter?.BeginHydrationBufferingScope(binding.RemoteSessionId);
             var ownsRemoteHydrationUi = ShouldOwnRemoteHydrationUi(conversationId, activationVersion);
             var transcriptBaselineCount = await GetProjectedTranscriptCountAsync(conversationId).ConfigureAwait(false);
             var knownTranscriptGrowthGraceDeadlineUtc = DateTime.UtcNow + RemoteReplayKnownTranscriptGrowthGracePeriod;
             var replayBaseline = GetSessionUpdateObservationCount(binding.RemoteSessionId);
             var transcriptProjectionBaseline = GetTranscriptProjectionObservationCount(binding.RemoteSessionId);
             var requiresTranscriptGrowthObservation = adapter != null;
+            var hasCachedTranscript = transcriptBaselineCount > 0;
+            var shouldAwaitReplayProjection =
+                requiresTranscriptGrowthObservation &&
+                _hydrationCompletionMode == AcpHydrationCompletionMode.StrictReplay &&
+                !hasCachedTranscript;
+            Logger.LogInformation(
+                "Hydration replay wait policy resolved. conversationId={ConversationId} remoteSessionId={RemoteSessionId} shouldAwaitReplayProjection={ShouldAwaitReplayProjection} cachedTranscriptCount={CachedTranscriptCount}",
+                conversationId,
+                binding.RemoteSessionId,
+                shouldAwaitReplayProjection,
+                transcriptBaselineCount);
             if (ownsRemoteHydrationUi)
             {
                 await PostToUiAsync(() =>
@@ -5023,7 +5309,19 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 await _chatStore.Dispatch(new SetIsHydratingAction(true)).ConfigureAwait(false);
             }
 
+            if (IsActivationContextStale(activationVersion, cancellationToken))
+            {
+                return false;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
             await _chatStore.Dispatch(new SelectConversationAction(conversationId)).ConfigureAwait(false);
+            if (IsActivationContextStale(activationVersion, cancellationToken))
+            {
+                return false;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
             await RefreshRemoteSessionMetadataFromSsotAsync(conversationId, binding, chatService, cancellationToken).ConfigureAwait(false);
             await ResetConversationProjectionForResyncAsync(conversationId, cancellationToken).ConfigureAwait(false);
             await SetHydrationOverlayPhaseAsync(
@@ -5031,20 +5329,28 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                     activationVersion,
                     HydrationOverlayPhase.RequestingSessionLoad)
                 .ConfigureAwait(false);
-            var sessionLoadResponse = await chatService
-                .LoadSessionAsync(
-                    new SessionLoadParams(binding.RemoteSessionId!, GetSessionCwdOrDefault(conversationId)),
-                    cancellationToken)
+            var sessionLoadTask = chatService.LoadSessionAsync(
+                new SessionLoadParams(binding.RemoteSessionId!, GetSessionCwdOrDefault(conversationId)),
+                cancellationToken);
+            var sessionLoadResponse = await sessionLoadTask
+                .WaitAsync(RemoteSessionLoadTimeout, cancellationToken)
                 .ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
-            await ApplySessionLoadResponseAsync(conversationId, sessionLoadResponse).ConfigureAwait(true);
             cancellationToken.ThrowIfCancellationRequested();
             if (adapter != null)
             {
-                adapter.MarkHydrated();
+                if (!adapter.TryMarkHydrated(hydrationAttemptId!.Value))
+                {
+                    Logger.LogWarning(
+                        "Discarding remote hydration completion because buffering attempt is stale. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
+                        conversationId,
+                        binding.RemoteSessionId);
+                    return false;
+                }
             }
+            await ApplySessionLoadResponseAsync(conversationId, sessionLoadResponse).ConfigureAwait(true);
+            cancellationToken.ThrowIfCancellationRequested();
 
-            if (requiresTranscriptGrowthObservation)
+            if (shouldAwaitReplayProjection)
             {
                 await AwaitRemoteReplayProjectionAsync(
                         conversationId,
@@ -5052,6 +5358,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                         binding.RemoteSessionId!,
                         replayBaseline,
                         transcriptProjectionBaseline,
+                        hydrationAttemptId,
                         cancellationToken)
                     .ConfigureAwait(false);
             }
@@ -5064,28 +5371,57 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                     .ConfigureAwait(false);
             }
 
-            if (requiresTranscriptGrowthObservation)
+            if (adapter != null
+                && !adapter.TryMarkHydrated(hydrationAttemptId!.Value, reason: "PostDrainVerification"))
+            {
+                Logger.LogWarning(
+                    "Discarding remote hydration finalization because buffering attempt became stale after replay drain. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
+                    conversationId,
+                    binding.RemoteSessionId);
+                return false;
+            }
+
+            if (shouldAwaitReplayProjection)
             {
                 await AwaitKnownTranscriptGrowthRequirementAsync(
                         conversationId,
                         transcriptBaselineCount,
                         knownTranscriptGrowthGraceDeadlineUtc,
+                        hydrationAttemptId,
                         cancellationToken)
                     .ConfigureAwait(false);
             }
 
-            MarkConversationRemoteHydrated(conversationId, binding);
+            await RestoreCachedConversationProjectionIfReplayIsEmptyAsync(conversationId).ConfigureAwait(false);
+            await SetConversationRuntimeStateAsync(
+                    conversationId,
+                    ConversationRuntimePhase.Warm,
+                    binding,
+                    reason: "SessionLoadCompleted",
+                    cancellationToken)
+                .ConfigureAwait(false);
+            Logger.LogInformation(
+                "Conversation hydration completed. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId} ElapsedMs={ElapsedMs}",
+                conversationId,
+                binding.RemoteSessionId,
+                hydrationStopwatch.ElapsedMilliseconds);
+
+            if (_hydrationCompletionMode == AcpHydrationCompletionMode.LoadResponse)
+            {
+                await EnsureMinimumHydrationVisibleDurationAsync(hydrationStopwatch, cancellationToken).ConfigureAwait(false);
+            }
 
             return true;
         }
         catch (OperationCanceledException)
         {
-            (chatService as AcpChatServiceAdapter)?.SuppressBufferedUpdates("RemoteHydrationCanceled");
+            ReleaseBufferedUpdatesAfterInterruptedHydration(adapter, hydrationAttemptId, "RemoteHydrationCanceled");
+
             throw;
         }
         catch (Exception ex)
         {
-            (chatService as AcpChatServiceAdapter)?.SuppressBufferedUpdates("DiscoverImportLoadSessionFailed");
+            ReleaseBufferedUpdatesAfterInterruptedHydration(adapter, hydrationAttemptId, "DiscoverImportLoadSessionFailed");
 
             if (AcpErrorClassifier.IsRemoteSessionNotFound(ex))
             {
@@ -5095,9 +5431,40 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                     conversationId,
                     binding.RemoteSessionId);
                 await ClearRemoteBindingAsync(conversationId, binding.ProfileId).ConfigureAwait(false);
+                await SetConversationRuntimeStateAsync(
+                        conversationId,
+                        ConversationRuntimePhase.Stale,
+                        binding,
+                        reason: "RemoteSessionNotFound",
+                        cancellationToken: CancellationToken.None)
+                    .ConfigureAwait(false);
+                var restoredFromWorkspace = await TryRestoreConversationProjectionFromWorkspaceSnapshotAsync(conversationId).ConfigureAwait(false);
+                if (!restoredFromWorkspace)
+                {
+                    SetError($"Failed to load session: {ex.Message}");
+                    return false;
+                }
+
+                SetError($"Failed to load session: {ex.Message}");
+                return true;
+            }
+            else
+            {
+                await SetConversationRuntimeStateAsync(
+                        conversationId,
+                        ConversationRuntimePhase.Faulted,
+                        binding,
+                        reason: ex.Message,
+                        cancellationToken: CancellationToken.None)
+                    .ConfigureAwait(false);
             }
 
             Logger.LogError(ex, "Failed to hydrate active conversation from remote session");
+            Logger.LogInformation(
+                "Conversation hydration failed. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId} ElapsedMs={ElapsedMs}",
+                conversationId,
+                binding.RemoteSessionId,
+                hydrationStopwatch.ElapsedMilliseconds);
             SetError($"Failed to load session: {ex.Message}");
             return false;
         }
@@ -5118,8 +5485,115 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                     activationVersion,
                     _pendingHistoryOverlayDismissConversationId);
 #endif
-                await AwaitBufferedSessionReplayProjectionAsync(cancellationToken).ConfigureAwait(false);
+                await AwaitBufferedSessionReplayProjectionAsync(cancellationToken, hydrationAttemptId).ConfigureAwait(false);
                 await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
+            }
+        }
+    }
+
+    private void ReplaceMessageHistory(IImmutableList<ConversationMessageSnapshot> transcript)
+    {
+        var messages = transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+        MessageHistory = new ObservableCollection<ChatMessageViewModel>(messages.Select(FromSnapshot));
+        OnPropertyChanged(nameof(HasVisibleTranscriptContent));
+        OnPropertyChanged(nameof(OverlayStatusText));
+        OnPropertyChanged(nameof(ShouldShowBlockingLoadingMask));
+        OnPropertyChanged(nameof(ShouldShowLoadingOverlayPresenter));
+    }
+
+    private void ReplaceMessageHistory(IReadOnlyList<ChatMessageViewModel> transcript)
+    {
+        var messages = transcript ?? Array.Empty<ChatMessageViewModel>();
+        MessageHistory = new ObservableCollection<ChatMessageViewModel>(messages);
+        OnPropertyChanged(nameof(HasVisibleTranscriptContent));
+        OnPropertyChanged(nameof(OverlayStatusText));
+        OnPropertyChanged(nameof(ShouldShowBlockingLoadingMask));
+        OnPropertyChanged(nameof(ShouldShowLoadingOverlayPresenter));
+    }
+
+    private void ReplacePlanEntries(IReadOnlyList<ConversationPlanEntrySnapshot> planEntries)
+    {
+        var entries = planEntries ?? Array.Empty<ConversationPlanEntrySnapshot>();
+        PlanEntries = new ObservableCollection<PlanEntryViewModel>(
+            entries.Select(entry => new PlanEntryViewModel
+            {
+                Content = entry.Content ?? string.Empty,
+                Status = entry.Status,
+                Priority = entry.Priority
+            }));
+    }
+
+    private async Task<bool> CanReuseWarmCurrentConversationAsync(
+        string sessionId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!string.Equals(CurrentSessionId, sessionId, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var state = await _chatStore.State ?? ChatState.Empty;
+        var workspaceBinding = _conversationWorkspace.GetRemoteBinding(sessionId);
+        var binding = state.ResolveBinding(sessionId)
+            ?? (workspaceBinding is null
+                ? null
+                : new ConversationBindingSlice(
+                    workspaceBinding.ConversationId,
+                    workspaceBinding.RemoteSessionId,
+                    workspaceBinding.BoundProfileId));
+        if (string.IsNullOrWhiteSpace(binding?.RemoteSessionId))
+        {
+            return true;
+        }
+
+        if (_chatService?.AgentCapabilities?.LoadSession == false)
+        {
+            return true;
+        }
+
+        var runtimeState = state.ResolveRuntimeState(sessionId);
+        return runtimeState is { } hydratedRuntime
+            && hydratedRuntime.Phase == ConversationRuntimePhase.Warm
+            && hydratedRuntime.ConnectionGeneration == ConnectionGeneration
+            && string.Equals(hydratedRuntime.RemoteSessionId, binding.RemoteSessionId, StringComparison.Ordinal)
+            && string.Equals(hydratedRuntime.ProfileId, binding.ProfileId, StringComparison.Ordinal);
+    }
+
+    private async Task CancelPendingPermissionRequestAsync(string? expectedRemoteSessionId = null)
+    {
+        var pending = PendingPermissionRequest;
+        if (pending is null)
+        {
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(expectedRemoteSessionId)
+            && !string.Equals(pending.SessionId, expectedRemoteSessionId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        try
+        {
+            if (_chatService != null)
+            {
+                await _chatService.RespondToPermissionRequestAsync(pending.MessageId, "cancelled", null).ConfigureAwait(true);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(
+                ex,
+                "Failed to send permission cancellation response. SessionId={SessionId}",
+                pending.SessionId);
+        }
+        finally
+        {
+            ShowPermissionDialog = false;
+            if (ReferenceEquals(PendingPermissionRequest, pending))
+            {
+                PendingPermissionRequest = null;
             }
         }
     }
@@ -5225,7 +5699,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             UnsubscribeFromChatService(_chatService);
         }
 
-        _remoteHydrationStampsByConversation.Clear();
+        _ = _chatStore.Dispatch(new ResetConversationRuntimeStatesAction());
         _remoteHydrationSessionUpdateBaselineCounts.Clear();
         _remoteHydrationKnownTranscriptBaselineCounts.Clear();
         _remoteHydrationKnownTranscriptGrowthGraceDeadlineUtc.Clear();
@@ -5331,19 +5805,61 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             ShowConfigOptionsPanel: false)).ConfigureAwait(false);
     }
 
-    private void MarkConversationRemoteHydrated(
-        string conversationId,
-        ConversationBindingSlice? binding)
+    private async Task<bool> TryRestoreConversationProjectionFromWorkspaceSnapshotAsync(string conversationId)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return false;
+        }
+
+        var fallback = await _conversationActivationCoordinator
+            .ActivateSessionAsync(
+                conversationId,
+                ConversationActivationHydrationMode.WorkspaceSnapshot,
+                CancellationToken.None)
+            .ConfigureAwait(false);
+        if (fallback.Succeeded)
+        {
+            return true;
+        }
+
+        Logger.LogWarning(
+            "Failed to restore workspace snapshot after stale remote session fallback. ConversationId={ConversationId} Reason={Reason}",
+            conversationId,
+            fallback.FailureReason);
+        return false;
+    }
+
+    private async Task RestoreCachedConversationProjectionIfReplayIsEmptyAsync(string conversationId)
     {
         if (string.IsNullOrWhiteSpace(conversationId))
         {
             return;
         }
 
-        if (TryCreateRemoteHydrationStamp(binding, out var stamp))
+        var snapshot = _conversationWorkspace.GetConversationSnapshot(conversationId);
+        if (snapshot is null || snapshot.Transcript.Count == 0)
         {
-            _remoteHydrationStampsByConversation[conversationId] = stamp;
+            return;
         }
+
+        var projectedTranscriptCount = await GetProjectedTranscriptCountAsync(conversationId).ConfigureAwait(false);
+        if (projectedTranscriptCount >= snapshot.Transcript.Count)
+        {
+            return;
+        }
+
+        Logger.LogInformation(
+            "Remote hydration projected partial transcript. Restoring cached workspace snapshot. ConversationId={ConversationId} ProjectedCount={ProjectedCount} CachedCount={CachedCount}",
+            conversationId,
+            projectedTranscriptCount,
+            snapshot.Transcript.Count);
+        await _chatStore.Dispatch(new HydrateConversationAction(
+            conversationId,
+            snapshot.Transcript.ToImmutableList(),
+            snapshot.Plan.ToImmutableList(),
+            snapshot.ShowPlanPanel,
+            snapshot.PlanTitle)).ConfigureAwait(false);
     }
 
     private async Task<bool> EnsureActiveConversationRemoteConnectionReadyAsync(
@@ -5497,7 +6013,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         }
 
         var binding = await ResolveConversationBindingAsync(conversationId, cancellationToken).ConfigureAwait(false);
-        if (!TryCreateRemoteHydrationStamp(binding, out var requiredStamp))
+        if (string.IsNullOrWhiteSpace(binding?.RemoteSessionId))
         {
             return true;
         }
@@ -5513,15 +6029,20 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             return true;
         }
 
-        var isRequiredRemoteSessionLoaded = string.Equals(
-            chatService.CurrentSessionId,
-            requiredStamp.RemoteSessionId,
-            StringComparison.Ordinal);
+        var state = await _chatStore.State ?? ChatState.Empty;
+        var runtimeState = state.ResolveRuntimeState(conversationId);
 
-        if (_remoteHydrationStampsByConversation.TryGetValue(conversationId, out var hydratedStamp)
-            && hydratedStamp == requiredStamp
-            && isRequiredRemoteSessionLoaded)
+        if (runtimeState is { } hydratedRuntime
+            && hydratedRuntime.Phase == ConversationRuntimePhase.Warm
+            && hydratedRuntime.ConnectionGeneration == ConnectionGeneration
+            && string.Equals(hydratedRuntime.RemoteSessionId, binding.RemoteSessionId, StringComparison.Ordinal)
+            && string.Equals(hydratedRuntime.ProfileId, binding.ProfileId, StringComparison.Ordinal))
         {
+            Logger.LogInformation(
+                "Skipping remote hydration for conversation because runtime state is warm. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId} ConnectionGeneration={ConnectionGeneration}",
+                conversationId,
+                binding.RemoteSessionId,
+                ConnectionGeneration);
             return true;
         }
 
@@ -5600,25 +6121,25 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         }
 
         var state = await _chatStore.State ?? ChatState.Empty;
-        if (!string.Equals(state.HydratedConversationId, conversationId, StringComparison.Ordinal))
-        {
-            return 0;
-        }
-
-        return state.Transcript?.Count ?? 0;
+        var projectedTranscript = state.ResolveContentSlice(conversationId)?.Transcript
+            ?? (string.Equals(state.HydratedConversationId, conversationId, StringComparison.Ordinal)
+                ? state.Transcript
+                : null);
+        return projectedTranscript?.Count ?? 0;
     }
 
     private async Task AwaitKnownTranscriptGrowthRequirementAsync(
         string conversationId,
         int transcriptBaselineCount,
         DateTime graceDeadlineUtc,
+        long? hydrationAttemptId,
         CancellationToken cancellationToken)
     {
         while (DateTime.UtcNow < graceDeadlineUtc)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            await AwaitBufferedSessionReplayProjectionAsync(cancellationToken).ConfigureAwait(false);
+            await AwaitBufferedSessionReplayProjectionAsync(cancellationToken, hydrationAttemptId).ConfigureAwait(false);
             var projectedTranscriptCount = await GetProjectedTranscriptCountAsync(conversationId).ConfigureAwait(false);
             if (projectedTranscriptCount > transcriptBaselineCount)
             {
@@ -5636,6 +6157,31 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 : TimeSpan.FromMilliseconds(RemoteReplayPollDelayMilliseconds);
             await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private static Task EnsureMinimumHydrationVisibleDurationAsync(Stopwatch hydrationStopwatch, CancellationToken cancellationToken)
+    {
+        var remaining = LoadResponseHydrationMinimumVisibleDuration - hydrationStopwatch.Elapsed;
+        if (remaining <= TimeSpan.Zero)
+        {
+            return Task.CompletedTask;
+        }
+
+        return Task.Delay(remaining, cancellationToken);
+    }
+
+    private static void ReleaseBufferedUpdatesAfterInterruptedHydration(
+        IAcpSessionUpdateBufferController? adapter,
+        long? hydrationAttemptId,
+        string reason)
+    {
+        if (adapter is null || !hydrationAttemptId.HasValue)
+        {
+            return;
+        }
+
+        adapter.SuppressBufferedUpdates(hydrationAttemptId.Value, reason);
+        adapter.TryMarkHydrated(hydrationAttemptId.Value, lowTrust: true, reason: reason);
     }
 
     private async Task<ServerConfiguration?> ResolveProfileConfigurationAsync(
@@ -5706,27 +6252,81 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         return true;
     }
 
-    private bool TryCreateRemoteHydrationStamp(
+    private Task SetConversationRuntimeStateAsync(
+        string conversationId,
+        ConversationRuntimePhase phase,
+        string? reason,
+        CancellationToken cancellationToken)
+        => SetConversationRuntimeStateAsync(
+            conversationId,
+            phase,
+            binding: null,
+            reason,
+            cancellationToken);
+
+    private async Task SetConversationRuntimeStateAsync(
+        string conversationId,
+        ConversationRuntimePhase phase,
         ConversationBindingSlice? binding,
-        out RemoteConversationHydrationStamp stamp)
+        string? reason,
+        CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(binding?.RemoteSessionId))
+        cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(conversationId))
         {
-            stamp = default;
-            return false;
+            return;
         }
 
-        stamp = new RemoteConversationHydrationStamp(
-            binding.RemoteSessionId!,
-            binding.ProfileId,
-            ConnectionGeneration);
-        return true;
+        var remoteSessionId = binding?.RemoteSessionId;
+        var profileId = binding?.ProfileId;
+        if (string.IsNullOrWhiteSpace(remoteSessionId) || string.IsNullOrWhiteSpace(profileId))
+        {
+            var currentState = await _chatStore.State ?? ChatState.Empty;
+            var existingRuntime = currentState.ResolveRuntimeState(conversationId);
+            remoteSessionId ??= existingRuntime?.RemoteSessionId ?? currentState.ResolveBinding(conversationId)?.RemoteSessionId;
+            profileId ??= existingRuntime?.ProfileId ?? currentState.ResolveBinding(conversationId)?.ProfileId;
+        }
+
+        var runtimeState = new ConversationRuntimeSlice(
+            ConversationId: conversationId,
+            Phase: phase,
+            ConnectionGeneration: ConnectionGeneration,
+            RemoteSessionId: remoteSessionId,
+            ProfileId: profileId,
+            Reason: reason,
+            UpdatedAtUtc: DateTime.UtcNow);
+        await _chatStore.Dispatch(new SetConversationRuntimeStateAction(runtimeState)).ConfigureAwait(false);
+        Logger.LogInformation(
+            "Conversation runtime stage transitioned. ConversationId={ConversationId} Stage={Stage} ConnectionGeneration={ConnectionGeneration} RemoteSessionId={RemoteSessionId} ProfileId={ProfileId} Reason={Reason}",
+            conversationId,
+            phase,
+            ConnectionGeneration,
+            remoteSessionId,
+            profileId,
+            reason);
     }
 
     private bool ShouldOwnRemoteHydrationUi(string conversationId, long? activationVersion)
         => activationVersion.HasValue
             ? IsLatestConversationActivationVersion(activationVersion.Value)
             : string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal);
+
+    private AcpHydrationCompletionMode ResolveHydrationCompletionMode(string? configuredMode)
+    {
+        if (Enum.TryParse<AcpHydrationCompletionMode>(configuredMode, ignoreCase: true, out var mode))
+        {
+            return mode;
+        }
+
+        if (!string.IsNullOrWhiteSpace(configuredMode))
+        {
+            Logger.LogWarning(
+                "Unknown ACP hydration completion mode '{ConfiguredMode}'. Falling back to StrictReplay.",
+                configuredMode);
+        }
+
+        return AcpHydrationCompletionMode.StrictReplay;
+    }
 
     private async Task RefreshRemoteSessionMetadataFromSsotAsync(
         string conversationId,
@@ -5888,22 +6488,24 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     private void TryCompletePendingHistoryOverlayDismissal(ChatUiProjection projection)
     {
+        var hasVisibleTranscript = projection.Transcript.Count > 0;
         if (string.IsNullOrWhiteSpace(projection.HydratedConversationId)
             || !string.Equals(_historyOverlayConversationId, projection.HydratedConversationId, StringComparison.Ordinal)
             || !string.Equals(_pendingHistoryOverlayDismissConversationId, projection.HydratedConversationId, StringComparison.Ordinal)
             || projection.IsHydrating
-            || HasPendingSessionUpdates()
             || IsRemoteHydrationPending
-            || !HasSatisfiedKnownTranscriptGrowthRequirement(projection))
+            || (!hasVisibleTranscript && HasPendingSessionUpdates())
+            || (!hasVisibleTranscript && !HasSatisfiedKnownTranscriptGrowthRequirement(projection)))
         {
             return;
         }
 
 #if DEBUG
         Logger.LogInformation(
-            "Completing history overlay dismissal. conversationId={ConversationId} transcriptCount={TranscriptCount} turnStatusVisible={IsTurnStatusVisible}",
+            "Completing history overlay dismissal. conversationId={ConversationId} transcriptCount={TranscriptCount} hasVisibleTranscript={HasVisibleTranscript} turnStatusVisible={IsTurnStatusVisible}",
             projection.HydratedConversationId,
             projection.Transcript.Count,
+            hasVisibleTranscript,
             projection.IsTurnStatusVisible);
 #endif
         SetConversationOverlayOwners(
@@ -5969,11 +6571,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             Selected = tabs.FirstOrDefault();
         }
     }
-
-    private readonly record struct RemoteConversationHydrationStamp(
-        string RemoteSessionId,
-        string? ProfileId,
-        long ConnectionGeneration);
 
     private sealed class ConversationActivationLease
     {

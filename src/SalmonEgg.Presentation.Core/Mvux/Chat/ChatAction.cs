@@ -34,6 +34,12 @@ public sealed record SelectConversationAction(string? ConversationId) : ChatActi
 /// </summary>
 public sealed record SetBindingSliceAction(ConversationBindingSlice? Binding) : ChatAction;
 
+public sealed record SetConversationRuntimeStateAction(ConversationRuntimeSlice RuntimeState) : ChatAction;
+
+public sealed record ClearConversationRuntimeStateAction(string ConversationId) : ChatAction;
+
+public sealed record ResetConversationRuntimeStatesAction : ChatAction;
+
 /// <summary>
 /// Dispatched when the user edits the draft prompt text.
 /// </summary>

@@ -118,5 +118,20 @@ public sealed class AppSettingsServiceTests : IDisposable
         Assert.Equal(3, loaded.AcpMaxWarmProfiles);
         Assert.Equal(1, loaded.AcpMaxPinnedProfiles);
     }
+
+    [Fact]
+    public async Task SaveThenLoad_RoundTripsAcpHydrationCompletionMode()
+    {
+        var service = new AppSettingsService();
+        var settings = new AppSettings
+        {
+            AcpHydrationCompletionMode = "LoadResponse"
+        };
+
+        await service.SaveAsync(settings);
+
+        var loaded = await service.LoadAsync();
+        Assert.Equal("LoadResponse", loaded.AcpHydrationCompletionMode);
+    }
 }
 

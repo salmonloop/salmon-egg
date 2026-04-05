@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Domain.Models.Conversation;
@@ -84,7 +85,11 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
 
         await PostToContextAsync(() =>
         {
-            _workspace.UpsertConversationSnapshot(pending.Snapshot);
+            foreach (var snapshot in pending.Snapshots)
+            {
+                _workspace.UpsertConversationSnapshot(snapshot);
+            }
+
             if (pending.ScheduleSave)
             {
                 _workspace.ScheduleSave();
@@ -106,61 +111,151 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
 
     private PendingWrite? CreatePendingWrite(ChatState state, bool scheduleSave)
     {
-        var conversationId = state.HydratedConversationId;
-        if (string.IsNullOrWhiteSpace(conversationId))
+        var conversationIds = new HashSet<string>(StringComparer.Ordinal);
+        if (!string.IsNullOrWhiteSpace(state.HydratedConversationId))
+        {
+            conversationIds.Add(state.HydratedConversationId!);
+        }
+
+        if (state.ConversationContents != null)
+        {
+            foreach (var key in state.ConversationContents.Keys)
+            {
+                if (!string.IsNullOrWhiteSpace(key))
+                {
+                    conversationIds.Add(key);
+                }
+            }
+        }
+
+        if (state.ConversationSessionStates != null)
+        {
+            foreach (var key in state.ConversationSessionStates.Keys)
+            {
+                if (!string.IsNullOrWhiteSpace(key))
+                {
+                    conversationIds.Add(key);
+                }
+            }
+        }
+
+        var snapshots = conversationIds
+            .Select(conversationId => CreateSnapshotForConversation(state, conversationId))
+            .OfType<ConversationWorkspaceSnapshot>()
+            .ToArray();
+        if (snapshots.Length == 0)
         {
             return null;
         }
 
-        if (state.Transcript is null && state.PlanEntries is null)
+        return new PendingWrite(snapshots, scheduleSave);
+    }
+
+    private ConversationWorkspaceSnapshot? CreateSnapshotForConversation(ChatState state, string conversationId)
+    {
+        var contentSlice = state.ResolveContentSlice(conversationId);
+        var sessionStateSlice = state.ResolveSessionStateSlice(conversationId);
+        var isHydratedConversation = string.Equals(state.HydratedConversationId, conversationId, StringComparison.Ordinal);
+        if (contentSlice is null
+            && sessionStateSlice is null
+            && (!isHydratedConversation || (state.Transcript is null && state.PlanEntries is null)))
         {
             return null;
         }
 
-        var transcript = (state.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty)
+        var transcript = (contentSlice?.Transcript ?? (isHydratedConversation ? state.Transcript : null) ?? ImmutableList<ConversationMessageSnapshot>.Empty)
             .Where(static message => !IsThinkingPlaceholder(message))
             .Select(CloneMessageSnapshot)
             .ToArray();
-        var planEntries = (state.PlanEntries ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty)
+        var planEntries = (contentSlice?.PlanEntries ?? (isHydratedConversation ? state.PlanEntries : null) ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty)
             .Select(ClonePlanEntrySnapshot)
             .OfType<ConversationPlanEntrySnapshot>()
             .ToArray();
-        var availableModes = (state.AvailableModes ?? ImmutableList<ConversationModeOptionSnapshot>.Empty)
+        var availableModes = (sessionStateSlice?.AvailableModes ?? (isHydratedConversation ? state.AvailableModes : null) ?? ImmutableList<ConversationModeOptionSnapshot>.Empty)
             .Select(CloneModeOptionSnapshot)
             .ToArray();
-        var configOptions = (state.ConfigOptions ?? ImmutableList<ConversationConfigOptionSnapshot>.Empty)
+        var configOptions = (sessionStateSlice?.ConfigOptions ?? (isHydratedConversation ? state.ConfigOptions : null) ?? ImmutableList<ConversationConfigOptionSnapshot>.Empty)
             .Select(CloneConfigOptionSnapshot)
             .ToArray();
+        var selectedModeId = sessionStateSlice?.SelectedModeId ?? (isHydratedConversation ? state.SelectedModeId : null);
+        var showConfigOptionsPanel = sessionStateSlice?.ShowConfigOptionsPanel ?? (isHydratedConversation && state.ShowConfigOptionsPanel);
+        var showPlanPanel = contentSlice?.ShowPlanPanel ?? (isHydratedConversation && state.ShowPlanPanel);
+        var planTitle = contentSlice?.PlanTitle ?? (isHydratedConversation ? state.PlanTitle : null);
         var existingSnapshot = _workspace.GetConversationSnapshot(conversationId);
+        var runtimeState = state.ResolveRuntimeState(conversationId);
+        var hasProjectedData = HasProjectedData(
+            transcript,
+            planEntries,
+            availableModes,
+            selectedModeId,
+            configOptions,
+            showConfigOptionsPanel,
+            showPlanPanel,
+            planTitle);
+        if (!hasProjectedData
+            && existingSnapshot is not null
+            && HasSnapshotData(existingSnapshot)
+            && runtimeState?.Phase is not ConversationRuntimePhase.Warm)
+        {
+            return null;
+        }
+
         var lastUpdatedAt = existingSnapshot != null
             && SnapshotContentMatches(
                 existingSnapshot,
                 transcript,
                 planEntries,
                 availableModes,
-                state.SelectedModeId,
+                selectedModeId,
                 configOptions,
-                state.ShowConfigOptionsPanel,
-                state.ShowPlanPanel,
-                state.PlanTitle)
+                showConfigOptionsPanel,
+                showPlanPanel,
+                planTitle)
             ? existingSnapshot.LastUpdatedAt
             : DateTime.UtcNow;
 
-        var snapshot = new ConversationWorkspaceSnapshot(
+        return new ConversationWorkspaceSnapshot(
             conversationId,
             transcript,
             planEntries,
-            state.ShowPlanPanel,
-            state.PlanTitle,
+            showPlanPanel,
+            planTitle,
             default,
             lastUpdatedAt,
             availableModes,
-            state.SelectedModeId,
+            selectedModeId,
             configOptions,
-            state.ShowConfigOptionsPanel);
-
-        return new PendingWrite(snapshot, scheduleSave);
+            showConfigOptionsPanel);
     }
+
+    private static bool HasSnapshotData(ConversationWorkspaceSnapshot snapshot)
+        => HasProjectedData(
+            snapshot.Transcript,
+            snapshot.Plan,
+            snapshot.AvailableModes ?? Array.Empty<ConversationModeOptionSnapshot>(),
+            snapshot.SelectedModeId,
+            snapshot.ConfigOptions ?? Array.Empty<ConversationConfigOptionSnapshot>(),
+            snapshot.ShowConfigOptionsPanel,
+            snapshot.ShowPlanPanel,
+            snapshot.PlanTitle);
+
+    private static bool HasProjectedData(
+        IReadOnlyList<ConversationMessageSnapshot> transcript,
+        IReadOnlyList<ConversationPlanEntrySnapshot> planEntries,
+        IReadOnlyList<ConversationModeOptionSnapshot> availableModes,
+        string? selectedModeId,
+        IReadOnlyList<ConversationConfigOptionSnapshot> configOptions,
+        bool showConfigOptionsPanel,
+        bool showPlanPanel,
+        string? planTitle)
+        => transcript.Count > 0
+            || planEntries.Count > 0
+            || availableModes.Count > 0
+            || configOptions.Count > 0
+            || showConfigOptionsPanel
+            || showPlanPanel
+            || !string.IsNullOrWhiteSpace(selectedModeId)
+            || !string.IsNullOrWhiteSpace(planTitle);
 
     private TimeSpan ComputeDelay()
     {
@@ -486,13 +581,13 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
 
     private sealed class PendingWrite
     {
-        public PendingWrite(ConversationWorkspaceSnapshot snapshot, bool scheduleSave)
+        public PendingWrite(IReadOnlyList<ConversationWorkspaceSnapshot> snapshots, bool scheduleSave)
         {
-            Snapshot = snapshot;
+            Snapshots = snapshots;
             ScheduleSave = scheduleSave;
         }
 
-        public ConversationWorkspaceSnapshot Snapshot { get; }
+        public IReadOnlyList<ConversationWorkspaceSnapshot> Snapshots { get; }
 
         public bool ScheduleSave { get; set; }
     }

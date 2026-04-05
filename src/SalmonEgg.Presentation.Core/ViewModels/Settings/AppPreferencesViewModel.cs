@@ -83,6 +83,9 @@ public partial class AppPreferencesViewModel : ObservableObject
     private int? _acpMaxPinnedProfiles;
 
     [ObservableProperty]
+    private string _acpHydrationCompletionMode = "StrictReplay";
+
+    [ObservableProperty]
     private bool _isLoaded;
 
     public ObservableCollection<KeyBindingPairViewModel> KeyBindings { get; } = new();
@@ -158,6 +161,9 @@ public partial class AppPreferencesViewModel : ObservableObject
                 AcpConnectionIdleTtlMinutes = settings.AcpConnectionIdleTtlMinutes;
                 AcpMaxWarmProfiles = settings.AcpMaxWarmProfiles;
                 AcpMaxPinnedProfiles = settings.AcpMaxPinnedProfiles;
+                AcpHydrationCompletionMode = string.IsNullOrWhiteSpace(settings.AcpHydrationCompletionMode)
+                    ? "StrictReplay"
+                    : settings.AcpHydrationCompletionMode.Trim();
 
                 Projects.Clear();
                 foreach (var project in settings.Projects)
@@ -259,6 +265,7 @@ public partial class AppPreferencesViewModel : ObservableObject
     partial void OnAcpConnectionIdleTtlMinutesChanged(int? value) => ScheduleSave();
     partial void OnAcpMaxWarmProfilesChanged(int? value) => ScheduleSave();
     partial void OnAcpMaxPinnedProfilesChanged(int? value) => ScheduleSave();
+    partial void OnAcpHydrationCompletionModeChanged(string value) => ScheduleSave();
 
     private void OnProjectsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
@@ -351,6 +358,7 @@ public partial class AppPreferencesViewModel : ObservableObject
             AcpConnectionIdleTtlMinutes = null;
             AcpMaxWarmProfiles = null;
             AcpMaxPinnedProfiles = null;
+            AcpHydrationCompletionMode = "StrictReplay";
             KeyBindings.Clear();
         }
         finally
@@ -395,6 +403,9 @@ public partial class AppPreferencesViewModel : ObservableObject
                     AcpConnectionIdleTtlMinutes = AcpConnectionIdleTtlMinutes,
                     AcpMaxWarmProfiles = AcpMaxWarmProfiles,
                     AcpMaxPinnedProfiles = AcpMaxPinnedProfiles,
+                    AcpHydrationCompletionMode = string.IsNullOrWhiteSpace(AcpHydrationCompletionMode)
+                        ? "StrictReplay"
+                        : AcpHydrationCompletionMode.Trim(),
                     ProjectPathMappings = NormalizeProjectPathMappings(ProjectPathMappings),
                     LastSelectedProjectId = LastSelectedProjectId,
                     Projects = Projects

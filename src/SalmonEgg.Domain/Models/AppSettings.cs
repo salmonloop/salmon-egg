@@ -54,4 +54,6 @@ public sealed class AppSettings
     public int? AcpMaxWarmProfiles { get; set; }
 
     public int? AcpMaxPinnedProfiles { get; set; }
+
+    public string AcpHydrationCompletionMode { get; set; } = "StrictReplay";
 }

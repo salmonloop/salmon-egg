@@ -10,6 +10,7 @@
     xmlns:models="using:SalmonEgg.Domain.Models"
     xmlns:converters="using:SalmonEgg.Presentation.Converters"
     mc:Ignorable="d"
+    NavigationCacheMode="Required"
     Background="Transparent">
 
     <Page.Resources>
@@ -49,6 +50,7 @@
             <StackPanel Grid.Row="0" Margin="24,32,24,16" Spacing="8">
                 <TextBlock
                     x:Uid="DiscoverSessionsTitle"
+                    AutomationProperties.AutomationId="DiscoverSessions.Title"
                     Style="{ThemeResource TitleLargeTextBlockStyle}"
                     FontWeight="SemiBold" />
                 <TextBlock

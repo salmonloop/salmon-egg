@@ -101,9 +101,95 @@ public class ChatReducerTests
     }
 
     [Fact]
-    public void GivenState_WhenGuardedActionIsNoOp_ThenGenerationDoesNotIncrement()
+    public void GivenState_WhenSetConversationRuntimeState_ThenRuntimeStateIsStored()
     {
-        // Arrange
+        var initialState = ChatState.Empty;
+        var runtimeState = new ConversationRuntimeSlice(
+            "conv-1",
+            ConversationRuntimePhase.RemoteHydrating,
+            ConnectionGeneration: 3,
+            RemoteSessionId: "remote-1",
+            ProfileId: "profile-1",
+            Reason: "SessionLoadStarted",
+            UpdatedAtUtc: new DateTime(2026, 4, 4, 0, 0, 0, DateTimeKind.Utc));
+
+        var next = ChatReducer.Reduce(initialState, new SetConversationRuntimeStateAction(runtimeState));
+
+        Assert.Equal(runtimeState, next.ResolveRuntimeState("conv-1"));
+        Assert.Equal(1, next.Generation);
+    }
+
+    [Fact]
+    public void GivenState_WhenSetConversationRuntimeStateWithBlankConversation_ThenNoMutation()
+    {
+        var initialState = ChatState.Empty with { Generation = 7 };
+        var runtimeState = new ConversationRuntimeSlice(
+            "",
+            ConversationRuntimePhase.Warm,
+            ConnectionGeneration: 1,
+            RemoteSessionId: "remote-1",
+            ProfileId: "profile-1",
+            Reason: null,
+            UpdatedAtUtc: DateTime.UtcNow);
+
+        var next = ChatReducer.Reduce(initialState, new SetConversationRuntimeStateAction(runtimeState));
+
+        Assert.Equal(initialState.Generation, next.Generation);
+    }
+
+    [Fact]
+    public void GivenRuntimeState_WhenClearConversationRuntimeState_ThenEntryRemoved()
+    {
+        var runtimeState = new ConversationRuntimeSlice(
+            "conv-1",
+            ConversationRuntimePhase.Warm,
+            ConnectionGeneration: 1,
+            RemoteSessionId: "remote-1",
+            ProfileId: "profile-1",
+            Reason: "seed",
+            UpdatedAtUtc: DateTime.UtcNow);
+        var initialState = ChatReducer.Reduce(
+            ChatState.Empty,
+            new SetConversationRuntimeStateAction(runtimeState));
+
+        var next = ChatReducer.Reduce(initialState, new ClearConversationRuntimeStateAction("conv-1"));
+
+        Assert.Null(next.ResolveRuntimeState("conv-1"));
+    }
+
+    [Fact]
+    public void GivenRuntimeStates_WhenResetConversationRuntimeStates_ThenAllEntriesCleared()
+    {
+        var seeded = ChatReducer.Reduce(
+            ChatState.Empty,
+            new SetConversationRuntimeStateAction(new ConversationRuntimeSlice(
+                "conv-1",
+                ConversationRuntimePhase.Warm,
+                ConnectionGeneration: 1,
+                RemoteSessionId: "remote-1",
+                ProfileId: "profile-1",
+                Reason: "seed",
+                UpdatedAtUtc: DateTime.UtcNow)));
+        seeded = ChatReducer.Reduce(
+            seeded,
+            new SetConversationRuntimeStateAction(new ConversationRuntimeSlice(
+                "conv-2",
+                ConversationRuntimePhase.Stale,
+                ConnectionGeneration: 1,
+                RemoteSessionId: "remote-2",
+                ProfileId: "profile-1",
+                Reason: "seed",
+                UpdatedAtUtc: DateTime.UtcNow)));
+
+        var reset = ChatReducer.Reduce(seeded, new ResetConversationRuntimeStatesAction());
+
+        Assert.Null(reset.ResolveRuntimeState("conv-1"));
+        Assert.Null(reset.ResolveRuntimeState("conv-2"));
+    }
+
+    [Fact]
+    public void GivenBackgroundConversationMessage_WhenUpdated_ThenGenerationIncrementsAndActiveProjectionStaysUnchanged()
+    {
         var initialState = ChatState.Empty with { HydratedConversationId = "conv-1", Generation = 5 };
         var message = new ConversationMessageSnapshot
         {
@@ -112,11 +198,62 @@ public class ChatReducerTests
             TextContent = "hello"
         };
 
-        // Act
         var newState = ChatReducer.Reduce(initialState, new UpsertTranscriptMessageAction("conv-2", message));
 
-        // Assert
-        Assert.Equal(initialState.Generation, newState.Generation);
+        Assert.Equal(6, newState.Generation);
+        Assert.True(newState.Transcript is null or { Count: 0 });
+        Assert.NotNull(newState.ResolveContentSlice("conv-2"));
+    }
+
+    [Fact]
+    public void GivenBackgroundConversationUpdate_WhenSelectingThatConversation_ThenTranscriptProjectsFromStoredSlice()
+    {
+        var initialState = ChatState.Empty with
+        {
+            HydratedConversationId = "conv-1"
+        };
+        var message = new ConversationMessageSnapshot
+        {
+            Id = "m-bg-1",
+            ContentType = "text",
+            TextContent = "background"
+        };
+
+        var updated = ChatReducer.Reduce(initialState, new UpsertTranscriptMessageAction("conv-2", message));
+        var selected = ChatReducer.Reduce(updated, new SelectConversationAction("conv-2"));
+
+        Assert.Equal("conv-2", selected.HydratedConversationId);
+        Assert.NotNull(selected.Transcript);
+        Assert.Single(selected.Transcript!);
+        Assert.Equal("background", selected.Transcript[0].TextContent);
+    }
+
+    [Fact]
+    public void GivenBackgroundConversationSessionState_WhenSelectingThatConversation_ThenSessionStateProjectsFromStoredSlice()
+    {
+        var initialState = ChatState.Empty with
+        {
+            HydratedConversationId = "conv-1"
+        };
+
+        var updated = ChatReducer.Reduce(
+            initialState,
+            new SetConversationSessionStateAction(
+                "conv-2",
+                ImmutableList.Create(new ConversationModeOptionSnapshot { ModeId = "agent", ModeName = "Agent" }),
+                "agent",
+                ImmutableList.Create(new ConversationConfigOptionSnapshot { Id = "mode", Name = "Mode", SelectedValue = "agent" }),
+                true));
+
+        var selected = ChatReducer.Reduce(updated, new SelectConversationAction("conv-2"));
+
+        Assert.Equal("conv-2", selected.HydratedConversationId);
+        Assert.NotNull(selected.AvailableModes);
+        Assert.Single(selected.AvailableModes!);
+        Assert.Equal("agent", selected.SelectedModeId);
+        Assert.NotNull(selected.ConfigOptions);
+        Assert.Single(selected.ConfigOptions!);
+        Assert.True(selected.ShowConfigOptionsPanel);
     }
 
     [Fact]
@@ -162,7 +299,7 @@ public class ChatReducerTests
     }
 
     [Fact]
-    public void SetConversationSessionState_ProjectsOnlyForHydratedConversation()
+    public void SetConversationSessionState_StoresBackgroundConversationWithoutMutatingActiveProjection()
     {
         var initialState = ChatState.Empty with
         {
@@ -179,15 +316,24 @@ public class ChatReducerTests
 
         var projected = ChatReducer.Reduce(initialState, action);
         Assert.Equal(12, projected.Generation);
+        Assert.NotNull(projected.AvailableModes);
         Assert.Single(projected.AvailableModes!);
         Assert.Equal("agent", projected.SelectedModeId);
+        Assert.NotNull(projected.ConfigOptions);
         Assert.Single(projected.ConfigOptions!);
         Assert.True(projected.ShowConfigOptionsPanel);
+        var projectedSlice = projected.ResolveSessionStateSlice("conv-1");
+        Assert.NotNull(projectedSlice);
+        Assert.Single(projectedSlice!.Value.AvailableModes);
+        Assert.Equal("agent", projectedSlice.Value.SelectedModeId);
+        Assert.Single(projectedSlice.Value.ConfigOptions);
+        Assert.True(projectedSlice.Value.ShowConfigOptionsPanel);
 
         var stale = ChatReducer.Reduce(initialState, action with { ConversationId = "conv-2" });
-        Assert.Equal(initialState.Generation, stale.Generation);
+        Assert.Equal(12, stale.Generation);
         Assert.Null(stale.AvailableModes);
         Assert.Null(stale.ConfigOptions);
+        Assert.NotNull(stale.ResolveSessionStateSlice("conv-2"));
     }
 
     [Fact]
@@ -197,13 +343,16 @@ public class ChatReducerTests
         {
             HydratedConversationId = "conv-1",
             Generation = 21,
-            AvailableModes = ImmutableList.Create(
-                new ConversationModeOptionSnapshot { ModeId = "agent", ModeName = "Agent" },
-                new ConversationModeOptionSnapshot { ModeId = "plan", ModeName = "Plan" }),
-            SelectedModeId = "agent",
-            ConfigOptions = ImmutableList.Create(
-                new ConversationConfigOptionSnapshot { Id = "mode", Name = "Mode", SelectedValue = "agent" }),
-            ShowConfigOptionsPanel = true
+            ConversationSessionStates = ImmutableDictionary<string, ConversationSessionStateSlice>.Empty.Add(
+                "conv-1",
+                new ConversationSessionStateSlice(
+                    ImmutableList.Create(
+                        new ConversationModeOptionSnapshot { ModeId = "agent", ModeName = "Agent" },
+                        new ConversationModeOptionSnapshot { ModeId = "plan", ModeName = "Plan" }),
+                    "agent",
+                    ImmutableList.Create(
+                        new ConversationConfigOptionSnapshot { Id = "mode", Name = "Mode", SelectedValue = "agent" }),
+                    true))
         };
 
         var projected = ChatReducer.Reduce(initialState, new MergeConversationSessionStateAction(
@@ -212,12 +361,12 @@ public class ChatReducerTests
             HasSelectedModeId: true));
 
         Assert.Equal(22, projected.Generation);
-        Assert.NotNull(projected.AvailableModes);
-        Assert.Equal(2, projected.AvailableModes!.Count);
-        Assert.Equal("plan", projected.SelectedModeId);
-        Assert.NotNull(projected.ConfigOptions);
-        Assert.Single(projected.ConfigOptions!);
-        Assert.True(projected.ShowConfigOptionsPanel);
+        var projectedSlice = projected.ResolveSessionStateSlice("conv-1");
+        Assert.NotNull(projectedSlice);
+        Assert.Equal(2, projectedSlice!.Value.AvailableModes.Count);
+        Assert.Equal("plan", projectedSlice.Value.SelectedModeId);
+        Assert.Single(projectedSlice.Value.ConfigOptions);
+        Assert.True(projectedSlice.Value.ShowConfigOptionsPanel);
 
         var cleared = ChatReducer.Reduce(projected, new MergeConversationSessionStateAction(
             "conv-1",
@@ -225,13 +374,15 @@ public class ChatReducerTests
             SelectedModeId: null,
             HasSelectedModeId: true));
 
-        Assert.Empty(cleared.AvailableModes!);
-        Assert.Null(cleared.SelectedModeId);
-        Assert.Single(cleared.ConfigOptions!);
+        var clearedSlice = cleared.ResolveSessionStateSlice("conv-1");
+        Assert.NotNull(clearedSlice);
+        Assert.Empty(clearedSlice!.Value.AvailableModes);
+        Assert.Null(clearedSlice.Value.SelectedModeId);
+        Assert.Single(clearedSlice.Value.ConfigOptions);
     }
 
     [Fact]
-    public void GivenDifferentSelectedConversation_WhenHydrating_ThenReducerIgnoresStaleSnapshot()
+    public void GivenDifferentSelectedConversation_WhenHydrating_ThenReducerStoresSliceWithoutMutatingActiveProjection()
     {
         var initialState = new ChatState(HydratedConversationId: "conv-1", Generation: 7);
         var action = new HydrateConversationAction(
@@ -248,7 +399,8 @@ public class ChatReducerTests
         Assert.True(newState.PlanEntries is null or { Count: 0 });
         Assert.False(newState.ShowPlanPanel);
         Assert.Null(newState.PlanTitle);
-        Assert.Equal(initialState.Generation, newState.Generation);
+        Assert.Equal(8, newState.Generation);
+        Assert.NotNull(newState.ResolveContentSlice("conv-2"));
     }
 
     [Fact]

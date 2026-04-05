@@ -54,4 +54,6 @@ internal sealed class AppSettingsYamlV1
     public int? AcpMaxWarmProfiles { get; set; }
 
     public int? AcpMaxPinnedProfiles { get; set; }
+
+    public string AcpHydrationCompletionMode { get; set; } = "StrictReplay";
 }

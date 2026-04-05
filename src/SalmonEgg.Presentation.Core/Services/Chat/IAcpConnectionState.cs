@@ -183,4 +183,13 @@ public interface IAcpChatCoordinatorSink : IAcpConnectionState
             ? Task.CompletedTask
             : MarkActiveConversationRemoteHydratedAsync(cancellationToken);
     }
+
+    Task ApplyConversationSessionLoadResponseAsync(
+        string conversationId,
+        SessionLoadResponse response,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.CompletedTask;
+    }
 }

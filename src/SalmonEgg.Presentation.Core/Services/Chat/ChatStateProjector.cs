@@ -41,6 +41,20 @@ public sealed class ChatStateProjector : IChatStateProjector
             && activeTurn.Phase is not ChatTurnPhase.Completed
             && activeTurn.Phase is not ChatTurnPhase.Failed
             && activeTurn.Phase is not ChatTurnPhase.Cancelled;
+        var contentSlice = storeState.ResolveContentSlice(hydratedConversationId);
+        var sessionStateSlice = storeState.ResolveSessionStateSlice(hydratedConversationId);
+        var transcript = contentSlice?.Transcript
+            ?? storeState.Transcript
+            ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+        var planEntries = contentSlice?.PlanEntries
+            ?? storeState.PlanEntries
+            ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty;
+        var availableModes = sessionStateSlice?.AvailableModes
+            ?? storeState.AvailableModes
+            ?? ImmutableList<ConversationModeOptionSnapshot>.Empty;
+        var configOptions = sessionStateSlice?.ConfigOptions
+            ?? storeState.ConfigOptions
+            ?? ImmutableList<ConversationConfigOptionSnapshot>.Empty;
 
         return new ChatUiProjection(
             HydratedConversationId: hydratedConversationId,
@@ -59,14 +73,14 @@ public sealed class ChatStateProjector : IChatStateProjector
             AgentName: storeState.AgentName,
             AgentVersion: storeState.AgentVersion,
             CurrentPrompt: storeState.DraftText ?? string.Empty,
-            Transcript: storeState.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty,
-            ShowPlanPanel: storeState.ShowPlanPanel,
-            PlanTitle: storeState.PlanTitle,
-            PlanEntries: storeState.PlanEntries ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-            AvailableModes: storeState.AvailableModes ?? ImmutableList<ConversationModeOptionSnapshot>.Empty,
-            SelectedModeId: storeState.SelectedModeId,
-            ConfigOptions: storeState.ConfigOptions ?? ImmutableList<ConversationConfigOptionSnapshot>.Empty,
-            ShowConfigOptionsPanel: storeState.ShowConfigOptionsPanel,
+            Transcript: transcript,
+            ShowPlanPanel: contentSlice?.ShowPlanPanel ?? storeState.ShowPlanPanel,
+            PlanTitle: contentSlice?.PlanTitle ?? storeState.PlanTitle,
+            PlanEntries: planEntries,
+            AvailableModes: availableModes,
+            SelectedModeId: sessionStateSlice?.SelectedModeId ?? storeState.SelectedModeId,
+            ConfigOptions: configOptions,
+            ShowConfigOptionsPanel: sessionStateSlice?.ShowConfigOptionsPanel ?? storeState.ShowConfigOptionsPanel,
             IsHydrating: storeState.IsHydrating,
             IsTurnStatusVisible: isTurnStatusVisible,
             TurnStatusText: turnStatusText,

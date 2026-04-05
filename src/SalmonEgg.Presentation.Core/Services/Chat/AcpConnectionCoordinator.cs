@@ -26,6 +26,9 @@ public interface IAcpConnectionCoordinator
 
 public sealed class AcpConnectionCoordinator : IAcpConnectionCoordinator
 {
+    private static readonly TimeSpan SessionLoadTimeout = TimeSpan.FromSeconds(45);
+    private static readonly TimeSpan ReplayDrainTimeout = TimeSpan.FromSeconds(10);
+
     private readonly IChatConnectionStore _store;
     private readonly ILogger<AcpConnectionCoordinator> _logger;
 
@@ -116,30 +119,84 @@ public sealed class AcpConnectionCoordinator : IAcpConnectionCoordinator
             return;
         }
 
-        var adapter = sink.CurrentChatService as AcpChatServiceAdapter;
+        var adapter = sink.CurrentChatService as IAcpSessionUpdateBufferController;
+        long? hydrationAttemptId = null;
 
         try
         {
-            adapter?.BeginHydrationBuffering(sessionId);
+            hydrationAttemptId = adapter?.BeginHydrationBufferingScope(sessionId);
             await sink.SetConversationHydratingAsync(conversationId!, true, cancellationToken).ConfigureAwait(false);
             await sink.ResetConversationForResyncAsync(conversationId!, cancellationToken).ConfigureAwait(false);
-            await sink.CurrentChatService.LoadSessionAsync(
+            var loadTask = sink.CurrentChatService.LoadSessionAsync(
                 new SessionLoadParams(sessionId, sink.GetSessionCwdOrDefault(conversationId!)),
-                cancellationToken).ConfigureAwait(false);
-            adapter?.MarkHydrated();
+                cancellationToken);
+            var sessionLoadResponse = await loadTask.WaitAsync(SessionLoadTimeout, cancellationToken).ConfigureAwait(false);
+            if (adapter != null && hydrationAttemptId.HasValue)
+            {
+                if (!adapter.TryMarkHydrated(hydrationAttemptId.Value))
+                {
+                    _logger.LogWarning(
+                        "Discarding ACP resync completion because buffering attempt is stale. sessionId={SessionId}",
+                        sessionId);
+                    await sink.SetConversationHydratingAsync(conversationId!, false, CancellationToken.None).ConfigureAwait(false);
+                    return;
+                }
+            }
+
+            await sink.ApplyConversationSessionLoadResponseAsync(conversationId!, sessionLoadResponse, cancellationToken).ConfigureAwait(false);
+
+            if (adapter != null && hydrationAttemptId.HasValue)
+            {
+
+                await adapter
+                    .WaitForBufferedUpdatesDrainedAsync(hydrationAttemptId.Value, cancellationToken)
+                    .WaitAsync(ReplayDrainTimeout, cancellationToken)
+                    .ConfigureAwait(false);
+                if (!adapter.TryMarkHydrated(hydrationAttemptId.Value, reason: "PostDrainVerification"))
+                {
+                    _logger.LogWarning(
+                        "Discarding ACP resync finalization because buffering attempt became stale after drain. sessionId={SessionId}",
+                        sessionId);
+                    await sink.SetConversationHydratingAsync(conversationId!, false, CancellationToken.None).ConfigureAwait(false);
+                    return;
+                }
+            }
+
             await sink.MarkConversationRemoteHydratedAsync(conversationId!, cancellationToken).ConfigureAwait(false);
             await sink.SetConversationHydratingAsync(conversationId!, false, cancellationToken).ConfigureAwait(false);
 
             _logger.LogInformation("ACP resync completed. sessionId={SessionId}", sessionId);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            await sink.SetConversationHydratingAsync(conversationId!, false, CancellationToken.None).ConfigureAwait(false);
+            ReleaseBufferedUpdatesAfterInterruptedHydration(adapter, hydrationAttemptId, "LoadSessionCanceled");
+
+            throw;
+        }
         catch (Exception ex)
         {
-            await sink.SetConversationHydratingAsync(conversationId!, false, cancellationToken).ConfigureAwait(false);
-            adapter?.SuppressBufferedUpdates("LoadSessionFailed");
+            await sink.SetConversationHydratingAsync(conversationId!, false, CancellationToken.None).ConfigureAwait(false);
+            ReleaseBufferedUpdatesAfterInterruptedHydration(adapter, hydrationAttemptId, "LoadSessionFailed");
+
             _logger.LogWarning(ex, "ACP resync failed. sessionId={SessionId}", sessionId);
         }
     }
 
     private Task UpdateProfileAsync(string? profileId)
         => _store.Dispatch(new SetSelectedProfileAction(profileId)).AsTask();
+
+    private static void ReleaseBufferedUpdatesAfterInterruptedHydration(
+        IAcpSessionUpdateBufferController? adapter,
+        long? hydrationAttemptId,
+        string reason)
+    {
+        if (adapter is null || !hydrationAttemptId.HasValue)
+        {
+            return;
+        }
+
+        adapter.SuppressBufferedUpdates(hydrationAttemptId.Value, reason);
+        adapter.TryMarkHydrated(hydrationAttemptId.Value, lowTrust: true, reason: reason);
+    }
 }

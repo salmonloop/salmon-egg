@@ -152,6 +152,57 @@ public sealed class ConversationActivationCoordinatorTests
     }
 
     [Fact]
+    public async Task ActivateSessionAsync_DoesNotHydrate_WhenConversationContentSliceAlreadyHasData()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var preferences = CreatePreferences(syncContext);
+        var workspaceStore = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
+        using var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript:
+            [
+                CreateTextMessage("workspace-1", "workspace")
+            ],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+
+        var state = State.Value(new object(), () => ChatState.Empty with
+        {
+            ConversationContents = ImmutableDictionary<string, ConversationContentSlice>.Empty.Add(
+                "session-1",
+                new ConversationContentSlice(
+                    ImmutableList.Create(CreateTextMessage("cached-1", "cached")),
+                    ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                    false,
+                    null))
+        });
+        var chatStore = CreateChatStore(state);
+        var connectionStore = CreateConnectionStore();
+        var bindingCommands = new BindingCoordinator(workspace, chatStore);
+        var coordinator = new ConversationActivationCoordinator(
+            workspace,
+            bindingCommands,
+            chatStore,
+            connectionStore,
+            Mock.Of<ILogger<ConversationActivationCoordinator>>());
+
+        var result = await coordinator.ActivateSessionAsync("session-1");
+
+        Assert.True(result.Succeeded);
+        var currentState = Assert.IsType<ChatState>(await state);
+        Assert.Equal("session-1", currentState.HydratedConversationId);
+        Assert.NotNull(currentState.Transcript);
+        Assert.Single(currentState.Transcript!);
+        Assert.Equal("cached", currentState.Transcript[0].TextContent);
+    }
+
+    [Fact]
     public async Task ActivateSessionAsync_HydratesSnapshot_WhenStoreIsEmptyAndGenerationIsZero()
     {
         var syncContext = new ImmediateSynchronizationContext();

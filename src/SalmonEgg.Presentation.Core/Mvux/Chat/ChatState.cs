@@ -6,6 +6,9 @@ namespace SalmonEgg.Presentation.Core.Mvux.Chat;
 public record ChatState(
     string? HydratedConversationId = null,
     IImmutableDictionary<string, ConversationBindingSlice>? Bindings = null,
+    IImmutableDictionary<string, ConversationContentSlice>? ConversationContents = null,
+    IImmutableDictionary<string, ConversationSessionStateSlice>? ConversationSessionStates = null,
+    IImmutableDictionary<string, ConversationRuntimeSlice>? RuntimeStates = null,
     ActiveTurnState? ActiveTurn = null,
     long Generation = 0,
     bool IsPromptInFlight = false,
@@ -35,6 +38,42 @@ public record ChatState(
 
         return Bindings.TryGetValue(conversationId, out var binding)
             ? binding
+            : null;
+    }
+
+    public ConversationRuntimeSlice? ResolveRuntimeState(string? conversationId)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId) || RuntimeStates is null)
+        {
+            return null;
+        }
+
+        return RuntimeStates.TryGetValue(conversationId, out var state)
+            ? state
+            : null;
+    }
+
+    public ConversationContentSlice? ResolveContentSlice(string? conversationId)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId) || ConversationContents is null)
+        {
+            return null;
+        }
+
+        return ConversationContents.TryGetValue(conversationId, out var content)
+            ? content
+            : null;
+    }
+
+    public ConversationSessionStateSlice? ResolveSessionStateSlice(string? conversationId)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId) || ConversationSessionStates is null)
+        {
+            return null;
+        }
+
+        return ConversationSessionStates.TryGetValue(conversationId, out var sessionState)
+            ? sessionState
             : null;
     }
 }

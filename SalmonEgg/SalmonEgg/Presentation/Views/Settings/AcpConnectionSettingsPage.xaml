@@ -16,6 +16,7 @@
     <Page.Resources>
         <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
         <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
+        <converters:HydrationCompletionModeLocalizationConverter x:Key="HydrationCompletionModeLocalizationConverter"/>
 
         <Style x:Key="AgentListItemStyle" TargetType="ListViewItem">
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
@@ -267,6 +268,40 @@
                                     </DataTemplate>
                                 </ListView.ItemTemplate>
                             </ListView>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- Hydration policy -->
+                    <StackPanel Spacing="12">
+                        <TextBlock x:Uid="Acp_HydrationCompletionTitle"
+                                   Text="Session Load Completion Policy"
+                                   FontSize="18"
+                                   FontWeight="SemiBold"
+                                   Foreground="{ThemeResource AccentBrush}"/>
+
+                        <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="16">
+                            <StackPanel Spacing="8">
+                                <TextBlock x:Uid="Acp_HydrationCompletionHint"
+                                           Text="Choose when a remote session should be considered fully loaded."
+                                           Opacity="0.7"
+                                           TextWrapping="Wrap"/>
+                                <ComboBox ItemsSource="{x:Bind ViewModel.HydrationCompletionModeOptions, Mode=OneWay}"
+                                          SelectedItem="{x:Bind ViewModel.SelectedHydrationCompletionMode, Mode=TwoWay}"
+                                          HorizontalAlignment="Stretch">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:HydrationCompletionModeOptionViewModel">
+                                            <TextBlock Text="{x:Bind Value, Converter={StaticResource HydrationCompletionModeLocalizationConverter}}"/>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                                <TextBlock Text="{x:Bind ViewModel.SelectedHydrationCompletionMode, Mode=OneWay, Converter={StaticResource HydrationCompletionModeLocalizationConverter}, ConverterParameter=Description}"
+                                           Opacity="0.75"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
                         </Border>
                     </StackPanel>
 

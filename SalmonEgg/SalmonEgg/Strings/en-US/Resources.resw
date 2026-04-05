@@ -847,4 +847,22 @@
   <data name="DiscoverSessionsImportButton.Content" xml:space="preserve">
     <value>Import session</value>
   </data>
+  <data name="Acp_HydrationCompletionTitle.Text" xml:space="preserve">
+    <value>Session Load Completion Policy</value>
+  </data>
+  <data name="Acp_HydrationCompletionHint.Text" xml:space="preserve">
+    <value>Choose when a remote session should be considered fully loaded.</value>
+  </data>
+  <data name="Acp_HydrationMode_StrictReplay.Name" xml:space="preserve">
+    <value>Strict Replay</value>
+  </data>
+  <data name="Acp_HydrationMode_StrictReplay.Description" xml:space="preserve">
+    <value>Consider loading complete only after replay projection reaches a stable state.</value>
+  </data>
+  <data name="Acp_HydrationMode_LoadResponse.Name" xml:space="preserve">
+    <value>Fast Complete</value>
+  </data>
+  <data name="Acp_HydrationMode_LoadResponse.Description" xml:space="preserve">
+    <value>Consider loading complete when session/load returns; replay continues asynchronously.</value>
+  </data>
 </root>

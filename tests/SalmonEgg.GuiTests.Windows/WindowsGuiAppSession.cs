@@ -252,6 +252,24 @@ internal sealed class WindowsGuiAppSession : IDisposable
         return element.Patterns.SelectionItem.Pattern.IsSelected.Value;
     }
 
+    public string? TryGetElementName(string automationId, TimeSpan? timeout = null)
+    {
+        var element = TryFindByAutomationId(automationId, timeout ?? TimeSpan.FromSeconds(2));
+        if (element == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return element.Name;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     public void Dispose()
     {
         _automation.Dispose();

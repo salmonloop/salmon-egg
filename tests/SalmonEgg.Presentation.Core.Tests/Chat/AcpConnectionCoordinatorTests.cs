@@ -157,6 +157,125 @@ public sealed class AcpConnectionCoordinatorTests
         Assert.False(publishedBeforeReset);
     }
 
+    [Fact]
+    public async Task ResyncAsync_WhenHydrationAttemptIsStale_ClearsHydratingWithoutCompletingHydration()
+    {
+        var chatService = new FakeBufferedChatService
+        {
+            AgentCapabilities = new AgentCapabilities(loadSession: true),
+            TryMarkHydratedResult = false
+        };
+
+        var sink = new FakeSink
+        {
+            CurrentChatService = chatService,
+            CurrentSessionId = "conv-1",
+            CurrentRemoteSessionId = "remote-1",
+            IsSessionActive = true
+        };
+
+        var coordinator = new AcpConnectionCoordinator(
+            Mock.Of<IChatConnectionStore>(),
+            Mock.Of<ILogger<AcpConnectionCoordinator>>());
+
+        await coordinator.ResyncAsync(sink);
+
+        Assert.False(sink.IsHydrating);
+        Assert.Equal(0, sink.MarkConversationRemoteHydratedCalls);
+        Assert.Equal(0, chatService.WaitForDrainCalls);
+    }
+
+    [Fact]
+    public async Task ResyncAsync_AppliesSessionLoadResponseBeforeCompletingHydration()
+    {
+        var expectedResponse = new SessionLoadResponse(
+            new SessionModesState
+            {
+                CurrentModeId = "agent",
+                AvailableModes = [new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "agent", Name = "Agent" }]
+            });
+        var chatService = new FakeBufferedChatService
+        {
+            AgentCapabilities = new AgentCapabilities(loadSession: true),
+            OnLoadSessionAsync = (_, _) => Task.FromResult(expectedResponse)
+        };
+
+        var sink = new FakeSink
+        {
+            CurrentChatService = chatService,
+            CurrentSessionId = "conv-1",
+            CurrentRemoteSessionId = "remote-1",
+            IsSessionActive = true
+        };
+
+        var coordinator = new AcpConnectionCoordinator(
+            Mock.Of<IChatConnectionStore>(),
+            Mock.Of<ILogger<AcpConnectionCoordinator>>());
+
+        await coordinator.ResyncAsync(sink);
+
+        Assert.Same(expectedResponse, sink.AppliedLoadResponse);
+    }
+
+    [Fact]
+    public async Task ResyncAsync_WhenLoadSessionIsCanceled_ClearsHydratingAndSuppressesBufferedUpdates()
+    {
+        using var cts = new CancellationTokenSource();
+        var chatService = new FakeBufferedChatService
+        {
+            AgentCapabilities = new AgentCapabilities(loadSession: true),
+            OnLoadSessionAsync = (_, _) =>
+            {
+                cts.Cancel();
+                throw new OperationCanceledException(cts.Token);
+            }
+        };
+
+        var sink = new FakeSink
+        {
+            CurrentChatService = chatService,
+            CurrentSessionId = "conv-1",
+            CurrentRemoteSessionId = "remote-1",
+            IsSessionActive = true
+        };
+
+        var coordinator = new AcpConnectionCoordinator(
+            Mock.Of<IChatConnectionStore>(),
+            Mock.Of<ILogger<AcpConnectionCoordinator>>());
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => coordinator.ResyncAsync(sink, cts.Token));
+
+        Assert.False(sink.IsHydrating);
+        Assert.Contains(chatService.MarkHydratedCalls, call => call.LowTrust && call.Reason == "LoadSessionCanceled");
+    }
+
+    [Fact]
+    public async Task ResyncAsync_WhenLoadSessionThrows_ClearsHydratingAndSuppressesBufferedUpdates()
+    {
+        var chatService = new FakeBufferedChatService
+        {
+            AgentCapabilities = new AgentCapabilities(loadSession: true),
+            OnLoadSessionAsync = (_, _) => throw new InvalidOperationException("load failed")
+        };
+
+        var sink = new FakeSink
+        {
+            CurrentChatService = chatService,
+            CurrentSessionId = "conv-1",
+            CurrentRemoteSessionId = "remote-1",
+            IsSessionActive = true
+        };
+
+        var coordinator = new AcpConnectionCoordinator(
+            Mock.Of<IChatConnectionStore>(),
+            Mock.Of<ILogger<AcpConnectionCoordinator>>());
+
+        await coordinator.ResyncAsync(sink);
+
+        Assert.False(sink.IsHydrating);
+        Assert.Contains(chatService.MarkHydratedCalls, call => call.LowTrust && call.Reason == "LoadSessionFailed");
+    }
+
     private sealed class FakeSink : IAcpChatCoordinatorSink
     {
         public event PropertyChangedEventHandler? PropertyChanged
@@ -196,6 +315,8 @@ public sealed class AcpConnectionCoordinatorTests
         public IConversationBindingCommands ConversationBindingCommands { get; } = new NoopBindingCommands();
 
         public int ResetHydratedConversationForResyncCalls { get; private set; }
+        public int MarkConversationRemoteHydratedCalls { get; private set; }
+        public SessionLoadResponse? AppliedLoadResponse { get; private set; }
 
         public Task ResetHydratedConversationForResyncAsync(CancellationToken cancellationToken = default)
         {
@@ -208,6 +329,31 @@ public sealed class AcpConnectionCoordinatorTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             IsHydrating = isHydrating;
+            return Task.CompletedTask;
+        }
+
+        public Task MarkConversationRemoteHydratedAsync(string conversationId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
+            {
+                MarkConversationRemoteHydratedCalls++;
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task ApplyConversationSessionLoadResponseAsync(
+            string conversationId,
+            SessionLoadResponse response,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
+            {
+                AppliedLoadResponse = response;
+            }
+
             return Task.CompletedTask;
         }
     }
@@ -223,7 +369,7 @@ public sealed class AcpConnectionCoordinatorTests
         public override void Post(SendOrPostCallback d, object? state) => d(state);
     }
 
-    private sealed class FakeChatService : IChatService
+    private class FakeChatService : IChatService
     {
         public string? CurrentSessionId => null;
 
@@ -330,6 +476,34 @@ public sealed class AcpConnectionCoordinatorTests
 
         public void ClearHistory()
         {
+        }
+    }
+
+    private sealed class FakeBufferedChatService : FakeChatService, IAcpSessionUpdateBufferController
+    {
+        public bool TryMarkHydratedResult { get; set; } = true;
+
+        public int WaitForDrainCalls { get; private set; }
+        public List<string> SuppressReasons { get; } = new();
+        public List<(long AttemptId, bool LowTrust, string? Reason)> MarkHydratedCalls { get; } = new();
+
+        public long BeginHydrationBufferingScope(string? sessionId) => 1;
+
+        public void SuppressBufferedUpdates(long hydrationAttemptId, string? reason = null)
+        {
+            SuppressReasons.Add(reason ?? string.Empty);
+        }
+
+        public bool TryMarkHydrated(long hydrationAttemptId, bool lowTrust = false, string? reason = null)
+        {
+            MarkHydratedCalls.Add((hydrationAttemptId, lowTrust, reason));
+            return TryMarkHydratedResult;
+        }
+
+        public Task WaitForBufferedUpdatesDrainedAsync(long hydrationAttemptId, CancellationToken cancellationToken = default)
+        {
+            WaitForDrainCalls++;
+            return Task.CompletedTask;
         }
     }
 }

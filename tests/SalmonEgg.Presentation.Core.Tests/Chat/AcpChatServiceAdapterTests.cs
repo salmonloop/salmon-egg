@@ -59,6 +59,27 @@ public sealed class AcpChatServiceAdapterTests
     }
 
     [Fact]
+    public void BeginHydrationBuffering_LargeReplayDoesNotTriggerSteadyStateResyncLimit()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var inner = new FakeChatService();
+        var resyncRequired = false;
+        using var adapter = BuildAdapter(inner, syncContext, () => resyncRequired = true, bufferLimit: 1);
+        var updates = new List<SessionUpdateEventArgs>();
+        adapter.SessionUpdateReceived += (_, args) => updates.Add(args);
+
+        var attemptId = adapter.BeginHydrationBufferingScope("remote-1");
+        inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-1", new PlanUpdate(title: "first")));
+        inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-1", new PlanUpdate(title: "second")));
+
+        Assert.False(resyncRequired);
+        Assert.Empty(updates);
+
+        Assert.True(adapter.TryMarkHydrated(attemptId));
+        Assert.Equal(2, updates.Count);
+    }
+
+    [Fact]
     public void MarkHydrated_WithLowTrust_ReleasesBufferedUpdates()
     {
         // Arrange
@@ -92,13 +113,13 @@ public sealed class AcpChatServiceAdapterTests
         inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-previous", new PlanUpdate(title: "before")));
         Assert.Single(updates);
 
-        adapter.BeginHydrationBuffering("remote-next");
+        var nextAttempt = adapter.BeginHydrationBufferingScope("remote-next");
         inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-previous", new PlanUpdate(title: "stale")));
         inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-next", new PlanUpdate(title: "fresh")));
 
         Assert.Single(updates);
 
-        adapter.MarkHydrated();
+        adapter.MarkHydrated(nextAttempt);
 
         Assert.Equal(2, updates.Count);
         Assert.Equal("remote-next", updates[1].SessionId);
@@ -114,20 +135,104 @@ public sealed class AcpChatServiceAdapterTests
         var updates = new List<SessionUpdateEventArgs>();
         adapter.SessionUpdateReceived += (_, args) => updates.Add(args);
 
-        adapter.BeginHydrationBuffering("remote-1");
+        var firstAttempt = adapter.BeginHydrationBufferingScope("remote-1");
         inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-1", new PlanUpdate(title: "discard-me")));
 
-        adapter.SuppressBufferedUpdates();
-        adapter.MarkHydrated();
+        adapter.SuppressBufferedUpdates(firstAttempt);
+        adapter.MarkHydrated(firstAttempt);
         Assert.Empty(updates);
 
-        adapter.BeginHydrationBuffering("remote-1");
+        var secondAttempt = adapter.BeginHydrationBufferingScope("remote-1");
         inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-1", new PlanUpdate(title: "keep-me")));
-        adapter.MarkHydrated();
+        adapter.MarkHydrated(secondAttempt);
 
         var update = Assert.Single(updates);
         Assert.Equal("remote-1", update.SessionId);
         Assert.Equal("keep-me", Assert.IsType<PlanUpdate>(update.Update).Title);
+    }
+
+    [Fact]
+    public void TryMarkHydrated_WhenAttemptIsStale_ReturnsFalseAndDoesNotDrainCurrentAttempt()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var inner = new FakeChatService();
+        using var adapter = BuildAdapter(inner, syncContext);
+        var updates = new List<SessionUpdateEventArgs>();
+        adapter.SessionUpdateReceived += (_, args) => updates.Add(args);
+
+        var firstAttempt = adapter.BeginHydrationBufferingScope("remote-1");
+        var secondAttempt = adapter.BeginHydrationBufferingScope("remote-2");
+        inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-2", new PlanUpdate(title: "fresh")));
+
+        var marked = adapter.TryMarkHydrated(firstAttempt);
+        Assert.False(marked);
+        Assert.Empty(updates);
+
+        Assert.True(adapter.TryMarkHydrated(secondAttempt));
+        var update = Assert.Single(updates);
+        Assert.Equal("remote-2", update.SessionId);
+    }
+
+    [Fact]
+    public void MarkHydrated_WhenBufferedReplayIsLarge_YieldsBackToSynchronizationContextBetweenDrainPasses()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var inner = new FakeChatService();
+        using var adapter = BuildAdapter(inner, syncContext);
+        var handledCount = 0;
+        var markerObservedHandledCount = -1;
+        adapter.SessionUpdateReceived += (_, _) => handledCount++;
+
+        for (var i = 0; i < 32; i++)
+        {
+            inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-1", new PlanUpdate(title: $"step-{i}")));
+        }
+
+        Assert.Equal(0, handledCount);
+
+        adapter.MarkHydrated();
+        syncContext.Post(_ => markerObservedHandledCount = handledCount, null);
+
+        syncContext.RunNext();
+        syncContext.RunNext();
+
+        Assert.True(markerObservedHandledCount > 0, "Drain should begin before later UI work runs.");
+        Assert.True(markerObservedHandledCount < 32, "Drain should yield before monopolizing the UI queue.");
+    }
+
+    [Fact]
+    public async Task WaitForBufferedUpdatesDrainedAsync_WhenDrainStopsEarlyDueToSuppress_Completes()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var inner = new FakeChatService();
+        using var adapter = BuildAdapter(inner, syncContext);
+        var suppressed = false;
+        var attemptId = adapter.BeginHydrationBufferingScope("remote-1");
+        adapter.SessionUpdateReceived += (_, _) =>
+        {
+            if (suppressed)
+            {
+                return;
+            }
+
+            suppressed = true;
+            adapter.SuppressBufferedUpdates("test");
+        };
+
+        for (var i = 0; i < 16; i++)
+        {
+            inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-1", new PlanUpdate(title: $"step-{i}")));
+        }
+
+        adapter.MarkHydrated(attemptId);
+        var waitTask = adapter.WaitForBufferedUpdatesDrainedAsync(attemptId);
+
+        while (syncContext.RunNext())
+        {
+        }
+
+        await waitTask.WaitAsync(TimeSpan.FromSeconds(1));
+        Assert.True(waitTask.IsCompletedSuccessfully);
     }
 
     private static AcpChatServiceAdapter BuildAdapter(
@@ -151,6 +256,28 @@ public sealed class AcpChatServiceAdapterTests
         public override void Post(SendOrPostCallback d, object? state)
         {
             d(state);
+        }
+    }
+
+    private sealed class QueueingSynchronizationContext : SynchronizationContext
+    {
+        private readonly Queue<(SendOrPostCallback Callback, object? State)> _queue = new();
+
+        public override void Post(SendOrPostCallback d, object? state)
+        {
+            _queue.Enqueue((d, state));
+        }
+
+        public bool RunNext()
+        {
+            if (_queue.Count == 0)
+            {
+                return false;
+            }
+
+            var (callback, state) = _queue.Dequeue();
+            callback(state);
+            return true;
         }
     }
 

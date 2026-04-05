@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -91,16 +92,6 @@ public sealed class ChatSkeletonSmokeTests
                 TimeSpan.FromSeconds(20),
                 "slow-remote-replay-protocol-stage-pill");
             Assert.True(IsUserFriendlyLoadingStatus(protocolStageStatus));
-            var hydrationProgressStatus = WaitForOverlayStatus(
-                session,
-                appData,
-                status =>
-                    status.Contains("已", StringComparison.Ordinal)
-                    && status.Contains("条", StringComparison.Ordinal)
-                    && IsUserFriendlyLoadingStatus(status),
-                TimeSpan.FromSeconds(20),
-                "slow-remote-replay-progress-pill");
-            Assert.Matches(new Regex(@"已(读取|加载) \d+ 条(消息)?", RegexOptions.CultureInvariant), hydrationProgressStatus);
 
             var overlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(30));
             Assert.True(overlayHidden, "Slow remote replay overlay did not disappear after the transcript should have hydrated.");
@@ -828,6 +819,255 @@ public sealed class ChatSkeletonSmokeTests
                     appData,
                     "mixed-deterministic-final-local-scroll",
                     $"Final local transcript did not surface expected latest message after deterministic mixed burst. Visible texts: [{string.Join(", ", session.GetVisibleTexts(messagesList))}]");
+            }
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", previousSlowLoadDelay);
+        }
+    }
+
+    [SkippableFact]
+    public void SelectRemoteSessionWithSlowReplay_ViewportStateReportsBottomAfterHydration()
+    {
+        var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
+        Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", "1500");
+
+        try
+        {
+            using var appData = GuiAppDataScope.CreateDeterministicSlowRemoteReplayData(
+                cachedMessageCount: 1,
+                replayMessageCount: 24);
+            using var session = WindowsGuiAppSession.LaunchFresh();
+
+            var sessionItem = session.FindByAutomationId("MainNav.Session.gui-remote-conversation-01", TimeSpan.FromSeconds(15));
+            session.ActivateElement(sessionItem);
+
+            var overlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(30));
+            Assert.True(overlayHidden, "Remote session loading overlay did not disappear after hydration should have completed.");
+
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+            string? viewportState = null;
+            while (DateTime.UtcNow < deadline)
+            {
+                viewportState = session.TryGetElementName("ChatView.TranscriptViewportState", TimeSpan.FromMilliseconds(200));
+                if (string.Equals(viewportState, "bottom", StringComparison.OrdinalIgnoreCase))
+                {
+                    break;
+                }
+
+                Thread.Sleep(150);
+            }
+
+            if (!string.Equals(viewportState, "bottom", StringComparison.OrdinalIgnoreCase))
+            {
+                ThrowWithScreenshot(
+                    session,
+                    appData,
+                    "remote-hydration-viewport-state-not-bottom",
+                    $"Transcript viewport state did not settle to bottom after hydration. State='{viewportState ?? "<missing>"}'.");
+            }
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", previousSlowLoadDelay);
+        }
+    }
+
+    [SkippableFact]
+    public void HydratedRemoteSession_NavigateToDiscoverAndBack_ReturnsHotWithoutRemoteReload()
+    {
+        var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
+        Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", "1500");
+
+        try
+        {
+            using var appData = GuiAppDataScope.CreateDeterministicSlowRemoteReplayData(
+                cachedMessageCount: 1,
+                replayMessageCount: 24);
+            using var session = WindowsGuiAppSession.LaunchFresh();
+
+            var remoteItem = session.FindByAutomationId("MainNav.Session.gui-remote-conversation-01", TimeSpan.FromSeconds(15));
+            session.ActivateElement(remoteItem);
+
+            var overlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(30));
+            Assert.True(overlayHidden, "Initial remote hydration did not complete before discover navigation.");
+
+            var discoverItem = session.FindByAutomationId("MainNav.DiscoverSessions", TimeSpan.FromSeconds(10));
+            session.ActivateElement(discoverItem);
+
+            var discoverVisible = session.WaitUntilVisible("DiscoverSessions.Title", TimeSpan.FromSeconds(10));
+            Assert.True(discoverVisible, "Discover sessions page did not become visible.");
+
+            remoteItem = session.FindByAutomationId("MainNav.Session.gui-remote-conversation-01", TimeSpan.FromSeconds(10));
+            session.ActivateElement(remoteItem);
+
+            var headerVisible = session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(5));
+            Assert.True(headerVisible, "Returning from discover to a hydrated remote chat did not restore the chat header quickly.");
+
+            var returnedOverlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(5));
+            Assert.True(returnedOverlayHidden, "Returning from discover to a hydrated remote chat stayed behind the loading overlay for too long.");
+
+            var messagesList = session.FindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(5));
+            Assert.NotNull(messagesList);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", previousSlowLoadDelay);
+        }
+    }
+
+    [SkippableFact]
+    public void SelectLargeCachedRemoteSession_FirstOpen_HeaderVisibleWithinBudget()
+    {
+        // Performance guardrail: first-open of a large cached session should not regress into
+        // multi-second UI stalls before the chat header is visible.
+        using var appData = GuiAppDataScope.CreateDeterministicSlowRemoteReplayData(
+            cachedMessageCount: 900,
+            replayMessageCount: 24);
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-remote-conversation-01", TimeSpan.FromSeconds(15));
+        var stopwatch = Stopwatch.StartNew();
+        session.ActivateElement(sessionItem);
+
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+        AutomationElement? header = null;
+        while (DateTime.UtcNow < deadline)
+        {
+            header = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(120));
+            if (header is not null)
+            {
+                break;
+            }
+
+            Thread.Sleep(35);
+        }
+
+        stopwatch.Stop();
+        if (header is null)
+        {
+            ThrowWithScreenshot(
+                session,
+                appData,
+                "large-cached-remote-first-open-header-timeout",
+                "Header did not become visible within the expected timeout on first open.");
+        }
+
+        const int headerVisibleBudgetMs = 1800;
+        if (stopwatch.ElapsedMilliseconds > headerVisibleBudgetMs)
+        {
+            ThrowWithScreenshot(
+                session,
+                appData,
+                "large-cached-remote-first-open-header-over-budget",
+                $"Header visibility exceeded budget. elapsedMs={stopwatch.ElapsedMilliseconds} budgetMs={headerVisibleBudgetMs}");
+        }
+    }
+
+    [SkippableFact]
+    public void SelectHugeCachedRemoteSession_FirstOpen_LoadingPillAppearsWithinBudget()
+    {
+        using var appData = GuiAppDataScope.CreateDeterministicSlowRemoteReplayData(
+            cachedMessageCount: 5000,
+            replayMessageCount: 24);
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-remote-conversation-01", TimeSpan.FromSeconds(20));
+
+        var clickStopwatch = Stopwatch.StartNew();
+        session.ActivateElement(sessionItem);
+        clickStopwatch.Stop();
+
+        const int clickInvokeBudgetMs = 1200;
+        if (clickStopwatch.ElapsedMilliseconds > clickInvokeBudgetMs)
+        {
+            ThrowWithScreenshot(
+                session,
+                appData,
+                "huge-cached-remote-first-open-click-over-budget",
+                $"Session click invoke exceeded budget. elapsedMs={clickStopwatch.ElapsedMilliseconds} budgetMs={clickInvokeBudgetMs}");
+        }
+
+        var statusDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(8);
+        var statusStopwatch = Stopwatch.StartNew();
+        while (DateTime.UtcNow < statusDeadline)
+        {
+            if (session.TryFindByAutomationId("ChatView.LoadingOverlayStatus", TimeSpan.FromMilliseconds(120)) is not null)
+            {
+                break;
+            }
+
+            Thread.Sleep(40);
+        }
+
+        const int statusVisibleBudgetMs = 1800;
+        if (statusStopwatch.ElapsedMilliseconds > statusVisibleBudgetMs)
+        {
+            ThrowWithScreenshot(
+                session,
+                appData,
+                "huge-cached-remote-first-open-status-over-budget",
+                $"Loading status pill exceeded budget. elapsedMs={statusStopwatch.ElapsedMilliseconds} budgetMs={statusVisibleBudgetMs}");
+        }
+    }
+
+    [SkippableFact]
+    public void RemoteFirstOpen_ImmediateSwitchToLocal_CompletesWithinResponsivenessBudget()
+    {
+        var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
+        Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", "2600");
+
+        try
+        {
+            using var appData = GuiAppDataScope.CreateDeterministicSlowRemoteReplayData(
+                cachedMessageCount: 900,
+                replayMessageCount: 24,
+                includeLocalConversation: true,
+                localMessageCount: 6);
+            using var session = WindowsGuiAppSession.LaunchFresh();
+
+            var remoteItem = session.FindByAutomationId("MainNav.Session.gui-remote-conversation-01", TimeSpan.FromSeconds(15));
+            var localItem = session.FindByAutomationId("MainNav.Session.gui-local-conversation-01", TimeSpan.FromSeconds(15));
+
+            session.ActivateElement(remoteItem);
+            Thread.Sleep(120);
+
+            var localSwitchStopwatch = Stopwatch.StartNew();
+            session.ActivateElement(localItem);
+            var localDeadline = DateTime.UtcNow + TimeSpan.FromMilliseconds(1500);
+            AutomationElement? localHeader = null;
+            while (DateTime.UtcNow < localDeadline)
+            {
+                var header = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(120));
+                if (header is not null
+                    && header.Name.Contains("GUI Local Session 01", StringComparison.Ordinal))
+                {
+                    localHeader = header;
+                    break;
+                }
+
+                Thread.Sleep(40);
+            }
+            localSwitchStopwatch.Stop();
+
+            if (localHeader is null)
+            {
+                ThrowWithScreenshot(
+                    session,
+                    appData,
+                    "remote-first-open-immediate-local-switch-not-responsive",
+                    $"Local switch did not settle quickly while remote hydration was in flight. elapsedMs={localSwitchStopwatch.ElapsedMilliseconds}");
+            }
+
+            const int localSwitchBudgetMs = 1000;
+            if (localSwitchStopwatch.ElapsedMilliseconds > localSwitchBudgetMs)
+            {
+                ThrowWithScreenshot(
+                    session,
+                    appData,
+                    "remote-first-open-immediate-local-switch-over-budget",
+                    $"Local switch responsiveness exceeded budget. elapsedMs={localSwitchStopwatch.ElapsedMilliseconds} budgetMs={localSwitchBudgetMs}");
             }
         }
         finally

@@ -847,4 +847,22 @@
   <data name="DiscoverSessionsImportButton.Content" xml:space="preserve">
     <value>导入会话</value>
   </data>
+  <data name="Acp_HydrationCompletionTitle.Text" xml:space="preserve">
+    <value>会话加载完成策略</value>
+  </data>
+  <data name="Acp_HydrationCompletionHint.Text" xml:space="preserve">
+    <value>用于控制远程会话在何时被判定为“加载完成”。</value>
+  </data>
+  <data name="Acp_HydrationMode_StrictReplay.Name" xml:space="preserve">
+    <value>严格回放</value>
+  </data>
+  <data name="Acp_HydrationMode_StrictReplay.Description" xml:space="preserve">
+    <value>仅在回放投影达到稳定状态后，才将会话视为加载完成。</value>
+  </data>
+  <data name="Acp_HydrationMode_LoadResponse.Name" xml:space="preserve">
+    <value>快速完成</value>
+  </data>
+  <data name="Acp_HydrationMode_LoadResponse.Description" xml:space="preserve">
+    <value>在 session/load 返回后即判定加载完成，回放在后台继续进行。</value>
+  </data>
 </root>

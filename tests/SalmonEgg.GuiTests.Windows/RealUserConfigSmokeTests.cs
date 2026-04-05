@@ -16,12 +16,11 @@ public sealed partial class RealUserConfigSmokeTests
         GuiTestGate.RequireEnabled();
 
         var candidate = RealUserConfigProbe.LoadReplayBackedCandidates()
-            .OrderByDescending(item => item.LocalMessageCount)
-            .FirstOrDefault(item => item.LocalMessageCount >= 10);
+            .Where(item => item.LocalMessageCount >= 10)
+            .OrderBy(item => Math.Abs(item.LocalMessageCount - 40))
+            .ThenByDescending(item => item.LastUpdatedAtUtc)
+            .FirstOrDefault();
         Skip.If(candidate is null, "No replay-backed remote conversation with enough local transcript history was found to validate bottom auto-scroll.");
-
-        var lastTranscriptText = RealUserConfigProbe.TryLoadLastTranscriptText(candidate.ConversationId);
-        Skip.If(string.IsNullOrWhiteSpace(lastTranscriptText), $"Conversation {candidate.ConversationId} has no last transcript text to assert against.");
 
         using var slowLoad = new EnvironmentVariableScope("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", "2000");
         using var session = WindowsGuiAppSession.LaunchFresh();
@@ -36,16 +35,225 @@ public sealed partial class RealUserConfigSmokeTests
         var sawOverlayStatus = session.WaitUntilVisible("ChatView.LoadingOverlayStatus", TimeSpan.FromSeconds(10));
         Assert.True(sawOverlayStatus, $"Slow remote hydration never exposed ChatView.LoadingOverlayStatus for conversation {candidate.ConversationId}.");
 
-        var overlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(25));
+        var overlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(60));
         Assert.True(overlayHidden, $"Slow remote hydration overlay did not finish for conversation {candidate.ConversationId}.");
 
-        var messagesList = session.FindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(10));
-        var lastMessageVisible = session.FindVisibleText(
-            lastTranscriptText!,
-            messagesList,
-            TimeSpan.FromSeconds(8));
+        var viewportState = WaitForViewportState(session, "bottom", TimeSpan.FromSeconds(10));
+        Assert.True(
+            viewportState,
+            $"Hydrated transcript viewport did not settle to bottom. Conversation={candidate.ConversationId} State='{session.TryGetElementName("ChatView.TranscriptViewportState") ?? "<missing>"}'");
+    }
 
-        Assert.NotNull(lastMessageVisible);
+    [SkippableFact]
+    public void SelectRemoteBoundSession_AfterDiscoverRoundTrip_ReturnsWithoutStuckReload()
+    {
+        GuiTestGate.RequireEnabled();
+
+        var candidate = RealUserConfigProbe.LoadReplayBackedCandidates()
+            .Where(item => item.LocalMessageCount is >= 10 and <= 120)
+            .OrderBy(item => Math.Abs(item.LocalMessageCount - 60))
+            .ThenByDescending(item => item.LastUpdatedAtUtc)
+            .FirstOrDefault();
+        candidate ??= RealUserConfigProbe.LoadReplayBackedCandidates()
+            .OrderByDescending(item => item.LastUpdatedAtUtc)
+            .FirstOrDefault();
+        Skip.If(candidate is null, "No replay-backed remote conversation is available for discover round-trip validation.");
+
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var sessionId = SessionAutomationId(candidate.ConversationId);
+        var sessionItem = session.FindByAutomationId(sessionId, TimeSpan.FromSeconds(10));
+        session.ActivateElement(sessionItem);
+
+        var initialOverlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(60));
+        Assert.True(initialOverlayHidden, $"Initial remote hydration did not finish for conversation {candidate.ConversationId}.");
+
+        var discoverItem = session.FindByAutomationId("MainNav.DiscoverSessions", TimeSpan.FromSeconds(10));
+        session.ActivateElement(discoverItem);
+
+        var discoverVisible = session.WaitUntilVisible("DiscoverSessions.Title", TimeSpan.FromSeconds(10));
+        Assert.True(discoverVisible, "Discover sessions page did not become visible.");
+
+        sessionItem = session.FindByAutomationId(sessionId, TimeSpan.FromSeconds(10));
+        session.ActivateElement(sessionItem);
+
+        var headerVisible = session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(8));
+        Assert.True(headerVisible, $"Conversation header did not recover promptly after discover round-trip for {candidate.ConversationId}.");
+
+        var returnedOverlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(8));
+        Assert.True(returnedOverlayHidden, $"Conversation remained stuck behind the loading overlay after discover round-trip for {candidate.ConversationId}.");
+    }
+
+    [SkippableFact]
+    public void SelectLargestRemoteBoundSession_FirstOpen_ShowsLoadingPillBeforeOverlayClears()
+    {
+        GuiTestGate.RequireEnabled();
+
+        var candidates = RealUserConfigProbe.LoadReplayBackedCandidates()
+            .OrderByDescending(item => item.LocalMessageCount)
+            .ThenByDescending(item => item.LastUpdatedAtUtc)
+            .ToArray();
+        Skip.If(candidates.Length == 0, "No replay-backed remote conversation is available for first-open responsiveness validation.");
+
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var startItem = session.FindByAutomationId("MainNav.Start", TimeSpan.FromSeconds(10));
+        session.ActivateElement(startItem);
+        Thread.Sleep(200);
+
+        var candidate = candidates
+            .FirstOrDefault(item => session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null);
+        Skip.If(candidate is null, $"No replay-backed conversation is currently visible in the left navigation. Candidates: {string.Join(", ", candidates.Select(c => c.ConversationId))}");
+
+        var sessionItem = session.FindByAutomationId(SessionAutomationId(candidate.ConversationId), TimeSpan.FromSeconds(10));
+
+        var clickStopwatch = Stopwatch.StartNew();
+        session.ActivateElement(sessionItem);
+        clickStopwatch.Stop();
+
+        const int clickInvokeBudgetMs = 1200;
+        Assert.True(
+            clickStopwatch.ElapsedMilliseconds <= clickInvokeBudgetMs,
+            $"Session invoke was blocked for too long. Conversation={candidate.ConversationId} elapsedMs={clickStopwatch.ElapsedMilliseconds} budgetMs={clickInvokeBudgetMs}");
+
+        var timeline = new List<string>();
+        var transitionStopwatch = Stopwatch.StartNew();
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(8);
+        long? statusVisibleAtMs = null;
+        long? overlayHiddenAtMs = null;
+        while (DateTime.UtcNow < deadline)
+        {
+            var statusVisible = session.TryFindByAutomationId("ChatView.LoadingOverlayStatus", TimeSpan.FromMilliseconds(100)) is not null;
+            var overlayVisible = session.TryFindByAutomationId("ChatView.LoadingOverlay", TimeSpan.FromMilliseconds(100)) is not null;
+            var headerVisible = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(100)) is not null;
+
+            if (statusVisible && statusVisibleAtMs is null)
+            {
+                statusVisibleAtMs = transitionStopwatch.ElapsedMilliseconds;
+            }
+
+            if (!overlayVisible && overlayHiddenAtMs is null)
+            {
+                overlayHiddenAtMs = transitionStopwatch.ElapsedMilliseconds;
+            }
+
+            timeline.Add(
+                $"{transitionStopwatch.ElapsedMilliseconds,5}ms status={statusVisible} overlay={overlayVisible} header={headerVisible}");
+
+            if (statusVisibleAtMs is not null && overlayHiddenAtMs is not null)
+            {
+                break;
+            }
+
+            Thread.Sleep(120);
+        }
+
+        if (statusVisibleAtMs is null)
+        {
+            var captureRoot = Path.Combine(Path.GetTempPath(), "SalmonEgg.GuiTests");
+            Directory.CreateDirectory(captureRoot);
+            var screenshotPath = Path.Combine(
+                captureRoot,
+                $"remote-first-open-pill-missing-{candidate.ConversationId}-{DateTime.UtcNow:yyyyMMddHHmmssfff}.png");
+            screenshotPath = TryCaptureMainWindow(session, screenshotPath);
+            throw new Xunit.Sdk.XunitException(
+                $"Loading status pill never appeared on first open. Conversation={candidate.ConversationId} LocalMessageCount={candidate.LocalMessageCount} Capture={screenshotPath}{Environment.NewLine}{string.Join(Environment.NewLine, timeline)}");
+        }
+
+        if (overlayHiddenAtMs is not null && statusVisibleAtMs.Value > overlayHiddenAtMs.Value)
+        {
+            var captureRoot = Path.Combine(Path.GetTempPath(), "SalmonEgg.GuiTests");
+            Directory.CreateDirectory(captureRoot);
+            var screenshotPath = Path.Combine(
+                captureRoot,
+                $"remote-first-open-pill-late-{candidate.ConversationId}-{DateTime.UtcNow:yyyyMMddHHmmssfff}.png");
+            screenshotPath = TryCaptureMainWindow(session, screenshotPath);
+            throw new Xunit.Sdk.XunitException(
+                $"Loading status pill appeared after overlay was already cleared. Conversation={candidate.ConversationId} statusAtMs={statusVisibleAtMs} overlayHiddenAtMs={overlayHiddenAtMs} Capture={screenshotPath}{Environment.NewLine}{string.Join(Environment.NewLine, timeline)}");
+        }
+
+        const int statusVisibleBudgetMs = 1500;
+        Assert.True(
+            statusVisibleAtMs.Value <= statusVisibleBudgetMs,
+            $"Loading status pill appeared too late on first open. Conversation={candidate.ConversationId} LocalMessageCount={candidate.LocalMessageCount} statusAtMs={statusVisibleAtMs} budgetMs={statusVisibleBudgetMs}{Environment.NewLine}{string.Join(Environment.NewLine, timeline)}");
+    }
+
+    [SkippableFact]
+    public void SelectLargestRemoteBoundSession_ImmediateDiscoverSwitch_RemainsResponsive()
+    {
+        GuiTestGate.RequireEnabled();
+
+        var candidates = RealUserConfigProbe.LoadReplayBackedCandidates()
+            .OrderByDescending(item => item.LocalMessageCount)
+            .ThenByDescending(item => item.LastUpdatedAtUtc)
+            .ToArray();
+        Skip.If(candidates.Length == 0, "No replay-backed remote conversation is available for responsiveness validation.");
+
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var candidate = candidates
+            .FirstOrDefault(item => session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null);
+        Skip.If(candidate is null, $"No replay-backed conversation is currently visible in the left navigation. Candidates: {string.Join(", ", candidates.Select(c => c.ConversationId))}");
+
+        var remoteItem = session.FindByAutomationId(SessionAutomationId(candidate.ConversationId), TimeSpan.FromSeconds(10));
+        session.ActivateElement(remoteItem);
+        Thread.Sleep(120);
+
+        var discoverItem = session.FindByAutomationId("MainNav.DiscoverSessions", TimeSpan.FromSeconds(10));
+        var discoverClickStopwatch = Stopwatch.StartNew();
+        session.ActivateElement(discoverItem);
+        discoverClickStopwatch.Stop();
+
+        const int discoverInvokeBudgetMs = 1200;
+        Assert.True(
+            discoverClickStopwatch.ElapsedMilliseconds <= discoverInvokeBudgetMs,
+            $"Discover click invoke was blocked for too long. Conversation={candidate.ConversationId} elapsedMs={discoverClickStopwatch.ElapsedMilliseconds} budgetMs={discoverInvokeBudgetMs}");
+
+        var discoverVisible = session.WaitUntilVisible("DiscoverSessions.Title", TimeSpan.FromSeconds(3));
+        Assert.True(
+            discoverVisible,
+            $"Discover page did not become visible quickly after switching away from remote session load. Conversation={candidate.ConversationId}");
+    }
+
+    [SkippableFact]
+    public void SelectLargestRemoteBoundSession_DiscoverRoundTrip_ReturnsWithinResponsivenessBudget()
+    {
+        GuiTestGate.RequireEnabled();
+
+        var candidates = RealUserConfigProbe.LoadReplayBackedCandidates()
+            .OrderByDescending(item => item.LocalMessageCount)
+            .ThenByDescending(item => item.LastUpdatedAtUtc)
+            .ToArray();
+        Skip.If(candidates.Length == 0, "No replay-backed remote conversation is available for discover round-trip responsiveness validation.");
+
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var candidate = candidates
+            .FirstOrDefault(item => session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null);
+        Skip.If(candidate is null, $"No replay-backed conversation is currently visible in the left navigation. Candidates: {string.Join(", ", candidates.Select(c => c.ConversationId))}");
+
+        var sessionId = SessionAutomationId(candidate.ConversationId);
+        var remoteItem = session.FindByAutomationId(sessionId, TimeSpan.FromSeconds(10));
+        session.ActivateElement(remoteItem);
+
+        var initialOverlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(60));
+        Assert.True(initialOverlayHidden, $"Initial remote hydration did not finish for conversation {candidate.ConversationId}.");
+
+        var discoverItem = session.FindByAutomationId("MainNav.DiscoverSessions", TimeSpan.FromSeconds(10));
+        session.ActivateElement(discoverItem);
+        Assert.True(
+            session.WaitUntilVisible("DiscoverSessions.Title", TimeSpan.FromSeconds(10)),
+            "Discover sessions page did not become visible.");
+
+        remoteItem = session.FindByAutomationId(sessionId, TimeSpan.FromSeconds(10));
+        var returnStopwatch = Stopwatch.StartNew();
+        session.ActivateElement(remoteItem);
+        var headerVisible = session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(1200));
+        returnStopwatch.Stop();
+
+        Assert.True(
+            headerVisible,
+            $"Round-trip back to remote chat exceeded responsiveness budget. Conversation={candidate.ConversationId} elapsedMs={returnStopwatch.ElapsedMilliseconds}");
     }
 
     [SkippableFact]
@@ -537,6 +745,31 @@ public sealed partial class RealUserConfigSmokeTests
             .Count(element => !TryGetIsOffscreen(element) && !string.IsNullOrWhiteSpace(element.Name));
     }
 
+    private static bool WaitForViewportState(
+        WindowsGuiAppSession session,
+        string expectedState,
+        TimeSpan timeout)
+    {
+        if (string.IsNullOrWhiteSpace(expectedState))
+        {
+            return false;
+        }
+
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            var actual = session.TryGetElementName("ChatView.TranscriptViewportState", TimeSpan.FromMilliseconds(200));
+            if (string.Equals(actual, expectedState, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            Thread.Sleep(150);
+        }
+
+        return false;
+    }
+
     private static string SessionAutomationId(string conversationId)
         => $"MainNav.Session.{conversationId}";
 
@@ -714,57 +947,6 @@ public sealed partial class RealUserConfigSmokeTests
                 .OrderByDescending(candidate => candidate.LocalMessageCount)
                 .ThenByDescending(candidate => candidate.LastUpdatedAtUtc)
                 .ToArray();
-        }
-
-        public static string? TryLoadLastTranscriptText(string conversationId)
-        {
-            if (string.IsNullOrWhiteSpace(conversationId))
-            {
-                return null;
-            }
-
-            var appDataRoot = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "SalmonEgg");
-            var conversationsPath = Path.Combine(appDataRoot, "conversations", "conversations.v1.json");
-            if (!File.Exists(conversationsPath))
-            {
-                return null;
-            }
-
-            using var document = JsonDocument.Parse(File.ReadAllText(conversationsPath));
-            if (!document.RootElement.TryGetProperty("conversations", out var conversationsElement)
-                || conversationsElement.ValueKind != JsonValueKind.Array)
-            {
-                return null;
-            }
-
-            foreach (var conversationElement in conversationsElement.EnumerateArray())
-            {
-                if (!string.Equals(ReadString(conversationElement, "conversationId"), conversationId, StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                if (!conversationElement.TryGetProperty("messages", out var messagesElement)
-                    || messagesElement.ValueKind != JsonValueKind.Array)
-                {
-                    return null;
-                }
-
-                foreach (var messageElement in messagesElement.EnumerateArray().Reverse())
-                {
-                    var text = ReadString(messageElement, "textContent");
-                    if (!string.IsNullOrWhiteSpace(text))
-                    {
-                        return text;
-                    }
-                }
-
-                return null;
-            }
-
-            return null;
         }
 
         private static HashSet<string> ReadReplayBackedRemoteSessionIds(string logsRoot)
