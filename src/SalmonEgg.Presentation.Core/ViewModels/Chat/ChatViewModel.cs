@@ -2221,19 +2221,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             return;
         }
 
-        try
-        {
-            _ = _conversationActivationCoordinator
-                .ArchiveConversationAsync(conversationId, CurrentSessionId)
-                .GetAwaiter()
-                .GetResult();
-
-            RemoveBottomPanelState(conversationId);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Archive operation failed due to underlying exception: {ConversationId}", conversationId);
-        }
+        _ = RunConversationMutationAsync(
+            operationName: "Archive",
+            conversationId,
+            token => _conversationActivationCoordinator.ArchiveConversationAsync(conversationId, CurrentSessionId, token));
     }
 
     public void DeleteConversation(string conversationId)
@@ -2243,18 +2234,35 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             return;
         }
 
+        _ = RunConversationMutationAsync(
+            operationName: "Delete",
+            conversationId,
+            token => _conversationActivationCoordinator.DeleteConversationAsync(conversationId, CurrentSessionId, token));
+    }
+
+    private async Task RunConversationMutationAsync(
+        string operationName,
+        string conversationId,
+        Func<CancellationToken, Task<ConversationMutationResult>> mutation)
+    {
         try
         {
-            _ = _conversationActivationCoordinator
-                .DeleteConversationAsync(conversationId, CurrentSessionId)
-                .GetAwaiter()
-                .GetResult();
+            var result = await mutation(CancellationToken.None).ConfigureAwait(false);
+            if (!result.Succeeded)
+            {
+                Logger.LogWarning(
+                    "{OperationName} conversation rejected by coordinator. ConversationId={ConversationId} FailureReason={FailureReason}",
+                    operationName,
+                    conversationId,
+                    result.FailureReason);
+                return;
+            }
 
-            RemoveBottomPanelState(conversationId);
+            await PostToUiAsync(() => RemoveBottomPanelState(conversationId)).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Delete operation failed due to underlying exception: {ConversationId}", conversationId);
+            Logger.LogError(ex, "{OperationName} operation failed due to underlying exception: {ConversationId}", operationName, conversationId);
         }
     }
 

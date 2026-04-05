@@ -500,6 +500,46 @@ public sealed class ConversationActivationCoordinatorTests
     }
 
     [Fact]
+    public async Task ArchiveConversation_WhenWorkspaceMutationFails_DoesNotClearVisibleSelection()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var preferences = CreatePreferences(syncContext);
+        var workspaceStore = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
+        var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+
+        var state = State.Value(new object(), () => ChatState.Empty);
+        await state.Update(_ => ChatReducer.Reduce(ChatState.Empty, new SelectConversationAction("session-1")), default);
+        var chatStore = CreateChatStore(state);
+        var connectionStore = CreateConnectionStore();
+        var bindingCommands = new BindingCoordinator(workspace, chatStore);
+        var coordinator = new ConversationActivationCoordinator(
+            workspace,
+            bindingCommands,
+            chatStore,
+            connectionStore,
+            Mock.Of<ILogger<ConversationActivationCoordinator>>());
+
+        workspace.Dispose();
+
+        var result = await coordinator.ArchiveConversationAsync("session-1", "session-1");
+
+        Assert.False(result.Succeeded);
+        Assert.False(result.ClearedActiveConversation);
+        var currentState = await state ?? ChatState.Empty;
+        Assert.Equal("session-1", currentState.HydratedConversationId);
+    }
+
+    [Fact]
     public async Task DeleteConversation_CurrentSession_ClearsVisibleSelection_ThroughCoordinatorOnly()
     {
         var syncContext = new ImmediateSynchronizationContext();

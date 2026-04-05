@@ -810,8 +810,9 @@ public class ChatViewModelTests
 
         activation.Verify(a => a.DeleteConversationAsync("session-1", "session-1", It.IsAny<CancellationToken>()), Times.Once);
 
-        Assert.Empty(fixture.ViewModel.BottomPanelTabs);
-        Assert.Null(fixture.ViewModel.SelectedBottomPanelTab);
+        await WaitForConditionAsync(() => Task.FromResult(
+            fixture.ViewModel.BottomPanelTabs.Count == 0
+            && fixture.ViewModel.SelectedBottomPanelTab is null));
 
         await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "session-2" });
         await WaitForConditionAsync(() =>
@@ -822,6 +823,89 @@ public class ChatViewModelTests
                 && string.Equals(fixture.ViewModel.SelectedBottomPanelTab?.Id, "terminal", StringComparison.Ordinal)));
 
         Assert.Equal("terminal", fixture.ViewModel.SelectedBottomPanelTab?.Id);
+    }
+
+    [Fact]
+    public async Task ArchiveConversation_WhenCoordinatorReturnsFailedResult_PreservesBottomPanelState()
+    {
+        var activation = new Mock<IConversationActivationCoordinator>();
+        activation
+            .Setup(a => a.ArchiveConversationAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConversationMutationResult(false, false, "ArchiveFailed"));
+
+        await using var fixture = CreateViewModel(conversationActivationCoordinator: activation.Object);
+
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "session-1" });
+        await Task.Delay(50);
+
+        var outputTab = fixture.ViewModel.BottomPanelTabs[1];
+        fixture.ViewModel.SelectedBottomPanelTab = outputTab;
+        await Task.Delay(50);
+
+        fixture.ViewModel.ArchiveConversation("session-1");
+
+        activation.Verify(a => a.ArchiveConversationAsync("session-1", "session-1", It.IsAny<CancellationToken>()), Times.Once);
+        Assert.NotEmpty(fixture.ViewModel.BottomPanelTabs);
+        Assert.Equal("output", fixture.ViewModel.SelectedBottomPanelTab?.Id);
+    }
+
+    [Fact]
+    public async Task ArchiveConversation_WhenCoordinatorIsSlow_DoesNotBlockCallerThread()
+    {
+        var started = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var activation = new Mock<IConversationActivationCoordinator>();
+        activation
+            .Setup(a => a.ArchiveConversationAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Returns(async () =>
+            {
+                started.TrySetResult(null);
+                await allowCompletion.Task;
+                return new ConversationMutationResult(true, true, null);
+            });
+
+        await using var fixture = CreateViewModel(conversationActivationCoordinator: activation.Object);
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "session-1" });
+        await Task.Delay(50);
+
+        var archiveTask = Task.Run(() => fixture.ViewModel.ArchiveConversation("session-1"));
+        var completed = await Task.WhenAny(archiveTask, Task.Delay(200));
+        Assert.True(completed == archiveTask, "ArchiveConversation should return immediately and must not block caller thread.");
+
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        allowCompletion.TrySetResult(null);
+    }
+
+    [Fact]
+    public async Task ArchiveConversation_WhenMutationCompletesOffUi_UpdatesBottomPanelStateOnUiContext()
+    {
+        var mutationCompleted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var activation = new Mock<IConversationActivationCoordinator>();
+        activation
+            .Setup(a => a.ArchiveConversationAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Returns(async () =>
+            {
+                await Task.Yield();
+                mutationCompleted.TrySetResult(null);
+                return new ConversationMutationResult(true, true, null);
+            });
+
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext, conversationActivationCoordinator: activation.Object);
+        syncContext.RunAll();
+
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "session-1" });
+        syncContext.RunAll();
+        await WaitForConditionAsync(() => Task.FromResult(fixture.ViewModel.BottomPanelTabs.Count > 0));
+
+        fixture.ViewModel.ArchiveConversation("session-1");
+
+        await mutationCompleted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.NotEmpty(fixture.ViewModel.BottomPanelTabs);
+
+        syncContext.RunAll();
+        Assert.Empty(fixture.ViewModel.BottomPanelTabs);
+        Assert.Null(fixture.ViewModel.SelectedBottomPanelTab);
     }
 
     [Fact]

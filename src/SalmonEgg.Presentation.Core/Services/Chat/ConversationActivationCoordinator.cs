@@ -195,12 +195,11 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
         var clearsActiveConversation = string.Equals(activeConversationId, conversationId, StringComparison.Ordinal);
         try
         {
+            removeConversation(_conversationWorkspace, conversationId);
             if (clearsActiveConversation)
             {
                 await _chatStore.Dispatch(new SelectConversationAction(null));
             }
-
-            removeConversation(_conversationWorkspace, conversationId);
             return new ConversationMutationResult(true, clearsActiveConversation, null);
         }
         catch (Exception ex)
