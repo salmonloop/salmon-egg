@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -20,6 +21,7 @@ public sealed class MainNavigationViewAdapter
     private readonly MainNavigationViewModel _viewModel;
     private readonly INavigationCoordinator _navigationCoordinator;
     private readonly SelectionProjectionApplyGate _selectionApplyGate = new();
+    private long _sessionActivationRequestVersion;
 
     public MainNavigationViewAdapter(
         NavigationView navigationView,
@@ -79,6 +81,8 @@ public sealed class MainNavigationViewAdapter
 
     private async Task<bool> HandleItemInvokedCoreAsync(NavigationViewItemInvokedEventArgs args)
     {
+        MarkNavigationIntentObserved();
+
         if (ReferenceEquals(args.InvokedItemContainer, _navigationView.SettingsItem))
         {
             await _navigationCoordinator.ActivateSettingsAsync("General").ConfigureAwait(true);
@@ -104,6 +108,7 @@ public sealed class MainNavigationViewAdapter
 
         if (NavItemTag.TryParseSession(tag, out var sessionId))
         {
+            var previousSelection = _viewModel.CurrentSelection;
             var sessionProjectId = (args.InvokedItemContainer as FrameworkElement)?.DataContext is SessionNavItemViewModel sessionItem
                 ? sessionItem.ProjectId
                 : _viewModel.TryGetProjectIdForSession(sessionId);
@@ -117,11 +122,12 @@ public sealed class MainNavigationViewAdapter
             // the ViewModel might briefly project the session as "Active" but "Not Loading"
             // (since the preview hasn't started yet), causing the "flash of empty chat".
             var activationTask = _navigationCoordinator.ActivateSessionAsync(sessionId, sessionProjectId);
+            var requestVersion = Volatile.Read(ref _sessionActivationRequestVersion);
             _viewModel.SelectSession(sessionId);
             // Never await remote session activation on the NavigationView UI event pipeline.
             // If we await here, the UI thread stays occupied until activation completes,
             // which causes multi-second "click has no response" freezes.
-            _ = ObserveSessionActivationAsync(activationTask);
+            _ = ObserveSessionActivationAsync(activationTask, previousSelection, sessionId, requestVersion);
             return true;
         }
 
@@ -149,17 +155,89 @@ public sealed class MainNavigationViewAdapter
         return false;
     }
 
-    private static async Task ObserveSessionActivationAsync(Task<bool> activationTask)
+    private async Task ObserveSessionActivationAsync(
+        Task<bool> activationTask,
+        NavigationSelectionState previousSelection,
+        string requestedSessionId,
+        long requestVersion)
     {
         try
         {
-            await activationTask.ConfigureAwait(false);
+            var activated = await activationTask.ConfigureAwait(false);
+            if (activated)
+            {
+                return;
+            }
+
+            _ = _dispatcherQueue.TryEnqueue(() =>
+            {
+                if (!ShouldRollbackSessionSelection(requestedSessionId, requestVersion))
+                {
+                    return;
+                }
+
+                RestoreSelection(previousSelection);
+                ApplySelection();
+            });
         }
         catch
         {
             // Navigation coordinator already handles logging/fault state.
+            _ = _dispatcherQueue.TryEnqueue(() =>
+            {
+                if (!ShouldRollbackSessionSelection(requestedSessionId, requestVersion))
+                {
+                    return;
+                }
+
+                RestoreSelection(previousSelection);
+                ApplySelection();
+            });
         }
     }
+
+    private bool ShouldRollbackSessionSelection(string requestedSessionId, long requestVersion)
+    {
+        if (requestVersion != Volatile.Read(ref _sessionActivationRequestVersion))
+        {
+            return false;
+        }
+
+        return _viewModel.CurrentSelection is NavigationSelectionState.Session current
+            && string.Equals(current.SessionId, requestedSessionId, StringComparison.Ordinal);
+    }
+
+    private void RestoreSelection(NavigationSelectionState selection)
+    {
+        if (selection is NavigationSelectionState.Session selectedSession
+            && string.IsNullOrWhiteSpace(_viewModel.TryGetProjectIdForSession(selectedSession.SessionId)))
+        {
+            _viewModel.SelectStart();
+            return;
+        }
+
+        switch (selection)
+        {
+            case NavigationSelectionState.Start:
+                _viewModel.SelectStart();
+                break;
+            case NavigationSelectionState.DiscoverSessions:
+                _viewModel.SelectDiscoverSessions();
+                break;
+            case NavigationSelectionState.Settings:
+                _viewModel.SelectSettings();
+                break;
+            case NavigationSelectionState.Session session:
+                _viewModel.SelectSession(session.SessionId);
+                break;
+            default:
+                _viewModel.SelectStart();
+                break;
+        }
+    }
+
+    private void MarkNavigationIntentObserved()
+        => Interlocked.Increment(ref _sessionActivationRequestVersion);
 
     private void ApplySelectionCore()
     {

@@ -29,6 +29,9 @@ namespace SalmonEgg.Presentation.Views.Chat
         private bool _suspendAutoScrollTracking;
         private bool _manualScrollIntentPending;
         private bool _wasOverlayVisible;
+        private bool _scrollToBottomScheduled;
+        private bool _programmaticScrollInProgress;
+        private int _scrollScheduleGeneration;
         private string _transcriptViewportAutomationState = "inactive";
         private ObservableCollection<ChatMessageViewModel>? _trackedMessageHistory;
 
@@ -46,8 +49,8 @@ namespace SalmonEgg.Presentation.Views.Chat
         private async void OnLoaded(object sender, RoutedEventArgs e)
         {
             _isViewLoaded = true;
+            unchecked { _scrollScheduleGeneration++; }
             _userScrolledUp = false;
-            _manualScrollIntentPending = false;
             _wasOverlayVisible = ViewModel.IsOverlayVisible;
             _initialScrollGate.MarkPending();
             EnsureMessageTracking();
@@ -70,6 +73,9 @@ namespace SalmonEgg.Presentation.Views.Chat
         private void OnUnloaded(object sender, RoutedEventArgs e)
         {
             _isViewLoaded = false;
+            unchecked { _scrollScheduleGeneration++; }
+            _scrollToBottomScheduled = false;
+            _programmaticScrollInProgress = false;
             DetachScrollViewer();
             _initialScrollGate.CancelInFlight();
             UpdateTranscriptViewportAutomationState();
@@ -138,7 +144,7 @@ namespace SalmonEgg.Presentation.Views.Chat
 
             if (!_userScrolledUp)
             {
-                RequestScrollToBottom();
+                ScheduleScrollToBottom();
             }
 
             UpdateTranscriptViewportAutomationState();
@@ -164,6 +170,7 @@ namespace SalmonEgg.Presentation.Views.Chat
             _scrollViewer.ViewChanged += ScrollViewer_ViewChanged;
             _scrollViewer.PointerPressed += ScrollViewer_PointerPressed;
             _scrollViewer.PointerWheelChanged += ScrollViewer_PointerWheelChanged;
+            _scrollViewer.KeyDown += ScrollViewer_KeyDown;
         }
 
         private void OnMessagesListLayoutUpdated(object? sender, object e)
@@ -219,8 +226,16 @@ namespace SalmonEgg.Presentation.Views.Chat
                 return;
             }
 
+            if (_programmaticScrollInProgress)
+            {
+                _programmaticScrollInProgress = false;
+                UpdateTranscriptViewportAutomationState();
+                return;
+            }
+
             if (!_manualScrollIntentPending)
             {
+                UpdateTranscriptViewportAutomationState();
                 return;
             }
 
@@ -239,6 +254,20 @@ namespace SalmonEgg.Presentation.Views.Chat
         {
             _manualScrollIntentPending = true;
             StopInitialScrollForManualInteraction();
+        }
+
+        private void ScrollViewer_KeyDown(object sender, KeyRoutedEventArgs e)
+        {
+            if (e.Key is Windows.System.VirtualKey.Up
+                or Windows.System.VirtualKey.Down
+                or Windows.System.VirtualKey.PageUp
+                or Windows.System.VirtualKey.PageDown
+                or Windows.System.VirtualKey.Home
+                or Windows.System.VirtualKey.End)
+            {
+                _manualScrollIntentPending = true;
+                StopInitialScrollForManualInteraction();
+            }
         }
 
         private static ScrollViewer? FindScrollViewer(DependencyObject element)
@@ -264,6 +293,7 @@ namespace SalmonEgg.Presentation.Views.Chat
 
             if (_scrollViewer != null)
             {
+                _programmaticScrollInProgress = true;
                 _scrollViewer.ChangeView(null, _scrollViewer.ScrollableHeight, null);
                 return;
             }
@@ -272,6 +302,36 @@ namespace SalmonEgg.Presentation.Views.Chat
             if (MessagesList != null && ViewModel.MessageHistory.Count > 0)
             {
                 MessagesList.ScrollIntoView(ViewModel.MessageHistory.Last());
+            }
+        }
+
+        private void ScheduleScrollToBottom()
+        {
+            if (_scrollToBottomScheduled)
+            {
+                return;
+            }
+
+            var scheduleGeneration = _scrollScheduleGeneration;
+            var scheduledConversationId = ViewModel.CurrentSessionId;
+            _scrollToBottomScheduled = true;
+            if (!DispatcherQueue.TryEnqueue(() =>
+                {
+                    _scrollToBottomScheduled = false;
+                    if (!_isViewLoaded
+                        || scheduleGeneration != _scrollScheduleGeneration
+                        || _userScrolledUp
+                        || !ViewModel.IsSessionActive
+                        || ViewModel.MessageHistory.Count <= 0
+                        || !string.Equals(ViewModel.CurrentSessionId, scheduledConversationId, StringComparison.Ordinal))
+                    {
+                        return;
+                    }
+
+                    RequestScrollToBottom();
+                }))
+            {
+                _scrollToBottomScheduled = false;
             }
         }
 
@@ -507,6 +567,7 @@ namespace SalmonEgg.Presentation.Views.Chat
             _scrollViewer.ViewChanged -= ScrollViewer_ViewChanged;
             _scrollViewer.PointerPressed -= ScrollViewer_PointerPressed;
             _scrollViewer.PointerWheelChanged -= ScrollViewer_PointerWheelChanged;
+            _scrollViewer.KeyDown -= ScrollViewer_KeyDown;
             _scrollViewer = null;
             UpdateTranscriptViewportAutomationState();
         }
@@ -532,9 +593,11 @@ namespace SalmonEgg.Presentation.Views.Chat
 
         private void ResetAutoScrollStateForConversationChange()
         {
+            unchecked { _scrollScheduleGeneration++; }
             _userScrolledUp = false;
             _suspendAutoScrollTracking = false;
             _manualScrollIntentPending = false;
+            _programmaticScrollInProgress = false;
             UpdateTranscriptViewportAutomationState();
         }
 
