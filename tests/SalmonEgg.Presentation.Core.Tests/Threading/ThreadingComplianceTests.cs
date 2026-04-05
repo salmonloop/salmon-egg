@@ -1,5 +1,12 @@
 using System;
-using System.IO;
+using System.Diagnostics;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+using Moq;
+using SalmonEgg.Presentation.Core.Services;
+using SalmonEgg.Presentation.Core.Services.Chat;
+using SalmonEgg.Presentation.Services;
 using Xunit;
 
 namespace SalmonEgg.Presentation.Core.Tests.Threading;
@@ -7,32 +14,45 @@ namespace SalmonEgg.Presentation.Core.Tests.Threading;
 public sealed class ThreadingComplianceTests
 {
     [Fact]
-    public void ChatViewModel_DoesNotBlockOnAsyncOperations()
+    public async Task ActivateSessionAsync_WhenSwitcherIsSlow_DoesNotBlockCallerThread()
     {
-        var code = LoadFile(@"src\SalmonEgg.Presentation.Core\ViewModels\Chat\ChatViewModel.cs");
+        var selectionStore = new ShellSelectionStateStore();
+        var switchStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowSwitchCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        Assert.DoesNotContain("GetAwaiter().GetResult()", code);
-    }
-
-    private static string LoadFile(string relativePath)
-    {
-        var root = FindRepoRoot();
-        var fullPath = Path.Combine(root, relativePath);
-        return File.ReadAllText(fullPath);
-    }
-
-    private static string FindRepoRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory != null)
-        {
-            if (File.Exists(Path.Combine(directory.FullName, "SalmonEgg.sln")))
+        var switcher = new Mock<IConversationSessionSwitcher>();
+        switcher
+            .Setup(x => x.SwitchConversationAsync("session-1", It.IsAny<CancellationToken>()))
+            .Returns(async () =>
             {
-                return directory.FullName;
-            }
-            directory = directory.Parent;
-        }
+                switchStarted.TrySetResult(null);
+                await allowSwitchCompletion.Task;
+                return true;
+            });
 
-        throw new DirectoryNotFoundException("Repository root (SalmonEgg.sln) not found.");
+        var shellNavigation = new Mock<IShellNavigationService>();
+        shellNavigation.Setup(x => x.NavigateToChat()).Returns(ValueTask.FromResult(ShellNavigationResult.Success()));
+
+        var coordinator = new NavigationCoordinator(
+            selectionStore,
+            selectionStore,
+            switcher.Object,
+            Mock.Of<INavigationProjectSelectionStore>(),
+            shellNavigation.Object,
+            Mock.Of<ILogger<NavigationCoordinator>>());
+
+        var invokeStopwatch = Stopwatch.StartNew();
+        var activationTask = coordinator.ActivateSessionAsync("session-1", "project-1");
+        invokeStopwatch.Stop();
+
+        Assert.True(invokeStopwatch.ElapsedMilliseconds < 1000, $"Invoke path was unexpectedly slow. elapsedMs={invokeStopwatch.ElapsedMilliseconds}");
+        await switchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.False(activationTask.IsCompleted, "Activation should still be pending while switcher is blocked.");
+
+        allowSwitchCompletion.TrySetResult(null);
+        Assert.True(await activationTask);
+
+        shellNavigation.Verify(x => x.NavigateToChat(), Times.Once);
+        switcher.Verify(x => x.SwitchConversationAsync("session-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 }

@@ -1,5 +1,6 @@
 using System;
-using System.Reflection;
+using System.IO;
+using System.Runtime.InteropServices;
 using Moq;
 using Serilog;
 using SalmonEgg.Domain.Models;
@@ -44,30 +45,43 @@ public sealed class TransportFactoryTests
     }
 
     [Fact]
-    public void CreateTransport_Stdio_Should_Preserve_Quoted_Path_Arguments()
+    public async Task CreateTransport_Stdio_WithQuotedScriptPath_CanConnect()
     {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            return;
+        }
+
         var factory = new TransportFactory(_logger);
-        const string scriptPath = @"C:\Users\shang\Project\salmon-acp\tests\SalmonEgg.GuiTests.Windows\Fixtures\Slow Replay Agent.ps1";
+        var tempDir = Path.Combine(Path.GetTempPath(), $"salmonegg-stdio-test-{Guid.NewGuid():N}", "with space");
+        Directory.CreateDirectory(tempDir);
+        var scriptPath = Path.Combine(tempDir, "slow agent.ps1");
+        await File.WriteAllTextAsync(scriptPath, "Start-Sleep -Seconds 2");
 
-        var transport = factory.CreateTransport(
-            TransportType.Stdio,
-            command: "powershell.exe",
-            args: $"-NoLogo -NoProfile -File \"{scriptPath}\"");
+        try
+        {
+            var transport = factory.CreateTransport(
+                TransportType.Stdio,
+                command: "powershell.exe",
+                args: $"-NoLogo -NoProfile -File \"{scriptPath}\"");
 
-        var stdioTransport = Assert.IsType<StdioTransport>(transport);
-        var argsField = typeof(StdioTransport).GetField("_args", BindingFlags.Instance | BindingFlags.NonPublic);
-        Assert.NotNull(argsField);
-
-        var parsedArgs = Assert.IsType<string[]>(argsField!.GetValue(stdioTransport));
-        Assert.Equal(
-            new[]
+            var connected = await transport.ConnectAsync();
+            Assert.True(
+                connected,
+                "Stdio transport should connect when script path contains spaces and is quoted.");
+            await transport.DisconnectAsync();
+        }
+        finally
+        {
+            try
             {
-                "-NoLogo",
-                "-NoProfile",
-                "-File",
-                scriptPath
-            },
-            parsedArgs);
+                Directory.Delete(Path.GetDirectoryName(scriptPath)!, recursive: true);
+            }
+            catch
+            {
+                // best effort cleanup
+            }
+        }
     }
 
     [Fact]

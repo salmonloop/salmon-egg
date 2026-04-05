@@ -21,7 +21,6 @@ using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Settings;
-using System.Reflection;
 using SerilogLogger = Serilog.ILogger;
 using Uno.Extensions.Reactive;
 using Xunit;
@@ -32,14 +31,16 @@ namespace SalmonEgg.Presentation.Core.Tests.Navigation;
 public sealed class NavigationCoordinatorTests
 {
     [Fact]
-    public void ShellNavigationService_UsesExplicitAsyncResultContract_ForChatNavigation()
+    public async Task ShellNavigationService_NavigateToChat_UsesAsyncResultContract()
     {
-        var navigateToChat = typeof(IShellNavigationService).GetMethod(
-            nameof(IShellNavigationService.NavigateToChat),
-            BindingFlags.Instance | BindingFlags.Public);
+        var shellNavigation = new Mock<IShellNavigationService>();
+        shellNavigation
+            .Setup(x => x.NavigateToChat())
+            .Returns(ValueTask.FromResult(ShellNavigationResult.Success()));
 
-        Assert.NotNull(navigateToChat);
-        Assert.NotEqual(typeof(void), navigateToChat!.ReturnType);
+        var result = await shellNavigation.Object.NavigateToChat();
+
+        Assert.True(result.Succeeded);
     }
 
     [Fact]

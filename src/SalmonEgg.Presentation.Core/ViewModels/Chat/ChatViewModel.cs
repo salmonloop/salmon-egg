@@ -3186,6 +3186,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
         if (await CanReuseWarmCurrentConversationAsync(sessionId, cancellationToken).ConfigureAwait(false))
         {
+            await SupersedePendingActivationForWarmConversationAsync(sessionId, cancellationToken).ConfigureAwait(false);
             Logger.LogInformation(
                 "Skipping redundant conversation activation because the current session is already warm. ConversationId={ConversationId}",
                 sessionId);
@@ -3501,6 +3502,33 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     private bool IsLatestConversationActivationVersion(long activationVersion)
         => Volatile.Read(ref _conversationActivationVersion) == activationVersion;
+
+    private async Task SupersedePendingActivationForWarmConversationAsync(
+        string sessionId,
+        CancellationToken cancellationToken)
+    {
+        var lease = BeginConversationActivation(cancellationToken);
+        try
+        {
+            await ResetRemoteHydrationUiStateAsync(lease.Version).ConfigureAwait(false);
+            await PostToUiAsync(() =>
+            {
+                _sessionSwitchPreviewConversationId = null;
+                IsSessionSwitching = false;
+                SetConversationOverlayOwners(
+                    sessionSwitchConversationId: null,
+                    connectionLifecycleConversationId: null,
+                    historyConversationId: null);
+            }).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (lease.CancellationToken.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            EndConversationActivation(lease);
+        }
+    }
 
     private bool IsActivationContextStale(long? activationVersion, CancellationToken cancellationToken)
     {

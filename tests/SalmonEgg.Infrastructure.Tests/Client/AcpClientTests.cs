@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Concurrent;
-using System.Reflection;
 using System.Text.Json;
 using SalmonEgg.Infrastructure.Serialization;
 using System.Threading;
@@ -32,7 +31,9 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             _parserMock.Setup(p => p.Options).Returns(new JsonSerializerOptions());
         }
 
-        private async Task<AcpClient> CreateInitializedClientAsync(AcpClient.AcpRequestTimeouts? timeouts = null)
+        private async Task<AcpClient> CreateInitializedClientAsync(
+            AcpClient.AcpRequestTimeouts? timeouts = null,
+            AgentCapabilities? capabilities = null)
         {
             var parser = new MessageParser(); // Use real parser for serialization
             
@@ -40,10 +41,6 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 DefaultTimeout: TimeSpan.FromSeconds(5),
                 SessionNewTimeout: TimeSpan.FromSeconds(5),
                 SessionPromptTimeout: TimeSpan.FromSeconds(5));
-            if (initTimeouts.DefaultTimeout < TimeSpan.FromSeconds(5))
-            {
-                initTimeouts = initTimeouts with { DefaultTimeout = TimeSpan.FromSeconds(5) };
-            }
 
             var client = new AcpClient(_transportMock.Object, parser, null, _errorLoggerMock.Object, initTimeouts);
 
@@ -51,7 +48,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var initResponse = new InitializeResponse(
                 1, // protocolVersion
                 new AgentInfo("TestAgent", "1.0.0"),
-                new AgentCapabilities(loadSession: true)
+                capabilities ?? new AgentCapabilities(loadSession: true)
             );
 
             _transportMock.Setup(t => t.SendMessageAsync(It.IsRegex("initialize"), It.IsAny<CancellationToken>()))
@@ -66,12 +63,6 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             await client.InitializeAsync(new InitializeParams(new ClientInfo("Test", "1.0.0"), new ClientCapabilities()));
             await initTrigger;
 
-            if (timeouts != null)
-            {
-                typeof(AcpClient).GetField("_timeouts", BindingFlags.NonPublic | BindingFlags.Instance)
-                    ?.SetValue(client, timeouts);
-            }
-
             return client;
         }
 
@@ -79,13 +70,15 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         public async Task CreateSessionAsync_SlowButValidResponse_UsesSessionNewTimeoutBudget()
         {
             var timeouts = new AcpClient.AcpRequestTimeouts(
-                DefaultTimeout: TimeSpan.FromMilliseconds(50),
+                DefaultTimeout: TimeSpan.FromMilliseconds(20),
                 SessionNewTimeout: TimeSpan.FromMilliseconds(500),
                 SessionPromptTimeout: TimeSpan.FromMilliseconds(500)
             );
 
             var parser = new MessageParser();
-            var client = await CreateInitializedClientAsync(timeouts);
+            var client = await CreateInitializedClientAsync(
+                timeouts,
+                new AgentCapabilities(loadSession: true));
             
             _transportMock.Setup(t => t.SendMessageAsync(It.IsRegex("session/new"), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(true);
@@ -228,9 +221,9 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             _transportMock.Setup(t => t.SendMessageAsync(It.IsRegex("session/load"), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(true);
 
-            // Delay response for 200ms (exceeds default 50ms)
+            // Delay response well beyond the default budget to avoid timing flakiness.
             var responseTrigger = Task.Run(async () => {
-                await Task.Delay(200);
+                await Task.Delay(500);
                 var response = new JsonRpcResponse(2, JsonSerializer.SerializeToElement(new { }, parser.Options));
                 _transportMock.Raise(t => t.MessageReceived += null, new MessageReceivedEventArgs(parser.SerializeMessage(response)));
             });
@@ -266,10 +259,8 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         [Fact]
         public async Task LoadSessionAsync_WhenAgentDoesNotSupportLoadSession_DoesNotSendProtocolRequest()
         {
-            var client = await CreateInitializedClientAsync();
-            typeof(AcpClient)
-                .GetField("_agentCapabilities", BindingFlags.Instance | BindingFlags.NonPublic)
-                ?.SetValue(client, new AgentCapabilities(loadSession: false));
+            var client = await CreateInitializedClientAsync(
+                capabilities: new AgentCapabilities(loadSession: false));
 
             var result = await client.LoadSessionAsync(new SessionLoadParams("session-123", "cwd", null));
 
@@ -282,10 +273,8 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         [Fact]
         public async Task LoadSessionAsync_WhenAgentDoesNotAdvertiseLoadSession_DoesNotSendProtocolRequest()
         {
-            var client = await CreateInitializedClientAsync();
-            typeof(AcpClient)
-                .GetField("_agentCapabilities", BindingFlags.Instance | BindingFlags.NonPublic)
-                ?.SetValue(client, new AgentCapabilities());
+            var client = await CreateInitializedClientAsync(
+                capabilities: new AgentCapabilities());
 
             var result = await client.LoadSessionAsync(new SessionLoadParams("session-123", "cwd", null));
 
@@ -898,10 +887,8 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         public async Task ListSessionsAsync_ParsesNextCursorFromRuntimeResponse()
         {
             var parser = new MessageParser();
-            var client = await CreateInitializedClientAsync();
-            typeof(AcpClient)
-                .GetField("_agentCapabilities", BindingFlags.Instance | BindingFlags.NonPublic)
-                ?.SetValue(client, new AgentCapabilities(sessionCapabilities: new SessionCapabilities
+            var client = await CreateInitializedClientAsync(
+                capabilities: new AgentCapabilities(sessionCapabilities: new SessionCapabilities
                 {
                     List = new SessionListCapabilities()
                 }));

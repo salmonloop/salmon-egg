@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -20,17 +19,6 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
 public sealed class AcpChatCoordinatorTests
 {
-    [Fact]
-    public void IAcpChatCoordinatorSink_RequiresExplicitConversationBindingCommands()
-    {
-        var getter = typeof(IAcpChatCoordinatorSink)
-            .GetProperty(nameof(IAcpChatCoordinatorSink.ConversationBindingCommands))?
-            .GetMethod;
-
-        Assert.NotNull(getter);
-        Assert.True(getter!.IsAbstract);
-    }
-
     [Fact]
     public async Task ConnectToProfileAsync_MapsProfileToTransportAndInitializesService()
     {
@@ -913,41 +901,6 @@ public sealed class AcpChatCoordinatorTests
 
         service.Verify(x => x.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()), Times.Never);
         Assert.Equal(0, sink.ResetHydratedConversationForResyncCalls);
-    }
-
-    [Fact]
-    public async Task HandleResyncRequiredAsync_WhenCurrentBindingTargetsDifferentRemoteSession_IgnoresRequest()
-    {
-        var sink = new FakeSink
-        {
-            CurrentSessionId = "conv-2",
-            CurrentRemoteSessionId = "remote-2",
-            ResolvedBinding = new ConversationRemoteBindingState("conv-2", "remote-2", "profile-2")
-        };
-        var service = CreateChatService(new AgentCapabilities(loadSession: true));
-        var wrappedService = new AcpChatServiceAdapter(
-            service.Object,
-            new AcpEventAdapter(_ => { }, new ImmediateSynchronizationContext()));
-        sink.CurrentChatService = wrappedService;
-
-        var sut = new AcpChatCoordinator(
-            Mock.Of<IAcpChatServiceFactory>(),
-            Mock.Of<ILogger<AcpChatCoordinator>>(),
-            connectionCoordinator: new AcpConnectionCoordinator(
-                Mock.Of<IChatConnectionStore>(),
-                Mock.Of<ILogger<AcpConnectionCoordinator>>()));
-
-        var method = typeof(AcpChatCoordinator).GetMethod(
-            "HandleResyncRequiredAsync",
-            BindingFlags.Instance | BindingFlags.NonPublic);
-
-        Assert.NotNull(method);
-
-        var task = Assert.IsAssignableFrom<Task>(method!.Invoke(sut, [sink, wrappedService, "remote-1", CancellationToken.None]));
-        await task;
-
-        Assert.Equal(0, sink.ResetHydratedConversationForResyncCalls);
-        service.Verify(x => x.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

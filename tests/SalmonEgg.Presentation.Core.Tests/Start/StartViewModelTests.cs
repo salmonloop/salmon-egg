@@ -302,17 +302,11 @@ public sealed class StartViewModelTests
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
 
-            var closeWithFocusMethod = typeof(StartViewModel).GetMethod(
-                nameof(StartViewModel.OnComposerPopupClosedWithFocusState),
-                new[] { typeof(bool) });
-
-            Assert.NotNull(closeWithFocusMethod);
-
             startViewModel.OnComposerLoaded();
             startViewModel.OnComposerFocusEntered();
             startViewModel.OnComposerPopupOpened();
 
-            closeWithFocusMethod!.Invoke(startViewModel, new object[] { true });
+            startViewModel.OnComposerPopupClosedWithFocusState(true);
 
             Assert.Equal(StartComposerStage.Primed, startViewModel.ComposerStage);
             Assert.True(startViewModel.IsComposerExpanded);
