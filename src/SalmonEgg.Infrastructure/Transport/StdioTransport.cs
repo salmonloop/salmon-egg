@@ -77,7 +77,24 @@ namespace SalmonEgg.Infrastructure.Transport
                 _args = trimmedArgs;
             }
 
-            _encoding = encoding ?? Encoding.UTF8;
+            _encoding = NormalizeTransportEncoding(encoding ?? Encoding.UTF8);
+        }
+
+        private static Encoding NormalizeTransportEncoding(Encoding encoding)
+        {
+            if (encoding == null)
+            {
+                throw new ArgumentNullException(nameof(encoding));
+            }
+
+            // ACP JSON-RPC over stdio must not prepend UTF-8 BOM; otherwise first frame parsing fails.
+            if (string.Equals(encoding.WebName, Encoding.UTF8.WebName, StringComparison.OrdinalIgnoreCase) &&
+                encoding.GetPreamble().Length > 0)
+            {
+                return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+            }
+
+            return encoding;
         }
 
         /// <summary>
