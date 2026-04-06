@@ -767,7 +767,8 @@ public class ChatViewModelTests
         await WaitForConditionAsync(() => Task.FromResult(
             string.Equals(fixture.ViewModel.SelectedBottomPanelTab?.Id, "output", StringComparison.Ordinal)));
 
-        await fixture.ViewModel.ArchiveConversationAsync("session-1");
+        var archiveResult = await fixture.ViewModel.ArchiveConversationAsync("session-1");
+        Assert.True(archiveResult.Succeeded, archiveResult.FailureReason);
 
         activation.Verify(a => a.ArchiveConversationAsync("session-1", "session-1", It.IsAny<CancellationToken>()), Times.Once);
 
@@ -807,7 +808,8 @@ public class ChatViewModelTests
         await Task.Delay(50);
         Assert.Equal("output", fixture.ViewModel.SelectedBottomPanelTab?.Id);
 
-        await fixture.ViewModel.DeleteConversationAsync("session-1");
+        var deleteResult = await fixture.ViewModel.DeleteConversationAsync("session-1");
+        Assert.True(deleteResult.Succeeded, deleteResult.FailureReason);
 
         activation.Verify(a => a.DeleteConversationAsync("session-1", "session-1", It.IsAny<CancellationToken>()), Times.Once);
 
@@ -4233,9 +4235,13 @@ public class ChatViewModelTests
         syncContext.RunAll();
 
         Assert.True(await hydrationTask);
-        Assert.Contains(
-            fixture.ViewModel.MessageHistory,
-            message => (message.TextContent?.Contains("remote history answer", StringComparison.Ordinal) ?? false));
+        await WaitForConditionAsync(() =>
+        {
+            var combinedText = string.Join(
+                "\n",
+                fixture.ViewModel.MessageHistory.Select(message => message.TextContent ?? string.Empty));
+            return Task.FromResult(combinedText.Contains("remote history answer", StringComparison.Ordinal));
+        }, timeoutMilliseconds: 4000);
         await WaitForConditionAsync(() => Task.FromResult(!fixture.ViewModel.IsOverlayVisible), timeoutMilliseconds: 6000);
     }
 

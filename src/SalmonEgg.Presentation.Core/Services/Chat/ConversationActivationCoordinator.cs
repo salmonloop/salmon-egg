@@ -198,6 +198,12 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
             async token =>
             {
                 token.ThrowIfCancellationRequested();
+                var currentState = await _chatStore.State ?? ChatState.Empty;
+                var hydratedConversationId = currentState.HydratedConversationId;
+                var clearsActiveConversation = string.Equals(conversationId, hydratedConversationId, StringComparison.Ordinal)
+                    || string.Equals(activeConversationId, conversationId, StringComparison.Ordinal);
+                var previousBinding = currentState.ResolveBinding(conversationId);
+
                 try
                 {
                     var clearBindingResult = await _bindingCommands.ClearBindingAsync(conversationId).ConfigureAwait(false);
@@ -206,24 +212,57 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
                         return new ConversationMutationResult(false, false, clearBindingResult.ErrorMessage ?? "BindingClearFailed");
                     }
 
-                    removeConversation(_conversationWorkspace, conversationId);
-
-                    var currentState = await _chatStore.State ?? ChatState.Empty;
-                    var hydratedConversationId = currentState.HydratedConversationId;
-                    var clearsActiveConversation = string.Equals(conversationId, hydratedConversationId, StringComparison.Ordinal)
-                        || string.Equals(activeConversationId, conversationId, StringComparison.Ordinal);
                     if (clearsActiveConversation)
                     {
                         await _chatStore.Dispatch(new SelectConversationAction(null));
                     }
+
+                    removeConversation(_conversationWorkspace, conversationId);
                     return new ConversationMutationResult(true, clearsActiveConversation, null);
                 }
                 catch (Exception ex)
                 {
+                    await TryCompensateMutationFailureAsync(
+                        conversationId,
+                        previousBinding,
+                        hydratedConversationId,
+                        clearsActiveConversation).ConfigureAwait(false);
                     _logger.LogError(ex, "Conversation mutation failed (ConversationId={ConversationId})", conversationId);
                     return new ConversationMutationResult(false, false, ex.Message);
                 }
             },
             cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task TryCompensateMutationFailureAsync(
+        string conversationId,
+        ConversationBindingSlice? previousBinding,
+        string? previousHydratedConversationId,
+        bool clearedActiveConversation)
+    {
+        try
+        {
+            if (previousBinding is not null)
+            {
+                await _bindingCommands
+                    .UpdateBindingAsync(
+                        conversationId,
+                        previousBinding.RemoteSessionId,
+                        previousBinding.ProfileId)
+                    .ConfigureAwait(false);
+            }
+
+            if (clearedActiveConversation)
+            {
+                await _chatStore.Dispatch(new SelectConversationAction(previousHydratedConversationId));
+            }
+        }
+        catch (Exception compensationEx)
+        {
+            _logger.LogWarning(
+                compensationEx,
+                "Conversation mutation compensation failed (ConversationId={ConversationId})",
+                conversationId);
+        }
     }
 }

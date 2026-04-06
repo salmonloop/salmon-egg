@@ -694,6 +694,47 @@ public sealed class ConversationActivationCoordinatorTests
         Assert.Contains("session-1", workspace.GetKnownConversationIds());
     }
 
+    [Fact]
+    public async Task DeleteConversation_WhenRemoveThrows_RestoresBindingAndSelection()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var preferences = CreatePreferences(syncContext);
+        var workspaceStore = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
+        var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
+        workspace.Dispose();
+
+        var state = State.Value(new object(), () => ChatState.Empty);
+        await state.Update(
+            current => ChatReducer.Reduce(
+                ChatReducer.Reduce(
+                    current,
+                    new SetBindingSliceAction(new ConversationBindingSlice("session-1", "remote-1", "profile-1"))),
+                new SelectConversationAction("session-1")),
+            default);
+
+        var chatStore = CreateChatStore(state);
+        var connectionStore = CreateConnectionStore();
+        var bindings = new RecordingBindingCommands();
+        var coordinator = new ConversationActivationCoordinator(
+            workspace,
+            bindings,
+            chatStore,
+            connectionStore,
+            Mock.Of<ILogger<ConversationActivationCoordinator>>());
+
+        var result = await coordinator.DeleteConversationAsync("session-1", "session-1");
+
+        Assert.False(result.Succeeded);
+        Assert.True(bindings.ClearedCalled);
+        Assert.True(bindings.RestoreCalled);
+        Assert.Equal(("session-1", "remote-1", "profile-1"), bindings.LastRestore);
+        var finalState = await state ?? ChatState.Empty;
+        Assert.Equal("session-1", finalState.HydratedConversationId);
+        Assert.NotNull(finalState.ResolveBinding("session-1"));
+    }
+
     private static IChatStore CreateChatStore(IState<ChatState> state)
     {
         return new ChatStore(state);
@@ -907,5 +948,30 @@ public sealed class ConversationActivationCoordinatorTests
 
         public ValueTask<BindingUpdateResult> ClearBindingAsync(string conversationId)
             => ValueTask.FromResult(new BindingUpdateResult(BindingUpdateStatus.Error, "forced-binding-clear-failure"));
+    }
+
+    private sealed class RecordingBindingCommands : IConversationBindingCommands
+    {
+        public bool ClearedCalled { get; private set; }
+
+        public bool RestoreCalled { get; private set; }
+
+        public (string ConversationId, string? RemoteSessionId, string? ProfileId)? LastRestore { get; private set; }
+
+        public ValueTask<BindingUpdateResult> UpdateBindingAsync(
+            string conversationId,
+            string? remoteSessionId,
+            string? profileId)
+        {
+            if (string.IsNullOrWhiteSpace(remoteSessionId) && string.IsNullOrWhiteSpace(profileId))
+            {
+                ClearedCalled = true;
+                return ValueTask.FromResult(BindingUpdateResult.Success());
+            }
+
+            RestoreCalled = true;
+            LastRestore = (conversationId, remoteSessionId, profileId);
+            return ValueTask.FromResult(BindingUpdateResult.Success());
+        }
     }
 }
