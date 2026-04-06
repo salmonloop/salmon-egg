@@ -39,9 +39,9 @@ public sealed class ChatViewModelSessionCatalogAdapter : IChatSessionCatalog
     public void MoveConversationToProject(string conversationId, string projectId)
         => _conversationCatalog.MoveConversationToProject(conversationId, projectId);
 
-    public void ArchiveConversation(string conversationId)
-        => _conversationCatalog.ArchiveConversation(conversationId);
+    public Task<ConversationMutationResult> ArchiveConversationAsync(string conversationId, CancellationToken cancellationToken = default)
+        => _conversationCatalog.ArchiveConversationAsync(conversationId, cancellationToken);
 
-    public void DeleteConversation(string conversationId)
-        => _conversationCatalog.DeleteConversation(conversationId);
+    public Task<ConversationMutationResult> DeleteConversationAsync(string conversationId, CancellationToken cancellationToken = default)
+        => _conversationCatalog.DeleteConversationAsync(conversationId, cancellationToken);
 }

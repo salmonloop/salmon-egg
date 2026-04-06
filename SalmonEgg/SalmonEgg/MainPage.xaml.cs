@@ -136,7 +136,7 @@ public sealed partial class MainPage : Page
         BootLogDebug("MainPage: navigated to StartView");
     }
 
-    private void OnAutomationArchiveSelectedClick(object sender, RoutedEventArgs e)
+    private async void OnAutomationArchiveSelectedClick(object sender, RoutedEventArgs e)
     {
         if (!IsGuiAutomationMode)
         {
@@ -154,7 +154,7 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        _chatViewModel.ArchiveConversation(selectedSessionId);
+        _ = await _chatViewModel.ArchiveConversationAsync(selectedSessionId).ConfigureAwait(true);
     }
 
     private static void BootLogDebug(string message)

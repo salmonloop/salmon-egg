@@ -660,6 +660,40 @@ public sealed class ConversationActivationCoordinatorTests
         Assert.Null(currentState.ResolveBinding("session-1"));
     }
 
+    [Fact]
+    public async Task ArchiveConversation_WhenBindingClearFails_DoesNotRemoveConversation()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var preferences = CreatePreferences(syncContext);
+        var workspaceStore = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
+        using var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+
+        var chatStore = CreateChatStore(State.Value(new object(), () => ChatState.Empty));
+        var connectionStore = CreateConnectionStore();
+        var coordinator = new ConversationActivationCoordinator(
+            workspace,
+            new FailedBindingCommands(),
+            chatStore,
+            connectionStore,
+            Mock.Of<ILogger<ConversationActivationCoordinator>>());
+
+        var result = await coordinator.ArchiveConversationAsync("session-1", activeConversationId: null);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("forced-binding-clear-failure", result.FailureReason);
+        Assert.Contains("session-1", workspace.GetKnownConversationIds());
+    }
+
     private static IChatStore CreateChatStore(IState<ChatState> state)
     {
         return new ChatStore(state);
@@ -861,5 +895,17 @@ public sealed class ConversationActivationCoordinatorTests
 
         public ValueTask<ShellNavigationResult> NavigateToDiscoverSessions()
             => ValueTask.FromResult(ShellNavigationResult.Success());
+    }
+
+    private sealed class FailedBindingCommands : IConversationBindingCommands
+    {
+        public ValueTask<BindingUpdateResult> UpdateBindingAsync(
+            string conversationId,
+            string? remoteSessionId,
+            string? profileId)
+            => ValueTask.FromResult(new BindingUpdateResult(BindingUpdateStatus.Success, null));
+
+        public ValueTask<BindingUpdateResult> ClearBindingAsync(string conversationId)
+            => ValueTask.FromResult(new BindingUpdateResult(BindingUpdateStatus.Error, "forced-binding-clear-failure"));
     }
 }

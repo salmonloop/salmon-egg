@@ -184,13 +184,11 @@ public sealed class SessionNavItemViewModelTests
         {
         }
 
-        public void ArchiveConversation(string conversationId)
-        {
-        }
+        public Task<ConversationMutationResult> ArchiveConversationAsync(string conversationId, CancellationToken cancellationToken = default)
+            => Task.FromResult(new ConversationMutationResult(true, false, null));
 
-        public void DeleteConversation(string conversationId)
-        {
-        }
+        public Task<ConversationMutationResult> DeleteConversationAsync(string conversationId, CancellationToken cancellationToken = default)
+            => Task.FromResult(new ConversationMutationResult(true, false, null));
 
         public IReadOnlyList<ConversationProjectTargetOption> GetConversationProjectTargets() => _projectTargets;
 

@@ -905,7 +905,44 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
-    public async Task ConversationCatalogFacade_DeleteConversation_DoesNotBlockUiThread()
+    public async Task DeletedConversation_TombstonePersistsAcrossSaveAndRestore()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+
+        using (var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext))
+        {
+            workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+                ConversationId: "session-1",
+                Transcript: [CreateTextMessage("m-1", "alpha")],
+                Plan: [],
+                ShowPlanPanel: false,
+                PlanTitle: null,
+                CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
+            workspace.DeleteConversation("session-1");
+            await workspace.SaveAsync();
+        }
+
+        Assert.NotNull(store.LastSavedDocument);
+        store.LoadResult = store.LastSavedDocument!;
+
+        using var restoredWorkspace = CreateWorkspace(store, new FakeSessionManager(), preferences, syncContext);
+        await restoredWorkspace.RestoreAsync();
+        await restoredWorkspace.ApplySessionInfoUpdateAsync(
+            "session-1",
+            title: "zombie",
+            updatedAtUtc: DateTime.UtcNow,
+            allowRegisterWhenMissing: true);
+
+        Assert.DoesNotContain("session-1", restoredWorkspace.GetKnownConversationIds());
+        Assert.Null(restoredWorkspace.GetConversationSnapshot("session-1"));
+    }
+
+    [Fact]
+    public async Task ConversationCatalogFacade_DeleteConversationAsync_WaitsForMutationCompletion()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var store = new CapturingConversationStore();
@@ -932,12 +969,13 @@ public sealed class ChatConversationWorkspaceTests
             Mock.Of<INavigationCoordinator>(),
             Mock.Of<ILogger<ConversationCatalogFacade>>());
 
-        var deleteTask = Task.Run(() => facade.DeleteConversation("session-1"));
+        var deleteTask = facade.DeleteConversationAsync("session-1");
         var completed = await Task.WhenAny(deleteTask, Task.Delay(100));
-        Assert.True(completed == deleteTask, "DeleteConversation must not wait for the backend task.");
+        Assert.True(completed != deleteTask, "DeleteConversationAsync must remain pending until backend mutation completes.");
 
         tcs.SetResult(new ConversationMutationResult(true, false, null));
-        await deleteTask;
+        var result = await deleteTask;
+        Assert.True(result.Succeeded);
     }
 
     [Fact]
@@ -975,10 +1013,10 @@ public sealed class ChatConversationWorkspaceTests
             navigation.Object,
             Mock.Of<ILogger<ConversationCatalogFacade>>());
 
-        facade.ArchiveConversation("session-1");
+        var mutationTask = facade.ArchiveConversationAsync("session-1");
 
         await mutationCompleted.Task.WaitAsync(TimeSpan.FromSeconds(2));
-        await Task.Delay(100);
+        await mutationTask;
 
         navigation.Verify(n => n.ActivateStartAsync(), Times.Once);
     }

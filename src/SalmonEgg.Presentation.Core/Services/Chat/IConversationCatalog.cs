@@ -21,7 +21,7 @@ public interface IConversationCatalog : INotifyPropertyChanged
 
     void MoveConversationToProject(string conversationId, string projectId);
 
-    void ArchiveConversation(string conversationId);
+    Task<ConversationMutationResult> ArchiveConversationAsync(string conversationId, CancellationToken cancellationToken = default);
 
-    void DeleteConversation(string conversationId);
+    Task<ConversationMutationResult> DeleteConversationAsync(string conversationId, CancellationToken cancellationToken = default);
 }

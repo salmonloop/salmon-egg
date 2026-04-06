@@ -2214,40 +2214,43 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         }
     }
 
-    public void ArchiveConversation(string conversationId)
+    public Task<ConversationMutationResult> ArchiveConversationAsync(string conversationId, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(conversationId))
         {
-            return;
+            return Task.FromResult(new ConversationMutationResult(false, false, "ConversationIdMissing"));
         }
 
-        _ = RunConversationMutationAsync(
+        return RunConversationMutationAsync(
             operationName: "Archive",
             conversationId,
-            token => _conversationActivationCoordinator.ArchiveConversationAsync(conversationId, CurrentSessionId, token));
+            token => _conversationActivationCoordinator.ArchiveConversationAsync(conversationId, CurrentSessionId, token),
+            cancellationToken);
     }
 
-    public void DeleteConversation(string conversationId)
+    public Task<ConversationMutationResult> DeleteConversationAsync(string conversationId, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(conversationId))
         {
-            return;
+            return Task.FromResult(new ConversationMutationResult(false, false, "ConversationIdMissing"));
         }
 
-        _ = RunConversationMutationAsync(
+        return RunConversationMutationAsync(
             operationName: "Delete",
             conversationId,
-            token => _conversationActivationCoordinator.DeleteConversationAsync(conversationId, CurrentSessionId, token));
+            token => _conversationActivationCoordinator.DeleteConversationAsync(conversationId, CurrentSessionId, token),
+            cancellationToken);
     }
 
-    private async Task RunConversationMutationAsync(
+    private async Task<ConversationMutationResult> RunConversationMutationAsync(
         string operationName,
         string conversationId,
-        Func<CancellationToken, Task<ConversationMutationResult>> mutation)
+        Func<CancellationToken, Task<ConversationMutationResult>> mutation,
+        CancellationToken cancellationToken)
     {
         try
         {
-            var result = await mutation(CancellationToken.None).ConfigureAwait(false);
+            var result = await mutation(cancellationToken).ConfigureAwait(false);
             if (!result.Succeeded)
             {
                 Logger.LogWarning(
@@ -2255,14 +2258,16 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                     operationName,
                     conversationId,
                     result.FailureReason);
-                return;
+                return result;
             }
 
             await PostToUiAsync(() => RemoveBottomPanelState(conversationId)).ConfigureAwait(false);
+            return result;
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "{OperationName} operation failed due to underlying exception: {ConversationId}", operationName, conversationId);
+            return new ConversationMutationResult(false, false, ex.Message);
         }
     }
 

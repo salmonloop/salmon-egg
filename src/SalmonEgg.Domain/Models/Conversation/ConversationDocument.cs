@@ -12,6 +12,8 @@ namespace SalmonEgg.Domain.Models.Conversation
         public string? LastActiveConversationId { get; set; }
 
         public List<ConversationRecord> Conversations { get; set; } = new();
+
+        public List<string> DeletedConversationIds { get; set; } = new();
     }
 
     public sealed class ConversationRecord

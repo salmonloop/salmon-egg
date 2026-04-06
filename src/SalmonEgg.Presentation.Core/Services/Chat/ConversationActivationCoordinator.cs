@@ -14,6 +14,7 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
     private readonly IConversationBindingCommands _bindingCommands;
     private readonly IChatStore _chatStore;
     private readonly IChatConnectionStore _chatConnectionStore;
+    private readonly IConversationMutationPipeline _mutationPipeline;
     private readonly ILogger<ConversationActivationCoordinator> _logger;
 
     public ConversationActivationCoordinator(
@@ -21,13 +22,15 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
         IConversationBindingCommands bindingCommands,
         IChatStore chatStore,
         IChatConnectionStore chatConnectionStore,
-        ILogger<ConversationActivationCoordinator> logger)
+        ILogger<ConversationActivationCoordinator> logger,
+        IConversationMutationPipeline? mutationPipeline = null)
     {
         _conversationWorkspace = conversationWorkspace ?? throw new ArgumentNullException(nameof(conversationWorkspace));
         _bindingCommands = bindingCommands ?? throw new ArgumentNullException(nameof(bindingCommands));
         _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
         _chatConnectionStore = chatConnectionStore ?? throw new ArgumentNullException(nameof(chatConnectionStore));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _mutationPipeline = mutationPipeline ?? new ConversationMutationPipeline();
     }
 
     public Task<ConversationActivationResult> ActivateSessionAsync(string sessionId, CancellationToken cancellationToken = default)
@@ -185,37 +188,42 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
         Action<ChatConversationWorkspace, string> removeConversation,
         CancellationToken cancellationToken)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-
         if (string.IsNullOrWhiteSpace(conversationId))
         {
             return new ConversationMutationResult(false, false, "ConversationIdMissing");
         }
 
-        try
-        {
-            removeConversation(_conversationWorkspace, conversationId);
-
-            var clearBindingResult = await _bindingCommands.ClearBindingAsync(conversationId).ConfigureAwait(false);
-            if (clearBindingResult.Status is not BindingUpdateStatus.Success)
+        return await _mutationPipeline.RunAsync(
+            conversationId,
+            async token =>
             {
-                return new ConversationMutationResult(false, false, clearBindingResult.ErrorMessage ?? "BindingClearFailed");
-            }
+                token.ThrowIfCancellationRequested();
+                try
+                {
+                    var clearBindingResult = await _bindingCommands.ClearBindingAsync(conversationId).ConfigureAwait(false);
+                    if (clearBindingResult.Status is not BindingUpdateStatus.Success)
+                    {
+                        return new ConversationMutationResult(false, false, clearBindingResult.ErrorMessage ?? "BindingClearFailed");
+                    }
 
-            var currentState = await _chatStore.State ?? ChatState.Empty;
-            var hydratedConversationId = currentState.HydratedConversationId;
-            var clearsActiveConversation = string.Equals(conversationId, hydratedConversationId, StringComparison.Ordinal)
-                || string.Equals(activeConversationId, conversationId, StringComparison.Ordinal);
-            if (clearsActiveConversation)
-            {
-                await _chatStore.Dispatch(new SelectConversationAction(null));
-            }
-            return new ConversationMutationResult(true, clearsActiveConversation, null);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Conversation mutation failed (ConversationId={ConversationId})", conversationId);
-            return new ConversationMutationResult(false, false, ex.Message);
-        }
+                    removeConversation(_conversationWorkspace, conversationId);
+
+                    var currentState = await _chatStore.State ?? ChatState.Empty;
+                    var hydratedConversationId = currentState.HydratedConversationId;
+                    var clearsActiveConversation = string.Equals(conversationId, hydratedConversationId, StringComparison.Ordinal)
+                        || string.Equals(activeConversationId, conversationId, StringComparison.Ordinal);
+                    if (clearsActiveConversation)
+                    {
+                        await _chatStore.Dispatch(new SelectConversationAction(null));
+                    }
+                    return new ConversationMutationResult(true, clearsActiveConversation, null);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Conversation mutation failed (ConversationId={ConversationId})", conversationId);
+                    return new ConversationMutationResult(false, false, ex.Message);
+                }
+            },
+            cancellationToken).ConfigureAwait(false);
     }
 }

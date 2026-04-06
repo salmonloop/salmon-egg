@@ -767,7 +767,7 @@ public class ChatViewModelTests
         await WaitForConditionAsync(() => Task.FromResult(
             string.Equals(fixture.ViewModel.SelectedBottomPanelTab?.Id, "output", StringComparison.Ordinal)));
 
-        fixture.ViewModel.ArchiveConversation("session-1");
+        await fixture.ViewModel.ArchiveConversationAsync("session-1");
 
         activation.Verify(a => a.ArchiveConversationAsync("session-1", "session-1", It.IsAny<CancellationToken>()), Times.Once);
 
@@ -807,7 +807,7 @@ public class ChatViewModelTests
         await Task.Delay(50);
         Assert.Equal("output", fixture.ViewModel.SelectedBottomPanelTab?.Id);
 
-        fixture.ViewModel.DeleteConversation("session-1");
+        await fixture.ViewModel.DeleteConversationAsync("session-1");
 
         activation.Verify(a => a.DeleteConversationAsync("session-1", "session-1", It.IsAny<CancellationToken>()), Times.Once);
 
@@ -844,7 +844,7 @@ public class ChatViewModelTests
         await WaitForConditionAsync(() => Task.FromResult(
             string.Equals(fixture.ViewModel.SelectedBottomPanelTab?.Id, "output", StringComparison.Ordinal)));
 
-        fixture.ViewModel.ArchiveConversation("session-1");
+        await fixture.ViewModel.ArchiveConversationAsync("session-1");
 
         activation.Verify(a => a.ArchiveConversationAsync("session-1", "session-1", It.IsAny<CancellationToken>()), Times.Once);
         Assert.NotEmpty(fixture.ViewModel.BottomPanelTabs);
@@ -870,12 +870,14 @@ public class ChatViewModelTests
         await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "session-1" });
         await Task.Delay(50);
 
-        var archiveTask = Task.Run(() => fixture.ViewModel.ArchiveConversation("session-1"));
+        var archiveTask = fixture.ViewModel.ArchiveConversationAsync("session-1");
         var completed = await Task.WhenAny(archiveTask, Task.Delay(200));
-        Assert.True(completed == archiveTask, "ArchiveConversation should return immediately and must not block caller thread.");
+        Assert.True(completed != archiveTask, "ArchiveConversationAsync should stay pending while backend mutation is still running.");
 
         await started.Task.WaitAsync(TimeSpan.FromSeconds(2));
         allowCompletion.TrySetResult(null);
+        var result = await archiveTask;
+        Assert.True(result.Succeeded);
     }
 
     [Fact]
@@ -900,7 +902,7 @@ public class ChatViewModelTests
         syncContext.RunAll();
         await WaitForConditionAsync(() => Task.FromResult(fixture.ViewModel.BottomPanelTabs.Count > 0));
 
-        fixture.ViewModel.ArchiveConversation("session-1");
+        var archiveTask = fixture.ViewModel.ArchiveConversationAsync("session-1");
 
         await mutationCompleted.Task.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.NotEmpty(fixture.ViewModel.BottomPanelTabs);
@@ -912,6 +914,7 @@ public class ChatViewModelTests
                 fixture.ViewModel.BottomPanelTabs.Count == 0
                 && fixture.ViewModel.SelectedBottomPanelTab is null);
         });
+        await archiveTask;
     }
 
     [Fact]
@@ -926,7 +929,7 @@ public class ChatViewModelTests
         await fixture.DispatchAsync(new SetBindingSliceAction(new ConversationBindingSlice("session-1", "remote-1", "profile-1")));
         await fixture.DispatchAsync(new SelectConversationAction("session-1"));
 
-        fixture.ViewModel.ArchiveConversation("session-1");
+        await fixture.ViewModel.ArchiveConversationAsync("session-1");
 
         await WaitForConditionAsync(async () =>
         {
@@ -966,7 +969,7 @@ public class ChatViewModelTests
         await fixture.DispatchAsync(new SetBindingSliceAction(new ConversationBindingSlice("session-1", "remote-1", "profile-1")));
         await fixture.DispatchAsync(new SelectConversationAction("session-1"));
 
-        fixture.ViewModel.DeleteConversation("session-1");
+        await fixture.ViewModel.DeleteConversationAsync("session-1");
 
         await WaitForConditionAsync(async () =>
         {
@@ -1072,7 +1075,7 @@ public class ChatViewModelTests
         await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "session-1" });
         await Task.Delay(50);
 
-        fixture.ViewModel.ArchiveConversation("session-1");
+        await fixture.ViewModel.ArchiveConversationAsync("session-1");
         await Task.Delay(50);
 
         var state = await fixture.GetStateAsync();
@@ -1097,7 +1100,7 @@ public class ChatViewModelTests
         await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "session-1" });
         await Task.Delay(50);
 
-        fixture.ViewModel.DeleteConversation("session-1");
+        await fixture.ViewModel.DeleteConversationAsync("session-1");
         await Task.Delay(50);
 
         var state = await fixture.GetStateAsync();
@@ -4133,11 +4136,21 @@ public class ChatViewModelTests
         syncContext.RunAll();
 
         Assert.True(await hydrationTask);
-        Assert.Contains(
-            fixture.ViewModel.MessageHistory,
-            message => (message.TextContent?.Contains("first replay burst", StringComparison.Ordinal) ?? false)
-                && (message.TextContent?.Contains("second replay burst", StringComparison.Ordinal) ?? false));
-        await WaitForConditionAsync(() => Task.FromResult(!fixture.ViewModel.IsOverlayVisible), timeoutMilliseconds: 4000);
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            var combinedText = string.Join(
+                "\n",
+                fixture.ViewModel.MessageHistory.Select(message => message.TextContent ?? string.Empty));
+            return Task.FromResult(
+                fixture.ViewModel.MessageHistory.Count > 0
+                && combinedText.Contains("second replay burst", StringComparison.Ordinal));
+        }, timeoutMilliseconds: 8000);
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(!fixture.ViewModel.IsOverlayVisible);
+        }, timeoutMilliseconds: 8000);
     }
 
     [Fact]

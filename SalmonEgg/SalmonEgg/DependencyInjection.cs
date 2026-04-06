@@ -303,6 +303,7 @@ public static class DependencyInjection
                 sp.GetRequiredService<ChatConversationWorkspace>(),
                 sp.GetRequiredService<IChatStore>()));
         services.AddSingleton<IConversationBindingCommands>(sp => sp.GetRequiredService<BindingCoordinator>());
+        services.AddSingleton<IConversationMutationPipeline, ConversationMutationPipeline>();
         services.AddSingleton<IWorkspaceWriter>(sp =>
             new WorkspaceWriter(sp.GetRequiredService<ChatConversationWorkspace>()));
         services.AddSingleton<Func<Action<SessionUpdateEventArgs>, SynchronizationContext, Action<string?>?, AcpEventAdapter>>(sp =>
@@ -317,7 +318,8 @@ public static class DependencyInjection
                 sp.GetRequiredService<IConversationBindingCommands>(),
                 sp.GetRequiredService<IChatStore>(),
                 sp.GetRequiredService<IChatConnectionStore>(),
-                sp.GetRequiredService<ILogger<ConversationActivationCoordinator>>()));
+                sp.GetRequiredService<ILogger<ConversationActivationCoordinator>>(),
+                sp.GetRequiredService<IConversationMutationPipeline>()));
 
         // Main shell navigation (Start + Projects -> Sessions tree)
         services.AddSingleton<NavigationSelectionProjector>();

@@ -207,6 +207,18 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
     public void MoveConversationToProject(string conversationId, string projectId)
         => UpdateProjectAffinityOverride(conversationId, projectId);
 
+    public Task<ConversationMutationResult> ArchiveConversationAsync(string conversationId, CancellationToken cancellationToken = default)
+    {
+        RemoveConversation(conversationId);
+        return Task.FromResult(new ConversationMutationResult(true, false, null));
+    }
+
+    public Task<ConversationMutationResult> DeleteConversationAsync(string conversationId, CancellationToken cancellationToken = default)
+    {
+        RemoveConversation(conversationId);
+        return Task.FromResult(new ConversationMutationResult(true, false, null));
+    }
+
     public void ArchiveConversation(string conversationId)
         => RemoveConversation(conversationId);
 
@@ -549,9 +561,15 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         ThrowIfDisposed();
         var document = new ConversationDocument
         {
-            Version = 3,
+            Version = 4,
             LastActiveConversationId = null
         };
+
+        document.DeletedConversationIds.AddRange(
+            _deletedConversationTombstones
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(id => id, StringComparer.Ordinal));
 
         foreach (var binding in _conversationBindings.Values.OrderByDescending(item => item.LastUpdatedAt))
         {
@@ -601,6 +619,18 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
 
     private void ApplyRestoredDocument(ConversationDocument document)
     {
+        _deletedConversationTombstones.Clear();
+        if (document.DeletedConversationIds is { Count: > 0 })
+        {
+            foreach (var deletedId in document.DeletedConversationIds)
+            {
+                if (!string.IsNullOrWhiteSpace(deletedId))
+                {
+                    _deletedConversationTombstones.Add(deletedId.Trim());
+                }
+            }
+        }
+
         foreach (var conversation in document.Conversations)
         {
             if (string.IsNullOrWhiteSpace(conversation.ConversationId))

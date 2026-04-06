@@ -61,8 +61,6 @@ namespace SalmonEgg.Presentation.Views.Chat
             UpdateTranscriptViewportAutomationState();
             try
             {
-                // Restore may already be running from the singleton VM; calling again is safe.
-                await ViewModel.RestoreConversationsAsync();
                 await ViewModel.EnsureAcpProfilesLoadedAsync();
             }
             catch

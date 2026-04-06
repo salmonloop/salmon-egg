@@ -182,7 +182,7 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
             return;
         }
 
-        _chatSessionCatalog.ArchiveConversation(SessionId);
+        _ = await _chatSessionCatalog.ArchiveConversationAsync(SessionId).ConfigureAwait(true);
     }
 
     private async Task MoveAsync()

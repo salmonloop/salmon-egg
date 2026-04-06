@@ -99,28 +99,32 @@ public sealed class ConversationCatalogFacade : IConversationCatalog, IDisposabl
     public void MoveConversationToProject(string conversationId, string projectId)
         => _workspace.MoveConversationToProject(conversationId, projectId);
 
-    public void ArchiveConversation(string conversationId)
+    public async Task<ConversationMutationResult> ArchiveConversationAsync(string conversationId, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(conversationId))
         {
-            return;
+            return new ConversationMutationResult(false, false, "ConversationIdMissing");
         }
 
-        _ = RunMutationAsync(() => _activationCoordinator.ArchiveConversationAsync(
-            conversationId,
-            GetActiveConversationId()));
+        return await RunMutationAsync(
+            () => _activationCoordinator.ArchiveConversationAsync(
+                conversationId,
+                GetActiveConversationId(),
+                cancellationToken)).ConfigureAwait(true);
     }
 
-    public void DeleteConversation(string conversationId)
+    public async Task<ConversationMutationResult> DeleteConversationAsync(string conversationId, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(conversationId))
         {
-            return;
+            return new ConversationMutationResult(false, false, "ConversationIdMissing");
         }
 
-        _ = RunMutationAsync(() => _activationCoordinator.DeleteConversationAsync(
-            conversationId,
-            GetActiveConversationId()));
+        return await RunMutationAsync(
+            () => _activationCoordinator.DeleteConversationAsync(
+                conversationId,
+                GetActiveConversationId(),
+                cancellationToken)).ConfigureAwait(true);
     }
 
     public Task RegisterConversationAsync(string conversationId)
@@ -147,7 +151,7 @@ public sealed class ConversationCatalogFacade : IConversationCatalog, IDisposabl
             ? session.SessionId
             : null;
 
-    private async Task RunMutationAsync(Func<Task<ConversationMutationResult>> mutation)
+    private async Task<ConversationMutationResult> RunMutationAsync(Func<Task<ConversationMutationResult>> mutation)
     {
         try
         {
@@ -156,10 +160,13 @@ public sealed class ConversationCatalogFacade : IConversationCatalog, IDisposabl
             {
                 await _navigationCoordinator.ActivateStartAsync().ConfigureAwait(true);
             }
+
+            return result;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Conversation catalog mutation failed");
+            return new ConversationMutationResult(false, false, ex.Message);
         }
     }
 }
