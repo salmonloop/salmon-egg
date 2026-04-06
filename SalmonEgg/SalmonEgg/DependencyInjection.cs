@@ -125,6 +125,7 @@ public static class DependencyInjection
         services.AddSingleton<IAppDocumentService, AppDocumentService>();
         services.AddSingleton<IConversationStore, ConversationStore>();
         services.AddSingleton<IPlatformCapabilityService, PlatformCapabilityService>();
+        services.AddSingleton<IPlatformIconService, PlatformIconService>();
         services.AddSingleton<IAppStartupService, AppStartupService>();
         services.AddSingleton<IAppLanguageService, AppLanguageService>();
         services.AddSingleton<IConfigurationService, ConfigurationManager>();

@@ -574,8 +574,13 @@ public sealed partial class MainPage : Page
             ? "TodoPanelTitleBarFilledIconTemplate"
             : "TodoPanelTitleBarRegularIconTemplate");
 
-    private static DataTemplate GetAuxiliaryIconTemplate(string resourceKey)
+    private DataTemplate GetAuxiliaryIconTemplate(string resourceKey)
     {
+        if (Resources.TryGetValue(resourceKey, out var localValue) && localValue is DataTemplate localTemplate)
+        {
+            return localTemplate;
+        }
+
         if (Microsoft.UI.Xaml.Application.Current.Resources.TryGetValue(resourceKey, out var value) && value is DataTemplate template)
         {
             return template;
