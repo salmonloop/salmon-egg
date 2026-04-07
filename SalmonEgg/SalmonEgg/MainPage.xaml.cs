@@ -8,11 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 #if WINDOWS
-using Microsoft.UI;
-using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
-using Windows.Foundation;
-using Windows.Graphics;
 #endif
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -75,10 +71,7 @@ public sealed partial class MainPage : Page
     private bool _allowClose;
 #endif
 #if WINDOWS
-    private AppWindowTitleBar? _appWindowTitleBar;
-    private Microsoft.UI.Xaml.Controls.TitleBar? _winuiTitleBarControl;
-    private InputNonClientPointerSource? _titleBarPointerSource;
-    private XamlRoot? _observedTitleBarXamlRoot;
+    // Title bar hosting/interactive-region state is encapsulated by MainWindowTitleBarAdapter.
 #endif
 
     public AppPreferencesViewModel Preferences { get; }
@@ -94,6 +87,7 @@ public sealed partial class MainPage : Page
     private readonly ILogger<MainPage> _logger;
     private readonly MainNavigationContentSyncAdapter _mainNavigationContentSyncAdapter;
     private readonly MainNavigationViewAdapter _mainNavigationViewAdapter;
+    private readonly MainWindowTitleBarAdapter _titleBarAdapter;
     private readonly SalmonEgg.Presentation.Logic.SearchInteractionLogic _searchLogic = new();
 
     public MainPage()
@@ -118,6 +112,18 @@ public sealed partial class MainPage : Page
         this.InitializeComponent();
         _mainNavigationContentSyncAdapter = new MainNavigationContentSyncAdapter(_navigationCoordinator);
         _mainNavigationViewAdapter = new MainNavigationViewAdapter(MainNavView, DispatcherQueue, NavVM, _navigationCoordinator);
+        _titleBarAdapter = new MainWindowTitleBarAdapter(
+            AppTitleBar,
+            AppTitleBarLayoutRoot,
+            AppTitleBarContent,
+            TitleBarDragRegion,
+            TitleBarLeftButtons,
+            TopSearchBox,
+            TitleBarRightButtons,
+            TitleBarBackButton,
+            ContentFrame,
+            DispatcherQueue,
+            _logger);
         BootLogDebug("MainPage: InitializeComponent done");
 
         Loaded += OnMainPageLoaded;
@@ -180,7 +186,7 @@ public sealed partial class MainPage : Page
         _metricsProvider.Detach();
         ContentFrame.NavigationFailed -= OnContentFrameNavigationFailed;
 #if WINDOWS
-        DetachTitleBarXamlRootChanged();
+        _titleBarAdapter.Detach();
         _trayIcon?.Dispose();
         _trayIcon = null;
 #endif
@@ -655,9 +661,9 @@ public sealed partial class MainPage : Page
 
     private async void OnMainPageLoaded(object sender, RoutedEventArgs e)
     {
-        ConfigureTitleBar();
+        _titleBarAdapter.Configure(App.MainWindowInstance);
 #if WINDOWS
-        _metricsProvider.Attach(App.MainWindowInstance!, _appWindowTitleBar);
+        _metricsProvider.Attach(App.MainWindowInstance!, _titleBarAdapter.AppWindowTitleBar);
 #else
         _metricsProvider.Attach(App.MainWindowInstance!, null);
 #endif
@@ -675,24 +681,14 @@ public sealed partial class MainPage : Page
     private void OnAppTitleBarLoaded(object sender, RoutedEventArgs e)
     {
 #if WINDOWS
-#if DEBUG
-        App.BootLog("TitleBarDiag OnAppTitleBarLoaded");
-#endif
-        AttachTitleBarXamlRootChanged();
-        if (_appWindowTitleBar is null)
-        {
-            ConfigureTitleBar();
-        }
-
-        RefreshTitleBarInteractiveRegions();
+        _titleBarAdapter.OnHostLoaded(App.MainWindowInstance);
 #endif
     }
 
     private void OnAppTitleBarSizeChanged(object sender, SizeChangedEventArgs e)
     {
 #if WINDOWS
-        RefreshTitleBarInteractiveRegions();
-        LogTitleBarRightMetrics("OnAppTitleBarSizeChanged");
+        _titleBarAdapter.OnHostSizeChanged();
 #endif
     }
 
@@ -934,299 +930,15 @@ public sealed partial class MainPage : Page
         LeftNavResizer.ReleasePointerCapture(pointer);
     }
 
-    private void ConfigureTitleBar()
-    {
-        var window = App.MainWindowInstance;
-        if (window == null || AppTitleBar is null || TitleBarDragRegion is null)
-        {
-#if DEBUG
-            App.BootLog("TitleBarDiag ConfigureTitleBar skipped: window/AppTitleBar/TitleBarDragRegion missing");
-#endif
-            return;
-        }
-
-#if WINDOWS
-#if DEBUG
-        App.BootLog("TitleBarDiag ConfigureTitleBar enter");
-#endif
-        AttachTitleBarXamlRootChanged();
-        if (!AppWindowTitleBar.IsCustomizationSupported() || AppTitleBar.XamlRoot is null)
-        {
-#if DEBUG
-            App.BootLog("TitleBarDiag ConfigureTitleBar skipped: customization unsupported or XamlRoot null");
-#endif
-            return;
-        }
-
-        EnsureWinUiTitleBarControl();
-        var titleBarElement = (UIElement?)_winuiTitleBarControl ?? AppTitleBar;
-
-        try
-        {
-            window.ExtendsContentIntoTitleBar = true;
-            // Prefer the WinUI TitleBar control path. If creation failed, fallback to legacy host.
-            window.SetTitleBar(titleBarElement);
-        }
-        catch
-        {
-#if DEBUG
-            App.BootLog("TitleBarDiag ConfigureTitleBar skipped: SetTitleBar threw");
-#endif
-            return;
-        }
-
-        if (TitleBarLeftButtons != null)
-        {
-            TitleBarLeftButtons.Visibility = Visibility.Visible;
-        }
-
-        if (TitleBarBackButton != null)
-        {
-            TitleBarBackButton.IsEnabled = ContentFrame.CanGoBack;
-        }
-
-        var appWindow = window.AppWindow;
-        if (appWindow?.TitleBar == null)
-        {
-#if DEBUG
-            App.BootLog("TitleBarDiag ConfigureTitleBar skipped: AppWindow.TitleBar null");
-#endif
-            return;
-        }
-
-        _appWindowTitleBar = appWindow.TitleBar;
-        _appWindowTitleBar.ExtendsContentIntoTitleBar = true;
-        _appWindowTitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
-        _appWindowTitleBar.BackgroundColor = Colors.Transparent;
-        _appWindowTitleBar.InactiveBackgroundColor = Colors.Transparent;
-        // Keep normal caption buttons transparent so they blend with our title bar,
-        // but preserve system hover/pressed visuals (including the Close button red state).
-        _appWindowTitleBar.ButtonBackgroundColor = Colors.Transparent;
-        _appWindowTitleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
-        _titleBarPointerSource = _winuiTitleBarControl is null
-            ? InputNonClientPointerSource.GetForWindowId(window.AppWindow.Id)
-            : null;
-        RefreshTitleBarInteractiveRegions();
-        LogTitleBarRightMetrics("ConfigureTitleBar");
-        _ = DispatcherQueue.TryEnqueue(() => LogTitleBarRightMetrics("ConfigureTitleBar.Deferred"));
-#if DEBUG
-        App.BootLog("TitleBarDiag ConfigureTitleBar complete");
-#endif
-#endif
-    }
-
     private void OnLayoutViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(ShellLayoutViewModel.TitleBarInteractiveRegionToken))
         {
 #if WINDOWS
-            RefreshTitleBarInteractiveRegions();
+            _titleBarAdapter.OnInteractiveRegionTokenChanged();
 #endif
         }
     }
-
-#if WINDOWS
-    private void EnsureWinUiTitleBarControl()
-    {
-        if (_winuiTitleBarControl is not null || AppTitleBar is null || AppTitleBarLayoutRoot is null || AppTitleBarContent is null)
-        {
-            return;
-        }
-
-        if (!ReferenceEquals(AppTitleBar.Child, AppTitleBarLayoutRoot))
-        {
-            return;
-        }
-
-        if (TitleBarLeftButtons is null || TopSearchBox is null || TitleBarRightButtons is null)
-        {
-            return;
-        }
-
-        DetachElementFromVisualParent(TitleBarLeftButtons);
-        DetachElementFromVisualParent(TopSearchBox);
-        DetachElementFromVisualParent(TitleBarRightButtons);
-
-        AppTitleBarContent.Visibility = Visibility.Collapsed;
-        if (TitleBarDragRegion is not null)
-        {
-            TitleBarDragRegion.Visibility = Visibility.Collapsed;
-        }
-
-        AppTitleBar.Child = null;
-        _winuiTitleBarControl = new Microsoft.UI.Xaml.Controls.TitleBar
-        {
-            Background = new SolidColorBrush(Colors.Transparent),
-            IsBackButtonVisible = false,
-            IsPaneToggleButtonVisible = false,
-            LeftHeader = TitleBarLeftButtons,
-            Content = TopSearchBox,
-            RightHeader = TitleBarRightButtons,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            VerticalAlignment = VerticalAlignment.Stretch,
-        };
-        AppTitleBar.Child = _winuiTitleBarControl;
-    }
-
-    private static void DetachElementFromVisualParent(FrameworkElement element)
-    {
-        if (element.Parent is Panel panel)
-        {
-            panel.Children.Remove(element);
-        }
-    }
-
-    private void LogTitleBarRightMetrics(string source)
-    {
-#if DEBUG
-        if (_appWindowTitleBar is null)
-        {
-            App.BootLog("TitleBarMetricsSkipped Source=" + source + " Reason=AppWindowTitleBarNull");
-            return;
-        }
-
-        if (AppTitleBar is null || TitleBarRightButtons is null)
-        {
-            App.BootLog("TitleBarMetricsSkipped Source=" + source + " Reason=TitleBarElementsNull");
-            return;
-        }
-
-        if (AppTitleBar.ActualWidth <= 0 || TitleBarRightButtons.ActualWidth <= 0)
-        {
-            App.BootLog(
-                "TitleBarMetricsSkipped "
-                + "Source=" + source
-                + " Reason=ZeroWidth"
-                + " AppTitleBarWidth=" + AppTitleBar.ActualWidth
-                + " RightButtonsWidth=" + TitleBarRightButtons.ActualWidth);
-            return;
-        }
-
-        try
-        {
-            var transform = TitleBarRightButtons.TransformToVisual(AppTitleBar);
-            var origin = transform.TransformPoint(new Point(0, 0));
-            var rightButtonsRight = origin.X + TitleBarRightButtons.ActualWidth;
-            var rightGap = AppTitleBar.ActualWidth - rightButtonsRight;
-
-            _logger.LogDebug(
-                "TitleBar metrics Source={Source} LeftInset={LeftInset} RightInset={RightInset} TitleBarHeight={TitleBarHeight} TitleBarWidth={TitleBarWidth} RightButtonsX={RightButtonsX} RightButtonsWidth={RightButtonsWidth} RightButtonsRight={RightButtonsRight} RightGap={RightGap}",
-                source,
-                _appWindowTitleBar.LeftInset,
-                _appWindowTitleBar.RightInset,
-                _appWindowTitleBar.Height,
-                AppTitleBar.ActualWidth,
-                origin.X,
-                TitleBarRightButtons.ActualWidth,
-                rightButtonsRight,
-                rightGap);
-            App.BootLog(
-                "TitleBarMetrics "
-                + "Source=" + source
-                + " LeftInset=" + _appWindowTitleBar.LeftInset
-                + " RightInset=" + _appWindowTitleBar.RightInset
-                + " TitleBarHeight=" + _appWindowTitleBar.Height
-                + " TitleBarWidth=" + AppTitleBar.ActualWidth
-                + " RightButtonsX=" + origin.X
-                + " RightButtonsWidth=" + TitleBarRightButtons.ActualWidth
-                + " RightButtonsRight=" + rightButtonsRight
-                + " RightGap=" + rightGap);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "TitleBar metrics capture failed Source={Source}", source);
-            App.BootLog("TitleBarMetricsCaptureFailed Source=" + source + " Exception=" + ex.GetType().Name);
-        }
-#endif
-    }
-
-    private void RefreshTitleBarInteractiveRegions()
-    {
-        if (_winuiTitleBarControl is not null)
-        {
-            return;
-        }
-
-        UpdateTitleBarInteractiveRegions();
-        _ = DispatcherQueue.TryEnqueue(UpdateTitleBarInteractiveRegions);
-    }
-
-    private void AttachTitleBarXamlRootChanged()
-    {
-        var xamlRoot = AppTitleBar?.XamlRoot;
-        if (ReferenceEquals(_observedTitleBarXamlRoot, xamlRoot))
-        {
-            return;
-        }
-
-        if (_observedTitleBarXamlRoot is not null)
-        {
-            _observedTitleBarXamlRoot.Changed -= OnTitleBarXamlRootChanged;
-        }
-
-        _observedTitleBarXamlRoot = xamlRoot;
-        if (_observedTitleBarXamlRoot is not null)
-        {
-            _observedTitleBarXamlRoot.Changed += OnTitleBarXamlRootChanged;
-        }
-    }
-
-    private void DetachTitleBarXamlRootChanged()
-    {
-        if (_observedTitleBarXamlRoot is null)
-        {
-            return;
-        }
-
-        _observedTitleBarXamlRoot.Changed -= OnTitleBarXamlRootChanged;
-        _observedTitleBarXamlRoot = null;
-    }
-
-    private void OnTitleBarXamlRootChanged(XamlRoot sender, XamlRootChangedEventArgs args)
-    {
-        AttachTitleBarXamlRootChanged();
-        RefreshTitleBarInteractiveRegions();
-    }
-
-    private void UpdateTitleBarInteractiveRegions()
-    {
-        if (AppTitleBar is null || _titleBarPointerSource is null || AppTitleBar.XamlRoot is null)
-        {
-            return;
-        }
-
-        var regions = new List<RectInt32>();
-
-        TryAddInteractiveRegion(TitleBarLeftButtons, regions);
-        TryAddInteractiveRegion(TopSearchBox, regions);
-        TryAddInteractiveRegion(TitleBarRightButtons, regions);
-
-        _titleBarPointerSource.SetRegionRects(NonClientRegionKind.Passthrough, regions.ToArray());
-    }
-
-    private void TryAddInteractiveRegion(FrameworkElement? element, List<RectInt32> regions)
-    {
-        if (element is null || AppTitleBar is null || AppTitleBar.XamlRoot is null)
-        {
-            return;
-        }
-
-        if (element.Visibility != Visibility.Visible || element.ActualWidth <= 0 || element.ActualHeight <= 0)
-        {
-            return;
-        }
-
-        var transform = element.TransformToVisual(AppTitleBar);
-        var origin = transform.TransformPoint(new Point(0, 0));
-        var scale = AppTitleBar.XamlRoot.RasterizationScale;
-
-        regions.Add(new RectInt32(
-            (int)Math.Round(origin.X * scale),
-            (int)Math.Round(origin.Y * scale),
-            Math.Max(1, (int)Math.Round(element.ActualWidth * scale)),
-            Math.Max(1, (int)Math.Round(element.ActualHeight * scale))));
-    }
-#endif
 
 #if WINDOWS
     private void InitializeTray()
