@@ -91,4 +91,15 @@ public class ShellLayoutReducerTests
 
         Assert.True(reduced.Snapshot.IsNavPaneOpen);
     }
+
+    [Fact]
+    public void Reducer_ContentContextChange_ProjectsAuxiliaryTitleBarVisibility()
+    {
+        var state = ShellLayoutState.Default with { IsChatContext = false };
+
+        var reduced = ShellLayoutReducer.Reduce(state, new ContentContextChanged(IsChatContext: true));
+
+        Assert.True(reduced.State.IsChatContext);
+        Assert.True(reduced.Snapshot.ShowAuxiliaryTitleBarButtons);
+    }
 }

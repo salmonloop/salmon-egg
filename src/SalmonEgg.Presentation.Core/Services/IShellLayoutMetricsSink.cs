@@ -8,6 +8,7 @@ public interface IShellLayoutMetricsSink
     ValueTask ReportWindowMetrics(double width, double height, double effectiveWidth, double effectiveHeight);
     ValueTask ReportTitleBarInsets(double left, double right, double height);
     ValueTask ReportNavToggle(string source);
+    ValueTask ReportContentContext(bool isChatContext);
     ValueTask ReportToggleRightPanel(RightPanelMode targetMode);
     ValueTask ReportToggleBottomPanel();
     ValueTask ReportClearAuxiliaryPanels();
@@ -30,6 +31,9 @@ public sealed class ShellLayoutMetricsSink : IShellLayoutMetricsSink
 
     public ValueTask ReportNavToggle(string source)
         => _store.Dispatch(new NavToggleRequested(source));
+
+    public ValueTask ReportContentContext(bool isChatContext)
+        => _store.Dispatch(new ContentContextChanged(isChatContext));
 
     public ValueTask ReportToggleRightPanel(RightPanelMode targetMode)
         => _store.Dispatch(new ToggleRightPanelRequested(targetMode));

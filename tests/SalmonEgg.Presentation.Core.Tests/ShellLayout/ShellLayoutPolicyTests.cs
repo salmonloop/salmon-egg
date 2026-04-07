@@ -26,6 +26,16 @@ public class ShellLayoutPolicyTests
     }
 
     [Fact]
+    public void Policy_ShowsAuxiliaryTitleBarButtons_OnlyInChatContext()
+    {
+        var nonChat = ShellLayoutPolicy.Compute(ShellLayoutState.Default with { IsChatContext = false });
+        var chat = ShellLayoutPolicy.Compute(ShellLayoutState.Default with { IsChatContext = true });
+
+        Assert.False(nonChat.ShowAuxiliaryTitleBarButtons);
+        Assert.True(chat.ShowAuxiliaryTitleBarButtons);
+    }
+
+    [Fact]
     public void Policy_Uses_TitleBarInsetsHeight()
     {
         var state = ShellLayoutState.Default with { TitleBarInsetsHeight = 60 };

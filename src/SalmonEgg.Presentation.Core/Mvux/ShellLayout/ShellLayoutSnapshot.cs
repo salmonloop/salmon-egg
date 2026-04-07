@@ -22,4 +22,5 @@ public sealed record ShellLayoutSnapshot(
     double LeftNavResizerLeft,
     bool CanToggleDiffPanel = true,
     bool CanToggleTodoPanel = true,
-    bool CanToggleBottomPanel = true);
+    bool CanToggleBottomPanel = true,
+    bool ShowAuxiliaryTitleBarButtons = false);

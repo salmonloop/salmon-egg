@@ -19,6 +19,18 @@ public class ShellLayoutMetricsSinkTests
         Assert.Equal(100, action.Width);
     }
 
+    [Fact]
+    public async Task MetricsSink_Dispatches_ContentContext()
+    {
+        await using var store = new CapturingStore();
+        var sink = new ShellLayoutMetricsSink(store);
+
+        await sink.ReportContentContext(isChatContext: true);
+
+        var action = Assert.IsType<ContentContextChanged>(store.LastAction);
+        Assert.True(action.IsChatContext);
+    }
+
     private sealed class CapturingStore : IShellLayoutStore, IAsyncDisposable
     {
         private readonly IState<ShellLayoutState> _state = Uno.Extensions.Reactive.State.Value(new object(), () => ShellLayoutState.Default);

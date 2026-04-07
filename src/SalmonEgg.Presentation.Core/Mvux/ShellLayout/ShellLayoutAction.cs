@@ -8,6 +8,8 @@ public sealed record TitleBarInsetsChanged(double Left, double Right, double Hei
 
 public sealed record NavToggleRequested(string Source) : ShellLayoutAction;
 
+public sealed record ContentContextChanged(bool IsChatContext) : ShellLayoutAction;
+
 public sealed record ToggleRightPanelRequested(RightPanelMode TargetMode) : ShellLayoutAction;
 
 public sealed record ToggleBottomPanelRequested : ShellLayoutAction;

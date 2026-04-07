@@ -187,6 +187,24 @@ public class ShellLayoutViewModelTests
     }
 
     [Fact]
+    public async Task ViewModel_ProjectsAuxiliaryTitleBarButtonsVisibility_FromSnapshot()
+    {
+        await using var store = new FakeShellLayoutStore();
+        using var vm = new ShellLayoutViewModel(store);
+
+        await store.SnapshotState.Update(_ => new ShellLayoutSnapshot(
+            NavigationPaneDisplayMode.Compact, false, 300, 72,
+            false, 0, 0, new LayoutPadding(4, 0, 4, 0), new LayoutPadding(0, 0, 0, 0), 60,
+            false, false, 0, RightPanelMode.None, false, 0, BottomPanelMode.None, false, 0,
+            false, false, false,
+            true), default);
+
+        await WaitForConditionAsync(() => vm.ShowAuxiliaryTitleBarButtons);
+
+        Assert.True(vm.ShowAuxiliaryTitleBarButtons);
+    }
+
+    [Fact]
     public async Task ViewModel_DoesNotDispatchToggleCommands_WhenDisabled()
     {
         await using var store = new FakeShellLayoutStore();

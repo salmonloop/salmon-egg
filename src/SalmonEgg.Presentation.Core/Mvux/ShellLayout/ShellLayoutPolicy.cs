@@ -42,6 +42,7 @@ public static class ShellLayoutPolicy
         var canToggleRightPanels = maxRightPanelWidth >= RightPanelMinWidth
             && mode != NavigationPaneDisplayMode.Minimal;
         var canToggleBottomPanel = maxBottomPanelHeight >= BottomPanelMinHeight;
+        var showAuxiliaryTitleBarButtons = state.IsChatContext;
 
         var canShowSimultaneousAuxiliaryPanels =
             availableWidth >= MinimumDualPanelWidth && availableHeight >= MinimumDualPanelHeight;
@@ -127,6 +128,7 @@ public static class ShellLayoutPolicy
             isOpen ? state.NavOpenPaneLength - 6 : state.NavCompactPaneLength - 6,
             canToggleRightPanels,
             canToggleRightPanels,
-            canToggleBottomPanel);
+            canToggleBottomPanel,
+            showAuxiliaryTitleBarButtons);
     }
 }

@@ -15,6 +15,7 @@ public static class ShellLayoutReducer
                 TitleBarInsetsHeight = t.Height
             },
             NavToggleRequested => state with { UserNavOpenIntent = !ShellLayoutPolicy.Compute(state).IsNavPaneOpen },
+            ContentContextChanged c => state with { IsChatContext = c.IsChatContext },
             ToggleRightPanelRequested t => state with
             {
                 DesiredRightPanelMode = state.DesiredRightPanelMode == t.TargetMode ? RightPanelMode.None : t.TargetMode,

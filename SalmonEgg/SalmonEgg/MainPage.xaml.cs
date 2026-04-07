@@ -129,6 +129,7 @@ public sealed partial class MainPage : Page
         Preferences.PropertyChanged += OnPreferencesPropertyChanged;
         _chatViewModel.PropertyChanged += OnChatViewModelPropertyChanged;
         NavVM.PropertyChanged += OnNavigationViewModelPropertyChanged;
+        LayoutVM.PropertyChanged += OnLayoutViewModelPropertyChanged;
 
         // 3. Initialize theme and motion state
         ApplyTheme();
@@ -175,6 +176,7 @@ public sealed partial class MainPage : Page
         Preferences.PropertyChanged -= OnPreferencesPropertyChanged;
         _chatViewModel.PropertyChanged -= OnChatViewModelPropertyChanged;
         NavVM.PropertyChanged -= OnNavigationViewModelPropertyChanged;
+        LayoutVM.PropertyChanged -= OnLayoutViewModelPropertyChanged;
         _metricsProvider.Detach();
         ContentFrame.NavigationFailed -= OnContentFrameNavigationFailed;
 #if WINDOWS
@@ -477,8 +479,6 @@ public sealed partial class MainPage : Page
         {
             NavigateTo(typeof(ChatView));
         }
-
-        UpdateRightPanelAvailability(true);
         UpdateBackButtonState();
     }
 
@@ -494,8 +494,6 @@ public sealed partial class MainPage : Page
         {
             NavigateTo(pageType);
         }
-
-        UpdateRightPanelAvailability(false);
         UpdateBackButtonState();
     }
 
@@ -505,8 +503,6 @@ public sealed partial class MainPage : Page
         {
             NavigateTo(typeof(StartView));
         }
-
-        UpdateRightPanelAvailability(false);
         UpdateBackButtonState();
     }
 
@@ -522,8 +518,6 @@ public sealed partial class MainPage : Page
             // SettingsShellPage is already loaded; ask it to switch section without resetting the shell.
             (ContentFrame.Content as SalmonEgg.Presentation.Views.SettingsShellPage)?.NavigateToSection(key);
         }
-
-        UpdateRightPanelAvailability(false);
         UpdateBackButtonState();
     }
 
@@ -595,20 +589,6 @@ public sealed partial class MainPage : Page
         }
 
         throw new InvalidOperationException($"Missing auxiliary icon template resource '{resourceKey}'.");
-    }
-
-    // Behavior notes:
-    // 1) Auxiliary title bar buttons only appear on chat pages.
-    private void UpdateRightPanelAvailability(bool isChat)
-    {
-        var visibility = isChat ? Visibility.Visible : Visibility.Collapsed;
-        BottomPanelButton.Visibility = visibility;
-        DiffPanelButton.Visibility = visibility;
-        TodoPanelButton.Visibility = visibility;
-
-#if WINDOWS
-        RefreshTitleBarInteractiveRegions();
-#endif
     }
 
     private void OnRightPanelResizerPointerPressed(object sender, PointerRoutedEventArgs e)
@@ -685,6 +665,7 @@ public sealed partial class MainPage : Page
         NavVM.RebuildTree();
         _mainNavigationViewAdapter.ApplySelection();
         _mainNavigationViewAdapter.ApplySelectionDeferred();
+        _ = _metricsSink.ReportContentContext(IsChatPageType(ContentFrame?.CurrentSourcePageType));
 #if WINDOWS
         InitializeTray();
 #endif
@@ -728,7 +709,7 @@ public sealed partial class MainPage : Page
         // Selection sync is handled by OnNavigationViewModelPropertyChanged
         // when the coordinator updates the shell selection state. Calling
         // ApplySelectionDeferred here would interrupt the indicator animation.
-        UpdateRightPanelAvailability(IsChatPageType(e.SourcePageType));
+        _ = _metricsSink.ReportContentContext(IsChatPageType(e.SourcePageType));
     }
 
     private void OnContentFrameNavigationFailed(object sender, NavigationFailedEventArgs e)
@@ -1032,6 +1013,16 @@ public sealed partial class MainPage : Page
         App.BootLog("TitleBarDiag ConfigureTitleBar complete");
 #endif
 #endif
+    }
+
+    private void OnLayoutViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ShellLayoutViewModel.ShowAuxiliaryTitleBarButtons))
+        {
+#if WINDOWS
+            RefreshTitleBarInteractiveRegions();
+#endif
+        }
     }
 
 #if WINDOWS
@@ -1346,6 +1337,7 @@ public sealed partial class MainPage
         base.OnNavigatedFrom(e);
         Preferences.PropertyChanged -= OnPreferencesPropertyChanged;
         _chatViewModel.PropertyChanged -= OnChatViewModelPropertyChanged;
+        LayoutVM.PropertyChanged -= OnLayoutViewModelPropertyChanged;
 
         Loaded -= OnMainPageLoaded;
         Unloaded -= OnMainPageUnloaded;
