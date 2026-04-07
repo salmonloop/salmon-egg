@@ -39,6 +39,8 @@ public static class ShellLayoutPolicy
         var maxRightPanelWidth = Math.Min(RightPanelMaxWidth, availableWidth);
         var contentHeight = Math.Max(0, availableHeight - state.TitleBarInsetsHeight);
         var maxBottomPanelHeight = Math.Min(BottomPanelMaxHeight, Math.Max(0, contentHeight - MinimumChatRegionHeight));
+        var canToggleRightPanels = maxRightPanelWidth >= RightPanelMinWidth;
+        var canToggleBottomPanel = maxBottomPanelHeight >= BottomPanelMinHeight;
 
         var canShowSimultaneousAuxiliaryPanels =
             availableWidth >= MinimumDualPanelWidth && availableHeight >= MinimumDualPanelHeight;
@@ -121,6 +123,9 @@ public static class ShellLayoutPolicy
             bottomPanelHeight,
             effectiveBottomPanelMode,
             isOpen && mode == NavigationPaneDisplayMode.Expanded,
-            isOpen ? state.NavOpenPaneLength - 6 : state.NavCompactPaneLength - 6);
+            isOpen ? state.NavOpenPaneLength - 6 : state.NavCompactPaneLength - 6,
+            canToggleRightPanels,
+            canToggleRightPanels,
+            canToggleBottomPanel);
     }
 }

@@ -19,4 +19,7 @@ public sealed record ShellLayoutSnapshot(
     double BottomPanelHeight,
     BottomPanelMode BottomPanelMode,
     bool IsNavResizerVisible,
-    double LeftNavResizerLeft);
+    double LeftNavResizerLeft,
+    bool CanToggleDiffPanel = true,
+    bool CanToggleTodoPanel = true,
+    bool CanToggleBottomPanel = true);

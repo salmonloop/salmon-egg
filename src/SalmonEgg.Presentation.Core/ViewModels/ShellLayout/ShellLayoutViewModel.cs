@@ -38,6 +38,9 @@ public sealed partial class ShellLayoutViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _bottomPanelVisible;
     [ObservableProperty] private double _bottomPanelHeight;
     [ObservableProperty] private BottomPanelMode _bottomPanelMode;
+    [ObservableProperty] private bool _canToggleDiffPanel;
+    [ObservableProperty] private bool _canToggleTodoPanel;
+    [ObservableProperty] private bool _canToggleBottomPanel;
     [ObservableProperty] private RightPanelMode _desiredRightPanelMode;
     [ObservableProperty] private BottomPanelMode _desiredBottomPanelMode;
     [ObservableProperty] private double _leftNavResizerLeft;
@@ -123,6 +126,9 @@ public sealed partial class ShellLayoutViewModel : ObservableObject, IDisposable
         BottomPanelVisible = snapshot.BottomPanelVisible;
         BottomPanelHeight = snapshot.BottomPanelHeight;
         BottomPanelMode = snapshot.BottomPanelMode;
+        CanToggleDiffPanel = snapshot.CanToggleDiffPanel;
+        CanToggleTodoPanel = snapshot.CanToggleTodoPanel;
+        CanToggleBottomPanel = snapshot.CanToggleBottomPanel;
         IsNavResizerVisible = snapshot.IsNavResizerVisible;
         LeftNavResizerLeft = snapshot.LeftNavResizerLeft;
     }
@@ -133,17 +139,42 @@ public sealed partial class ShellLayoutViewModel : ObservableObject, IDisposable
         DesiredBottomPanelMode = state.DesiredBottomPanelMode;
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanToggleDiffPanel))]
     private async Task ToggleDiffPanelAsync()
-        => await _store.Dispatch(new ToggleRightPanelRequested(RightPanelMode.Diff));
+    {
+        if (!CanToggleDiffPanel)
+        {
+            return;
+        }
 
-    [RelayCommand]
+        await _store.Dispatch(new ToggleRightPanelRequested(RightPanelMode.Diff));
+    }
+
+    [RelayCommand(CanExecute = nameof(CanToggleTodoPanel))]
     private async Task ToggleTodoPanelAsync()
-        => await _store.Dispatch(new ToggleRightPanelRequested(RightPanelMode.Todo));
+    {
+        if (!CanToggleTodoPanel)
+        {
+            return;
+        }
 
-    [RelayCommand]
+        await _store.Dispatch(new ToggleRightPanelRequested(RightPanelMode.Todo));
+    }
+
+    [RelayCommand(CanExecute = nameof(CanToggleBottomPanel))]
     private async Task ToggleBottomPanelAsync()
-        => await _store.Dispatch(new ToggleBottomPanelRequested());
+    {
+        if (!CanToggleBottomPanel)
+        {
+            return;
+        }
+
+        await _store.Dispatch(new ToggleBottomPanelRequested());
+    }
+
+    partial void OnCanToggleDiffPanelChanged(bool value) => ToggleDiffPanelCommand.NotifyCanExecuteChanged();
+    partial void OnCanToggleTodoPanelChanged(bool value) => ToggleTodoPanelCommand.NotifyCanExecuteChanged();
+    partial void OnCanToggleBottomPanelChanged(bool value) => ToggleBottomPanelCommand.NotifyCanExecuteChanged();
 
     public void Dispose()
     {

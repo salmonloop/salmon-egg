@@ -164,6 +164,52 @@ public class ShellLayoutViewModelTests
         Assert.Contains(store.DispatchedActions, action => action is ToggleBottomPanelRequested);
     }
 
+    [Fact]
+    public async Task ViewModel_ProjectsPanelToggleAvailability_FromSnapshot()
+    {
+        await using var store = new FakeShellLayoutStore();
+        using var vm = new ShellLayoutViewModel(store);
+
+        await store.SnapshotState.Update(_ => new ShellLayoutSnapshot(
+            NavigationPaneDisplayMode.Compact, false, 300, 72,
+            false, 0, 0, new LayoutPadding(4, 0, 4, 0), new LayoutPadding(0, 0, 0, 0), 60,
+            false, false, 0, RightPanelMode.None, false, 0, BottomPanelMode.None, false, 0,
+            false, false, false), default);
+
+        await WaitForConditionAsync(
+            () => !vm.CanToggleDiffPanel
+                  && !vm.CanToggleTodoPanel
+                  && !vm.CanToggleBottomPanel);
+
+        Assert.False(vm.CanToggleDiffPanel);
+        Assert.False(vm.CanToggleTodoPanel);
+        Assert.False(vm.CanToggleBottomPanel);
+    }
+
+    [Fact]
+    public async Task ViewModel_DoesNotDispatchToggleCommands_WhenDisabled()
+    {
+        await using var store = new FakeShellLayoutStore();
+        using var vm = new ShellLayoutViewModel(store);
+
+        await store.SnapshotState.Update(_ => new ShellLayoutSnapshot(
+            NavigationPaneDisplayMode.Compact, false, 300, 72,
+            false, 0, 0, new LayoutPadding(4, 0, 4, 0), new LayoutPadding(0, 0, 0, 0), 60,
+            false, false, 0, RightPanelMode.None, false, 0, BottomPanelMode.None, false, 0,
+            false, false, false), default);
+
+        await WaitForConditionAsync(
+            () => !vm.CanToggleDiffPanel
+                  && !vm.CanToggleTodoPanel
+                  && !vm.CanToggleBottomPanel);
+
+        await vm.ToggleDiffPanelCommand.ExecuteAsync(null);
+        await vm.ToggleTodoPanelCommand.ExecuteAsync(null);
+        await vm.ToggleBottomPanelCommand.ExecuteAsync(null);
+
+        Assert.Empty(store.DispatchedActions);
+    }
+
     private static async Task WaitForConditionAsync(
         System.Func<bool> predicate,
         int maxAttempts = 20,

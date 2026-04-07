@@ -50,6 +50,34 @@ public class ShellLayoutPolicyTests
     }
 
     [Fact]
+    public void Policy_Disables_RightPanelToggles_WhenRightPanelCannotRender()
+    {
+        var state = ShellLayoutState.Default with
+        {
+            WindowMetrics = new WindowMetrics(1000, 700, 220, 700)
+        };
+
+        var snapshot = ShellLayoutPolicy.Compute(state);
+
+        Assert.False(snapshot.CanToggleDiffPanel);
+        Assert.False(snapshot.CanToggleTodoPanel);
+    }
+
+    [Fact]
+    public void Policy_Disables_BottomPanelToggle_WhenBottomPanelCannotRender()
+    {
+        var state = ShellLayoutState.Default with
+        {
+            WindowMetrics = new WindowMetrics(1000, 300, 1000, 300),
+            TitleBarInsetsHeight = 60
+        };
+
+        var snapshot = ShellLayoutPolicy.Compute(state);
+
+        Assert.False(snapshot.CanToggleBottomPanel);
+    }
+
+    [Fact]
     public void Policy_Restores_NavIntent_WhenWide()
     {
         var state = ShellLayoutState.Default with { UserNavOpenIntent = true, WindowMetrics = new WindowMetrics(1200, 700, 1200, 700) };
