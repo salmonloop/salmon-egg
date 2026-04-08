@@ -31,6 +31,19 @@ public class ShellLayoutMetricsSinkTests
         Assert.True(action.IsChatContext);
     }
 
+    [Fact]
+    public async Task MetricsSink_Dispatches_NavPaneOpenIntent()
+    {
+        await using var store = new CapturingStore();
+        var sink = new ShellLayoutMetricsSink(store);
+
+        await sink.ReportNavPaneOpenIntent(isOpen: false, source: "PaneClosing");
+
+        var action = Assert.IsType<NavPaneOpenIntentRequested>(store.LastAction);
+        Assert.False(action.IsOpen);
+        Assert.Equal("PaneClosing", action.Source);
+    }
+
     private sealed class CapturingStore : IShellLayoutStore, IAsyncDisposable
     {
         private readonly IState<ShellLayoutState> _state = Uno.Extensions.Reactive.State.Value(new object(), () => ShellLayoutState.Default);

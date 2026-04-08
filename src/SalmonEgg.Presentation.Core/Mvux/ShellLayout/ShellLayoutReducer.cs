@@ -14,7 +14,12 @@ public static class ShellLayoutReducer
                 TitleBarPadding = new LayoutPadding(t.Left, 0, t.Right, 0),
                 TitleBarInsetsHeight = t.Height
             },
-            NavToggleRequested => state with { UserNavOpenIntent = !ShellLayoutPolicy.Compute(state).IsNavPaneOpen },
+            NavToggleRequested => ApplyNavToggleIntent(state),
+            NavPaneOpenIntentRequested r => state with
+            {
+                UserNavOpenIntent = r.IsOpen,
+                IsMinimalPaneOpen = r.IsOpen
+            },
             ContentContextChanged c => state with { IsChatContext = c.IsChatContext },
             ToggleRightPanelRequested t => state with
             {
@@ -62,9 +67,44 @@ public static class ShellLayoutReducer
 
     private static ShellLayoutState ApplyWindowMetrics(ShellLayoutState state, WindowMetricsChanged metrics)
     {
-        return state with
+        var previousMode = ShellLayoutPolicy.Compute(state).NavPaneDisplayMode;
+        var next = state with
         {
             WindowMetrics = new WindowMetrics(metrics.Width, metrics.Height, metrics.EffectiveWidth, metrics.EffectiveHeight)
+        };
+        var nextMode = ShellLayoutPolicy.Compute(next).NavPaneDisplayMode;
+        if (previousMode != NavigationPaneDisplayMode.Minimal && nextMode == NavigationPaneDisplayMode.Minimal)
+        {
+            // Entering minimal should start collapsed until the user explicitly opens the overlay pane.
+            next = next with { IsMinimalPaneOpen = false };
+        }
+        else if (previousMode == NavigationPaneDisplayMode.Minimal && nextMode != NavigationPaneDisplayMode.Minimal)
+        {
+            // The transient minimal overlay state does not apply outside minimal mode.
+            next = next with { IsMinimalPaneOpen = false };
+        }
+
+        return next;
+    }
+
+    private static ShellLayoutState ApplyNavToggleIntent(ShellLayoutState state)
+    {
+        var snapshot = ShellLayoutPolicy.Compute(state);
+        if (snapshot.NavPaneDisplayMode == NavigationPaneDisplayMode.Minimal)
+        {
+            var nextMinimalOpen = !state.IsMinimalPaneOpen;
+            return state with
+            {
+                IsMinimalPaneOpen = nextMinimalOpen,
+                UserNavOpenIntent = nextMinimalOpen
+            };
+        }
+
+        var nextIntent = !snapshot.IsNavPaneOpen;
+        return state with
+        {
+            UserNavOpenIntent = nextIntent,
+            IsMinimalPaneOpen = false
         };
     }
 }

@@ -22,6 +22,7 @@ public sealed class MainNavigationViewAdapter
     private readonly INavigationCoordinator _navigationCoordinator;
     private readonly SelectionProjectionApplyGate _selectionApplyGate = new();
     private long _sessionActivationRequestVersion;
+    private long _settingsSelectionRequestVersion;
 
     public MainNavigationViewAdapter(
         NavigationView navigationView,
@@ -254,6 +255,9 @@ public sealed class MainNavigationViewAdapter
             return;
         }
 
+        // Invalidate queued "select settings" replay when selection has moved on.
+        Interlocked.Increment(ref _settingsSelectionRequestVersion);
+
         var target = _viewModel.ProjectedControlSelectedItem;
         if (target is null)
         {
@@ -280,8 +284,19 @@ public sealed class MainNavigationViewAdapter
             return;
         }
 
+        var requestVersion = Interlocked.Increment(ref _settingsSelectionRequestVersion);
         _ = _dispatcherQueue.TryEnqueue(() =>
         {
+            if (requestVersion != Volatile.Read(ref _settingsSelectionRequestVersion))
+            {
+                return;
+            }
+
+            if (!_viewModel.IsSettingsSelected)
+            {
+                return;
+            }
+
             if (_navigationView.SettingsItem is null)
             {
                 return;

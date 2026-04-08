@@ -70,7 +70,7 @@ public class ShellLayoutReducerTests
             new WindowMetricsChanged(520, 700, 520, 700));
 
         Assert.Equal(NavigationPaneDisplayMode.Minimal, resizedWithinMinimal.Snapshot.NavPaneDisplayMode);
-        Assert.False(resizedWithinMinimal.Snapshot.IsNavPaneOpen);
+        Assert.True(resizedWithinMinimal.Snapshot.IsNavPaneOpen);
         Assert.True(resizedWithinMinimal.State.UserNavOpenIntent);
     }
 
@@ -112,6 +112,50 @@ public class ShellLayoutReducerTests
         var reduced = ShellLayoutReducer.Reduce(state, new NavToggleRequested("TitleBar"));
 
         Assert.True(reduced.Snapshot.IsNavPaneOpen);
+    }
+
+    [Fact]
+    public void Reducer_ToggleTwiceInMinimal_ShouldRestoreClosedIntent()
+    {
+        var state = ShellLayoutState.Default with
+        {
+            WindowMetrics = new WindowMetrics(500, 700, 500, 700),
+            UserNavOpenIntent = false
+        };
+
+        var firstToggle = ShellLayoutReducer.Reduce(state, new NavToggleRequested("TitleBar"));
+        var secondToggle = ShellLayoutReducer.Reduce(firstToggle.State, new NavToggleRequested("TitleBar"));
+
+        Assert.True(firstToggle.State.UserNavOpenIntent);
+        Assert.False(secondToggle.State.UserNavOpenIntent);
+    }
+
+    [Fact]
+    public void Reducer_ToggleInMinimal_ShouldOpenPane()
+    {
+        var state = ShellLayoutState.Default with
+        {
+            WindowMetrics = new WindowMetrics(500, 700, 500, 700),
+            UserNavOpenIntent = true
+        };
+
+        var minimal = ShellLayoutReducer.Reduce(state, new WindowMetricsChanged(500, 700, 500, 700));
+        Assert.Equal(NavigationPaneDisplayMode.Minimal, minimal.Snapshot.NavPaneDisplayMode);
+        Assert.False(minimal.Snapshot.IsNavPaneOpen);
+
+        var toggled = ShellLayoutReducer.Reduce(minimal.State, new NavToggleRequested("TitleBar"));
+
+        Assert.True(toggled.Snapshot.IsNavPaneOpen);
+    }
+
+    [Fact]
+    public void Reducer_SetNavPaneOpenIntent_OverridesCurrentIntent()
+    {
+        var state = ShellLayoutState.Default with { UserNavOpenIntent = true };
+
+        var reduced = ShellLayoutReducer.Reduce(state, new NavPaneOpenIntentRequested(false, "PaneClosing"));
+
+        Assert.False(reduced.State.UserNavOpenIntent);
     }
 
     [Fact]

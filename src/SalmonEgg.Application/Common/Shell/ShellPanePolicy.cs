@@ -13,10 +13,11 @@ public static class ShellPanePolicy
     /// <param name="desiredPaneOpen">
     /// The open/close intent projected from the shell store.
     /// </param>
-    /// <param name="isMinimalMode">
-     /// If the shell is in minimal display mode, the pane may need to close (e.g. after selection)
-     /// to keep the content usable on narrow windows; we allow closing in that case.
+    /// <param name="isExpandedMode">
+    /// Whether the shell is currently in expanded mode.
+    /// In compact/minimal modes the pane should be allowed to close so the app can honor
+    /// light-dismiss and narrow-window interaction patterns.
      /// </param>
-    public static bool ShouldCancelClosing(bool desiredPaneOpen, bool isMinimalMode)
-        => !isMinimalMode && desiredPaneOpen;
+    public static bool ShouldCancelClosing(bool desiredPaneOpen, bool isExpandedMode)
+        => isExpandedMode && desiredPaneOpen;
 }

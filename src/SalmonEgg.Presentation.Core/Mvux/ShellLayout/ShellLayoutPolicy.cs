@@ -30,7 +30,7 @@ public static class ShellLayoutPolicy
         {
             NavigationPaneDisplayMode.Expanded => state.UserNavOpenIntent != false,
             NavigationPaneDisplayMode.Compact => state.UserNavOpenIntent == true,
-            NavigationPaneDisplayMode.Minimal => false,
+            NavigationPaneDisplayMode.Minimal => state.IsMinimalPaneOpen,
             _ => false
         };
 

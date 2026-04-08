@@ -181,6 +181,22 @@ public class ShellLayoutPolicyTests
     }
 
     [Fact]
+    public void Policy_OpensPane_InMinimalMode_WhenTransientPaneIsOpen()
+    {
+        var state = ShellLayoutState.Default with
+        {
+            UserNavOpenIntent = true,
+            IsMinimalPaneOpen = true,
+            WindowMetrics = new WindowMetrics(500, 700, 500, 700)
+        };
+
+        var snapshot = ShellLayoutPolicy.Compute(state);
+
+        Assert.Equal(NavigationPaneDisplayMode.Minimal, snapshot.NavPaneDisplayMode);
+        Assert.True(snapshot.IsNavPaneOpen);
+    }
+
+    [Fact]
     public void Policy_SearchBox_Visibility_And_Widths_ByBreakpoint()
     {
         var wide = ShellLayoutPolicy.Compute(ShellLayoutState.Default with { WindowMetrics = new WindowMetrics(1200, 700, 1200, 700) });

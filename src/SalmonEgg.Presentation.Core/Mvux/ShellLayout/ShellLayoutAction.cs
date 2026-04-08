@@ -7,6 +7,7 @@ public sealed record WindowMetricsChanged(double Width, double Height, double Ef
 public sealed record TitleBarInsetsChanged(double Left, double Right, double Height) : ShellLayoutAction;
 
 public sealed record NavToggleRequested(string Source) : ShellLayoutAction;
+public sealed record NavPaneOpenIntentRequested(bool IsOpen, string Source) : ShellLayoutAction;
 
 public sealed record ContentContextChanged(bool IsChatContext) : ShellLayoutAction;
 

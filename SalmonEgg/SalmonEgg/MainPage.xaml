@@ -556,9 +556,9 @@
                              MenuItemTemplateSelector="{StaticResource MainNavItemTemplateSelector}"
                              ItemInvoked="OnMainNavItemInvoked"
                              SelectionChanged="OnMainNavSelectionChanged"
-                             DisplayModeChanged="OnMainNavDisplayModeChanged"
-                             PaneOpened="OnMainNavPaneOpened"
-                             PaneClosed="OnMainNavPaneClosed"
+                             DisplayModeChanged="OnMainNavPanePresentationChanged"
+                             PaneOpened="OnMainNavPanePresentationChanged"
+                             PaneClosed="OnMainNavPanePresentationChanged"
                              PaneClosing="OnMainNavPaneClosing">
                 <NavigationView.Content>
                     <Frame x:Name="ContentFrame"

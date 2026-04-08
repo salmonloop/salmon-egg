@@ -12,7 +12,8 @@ public sealed record ShellLayoutState(
     AuxiliaryPanelArea LastAuxiliaryPanelArea,
     double NavOpenPaneLength,
     double NavCompactPaneLength,
-    bool? UserNavOpenIntent)
+    bool? UserNavOpenIntent,
+    bool IsMinimalPaneOpen)
 {
     public static ShellLayoutState Default => new(
         new WindowMetrics(1280, 720, 1280, 720),
@@ -26,5 +27,6 @@ public sealed record ShellLayoutState(
         AuxiliaryPanelArea.None,
         300,
         72,
-        null);
+        null,
+        false);
 }

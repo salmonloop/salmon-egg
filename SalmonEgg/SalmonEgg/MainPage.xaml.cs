@@ -757,22 +757,16 @@ public sealed partial class MainPage : Page
                 isOpen ? "Collapse Sidebar" : "Expand Sidebar"));
     }
 
-    private void OnMainNavPaneOpened(NavigationView sender, object args)
+    private void OnMainNavPanePresentationChanged(NavigationView sender, object args)
     {
-        UpdateNavPaneToggleUi();
-        _mainNavigationViewAdapter.ApplySelectionDeferred();
-    }
-
-    private void OnMainNavPaneClosed(NavigationView sender, object args)
-    {
-        UpdateNavPaneToggleUi();
-        _mainNavigationViewAdapter.ApplySelectionDeferred();
-    }
-
-    private void OnMainNavDisplayModeChanged(NavigationView sender, NavigationViewDisplayModeChangedEventArgs args)
-    {
-        UpdateNavPaneToggleUi();
-        _mainNavigationViewAdapter.ApplySelectionDeferred();
+        UpdateNavPaneToggleUi(sender.IsPaneOpen);
+        // Re-project selection only when the control's display mode actually changes.
+        // Pane open/close in the same mode can fire frequently and should not enqueue
+        // redundant deferred selection work.
+        if (args is NavigationViewDisplayModeChangedEventArgs)
+        {
+            _mainNavigationViewAdapter.ApplySelectionDeferred();
+        }
     }
 
     private void OnMainNavSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
@@ -813,12 +807,22 @@ public sealed partial class MainPage : Page
 
     private void OnMainNavPaneClosing(NavigationView sender, NavigationViewPaneClosingEventArgs args)
     {
+        var mode = LayoutVM?.NavPaneDisplayMode
+            ?? SalmonEgg.Presentation.Core.Mvux.ShellLayout.NavigationPaneDisplayMode.Expanded;
+        if (mode != SalmonEgg.Presentation.Core.Mvux.ShellLayout.NavigationPaneDisplayMode.Expanded
+            && LayoutVM?.IsNavPaneOpen == true)
+        {
+            _ = _metricsSink.ReportNavPaneOpenIntent(isOpen: false, source: "PaneClosing");
+            args.Cancel = false;
+            return;
+        }
+
         // The view must follow the store snapshot. If the shell still wants the pane open,
-        // reject spontaneous UI closes in expanded/compact modes so NavigationView cannot drift
-        // away from the SSOT store state.
+        // reject spontaneous closes only in expanded mode so NavigationView cannot drift
+        // away from the SSOT store state while preserving compact light-dismiss behavior.
         args.Cancel = ShellPanePolicy.ShouldCancelClosing(
             desiredPaneOpen: LayoutVM?.IsNavPaneOpen == true,
-            isMinimalMode: sender.DisplayMode == NavigationViewDisplayMode.Minimal);
+            isExpandedMode: mode == SalmonEgg.Presentation.Core.Mvux.ShellLayout.NavigationPaneDisplayMode.Expanded);
     }
 
     // Manual resizer positioning removed as it is now handled by XAML binding to LayoutVM.LeftNavResizerLeft
@@ -912,6 +916,11 @@ public sealed partial class MainPage : Page
 
     private void OnLayoutViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(ShellLayoutViewModel.IsNavPaneOpen))
+        {
+            UpdateNavPaneToggleUi();
+        }
+
         if (e.PropertyName == nameof(ShellLayoutViewModel.TitleBarInteractiveRegionToken))
         {
 #if WINDOWS
