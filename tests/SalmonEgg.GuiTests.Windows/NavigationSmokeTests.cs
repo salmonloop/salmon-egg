@@ -222,6 +222,180 @@ public sealed class NavigationSmokeTests
         Assert.DoesNotContain(affordanceElements, item => item.Contains("ControlType.Button", StringComparison.Ordinal));
     }
 
+    [SkippableFact]
+    public void ActiveSession_SelectionRemainsVisible_AcrossExpandedCollapse_AndMinimalToCompact()
+    {
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        const string sessionId = "MainNav.Session.gui-session-01";
+        const string projectId = "MainNav.Project.project-1";
+        const string startId = "MainNav.Start";
+
+        var timeline = new System.Collections.Generic.List<string>();
+        static string Stamp() => DateTime.UtcNow.ToString("HH:mm:ss.fff", System.Globalization.CultureInfo.InvariantCulture);
+
+        ResizeMainWindow(width: 1400, height: 900);
+        Thread.Sleep(1200);
+
+        var sessionItem = session.FindByAutomationId(sessionId, TimeSpan.FromSeconds(10));
+        session.ActivateElement(sessionItem);
+        session.FindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(10));
+        timeline.Add($"{Stamp()} selected session");
+
+        Assert.True(
+            WaitForVisibleSelected(session, [sessionId, projectId, startId], TimeSpan.FromSeconds(6), out var winnerOpen),
+            $"Expected a visible selected nav item in expanded-open mode. winner={winnerOpen ?? "<null>"}{Environment.NewLine}{DumpSelectionSnapshot(session, sessionId, projectId, startId)}{Environment.NewLine}{appData.ReadBootLogTail()}");
+        Assert.Equal(sessionId, winnerOpen);
+
+        session.InvokeButton("TitleBar.ToggleSidebar");
+        timeline.Add($"{Stamp()} toggled sidebar collapsed in expanded");
+        var projectItem = session.FindByAutomationId(projectId);
+        var activeDescendantIndicator = string.Equals(projectItem.HelpText, "True", StringComparison.Ordinal);
+        Assert.True(
+            activeDescendantIndicator,
+            $"Expected project to indicate active descendant after expanded collapse. HelpText={projectItem.HelpText}{Environment.NewLine}{DumpSelectionSnapshot(session, sessionId, projectId, startId)}{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        session.InvokeButton("TitleBar.ToggleSidebar");
+        timeline.Add($"{Stamp()} toggled sidebar expanded");
+        Assert.True(
+            WaitForVisibleSelected(session, [sessionId, projectId, startId], TimeSpan.FromSeconds(6), out var winnerExpandedBack),
+            $"Expected a visible selected nav item after expanded restore. winner={winnerExpandedBack ?? "<null>"}{Environment.NewLine}{DumpSelectionSnapshot(session, sessionId, projectId, startId)}{Environment.NewLine}{appData.ReadBootLogTail()}");
+        Assert.Equal(sessionId, winnerExpandedBack);
+
+        ResizeMainWindow(width: 500, height: 900);
+        Thread.Sleep(1400);
+        timeline.Add($"{Stamp()} resized to minimal");
+
+        ResizeMainWindow(width: 800, height: 900);
+        Thread.Sleep(1400);
+        timeline.Add($"{Stamp()} resized to compact");
+
+        var sessionSelectedInCompact = TryGetVisibleIsSelected(session, sessionId) == true;
+        if (!sessionSelectedInCompact)
+        {
+            var projectCompact = session.FindByAutomationId(projectId);
+            var compactIndicator = string.Equals(projectCompact.HelpText, "True", StringComparison.Ordinal);
+            Assert.True(
+                compactIndicator,
+                $"Expected project to indicate active descendant after minimal->compact when session item is not visible. HelpText={projectCompact.HelpText} timeline={string.Join(" | ", timeline)}{Environment.NewLine}{DumpSelectionSnapshot(session, sessionId, projectId, startId)}{Environment.NewLine}{appData.ReadBootLogTail()}");
+        }
+        else
+        {
+            Assert.True(
+                sessionSelectedInCompact,
+                $"Expected session to remain selected after minimal->compact when pane is open. timeline={string.Join(" | ", timeline)}{Environment.NewLine}{DumpSelectionSnapshot(session, sessionId, projectId, startId)}{Environment.NewLine}{appData.ReadBootLogTail()}");
+        }
+
+        if (!sessionSelectedInCompact)
+        {
+            session.InvokeButton("TitleBar.ToggleSidebar");
+            timeline.Add($"{Stamp()} toggled compact open");
+            Assert.True(
+                WaitForVisibleSelected(session, [sessionId, projectId, startId], TimeSpan.FromSeconds(8), out var winnerCompactOpen),
+                $"Expected a visible selected nav item after compact open. winner={winnerCompactOpen ?? "<null>"} timeline={string.Join(" | ", timeline)}{Environment.NewLine}{DumpSelectionSnapshot(session, sessionId, projectId, startId)}{Environment.NewLine}{appData.ReadBootLogTail()}");
+            Assert.Equal(sessionId, winnerCompactOpen);
+        }
+    }
+
+    [SkippableFact]
+    public void ActiveSession_ResizeBackToExpanded_RestoresVisibleSessionSelection()
+    {
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        const string sessionId = "MainNav.Session.gui-session-01";
+        const string projectId = "MainNav.Project.project-1";
+        const string startId = "MainNav.Start";
+
+        ResizeMainWindow(width: 1400, height: 900);
+        Thread.Sleep(1200);
+
+        session.ActivateElement(session.FindByAutomationId(sessionId, TimeSpan.FromSeconds(10)));
+        session.FindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(10));
+
+        ResizeMainWindow(width: 500, height: 900);
+        Thread.Sleep(1400);
+
+        ResizeMainWindow(width: 1400, height: 900);
+        Thread.Sleep(1600);
+
+        Assert.True(
+            WaitForVisibleSelected(session, [sessionId, projectId, startId], TimeSpan.FromSeconds(8), out var winner),
+            $"Expected a visible selected nav item after expanded->minimal->expanded resize. winner={winner ?? "<null>"}{Environment.NewLine}{DumpSelectionSnapshot(session, sessionId, projectId, startId)}{Environment.NewLine}{DumpProjectSnapshot(session, projectId)}{Environment.NewLine}{appData.ReadBootLogTail()}");
+        Assert.Equal(sessionId, winner);
+    }
+
+    [SkippableFact]
+    public void ActiveSession_ExpandedToCompact_WithExplicitOpenIntent_ProjectsSelectionToProject()
+    {
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        const string sessionId = "MainNav.Session.gui-session-01";
+        const string projectId = "MainNav.Project.project-1";
+        const string startId = "MainNav.Start";
+
+        ResizeMainWindow(width: 1400, height: 900);
+        Thread.Sleep(1200);
+
+        session.ActivateElement(session.FindByAutomationId(sessionId, TimeSpan.FromSeconds(10)));
+        session.FindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(10));
+
+        session.InvokeButton("TitleBar.ToggleSidebar");
+        Thread.Sleep(600);
+        session.InvokeButton("TitleBar.ToggleSidebar");
+        Thread.Sleep(1200);
+
+        ResizeMainWindow(width: 800, height: 900);
+        Thread.Sleep(1500);
+
+        Assert.True(
+            WaitForVisibleSelected(session, [sessionId, projectId, startId], TimeSpan.FromSeconds(8), out var winner),
+            $"Expected a visible selected nav item after expanded->compact with explicit open intent. winner={winner ?? "<null>"}{Environment.NewLine}{DumpSelectionSnapshot(session, sessionId, projectId, startId)}{Environment.NewLine}{DumpProjectSnapshot(session, projectId)}{Environment.NewLine}{appData.ReadBootLogTail()}");
+        Assert.Equal(projectId, winner);
+    }
+
+    [SkippableFact]
+    public void ActiveSession_ExpandedToCompact_WithoutManualToggle_KeepsSemanticSelection()
+    {
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        const string sessionId = "MainNav.Session.gui-session-01";
+        const string projectId = "MainNav.Project.project-1";
+        const string startId = "MainNav.Start";
+
+        ResizeMainWindow(width: 1400, height: 900);
+        Thread.Sleep(1200);
+
+        session.ActivateElement(session.FindByAutomationId(sessionId, TimeSpan.FromSeconds(10)));
+        session.FindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(10));
+
+        ResizeMainWindow(width: 800, height: 900);
+        Thread.Sleep(1600);
+
+        var sessionSelected = TryGetVisibleIsSelected(session, sessionId) == true;
+        if (sessionSelected)
+        {
+            Assert.True(
+                sessionSelected,
+                $"Expected session to stay selected in compact when pane remains open. {DumpSelectionSnapshot(session, sessionId, projectId, startId)}{Environment.NewLine}{DumpProjectSnapshot(session, projectId)}{Environment.NewLine}{appData.ReadBootLogTail()}");
+            return;
+        }
+
+        var projectItem = session.FindByAutomationId(projectId);
+        var hasActiveDescendant = string.Equals(projectItem.HelpText, "True", StringComparison.Ordinal);
+        Assert.True(
+            hasActiveDescendant,
+            $"Expected compact collapsed pane to keep semantic selection via project active-descendant indicator. HelpText={projectItem.HelpText}{Environment.NewLine}{DumpSelectionSnapshot(session, sessionId, projectId, startId)}{Environment.NewLine}{DumpProjectSnapshot(session, projectId)}{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var startSelected = TryGetVisibleIsSelected(session, startId) == true;
+        Assert.False(
+            startSelected,
+            $"Did not expect selection to fall back to Start after pure resize path. {DumpSelectionSnapshot(session, sessionId, projectId, startId)}{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
     private static void ResizeMainWindow(int width, int height)
     {
         var process = Process.GetProcessesByName("SalmonEgg")
@@ -305,5 +479,84 @@ public sealed class NavigationSmokeTests
         {
             return false;
         }
+    }
+
+    private static bool WaitForVisibleSelected(
+        WindowsGuiAppSession session,
+        string[] candidates,
+        TimeSpan timeout,
+        out string? winner)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            foreach (var candidate in candidates)
+            {
+                if (TryGetVisibleIsSelected(session, candidate) == true)
+                {
+                    winner = candidate;
+                    return true;
+                }
+            }
+
+            Thread.Sleep(120);
+        }
+
+        winner = null;
+        return false;
+    }
+
+    private static bool? TryGetVisibleIsSelected(WindowsGuiAppSession session, string automationId)
+    {
+        var element = session.TryFindByAutomationId(automationId, TimeSpan.FromMilliseconds(200));
+        if (element is null || TryGetIsOffscreen(element))
+        {
+            return null;
+        }
+
+        try
+        {
+            if (!element.Patterns.SelectionItem.IsSupported)
+            {
+                return null;
+            }
+
+            return element.Patterns.SelectionItem.Pattern.IsSelected.Value;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string DumpSelectionSnapshot(WindowsGuiAppSession session, string sessionId, string projectId, string startId)
+    {
+        var sessionSelected = TryGetVisibleIsSelected(session, sessionId);
+        var projectSelected = TryGetVisibleIsSelected(session, projectId);
+        var startSelected = TryGetVisibleIsSelected(session, startId);
+        return $"visible-selected snapshot => session:{sessionSelected?.ToString() ?? "null"}, project:{projectSelected?.ToString() ?? "null"}, start:{startSelected?.ToString() ?? "null"}";
+    }
+
+    private static string DumpProjectSnapshot(WindowsGuiAppSession session, string projectId)
+    {
+        var project = session.TryFindByAutomationId(projectId, TimeSpan.FromMilliseconds(500));
+        if (project is null)
+        {
+            return "project snapshot => <missing>";
+        }
+
+        string expandState;
+        try
+        {
+            expandState = project.Patterns.ExpandCollapse.IsSupported
+                ? project.Patterns.ExpandCollapse.Pattern.ExpandCollapseState.Value.ToString()
+                : "<unsupported>";
+        }
+        catch
+        {
+            expandState = "<error>";
+        }
+
+        return $"project snapshot => offscreen:{TryGetIsOffscreen(project)}, helpText:{project.HelpText}, expand:{expandState}";
     }
 }

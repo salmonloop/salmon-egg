@@ -51,7 +51,10 @@ public sealed class NavigationSelectionProjector
                     activeProjects.Add(projectItem.ProjectId);
 
                     return new NavigationViewProjection(
-                        ControlSelectedItem: sessionItem,
+                        // Keep semantic selection at session level, but when pane is closed
+                        // project the control selection onto the parent project item.
+                        // This aligns compact/minimal collapsed behavior with NavigationView hierarchy UX.
+                        ControlSelectedItem: isPaneOpen ? sessionItem : projectItem,
                         IsSettingsSelected: false,
                         ActiveProjectIds: activeProjects,
                         SelectedSessionIds: selectedSessions);

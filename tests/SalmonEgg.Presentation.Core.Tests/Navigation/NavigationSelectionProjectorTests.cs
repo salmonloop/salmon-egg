@@ -49,7 +49,7 @@ public sealed class NavigationSelectionProjectorTests
     }
 
     [Fact]
-    public void Project_KeepsSessionControlSelection_WhenPaneIsClosed()
+    public void Project_UsesProjectControlSelection_WhenPaneIsClosed()
     {
         var navState = new FakeNavigationPaneState(isPaneOpen: false);
         var start = new StartNavItemViewModel(navState);
@@ -76,8 +76,35 @@ public sealed class NavigationSelectionProjectorTests
             new Dictionary<string, ProjectNavItemViewModel> { ["project-1"] = project },
             isPaneOpen: false);
 
-        Assert.Same(session, projection.ControlSelectedItem);
+        Assert.Same(project, projection.ControlSelectedItem);
         Assert.Contains("project-1", projection.ActiveProjectIds);
+        Assert.Contains("session-1", projection.SelectedSessionIds);
+    }
+
+    [Fact]
+    public void Project_FallsBackToSessionSelection_WhenProjectMissingAndPaneClosed()
+    {
+        var navState = new FakeNavigationPaneState(isPaneOpen: false);
+        var start = new StartNavItemViewModel(navState);
+        var session = new SessionNavItemViewModel(
+            sessionId: "session-1",
+            projectId: "missing-project",
+            title: "Session 1",
+            relativeTimeText: "刚刚",
+            ui: new NoopUiInteractionService(),
+            chatSessionCatalog: new FakeChatSessionCatalog(),
+            navigationState: navState);
+
+        var projector = new NavigationSelectionProjector();
+        var projection = projector.Project(
+            new NavigationSelectionState.Session("session-1"),
+            start,
+            new DiscoverSessionsNavItemViewModel(navState),
+            new Dictionary<string, SessionNavItemViewModel> { ["session-1"] = session },
+            new Dictionary<string, ProjectNavItemViewModel>(),
+            isPaneOpen: false);
+
+        Assert.Same(session, projection.ControlSelectedItem);
         Assert.Contains("session-1", projection.SelectedSessionIds);
     }
 

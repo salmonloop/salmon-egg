@@ -20,9 +20,7 @@ public sealed class MainNavigationViewAdapter
     private readonly DispatcherQueue _dispatcherQueue;
     private readonly MainNavigationViewModel _viewModel;
     private readonly INavigationCoordinator _navigationCoordinator;
-    private readonly SelectionProjectionApplyGate _selectionApplyGate = new();
     private long _sessionActivationRequestVersion;
-    private long _settingsSelectionRequestVersion;
 
     public MainNavigationViewAdapter(
         NavigationView navigationView,
@@ -36,48 +34,9 @@ public sealed class MainNavigationViewAdapter
         _navigationCoordinator = navigationCoordinator ?? throw new ArgumentNullException(nameof(navigationCoordinator));
     }
 
-    public void ApplySelection()
-    {
-        var decision = _selectionApplyGate.RequestApply();
-        if (decision is SelectionProjectionApplyDecision.Defer)
-        {
-            return;
-        }
-
-        ApplySelectionCore();
-    }
-
-    public void ApplySelectionDeferred()
-    {
-        if (!_selectionApplyGate.TryScheduleDeferredApply())
-        {
-            return;
-        }
-
-        if (!_dispatcherQueue.TryEnqueue(() =>
-            {
-                _selectionApplyGate.ReleaseScheduledDeferredApply();
-                ApplySelection();
-            }))
-        {
-            _selectionApplyGate.ReleaseScheduledDeferredApply();
-        }
-    }
-
     public async Task<bool> HandleItemInvokedAsync(NavigationViewItemInvokedEventArgs args)
     {
-        _selectionApplyGate.BeginInteraction();
-        try
-        {
-            return await HandleItemInvokedCoreAsync(args).ConfigureAwait(true);
-        }
-        finally
-        {
-            if (_selectionApplyGate.EndInteraction())
-            {
-                ApplySelection();
-            }
-        }
+        return await HandleItemInvokedCoreAsync(args).ConfigureAwait(true);
     }
 
     private async Task<bool> HandleItemInvokedCoreAsync(NavigationViewItemInvokedEventArgs args)
@@ -178,7 +137,6 @@ public sealed class MainNavigationViewAdapter
                 }
 
                 RestoreSelection(previousSelection);
-                ApplySelection();
             });
         }
         catch
@@ -192,7 +150,6 @@ public sealed class MainNavigationViewAdapter
                 }
 
                 RestoreSelection(previousSelection);
-                ApplySelection();
             });
         }
     }
@@ -246,69 +203,4 @@ public sealed class MainNavigationViewAdapter
 
     private void MarkNavigationIntentObserved()
         => Interlocked.Increment(ref _sessionActivationRequestVersion);
-
-    private void ApplySelectionCore()
-    {
-        if (_viewModel.IsSettingsSelected)
-        {
-            SetSelectedSettingsItemDeferred();
-            return;
-        }
-
-        // Invalidate queued "select settings" replay when selection has moved on.
-        Interlocked.Increment(ref _settingsSelectionRequestVersion);
-
-        var target = _viewModel.ProjectedControlSelectedItem;
-        if (target is null)
-        {
-            return;
-        }
-
-        if (ReferenceEquals(_navigationView.SelectedItem, target))
-        {
-            return;
-        }
-
-        _navigationView.SelectedItem = target;
-    }
-
-    private void SetSelectedSettingsItemDeferred()
-    {
-        if (_navigationView.SettingsItem is null)
-        {
-            return;
-        }
-
-        if (ReferenceEquals(_navigationView.SelectedItem, _navigationView.SettingsItem))
-        {
-            return;
-        }
-
-        var requestVersion = Interlocked.Increment(ref _settingsSelectionRequestVersion);
-        _ = _dispatcherQueue.TryEnqueue(() =>
-        {
-            if (requestVersion != Volatile.Read(ref _settingsSelectionRequestVersion))
-            {
-                return;
-            }
-
-            if (!_viewModel.IsSettingsSelected)
-            {
-                return;
-            }
-
-            if (_navigationView.SettingsItem is null)
-            {
-                return;
-            }
-
-            if (ReferenceEquals(_navigationView.SelectedItem, _navigationView.SettingsItem))
-            {
-                return;
-            }
-
-            _navigationView.SelectedItem = _navigationView.SettingsItem;
-        });
-    }
-
 }

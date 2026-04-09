@@ -1,5 +1,6 @@
 using System;
 using System.Collections.ObjectModel;
+using System.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SalmonEgg.Presentation.Services;
@@ -9,6 +10,7 @@ namespace SalmonEgg.Presentation.ViewModels.Navigation;
 public abstract partial class MainNavItemViewModel : ObservableObject, IDisposable
 {
     protected readonly INavigationPaneState NavigationState;
+    private readonly SynchronizationContext? _syncContext;
     private bool _isLogicallySelected;
 
     public ObservableCollection<MainNavItemViewModel> Children { get; } = new();
@@ -16,6 +18,7 @@ public abstract partial class MainNavItemViewModel : ObservableObject, IDisposab
     protected MainNavItemViewModel(INavigationPaneState navigationState)
     {
         NavigationState = navigationState;
+        _syncContext = SynchronizationContext.Current;
         NavigationState.PaneStateChanged += OnServicePaneStateChanged;
     }
 
@@ -30,6 +33,17 @@ public abstract partial class MainNavItemViewModel : ObservableObject, IDisposab
     }
 
     private void OnServicePaneStateChanged(object? sender, EventArgs e)
+    {
+        if (_syncContext is not null && SynchronizationContext.Current != _syncContext)
+        {
+            _syncContext.Post(_ => ApplyPaneStateChanged(), null);
+            return;
+        }
+
+        ApplyPaneStateChanged();
+    }
+
+    private void ApplyPaneStateChanged()
     {
         OnPropertyChanged(nameof(IsPaneOpen));
         OnPropertyChanged(nameof(IsPaneClosed));

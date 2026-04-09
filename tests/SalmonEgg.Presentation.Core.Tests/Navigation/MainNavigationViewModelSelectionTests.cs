@@ -63,7 +63,126 @@ public sealed class MainNavigationViewModelSelectionTests
     }
 
     [Fact]
-    public async Task ProjectVisualState_FollowsActiveSessionWithoutChangingLogicalSelection()
+    public void PaneStateChange_ReassertsSelectedItemNotification_ForSessionSelection()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            navState.SetPaneOpen(true);
+
+            var sessionManager = CreateSessionManager(new Session("session-1", @"C:\repo\demo")
+            {
+                DisplayName = "Session 1"
+            });
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog("session-1");
+
+            using var navVm = CreateNavigationViewModel(chatCatalog, sessionManager.Object, preferences, navState);
+            navVm.RebuildTree();
+            navVm.SelectSession("session-1");
+
+            var selectedItemChanges = 0;
+            navVm.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(MainNavigationViewModel.SelectedItem))
+                {
+                    selectedItemChanges++;
+                }
+            };
+
+            navState.SetPaneOpen(false);
+
+            Assert.True(selectedItemChanges > 0);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public void RefreshSelectionProjection_ReassertsSelectedItemNotification_ForSessionSelection()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            navState.SetPaneOpen(true);
+
+            var sessionManager = CreateSessionManager(new Session("session-1", @"C:\repo\demo")
+            {
+                DisplayName = "Session 1"
+            });
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog("session-1");
+
+            using var navVm = CreateNavigationViewModel(chatCatalog, sessionManager.Object, preferences, navState);
+            navVm.RebuildTree();
+            navVm.SelectSession("session-1");
+
+            var selectedItemChanges = 0;
+            navVm.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(MainNavigationViewModel.SelectedItem))
+                {
+                    selectedItemChanges++;
+                }
+            };
+
+            navVm.RefreshSelectionProjection();
+
+            Assert.True(selectedItemChanges > 0);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public void PaneOpenToClosed_ReprojectsControlSelection_FromSessionToProject()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            navState.SetPaneOpen(true);
+
+            var sessionManager = CreateSessionManager(new Session("session-1", @"C:\repo\demo")
+            {
+                DisplayName = "Session 1"
+            });
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog("session-1");
+
+            using var navVm = CreateNavigationViewModel(chatCatalog, sessionManager.Object, preferences, navState);
+            navVm.RebuildTree();
+            navVm.SelectSession("session-1");
+
+            Assert.IsType<SessionNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+
+            navState.SetPaneOpen(false);
+
+            var projectedProject = Assert.IsType<ProjectNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+            Assert.Equal("project-1", projectedProject.ProjectId);
+            var selectedProject = Assert.IsType<ProjectNavItemViewModel>(navVm.SelectedItem);
+            Assert.Equal("project-1", selectedProject.ProjectId);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task ProjectVisualState_FollowsActiveSession_WhenPaneIsClosed()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -83,16 +202,18 @@ public sealed class MainNavigationViewModelSelectionTests
             using var navVm = CreateNavigationViewModel(chatCatalog, sessionManager.Object, preferences, navState);
 
             navVm.RebuildTree();
+            var project = Assert.Single(navVm.Items.OfType<ProjectNavItemViewModel>(), p => p.ProjectId == "project-1");
             navVm.SelectSession("session-1");
 
             Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
-            var project = Assert.Single(navVm.Items.OfType<ProjectNavItemViewModel>(), p => p.ProjectId == "project-1");
             Assert.True(project.IsActiveDescendant);
             Assert.True(project.HasActiveDescendantIndicator);
-            var projectedSession = Assert.IsType<SessionNavItemViewModel>(navVm.ProjectedControlSelectedItem);
-            Assert.Equal("session-1", projectedSession.SessionId);
+            var projectedProject = Assert.IsType<ProjectNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+            Assert.Equal("project-1", projectedProject.ProjectId);
 
-            var selectedSession = Assert.IsType<SessionNavItemViewModel>(navVm.SelectedItem);
+            var selectedProjectItem = Assert.IsType<ProjectNavItemViewModel>(navVm.SelectedItem);
+            Assert.Equal("project-1", selectedProjectItem.ProjectId);
+            var selectedSession = Assert.Single(project.Children.OfType<SessionNavItemViewModel>(), s => s.SessionId == "session-1");
             Assert.True(selectedSession.IsLogicallySelected);
             Assert.Equal("session-1", selectedSession.SessionId);
         }
@@ -133,6 +254,115 @@ public sealed class MainNavigationViewModelSelectionTests
 
             Assert.True(project.IsActiveDescendant);
             Assert.False(project.HasActiveDescendantIndicator);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task PaneClosed_ProjectsSelectionToProject()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            navState.SetPaneOpen(false);
+
+            var sessionManager = CreateSessionManager(new Session("session-1", @"C:\repo\demo")
+            {
+                DisplayName = "Session 1"
+            });
+            var preferences = CreatePreferencesWithProject();
+
+            var chatCatalog = CreateChatSessionCatalog("session-1");
+            using var navVm = CreateNavigationViewModel(chatCatalog, sessionManager.Object, preferences, navState);
+
+            navVm.RebuildTree();
+            navVm.SelectSession("session-1");
+
+            var projectedProject = Assert.IsType<ProjectNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+            Assert.Equal("project-1", projectedProject.ProjectId);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task PaneClosed_TogglingProjectExpansion_DoesNotChangeProjectProjection()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            navState.SetPaneOpen(false);
+
+            var sessionManager = CreateSessionManager(new Session("session-1", @"C:\repo\demo")
+            {
+                DisplayName = "Session 1"
+            });
+            var preferences = CreatePreferencesWithProject();
+
+            var chatCatalog = CreateChatSessionCatalog("session-1");
+            using var navVm = CreateNavigationViewModel(chatCatalog, sessionManager.Object, preferences, navState);
+
+            navVm.RebuildTree();
+            var project = Assert.Single(navVm.Items.OfType<ProjectNavItemViewModel>(), p => p.ProjectId == "project-1");
+            project.IsExpanded = false;
+
+            navVm.SelectSession("session-1");
+            var projectedBefore = Assert.IsType<ProjectNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+            Assert.Equal("project-1", projectedBefore.ProjectId);
+
+            project.IsExpanded = true;
+            var projectedAfter = Assert.IsType<ProjectNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+            Assert.Equal("project-1", projectedAfter.ProjectId);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task ReopenPane_DoesNotForceExpandProject_WhenUserCollapsedWhileClosed()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            navState.SetPaneOpen(true);
+
+            var sessionManager = CreateSessionManager(new Session("session-1", @"C:\repo\demo")
+            {
+                DisplayName = "Session 1"
+            });
+            var preferences = CreatePreferencesWithProject();
+
+            var chatCatalog = CreateChatSessionCatalog("session-1");
+            using var navVm = CreateNavigationViewModel(chatCatalog, sessionManager.Object, preferences, navState);
+
+            navVm.RebuildTree();
+            navVm.SelectSession("session-1");
+
+            var project = Assert.Single(navVm.Items.OfType<ProjectNavItemViewModel>(), p => p.ProjectId == "project-1");
+            Assert.True(project.IsExpanded);
+
+            navState.SetPaneOpen(false);
+            project.IsExpanded = false;
+            navState.SetPaneOpen(true);
+
+            Assert.False(project.IsExpanded);
+            Assert.IsType<SessionNavItemViewModel>(navVm.ProjectedControlSelectedItem);
         }
         finally
         {

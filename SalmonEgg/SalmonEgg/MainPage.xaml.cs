@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading;
@@ -57,9 +56,8 @@ public sealed partial class MainPage : Page
     private bool _isResizingLeftNav;
     private double _leftNavResizeStartX;
     private double _leftNavResizeStartWidth;
+    private bool _suppressNextPaneIntentFromDisplayModeTransition;
 
-    private bool _isNavItemsSubscribed;
-    private readonly List<ObservableCollection<MainNavItemViewModel>> _projectChildCollections = new();
     private readonly DeferredActionGate<string> _archiveOnFlyoutClosed = new(StringComparer.Ordinal);
     private readonly DeferredActionGate<string> _moveOnFlyoutClosed = new(StringComparer.Ordinal);
     private readonly DeferredActionGate<string> _renameOnFlyoutClosed = new(StringComparer.Ordinal);
@@ -141,7 +139,6 @@ public sealed partial class MainPage : Page
         // 3. Initialize theme and motion state
         ApplyTheme();
         ApplyBackdrop();
-        SubscribeNavItems();
         // NavVM.PropertyChanged registration removed as layout is now driven by LayoutVM SSOT
 
         // 4. Default to Start view on launch
@@ -179,7 +176,6 @@ public sealed partial class MainPage : Page
 
     private void OnMainPageUnloaded(object sender, RoutedEventArgs e)
     {
-        UnsubscribeNavItems();
         Preferences.PropertyChanged -= OnPreferencesPropertyChanged;
         _chatViewModel.PropertyChanged -= OnChatViewModelPropertyChanged;
         NavVM.PropertyChanged -= OnNavigationViewModelPropertyChanged;
@@ -216,7 +212,7 @@ public sealed partial class MainPage : Page
         }
 
         EnsureSettingsContent(key);
-        _mainNavigationViewAdapter.ApplySelectionDeferred();
+        NavVM.RefreshSelectionProjection();
     }
 
     private static Type GetSettingsShellPageType() => typeof(SalmonEgg.Presentation.Views.SettingsShellPage);
@@ -299,62 +295,6 @@ public sealed partial class MainPage : Page
             Background = b;
         }
 #endif
-    }
-
-    private void SubscribeNavItems()
-    {
-        if (_isNavItemsSubscribed)
-        {
-            return;
-        }
-
-        NavVM.Items.CollectionChanged += OnNavItemsChanged;
-        RefreshProjectChildSubscriptions();
-        _isNavItemsSubscribed = true;
-    }
-
-    private void UnsubscribeNavItems()
-    {
-        if (!_isNavItemsSubscribed)
-        {
-            return;
-        }
-
-        NavVM.Items.CollectionChanged -= OnNavItemsChanged;
-        ClearProjectChildSubscriptions();
-        _isNavItemsSubscribed = false;
-    }
-
-    private void OnNavItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        RefreshProjectChildSubscriptions();
-        _mainNavigationViewAdapter.ApplySelectionDeferred();
-    }
-
-    private void OnProjectChildrenChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        _mainNavigationViewAdapter.ApplySelectionDeferred();
-    }
-
-    private void RefreshProjectChildSubscriptions()
-    {
-        ClearProjectChildSubscriptions();
-
-        foreach (var project in NavVM.Items.OfType<ProjectNavItemViewModel>())
-        {
-            project.Children.CollectionChanged += OnProjectChildrenChanged;
-            _projectChildCollections.Add(project.Children);
-        }
-    }
-
-    private void ClearProjectChildSubscriptions()
-    {
-        foreach (var children in _projectChildCollections)
-        {
-            children.CollectionChanged -= OnProjectChildrenChanged;
-        }
-
-        _projectChildCollections.Clear();
     }
 
     private void NavigateTo(Type pageType, object? parameter = null)
@@ -670,8 +610,7 @@ public sealed partial class MainPage : Page
 #endif
         UpdateNavPaneToggleUi();
         NavVM.RebuildTree();
-        _mainNavigationViewAdapter.ApplySelection();
-        _mainNavigationViewAdapter.ApplySelectionDeferred();
+        NavVM.RefreshSelectionProjection();
         _ = _metricsSink.ReportContentContext(IsChatPageType(ContentFrame?.CurrentSourcePageType));
 #if WINDOWS
         InitializeTray();
@@ -703,9 +642,6 @@ public sealed partial class MainPage : Page
 
         _titleBarAdapter.UpdateBackButtonState();
         _mainNavigationContentSyncAdapter.OnFrameNavigated(e.SourcePageType);
-        // Selection sync is handled by OnNavigationViewModelPropertyChanged
-        // when the coordinator updates the shell selection state. Calling
-        // ApplySelectionDeferred here would interrupt the indicator animation.
         _ = _metricsSink.ReportContentContext(IsChatPageType(e.SourcePageType));
     }
 
@@ -721,6 +657,8 @@ public sealed partial class MainPage : Page
 
     private async void OnToggleLeftNavClick(object sender, RoutedEventArgs e)
     {
+        BootLogDebug($"TitleBar ToggleSidebar Clicked: mode={LayoutVM.NavPaneDisplayMode} open={LayoutVM.IsNavPaneOpen}");
+        _suppressNextPaneIntentFromDisplayModeTransition = false;
         await _metricsSink.ReportNavToggle("TitleBarButton");
     }
 
@@ -757,25 +695,81 @@ public sealed partial class MainPage : Page
                 isOpen ? "Collapse Sidebar" : "Expand Sidebar"));
     }
 
+    private void ReapplyNavPaneProjectionDeferred(string source)
+    {
+        _ = DispatcherQueue.TryEnqueue(() =>
+        {
+            if (MainNavView.IsPaneOpen != LayoutVM.IsNavPaneOpen)
+            {
+                BootLogDebug($"MainNav PaneProjectionReapply: source={source} controlOpen={MainNavView.IsPaneOpen} storeOpen={LayoutVM.IsNavPaneOpen}");
+                MainNavView.IsPaneOpen = LayoutVM.IsNavPaneOpen;
+            }
+
+            NavVM.RefreshSelectionProjection();
+        });
+    }
+
     private void OnMainNavPanePresentationChanged(NavigationView sender, object args)
     {
         UpdateNavPaneToggleUi(sender.IsPaneOpen);
-        // Re-project selection only when the control's display mode actually changes.
-        // Pane open/close in the same mode can fire frequently and should not enqueue
-        // redundant deferred selection work.
-        if (args is NavigationViewDisplayModeChangedEventArgs)
+        BootLogDebug($"MainNav PanePresentationChanged: args={args?.GetType().Name ?? "<null>"} senderPaneOpen={sender.IsPaneOpen} mode={LayoutVM.NavPaneDisplayMode} storeOpen={LayoutVM.IsNavPaneOpen}");
+        _logger.LogDebug(
+            "NavView pane event {EventType} DisplayMode={DisplayMode} IsPaneOpen={IsPaneOpen} SelectedItem={SelectedItem} VmSelected={VmSelected} ProjectedSelected={ProjectedSelected} SettingsSelected={IsSettingsSelected}",
+            args?.GetType().Name ?? "<null>",
+            LayoutVM.NavPaneDisplayMode,
+            sender.IsPaneOpen,
+            DescribeNavSelection(sender.SelectedItem),
+            DescribeNavSelection(NavVM.SelectedItem),
+            DescribeNavSelection(NavVM.ProjectedControlSelectedItem),
+            NavVM.IsSettingsSelected);
+
+        var isDisplayModeChanged = args is NavigationViewDisplayModeChangedEventArgs;
+        var nonExpandedMode = LayoutVM.NavPaneDisplayMode != SalmonEgg.Presentation.Core.Mvux.ShellLayout.NavigationPaneDisplayMode.Expanded;
+        var hasStoreDrift = LayoutVM.IsNavPaneOpen != sender.IsPaneOpen;
+
+        // Only treat actual pane-open/pane-close events as intent signals.
+        // DisplayModeChanged is layout projection, not user toggle intent.
+        if (isDisplayModeChanged)
         {
-            _mainNavigationViewAdapter.ApplySelectionDeferred();
+            _suppressNextPaneIntentFromDisplayModeTransition = true;
+            BootLogDebug("MainNav PanePresentationChanged: armed display-mode suppression.");
         }
+        else if (_suppressNextPaneIntentFromDisplayModeTransition)
+        {
+            _suppressNextPaneIntentFromDisplayModeTransition = false;
+            BootLogDebug("MainNav PanePresentationChanged: suppressed non-intent pane event after display-mode transition.");
+            if (hasStoreDrift)
+            {
+                ReapplyNavPaneProjectionDeferred("DisplayModeTransition");
+            }
+        }
+        else if (nonExpandedMode && hasStoreDrift)
+        {
+            BootLogDebug($"MainNav PanePresentationChanged: reporting pane intent senderPaneOpen={sender.IsPaneOpen} mode={LayoutVM.NavPaneDisplayMode}.");
+            _ = _metricsSink.ReportNavPaneOpenIntent(sender.IsPaneOpen, source: "PanePresentationChanged");
+        }
+
+        if (isDisplayModeChanged)
+        {
+            // Window-size driven mode switches can recycle item containers without changing
+            // semantic selection state. Refresh projection so the single VM->adapter path
+            // reapplies control selection consistently.
+            NavVM.RefreshSelectionProjection();
+        }
+
     }
 
     private void OnMainNavSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
         BootLogDebug($"MainNav SelectionChanged: selected={DescribeNavSelection(sender.SelectedItem)} settings={args.IsSettingsSelected}");
-        // Do NOT re-drive SelectedItem here. The ViewModel-driven
-        // ApplySelection() (from OnNavigationViewModelPropertyChanged) is the
-        // authoritative path. Re-applying during NavigationView's own selection
-        // processing interrupts the native indicator slide animation.
+        _logger.LogDebug(
+            "NavView selection changed SelectedItem={SelectedItem} SettingsSelected={IsSettingsSelected} VmSelected={VmSelected} ProjectedSelected={ProjectedSelected}",
+            DescribeNavSelection(sender.SelectedItem),
+            args.IsSettingsSelected,
+            DescribeNavSelection(NavVM.SelectedItem),
+            DescribeNavSelection(NavVM.ProjectedControlSelectedItem));
+        // Do NOT re-drive SelectedItem here. Selection is projected by x:Bind from
+        // MainNavigationViewModel.SelectedItem and should remain single-source.
     }
 
     private void OnNavigationViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -784,8 +778,32 @@ public sealed partial class MainPage : Page
             e.PropertyName == nameof(MainNavigationViewModel.ProjectedControlSelectedItem) ||
             e.PropertyName == nameof(MainNavigationViewModel.IsSettingsSelected))
         {
+            if (!DispatcherQueue.HasThreadAccess)
+            {
+                _ = DispatcherQueue.TryEnqueue(() => OnNavigationViewModelPropertyChanged(sender, e));
+                return;
+            }
+
             BootLogDebug($"NavVM ProjectionChanged: current={NavVM.CurrentSelection}; projected={DescribeNavSelection(NavVM.ProjectedControlSelectedItem)}; settings={NavVM.IsSettingsSelected}");
-            _mainNavigationViewAdapter.ApplySelection();
+            _logger.LogDebug(
+                "NavVM projection changed CurrentSelection={CurrentSelection} ProjectedSelected={ProjectedSelected} SettingsSelected={IsSettingsSelected} VmSelected={VmSelected}",
+                NavVM.CurrentSelection,
+                DescribeNavSelection(NavVM.ProjectedControlSelectedItem),
+                NavVM.IsSettingsSelected,
+                DescribeNavSelection(NavVM.SelectedItem));
+
+            if (NavVM.IsSettingsSelected
+                && MainNavView.SettingsItem is not null
+                && !ReferenceEquals(MainNavView.SelectedItem, MainNavView.SettingsItem))
+            {
+                MainNavView.SelectedItem = MainNavView.SettingsItem;
+            }
+            else if (!NavVM.IsSettingsSelected
+                && NavVM.SelectedItem is not null
+                && !ReferenceEquals(MainNavView.SelectedItem, NavVM.SelectedItem))
+            {
+                MainNavView.SelectedItem = NavVM.SelectedItem;
+            }
         }
     }
 
@@ -809,10 +827,8 @@ public sealed partial class MainPage : Page
     {
         var mode = LayoutVM?.NavPaneDisplayMode
             ?? SalmonEgg.Presentation.Core.Mvux.ShellLayout.NavigationPaneDisplayMode.Expanded;
-        if (mode != SalmonEgg.Presentation.Core.Mvux.ShellLayout.NavigationPaneDisplayMode.Expanded
-            && LayoutVM?.IsNavPaneOpen == true)
+        if (mode != SalmonEgg.Presentation.Core.Mvux.ShellLayout.NavigationPaneDisplayMode.Expanded)
         {
-            _ = _metricsSink.ReportNavPaneOpenIntent(isOpen: false, source: "PaneClosing");
             args.Cancel = false;
             return;
         }
@@ -916,8 +932,15 @@ public sealed partial class MainPage : Page
 
     private void OnLayoutViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (!DispatcherQueue.HasThreadAccess)
+        {
+            _ = DispatcherQueue.TryEnqueue(() => OnLayoutViewModelPropertyChanged(sender, e));
+            return;
+        }
+
         if (e.PropertyName == nameof(ShellLayoutViewModel.IsNavPaneOpen))
         {
+            BootLogDebug($"LayoutVM IsNavPaneOpen Changed: mode={LayoutVM.NavPaneDisplayMode} open={LayoutVM.IsNavPaneOpen}");
             UpdateNavPaneToggleUi();
         }
 

@@ -83,8 +83,26 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     private void OnServicePaneStateChanged(object? sender, EventArgs e)
     {
+        if (SynchronizationContext.Current != _syncContext)
+        {
+            _syncContext.Post(_ => ApplyPaneStateChanged(), null);
+            return;
+        }
+
+        ApplyPaneStateChanged();
+    }
+
+    private void ApplyPaneStateChanged()
+    {
         OnPropertyChanged(nameof(IsPaneOpen));
         ApplySelectionProjection();
+        OnPropertyChanged(nameof(SelectedItem));
+        _logger.LogDebug(
+            "Pane state changed IsPaneOpen={IsPaneOpen} CurrentSelection={CurrentSelection} ProjectedSelected={ProjectedSelected} VmSelected={VmSelected}",
+            _navigationState.IsPaneOpen,
+            CurrentSelection,
+            _projection.ControlSelectedItem?.GetType().Name ?? "<null>",
+            SelectedItem?.GetType().Name ?? "<null>");
     }
 
     public IAsyncRelayCommand AddProjectCommand { get; }
@@ -242,6 +260,14 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         {
             RebuildTree();
         }
+    }
+
+    public void RefreshSelectionProjection()
+    {
+        ApplySelectionProjection();
+        OnPropertyChanged(nameof(SelectedItem));
+        OnPropertyChanged(nameof(ProjectedControlSelectedItem));
+        OnPropertyChanged(nameof(IsSettingsSelected));
     }
 
     public string? TryGetProjectIdForSession(string sessionId)
@@ -688,7 +714,19 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     private void ApplySelectionProjection()
     {
-        _projection = _selectionProjector.Project(
+        if (CurrentSelection is NavigationSelectionState.Session selectionState
+            && !string.IsNullOrWhiteSpace(selectionState.SessionId)
+            && _sessionIndex.TryGetValue(selectionState.SessionId, out var sessionItem))
+        {
+            _logger.LogDebug(
+                "SelectionProjection sessionId={SessionId} projectId={ProjectId} paneOpen={PaneOpen} projectIndexHas={ProjectIndexHas}",
+                selectionState.SessionId,
+                sessionItem.ProjectId,
+                _navigationState.IsPaneOpen,
+                _projectIndex.ContainsKey(sessionItem.ProjectId));
+        }
+
+        var nextProjection = _selectionProjector.Project(
             CurrentSelection,
             StartItem,
             DiscoverSessionsItem,
@@ -696,6 +734,29 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             _projectIndex,
             _navigationState.IsPaneOpen);
 
+        if (!_navigationState.IsPaneOpen
+            && CurrentSelection is NavigationSelectionState.Session selection
+            && !string.IsNullOrWhiteSpace(selection.SessionId)
+            && _sessionIndex.TryGetValue(selection.SessionId, out var selectedSession)
+            && _projectIndex.TryGetValue(selectedSession.ProjectId, out var selectedProject))
+        {
+            nextProjection = nextProjection with
+            {
+                ControlSelectedItem = selectedProject
+            };
+        }
+
+        if (CurrentSelection is NavigationSelectionState.Session
+            && nextProjection.ControlSelectedItem is null
+            && _projection.ControlSelectedItem is not null)
+        {
+            nextProjection = nextProjection with
+            {
+                ControlSelectedItem = _projection.ControlSelectedItem
+            };
+        }
+
+        _projection = nextProjection;
         ApplyVisualSelectionState(_projection);
         SelectedItem = _projection.ControlSelectedItem;
         OnPropertyChanged(nameof(ProjectedControlSelectedItem));

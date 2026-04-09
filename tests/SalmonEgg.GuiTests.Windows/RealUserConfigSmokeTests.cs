@@ -257,6 +257,51 @@ public sealed partial class RealUserConfigSmokeTests
     }
 
     [SkippableFact]
+    public void RealData_ExpandedToCompactResize_DoesNotLoseNavigationSelectionContext()
+    {
+        GuiTestGate.RequireEnabled();
+
+        var candidates = RealUserConfigProbe.LoadReplayBackedCandidates()
+            .OrderByDescending(item => item.LastUpdatedAtUtc)
+            .ToArray();
+        Skip.If(candidates.Length == 0, "No replay-backed conversation is available for real-data resize navigation validation.");
+
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var candidate = candidates
+            .FirstOrDefault(item => session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null);
+        Skip.If(candidate is null, "No replay-backed candidate is currently visible in left navigation.");
+
+        ResizeMainWindow(width: 1400, height: 900);
+        Thread.Sleep(1200);
+
+        var startItem = session.FindByAutomationId("MainNav.Start", TimeSpan.FromSeconds(10));
+        session.ActivateElement(startItem);
+        Thread.Sleep(300);
+
+        var sessionId = SessionAutomationId(candidate.ConversationId);
+        var selectedItem = session.FindByAutomationId(sessionId, TimeSpan.FromSeconds(10));
+        session.ActivateElement(selectedItem);
+        Assert.True(
+            session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(10)),
+            $"Chat header did not appear after selecting conversation {candidate.ConversationId}.");
+
+        ResizeMainWindow(width: 800, height: 900);
+        Thread.Sleep(1700);
+
+        var startSelected = session.TryGetIsSelected("MainNav.Start") == true;
+        var sessionSelected = session.TryGetIsSelected(sessionId) == true;
+        var activeProjectIndicators = CountActiveProjectIndicators(session);
+
+        Assert.False(
+            startSelected,
+            $"Selection unexpectedly snapped back to Start after expanded->compact resize. Conversation={candidate.ConversationId}");
+        Assert.True(
+            sessionSelected || activeProjectIndicators > 0,
+            $"Navigation selection context was lost after expanded->compact resize. Conversation={candidate.ConversationId} sessionSelected={sessionSelected} activeProjectIndicators={activeProjectIndicators}");
+    }
+
+    [SkippableFact]
     public void SelectRemoteBoundSession_FromStart_DoesNotSnapBackToStartSelection()
     {
         GuiTestGate.RequireEnabled();
@@ -772,6 +817,96 @@ public sealed partial class RealUserConfigSmokeTests
 
     private static string SessionAutomationId(string conversationId)
         => $"MainNav.Session.{conversationId}";
+
+    private static int CountActiveProjectIndicators(WindowsGuiAppSession session)
+    {
+        return session.MainWindow
+            .FindAllDescendants()
+            .Count(element =>
+            {
+                try
+                {
+                    if (!element.Properties.AutomationId.TryGetValue(out var automationId)
+                        || string.IsNullOrWhiteSpace(automationId)
+                        || !automationId.StartsWith("MainNav.Project.", StringComparison.Ordinal))
+                    {
+                        return false;
+                    }
+
+                    if (!element.Properties.HelpText.TryGetValue(out var helpText))
+                    {
+                        return false;
+                    }
+
+                    return string.Equals(helpText, "True", StringComparison.Ordinal);
+                }
+                catch
+                {
+                    return false;
+                }
+            });
+    }
+
+    private static void ResizeMainWindow(int width, int height)
+    {
+        var process = Process.GetProcessesByName("SalmonEgg")
+            .OrderByDescending(candidate => candidate.StartTime)
+            .First();
+
+        if (NativeMethods.MoveWindow(process.MainWindowHandle, 80, 80, width, height, true))
+        {
+            return;
+        }
+
+        if (NativeMethods.SetWindowPos(process.MainWindowHandle, IntPtr.Zero, 80, 80, width, height, 0))
+        {
+            return;
+        }
+
+        if (NativeMethods.TryGetWindowSize(process.MainWindowHandle, out var currentWidth, out var currentHeight)
+            && Math.Abs(currentWidth - width) <= 2
+            && Math.Abs(currentHeight - height) <= 2)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException("Failed to resize the SalmonEgg window.");
+    }
+
+    private static class NativeMethods
+    {
+        [StructLayout(LayoutKind.Sequential)]
+        private struct Rect
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
+
+        [DllImport("user32.dll", SetLastError = true)]
+        internal static extern bool MoveWindow(IntPtr hWnd, int x, int y, int width, int height, bool repaint);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        internal static extern bool SetWindowPos(IntPtr hWnd, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool GetWindowRect(IntPtr hWnd, out Rect rect);
+
+        internal static bool TryGetWindowSize(IntPtr hWnd, out int width, out int height)
+        {
+            if (GetWindowRect(hWnd, out var rect))
+            {
+                width = rect.Right - rect.Left;
+                height = rect.Bottom - rect.Top;
+                return true;
+            }
+
+            width = 0;
+            height = 0;
+            return false;
+        }
+    }
 
     private static string DescribeSelectionSnapshot(
         WindowsGuiAppSession session,

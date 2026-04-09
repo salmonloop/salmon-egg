@@ -101,7 +101,8 @@
                                 IsExpanded="{x:Bind IsExpanded, Mode=TwoWay}"
                                 IsChildSelected="{x:Bind IsActiveDescendant, Mode=OneWay}"
                                 HorizontalContentAlignment="Stretch"
-                                SelectsOnInvoked="False"
+                                SelectsOnInvoked="{x:Bind IsPaneClosed, Mode=OneWay}"
+                                AutomationProperties.HelpText="{x:Bind HasActiveDescendantIndicator, Mode=OneWay}"
                                 AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.ProjectItem(ProjectId)}"
                                 Tag="{x:Bind navModels:NavItemTag.Project(ProjectId)}">
                 <NavigationViewItem.Icon>
@@ -553,6 +554,7 @@
                              Padding="{x:Bind LayoutVM.NavViewPadding, Mode=OneWay, Converter={StaticResource PaddingConverter}}"
                              MenuItemsSource="{x:Bind NavVM.Items, Mode=OneWay}"
                              FooterMenuItemsSource="{x:Bind NavVM.FooterItems, Mode=OneWay}"
+                             SelectedItem="{x:Bind NavVM.SelectedItem, Mode=OneWay}"
                              MenuItemTemplateSelector="{StaticResource MainNavItemTemplateSelector}"
                              ItemInvoked="OnMainNavItemInvoked"
                              SelectionChanged="OnMainNavSelectionChanged"
