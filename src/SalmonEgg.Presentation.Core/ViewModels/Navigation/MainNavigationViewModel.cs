@@ -26,6 +26,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 {
     public const string UnclassifiedProjectId = NavigationProjectIds.Unclassified;
 
+    public event EventHandler? TreeRebuilt;
+
     private readonly IChatSessionCatalog _chatSessionCatalogActions;
     private readonly INavigationProjectPreferences _projectPreferences;
     private readonly IUiInteractionService _ui;
@@ -60,6 +62,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     public AddProjectNavItemViewModel AddProjectItem { get; }
 
     private NavigationViewProjection _projection = new(
+        ControlSelectedItem: null,
         IsSettingsSelected: false,
         ActiveProjectIds: new HashSet<string>(StringComparer.Ordinal),
         SelectedSessionIds: new HashSet<string>(StringComparer.Ordinal));
@@ -69,6 +72,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     public bool IsSettingsSelected => _projection.IsSettingsSelected;
 
     public bool IsPaneOpen => _navigationState.IsPaneOpen;
+
+    public MainNavItemViewModel? ProjectedControlSelectedItem => _projection.ControlSelectedItem;
 
     private void OnServicePaneStateChanged(object? sender, EventArgs e)
     {
@@ -514,6 +519,9 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             }
 
             NormalizeSelectionAfterRebuild();
+
+            // Notify that tree has been rebuilt
+            TreeRebuilt?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception ex)
         {
@@ -710,6 +718,11 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         if (previousProjection.IsSettingsSelected != _projection.IsSettingsSelected)
         {
             OnPropertyChanged(nameof(IsSettingsSelected));
+        }
+
+        if (!ReferenceEquals(previousProjection.ControlSelectedItem, _projection.ControlSelectedItem))
+        {
+            OnPropertyChanged(nameof(ProjectedControlSelectedItem));
         }
     }
 

@@ -21,18 +21,21 @@ public sealed class NavigationSelectionProjector : INavigationSelectionProjector
         {
             case NavigationSelectionState.Start:
                 return new NavigationViewProjection(
+                    ControlSelectedItem: startItem,
                     IsSettingsSelected: false,
                     ActiveProjectIds: activeProjects,
                     SelectedSessionIds: selectedSessions);
 
             case NavigationSelectionState.DiscoverSessions:
                 return new NavigationViewProjection(
+                    ControlSelectedItem: discoverSessionsItem,
                     IsSettingsSelected: false,
                     ActiveProjectIds: activeProjects,
                     SelectedSessionIds: selectedSessions);
 
             case NavigationSelectionState.Settings:
                 return new NavigationViewProjection(
+                    ControlSelectedItem: null,
                     IsSettingsSelected: true,
                     ActiveProjectIds: activeProjects,
                     SelectedSessionIds: selectedSessions);
@@ -47,12 +50,14 @@ public sealed class NavigationSelectionProjector : INavigationSelectionProjector
                     activeProjects.Add(projectItem.ProjectId);
 
                     return new NavigationViewProjection(
+                        ControlSelectedItem: sessionItem,
                         IsSettingsSelected: false,
                         ActiveProjectIds: activeProjects,
                         SelectedSessionIds: selectedSessions);
                 }
 
                 return new NavigationViewProjection(
+                    ControlSelectedItem: sessionItem,
                     IsSettingsSelected: false,
                     ActiveProjectIds: activeProjects,
                     SelectedSessionIds: selectedSessions);
@@ -60,12 +65,14 @@ public sealed class NavigationSelectionProjector : INavigationSelectionProjector
             case NavigationSelectionState.Session sessionSelection
                 when !string.IsNullOrWhiteSpace(sessionSelection.SessionId):
                 return new NavigationViewProjection(
+                    ControlSelectedItem: null,
                     IsSettingsSelected: false,
                     ActiveProjectIds: activeProjects,
                     SelectedSessionIds: selectedSessions);
 
             default:
                 return new NavigationViewProjection(
+                    ControlSelectedItem: null,
                     IsSettingsSelected: false,
                     ActiveProjectIds: activeProjects,
                     SelectedSessionIds: selectedSessions);

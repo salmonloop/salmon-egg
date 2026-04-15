@@ -758,7 +758,7 @@ public sealed class MainNavigationViewModelSelectionTests
                 navState,
                 new Mock<IShellLayoutMetricsSink>().Object,
                 new StubNavigationSelectionProjector(new NavigationViewProjection(
-                    sentinelItem,
+                    ControlSelectedItem: sentinelItem,
                     IsSettingsSelected: false,
                     ActiveProjectIds: new HashSet<string>(StringComparer.Ordinal),
                     SelectedSessionIds: new HashSet<string>(StringComparer.Ordinal))),
