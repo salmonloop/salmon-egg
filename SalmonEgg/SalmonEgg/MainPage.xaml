@@ -98,7 +98,6 @@
 
         <DataTemplate x:Key="ProjectNavTemplate" x:DataType="nav:ProjectNavItemViewModel">
             <NavigationViewItem MenuItemsSource="{x:Bind Children, Mode=OneWay}"
-                                IsExpanded="{x:Bind IsExpanded, Mode=OneWay}"
                                 HorizontalContentAlignment="Stretch"
                                 AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.ProjectItem(ProjectId)}"
                                 Tag="{x:Bind navModels:NavItemTag.Project(ProjectId)}">
@@ -555,8 +554,6 @@
                              MenuItemTemplateSelector="{StaticResource MainNavItemTemplateSelector}"
                              ItemInvoked="OnMainNavItemInvoked"
                              SelectionChanged="OnMainNavSelectionChanged"
-                             Expanding="OnMainNavItemExpanding"
-                             Collapsed="OnMainNavItemCollapsed"
                              DisplayModeChanged="OnMainNavPanePresentationChanged"
                              PaneOpened="OnMainNavPanePresentationChanged"
                              PaneClosed="OnMainNavPanePresentationChanged"
@@ -679,3 +676,4 @@
         </Grid>
     </Grid>
 </Page>
+

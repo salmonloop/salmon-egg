@@ -23,8 +23,9 @@ public sealed class ShellLayoutNavigationStateAdapter : INavigationPaneState, ID
         _snapshotState.ForEach(async (snapshot, ct) =>
         {
             if (snapshot is null) return;
-            if (_isPaneOpen == snapshot.IsNavPaneOpen) return;
-            _isPaneOpen = snapshot.IsNavPaneOpen;
+            var nextPaneOpen = snapshot.IsNavPaneOpen;
+            if (_isPaneOpen == nextPaneOpen) return;
+            _isPaneOpen = nextPaneOpen;
             RaisePaneStateChanged();
         }, out _subscription);
     }

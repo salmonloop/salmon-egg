@@ -126,12 +126,49 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
-    public void NavigationViewPanePresentationPolicy_DoesNotUseDualSuppressionFlags()
+    public void MainNavigationViewModel_DoesNotContainDisplayModeTransitionHacks()
+    {
+        var code = LoadFile(@"src\SalmonEgg.Presentation.Core\ViewModels\Navigation\MainNavigationViewModel.cs");
+
+        // These methods were hack workarounds for NavigationView ancestor visual issues.
+        // The correct fix is to let NavigationView handle ancestor visuals natively
+        // by keeping SelectedItem on the leaf and not interfering during transitions.
+        Assert.DoesNotContain("ReassertSelectionProjection", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("ClearAndDeferRestore", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("ClearAndRestoreSelectionProjection", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("ReassertExpandedProjects", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MainPage_DoesNotContainDisplayModeTransitionHacks()
+    {
+        var code = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
+
+        Assert.DoesNotContain("ClearAndDeferRestore", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("ClearAndRestoreSelectionProjection", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("ReassertSelectionProjection", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("_displayModeTransitionVersion", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("LayoutUpdated += OnLayoutSettled", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NavigationViewPanePresentationPolicy_DoesNotUseDisplayModeTransitionSuppression()
     {
         var code = LoadFile(@"src\SalmonEgg.Application\Common\Shell\NavigationViewPanePresentationPolicy.cs");
 
         Assert.DoesNotContain("SuppressNextPaneIntentFromDisplayModeTransition", code, StringComparison.Ordinal);
         Assert.DoesNotContain("SuppressProjectExpansionSyncFromDisplayModeTransition", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsDisplayModeTransitionSuppressed", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NavigationSelectionProjector_DoesNotSwapLeafSelectionForAncestorOnClosedPane()
+    {
+        var code = LoadFile(@"src\SalmonEgg.Presentation.Core\Services\NavigationSelectionProjector.cs");
+
+        Assert.DoesNotContain("project the selected ancestor", code, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("controlSelectedItem", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("? sessionItem", code, StringComparison.Ordinal);
     }
 
     [Fact]

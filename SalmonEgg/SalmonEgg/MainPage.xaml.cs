@@ -108,7 +108,7 @@ public sealed partial class MainPage : Page
 
         this.InitializeComponent();
         _mainNavigationContentSyncAdapter = new MainNavigationContentSyncAdapter(navigationCoordinator);
-        _mainNavigationViewAdapter = new MainNavigationViewAdapter(MainNavView, NavVM, navigationCoordinator, DispatcherQueue);
+        _mainNavigationViewAdapter = new MainNavigationViewAdapter(MainNavView, NavVM, navigationCoordinator);
         _titleBarAdapter = new MainWindowTitleBarAdapter(
             AppTitleBar,
             AppTitleBarLayoutRoot,
@@ -742,16 +742,6 @@ public sealed partial class MainPage : Page
         // by MainNavigationViewModel -> adapter, and SelectionChanged stays observational.
     }
 
-    private void OnMainNavItemExpanding(NavigationView sender, NavigationViewItemExpandingEventArgs args)
-    {
-        _mainNavigationViewAdapter.TrySyncProjectExpansion(args.ExpandingItemContainer, true);
-    }
-
-    private void OnMainNavItemCollapsed(NavigationView sender, NavigationViewItemCollapsedEventArgs args)
-    {
-        _mainNavigationViewAdapter.TrySyncProjectExpansion(args.CollapsedItemContainer, false);
-    }
-
     private void OnNavigationViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(MainNavigationViewModel.ProjectedControlSelectedItem) ||
@@ -826,6 +816,15 @@ public sealed partial class MainPage : Page
         _ => selection.GetType().Name
     };
 
+    private static string DescribeSemanticSelection(NavigationSelectionState selection) => selection switch
+    {
+        NavigationSelectionState.Start => "Start",
+        NavigationSelectionState.DiscoverSessions => "DiscoverSessions",
+        NavigationSelectionState.Settings => "Settings",
+        NavigationSelectionState.Session session => $"Session:{session.SessionId}",
+        _ => selection.GetType().Name
+    };
+
     private static NavigationViewPanePresentationMode MapNavigationPaneDisplayMode(NavigationViewDisplayMode displayMode)
         => displayMode switch
         {
@@ -876,6 +875,7 @@ public sealed partial class MainPage : Page
         return string.Join(
             ";",
             $"Context={context}",
+            $"Semantic={DescribeSemanticSelection(NavVM.CurrentSelection)}",
             $"NavSelected={DescribeNavSelection(MainNavView.SelectedItem)}",
             $"Projected={DescribeNavSelection(NavVM.ProjectedControlSelectedItem)}",
             $"ProjectVisible={projectVisible}",

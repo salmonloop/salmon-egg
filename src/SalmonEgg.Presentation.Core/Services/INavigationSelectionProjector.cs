@@ -11,6 +11,5 @@ public interface INavigationSelectionProjector
         StartNavItemViewModel startItem,
         DiscoverSessionsNavItemViewModel discoverSessionsItem,
         IReadOnlyDictionary<string, SessionNavItemViewModel> sessionIndex,
-        IReadOnlyDictionary<string, ProjectNavItemViewModel> projectIndex,
-        bool isPaneOpen);
+        IReadOnlyDictionary<string, ProjectNavItemViewModel> projectIndex);
 }

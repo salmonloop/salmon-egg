@@ -4,7 +4,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Shell;
 public sealed class NavigationViewPanePresentationPolicyTests
 {
     [Fact]
-    public void Evaluate_DisplayModeChanged_ArmsSingleIntentSuppressionWithoutReplay()
+    public void Evaluate_DisplayModeChanged_DoesNothing()
     {
         var state = NavigationViewPanePresentationState.Default;
 
@@ -15,22 +15,14 @@ public sealed class NavigationViewPanePresentationPolicyTests
             displayMode: NavigationViewPanePresentationMode.Compact,
             desiredPaneOpen: false);
 
-        Assert.True(decision.NextState.IsDisplayModeTransitionSuppressed);
-        Assert.False(decision.NextState.HasConfirmedOverlayPaneOpen);
         Assert.False(decision.ShouldReportPaneOpenIntent);
         Assert.False(decision.ShouldApplyPaneProjection);
-        Assert.False(decision.ShouldRefreshSelectionProjection);
-        Assert.False(decision.ShouldReassertExpandedProjects);
-        Assert.False(decision.ShouldReapplyProjectExpansionProjection);
-        Assert.False(decision.ShouldClearDisplayModeSuppressionAfterReplay);
     }
 
     [Fact]
-    public void Evaluate_SuppressedFollowUp_ClearsSuppressionWithoutReportingIntent()
+    public void Evaluate_SuppressedStateNotPassed_DoesNothing()
     {
-        var state = new NavigationViewPanePresentationState(
-            IsDisplayModeTransitionSuppressed: true,
-            HasConfirmedOverlayPaneOpen: false);
+        var state = NavigationViewPanePresentationState.Default;
 
         var decision = NavigationViewPanePresentationPolicy.Evaluate(
             state,
@@ -42,10 +34,6 @@ public sealed class NavigationViewPanePresentationPolicyTests
         Assert.Equal(NavigationViewPanePresentationState.Default, decision.NextState);
         Assert.False(decision.ShouldReportPaneOpenIntent);
         Assert.False(decision.ShouldApplyPaneProjection);
-        Assert.False(decision.ShouldRefreshSelectionProjection);
-        Assert.False(decision.ShouldReassertExpandedProjects);
-        Assert.False(decision.ShouldReapplyProjectExpansionProjection);
-        Assert.False(decision.ShouldClearDisplayModeSuppressionAfterReplay);
     }
 
     [Fact]
@@ -63,10 +51,6 @@ public sealed class NavigationViewPanePresentationPolicyTests
         Assert.Equal(NavigationViewPanePresentationState.Default, decision.NextState);
         Assert.False(decision.ShouldReportPaneOpenIntent);
         Assert.False(decision.ShouldApplyPaneProjection);
-        Assert.False(decision.ShouldRefreshSelectionProjection);
-        Assert.False(decision.ShouldReassertExpandedProjects);
-        Assert.False(decision.ShouldReapplyProjectExpansionProjection);
-        Assert.False(decision.ShouldClearDisplayModeSuppressionAfterReplay);
     }
 
     [Fact]
@@ -84,14 +68,10 @@ public sealed class NavigationViewPanePresentationPolicyTests
         Assert.Equal(NavigationViewPanePresentationState.Default, decision.NextState);
         Assert.False(decision.ShouldReportPaneOpenIntent);
         Assert.True(decision.ShouldApplyPaneProjection);
-        Assert.False(decision.ShouldRefreshSelectionProjection);
-        Assert.False(decision.ShouldReassertExpandedProjects);
-        Assert.False(decision.ShouldReapplyProjectExpansionProjection);
-        Assert.False(decision.ShouldClearDisplayModeSuppressionAfterReplay);
     }
 
     [Fact]
-    public void Evaluate_CompactModeOpenDrift_ReportsPaneIntent()
+    public void Evaluate_CompactModeOpenDrift_DoesNotReportPaneIntent()
     {
         var state = NavigationViewPanePresentationState.Default;
 
@@ -103,11 +83,8 @@ public sealed class NavigationViewPanePresentationPolicyTests
             desiredPaneOpen: false);
 
         Assert.True(decision.NextState.HasConfirmedOverlayPaneOpen);
-        Assert.True(decision.ShouldReportPaneOpenIntent);
+        Assert.False(decision.ShouldReportPaneOpenIntent);
         Assert.False(decision.ShouldApplyPaneProjection);
-        Assert.False(decision.ShouldRefreshSelectionProjection);
-        Assert.False(decision.ShouldReassertExpandedProjects);
-        Assert.False(decision.ShouldReapplyProjectExpansionProjection);
     }
 
     [Fact]
@@ -154,7 +131,7 @@ public sealed class NavigationViewPanePresentationPolicyTests
     [Fact]
     public void Evaluate_CompactSequence_TransientCloseDoesNotOverrideOpenIntentUntilOpenIsConfirmed()
     {
-        // 1) expanded -> compact display mode change: arm suppression
+        // 1) expanded -> compact display mode change: let NavigationView handle natively
         var afterDisplayModeChanged = NavigationViewPanePresentationPolicy.Evaluate(
             NavigationViewPanePresentationState.Default,
             isPaneOpen: false,
@@ -162,22 +139,22 @@ public sealed class NavigationViewPanePresentationPolicyTests
             displayMode: NavigationViewPanePresentationMode.Compact,
             desiredPaneOpen: false);
 
-        Assert.True(afterDisplayModeChanged.NextState.IsDisplayModeTransitionSuppressed);
+        Assert.False(afterDisplayModeChanged.ShouldReportPaneOpenIntent);
+        Assert.False(afterDisplayModeChanged.ShouldApplyPaneProjection);
 
-        // 2) follow-up pane event during transition: consume suppression, no intent report
-        var afterSuppressedFollowUp = NavigationViewPanePresentationPolicy.Evaluate(
+        // 2) follow-up pane event during transition: no intent report
+        var afterFollowUp = NavigationViewPanePresentationPolicy.Evaluate(
             afterDisplayModeChanged.NextState,
             isPaneOpen: false,
             isDisplayModeChanged: false,
             displayMode: NavigationViewPanePresentationMode.Compact,
             desiredPaneOpen: true);
 
-        Assert.False(afterSuppressedFollowUp.ShouldReportPaneOpenIntent);
-        Assert.False(afterSuppressedFollowUp.NextState.IsDisplayModeTransitionSuppressed);
+        Assert.False(afterFollowUp.ShouldReportPaneOpenIntent);
 
         // 3) immediate transient close while store already wants open: ignore
         var transientClose = NavigationViewPanePresentationPolicy.Evaluate(
-            afterSuppressedFollowUp.NextState,
+            afterFollowUp.NextState,
             isPaneOpen: false,
             isDisplayModeChanged: false,
             displayMode: NavigationViewPanePresentationMode.Compact,
@@ -224,19 +201,6 @@ public sealed class NavigationViewPanePresentationPolicyTests
         Assert.Equal(state, decision.NextState);
         Assert.False(decision.ShouldReportPaneOpenIntent);
         Assert.False(decision.ShouldApplyPaneProjection);
-        Assert.False(decision.ShouldRefreshSelectionProjection);
-        Assert.False(decision.ShouldReassertExpandedProjects);
-        Assert.False(decision.ShouldReapplyProjectExpansionProjection);
-    }
-
-    [Fact]
-    public void ShouldSyncProjectExpansion_AlwaysTrue()
-    {
-        Assert.True(NavigationViewPanePresentationPolicy.ShouldSyncProjectExpansion(
-            new NavigationViewPanePresentationState(
-                IsDisplayModeTransitionSuppressed: true,
-                HasConfirmedOverlayPaneOpen: false)));
-        Assert.True(NavigationViewPanePresentationPolicy.ShouldSyncProjectExpansion(NavigationViewPanePresentationState.Default));
     }
 
     [Fact]
@@ -255,25 +219,4 @@ public sealed class NavigationViewPanePresentationPolicyTests
         Assert.False(decision.ShouldReportPaneOpenIntent);
     }
 
-    [Fact]
-    public void ResolveProjectExpansionProjection_CompactOpen_PreservesProjectExpansion()
-    {
-        var projection = NavigationViewPanePresentationPolicy.ResolveProjectExpansionProjection(
-            displayMode: NavigationViewPanePresentationMode.Compact,
-            isPaneOpen: true,
-            isProjectExpanded: true);
-
-        Assert.True(projection);
-    }
-
-    [Fact]
-    public void ResolveProjectExpansionProjection_ClosedPane_DoesNotForceContainerExpansion()
-    {
-        var projection = NavigationViewPanePresentationPolicy.ResolveProjectExpansionProjection(
-            displayMode: NavigationViewPanePresentationMode.Compact,
-            isPaneOpen: false,
-            isProjectExpanded: true);
-
-        Assert.Null(projection);
-    }
 }

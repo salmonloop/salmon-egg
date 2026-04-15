@@ -60,6 +60,40 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void MainPage_ProjectItemsDoNotOverrideSelectsOnInvoked()
+    {
+        var document = XDocument.Parse(LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml"));
+        var xNamespace = XNamespace.Get("http://schemas.microsoft.com/winfx/2006/xaml");
+
+        var projectTemplate = document
+            .Descendants()
+            .FirstOrDefault(element =>
+                string.Equals(element.Name.LocalName, "DataTemplate", StringComparison.Ordinal)
+                && string.Equals(element.Attribute(xNamespace + "Key")?.Value, "ProjectNavTemplate", StringComparison.Ordinal));
+
+        Assert.NotNull(projectTemplate);
+
+        var projectNavItem = projectTemplate!
+            .Descendants()
+            .FirstOrDefault(element => string.Equals(element.Name.LocalName, "NavigationViewItem", StringComparison.Ordinal));
+
+        Assert.NotNull(projectNavItem);
+        Assert.False(
+            string.Equals(projectNavItem!.Attribute("SelectsOnInvoked")?.Value, "False", StringComparison.OrdinalIgnoreCase),
+            "ProjectNavTemplate should preserve native item selection behavior and not force SelectsOnInvoked=False.");
+    }
+
+    [Fact]
+    public void MainPage_ProjectExpansionUsesNativeNavigationViewBehavior()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");
+
+        Assert.DoesNotContain("IsExpanded=\"{x:Bind IsExpanded, Mode=OneWay}\"", xaml);
+        Assert.DoesNotContain("Expanding=\"OnMainNavItemExpanding\"", xaml);
+        Assert.DoesNotContain("Collapsed=\"OnMainNavItemCollapsed\"", xaml);
+    }
+
+    [Fact]
     public void MainPage_SearchActionsUseCommands()
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");

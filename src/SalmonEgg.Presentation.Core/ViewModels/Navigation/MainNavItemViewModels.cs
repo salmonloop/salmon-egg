@@ -71,11 +71,6 @@ public sealed partial class ProjectNavItemViewModel : MainNavItemViewModel
         IsSystemProject = isSystemProject;
         CreateSessionCommand = new AsyncRelayCommand(() => createSessionAsync(ProjectId));
     }
-
-    public void ReassertExpansion()
-    {
-        OnPropertyChanged(nameof(IsExpanded));
-    }
 }
 
 public sealed partial class SessionNavItemViewModel : MainNavItemViewModel

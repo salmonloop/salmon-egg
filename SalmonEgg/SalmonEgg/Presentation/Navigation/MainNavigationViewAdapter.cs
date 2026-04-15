@@ -1,10 +1,8 @@
 using System;
 using System.Threading.Tasks;
-using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Application.Common.Shell;
-using SalmonEgg.Presentation.Core.Mvux.ShellLayout;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.ViewModels.Navigation;
@@ -20,20 +18,16 @@ public sealed class MainNavigationViewAdapter
     private readonly NavigationView _navigationView;
     private readonly MainNavigationViewModel _viewModel;
     private readonly INavigationCoordinator _navigationCoordinator;
-    private readonly DispatcherQueue _dispatcherQueue;
     private NavigationViewPanePresentationState _panePresentationState = NavigationViewPanePresentationState.Default;
-    private NavigationViewPanePresentationMode _displayMode = NavigationViewPanePresentationMode.Expanded;
 
     public MainNavigationViewAdapter(
         NavigationView navigationView,
         MainNavigationViewModel viewModel,
-        INavigationCoordinator navigationCoordinator,
-        DispatcherQueue dispatcherQueue)
+        INavigationCoordinator navigationCoordinator)
     {
         _navigationView = navigationView ?? throw new ArgumentNullException(nameof(navigationView));
         _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
         _navigationCoordinator = navigationCoordinator ?? throw new ArgumentNullException(nameof(navigationCoordinator));
-        _dispatcherQueue = dispatcherQueue ?? throw new ArgumentNullException(nameof(dispatcherQueue));
     }
 
     public async Task<bool> HandleItemInvokedAsync(NavigationViewItemInvokedEventArgs args)
@@ -49,53 +43,12 @@ public sealed class MainNavigationViewAdapter
         }
     }
 
-    public void SyncProjectExpansion(NavigationViewItemBase? itemContainer, bool isExpanded)
-    {
-        if (!_navigationView.IsPaneOpen)
-        {
-            return;
-        }
-
-        if ((itemContainer as FrameworkElement)?.DataContext is ProjectNavItemViewModel project)
-        {
-            _viewModel.SetProjectExpanded(project.ProjectId, isExpanded);
-        }
-    }
-
-    public void ReapplyProjectExpansionProjection()
-    {
-        foreach (var project in _viewModel.Items.OfType<ProjectNavItemViewModel>())
-        {
-            if (_navigationView.ContainerFromMenuItem(project) is not NavigationViewItem container)
-            {
-                continue;
-            }
-
-            var targetExpansion = NavigationViewPanePresentationPolicy.ResolveProjectExpansionProjection(
-                _displayMode,
-                _navigationView.IsPaneOpen,
-                project.IsExpanded);
-
-            if (!targetExpansion.HasValue)
-            {
-                continue;
-            }
-
-            if (container.IsExpanded != targetExpansion.Value)
-            {
-                container.IsExpanded = targetExpansion.Value;
-            }
-        }
-    }
-
     public bool HandlePanePresentationChanged(
         bool isPaneOpen,
         bool isDisplayModeChanged,
         NavigationViewPanePresentationMode displayMode,
         bool desiredPaneOpen)
     {
-        _displayMode = displayMode;
-
         var decision = NavigationViewPanePresentationPolicy.Evaluate(
             _panePresentationState,
             isPaneOpen,
@@ -109,28 +62,7 @@ public sealed class MainNavigationViewAdapter
             ApplyPaneProjection(desiredPaneOpen);
         }
 
-        if (decision.ShouldRefreshSelectionProjection
-            || decision.ShouldReassertExpandedProjects
-            || decision.ShouldReapplyProjectExpansionProjection)
-        {
-            ScheduleProjectionReplay(
-                decision.ShouldRefreshSelectionProjection,
-                decision.ShouldReassertExpandedProjects,
-                decision.ShouldReapplyProjectExpansionProjection,
-                decision.ShouldClearDisplayModeSuppressionAfterReplay);
-        }
-
         return decision.ShouldReportPaneOpenIntent;
-    }
-
-    public void TrySyncProjectExpansion(NavigationViewItemBase? itemContainer, bool isExpanded)
-    {
-        if (!NavigationViewPanePresentationPolicy.ShouldSyncProjectExpansion(_panePresentationState))
-        {
-            return;
-        }
-
-        SyncProjectExpansion(itemContainer, isExpanded);
     }
 
     private async Task<bool> HandleItemInvokedCoreAsync(NavigationViewItemInvokedEventArgs args)
@@ -192,35 +124,5 @@ public sealed class MainNavigationViewAdapter
         }
 
         return false;
-    }
-    private void ScheduleProjectionReplay(
-        bool refreshSelectionProjection,
-        bool reassertExpandedProjects,
-        bool reapplyProjectExpansionProjection,
-        bool clearDisplayModeSuppressionAfterReplay)
-    {
-        _ = _dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
-        {
-            if (refreshSelectionProjection)
-            {
-                _viewModel.RefreshSelectionProjection();
-            }
-
-            if (reassertExpandedProjects)
-            {
-                _viewModel.ReassertExpandedProjects();
-            }
-
-            if (reapplyProjectExpansionProjection)
-            {
-                ReapplyProjectExpansionProjection();
-            }
-
-            if (clearDisplayModeSuppressionAfterReplay
-                && _panePresentationState.IsDisplayModeTransitionSuppressed)
-            {
-                _panePresentationState = NavigationViewPanePresentationState.Default;
-            }
-        });
     }
 }

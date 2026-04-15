@@ -39,8 +39,7 @@ public sealed class NavigationSelectionProjectorTests
             start,
             new DiscoverSessionsNavItemViewModel(navState),
             new Dictionary<string, SessionNavItemViewModel> { ["session-1"] = session },
-            new Dictionary<string, ProjectNavItemViewModel> { ["project-1"] = project },
-            isPaneOpen: true);
+            new Dictionary<string, ProjectNavItemViewModel> { ["project-1"] = project });
 
         Assert.Same(session, projection.ControlSelectedItem);
         Assert.Contains("project-1", projection.ActiveProjectIds);
@@ -49,7 +48,7 @@ public sealed class NavigationSelectionProjectorTests
     }
 
     [Fact]
-    public void Project_UsesProjectControlSelection_WhenPaneIsClosed()
+    public void Project_KeepsSemanticSessionSelection_WhenPaneIsClosed()
     {
         var navState = new FakeNavigationPaneState(isPaneOpen: false);
         var start = new StartNavItemViewModel(navState);
@@ -73,10 +72,9 @@ public sealed class NavigationSelectionProjectorTests
             start,
             new DiscoverSessionsNavItemViewModel(navState),
             new Dictionary<string, SessionNavItemViewModel> { ["session-1"] = session },
-            new Dictionary<string, ProjectNavItemViewModel> { ["project-1"] = project },
-            isPaneOpen: false);
+            new Dictionary<string, ProjectNavItemViewModel> { ["project-1"] = project });
 
-        Assert.Same(project, projection.ControlSelectedItem);
+        Assert.Same(session, projection.ControlSelectedItem);
         Assert.Contains("project-1", projection.ActiveProjectIds);
         Assert.Contains("session-1", projection.SelectedSessionIds);
     }
@@ -101,8 +99,7 @@ public sealed class NavigationSelectionProjectorTests
             start,
             new DiscoverSessionsNavItemViewModel(navState),
             new Dictionary<string, SessionNavItemViewModel> { ["session-1"] = session },
-            new Dictionary<string, ProjectNavItemViewModel>(),
-            isPaneOpen: false);
+            new Dictionary<string, ProjectNavItemViewModel>());
 
         Assert.Same(session, projection.ControlSelectedItem);
         Assert.Contains("session-1", projection.SelectedSessionIds);

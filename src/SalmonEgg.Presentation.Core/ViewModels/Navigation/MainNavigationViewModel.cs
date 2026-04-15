@@ -87,7 +87,6 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     private void ApplyPaneStateChanged()
     {
         OnPropertyChanged(nameof(IsPaneOpen));
-        ApplySelectionProjection();
         _logger.LogDebug(
             "Pane state changed IsPaneOpen={IsPaneOpen} CurrentSelection={CurrentSelection} ProjectedSelected={ProjectedSelected}",
             _navigationState.IsPaneOpen,
@@ -234,31 +233,6 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     public void RefreshSelectionProjection()
     {
         ApplySelectionProjection();
-    }
-
-    public void SetProjectExpanded(string projectId, bool isExpanded)
-    {
-        if (string.IsNullOrWhiteSpace(projectId))
-        {
-            return;
-        }
-
-        if (_projectVms.TryGetValue(projectId, out var projectVm)
-            && projectVm.IsExpanded != isExpanded)
-        {
-            projectVm.IsExpanded = isExpanded;
-        }
-    }
-
-    public void ReassertExpandedProjects()
-    {
-        foreach (var projectVm in _projectVms.Values)
-        {
-            if (projectVm.IsExpanded)
-            {
-                projectVm.ReassertExpansion();
-            }
-        }
     }
 
     public string? TryGetProjectIdForSession(string sessionId)
@@ -452,8 +426,14 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 Items.Add(AddProjectItem);
             }
 
-            _sessionIndex.Clear();
-            _projectIndex.Clear();
+            // Build the new indexes in local scope first, then swap atomically.
+            // Clearing _sessionIndex/_projectIndex upfront would create a window
+            // where ApplySelectionProjection (triggered by async callbacks) sees
+            // an empty index and projects ControlSelectedItem to null. That null
+            // pushed through the binding causes NavigationView to lose its
+            // IsChildSelected ancestor visual during display-mode transitions.
+            var newSessionIndex = new Dictionary<string, SessionNavItemViewModel>(StringComparer.Ordinal);
+            var newProjectIndex = new Dictionary<string, ProjectNavItemViewModel>(StringComparer.Ordinal);
 
             var projects = GetProjectDefinitions();
             var sessionsByProject = GetSessionsByProject(projects);
@@ -478,7 +458,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                     projectVm.Title = projectDef.Name ?? string.Empty;
                 }
 
-                _projectIndex[projectId] = projectVm;
+                newProjectIndex[projectId] = projectVm;
 
                 // Ensure the project VM is at the correct position in the Items collection
                 if (itemIndex < Items.Count)
@@ -501,7 +481,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                     Items.Add(projectVm);
                 }
 
-                SyncSessions(projectVm, sessionsByProject.TryGetValue(projectId, out var s) ? s : new List<ConversationCatalogItem>());
+                SyncSessions(projectVm, sessionsByProject.TryGetValue(projectId, out var s) ? s : new List<ConversationCatalogItem>(), newSessionIndex);
                 itemIndex++;
             }
 
@@ -524,6 +504,19 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 _projectVms.Remove(id);
             }
 
+            // Atomic swap: replace shared indexes only after the new tree is fully built.
+            _sessionIndex.Clear();
+            foreach (var kvp in newSessionIndex)
+            {
+                _sessionIndex[kvp.Key] = kvp.Value;
+            }
+
+            _projectIndex.Clear();
+            foreach (var kvp in newProjectIndex)
+            {
+                _projectIndex[kvp.Key] = kvp.Value;
+            }
+
             NormalizeSelectionAfterRebuild();
         }
         catch (Exception ex)
@@ -532,7 +525,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         }
     }
 
-    private void SyncSessions(ProjectNavItemViewModel projectVm, List<ConversationCatalogItem> sessions)
+    private void SyncSessions(ProjectNavItemViewModel projectVm, List<ConversationCatalogItem> sessions, Dictionary<string, SessionNavItemViewModel> targetSessionIndex)
     {
         var top = sessions.Take(20).ToList();
         var remainingCount = Math.Max(0, sessions.Count - top.Count);
@@ -581,7 +574,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 projectVm.Children.Insert(childIndex, sessionVm);
             }
 
-            _sessionIndex[session.ConversationId] = sessionVm;
+            targetSessionIndex[session.ConversationId] = sessionVm;
             childIndex++;
         }
 
@@ -714,8 +707,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             StartItem,
             DiscoverSessionsItem,
             _sessionIndex,
-            _projectIndex,
-            _navigationState.IsPaneOpen);
+            _projectIndex);
 
         _projection = nextProjection;
         ApplyVisualSelectionState(_projection);

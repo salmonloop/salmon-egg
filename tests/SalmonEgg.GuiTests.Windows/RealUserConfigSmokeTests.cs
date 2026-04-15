@@ -1020,7 +1020,7 @@ public sealed partial class RealUserConfigSmokeTests
             return;
         }
 
-        Assert.Equal("content", winner);
+        Assert.Fail($"Expected compact native selection to settle on session or owning project, but winner was {winner ?? "<null>"}.");
     }
 
     private static bool WaitForCompactSelectionContext(
@@ -1038,6 +1038,8 @@ public sealed partial class RealUserConfigSmokeTests
             var sessionSelected = sessionVisible && session.TryGetIsSelected(sessionId) == true;
             var projectSelected = session.TryGetIsSelected(projectId) == true;
             var startSelected = session.TryGetIsSelected(startId) == true;
+            var projectElement = session.TryFindByAutomationId(projectId, TimeSpan.FromMilliseconds(200));
+            var projectHasSelectedDescendant = TryGetHasSelectedDescendant(projectElement);
             var headerVisible = session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(200));
 
             if (sessionSelected)
@@ -1046,15 +1048,23 @@ public sealed partial class RealUserConfigSmokeTests
                 return true;
             }
 
-            if (!sessionVisible && projectSelected)
+            if (!sessionVisible && (projectSelected || projectHasSelectedDescendant))
             {
                 winner = projectId;
                 return true;
             }
 
-            if (!sessionVisible && headerVisible)
+            var automationContext = ParseAutomationStateToken(
+                session.TryGetElementName("MainNav.Automation.SelectionState", TimeSpan.FromMilliseconds(200)) ?? string.Empty,
+                "Context");
+            if (!sessionVisible
+                && (string.Equals(automationContext, "Session", StringComparison.Ordinal)
+                    || string.Equals(automationContext, "Ancestor", StringComparison.Ordinal))
+                && headerVisible)
             {
-                winner = "content";
+                winner = string.Equals(automationContext, "Session", StringComparison.Ordinal)
+                    ? sessionId
+                    : projectId;
                 return true;
             }
 
@@ -1069,6 +1079,23 @@ public sealed partial class RealUserConfigSmokeTests
 
         winner = null;
         return false;
+    }
+
+    private static bool TryGetHasSelectedDescendant(AutomationElement? element)
+    {
+        if (element is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            return string.Equals(element.ItemStatus, "Selected", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static void ResizeMainWindow(int width, int height)

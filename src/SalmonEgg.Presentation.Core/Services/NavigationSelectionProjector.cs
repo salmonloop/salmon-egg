@@ -12,8 +12,7 @@ public sealed class NavigationSelectionProjector : INavigationSelectionProjector
         StartNavItemViewModel startItem,
         DiscoverSessionsNavItemViewModel discoverSessionsItem,
         IReadOnlyDictionary<string, SessionNavItemViewModel> sessionIndex,
-        IReadOnlyDictionary<string, ProjectNavItemViewModel> projectIndex,
-        bool isPaneOpen)
+        IReadOnlyDictionary<string, ProjectNavItemViewModel> projectIndex)
     {
         var activeProjects = new HashSet<string>(StringComparer.Ordinal);
         var selectedSessions = new HashSet<string>(StringComparer.Ordinal);
@@ -50,14 +49,11 @@ public sealed class NavigationSelectionProjector : INavigationSelectionProjector
                 {
                     activeProjects.Add(projectItem.ProjectId);
 
-                    if (!isPaneOpen)
-                    {
-                        return new NavigationViewProjection(
-                            ControlSelectedItem: projectItem,
-                            IsSettingsSelected: false,
-                            ActiveProjectIds: activeProjects,
-                            SelectedSessionIds: selectedSessions);
-                    }
+                    return new NavigationViewProjection(
+                        ControlSelectedItem: sessionItem,
+                        IsSettingsSelected: false,
+                        ActiveProjectIds: activeProjects,
+                        SelectedSessionIds: selectedSessions);
                 }
 
                 return new NavigationViewProjection(
