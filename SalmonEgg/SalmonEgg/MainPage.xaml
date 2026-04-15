@@ -546,7 +546,6 @@
                              IsBackButtonVisible="Collapsed"
                              IsPaneToggleButtonVisible="False"
                              IsSettingsVisible="True"
-                             SelectedItem="{x:Bind NavVM.ProjectedControlSelectedItem, Mode=OneWay}"
                              AlwaysShowHeader="False"
                              Padding="{x:Bind LayoutVM.NavViewPadding, Mode=OneWay, Converter={StaticResource PaddingConverter}}"
                              MenuItemsSource="{x:Bind NavVM.Items, Mode=OneWay}"

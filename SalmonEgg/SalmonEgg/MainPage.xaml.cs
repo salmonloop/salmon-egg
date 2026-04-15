@@ -85,6 +85,7 @@ public sealed partial class MainPage : Page
     private readonly MainNavigationContentSyncAdapter _mainNavigationContentSyncAdapter;
     private readonly MainNavigationViewAdapter _mainNavigationViewAdapter;
     private readonly MainWindowTitleBarAdapter _titleBarAdapter;
+    private readonly INavigationCoordinator _navigationCoordinator;
     private readonly SalmonEgg.Presentation.Logic.SearchInteractionLogic _searchLogic = new();
 
     public MainPage()
@@ -99,7 +100,7 @@ public sealed partial class MainPage : Page
         LayoutVM = App.ServiceProvider.GetRequiredService<ShellLayoutViewModel>();
         _metricsProvider = App.ServiceProvider.GetRequiredService<WindowMetricsProvider>();
         _metricsSink = App.ServiceProvider.GetRequiredService<IShellLayoutMetricsSink>();
-        var navigationCoordinator = App.ServiceProvider.GetRequiredService<INavigationCoordinator>();
+        _navigationCoordinator = App.ServiceProvider.GetRequiredService<INavigationCoordinator>();
         _logger = App.ServiceProvider.GetRequiredService<ILogger<MainPage>>();
         IsGuiAutomationMode = string.Equals(
             Environment.GetEnvironmentVariable("SALMONEGG_GUI"),
@@ -107,6 +108,7 @@ public sealed partial class MainPage : Page
             StringComparison.Ordinal);
 
         this.InitializeComponent();
+        var navigationCoordinator = _navigationCoordinator;
         _mainNavigationContentSyncAdapter = new MainNavigationContentSyncAdapter(navigationCoordinator);
         _mainNavigationViewAdapter = new MainNavigationViewAdapter(MainNavView, NavVM, navigationCoordinator);
         _titleBarAdapter = new MainWindowTitleBarAdapter(
@@ -704,13 +706,12 @@ public sealed partial class MainPage : Page
         BootLogDebug($"MainNav PanePresentationChanged: args={args?.GetType().Name ?? "<null>"} senderPaneOpen={sender.IsPaneOpen} controlMode={controlDisplayMode} layoutMode={LayoutVM.NavPaneDisplayMode} storeOpen={LayoutVM.IsNavPaneOpen}");
         UpdateMainNavAutomationSelectionState();
         _logger.LogDebug(
-            "NavView pane event {EventType} DisplayMode={DisplayMode} LayoutMode={LayoutMode} IsPaneOpen={IsPaneOpen} SelectedItem={SelectedItem} ProjectedSelected={ProjectedSelected} SemanticSelection={SemanticSelection} SettingsSelected={IsSettingsSelected}",
+            "NavView pane event {EventType} DisplayMode={DisplayMode} LayoutMode={LayoutMode} IsPaneOpen={IsPaneOpen} SelectedItem={SelectedItem} SemanticSelection={SemanticSelection} SettingsSelected={IsSettingsSelected}",
             args?.GetType().Name ?? "<null>",
             controlDisplayMode,
             LayoutVM.NavPaneDisplayMode,
             sender.IsPaneOpen,
             DescribeNavSelection(sender.SelectedItem),
-            DescribeNavSelection(NavVM.ProjectedControlSelectedItem),
             NavVM.CurrentSelection,
             NavVM.IsSettingsSelected);
 
@@ -733,19 +734,39 @@ public sealed partial class MainPage : Page
         BootLogDebug($"MainNav SelectionChanged: selected={DescribeNavSelection(sender.SelectedItem)} settings={args.IsSettingsSelected}");
         UpdateMainNavAutomationSelectionState();
         _logger.LogDebug(
-            "NavView selection changed SelectedItem={SelectedItem} SettingsSelected={IsSettingsSelected} ProjectedSelected={ProjectedSelected} SemanticSelection={SemanticSelection}",
+            "NavView selection changed SelectedItem={SelectedItem} SettingsSelected={IsSettingsSelected} SemanticSelection={SemanticSelection}",
             DescribeNavSelection(sender.SelectedItem),
             args.IsSettingsSelected,
-            DescribeNavSelection(NavVM.ProjectedControlSelectedItem),
             NavVM.CurrentSelection);
-        // Do NOT re-drive selection here. The projected control selection is owned
-        // by MainNavigationViewModel -> adapter, and SelectionChanged stays observational.
+
+        // Drive semantic selection from NavigationView's native selection
+        if (args.IsSettingsSelected)
+        {
+            _ = _navigationCoordinator.ActivateSettingsAsync("General");
+        }
+        else if (sender.SelectedItem is NavigationViewItem navItem && navItem.Tag is string tag)
+        {
+            if (string.Equals(tag, NavItemTag.Start, StringComparison.Ordinal))
+            {
+                _ = _navigationCoordinator.ActivateStartAsync();
+            }
+            else if (string.Equals(tag, NavItemTag.DiscoverSessions, StringComparison.Ordinal))
+            {
+                _ = _navigationCoordinator.ActivateDiscoverSessionsAsync();
+            }
+            else if (NavItemTag.TryParseSession(tag, out var sessionId))
+            {
+                var sessionProjectId = (navItem.DataContext as SessionNavItemViewModel)?.ProjectId
+                    ?? NavVM.TryGetProjectIdForSession(sessionId);
+                _ = _navigationCoordinator.ActivateSessionAsync(sessionId, sessionProjectId);
+            }
+            // Note: Project items are not navigation destinations, so we don't handle them here
+        }
     }
 
     private void OnNavigationViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(MainNavigationViewModel.ProjectedControlSelectedItem) ||
-            e.PropertyName == nameof(MainNavigationViewModel.IsSettingsSelected))
+        if (e.PropertyName == nameof(MainNavigationViewModel.IsSettingsSelected))
         {
             if (!DispatcherQueue.HasThreadAccess)
             {
@@ -753,13 +774,10 @@ public sealed partial class MainPage : Page
                 return;
             }
 
-            BootLogDebug($"NavVM ProjectionChanged: current={NavVM.CurrentSelection}; projected={DescribeNavSelection(NavVM.ProjectedControlSelectedItem)}; settings={NavVM.IsSettingsSelected}");
+            BootLogDebug($"NavVM SettingsChanged: settings={NavVM.IsSettingsSelected}");
             _logger.LogDebug(
-                "NavVM projection changed CurrentSelection={CurrentSelection} ProjectedSelected={ProjectedSelected} SettingsSelected={IsSettingsSelected}",
-                NavVM.CurrentSelection,
-                DescribeNavSelection(NavVM.ProjectedControlSelectedItem),
+                "NavVM settings changed SettingsSelected={IsSettingsSelected}",
                 NavVM.IsSettingsSelected);
-            // NavigationView.SelectedItem is projected through XAML binding.
             UpdateMainNavAutomationSelectionState();
         }
     }
@@ -877,7 +895,6 @@ public sealed partial class MainPage : Page
             $"Context={context}",
             $"Semantic={DescribeSemanticSelection(NavVM.CurrentSelection)}",
             $"NavSelected={DescribeNavSelection(MainNavView.SelectedItem)}",
-            $"Projected={DescribeNavSelection(NavVM.ProjectedControlSelectedItem)}",
             $"ProjectVisible={projectVisible}",
             $"ProjectSelected={projectSelected}",
             $"ProjectChildSelected={projectChildSelected}",
@@ -896,16 +913,12 @@ public sealed partial class MainPage : Page
             sessionId = currentSession.SessionId;
         }
 
-        if (string.IsNullOrWhiteSpace(sessionId) && NavVM.ProjectedControlSelectedItem is SessionNavItemViewModel projectedSession)
-        {
-            sessionId = projectedSession.SessionId;
-        }
-
         if (string.IsNullOrWhiteSpace(sessionId))
         {
             return null;
         }
 
+        // Try to find the session item in the navigation view model
         return NavVM.Items
             .OfType<ProjectNavItemViewModel>()
             .SelectMany(project => project.Children.OfType<SessionNavItemViewModel>())

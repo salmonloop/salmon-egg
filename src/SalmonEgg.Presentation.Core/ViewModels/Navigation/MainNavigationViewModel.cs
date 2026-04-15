@@ -60,14 +60,11 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     public AddProjectNavItemViewModel AddProjectItem { get; }
 
     private NavigationViewProjection _projection = new(
-        ControlSelectedItem: null,
         IsSettingsSelected: false,
         ActiveProjectIds: new HashSet<string>(StringComparer.Ordinal),
         SelectedSessionIds: new HashSet<string>(StringComparer.Ordinal));
 
     public NavigationSelectionState CurrentSelection => _shellSelection.CurrentSelection;
-
-    public object? ProjectedControlSelectedItem => _projection.ControlSelectedItem;
 
     public bool IsSettingsSelected => _projection.IsSettingsSelected;
 
@@ -88,10 +85,9 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     {
         OnPropertyChanged(nameof(IsPaneOpen));
         _logger.LogDebug(
-            "Pane state changed IsPaneOpen={IsPaneOpen} CurrentSelection={CurrentSelection} ProjectedSelected={ProjectedSelected}",
+            "Pane state changed IsPaneOpen={IsPaneOpen} CurrentSelection={CurrentSelection}",
             _navigationState.IsPaneOpen,
-            CurrentSelection,
-            _projection.ControlSelectedItem?.GetType().Name ?? "<null>");
+            CurrentSelection);
     }
 
     public IAsyncRelayCommand AddProjectCommand { get; }
@@ -711,11 +707,6 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
         _projection = nextProjection;
         ApplyVisualSelectionState(_projection);
-        if (!ReferenceEquals(previousProjection.ControlSelectedItem, _projection.ControlSelectedItem))
-        {
-            OnPropertyChanged(nameof(ProjectedControlSelectedItem));
-        }
-
         if (previousProjection.IsSettingsSelected != _projection.IsSettingsSelected)
         {
             OnPropertyChanged(nameof(IsSettingsSelected));
@@ -735,8 +726,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     private void ApplyVisualSelectionState(NavigationViewProjection projection)
     {
-        StartItem.IsLogicallySelected = ReferenceEquals(projection.ControlSelectedItem, StartItem);
-        DiscoverSessionsItem.IsLogicallySelected = ReferenceEquals(projection.ControlSelectedItem, DiscoverSessionsItem);
+        // Visual selection state is now handled by NavigationView's native projection behavior
+        // We only need to maintain the logical state for our internal logic
         SessionsLabelItem.IsLogicallySelected = false;
         AddProjectItem.IsLogicallySelected = false;
 
