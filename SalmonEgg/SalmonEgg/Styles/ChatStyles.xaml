@@ -3,7 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:vm="using:SalmonEgg.Presentation.ViewModels.Chat"
-    xmlns:md="using:CommunityToolkit.WinUI.Controls"
+    xmlns:controls="using:SalmonEgg.Controls"
     xmlns:converters="using:SalmonEgg.Presentation.Converters">
 
     <!-- SSOT Common Chat Converters -->
@@ -41,15 +41,10 @@
                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                    Visibility="{x:Bind ShouldRenderPlainText, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
 
-                        <md:MarkdownTextBlock Text="{x:Bind TextContent, Mode=OneWay}"
-                                              Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                              IsTextSelectionEnabled="True"
-                                              UsePipeTables="True"
-                                              UseTaskLists="True"
-                                              UseEmphasisExtras="True"
-                                              UseAutoLinks="True"
-                                              DisableLinks="False"
-                                              Visibility="{x:Bind ShouldRenderMarkdown, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                        <controls:MarkdownTextPresenter Text="{x:Bind TextContent, Mode=OneWay}"
+                                                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                                        IsTextSelectionEnabled="True"
+                                                        Visibility="{x:Bind ShouldRenderMarkdown, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
                     </Grid>
 
                     <!-- ToolCall JSON / 高级系统调用信息 -->

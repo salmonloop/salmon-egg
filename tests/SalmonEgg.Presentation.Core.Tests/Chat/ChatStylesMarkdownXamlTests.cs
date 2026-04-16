@@ -19,8 +19,8 @@ public sealed class ChatStylesMarkdownXamlTests
     {
         var xaml = LoadChatStylesXaml();
 
-        Assert.Contains("xmlns:md=\"using:CommunityToolkit.WinUI.Controls\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("<md:MarkdownTextBlock", xaml, StringComparison.Ordinal);
+        Assert.Contains("xmlns:controls=\"using:SalmonEgg.Controls\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("<controls:MarkdownTextPresenter", xaml, StringComparison.Ordinal);
         Assert.Contains("Visibility=\"{x:Bind ShouldRenderMarkdown", xaml, StringComparison.Ordinal);
         Assert.Contains("Visibility=\"{x:Bind ShouldRenderPlainText", xaml, StringComparison.Ordinal);
     }
