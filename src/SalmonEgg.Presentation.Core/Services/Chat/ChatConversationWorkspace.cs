@@ -206,13 +206,19 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             return;
         }
 
+        var conversationListChanged = false;
         lock (_stateGate)
         {
             if (_conversationBindings.TryGetValue(conversationId, out var binding))
             {
                 binding.LastUpdatedAt = DateTime.UtcNow;
-                NotifyConversationListChanged();
+                conversationListChanged = true;
             }
+        }
+
+        if (conversationListChanged)
+        {
+            NotifyConversationListChanged();
         }
 
         ScheduleSave();
@@ -258,7 +264,10 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             await PostToContextAsync(() =>
             {
                 LastActiveConversationId = sessionId;
-                UpdateLastAccessedAt(sessionId, DateTime.UtcNow);
+                if (UpdateLastAccessedAt(sessionId, DateTime.UtcNow))
+                {
+                    ScheduleSave();
+                }
             }, cancellationToken).ConfigureAwait(false);
 
             return true;
@@ -336,11 +345,20 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             return;
         }
 
+        var conversationListChanged = false;
+        var shouldSave = false;
         lock (_stateGate)
         {
             if (!_conversationBindings.TryGetValue(conversationId, out var binding))
             {
-                binding = RegisterConversation(conversationId, default, DateTime.UtcNow, bumpVersion: true);
+                binding = RegisterConversationCore(
+                    conversationId,
+                    default,
+                    DateTime.UtcNow,
+                    bumpVersion: true,
+                    clearTombstone: false,
+                    out var registeredConversationListChanged);
+                conversationListChanged |= registeredConversationListChanged;
             }
 
             var normalizedProjectId = string.IsNullOrWhiteSpace(projectId) ? null : projectId.Trim();
@@ -352,7 +370,17 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
 
             binding.ProjectAffinityOverride = newOverride;
             binding.LastUpdatedAt = DateTime.UtcNow;
+            conversationListChanged = true;
+            shouldSave = true;
+        }
+
+        if (conversationListChanged)
+        {
             NotifyConversationListChanged();
+        }
+
+        if (shouldSave)
+        {
             ScheduleSave();
         }
     }
@@ -370,6 +398,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             return;
         }
 
+        var conversationListChanged = false;
         lock (_stateGate)
         {
             if (!_conversationBindings.ContainsKey(snapshot.ConversationId)
@@ -381,11 +410,14 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 return;
             }
 
-            var binding = RegisterConversation(
+            var binding = RegisterConversationCore(
                 snapshot.ConversationId,
                 snapshot.CreatedAt,
                 snapshot.LastUpdatedAt,
-                bumpVersion: true);
+                bumpVersion: true,
+                clearTombstone: false,
+                out var registeredConversationListChanged);
+            conversationListChanged |= registeredConversationListChanged;
             binding.Transcript.Clear();
             binding.Transcript.AddRange(CloneMessages(snapshot.Transcript));
             binding.Plan.Clear();
@@ -399,6 +431,11 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             binding.ShowPlanPanel = snapshot.ShowPlanPanel;
             binding.PlanTitle = snapshot.PlanTitle;
         }
+
+        if (conversationListChanged)
+        {
+            NotifyConversationListChanged();
+        }
     }
 
     public void UpdateRemoteBinding(string conversationId, string? remoteSessionId, string? boundProfileId)
@@ -409,6 +446,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             return;
         }
 
+        var conversationListChanged = false;
         lock (_stateGate)
         {
             if (!_conversationBindings.ContainsKey(conversationId)
@@ -422,11 +460,23 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
 
             if (!_conversationBindings.TryGetValue(conversationId, out var binding))
             {
-                binding = RegisterConversation(conversationId, default, DateTime.UtcNow, bumpVersion: true);
+                binding = RegisterConversationCore(
+                    conversationId,
+                    default,
+                    DateTime.UtcNow,
+                    bumpVersion: true,
+                    clearTombstone: false,
+                    out var registeredConversationListChanged);
+                conversationListChanged |= registeredConversationListChanged;
             }
 
             binding.RemoteSessionId = remoteSessionId;
             binding.BoundProfileId = boundProfileId;
+        }
+
+        if (conversationListChanged)
+        {
+            NotifyConversationListChanged();
         }
     }
 
@@ -488,6 +538,8 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
 
         await PostToContextAsync(() =>
         {
+            var conversationListChanged = false;
+            var shouldSave = false;
             lock (_stateGate)
             {
                 if (!_conversationBindings.TryGetValue(conversationId, out var binding))
@@ -497,7 +549,14 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                         return;
                     }
 
-                    binding = RegisterConversation(conversationId, default, updatedAtUtc ?? DateTime.UtcNow, bumpVersion: true);
+                    binding = RegisterConversationCore(
+                        conversationId,
+                        default,
+                        updatedAtUtc ?? DateTime.UtcNow,
+                        bumpVersion: true,
+                        clearTombstone: false,
+                        out var registeredConversationListChanged);
+                    conversationListChanged |= registeredConversationListChanged;
                 }
 
                 var metadataChanged = false;
@@ -535,9 +594,19 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
 
                 if (metadataChanged)
                 {
-                    NotifyConversationListChanged();
-                    ScheduleSave();
+                    conversationListChanged = true;
+                    shouldSave = true;
                 }
+            }
+
+            if (conversationListChanged)
+            {
+                NotifyConversationListChanged();
+            }
+
+            if (shouldSave)
+            {
+                ScheduleSave();
             }
         }, cancellationToken).ConfigureAwait(false);
     }
@@ -597,49 +666,73 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
     public Task SaveAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        ConversationDocument document;
+        PersistedConversationState[] conversationStates;
+        string[] deletedConversationIds;
         lock (_stateGate)
         {
-            document = new ConversationDocument
+            deletedConversationIds = _deletedConversationTombstones
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(id => id, StringComparer.Ordinal)
+                .ToArray();
+
+            conversationStates = _conversationBindings.Values
+                .OrderByDescending(item => item.LastUpdatedAt)
+                .Select(binding => new PersistedConversationState(
+                    binding.ConversationId,
+                    binding.CreatedAt,
+                    binding.LastUpdatedAt,
+                    binding.LastAccessedAt,
+                    binding.RemoteSessionId,
+                    binding.BoundProfileId,
+                    binding.ProjectAffinityOverride?.ProjectId,
+                    binding.SelectedModeId,
+                    binding.ShowConfigOptionsPanel,
+                    binding.ShowPlanPanel,
+                    binding.PlanTitle,
+                    CloneMessages(binding.Transcript).ToArray(),
+                    binding.AvailableModes.Select(CloneModeOption).ToArray(),
+                    binding.ConfigOptions.Select(CloneConfigOption).ToArray(),
+                    binding.Plan.Select(ClonePlanEntry).ToArray()))
+                .ToArray();
+        }
+
+        var document = new ConversationDocument
+        {
+            Version = 4,
+            LastActiveConversationId = null
+        };
+
+        document.DeletedConversationIds.AddRange(deletedConversationIds);
+        foreach (var conversationState in conversationStates)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var session = _sessionManager.GetSession(conversationState.ConversationId);
+            var record = new ConversationRecord
             {
-                Version = 4,
-                LastActiveConversationId = null
+                ConversationId = conversationState.ConversationId,
+                DisplayName = ResolveSessionDisplayName(conversationState.ConversationId),
+                CreatedAt = conversationState.CreatedAt,
+                LastUpdatedAt = conversationState.LastUpdatedAt,
+                LastAccessedAt = conversationState.LastAccessedAt == default
+                    ? conversationState.LastUpdatedAt
+                    : conversationState.LastAccessedAt,
+                Cwd = session?.Cwd,
+                RemoteSessionId = conversationState.RemoteSessionId,
+                BoundProfileId = conversationState.BoundProfileId,
+                ProjectAffinityOverrideProjectId = conversationState.ProjectAffinityOverrideProjectId,
+                SelectedModeId = conversationState.SelectedModeId,
+                ShowConfigOptionsPanel = conversationState.ShowConfigOptionsPanel,
+                ShowPlanPanel = conversationState.ShowPlanPanel,
+                PlanTitle = conversationState.PlanTitle
             };
 
-            document.DeletedConversationIds.AddRange(
-                _deletedConversationTombstones
-                    .Where(id => !string.IsNullOrWhiteSpace(id))
-                    .Distinct(StringComparer.Ordinal)
-                    .OrderBy(id => id, StringComparer.Ordinal));
+            record.Messages.AddRange(conversationState.Transcript);
+            record.AvailableModes.AddRange(conversationState.AvailableModes);
+            record.ConfigOptions.AddRange(conversationState.ConfigOptions);
+            record.Plan.AddRange(conversationState.Plan);
 
-            foreach (var binding in _conversationBindings.Values.OrderByDescending(item => item.LastUpdatedAt))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                var session = _sessionManager.GetSession(binding.ConversationId);
-                var record = new ConversationRecord
-                {
-                    ConversationId = binding.ConversationId,
-                    DisplayName = ResolveSessionDisplayName(binding.ConversationId),
-                    CreatedAt = binding.CreatedAt,
-                    LastUpdatedAt = binding.LastUpdatedAt,
-                    LastAccessedAt = binding.LastAccessedAt == default ? binding.LastUpdatedAt : binding.LastAccessedAt,
-                    Cwd = session?.Cwd,
-                    RemoteSessionId = binding.RemoteSessionId,
-                    BoundProfileId = binding.BoundProfileId,
-                    ProjectAffinityOverrideProjectId = binding.ProjectAffinityOverride?.ProjectId,
-                    SelectedModeId = binding.SelectedModeId,
-                    ShowConfigOptionsPanel = binding.ShowConfigOptionsPanel,
-                    ShowPlanPanel = binding.ShowPlanPanel,
-                    PlanTitle = binding.PlanTitle
-                };
-
-                record.Messages.AddRange(CloneMessages(binding.Transcript));
-                record.AvailableModes.AddRange(binding.AvailableModes.Select(CloneModeOption));
-                record.ConfigOptions.AddRange(binding.ConfigOptions.Select(CloneConfigOption));
-                record.Plan.AddRange(binding.Plan.Select(ClonePlanEntry));
-
-                document.Conversations.Add(record);
-            }
+            document.Conversations.Add(record);
         }
 
         return _conversationStore.SaveAsync(document, cancellationToken);
@@ -682,12 +775,13 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                     continue;
                 }
 
-                var binding = RegisterConversation(
+                var binding = RegisterConversationCore(
                     conversation.ConversationId,
                     conversation.CreatedAt,
                     conversation.LastUpdatedAt,
                     bumpVersion: false,
-                    clearTombstone: true);
+                    clearTombstone: true,
+                    out _);
                 binding.LastAccessedAt = conversation.LastAccessedAt == default
                     ? binding.LastUpdatedAt
                     : conversation.LastAccessedAt;
@@ -754,6 +848,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             return;
         }
 
+        var removed = false;
         lock (_stateGate)
         {
             if (string.Equals(LastActiveConversationId, conversationId, StringComparison.Ordinal))
@@ -763,10 +858,17 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
 
             _conversationBindings.Remove(conversationId);
             _deletedConversationTombstones.Add(conversationId);
-            _sessionManager.RemoveSession(conversationId);
-            ScheduleSave();
-            NotifyConversationListChanged();
+            removed = true;
         }
+
+        if (!removed)
+        {
+            return;
+        }
+
+        _sessionManager.RemoveSession(conversationId);
+        ScheduleSave();
+        NotifyConversationListChanged();
     }
 
     private void NotifyConversationListChanged()
@@ -774,17 +876,17 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         ConversationListVersion++;
     }
 
-    private void UpdateLastAccessedAt(string conversationId, DateTime accessedAt)
+    private bool UpdateLastAccessedAt(string conversationId, DateTime accessedAt)
     {
         lock (_stateGate)
         {
             if (!_conversationBindings.TryGetValue(conversationId, out var binding))
             {
-                return;
+                return false;
             }
 
             binding.LastAccessedAt = accessedAt;
-            ScheduleSave();
+            return true;
         }
     }
 
@@ -795,30 +897,25 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         bool bumpVersion,
         bool clearTombstone = false)
     {
+        var conversationListChanged = false;
+        ConversationBinding binding;
         lock (_stateGate)
         {
-            var existed = _conversationBindings.ContainsKey(conversationId);
-            var binding = GetOrCreateConversationBinding(conversationId);
-            if (clearTombstone)
-            {
-                _deletedConversationTombstones.Remove(conversationId);
-            }
-            var previousLastUpdated = binding.LastUpdatedAt;
-            if (createdAt != default)
-            {
-                binding.CreatedAt = createdAt;
-            }
-
-            var actualLastUpdated = lastUpdatedAt == default ? DateTime.UtcNow : lastUpdatedAt;
-            binding.LastUpdatedAt = actualLastUpdated;
-
-            if (bumpVersion && (!existed || actualLastUpdated != previousLastUpdated))
-            {
-                NotifyConversationListChanged();
-            }
-
-            return binding;
+            binding = RegisterConversationCore(
+                conversationId,
+                createdAt,
+                lastUpdatedAt,
+                bumpVersion,
+                clearTombstone,
+                out conversationListChanged);
         }
+
+        if (conversationListChanged)
+        {
+            NotifyConversationListChanged();
+        }
+
+        return binding;
     }
 
     private string ResolveSessionDisplayName(string conversationId)
@@ -833,7 +930,34 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         return SessionNamePolicy.CreateDefault(conversationId);
     }
 
-    private ConversationBinding GetOrCreateConversationBinding(string conversationId)
+    private ConversationBinding RegisterConversationCore(
+        string conversationId,
+        DateTime createdAt,
+        DateTime lastUpdatedAt,
+        bool bumpVersion,
+        bool clearTombstone,
+        out bool conversationListChanged)
+    {
+        var existed = _conversationBindings.ContainsKey(conversationId);
+        var binding = GetOrCreateConversationBindingCore(conversationId);
+        if (clearTombstone)
+        {
+            _deletedConversationTombstones.Remove(conversationId);
+        }
+
+        var previousLastUpdated = binding.LastUpdatedAt;
+        if (createdAt != default)
+        {
+            binding.CreatedAt = createdAt;
+        }
+
+        var actualLastUpdated = lastUpdatedAt == default ? DateTime.UtcNow : lastUpdatedAt;
+        binding.LastUpdatedAt = actualLastUpdated;
+        conversationListChanged = bumpVersion && (!existed || actualLastUpdated != previousLastUpdated);
+        return binding;
+    }
+
+    private ConversationBinding GetOrCreateConversationBindingCore(string conversationId)
     {
         if (_conversationBindings.TryGetValue(conversationId, out var existing))
         {
@@ -953,6 +1077,23 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
     }
+
+    private sealed record PersistedConversationState(
+        string ConversationId,
+        DateTime CreatedAt,
+        DateTime LastUpdatedAt,
+        DateTime LastAccessedAt,
+        string? RemoteSessionId,
+        string? BoundProfileId,
+        string? ProjectAffinityOverrideProjectId,
+        string? SelectedModeId,
+        bool ShowConfigOptionsPanel,
+        bool ShowPlanPanel,
+        string? PlanTitle,
+        ConversationMessageSnapshot[] Transcript,
+        ConversationModeOptionSnapshot[] AvailableModes,
+        ConversationConfigOptionSnapshot[] ConfigOptions,
+        ConversationPlanEntrySnapshot[] Plan);
 
     private sealed class ConversationBinding
     {
