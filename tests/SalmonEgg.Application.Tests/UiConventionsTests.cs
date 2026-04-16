@@ -539,20 +539,18 @@ public class UiConventionsTests
     }
 
     [Fact]
-    public void AppTheme_ShouldKeepNavigationViewPaneBackgroundStableAcrossDisplayModes()
+    public void AppTheme_ShouldNotOverrideNavigationViewPaneBackgroundThemeResources()
     {
         var repoRoot = FindRepoRoot();
         var appXaml = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "App.xaml");
         var appText = File.ReadAllText(appXaml);
         var keys = ReadXamlKeys(appXaml);
 
-        Assert.Contains("NavigationViewDefaultPaneBackground", keys);
-        Assert.Contains("NavigationViewExpandedPaneBackground", keys);
-        Assert.Contains("NavigationViewTopPaneBackground", keys);
-
-        Assert.Contains("x:Key=\"NavigationViewDefaultPaneBackground\"", appText);
-        Assert.Contains("x:Key=\"NavigationViewExpandedPaneBackground\"", appText);
-        Assert.Contains("x:Key=\"NavigationViewTopPaneBackground\"", appText);
-        Assert.Contains("ResourceKey=\"LayerOnAcrylicFillColorDefaultBrush\"", appText);
+        Assert.DoesNotContain("NavigationViewDefaultPaneBackground", keys);
+        Assert.DoesNotContain("NavigationViewExpandedPaneBackground", keys);
+        Assert.DoesNotContain("NavigationViewTopPaneBackground", keys);
+        Assert.DoesNotContain("x:Key=\"NavigationViewDefaultPaneBackground\"", appText);
+        Assert.DoesNotContain("x:Key=\"NavigationViewExpandedPaneBackground\"", appText);
+        Assert.DoesNotContain("x:Key=\"NavigationViewTopPaneBackground\"", appText);
     }
 }

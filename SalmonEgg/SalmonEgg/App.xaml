@@ -26,12 +26,6 @@
                                   TintColor="{ThemeResource SystemAltHighColor}"
                                   TintOpacity="0.55"
                                   FallbackColor="{ThemeResource SystemAltHighColor}" />
-                    <StaticResource x:Key="NavigationViewDefaultPaneBackground"
-                                    ResourceKey="LayerOnAcrylicFillColorDefaultBrush" />
-                    <StaticResource x:Key="NavigationViewExpandedPaneBackground"
-                                    ResourceKey="LayerOnAcrylicFillColorDefaultBrush" />
-                    <StaticResource x:Key="NavigationViewTopPaneBackground"
-                                    ResourceKey="LayerOnAcrylicFillColorDefaultBrush" />
                     <SolidColorBrush x:Key="AppOverlayScrimBrush"
                                      Color="{ThemeResource SystemBaseHighColor}"
                                      Opacity="0.25" />
@@ -41,12 +35,6 @@
                                   TintColor="{ThemeResource SystemAltHighColor}"
                                   TintOpacity="0.45"
                                   FallbackColor="{ThemeResource SystemAltHighColor}" />
-                    <StaticResource x:Key="NavigationViewDefaultPaneBackground"
-                                    ResourceKey="LayerOnAcrylicFillColorDefaultBrush" />
-                    <StaticResource x:Key="NavigationViewExpandedPaneBackground"
-                                    ResourceKey="LayerOnAcrylicFillColorDefaultBrush" />
-                    <StaticResource x:Key="NavigationViewTopPaneBackground"
-                                    ResourceKey="LayerOnAcrylicFillColorDefaultBrush" />
                     <SolidColorBrush x:Key="AppOverlayScrimBrush"
                                      Color="{ThemeResource SystemBaseLowColor}"
                                      Opacity="0.25" />
