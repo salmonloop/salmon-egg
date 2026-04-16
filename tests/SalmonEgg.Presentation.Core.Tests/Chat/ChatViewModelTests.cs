@@ -4328,6 +4328,7 @@ public class ChatViewModelTests
             .ReturnsAsync(new ConversationActivationResult(true, "conv-1", null));
 
         await using var fixture = CreateViewModel(syncContext, conversationActivationCoordinator: activationCoordinator.Object);
+        await fixture.ViewModel.RestoreAsync();
         await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "conv-1" });
 
         await fixture.ViewModel.SwitchConversationAsync("conv-1");
@@ -4349,6 +4350,7 @@ public class ChatViewModelTests
             .ReturnsAsync(new ConversationActivationResult(true, "conv-1", null));
 
         await using var fixture = CreateViewModel(syncContext, conversationActivationCoordinator: activationCoordinator.Object);
+        await fixture.ViewModel.RestoreAsync();
         await fixture.UpdateStateAsync(state => state with
         {
             HydratedConversationId = "conv-1",

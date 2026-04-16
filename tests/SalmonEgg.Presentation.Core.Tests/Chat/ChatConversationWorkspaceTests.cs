@@ -197,6 +197,86 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
+    public async Task GetConversationSnapshot_WhenTranscriptMutatesConcurrently_DoesNotThrow()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript:
+            CreateTranscript("seed", 1024),
+            Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
+
+        var started = new ManualResetEventSlim(false);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+        Exception? failure = null;
+
+        var snapshotReader = Task.Run(() =>
+        {
+            started.Wait(cts.Token);
+            try
+            {
+                while (!cts.IsCancellationRequested)
+                {
+                    _ = workspace.GetConversationSnapshot("session-1");
+                }
+            }
+            catch (OperationCanceledException) when (cts.IsCancellationRequested)
+            {
+            }
+            catch (Exception ex)
+            {
+                failure = ex;
+                cts.Cancel();
+            }
+        });
+
+        var transcriptMutator = Task.Run(() =>
+        {
+            started.Wait(cts.Token);
+            try
+            {
+                var counter = 0;
+                while (!cts.IsCancellationRequested)
+                {
+                    workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+                        ConversationId: "session-1",
+                        Transcript: CreateTranscript($"mutated-{counter}", 1024),
+                        Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
+                        ShowPlanPanel: false,
+                        PlanTitle: null,
+                        CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                        LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc).AddSeconds(counter)));
+                    counter++;
+                }
+            }
+            catch (OperationCanceledException) when (cts.IsCancellationRequested)
+            {
+            }
+            catch (Exception ex)
+            {
+                failure = ex;
+                cts.Cancel();
+            }
+        });
+
+        started.Set();
+        await Task.Delay(200, CancellationToken.None);
+        cts.Cancel();
+        await Task.WhenAll(snapshotReader, transcriptMutator);
+
+        Assert.Null(failure);
+    }
+
+    [Fact]
     public async Task RestoreAsync_RestoresConversationSessionState()
     {
         var syncContext = new ImmediateSynchronizationContext();
@@ -1173,6 +1253,11 @@ public sealed class ChatConversationWorkspaceTests
             Timestamp = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)
         };
 
+    private static ConversationMessageSnapshot[] CreateTranscript(string prefix, int count)
+        => Enumerable.Range(0, count)
+            .Select(index => CreateTextMessage($"{prefix}-{index}", $"message-{index}"))
+            .ToArray();
+
     private sealed class ImmediateSynchronizationContext : SynchronizationContext
     {
         public override void Post(SendOrPostCallback d, object? state) => d(state);
@@ -1233,4 +1318,5 @@ public sealed class ChatConversationWorkspaceTests
         public bool RemoveSession(string sessionId)
             => _sessions.Remove(sessionId);
     }
+
 }

@@ -60,7 +60,7 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
-    public void MainPage_ProjectItemsDoNotOverrideSelectsOnInvoked()
+    public void MainPage_ProjectItemsRemainNonSelectableGroups()
     {
         var document = XDocument.Parse(LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml"));
         var xNamespace = XNamespace.Get("http://schemas.microsoft.com/winfx/2006/xaml");
@@ -78,9 +78,9 @@ public sealed class XamlComplianceTests
             .FirstOrDefault(element => string.Equals(element.Name.LocalName, "NavigationViewItem", StringComparison.Ordinal));
 
         Assert.NotNull(projectNavItem);
-        Assert.False(
+        Assert.True(
             string.Equals(projectNavItem!.Attribute("SelectsOnInvoked")?.Value, "False", StringComparison.OrdinalIgnoreCase),
-            "ProjectNavTemplate should preserve native item selection behavior and not force SelectsOnInvoked=False.");
+            "ProjectNavTemplate must remain a native non-selectable grouping item.");
     }
 
     [Fact]
