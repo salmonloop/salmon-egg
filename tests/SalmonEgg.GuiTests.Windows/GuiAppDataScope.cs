@@ -115,6 +115,39 @@ internal sealed class GuiAppDataScope : IDisposable
         return scope;
     }
 
+    public static GuiAppDataScope CreateDeterministicMarkdownRenderData()
+    {
+        GuiTestGate.RequireEnabled();
+        WindowsGuiAppSession.StopAllRunningInstances();
+
+        var appDataRoot = ResolveAppDataRoot();
+        var previousGuiAppDataRootOverride = Environment.GetEnvironmentVariable(AppDataRootEnvVar);
+        Environment.SetEnvironmentVariable(AppDataRootEnvVar, appDataRoot);
+        var appYamlPath = Path.Combine(appDataRoot, "config", "app.yaml");
+        var conversationsPath = Path.Combine(appDataRoot, "conversations", "conversations.v1.json");
+        var projectRootPath = Path.Combine(Path.GetTempPath(), "SalmonEgg.GuiTests", "markdown-project-1");
+
+        var scope = new GuiAppDataScope(
+            appDataRoot,
+            appYamlPath,
+            conversationsPath,
+            serverYamlPath: null,
+            secondaryServerYamlPath: null,
+            File.Exists(appYamlPath) ? File.ReadAllBytes(appYamlPath) : null,
+            File.Exists(appYamlPath),
+            File.Exists(conversationsPath) ? File.ReadAllBytes(conversationsPath) : null,
+            File.Exists(conversationsPath),
+            originalServerYaml: null,
+            serverYamlExisted: false,
+            originalSecondaryServerYaml: null,
+            secondaryServerYamlExisted: false,
+            projectRootPath,
+            previousGuiAppDataRootOverride);
+
+        scope.SeedMarkdownRenderScenario();
+        return scope;
+    }
+
     public static GuiAppDataScope CreateDeterministicSlowRemoteReplayData(
         int cachedMessageCount = 1,
         int replayMessageCount = 60,
@@ -345,6 +378,19 @@ internal sealed class GuiAppDataScope : IDisposable
             Encoding.UTF8);
     }
 
+    private void SeedMarkdownRenderScenario()
+    {
+        Directory.CreateDirectory(_configDirectory);
+        Directory.CreateDirectory(_conversationsDirectory);
+        Directory.CreateDirectory(_projectRootPath);
+
+        File.WriteAllText(_appYamlPath, BuildAppYaml(_projectRootPath), Encoding.UTF8);
+        File.WriteAllText(
+            _conversationsPath,
+            BuildMarkdownRenderConversationsJson(_projectRootPath),
+            Encoding.UTF8);
+    }
+
     private void SeedSlowRemoteReplay(
         string profileId,
         int cachedMessageCount,
@@ -521,6 +567,48 @@ internal sealed class GuiAppDataScope : IDisposable
             version = 1,
             lastActiveConversationId = (string?)null,
             conversations
+        };
+
+        return JsonSerializer.Serialize(document);
+    }
+
+    private static string BuildMarkdownRenderConversationsJson(string projectRootPath)
+    {
+        var timestamp = new DateTimeOffset(2026, 04, 16, 10, 00, 00, TimeSpan.Zero);
+        var document = new
+        {
+            version = 1,
+            lastActiveConversationId = (string?)null,
+            conversations = new object[]
+            {
+                new
+                {
+                    conversationId = "gui-markdown-session-01",
+                    displayName = "GUI Markdown Session 01",
+                    createdAt = timestamp,
+                    lastUpdatedAt = timestamp,
+                    cwd = projectRootPath,
+                    messages = new object[]
+                    {
+                        new
+                        {
+                            id = "md-unclosed-1",
+                            timestamp = timestamp.AddSeconds(1),
+                            contentType = "text",
+                            textContent = "```csharp\nvar partial = true;",
+                            isOutgoing = false
+                        },
+                        new
+                        {
+                            id = "md-closed-1",
+                            timestamp = timestamp.AddSeconds(2),
+                            contentType = "text",
+                            textContent = "```csharp\nvar done = true;\n```",
+                            isOutgoing = false
+                        }
+                    }
+                }
+            }
         };
 
         return JsonSerializer.Serialize(document);

@@ -16,6 +16,36 @@ namespace SalmonEgg.GuiTests.Windows;
 public sealed class ChatSkeletonSmokeTests
 {
     [SkippableFact]
+    public void SelectSessionWithMarkdownMessages_UnclosedFenceStaysRaw_ClosedFenceRendersCodeWithoutFenceMarkers()
+    {
+        using var appData = GuiAppDataScope.CreateDeterministicMarkdownRenderData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-markdown-session-01", TimeSpan.FromSeconds(15));
+        session.ActivateElement(sessionItem);
+
+        var loadingOverlay = session.TryFindByAutomationId("ChatView.LoadingOverlay", TimeSpan.FromSeconds(2));
+        if (loadingOverlay is not null)
+        {
+            var hidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(10));
+            Assert.True(hidden, "Loading overlay did not disappear for markdown render scenario.");
+        }
+
+        var messagesList = session.FindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(10));
+        var visibleTexts = session.GetVisibleTexts(messagesList);
+
+        Assert.Contains(
+            visibleTexts,
+            text => text.Contains("```csharp", StringComparison.Ordinal)
+                    && text.Contains("var partial = true;", StringComparison.Ordinal));
+
+        Assert.Contains(
+            visibleTexts,
+            text => text.Contains("var done = true;", StringComparison.Ordinal)
+                    && !text.Contains("```", StringComparison.Ordinal));
+    }
+
+    [SkippableFact]
     public void SelectSessionWithContent_ShowsSkeletonLoader_ThenContent()
     {
         // Use withContent: true to ensure there are messages to be rendered.
