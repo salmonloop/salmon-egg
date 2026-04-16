@@ -279,12 +279,6 @@ internal sealed class WindowsGuiAppSession : IDisposable
             return;
         }
 
-        if (element.Patterns.SelectionItem.IsSupported)
-        {
-            element.Patterns.SelectionItem.Pattern.Select();
-            return;
-        }
-
         try
         {
             var point = element.GetClickablePoint();
@@ -303,6 +297,12 @@ internal sealed class WindowsGuiAppSession : IDisposable
         catch
         {
             elementId = "<unknown>";
+        }
+
+        if (element.Patterns.SelectionItem.IsSupported)
+        {
+            element.Patterns.SelectionItem.Pattern.Select();
+            return;
         }
 
         throw new InvalidOperationException(

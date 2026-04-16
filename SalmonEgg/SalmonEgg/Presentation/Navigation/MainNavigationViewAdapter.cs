@@ -2,7 +2,6 @@ using System;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using SalmonEgg.Application.Common.Shell;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.ViewModels.Navigation;
@@ -10,97 +9,88 @@ using SalmonEgg.Presentation.ViewModels.Navigation;
 namespace SalmonEgg.Presentation.Navigation;
 
 /// <summary>
-/// UI-only adapter that projects navigation selection state onto NavigationView.
-/// It absorbs control-specific selection quirks without becoming another state source.
+/// UI-only adapter that maps NavigationView UI events to semantic navigation intents.
+/// It must not own a secondary visual selection or pane state machine.
 /// </summary>
 public sealed class MainNavigationViewAdapter
 {
-    private readonly NavigationView _navigationView;
     private readonly MainNavigationViewModel _viewModel;
     private readonly INavigationCoordinator _navigationCoordinator;
-    private NavigationViewPanePresentationState _panePresentationState = NavigationViewPanePresentationState.Default;
 
     public MainNavigationViewAdapter(
-        NavigationView navigationView,
         MainNavigationViewModel viewModel,
         INavigationCoordinator navigationCoordinator)
     {
-        _navigationView = navigationView ?? throw new ArgumentNullException(nameof(navigationView));
         _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
         _navigationCoordinator = navigationCoordinator ?? throw new ArgumentNullException(nameof(navigationCoordinator));
     }
 
-    public async Task<bool> HandleItemInvokedAsync(NavigationViewItemInvokedEventArgs args)
-    {
-        return await HandleItemInvokedCoreAsync(args).ConfigureAwait(true);
-    }
+    public Task<bool> HandleItemInvokedAsync(NavigationViewItemInvokedEventArgs args)
+        => HandleItemInvokedCoreAsync(args);
 
-    public void ApplyPaneProjection(bool isPaneOpen)
+    public Task HandleSelectionChangedAsync(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
-        if (_navigationView.IsPaneOpen != isPaneOpen)
+        if (args.IsSettingsSelected)
         {
-            _navigationView.IsPaneOpen = isPaneOpen;
-        }
-    }
-
-    public bool HandlePanePresentationChanged(
-        bool isPaneOpen,
-        bool isDisplayModeChanged,
-        NavigationViewPanePresentationMode displayMode,
-        bool desiredPaneOpen)
-    {
-        var decision = NavigationViewPanePresentationPolicy.Evaluate(
-            _panePresentationState,
-            isPaneOpen,
-            isDisplayModeChanged,
-            displayMode,
-            desiredPaneOpen);
-        _panePresentationState = decision.NextState;
-
-        if (decision.ShouldApplyPaneProjection)
-        {
-            ApplyPaneProjection(desiredPaneOpen);
+            return _navigationCoordinator.ActivateSettingsAsync("General");
         }
 
-        return decision.ShouldReportPaneOpenIntent;
-    }
+        var selectedItem = args.SelectedItem ?? sender.SelectedItem;
 
-    private async Task<bool> HandleItemInvokedCoreAsync(NavigationViewItemInvokedEventArgs args)
-    {
-        if (ReferenceEquals(args.InvokedItemContainer, _navigationView.SettingsItem))
+        if (selectedItem is SessionNavItemViewModel sessionVm && !string.IsNullOrWhiteSpace(sessionVm.SessionId))
         {
-            await _navigationCoordinator.ActivateSettingsAsync("General").ConfigureAwait(true);
-            return true;
+            var sessionProjectId = string.IsNullOrWhiteSpace(sessionVm.ProjectId)
+                ? _viewModel.TryGetProjectIdForSession(sessionVm.SessionId)
+                : sessionVm.ProjectId;
+
+            // Never await remote session activation on the NavigationView UI event pipeline.
+            _ = _navigationCoordinator.ActivateSessionAsync(sessionVm.SessionId, sessionProjectId);
+            return Task.CompletedTask;
         }
 
-        if (args.InvokedItemContainer is not NavigationViewItem navItem || navItem.Tag is not string tag)
+        if (selectedItem is StartNavItemViewModel)
         {
-            return false;
+            return _navigationCoordinator.ActivateStartAsync();
+        }
+
+        if (selectedItem is DiscoverSessionsNavItemViewModel)
+        {
+            return _navigationCoordinator.ActivateDiscoverSessionsAsync();
+        }
+
+        if (selectedItem is not NavigationViewItem navItem || navItem.Tag is not string tag)
+        {
+            return Task.CompletedTask;
         }
 
         if (string.Equals(tag, NavItemTag.Start, StringComparison.Ordinal))
         {
-            await _navigationCoordinator.ActivateStartAsync().ConfigureAwait(true);
-            return true;
+            return _navigationCoordinator.ActivateStartAsync();
         }
 
         if (string.Equals(tag, NavItemTag.DiscoverSessions, StringComparison.Ordinal))
         {
-            await _navigationCoordinator.ActivateDiscoverSessionsAsync().ConfigureAwait(true);
-            return true;
+            return _navigationCoordinator.ActivateDiscoverSessionsAsync();
         }
 
         if (NavItemTag.TryParseSession(tag, out var sessionId))
         {
-            var sessionProjectId = (args.InvokedItemContainer as FrameworkElement)?.DataContext is SessionNavItemViewModel sessionItem
-                ? sessionItem.ProjectId
-                : _viewModel.TryGetProjectIdForSession(sessionId);
+            var sessionProjectId = (navItem.DataContext as SessionNavItemViewModel)?.ProjectId
+                ?? _viewModel.TryGetProjectIdForSession(sessionId);
 
             // Never await remote session activation on the NavigationView UI event pipeline.
-            // If we await here, the UI thread stays occupied until activation completes,
-            // which causes multi-second "click has no response" freezes.
             _ = _navigationCoordinator.ActivateSessionAsync(sessionId, sessionProjectId);
-            return true;
+            return Task.CompletedTask;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private Task<bool> HandleItemInvokedCoreAsync(NavigationViewItemInvokedEventArgs args)
+    {
+        if (args.InvokedItemContainer is not NavigationViewItem navItem || navItem.Tag is not string tag)
+        {
+            return Task.FromResult(false);
         }
 
         if (NavItemTag.TryParseProject(tag, out _))
@@ -108,21 +98,21 @@ public sealed class MainNavigationViewAdapter
             // Non-leaf project items are not navigation destinations. Let the native
             // NavigationView hierarchy handle expand/collapse without translating the
             // click into a semantic selection change.
-            return true;
+            return Task.FromResult(true);
         }
 
         if (string.Equals(tag, NavItemTag.AddProject, StringComparison.Ordinal))
         {
             _ = _viewModel.AddProjectItem.AddProjectCommand.ExecuteAsync(null);
-            return true;
+            return Task.FromResult(true);
         }
 
         if (NavItemTag.TryParseMore(tag, out var moreProjectId))
         {
             _ = _viewModel.ShowAllSessionsForProjectAsync(moreProjectId);
-            return true;
+            return Task.FromResult(true);
         }
 
-        return false;
+        return Task.FromResult(false);
     }
 }

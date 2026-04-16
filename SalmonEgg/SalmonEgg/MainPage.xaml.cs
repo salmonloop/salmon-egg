@@ -18,7 +18,6 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Navigation;
-using SalmonEgg.Application.Common.Shell;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Presentation.Models;
 using SalmonEgg.Presentation.Models.Navigation;
@@ -85,7 +84,6 @@ public sealed partial class MainPage : Page
     private readonly MainNavigationContentSyncAdapter _mainNavigationContentSyncAdapter;
     private readonly MainNavigationViewAdapter _mainNavigationViewAdapter;
     private readonly MainWindowTitleBarAdapter _titleBarAdapter;
-    private readonly INavigationCoordinator _navigationCoordinator;
     private readonly SalmonEgg.Presentation.Logic.SearchInteractionLogic _searchLogic = new();
 
     public MainPage()
@@ -100,7 +98,7 @@ public sealed partial class MainPage : Page
         LayoutVM = App.ServiceProvider.GetRequiredService<ShellLayoutViewModel>();
         _metricsProvider = App.ServiceProvider.GetRequiredService<WindowMetricsProvider>();
         _metricsSink = App.ServiceProvider.GetRequiredService<IShellLayoutMetricsSink>();
-        _navigationCoordinator = App.ServiceProvider.GetRequiredService<INavigationCoordinator>();
+        var navigationCoordinator = App.ServiceProvider.GetRequiredService<INavigationCoordinator>();
         _logger = App.ServiceProvider.GetRequiredService<ILogger<MainPage>>();
         IsGuiAutomationMode = string.Equals(
             Environment.GetEnvironmentVariable("SALMONEGG_GUI"),
@@ -108,9 +106,8 @@ public sealed partial class MainPage : Page
             StringComparison.Ordinal);
 
         this.InitializeComponent();
-        var navigationCoordinator = _navigationCoordinator;
         _mainNavigationContentSyncAdapter = new MainNavigationContentSyncAdapter(navigationCoordinator);
-        _mainNavigationViewAdapter = new MainNavigationViewAdapter(MainNavView, NavVM, navigationCoordinator);
+        _mainNavigationViewAdapter = new MainNavigationViewAdapter(NavVM, navigationCoordinator);
         _titleBarAdapter = new MainWindowTitleBarAdapter(
             AppTitleBar,
             AppTitleBarLayoutRoot,
@@ -135,7 +132,6 @@ public sealed partial class MainPage : Page
         Preferences.PropertyChanged += OnPreferencesPropertyChanged;
         _chatViewModel.PropertyChanged += OnChatViewModelPropertyChanged;
         NavVM.PropertyChanged += OnNavigationViewModelPropertyChanged;
-        NavVM.TreeRebuilt += OnNavigationTreeRebuilt;
         LayoutVM.PropertyChanged += OnLayoutViewModelPropertyChanged;
 
         // 3. Initialize theme and motion state
@@ -181,7 +177,6 @@ public sealed partial class MainPage : Page
         Preferences.PropertyChanged -= OnPreferencesPropertyChanged;
         _chatViewModel.PropertyChanged -= OnChatViewModelPropertyChanged;
         NavVM.PropertyChanged -= OnNavigationViewModelPropertyChanged;
-        NavVM.TreeRebuilt -= OnNavigationTreeRebuilt;
         LayoutVM.PropertyChanged -= OnLayoutViewModelPropertyChanged;
         _metricsProvider.Detach();
         ContentFrame.NavigationFailed -= OnContentFrameNavigationFailed;
@@ -699,8 +694,8 @@ public sealed partial class MainPage : Page
     private void OnMainNavPanePresentationChanged(NavigationView sender, object args)
     {
         var controlDisplayMode = args is NavigationViewDisplayModeChangedEventArgs modeChangedArgs
-            ? MapNavigationPaneDisplayMode(modeChangedArgs.DisplayMode)
-            : MapNavigationPaneDisplayMode(sender.DisplayMode);
+            ? modeChangedArgs.DisplayMode
+            : sender.DisplayMode;
 
         UpdateNavPaneToggleUi(sender.IsPaneOpen);
         BootLogDebug($"MainNav PanePresentationChanged: args={args?.GetType().Name ?? "<null>"} senderPaneOpen={sender.IsPaneOpen} controlMode={controlDisplayMode} layoutMode={LayoutVM.NavPaneDisplayMode} storeOpen={LayoutVM.IsNavPaneOpen}");
@@ -715,13 +710,7 @@ public sealed partial class MainPage : Page
             NavVM.CurrentSelection,
             NavVM.IsSettingsSelected);
 
-        var shouldReportPaneOpenIntent = _mainNavigationViewAdapter.HandlePanePresentationChanged(
-            isPaneOpen: sender.IsPaneOpen,
-            isDisplayModeChanged: args is NavigationViewDisplayModeChangedEventArgs,
-            displayMode: controlDisplayMode,
-            desiredPaneOpen: LayoutVM.IsNavPaneOpen);
-
-        if (shouldReportPaneOpenIntent)
+        if (args is not NavigationViewDisplayModeChangedEventArgs)
         {
             BootLogDebug($"MainNav PanePresentationChanged: reporting pane intent senderPaneOpen={sender.IsPaneOpen} mode={LayoutVM.NavPaneDisplayMode}.");
             _ = _metricsSink.ReportNavPaneOpenIntent(sender.IsPaneOpen, source: "PanePresentationChanged");
@@ -739,29 +728,7 @@ public sealed partial class MainPage : Page
             args.IsSettingsSelected,
             NavVM.CurrentSelection);
 
-        // Drive semantic selection from NavigationView's native selection
-        if (args.IsSettingsSelected)
-        {
-            _ = _navigationCoordinator.ActivateSettingsAsync("General");
-        }
-        else if (sender.SelectedItem is NavigationViewItem navItem && navItem.Tag is string tag)
-        {
-            if (string.Equals(tag, NavItemTag.Start, StringComparison.Ordinal))
-            {
-                _ = _navigationCoordinator.ActivateStartAsync();
-            }
-            else if (string.Equals(tag, NavItemTag.DiscoverSessions, StringComparison.Ordinal))
-            {
-                _ = _navigationCoordinator.ActivateDiscoverSessionsAsync();
-            }
-            else if (NavItemTag.TryParseSession(tag, out var sessionId))
-            {
-                var sessionProjectId = (navItem.DataContext as SessionNavItemViewModel)?.ProjectId
-                    ?? NavVM.TryGetProjectIdForSession(sessionId);
-                _ = _navigationCoordinator.ActivateSessionAsync(sessionId, sessionProjectId);
-            }
-            // Note: Project items are not navigation destinations, so we don't handle them here
-        }
+        _ = _mainNavigationViewAdapter.HandleSelectionChangedAsync(sender, args);
     }
 
     private void OnNavigationViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -782,20 +749,6 @@ public sealed partial class MainPage : Page
         }
     }
 
-    private void OnNavigationTreeRebuilt(object? sender, EventArgs e)
-    {
-        if (!DispatcherQueue.HasThreadAccess)
-        {
-            _ = DispatcherQueue.TryEnqueue(() => OnNavigationTreeRebuilt(sender, e));
-            return;
-        }
-
-        BootLogDebug("Navigation tree rebuilt, restoring selection state");
-        _logger.LogDebug("Navigation tree rebuilt, restoring selection state");
-
-        MainNavView.SelectedItem = NavVM.ProjectedControlSelectedItem;
-    }
-
     private void OnChatViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (LayoutVM.RightPanelMode != RightPanelMode.Todo)
@@ -811,30 +764,6 @@ public sealed partial class MainPage : Page
     }
 
     // Animation logic removed
-
-    private void OnMainNavPaneClosing(NavigationView sender, NavigationViewPaneClosingEventArgs args)
-    {
-        var mode = MapNavigationPaneDisplayMode(sender.DisplayMode) switch
-        {
-            NavigationViewPanePresentationMode.Minimal => SalmonEgg.Presentation.Core.Mvux.ShellLayout.NavigationPaneDisplayMode.Minimal,
-            NavigationViewPanePresentationMode.Compact => SalmonEgg.Presentation.Core.Mvux.ShellLayout.NavigationPaneDisplayMode.Compact,
-            _ => SalmonEgg.Presentation.Core.Mvux.ShellLayout.NavigationPaneDisplayMode.Expanded
-        };
-        if (mode != SalmonEgg.Presentation.Core.Mvux.ShellLayout.NavigationPaneDisplayMode.Expanded)
-        {
-            args.Cancel = false;
-            BootLogDebug($"MainNav PaneClosing: mode={mode} senderPaneOpen={sender.IsPaneOpen} desiredPaneOpen={LayoutVM?.IsNavPaneOpen == true} cancel={args.Cancel}");
-            return;
-        }
-
-        // The view must follow the store snapshot. If the shell still wants the pane open,
-        // reject spontaneous closes only in expanded mode so NavigationView cannot drift
-        // away from the SSOT store state while preserving compact light-dismiss behavior.
-        args.Cancel = ShellPanePolicy.ShouldCancelClosing(
-            desiredPaneOpen: LayoutVM?.IsNavPaneOpen == true,
-            isExpandedMode: mode == SalmonEgg.Presentation.Core.Mvux.ShellLayout.NavigationPaneDisplayMode.Expanded);
-        BootLogDebug($"MainNav PaneClosing: mode={mode} senderPaneOpen={sender.IsPaneOpen} desiredPaneOpen={LayoutVM?.IsNavPaneOpen == true} cancel={args.Cancel}");
-    }
 
     // Manual resizer positioning removed as it is now handled by XAML binding to LayoutVM.LeftNavResizerLeft
 
@@ -856,14 +785,6 @@ public sealed partial class MainPage : Page
         NavigationSelectionState.Session session => $"Session:{session.SessionId}",
         _ => selection.GetType().Name
     };
-
-    private static NavigationViewPanePresentationMode MapNavigationPaneDisplayMode(NavigationViewDisplayMode displayMode)
-        => displayMode switch
-        {
-            NavigationViewDisplayMode.Minimal => NavigationViewPanePresentationMode.Minimal,
-            NavigationViewDisplayMode.Compact => NavigationViewPanePresentationMode.Compact,
-            _ => NavigationViewPanePresentationMode.Expanded
-        };
 
     private void UpdateMainNavAutomationSelectionState()
     {

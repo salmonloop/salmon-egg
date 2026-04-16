@@ -5,6 +5,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using FlaUI.Core.AutomationElements;
+using FlaUI.Core.Definitions;
 using Xunit;
 
 namespace SalmonEgg.GuiTests.Windows;
@@ -25,7 +26,7 @@ public sealed class ResponsiveNavigationAncestorTests
 
         ResizeMainWindow(width: 1400, height: 900);
 
-        var sessionItem = session.FindByAutomationId(SessionAutomationId, TimeSpan.FromSeconds(10));
+        var sessionItem = EnsureSessionItemReadyForInteraction(session);
         session.ActivateElement(sessionItem);
         Assert.True(
             session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(10)),
@@ -58,7 +59,7 @@ public sealed class ResponsiveNavigationAncestorTests
 
         ResizeMainWindow(width: 1400, height: 900);
 
-        var sessionItem = session.FindByAutomationId(SessionAutomationId, TimeSpan.FromSeconds(10));
+        var sessionItem = EnsureSessionItemReadyForInteraction(session);
         session.ActivateElement(sessionItem);
         Assert.True(
             session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(10)),
@@ -108,7 +109,7 @@ public sealed class ResponsiveNavigationAncestorTests
         using var session = WindowsGuiAppSession.LaunchFresh();
 
         ResizeMainWindow(width: 1400, height: 900);
-        var sessionItem = session.FindByAutomationId(SessionAutomationId, TimeSpan.FromSeconds(10));
+        var sessionItem = EnsureSessionItemReadyForInteraction(session);
         session.ActivateElement(sessionItem);
         Assert.True(
             session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(10)),
@@ -123,6 +124,11 @@ public sealed class ResponsiveNavigationAncestorTests
             WaitForCompactSelectionContext(session, SessionAutomationId, ProjectAutomationId, StartAutomationId, TimeSpan.FromSeconds(4), out _),
             $"Expected slow compact resize path to settle ancestor context. {DumpSelectionSnapshot(session, SessionAutomationId, ProjectAutomationId, StartAutomationId)}");
 
+        var firstStableCapture = TryCaptureMainWindow(session);
+        Assert.False(
+            IsCaptureFailure(firstStableCapture),
+            $"Expected first compact-pass screenshot capture to succeed, but failed. Capture={firstStableCapture}");
+
         var stableDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(1.2);
         while (DateTime.UtcNow < stableDeadline)
         {
@@ -134,12 +140,22 @@ public sealed class ResponsiveNavigationAncestorTests
                     TimeSpan.FromMilliseconds(200),
                     out _))
             {
+                var regressedCapture = TryCaptureMainWindow(session);
                 throw new Xunit.Sdk.XunitException(
-                    $"Ancestor context regressed during slow compact stabilization. {DumpSelectionSnapshot(session, SessionAutomationId, ProjectAutomationId, StartAutomationId)}");
+                    $"Ancestor context regressed during slow compact stabilization. " +
+                    $"{DumpSelectionSnapshot(session, SessionAutomationId, ProjectAutomationId, StartAutomationId)} " +
+                    $"{DumpAutomationSelectionState(session)} " +
+                    $"Capture1={firstStableCapture} CaptureRegressed={regressedCapture}");
             }
 
             Thread.Sleep(110);
         }
+
+        var secondStableCapture = TryCaptureMainWindow(session);
+        Assert.False(
+            IsCaptureFailure(secondStableCapture),
+            $"Expected second compact-pass screenshot capture to succeed, but failed. " +
+            $"Capture1={firstStableCapture} Capture2={secondStableCapture}");
     }
 
     [SkippableFact]
@@ -151,7 +167,7 @@ public sealed class ResponsiveNavigationAncestorTests
         using var session = WindowsGuiAppSession.LaunchFresh();
 
         ResizeMainWindow(width: 1400, height: 900);
-        var sessionItem = session.FindByAutomationId(SessionAutomationId, TimeSpan.FromSeconds(10));
+        var sessionItem = EnsureSessionItemReadyForInteraction(session);
         session.ActivateElement(sessionItem);
         Assert.True(
             session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(10)),
@@ -219,6 +235,38 @@ public sealed class ResponsiveNavigationAncestorTests
         {
             return $"<capture failed: {ex.Message}>";
         }
+    }
+
+    private static bool IsCaptureFailure(string capturePath)
+        => capturePath.StartsWith("<capture failed:", StringComparison.Ordinal);
+
+    private static AutomationElement EnsureSessionItemReadyForInteraction(WindowsGuiAppSession session)
+    {
+        if (session.WaitUntilOnscreen(SessionAutomationId, TimeSpan.FromSeconds(2)))
+        {
+            return session.FindByAutomationId(SessionAutomationId, TimeSpan.FromSeconds(2));
+        }
+
+        var projectItem = session.FindByAutomationId(ProjectAutomationId, TimeSpan.FromSeconds(6));
+        if (projectItem.Patterns.ExpandCollapse.IsSupported)
+        {
+            var expandPattern = projectItem.Patterns.ExpandCollapse.Pattern;
+            if (expandPattern.ExpandCollapseState.Value == ExpandCollapseState.Collapsed)
+            {
+                expandPattern.Expand();
+            }
+        }
+        else
+        {
+            // Fall back to an explicit click-style activation to mirror user interaction.
+            session.ActivateElement(projectItem);
+        }
+
+        Assert.True(
+            session.WaitUntilOnscreen(SessionAutomationId, TimeSpan.FromSeconds(8)),
+            $"Expected session item '{SessionAutomationId}' to become onscreen after ensuring project group visibility.");
+
+        return session.FindByAutomationId(SessionAutomationId, TimeSpan.FromSeconds(2));
     }
 
     private static void ResizeMainWindow(int width, int height)

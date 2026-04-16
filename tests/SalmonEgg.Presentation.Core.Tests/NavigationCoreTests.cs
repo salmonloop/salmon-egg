@@ -152,13 +152,13 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
-    public void NavigationViewPanePresentationPolicy_DoesNotUseDisplayModeTransitionSuppression()
+    public void MainPage_DoesNotRouteLeftNavPaneLifecycleThroughCustomPolicies()
     {
-        var code = LoadFile(@"src\SalmonEgg.Application\Common\Shell\NavigationViewPanePresentationPolicy.cs");
+        var code = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
 
-        Assert.DoesNotContain("SuppressNextPaneIntentFromDisplayModeTransition", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("SuppressProjectExpansionSyncFromDisplayModeTransition", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("IsDisplayModeTransitionSuppressed", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("HandlePanePresentationChanged(", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("ShellPanePolicy.ShouldCancelClosing(", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("OnMainNavPaneClosing(", code, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -192,6 +192,47 @@ public sealed class NavigationCoreTests
         var xaml = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml");
 
         Assert.DoesNotContain("IsChildSelected=\"{x:Bind IsActiveDescendant, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MainNavigationXaml_UsesNativeAutoPaneDisplayMode()
+    {
+        var xaml = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml");
+
+        Assert.Contains("PaneDisplayMode=\"Auto\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("CompactModeThresholdWidth=\"640\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ExpandedModeThresholdWidth=\"1000\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("NavPaneDisplayModeConverter", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MainNavigationViewAdapter_ItemInvoked_DoesNotActivateNavigationDestinations()
+    {
+        var code = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Navigation\MainNavigationViewAdapter.cs");
+        var section = ExtractSection(code, "private Task<bool> HandleItemInvokedCoreAsync");
+
+        Assert.DoesNotContain("ActivateSettingsAsync", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("ActivateStartAsync", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("ActivateDiscoverSessionsAsync", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("ActivateSessionAsync", section, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MainNavigationViewAdapter_SelectionChanged_OwnsDestinationActivationPath()
+    {
+        var code = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Navigation\MainNavigationViewAdapter.cs");
+        var section = ExtractSection(
+            code,
+            "public Task HandleSelectionChangedAsync",
+            "private Task<bool> HandleItemInvokedCoreAsync");
+
+        Assert.Contains("ActivateSettingsAsync", section, StringComparison.Ordinal);
+        Assert.Contains("ActivateStartAsync", section, StringComparison.Ordinal);
+        Assert.Contains("ActivateDiscoverSessionsAsync", section, StringComparison.Ordinal);
+        Assert.Contains("ActivateSessionAsync", section, StringComparison.Ordinal);
+        Assert.Contains("args.SelectedItem ?? sender.SelectedItem", section, StringComparison.Ordinal);
+        Assert.Contains("selectedItem is SessionNavItemViewModel", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("sender.SelectedItem is not NavigationViewItem", section, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -301,6 +342,23 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
+    public void MainNavigationXaml_ProjectItemsAreGroupingOnly()
+    {
+        var xaml = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml");
+
+        Assert.Contains("Tag=\"{x:Bind navModels:NavItemTag.Project(ProjectId)}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("SelectsOnInvoked=\"False\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MainNavigationXaml_DoesNotHookPaneClosingOverride()
+    {
+        var xaml = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml");
+
+        Assert.DoesNotContain("PaneClosing=\"OnMainNavPaneClosing\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MainNavigation_SessionFlyout_DefersDialogCommandsUntilFlyoutCloses()
     {
         var xaml = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml");
@@ -324,6 +382,22 @@ public sealed class NavigationCoreTests
     {
         var root = FindRepoRoot();
         return File.ReadAllText(Path.Combine(root, relativePath));
+    }
+
+    private static string ExtractSection(string content, string startMarker, string? endMarker = null)
+    {
+        var start = content.IndexOf(startMarker, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"Unable to locate marker '{startMarker}'.");
+
+        var end = endMarker is null
+            ? content.Length
+            : content.IndexOf(endMarker, start, StringComparison.Ordinal);
+        if (end < 0)
+        {
+            end = content.Length;
+        }
+
+        return content.Substring(start, end - start);
     }
 
     private static string FindRepoRoot()

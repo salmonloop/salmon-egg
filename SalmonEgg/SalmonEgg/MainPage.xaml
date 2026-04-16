@@ -29,7 +29,6 @@
         <converters:PlanStatusToColorConverter x:Key="PlanStatusToColorConverter" />
         <converters:EnumToBooleanConverter x:Key="EnumToBoolConverter" />
         <converters:EnumToVisibilityConverter x:Key="EnumToVisibilityConverter" />
-        <converters:NavigationPaneDisplayModeConverter x:Key="NavPaneDisplayModeConverter" />
         <converters:LayoutPaddingConverter x:Key="PaddingConverter" />
         <converters:GridLengthConverter x:Key="GridLengthConverter" />
 
@@ -98,6 +97,7 @@
 
         <DataTemplate x:Key="ProjectNavTemplate" x:DataType="nav:ProjectNavItemViewModel">
             <NavigationViewItem MenuItemsSource="{x:Bind Children, Mode=OneWay}"
+                                SelectsOnInvoked="False"
                                 HorizontalContentAlignment="Stretch"
                                 AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.ProjectItem(ProjectId)}"
                                 Tag="{x:Bind navModels:NavItemTag.Project(ProjectId)}">
@@ -541,7 +541,9 @@
                              AutomationProperties.AutomationId="MainNavView"
                              CompactPaneLength="{x:Bind LayoutVM.NavCompactPaneLength, Mode=OneWay}"
                              OpenPaneLength="{x:Bind LayoutVM.NavOpenPaneLength, Mode=OneWay}"
-                             PaneDisplayMode="{x:Bind LayoutVM.NavPaneDisplayMode, Mode=OneWay, Converter={StaticResource NavPaneDisplayModeConverter}}"
+                             PaneDisplayMode="Auto"
+                             CompactModeThresholdWidth="640"
+                             ExpandedModeThresholdWidth="1000"
                              IsPaneOpen="{x:Bind LayoutVM.IsNavPaneOpen, Mode=OneWay}"
                              IsBackButtonVisible="Collapsed"
                              IsPaneToggleButtonVisible="False"
@@ -555,8 +557,7 @@
                              SelectionChanged="OnMainNavSelectionChanged"
                              DisplayModeChanged="OnMainNavPanePresentationChanged"
                              PaneOpened="OnMainNavPanePresentationChanged"
-                             PaneClosed="OnMainNavPanePresentationChanged"
-                             PaneClosing="OnMainNavPaneClosing">
+                             PaneClosed="OnMainNavPanePresentationChanged">
                 <NavigationView.Content>
                     <Frame x:Name="ContentFrame"
                            Background="Transparent"
