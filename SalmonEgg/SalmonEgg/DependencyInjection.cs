@@ -115,6 +115,18 @@ public static class DependencyInjection
 
     private static void RegisterInfrastructureServices(IServiceCollection services)
     {
+        // Infrastructure Services
+        services.AddSingleton<IUiDispatcher>(sp =>
+        {
+            var queue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+            var logger = sp.GetRequiredService<ILogger<WinUiDispatcher>>();
+            if (queue == null)
+            {
+                logger.LogCritical("DispatcherQueue.GetForCurrentThread() returned null during IUiDispatcher resolution. UI marshaling will fail.");
+            }
+            return new WinUiDispatcher(queue!, logger);
+        });
+
         // Secure Storage
         services.AddSingleton<ISecureStorage, SecureStorage>();
 
@@ -381,7 +393,8 @@ public static class DependencyInjection
                 sp.GetRequiredService<IAcpConnectionSessionRegistry>(),
                 sp.GetRequiredService<IAcpConnectionSessionEvents>(),
                 sp.GetRequiredService<ISettingsAcpConnectionCommands>(),
-                sp.GetRequiredService<ILoggerFactory>()));
+                sp.GetRequiredService<ILoggerFactory>(),
+                sp.GetRequiredService<IUiDispatcher>()));
 
 
         // ACP connection settings page view model (wraps Chat + Profiles)

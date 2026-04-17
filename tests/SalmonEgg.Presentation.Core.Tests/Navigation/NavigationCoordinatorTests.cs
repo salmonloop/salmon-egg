@@ -21,6 +21,7 @@ using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Settings;
+using SalmonEgg.Presentation.Core.Tests.Threading;
 using SerilogLogger = Serilog.ILogger;
 using Uno.Extensions.Reactive;
 using Xunit;
@@ -1100,7 +1101,7 @@ public sealed class NavigationCoordinatorTests
 
         var configService = new Mock<IConfigurationService>();
         var profilesLogger = new Mock<ILogger<AcpProfilesViewModel>>();
-        var profiles = new AcpProfilesViewModel(configService.Object, preferences, profilesLogger.Object);
+        var profiles = new AcpProfilesViewModel(configService.Object, preferences, profilesLogger.Object, new ImmediateUiDispatcher());
         var connectionState = State.Value(new object(), () => ChatConnectionState.Empty);
         var connectionStore = new ChatConnectionStore(connectionState);
         var chatStateProjector = new ChatStateProjector();

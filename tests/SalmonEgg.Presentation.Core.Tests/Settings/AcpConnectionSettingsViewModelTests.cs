@@ -12,6 +12,7 @@ using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.ViewModels.Settings;
+using SalmonEgg.Presentation.Core.Tests.Threading;
 using Xunit;
 
 namespace SalmonEgg.Presentation.Core.Tests.Settings;
@@ -365,7 +366,7 @@ public sealed class AcpConnectionSettingsViewModelTests
     {
         var configurationService = new Mock<IConfigurationService>();
         var logger = new Mock<ILogger<AcpProfilesViewModel>>();
-        return new AcpProfilesViewModel(configurationService.Object, preferences, logger.Object);
+        return new AcpProfilesViewModel(configurationService.Object, preferences, logger.Object, new ImmediateUiDispatcher());
     }
 
     private sealed class TestSettingsChatConnection : ISettingsChatConnection

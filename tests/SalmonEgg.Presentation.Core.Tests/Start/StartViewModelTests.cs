@@ -18,6 +18,7 @@ using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Start;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.ViewModels.Settings;
+using SalmonEgg.Presentation.Core.Tests.Threading;
 using SerilogLogger = Serilog.ILogger;
 using Uno.Extensions.Reactive;
 using Xunit;
@@ -572,7 +573,7 @@ public sealed class StartViewModelTests
 
         var configService = new Mock<IConfigurationService>();
         var profilesLogger = new Mock<ILogger<AcpProfilesViewModel>>();
-        var profiles = new AcpProfilesViewModel(configService.Object, preferences, profilesLogger.Object);
+        var profiles = new AcpProfilesViewModel(configService.Object, preferences, profilesLogger.Object, new ImmediateUiDispatcher());
 
         var conversationStore = new Mock<IConversationStore>();
         conversationStore.Setup(s => s.LoadAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new ConversationDocument());

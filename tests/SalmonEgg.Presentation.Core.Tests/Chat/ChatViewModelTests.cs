@@ -28,6 +28,7 @@ using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.ViewModels.Settings;
+using SalmonEgg.Presentation.Core.Tests.Threading;
 using SerilogLogger = Serilog.ILogger;
 using Uno.Extensions.Reactive;
 using Xunit;
@@ -117,7 +118,7 @@ public class ChatViewModelTests
             prefsLogger.Object);
 
         var profilesLogger = new Mock<ILogger<AcpProfilesViewModel>>();
-        var profiles = new AcpProfilesViewModel(configurationService.Object, preferences, profilesLogger.Object);
+        var profiles = new AcpProfilesViewModel(configurationService.Object, preferences, profilesLogger.Object, new ImmediateUiDispatcher());
 
         var ownsConversationStore = conversationStore is null;
         conversationStore ??= new Mock<IConversationStore>();
@@ -1627,7 +1628,7 @@ public class ChatViewModelTests
             prefsLogger.Object);
 
         var profilesLogger = new Mock<ILogger<AcpProfilesViewModel>>();
-        var profiles = new AcpProfilesViewModel(configService.Object, preferences, profilesLogger.Object);
+        var profiles = new AcpProfilesViewModel(configService.Object, preferences, profilesLogger.Object, new ImmediateUiDispatcher());
         var conversationStore = new Mock<IConversationStore>();
         conversationStore.Setup(s => s.LoadAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ConversationDocument());
@@ -1716,7 +1717,7 @@ public class ChatViewModelTests
             prefsLogger.Object);
 
         var profilesLogger = new Mock<ILogger<AcpProfilesViewModel>>();
-        var profiles = new AcpProfilesViewModel(configService.Object, preferences, profilesLogger.Object);
+        var profiles = new AcpProfilesViewModel(configService.Object, preferences, profilesLogger.Object, new ImmediateUiDispatcher());
         var conversationStore = new Mock<IConversationStore>();
         var miniWindow = new Mock<IMiniWindowCoordinator>();
         var workspace = new ChatConversationWorkspace(
@@ -1829,7 +1830,7 @@ public class ChatViewModelTests
             prefsLogger.Object);
 
         var profilesLogger = new Mock<ILogger<AcpProfilesViewModel>>();
-        var profiles = new AcpProfilesViewModel(configService.Object, preferences, profilesLogger.Object);
+        var profiles = new AcpProfilesViewModel(configService.Object, preferences, profilesLogger.Object, new ImmediateUiDispatcher());
         var conversationStore = new Mock<IConversationStore>();
         conversationStore.Setup(s => s.LoadAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ConversationDocument());

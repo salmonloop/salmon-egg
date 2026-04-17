@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
 
 namespace SalmonEgg.Presentation.ViewModels.Settings;
@@ -17,7 +18,7 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
     private readonly IConfigurationService _configurationService;
     private readonly AppPreferencesViewModel _preferences;
     private readonly ILogger<AcpProfilesViewModel> _logger;
-    private readonly SynchronizationContext _syncContext;
+    private readonly IUiDispatcher _dispatcher;
     private readonly SemaphoreSlim _refreshSemaphore = new(1, 1);
 
     // ── Dependencies for per-profile item ViewModels ─────────────────────────
@@ -76,12 +77,13 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
     public AcpProfilesViewModel(
         IConfigurationService configurationService,
         AppPreferencesViewModel preferences,
-        ILogger<AcpProfilesViewModel> logger)
+        ILogger<AcpProfilesViewModel> logger,
+        IUiDispatcher dispatcher)
     {
         _configurationService = configurationService ?? throw new ArgumentNullException(nameof(configurationService));
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _syncContext = SynchronizationContext.Current ?? new SynchronizationContext();
+        _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
     }
 
     /// <summary>
@@ -94,8 +96,9 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
         IAcpConnectionSessionRegistry sessionRegistry,
         IAcpConnectionSessionEvents sessionEvents,
         ISettingsAcpConnectionCommands connectionCommands,
-        ILoggerFactory loggerFactory)
-        : this(configurationService, preferences, logger)
+        ILoggerFactory loggerFactory,
+        IUiDispatcher dispatcher)
+        : this(configurationService, preferences, logger, dispatcher)
     {
         _sessionRegistry = sessionRegistry ?? throw new ArgumentNullException(nameof(sessionRegistry));
         _sessionEvents = sessionEvents ?? throw new ArgumentNullException(nameof(sessionEvents));
@@ -115,28 +118,12 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
 
     private Task MarshalToUiAsync(Action action)
     {
-        if (SynchronizationContext.Current == _syncContext)
-        {
-            action();
-            return Task.CompletedTask;
-        }
+        return _dispatcher.EnqueueAsync(action);
+    }
 
-        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _syncContext.Post(_ =>
-        {
-            try
-            {
-                action();
-                tcs.TrySetResult(true);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to execute action on UI thread");
-                tcs.TrySetException(ex);
-            }
-        }, null);
-
-        return tcs.Task;
+    private Task MarshalToUiAsync(Func<Task> function)
+    {
+        return _dispatcher.EnqueueAsync(function);
     }
 
     private Task SetIsLoadingAsync(bool value)

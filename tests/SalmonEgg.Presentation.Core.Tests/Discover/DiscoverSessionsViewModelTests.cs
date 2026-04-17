@@ -16,6 +16,7 @@ using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Models.Tool;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services;
+using SalmonEgg.Presentation.Core.Tests.Threading;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Models.Navigation;
@@ -433,7 +434,8 @@ public sealed class DiscoverSessionsViewModelTests
         var profilesViewModel = new AcpProfilesViewModel(
             configurationService.Object,
             preferences,
-            Mock.Of<ILogger<AcpProfilesViewModel>>());
+            Mock.Of<ILogger<AcpProfilesViewModel>>(),
+            new ImmediateUiDispatcher());
         profilesViewModel.Profiles.Add(profile);
         profilesViewModel.SelectedProfile = profile;
         return profilesViewModel;
