@@ -60,9 +60,10 @@ namespace SalmonEgg.Application.Tests.UseCases
         public async Task ExecuteAsync_WhenDisconnectThrowsException_ShouldReturnFailure()
         {
             // Arrange
+            var expectedException = new InvalidOperationException("Connection error");
             _mockConnectionManager
                 .Setup(x => x.DisconnectAsync())
-                .ThrowsAsync(new InvalidOperationException("Connection error"));
+                .ThrowsAsync(expectedException);
 
             // Act
             var result = await _useCase.ExecuteAsync();
@@ -70,6 +71,8 @@ namespace SalmonEgg.Application.Tests.UseCases
             // Assert
             Assert.False(result.IsSuccess);
             Assert.Contains("断开连接失败", result.Error);
+
+            _mockLogger.Verify(x => x.Error(expectedException, "断开连接时发生未预期的错误"), Times.Once);
         }
 
         [Fact]
