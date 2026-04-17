@@ -115,6 +115,19 @@ public sealed class AcpConnectionSettingsViewModelTests
     }
 
     [Fact]
+    public async Task TransportOptions_Should_PresentStdioAsSubprocessTransport()
+    {
+        var preferences = await CreatePreferencesAsync();
+        var profiles = CreateProfiles(preferences);
+        var chat = new TestSettingsChatConnection();
+        var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
+
+        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, logger.Object);
+
+        Assert.Equal("Stdio（子进程）", viewModel.TransportOptions[0].Name);
+    }
+
+    [Fact]
     public async Task AgentDisplayName_PrefersSelectedProfileNameAndFallsBackToAgentName()
     {
         // Arrange

@@ -38,7 +38,7 @@ namespace SalmonEgg.Domain.Models
         public string TransportDisplayName =>
             Transport switch
             {
-                TransportType.Stdio => "Stdio（本地）",
+                TransportType.Stdio => "Stdio（子进程）",
                 TransportType.HttpSse => "HTTP SSE",
                 _ => "WebSocket"
             };

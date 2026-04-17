@@ -45,6 +45,19 @@ public sealed class TransportFactoryTests
     }
 
     [Fact]
+    public void CreateTransport_Stdio_WithSshBridgeCommand_Should_Return_StdioTransport()
+    {
+        var factory = new TransportFactory(_logger);
+
+        var transport = factory.CreateTransport(
+            TransportType.Stdio,
+            command: "ssh",
+            args: "-T -o BatchMode=yes user@host /opt/acp/bin/agent stdio");
+
+        Assert.IsType<StdioTransport>(transport);
+    }
+
+    [Fact]
     public async Task CreateTransport_Stdio_WithQuotedScriptPath_CanConnect()
     {
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))

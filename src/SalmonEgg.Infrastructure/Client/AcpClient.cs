@@ -1407,7 +1407,7 @@ namespace SalmonEgg.Infrastructure.Client
         /// </summary>
         private void OnTransportError(object? sender, TransportErrorEventArgs e)
         {
-            OnErrorOccurred(e.ErrorMessage);
+            OnErrorOccurred(EnrichTransportErrorMessage(e.ErrorMessage));
         }
 
         /// <summary>
@@ -1417,6 +1417,28 @@ namespace SalmonEgg.Infrastructure.Client
         {
             _errorLogger.LogError(new ErrorLogEntry("CLIENT_ERROR", errorMessage, ErrorSeverity.Error));
             ErrorOccurred?.Invoke(this, errorMessage);
+        }
+
+        private static string EnrichTransportErrorMessage(string errorMessage)
+        {
+            if (string.IsNullOrWhiteSpace(errorMessage))
+            {
+                return errorMessage;
+            }
+
+            if (!errorMessage.Contains("进程", StringComparison.Ordinal) &&
+                !errorMessage.Contains("stdout", StringComparison.OrdinalIgnoreCase) &&
+                !errorMessage.Contains("stderr", StringComparison.OrdinalIgnoreCase))
+            {
+                return errorMessage;
+            }
+
+            const string sshBridgeGuidance =
+                " 如果这是 SSH stdio bridge，请避免使用 ssh -t，确保 stdout 只输出 ACP 帧，并优先启用 BatchMode=yes。";
+
+            return errorMessage.Contains("ssh -t", StringComparison.Ordinal)
+                ? errorMessage
+                : errorMessage + sshBridgeGuidance;
         }
 
         /// <summary>

@@ -12,10 +12,18 @@
    - 点击"添加配置"按钮
    - 填写服务器信息：
      - **名称**: 给服务器起一个易于识别的名字（如"本地开发服务器"）
-     - **服务器 URL**: ACP 服务器的地址
+     - **传输类型**:
+       - `Stdio（子进程）`: 启动本地 Agent，或启动 `ssh` 这类桥接进程
+       - `WebSocket`: 远程 WebSocket ACP 服务
+       - `HTTP SSE`: 远程 HTTP SSE ACP 服务
+     - **服务器 URL**: 当传输类型为 WebSocket / HTTP SSE 时填写
        - WebSocket 格式: `ws://localhost:8080` 或 `wss://your-server.com`
        - HTTP SSE 格式: `http://localhost:8080/sse` 或 `https://your-server.com/sse`
-     - **传输类型**: 选择 WebSocket 或 HTTP SSE
+     - **Stdio 命令 / 参数**: 当传输类型为 `Stdio（子进程）` 时填写
+       - 本地示例: `python` + `server.py --port 8080`
+       - SSH bridge 示例:
+         - 命令: `ssh`
+         - 参数: `-T -o BatchMode=yes -o RequestTTY=no -o LogLevel=ERROR user@host /opt/acp/bin/agent stdio`
      - **心跳间隔**: 心跳消息间隔（默认 30 秒）
      - **连接超时**: 连接超时时间（默认 10 秒）
      - **认证信息**（可选）:
@@ -34,27 +42,24 @@
 ### 方法 2: 直接编辑配置文件
 
 配置文件存储位置：
-- Windows: `%LOCALAPPDATA%\SalmonEgg\configurations\`
-- 每个配置都是一个 JSON 文件
+- Windows: `%LOCALAPPDATA%\SalmonEgg\config\servers\`
+- 每个配置都是一个 YAML 文件
 
 配置文件格式示例：
-```json
-{
-  "id": "server-001",
-  "name": "本地开发服务器",
-  "serverUrl": "ws://localhost:8080",
-  "transport": 0,
-  "heartbeatInterval": 30,
-  "connectionTimeout": 10,
-  "authentication": {
-    "token": "your-token",
-    "apiKey": "your-api-key"
-  },
-  "proxy": {
-    "enabled": false,
-    "proxyUrl": ""
-  }
-}
+```yaml
+schema_version: 1
+id: "server-stdio-ssh"
+name: "远程 SSH Agent"
+transport: "stdio"
+stdio_command: "ssh"
+stdio_args: "-T -o BatchMode=yes -o RequestTTY=no -o LogLevel=ERROR user@host /opt/acp/bin/agent stdio"
+heartbeat_interval_seconds: 30
+connection_timeout_seconds: 10
+authentication:
+  mode: "none"
+proxy:
+  enabled: false
+  proxy_url: ""
 ```
 
 ## 常用 ACP Server 地址
@@ -98,6 +103,10 @@
 - 检查认证信息是否正确
 - 确认服务器支持所选传输类型
 - 查看服务器日志
+- 如果使用 SSH bridge:
+  - 不要使用 `ssh -t`
+  - 确保远端 shell 不会向 `stdout` 输出 banner / MOTD / 欢迎语
+  - 优先启用 `-o BatchMode=yes`
 
 ### 找不到配置
 - 确认已保存配置

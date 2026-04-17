@@ -133,7 +133,7 @@ ConnectToServerUseCase.ExecuteAsync(configId)
 2. Validate configuration (FluentValidation)
 3. ConnectionManager.ConnectAsync(config)
        ↓
-   a. Select transport (WebSocket/HTTP SSE)
+   a. Select transport (Stdio subprocess / WebSocket / HTTP SSE)
    b. Establish connection
    c. Send initialization message
    d. Start heartbeat mechanism
@@ -216,6 +216,7 @@ UI Updates (message history list)
 |------|------|
 | `AcpMessageParser` | 实现 `IAcpProtocolService`，使用 System.Text.Json 解析/序列化 |
 | `ConnectionManager` | 实现 `IConnectionManager`，管理连接生命周期 |
+| `StdioTransport` | 子进程 stdio 传输实现；可直接启动 Agent，也可启动 `ssh` 等桥接进程 |
 | `WebSocketTransport` | WebSocket 传输实现（使用 Websocket.Client 库） |
 | `HttpSseTransport` | HTTP SSE 传输实现 |
 | `ConfigurationManager` | 配置持久化管理（加密敏感信息） |

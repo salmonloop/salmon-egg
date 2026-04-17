@@ -44,7 +44,7 @@ public partial class ConfigurationEditorViewModel(
 
     public ObservableCollection<TransportOption> TransportOptions { get; } = new()
     {
-        new TransportOption(TransportType.Stdio, "Stdio（本地）"),
+        new TransportOption(TransportType.Stdio, "Stdio（子进程）"),
         new TransportOption(TransportType.WebSocket, "WebSocket"),
         new TransportOption(TransportType.HttpSse, "HTTP SSE"),
     };

@@ -6,7 +6,7 @@ namespace SalmonEgg.Domain.Models;
 public enum TransportType
 {
     /// <summary>
-    /// Stdio (标准输入/输出) 传输 - 用于本地 Agent
+    /// Stdio (标准输入/输出) 传输 - 用于子进程 Agent 或桥接进程
     /// </summary>
     Stdio,
 

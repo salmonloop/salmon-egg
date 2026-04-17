@@ -34,13 +34,13 @@ public partial class TransportConfigViewModel : ObservableObject, IAcpTransportC
     public bool IsHttpSse => SelectedTransportType == TransportType.HttpSse;
 
     /// <summary>
-    /// Stdio 命令 (例如：agent-command)
+    /// Stdio 命令 (例如：agent-command 或 ssh)
     /// </summary>
     [ObservableProperty]
     private string _stdioCommand = string.Empty;
 
     /// <summary>
-    /// Stdio 命令行参数 (例如：--port 8080)
+    /// Stdio 命令行参数 (例如：--port 8080 或 user@host /opt/acp/bin/agent stdio)
     /// </summary>
     [ObservableProperty]
     private string _stdioArgs = string.Empty;
@@ -62,7 +62,7 @@ public partial class TransportConfigViewModel : ObservableObject, IAcpTransportC
             case TransportType.Stdio:
                 if (string.IsNullOrWhiteSpace(StdioCommand))
                 {
-                    return (false, "Stdio 传输必须指定命令");
+                    return (false, "Stdio 传输必须指定命令或启动器");
                 }
                 return (true, null);
 

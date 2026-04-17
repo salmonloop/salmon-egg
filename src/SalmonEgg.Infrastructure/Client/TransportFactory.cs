@@ -82,6 +82,7 @@ public class TransportFactory : ITransportFactory
 
        _logger.Information("创建 Stdio 传输：Command={Command}, Args={Args}", command, args);
 
+       // Stdio remains a subprocess transport even when the subprocess is a bridge such as ssh.
        var argsArray = ParseCommandLineArguments(args);
 
        return new StdioTransport(command.Trim(), argsArray, System.Text.Encoding.UTF8);

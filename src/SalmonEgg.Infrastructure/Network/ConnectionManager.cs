@@ -312,7 +312,7 @@ namespace SalmonEgg.Infrastructure.Network
                 // Stdio must have a command
                 if (string.IsNullOrWhiteSpace(config.StdioCommand))
                 {
-                    return "Stdio command is required (e.g. 'node', 'python')";
+                    return "Stdio command or launcher is required (e.g. 'node', 'python', 'ssh')";
                 }
             }
 

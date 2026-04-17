@@ -12,6 +12,7 @@ public static class PathResolver
             return command;
 
         // PATH HANDLING: If the command already specifies a path, don't attempt to resolve it.
+        // Launchers such as ssh are also valid stdio commands and should flow through unchanged.
         if (command.Contains(Path.DirectorySeparatorChar) || command.Contains(Path.AltDirectorySeparatorChar))
             return command;
 

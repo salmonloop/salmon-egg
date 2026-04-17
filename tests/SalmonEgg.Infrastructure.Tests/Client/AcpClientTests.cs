@@ -207,6 +207,24 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         [Fact]
+        public void TransportErrors_ForStdioBridgeFailures_ShouldAppendSshGuidance()
+        {
+            var parser = new MessageParser();
+            var client = new AcpClient(_transportMock.Object, parser, null, _errorLoggerMock.Object);
+            string? receivedError = null;
+            client.ErrorOccurred += (_, error) => receivedError = error;
+
+            _transportMock.Raise(
+                t => t.ErrorOccurred += null,
+                new TransportErrorEventArgs("进程启动后立即退出，退出码=255"));
+
+            Assert.NotNull(receivedError);
+            Assert.Contains("ssh -t", receivedError, StringComparison.Ordinal);
+            Assert.Contains("stdout", receivedError, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("BatchMode=yes", receivedError, StringComparison.Ordinal);
+        }
+
+        [Fact]
         public async Task NonPromptRequest_StillUsesDefaultTimeoutBudget()
         {
             var timeouts = new AcpClient.AcpRequestTimeouts(

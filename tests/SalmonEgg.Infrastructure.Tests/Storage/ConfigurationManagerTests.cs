@@ -98,6 +98,28 @@ public sealed class ConfigurationManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task SaveConfigurationAsync_WithSshBridgeStdio_PersistsStdioTransportShape()
+    {
+        var config = new ServerConfiguration
+        {
+            Id = "stdio-ssh-001",
+            Name = "SSH Bridge",
+            Transport = TransportType.Stdio,
+            StdioCommand = "ssh",
+            StdioArgs = "-T -o BatchMode=yes user@host /opt/acp/bin/agent stdio",
+            HeartbeatInterval = 30,
+            ConnectionTimeout = 10
+        };
+
+        await _configManager.SaveConfigurationAsync(config);
+
+        var yaml = await File.ReadAllTextAsync(GetServerYamlPath(config.Id));
+        Assert.Contains("transport: stdio", yaml, StringComparison.Ordinal);
+        Assert.Contains("stdio_command: ssh", yaml, StringComparison.Ordinal);
+        Assert.Contains("stdio_args: -T -o BatchMode=yes user@host /opt/acp/bin/agent stdio", yaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task LoadConfigurationAsync_NonExistentConfig_ReturnsNull()
     {
         var loaded = await _configManager.LoadConfigurationAsync("non-existent");

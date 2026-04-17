@@ -32,7 +32,7 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
 
     public ObservableCollection<TransportOptionViewModel> TransportOptions { get; } = new()
     {
-        new TransportOptionViewModel(TransportType.Stdio, "Stdio（本地）"),
+        new TransportOptionViewModel(TransportType.Stdio, "Stdio（子进程）"),
         new TransportOptionViewModel(TransportType.WebSocket, "WebSocket"),
         new TransportOptionViewModel(TransportType.HttpSse, "HTTP SSE"),
     };

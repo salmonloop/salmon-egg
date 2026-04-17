@@ -665,7 +665,7 @@
     <value>Arguments</value>
   </data>
   <data name="ConfigurationEditorDialogArgs.PlaceholderText" xml:space="preserve">
-    <value>For example: server.py --port 8080</value>
+    <value>For example: ssh -T user@host /opt/acp/bin/agent stdio</value>
   </data>
   <data name="ConfigurationEditorDialogServerUrl.Header" xml:space="preserve">
     <value>Server URL</value>
@@ -773,7 +773,7 @@
     <value>Arguments</value>
   </data>
   <data name="AgentProfileEditorArgs.PlaceholderText" xml:space="preserve">
-    <value>For example: server.py --port 8080</value>
+    <value>For example: ssh -T user@host /opt/acp/bin/agent stdio</value>
   </data>
   <data name="AgentProfileEditorServerUrl.Header" xml:space="preserve">
     <value>Server URL</value>

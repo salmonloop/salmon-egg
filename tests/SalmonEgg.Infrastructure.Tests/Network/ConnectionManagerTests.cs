@@ -237,6 +237,28 @@ namespace SalmonEgg.Infrastructure.Tests.Network
         }
 
         [Fact]
+        public async Task ConnectAsync_WithMissingStdioCommand_ShouldMentionLauncherAndSsh()
+        {
+            var config = new ServerConfiguration
+            {
+                Id = "stdio-test",
+                Name = "SSH Bridge",
+                Transport = TransportType.Stdio
+            };
+
+            var transportFactory = new Func<TransportType, ITransport>(_ => _mockTransport.Object);
+            var connectionManager = new ConnectionManager(
+                _mockProtocolService.Object,
+                _mockLogger.Object,
+                transportFactory);
+
+            var result = await connectionManager.ConnectAsync(config, CancellationToken.None);
+
+            Assert.False(result.IsSuccess);
+            Assert.Equal("Stdio command or launcher is required (e.g. 'node', 'python', 'ssh')", result.Error);
+        }
+
+        [Fact]
         public void Dispose_ShouldCleanupResources()
         {
             // Arrange

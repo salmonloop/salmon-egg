@@ -348,7 +348,7 @@
     <value>传输协议</value>
   </data>
   <data name="Conn_TransportStdio.Content" xml:space="preserve">
-    <value>Stdio (本地)</value>
+    <value>Stdio (子进程)</value>
   </data>
   <data name="Conn_TransportWebSocket.Content" xml:space="preserve">
     <value>WebSocket</value>
@@ -665,7 +665,7 @@
     <value>参数</value>
   </data>
   <data name="ConfigurationEditorDialogArgs.PlaceholderText" xml:space="preserve">
-    <value>例如：server.py --port 8080</value>
+    <value>例如：ssh -T user@host /opt/acp/bin/agent stdio</value>
   </data>
   <data name="ConfigurationEditorDialogServerUrl.Header" xml:space="preserve">
     <value>服务器地址</value>
@@ -773,7 +773,7 @@
     <value>参数</value>
   </data>
   <data name="AgentProfileEditorArgs.PlaceholderText" xml:space="preserve">
-    <value>例如：server.py --port 8080</value>
+    <value>例如：ssh -T user@host /opt/acp/bin/agent stdio</value>
   </data>
   <data name="AgentProfileEditorServerUrl.Header" xml:space="preserve">
     <value>服务器地址</value>

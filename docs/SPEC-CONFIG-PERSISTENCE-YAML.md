@@ -75,6 +75,26 @@ authentication:
   # token/apiKey 不允许出现在 YAML 中（见 4.1）
 ```
 
+SSH bridge 仍然必须使用同一个 `stdio` transport token，不允许新增 `ssh` transport：
+
+```yaml
+schema_version: 1
+updated_at_utc: "2026-04-17T09:20:00Z"
+
+id: "agent-ssh"
+name: "Remote Agent via SSH"
+transport: "stdio"
+stdio_command: "ssh"
+stdio_args: "-T -o BatchMode=yes -o RequestTTY=no -o LogLevel=ERROR user@host /opt/acp/bin/agent stdio"
+heartbeat_interval_seconds: 30
+connection_timeout_seconds: 10
+authentication:
+  mode: "none"
+```
+
+- `transport: "ssh"` 是禁止配置；SSH 只是 `stdio` 的启动器/桥接进程。
+- 推荐使用 `ssh -T` 或 `-o RequestTTY=no`；禁止 `ssh -t`，否则 PTY 可能污染 ACP 帧流。
+
 ### 3.3 命名约束
 - 键名统一 `snake_case` （如文档有冲突以此为准）。
 - enum 值统一 **snake_case**（如 `in_progress`），保持与 ACP 事件一致。

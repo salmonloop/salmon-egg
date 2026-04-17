@@ -33,7 +33,7 @@ namespace SalmonEgg.Application.Validators
             {
                 RuleFor(x => x.StdioCommand)
                     .NotEmpty()
-                    .WithMessage("Stdio transport requires a command");
+                    .WithMessage("Stdio transport requires a command or launcher");
             });
 
             When(x => x.Transport == TransportType.WebSocket || x.Transport == TransportType.HttpSse, () =>
