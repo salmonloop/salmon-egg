@@ -203,5 +203,26 @@ namespace SalmonEgg.Application.Tests.UseCases
                 x => x.ConnectAsync(validConfig, It.IsAny<CancellationToken>()),
                 Times.Once);
         }
+
+        [Fact]
+        public async Task ExecuteAsync_WhenExceptionThrown_ShouldReturnFailureAndLogError()
+        {
+            // Arrange
+            var exception = new Exception("Test exception");
+            _mockConfigService
+                .Setup(x => x.LoadConfigurationAsync("test-id"))
+                .ThrowsAsync(exception);
+
+            // Act
+            var result = await _useCase.ExecuteAsync("test-id");
+
+            // Assert
+            Assert.False(result.IsSuccess);
+            Assert.Contains("连接失败：发生未预期的错误", result.Error);
+
+            _mockLogger.Verify(
+                x => x.Error(exception, "连接到服务器时发生未预期的错误，配置 ID: {ConfigId}", "test-id"),
+                Times.Once);
+        }
     }
 }
