@@ -5,8 +5,10 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Moq;
+using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.ProjectAffinity;
+using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Services;
@@ -351,6 +353,53 @@ public sealed class AcpConnectionSettingsViewModelTests
         Assert.Empty(preferences.ProjectPathMappings);
     }
 
+    [Fact]
+    public async Task ProfileConnectionChanged_WhenRaisedOffUiThread_RefreshesDiagnosticsViaDispatcher()
+    {
+        var preferences = await CreatePreferencesAsync();
+        var profiles = CreateProfiles(preferences);
+        var profile = new ServerConfiguration { Id = "profile-1", Name = "Profile 1" };
+        profiles.Profiles.Add(profile);
+        profiles.SelectedProfile = profile;
+
+        var chat = new TestSettingsChatConnection();
+        var registry = new TestSessionRegistry();
+        var dispatcher = new QueueingUiDispatcher();
+        var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
+        var itemLogger = new Mock<ILogger<AgentProfileItemViewModel>>();
+
+        profiles.SelectedProfileItem = new AgentProfileItemViewModel(
+            profile,
+            registry,
+            registry,
+            chat,
+            itemLogger.Object,
+            dispatcher);
+
+        using var viewModel = new AcpConnectionSettingsViewModel(
+            chat,
+            profiles,
+            registry,
+            registry,
+            preferences,
+            logger.Object,
+            dispatcher);
+
+        Assert.Equal("Disconnected", viewModel.SelectedProfileStatus);
+
+        registry.ConnectedSession = CreateSessionSnapshot("profile-1", "OpenCode", "1.3.15");
+        registry.IsConnected = true;
+        registry.RaiseProfileConnectionChanged("profile-1", true);
+
+        Assert.Equal("Disconnected", viewModel.SelectedProfileStatus);
+
+        dispatcher.RunAll();
+
+        Assert.Equal("Connected", viewModel.SelectedProfileStatus);
+        Assert.Equal("OpenCode", viewModel.SelectedProfileAgentName);
+        Assert.Equal("1.3.15", viewModel.SelectedProfileAgentVersion);
+    }
+
     private static async Task<AppPreferencesViewModel> CreatePreferencesAsync()
     {
         var appSettingsService = new Mock<IAppSettingsService>();
@@ -579,5 +628,68 @@ public sealed class AcpConnectionSettingsViewModelTests
             field = value;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
+    }
+
+    private sealed class TestSessionRegistry : IAcpConnectionSessionRegistry, IAcpConnectionSessionEvents
+    {
+        public event Action<string, bool>? ProfileConnectionChanged;
+
+        public bool IsConnected { get; set; }
+        public AcpConnectionSession? ConnectedSession { get; set; }
+
+        public bool TryGetByProfile(string profileId, out AcpConnectionSession session)
+        {
+            if (IsConnected && ConnectedSession != null)
+            {
+                session = ConnectedSession;
+                return true;
+            }
+
+            session = null!;
+            return false;
+        }
+
+        public bool TryGetProfileId(IChatService service, out string profileId)
+        {
+            profileId = string.Empty;
+            return false;
+        }
+
+        public void Upsert(AcpConnectionSession session) => throw new NotSupportedException();
+
+        public bool RemoveByProfile(string profileId) => throw new NotSupportedException();
+
+        public bool RemoveByService(IChatService service, out string profileId) => throw new NotSupportedException();
+
+        public IReadOnlyList<AcpConnectionSession> RemoveWhere(Func<AcpConnectionSession, bool> predicate) => throw new NotSupportedException();
+
+        public bool Touch(string profileId, DateTime? usedAtUtc = null) => throw new NotSupportedException();
+
+        public IReadOnlyList<AcpConnectionSession> GetSnapshot() => Array.Empty<AcpConnectionSession>();
+
+        public void RaiseProfileConnectionChanged(string profileId, bool isConnected)
+            => ProfileConnectionChanged?.Invoke(profileId, isConnected);
+    }
+
+    private static AcpConnectionSession CreateSessionSnapshot(string profileId, string agentName, string agentVersion)
+    {
+        var service = new Mock<IChatService>();
+        service.SetupGet(x => x.IsConnected).Returns(true);
+        service.SetupGet(x => x.IsInitialized).Returns(true);
+        service.SetupGet(x => x.AgentCapabilities).Returns(new AgentCapabilities());
+
+        var adapter = new AcpChatServiceAdapter(
+            service.Object,
+            new AcpEventAdapter(
+                _ => { },
+                new ImmediateUiDispatcher(),
+                bufferLimit: 16,
+                resyncRequired: _ => { }));
+
+        return new AcpConnectionSession(
+            profileId,
+            adapter,
+            new InitializeResponse(1, new AgentInfo(agentName, agentVersion), new AgentCapabilities()),
+            new AcpConnectionReuseKey(TransportType.Stdio, "ssh", "oci-arm", string.Empty));
     }
 }

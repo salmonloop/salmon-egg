@@ -412,7 +412,8 @@ public static class DependencyInjection
                 sp.GetRequiredService<IAcpConnectionSessionRegistry>(),
                 sp.GetRequiredService<IAcpConnectionSessionEvents>(),
                 sp.GetRequiredService<AppPreferencesViewModel>(),
-                sp.GetRequiredService<ILogger<AcpConnectionSettingsViewModel>>()));
+                sp.GetRequiredService<ILogger<AcpConnectionSettingsViewModel>>(),
+                sp.GetRequiredService<IUiDispatcher>()));
 
         // Settings pages (Data/Shortcuts/Diagnostics/About)
         services.AddSingleton<DataStorageSettingsViewModel>();
