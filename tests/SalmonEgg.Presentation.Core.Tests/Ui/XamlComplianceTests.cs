@@ -128,7 +128,9 @@ public sealed class XamlComplianceTests
     {
         var mainPageXaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");
         var miniChatXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml");
-        var titleBarIconsXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Styles\TitleBarIcons.xaml");
+        var titleBarIconsDocument = XDocument.Parse(LoadXaml(@"SalmonEgg\SalmonEgg\Styles\TitleBarIcons.xaml"));
+        var titleBarButtonStylesDocument = XDocument.Parse(LoadXaml(@"SalmonEgg\SalmonEgg\Styles\TitleBarCommandButtonStyle.xaml"));
+        var xNamespace = XNamespace.Get("http://schemas.microsoft.com/winfx/2006/xaml");
 
         Assert.Contains("ContentTemplate=\"{StaticResource TitleBarBackIconTemplate}\"", mainPageXaml);
         Assert.Contains("ContentTemplate=\"{StaticResource TitleBarToggleLeftNavIconTemplate}\"", mainPageXaml);
@@ -138,11 +140,38 @@ public sealed class XamlComplianceTests
         Assert.DoesNotContain("Glyph=\"&#xEE49;\"", mainPageXaml, StringComparison.Ordinal);
         Assert.Contains("ContentTemplate=\"{StaticResource TitleBarReturnToMainWindowIconTemplate}\"", miniChatXaml);
         Assert.DoesNotContain("Glyph=\"&#xE73F;\"", miniChatXaml, StringComparison.Ordinal);
-        Assert.Contains("Picture In Picture Enter", titleBarIconsXaml);
-        Assert.Contains("Picture In Picture Exit", titleBarIconsXaml);
-        Assert.DoesNotContain("Desktop Arrow Right", titleBarIconsXaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("Tab Desktop Arrow Left", titleBarIconsXaml, StringComparison.Ordinal);
-        Assert.Contains("Glyph=\"&#xE700;\"", titleBarIconsXaml);
+        Assert.Contains("Style=\"{StaticResource MiniTitleBarAccessoryButtonStyle}\"", miniChatXaml);
+
+        var returnIconTemplate = titleBarIconsDocument
+            .Descendants()
+            .FirstOrDefault(element =>
+                string.Equals(element.Name.LocalName, "DataTemplate", StringComparison.Ordinal)
+                && string.Equals(element.Attribute(xNamespace + "Key")?.Value, "TitleBarReturnToMainWindowIconTemplate", StringComparison.Ordinal));
+
+        Assert.NotNull(returnIconTemplate);
+
+        var returnIconPath = returnIconTemplate!
+            .Descendants()
+            .FirstOrDefault(element => string.Equals(element.Name.LocalName, "Path", StringComparison.Ordinal));
+
+        Assert.NotNull(returnIconPath);
+        Assert.Equal("16", returnIconPath!.Attribute("Width")?.Value);
+        Assert.Equal("16", returnIconPath.Attribute("Height")?.Value);
+
+        var miniAccessoryStyle = titleBarButtonStylesDocument
+            .Descendants()
+            .FirstOrDefault(element =>
+                string.Equals(element.Name.LocalName, "Style", StringComparison.Ordinal)
+                && string.Equals(element.Attribute(xNamespace + "Key")?.Value, "MiniTitleBarAccessoryButtonStyle", StringComparison.Ordinal));
+
+        Assert.NotNull(miniAccessoryStyle);
+        Assert.Contains(miniAccessoryStyle!.Descendants().Where(element => string.Equals(element.Name.LocalName, "Setter", StringComparison.Ordinal)),
+            setter => string.Equals(setter.Attribute("Property")?.Value, "Width", StringComparison.Ordinal)
+                && string.Equals(setter.Attribute("Value")?.Value, "40", StringComparison.Ordinal));
+        Assert.Contains(miniAccessoryStyle.Descendants().Where(element => string.Equals(element.Name.LocalName, "Setter", StringComparison.Ordinal)),
+            setter => string.Equals(setter.Attribute("Property")?.Value, "Height", StringComparison.Ordinal)
+                && string.Equals(setter.Attribute("Value")?.Value, "40", StringComparison.Ordinal));
+        Assert.DoesNotContain(miniAccessoryStyle.Descendants(), element => string.Equals(element.Name.LocalName, "Viewbox", StringComparison.Ordinal));
     }
 
     [Fact]

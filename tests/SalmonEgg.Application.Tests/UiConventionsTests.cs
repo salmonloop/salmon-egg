@@ -556,12 +556,18 @@ public class UiConventionsTests
         var mainPageCodeBehind = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "MainPage.xaml.cs");
         var appXaml = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "App.xaml");
         var iconDictionaryXaml = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Styles", "TitleBarIcons.xaml");
+        var titleBarButtonStylesXaml = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Styles", "TitleBarCommandButtonStyle.xaml");
         var iconDictionaryText = File.ReadAllText(iconDictionaryXaml);
+        var titleBarButtonStyles = ReadXml(titleBarButtonStylesXaml);
+        var iconDictionary = ReadXml(iconDictionaryXaml);
         var codeBehindText = File.ReadAllText(mainPageCodeBehind);
         var mainPage = ReadXml(mainPageXaml);
+        var miniChatView = ReadXml(Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Presentation", "Views", "MiniWindow", "MiniChatView.xaml"));
+        var xNamespace = XNamespace.Get("http://schemas.microsoft.com/winfx/2006/xaml");
         var backButton = FindElementByXName(mainPage, "Button", "TitleBarBackButton");
         var navButton = FindElementByXName(mainPage, "Button", "TitleBarToggleLeftNavButton");
         var miniWindowButton = FindElementByXName(mainPage, "Button", "TitleBarMiniWindowButton");
+        var miniReturnButton = FindElementByXName(miniChatView, "Button", "MiniTitleBarReturnButton");
         var bottomButton = FindElementByXName(mainPage, "ToggleButton", "BottomPanelButton");
         var diffButton = FindElementByXName(mainPage, "ToggleButton", "DiffPanelButton");
         var todoButton = FindElementByXName(mainPage, "ToggleButton", "TodoPanelButton");
@@ -572,6 +578,8 @@ public class UiConventionsTests
         Assert.Equal("{StaticResource TitleBarToggleLeftNavIconTemplate}", GetAttributeValueByLocalName(navButton, "ContentTemplate"));
         Assert.Equal("{StaticResource TitleBarCommandButtonStyle}", GetAttributeValueByLocalName(miniWindowButton, "Style"));
         Assert.Equal("{StaticResource TitleBarOpenMiniWindowIconTemplate}", GetAttributeValueByLocalName(miniWindowButton, "ContentTemplate"));
+        Assert.Equal("{StaticResource MiniTitleBarAccessoryButtonStyle}", GetAttributeValueByLocalName(miniReturnButton, "Style"));
+        Assert.Equal("{StaticResource TitleBarReturnToMainWindowIconTemplate}", GetAttributeValueByLocalName(miniReturnButton, "ContentTemplate"));
         Assert.Equal("{StaticResource TitleBarToggleButtonStyle}", GetAttributeValueByLocalName(bottomButton, "Style"));
         Assert.Equal("{x:Bind GetBottomPanelButtonIconTemplate(LayoutVM.BottomPanelMode), Mode=OneWay}", GetAttributeValueByLocalName(bottomButton, "ContentTemplate"));
         Assert.Equal("{x:Bind LayoutVM.BottomPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Dock}", GetAttributeValueByLocalName(bottomButton, "IsChecked"));
@@ -606,6 +614,34 @@ public class UiConventionsTests
         Assert.DoesNotContain("Desktop Arrow Right", iconDictionaryText, StringComparison.Ordinal);
         Assert.DoesNotContain("Tab Desktop Arrow Left", iconDictionaryText, StringComparison.Ordinal);
         Assert.Contains("Glyph=\"&#xE700;\"", iconDictionaryText, StringComparison.Ordinal);
+
+        var miniAccessoryStyle = titleBarButtonStyles
+            .Descendants()
+            .Single(element =>
+                string.Equals(element.Name.LocalName, "Style", StringComparison.Ordinal)
+                && string.Equals(element.Attribute(xNamespace + "Key")?.Value, "MiniTitleBarAccessoryButtonStyle", StringComparison.Ordinal));
+        var miniAccessorySetters = miniAccessoryStyle
+            .Descendants()
+            .Where(element => string.Equals(element.Name.LocalName, "Setter", StringComparison.Ordinal))
+            .ToArray();
+        Assert.Contains(miniAccessorySetters, setter =>
+            string.Equals(setter.Attribute("Property")?.Value, "Width", StringComparison.Ordinal)
+            && string.Equals(setter.Attribute("Value")?.Value, "40", StringComparison.Ordinal));
+        Assert.Contains(miniAccessorySetters, setter =>
+            string.Equals(setter.Attribute("Property")?.Value, "Height", StringComparison.Ordinal)
+            && string.Equals(setter.Attribute("Value")?.Value, "40", StringComparison.Ordinal));
+        Assert.DoesNotContain(miniAccessoryStyle.Descendants(), element => string.Equals(element.Name.LocalName, "Viewbox", StringComparison.Ordinal));
+
+        var returnIconTemplate = iconDictionary
+            .Descendants()
+            .Single(element =>
+                string.Equals(element.Name.LocalName, "DataTemplate", StringComparison.Ordinal)
+                && string.Equals(element.Attribute(xNamespace + "Key")?.Value, "TitleBarReturnToMainWindowIconTemplate", StringComparison.Ordinal));
+        var returnIconPath = returnIconTemplate
+            .Descendants()
+            .Single(element => string.Equals(element.Name.LocalName, "Path", StringComparison.Ordinal));
+        Assert.Equal("16", returnIconPath.Attribute("Width")?.Value);
+        Assert.Equal("16", returnIconPath.Attribute("Height")?.Value);
 
         var iconKeys = ReadXamlKeys(iconDictionaryXaml);
         Assert.Contains("TitleBarOpenMiniWindowIconTemplate", iconKeys);

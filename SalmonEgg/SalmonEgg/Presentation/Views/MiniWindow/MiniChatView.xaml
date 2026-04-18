@@ -79,7 +79,7 @@
                 <Button x:Name="MiniTitleBarReturnButton"
                         Grid.Column="1"
                         x:Uid="MiniChatReturnButton"
-                        Style="{StaticResource TitleBarCommandButtonStyle}"
+                        Style="{StaticResource MiniTitleBarAccessoryButtonStyle}"
                         Content="Icon"
                         ContentTemplate="{StaticResource TitleBarReturnToMainWindowIconTemplate}"
                         VerticalAlignment="Center"
