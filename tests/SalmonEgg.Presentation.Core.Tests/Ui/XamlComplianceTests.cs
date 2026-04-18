@@ -540,6 +540,34 @@ public sealed class XamlComplianceTests
         Assert.Contains("VisualTreeHelper.GetParent", code);
     }
 
+    [Fact]
+    public void NavigationIntentConsumer_Contract_Exists_AndDispatcherRemainsControlAgnostic()
+    {
+        var contract = LoadText(@"src\SalmonEgg.Presentation.Core\Services\Input\INavigationIntentConsumer.cs");
+        var dispatcher = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\MainShellGamepadNavigationDispatcher.cs");
+
+        Assert.Contains("interface INavigationIntentConsumer", contract);
+        Assert.Contains("TryConsumeNavigationIntent", contract);
+        Assert.Contains("INavigationIntentConsumer", dispatcher);
+        Assert.DoesNotContain("ChatInputArea", dispatcher, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatInputArea_NavigationIntentSupport_PreservesKeyboardAndSlashHandlers()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml.cs");
+
+        Assert.Contains("INavigationIntentConsumer", code);
+        Assert.Contains("OnInputKeyDown", code);
+        Assert.Contains("OnSendAcceleratorInvoked", code);
+        Assert.Contains("OnNewLineAcceleratorInvoked", code);
+        Assert.Contains("TryMoveSlashSelection", code);
+        Assert.Contains("TryAcceptSelectedSlashCommand", code);
+        Assert.Contains("_isImeComposing", code);
+        Assert.Contains("InputBox.IsEnabled", code);
+        Assert.Contains("TryAcceptSelectedSlashCommandAndMoveCaretToEnd", code);
+    }
+
 
     private static string LoadXaml(string relativePath)
     {

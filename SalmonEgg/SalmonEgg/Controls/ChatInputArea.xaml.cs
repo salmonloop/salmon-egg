@@ -5,11 +5,14 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using SalmonEgg.Presentation.Core.Services.Input;
 using SalmonEgg.Presentation.ViewModels.Chat;
+using XamlFocusManager = Microsoft.UI.Xaml.Input.FocusManager;
 
 namespace SalmonEgg.Controls;
 
-public sealed partial class ChatInputArea : UserControl
+public sealed partial class ChatInputArea : UserControl, INavigationIntentConsumer
 {
     public static readonly DependencyProperty ViewModelProperty =
         DependencyProperty.Register(
@@ -218,12 +221,8 @@ public sealed partial class ChatInputArea : UserControl
         switch (e.Key)
         {
             case Windows.System.VirtualKey.Tab:
-                if (ViewModel.TryAcceptSelectedSlashCommand())
+                if (TryAcceptSelectedSlashCommandAndMoveCaretToEnd())
                 {
-                    if (sender is TextBox tb)
-                    {
-                        tb.SelectionStart = tb.Text?.Length ?? 0;
-                    }
                     e.Handled = true;
                     return;
                 }
@@ -255,9 +254,8 @@ public sealed partial class ChatInputArea : UserControl
         // Enter sends; if slash commands menu is open, accept selection instead.
         if (ViewModel.ShowSlashCommands)
         {
-            if (ViewModel.TryAcceptSelectedSlashCommand())
+            if (TryAcceptSelectedSlashCommandAndMoveCaretToEnd())
             {
-                InputBox.SelectionStart = InputBox.Text?.Length ?? 0;
                 args.Handled = true;
                 return;
             }
@@ -310,5 +308,95 @@ public sealed partial class ChatInputArea : UserControl
         {
             command.Execute(null);
         }
+    }
+
+    public bool TryConsumeNavigationIntent(GamepadNavigationIntent intent)
+    {
+        if (ViewModel == null || XamlRoot == null)
+        {
+            return false;
+        }
+
+        var focusedElement = XamlFocusManager.GetFocusedElement(XamlRoot) as DependencyObject;
+        var focusContext = ResolveFocusContext(focusedElement);
+        var action = ChatInputNavigationPolicy.Decide(
+            intent,
+            focusContext,
+            ViewModel.ShowSlashCommands,
+            InputBox.IsEnabled && ViewModel.IsInputEnabled,
+            _isImeComposing);
+
+        return action switch
+        {
+            ChatInputNavigationAction.MoveSlashUp => ViewModel.TryMoveSlashSelection(-1),
+            ChatInputNavigationAction.MoveSlashDown => ViewModel.TryMoveSlashSelection(1),
+            ChatInputNavigationAction.AcceptSlashCommand => TryAcceptSelectedSlashCommandAndMoveCaretToEnd(),
+            _ => false
+        };
+    }
+
+    private bool TryAcceptSelectedSlashCommandAndMoveCaretToEnd()
+    {
+        if (!ViewModel.TryAcceptSelectedSlashCommand())
+        {
+            return false;
+        }
+
+        InputBox.SelectionStart = InputBox.Text?.Length ?? 0;
+        InputBox.SelectionLength = 0;
+        return true;
+    }
+
+    private ChatInputFocusContext ResolveFocusContext(DependencyObject? focusedElement)
+    {
+        if (!IsInControlSubtree(focusedElement))
+        {
+            return ChatInputFocusContext.Other;
+        }
+
+        var focusedComboBox = FindAncestorOrSelf<ComboBox>(focusedElement);
+        if (focusedComboBox != null)
+        {
+            return ChatInputFocusContext.ModeSelector;
+        }
+
+        if (ReferenceEquals(FindAncestorOrSelf<Button>(focusedElement), SendButton))
+        {
+            return ChatInputFocusContext.SendButton;
+        }
+
+        if (ReferenceEquals(FindAncestorOrSelf<Button>(focusedElement), CancelButton))
+        {
+            return ChatInputFocusContext.CancelButton;
+        }
+
+        if (ReferenceEquals(FindAncestorOrSelf<TextBox>(focusedElement), InputBox))
+        {
+            return ChatInputFocusContext.InputBox;
+        }
+
+        return ChatInputFocusContext.Other;
+    }
+
+    private bool IsInControlSubtree(DependencyObject? element)
+    {
+        return ReferenceEquals(FindAncestorOrSelf<ChatInputArea>(element), this);
+    }
+
+    private static T? FindAncestorOrSelf<T>(DependencyObject? element)
+        where T : DependencyObject
+    {
+        var current = element;
+        while (current != null)
+        {
+            if (current is T match)
+            {
+                return match;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return default;
     }
 }

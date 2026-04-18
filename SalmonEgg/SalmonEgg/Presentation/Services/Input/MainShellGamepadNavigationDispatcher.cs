@@ -26,6 +26,11 @@ public sealed class MainShellGamepadNavigationDispatcher : IGamepadNavigationDis
 
     public bool TryDispatch(GamepadNavigationIntent intent)
     {
+        if (TryConsumeNavigationIntent(intent))
+        {
+            return true;
+        }
+
         return intent switch
         {
             GamepadNavigationIntent.MoveUp => TryMoveFocus(FocusDirection.Up),
@@ -36,6 +41,23 @@ public sealed class MainShellGamepadNavigationDispatcher : IGamepadNavigationDis
             GamepadNavigationIntent.Back => TryHandleBack(),
             _ => false
         };
+    }
+
+    private static bool TryConsumeNavigationIntent(GamepadNavigationIntent intent)
+    {
+        var current = GetFocusedElement();
+        while (current != null)
+        {
+            if (current is INavigationIntentConsumer consumer
+                && consumer.TryConsumeNavigationIntent(intent))
+            {
+                return true;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return false;
     }
 
     private bool TryActivateFocusedElement()
