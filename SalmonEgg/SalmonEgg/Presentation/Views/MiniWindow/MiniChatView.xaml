@@ -61,6 +61,8 @@
                               SelectedItem="{x:Bind ViewModel.SelectedMiniWindowSession, Mode=TwoWay}"
                               BorderThickness="0"
                               Background="Transparent"
+                              ToolTipService.ToolTip="{x:Bind ViewModel.CurrentSessionDisplayName, Mode=OneWay}"
+                              AutomationProperties.Name="{x:Bind ViewModel.CurrentSessionDisplayName, Mode=OneWay}"
                               VerticalAlignment="Center">
                         <ComboBox.ItemTemplate>
                             <DataTemplate x:DataType="vm:MiniWindowConversationItemViewModel">

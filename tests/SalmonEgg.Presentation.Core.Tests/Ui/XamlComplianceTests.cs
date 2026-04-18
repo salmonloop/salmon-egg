@@ -440,6 +440,7 @@ public sealed class XamlComplianceTests
 
         Assert.Contains("Text=\"{x:Bind CompactDisplayName, Mode=OneTime}\"", xaml);
         Assert.Contains("ToolTipService.ToolTip=\"{x:Bind DisplayName, Mode=OneTime}\"", xaml);
+        Assert.Contains("AutomationProperties.Name=\"{x:Bind ViewModel.CurrentSessionDisplayName, Mode=OneWay}\"", xaml);
     }
 
     [Fact]

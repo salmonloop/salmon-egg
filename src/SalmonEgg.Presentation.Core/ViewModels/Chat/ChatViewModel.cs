@@ -2054,12 +2054,13 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         }
 
         var normalized = NormalizeMiniWindowDisplayName(displayName);
-        if (normalized.Length <= MiniWindowCompactDisplayNameMaxLength)
+        var normalizedInfo = new StringInfo(normalized);
+        if (normalizedInfo.LengthInTextElements <= MiniWindowCompactDisplayNameMaxLength)
         {
             return normalized;
         }
 
-        return normalized[..(MiniWindowCompactDisplayNameMaxLength - 3)] + "...";
+        return normalizedInfo.SubstringByTextElements(0, MiniWindowCompactDisplayNameMaxLength - 3) + "...";
     }
 
     private static string NormalizeMiniWindowDisplayName(string value)

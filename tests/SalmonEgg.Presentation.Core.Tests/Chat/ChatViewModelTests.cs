@@ -3265,6 +3265,69 @@ public class ChatViewModelTests
     }
 
     [Fact]
+    public async Task RefreshMiniWindowSessions_PreservesWholeGraphemeClustersWhenCompactDisplayNameTrims()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
+        var sessionManager = new Mock<ISessionManager>();
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .Returns<string, string?>((sessionId, cwd) =>
+            {
+                var session = new Session(sessionId, cwd);
+                sessions[sessionId] = session;
+                return Task.FromResult(session);
+            });
+        sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
+            .Returns<string>(sessionId => sessions.TryGetValue(sessionId, out var session) ? session : null);
+        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
+            .Returns<string, Action<Session>, bool>((sessionId, update, updateActivity) =>
+            {
+                if (!sessions.TryGetValue(sessionId, out var session))
+                {
+                    return false;
+                }
+
+                update(session);
+                if (updateActivity)
+                {
+                    session.UpdateActivity();
+                }
+
+                return true;
+            });
+        sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
+            .Returns<string>(sessionId => sessions.Remove(sessionId));
+
+        const string fullDisplayName = "12345678901234567890👨‍👩‍👧‍👦 trailing title words";
+        await sessionManager.Object.CreateSessionAsync("conv-emoji", @"C:\repo\emoji");
+        sessionManager.Object.UpdateSession(
+            "conv-emoji",
+            session => session.DisplayName = fullDisplayName,
+            updateActivity: false);
+
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-emoji",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-emoji"
+        });
+
+        var item = fixture.ViewModel.MiniWindowSessions.Single(entry =>
+            string.Equals(entry.ConversationId, "conv-emoji", StringComparison.Ordinal));
+
+        Assert.Equal(fullDisplayName, item.DisplayName);
+        Assert.Equal("12345678901234567890👨‍👩‍👧‍👦...", item.CompactDisplayName);
+    }
+
+    [Fact]
     public async Task ProcessSessionUpdateAsync_SessionInfoUpdate_ForBackgroundConversation_RefreshesCatalogMetadata()
     {
         var syncContext = new ImmediateSynchronizationContext();
