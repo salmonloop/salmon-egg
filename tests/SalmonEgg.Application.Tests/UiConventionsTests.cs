@@ -528,13 +528,23 @@ public class UiConventionsTests
         var mainPageXaml = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "MainPage.xaml");
         var mainPageCodeBehind = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "MainPage.xaml.cs");
         var appXaml = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "App.xaml");
-        var iconDictionaryXaml = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Styles", "AuxiliaryPanelIcons.xaml");
+        var iconDictionaryXaml = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Styles", "TitleBarIcons.xaml");
+        var iconDictionaryText = File.ReadAllText(iconDictionaryXaml);
         var codeBehindText = File.ReadAllText(mainPageCodeBehind);
         var mainPage = ReadXml(mainPageXaml);
+        var backButton = FindElementByXName(mainPage, "Button", "TitleBarBackButton");
+        var navButton = FindElementByXName(mainPage, "Button", "TitleBarToggleLeftNavButton");
+        var miniWindowButton = FindElementByXName(mainPage, "Button", "TitleBarMiniWindowButton");
         var bottomButton = FindElementByXName(mainPage, "ToggleButton", "BottomPanelButton");
         var diffButton = FindElementByXName(mainPage, "ToggleButton", "DiffPanelButton");
         var todoButton = FindElementByXName(mainPage, "ToggleButton", "TodoPanelButton");
 
+        Assert.Equal("{StaticResource TitleBarCommandButtonStyle}", GetAttributeValueByLocalName(backButton, "Style"));
+        Assert.Equal("{StaticResource TitleBarBackIconTemplate}", GetAttributeValueByLocalName(backButton, "ContentTemplate"));
+        Assert.Equal("{StaticResource TitleBarCommandButtonStyle}", GetAttributeValueByLocalName(navButton, "Style"));
+        Assert.Equal("{StaticResource TitleBarToggleLeftNavIconTemplate}", GetAttributeValueByLocalName(navButton, "ContentTemplate"));
+        Assert.Equal("{StaticResource TitleBarCommandButtonStyle}", GetAttributeValueByLocalName(miniWindowButton, "Style"));
+        Assert.Equal("{StaticResource TitleBarOpenMiniWindowIconTemplate}", GetAttributeValueByLocalName(miniWindowButton, "ContentTemplate"));
         Assert.Equal("{StaticResource TitleBarToggleButtonStyle}", GetAttributeValueByLocalName(bottomButton, "Style"));
         Assert.Equal("{x:Bind GetBottomPanelButtonIconTemplate(LayoutVM.BottomPanelMode), Mode=OneWay}", GetAttributeValueByLocalName(bottomButton, "ContentTemplate"));
         Assert.Equal("{x:Bind LayoutVM.BottomPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Dock}", GetAttributeValueByLocalName(bottomButton, "IsChecked"));
@@ -562,9 +572,19 @@ public class UiConventionsTests
             .Select(element => GetAttributeValueByLocalName(element, "Source"))
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .ToArray();
-        Assert.Contains("ms-appx:///Styles/AuxiliaryPanelIcons.xaml", appSources);
+        Assert.DoesNotContain("ms-appx:///Styles/AuxiliaryPanelIcons.xaml", appSources);
+        Assert.Contains("ms-appx:///Styles/TitleBarIcons.xaml", appSources);
+        Assert.Contains("Picture In Picture Enter", iconDictionaryText, StringComparison.Ordinal);
+        Assert.Contains("Picture In Picture Exit", iconDictionaryText, StringComparison.Ordinal);
+        Assert.DoesNotContain("Desktop Arrow Right", iconDictionaryText, StringComparison.Ordinal);
+        Assert.DoesNotContain("Tab Desktop Arrow Left", iconDictionaryText, StringComparison.Ordinal);
+        Assert.Contains("Glyph=\"&#xE700;\"", iconDictionaryText, StringComparison.Ordinal);
 
         var iconKeys = ReadXamlKeys(iconDictionaryXaml);
+        Assert.Contains("TitleBarOpenMiniWindowIconTemplate", iconKeys);
+        Assert.Contains("TitleBarReturnToMainWindowIconTemplate", iconKeys);
+        Assert.Contains("TitleBarBackIconTemplate", iconKeys);
+        Assert.Contains("TitleBarToggleLeftNavIconTemplate", iconKeys);
         Assert.Contains("BottomPanelTitleBarRegularIconTemplate", iconKeys);
         Assert.Contains("BottomPanelTitleBarFilledIconTemplate", iconKeys);
         Assert.Contains("DiffPanelTitleBarRegularIconTemplate", iconKeys);

@@ -302,22 +302,25 @@
                         <Button x:Name="TitleBarBackButton"
                                 x:Uid="TitleBarBackButton"
                                 Style="{StaticResource TitleBarCommandButtonStyle}"
+                                Content="Icon"
+                                ContentTemplate="{StaticResource TitleBarBackIconTemplate}"
                                 Click="OnTitleBarBackClick">
-                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE72B;"/>
                         </Button>
                         <Button x:Name="TitleBarToggleLeftNavButton"
                                 x:Uid="TitleBarToggleLeftNavButton"
                                 Style="{StaticResource TitleBarCommandButtonStyle}"
                                 AutomationProperties.AutomationId="TitleBar.ToggleSidebar"
+                                Content="Icon"
+                                ContentTemplate="{StaticResource TitleBarToggleLeftNavIconTemplate}"
                                 Click="OnToggleLeftNavClick">
-                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE700;"/>
                         </Button>
                         <Button x:Name="TitleBarMiniWindowButton"
                                 x:Uid="TitleBarMiniWindowButton"
                                 Style="{StaticResource TitleBarCommandButtonStyle}"
                                 Visibility="{x:Bind Preferences.IsMiniWindowSupported, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                Content="Icon"
+                                ContentTemplate="{StaticResource TitleBarOpenMiniWindowIconTemplate}"
                                 Command="{x:Bind ChatVM.OpenMiniWindowCommand}">
-                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xEE49;" FontSize="14" />
                         </Button>
                     </StackPanel>
 

@@ -116,6 +116,36 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void App_MergesSharedTitleBarIconResources()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\App.xaml");
+
+        Assert.Contains("Styles/TitleBarIcons.xaml", xaml);
+    }
+
+    [Fact]
+    public void TitleBarButtons_UseSharedIconTemplates()
+    {
+        var mainPageXaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");
+        var miniChatXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml");
+        var titleBarIconsXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Styles\TitleBarIcons.xaml");
+
+        Assert.Contains("ContentTemplate=\"{StaticResource TitleBarBackIconTemplate}\"", mainPageXaml);
+        Assert.Contains("ContentTemplate=\"{StaticResource TitleBarToggleLeftNavIconTemplate}\"", mainPageXaml);
+        Assert.Contains("ContentTemplate=\"{StaticResource TitleBarOpenMiniWindowIconTemplate}\"", mainPageXaml);
+        Assert.DoesNotContain("Glyph=\"&#xE72B;\"", mainPageXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Glyph=\"&#xE700;\"", mainPageXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Glyph=\"&#xEE49;\"", mainPageXaml, StringComparison.Ordinal);
+        Assert.Contains("ContentTemplate=\"{StaticResource TitleBarReturnToMainWindowIconTemplate}\"", miniChatXaml);
+        Assert.DoesNotContain("Glyph=\"&#xE73F;\"", miniChatXaml, StringComparison.Ordinal);
+        Assert.Contains("Picture In Picture Enter", titleBarIconsXaml);
+        Assert.Contains("Picture In Picture Exit", titleBarIconsXaml);
+        Assert.DoesNotContain("Desktop Arrow Right", titleBarIconsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Tab Desktop Arrow Left", titleBarIconsXaml, StringComparison.Ordinal);
+        Assert.Contains("Glyph=\"&#xE700;\"", titleBarIconsXaml);
+    }
+
+    [Fact]
     public void MainPage_SearchStringsAreLocalized()
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");

@@ -9,7 +9,7 @@
                 <ResourceDictionary.MergedDictionaries>
                     <!-- WinUI 3 default control resources (provides TextFillColorPrimaryBrush, etc.) -->
                     <controls:XamlControlsResources />
-                    <ResourceDictionary Source="ms-appx:///Styles/AuxiliaryPanelIcons.xaml" />
+                    <ResourceDictionary Source="ms-appx:///Styles/TitleBarIcons.xaml" />
                     <ResourceDictionary Source="ms-appx:///Styles/TitleBarCommandButtonStyle.xaml" />
                     <ResourceDictionary Source="ms-appx:///Styles/TitleBarToggleButtonStyle.xaml" />
                     <styles:ChatStyles />

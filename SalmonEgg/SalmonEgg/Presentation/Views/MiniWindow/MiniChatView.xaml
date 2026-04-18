@@ -80,10 +80,10 @@
                         Grid.Column="1"
                         x:Uid="MiniChatReturnButton"
                         Style="{StaticResource TitleBarCommandButtonStyle}"
+                        Content="Icon"
+                        ContentTemplate="{StaticResource TitleBarReturnToMainWindowIconTemplate}"
                         VerticalAlignment="Center"
                         Command="{x:Bind ViewModel.ReturnToMainWindowCommand}">
-                    <!-- "BackToWindow" glyph (Segoe Fluent Icons / MDL2-compatible on WinUI) -->
-                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE73F;" />
                 </Button>
             </Grid>
         </Border>

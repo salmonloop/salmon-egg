@@ -3,12 +3,51 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!--
-      Title bar auxiliary icons use Fluent regular/filled pairs so unchecked state
-      matches fluenticon.com outlined assets while checked state switches to filled.
+      Title bar command icons use shared resources so pages never inline icon assets.
+      Sources:
+      - Arrow Left
+      - Picture In Picture Enter
+      - Picture In Picture Exit
+      - Existing collapse glyph semantic preserved with Segoe MDL2 E700
+      https://github.com/microsoft/fluentui-system-icons
+    -->
+
+    <DataTemplate x:Key="TitleBarBackIconTemplate">
+        <Path Width="20"
+              Height="20"
+              Stretch="Uniform"
+              Fill="{ThemeResource TextFillColorPrimaryBrush}"
+              Data="M9.15898 16.8666C9.36292 17.0528 9.67918 17.0384 9.86536 16.8345C10.0515 16.6305 10.0371 16.3143 9.8332 16.1281L3.66535 10.4974H17.4961C17.7722 10.4974 17.9961 10.2735 17.9961 9.99736C17.9961 9.72122 17.7722 9.49736 17.4961 9.49736H3.66824L9.8332 3.86927C10.0371 3.68309 10.0515 3.36684 9.86536 3.16289C9.67918 2.95895 9.36292 2.94456 9.15898 3.13074L2.24263 9.44478C2.10268 9.57254 2.02285 9.74008 2.00314 9.91323C1.99851 9.94058 1.99609 9.96869 1.99609 9.99736C1.99609 10.0242 1.99821 10.0506 2.00229 10.0763C2.02047 10.2522 2.10058 10.4229 2.24263 10.5526L9.15898 16.8666Z" />
+    </DataTemplate>
+
+    <DataTemplate x:Key="TitleBarToggleLeftNavIconTemplate">
+        <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                  Glyph="&#xE700;" />
+    </DataTemplate>
+
+    <DataTemplate x:Key="TitleBarOpenMiniWindowIconTemplate">
+        <Path Width="20"
+              Height="20"
+              Stretch="Uniform"
+              Fill="{ThemeResource TextFillColorPrimaryBrush}"
+              Data="M2 5.75C2 4.23122 3.23122 3 4.75 3H15.25C16.7688 3 18 4.23122 18 5.75V10H17V5.75C17 4.7835 16.2165 4 15.25 4H4.75C3.7835 4 3 4.7835 3 5.75V12.25C3 13.2165 3.7835 14 4.75 14H9V15H4.75C3.23122 15 2 13.7688 2 12.25V5.75ZM11.5 11C10.6716 11 10 11.6716 10 12.5V16.5C10 17.3284 10.6716 18 11.5 18H17.5C18.3284 18 19 17.3284 19 16.5V12.5C19 11.6716 18.3284 11 17.5 11H11.5ZM4.64645 5.64645C4.84171 5.45118 5.15829 5.45118 5.35355 5.64645L8 8.29289V6.5C8 6.22386 8.22386 6 8.5 6C8.77614 6 9 6.22386 9 6.5V9.5C9 9.77614 8.77614 10 8.5 10H5.5C5.22386 10 5 9.77614 5 9.5C5 9.22386 5.22386 9 5.5 9H7.29289L4.64645 6.35355C4.45118 6.15829 4.45118 5.84171 4.64645 5.64645Z" />
+    </DataTemplate>
+
+    <DataTemplate x:Key="TitleBarReturnToMainWindowIconTemplate">
+        <Path Width="20"
+              Height="20"
+              Stretch="Uniform"
+              Fill="{ThemeResource TextFillColorPrimaryBrush}"
+              Data="M8.5 9C9.32843 9 10 8.32843 10 7.5V3.5C10 2.67157 9.32843 2 8.5 2H2.5C1.67157 2 1 2.67157 1 3.5V7.5C1 8.15311 1.4174 8.70873 2 8.91465L2.01891 8.92119C2.16992 8.97229 2.33173 9 2.5 9H8.5ZM15.25 6H11V5H15.25C16.7688 5 18 6.23122 18 7.75V14.25C18 15.7688 16.7688 17 15.25 17H4.75C3.23122 17 2 15.7688 2 14.25V9.94999C2.16155 9.98278 2.32877 10 2.5 10H3V14.25C3 15.2165 3.7835 16 4.75 16H15.25C16.2165 16 17 15.2165 17 14.25V7.75C17 6.7835 16.2165 6 15.25 6ZM14 12.2929L11.3536 9.64645C11.1583 9.45118 10.8417 9.45118 10.6464 9.64645C10.4512 9.84171 10.4512 10.1583 10.6464 10.3536L13.2929 13H11.5C11.2239 13 11 13.2239 11 13.5C11 13.7761 11.2239 14 11.5 14H14.4995C14.4993 14 14.4997 14 14.4995 14C14.5075 14 14.516 13.9998 14.524 13.9994C14.5811 13.9967 14.6378 13.9842 14.6914 13.9621C14.7504 13.9377 14.8056 13.9015 14.8536 13.8536C14.9015 13.8056 14.9377 13.7504 14.9621 13.6914C14.9861 13.6333 14.9996 13.5697 15 13.503C15 13.502 15 13.501 15 13.5V10.5C15 10.2239 14.7761 10 14.5 10C14.2239 10 14 10.2239 14 10.5V12.2929Z" />
+    </DataTemplate>
+
+    <!--
+      Auxiliary title bar icons use Fluent regular/filled pairs so unchecked state
+      stays outlined while checked state switches to filled.
       Sources referenced:
       - Checkmark Circle Square
       - Item Compare
-      - Layout Row Two Split Bottom (used for BottomPanel semantics)
+      - Layout Row Two Split Bottom
     -->
 
     <DataTemplate x:Key="BottomPanelTitleBarRegularIconTemplate">
@@ -58,5 +97,4 @@
               Fill="{ThemeResource TextFillColorPrimaryBrush}"
               Data="M7 13c3.314 0 6-2.686 6-6s-2.686-6-6-6-6 2.686-6 6 2.686 6 6 6zm2.854-7.146l-3 3c-0.196 0.195-0.512 0.195-0.708 0l-1.5-1.5c-0.195-0.196-0.195-0.512 0-0.708 0.196-0.195 0.512-0.195 0.708 0L6.5 7.793l2.646-2.647c0.196-0.195 0.512-0.195 0.707 0 0.196 0.196 0.196 0.512 0 0.708zM8 13.928V16c0 1.657 1.343 3 3 3h5c1.657 0 3-1.343 3-3v-5c0-1.657-1.343-3-3-3h-2.07c-0.05 0.342-0.123 0.676-0.22 1H16c1.105 0 2 0.895 2 2v5c0 1.105-0.895 2-2 2h-5c-1.105 0-2-0.895-2-2v-2.29c-0.324 0.097-0.658 0.17-1 0.22zm8.354-1.575c0.195-0.196 0.195-0.512 0-0.708-0.196-0.195-0.512-0.195-0.708 0L13 14.293l-1.146-1.147c-0.196-0.195-0.512-0.195-0.708 0-0.195 0.196-0.195 0.512 0 0.708l1.5 1.5c0.196 0.195 0.512 0.195 0.708 0l3-3z" />
     </DataTemplate>
-
 </ResourceDictionary>
