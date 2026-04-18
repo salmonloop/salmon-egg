@@ -28,6 +28,7 @@ using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.Core.Mvux.ShellLayout;
 using SalmonEgg.Presentation.Core.Services;
+using SalmonEgg.Presentation.Core.Services.Input;
 using SalmonEgg.Presentation.Core.ViewModels.ShellLayout;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.Utilities;
@@ -83,7 +84,10 @@ public sealed partial class MainPage : Page
     private readonly ILogger<MainPage> _logger;
     private readonly MainNavigationViewAdapter _mainNavigationViewAdapter;
     private readonly MainWindowTitleBarAdapter _titleBarAdapter;
+    private readonly IGamepadInputService _gamepadInputService;
+    private readonly IGamepadNavigationDispatcher _gamepadNavigationDispatcher;
     private readonly SalmonEgg.Presentation.Logic.SearchInteractionLogic _searchLogic = new();
+    private bool _isGamepadInputAttached;
 
     public MainPage()
     {
@@ -99,6 +103,8 @@ public sealed partial class MainPage : Page
         _metricsSink = App.ServiceProvider.GetRequiredService<IShellLayoutMetricsSink>();
         var navigationCoordinator = App.ServiceProvider.GetRequiredService<INavigationCoordinator>();
         _logger = App.ServiceProvider.GetRequiredService<ILogger<MainPage>>();
+        _gamepadInputService = App.ServiceProvider.GetRequiredService<IGamepadInputService>();
+        _gamepadNavigationDispatcher = App.ServiceProvider.GetRequiredService<IGamepadNavigationDispatcher>();
         IsGuiAutomationMode = string.Equals(
             Environment.GetEnvironmentVariable("SALMONEGG_GUI"),
             "1",
@@ -173,6 +179,7 @@ public sealed partial class MainPage : Page
 
     private void OnMainPageUnloaded(object sender, RoutedEventArgs e)
     {
+        DetachGamepadInput();
         Preferences.PropertyChanged -= OnPreferencesPropertyChanged;
         _chatViewModel.PropertyChanged -= OnChatViewModelPropertyChanged;
         NavVM.PropertyChanged -= OnNavigationViewModelPropertyChanged;
@@ -599,6 +606,7 @@ public sealed partial class MainPage : Page
 
     private async void OnMainPageLoaded(object sender, RoutedEventArgs e)
     {
+        AttachGamepadInput();
         _titleBarAdapter.Configure(App.MainWindowInstance);
 #if WINDOWS
         _metricsProvider.Attach(App.MainWindowInstance!, _titleBarAdapter.AppWindowTitleBar);
@@ -613,6 +621,41 @@ public sealed partial class MainPage : Page
         InitializeTray();
 #endif
         await _chatViewModel.RestoreAsync();
+    }
+
+    private void AttachGamepadInput()
+    {
+        if (_isGamepadInputAttached)
+        {
+            return;
+        }
+
+        _gamepadInputService.IntentRaised += OnGamepadIntentRaised;
+        _gamepadInputService.Start();
+        _isGamepadInputAttached = true;
+    }
+
+    private void DetachGamepadInput()
+    {
+        if (!_isGamepadInputAttached)
+        {
+            return;
+        }
+
+        _gamepadInputService.IntentRaised -= OnGamepadIntentRaised;
+        _gamepadInputService.Stop();
+        _isGamepadInputAttached = false;
+    }
+
+    private void OnGamepadIntentRaised(object? sender, GamepadNavigationIntent intent)
+    {
+        if (!DispatcherQueue.HasThreadAccess)
+        {
+            _ = DispatcherQueue.TryEnqueue(() => OnGamepadIntentRaised(sender, intent));
+            return;
+        }
+
+        _ = _gamepadNavigationDispatcher.TryDispatch(intent);
     }
 
     private void OnAppTitleBarLoaded(object sender, RoutedEventArgs e)

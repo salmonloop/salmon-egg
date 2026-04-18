@@ -33,9 +33,13 @@ using SalmonEgg.Presentation.Core.Mvux.ShellLayout;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Core.Services.Search;
+using SalmonEgg.Presentation.Core.Services.Input;
 using SalmonEgg.Presentation.Core.ViewModels.ShellLayout;
 using Uno.Extensions.Reactive;
 using SalmonEgg.Presentation.Core.Services;
+using SalmonEgg.Presentation.Services.Input;
+#if WINDOWS
+#endif
 
 namespace SalmonEgg;
 
@@ -127,6 +131,13 @@ public static class DependencyInjection
             }
             return new WinUiDispatcher(queue!, logger);
         });
+#if WINDOWS
+        services.AddSingleton<WindowsRawGameControllerMapper>();
+        services.AddSingleton<IGamepadInputService, WindowsGamepadInputService>();
+#else
+        services.AddSingleton<IGamepadInputService, NoOpGamepadInputService>();
+#endif
+        services.AddSingleton<IGamepadNavigationDispatcher, MainShellGamepadNavigationDispatcher>();
 
         // Secure Storage
         services.AddSingleton<ISecureStorage, SecureStorage>();

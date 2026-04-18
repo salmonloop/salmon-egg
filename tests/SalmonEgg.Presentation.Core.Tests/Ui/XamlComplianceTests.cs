@@ -241,6 +241,20 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void ChatInputArea_DoesNotHijackGeneralFocusFlowForGamepadEntry()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml");
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml.cs");
+
+        Assert.Contains("XYFocusKeyboardNavigation=\"Enabled\"", xaml);
+        Assert.Contains("x:Name=\"SlashCommandsList\"", xaml);
+        Assert.DoesNotContain("FocusEngaged=\"OnInputAreaFocusEngaged\"", xaml);
+        Assert.DoesNotContain("FocusDisengaged=\"OnInputAreaFocusDisengaged\"", xaml);
+        Assert.DoesNotContain("private void OnInputAreaFocusEngaged(", code);
+        Assert.DoesNotContain("private void OnInputAreaFocusDisengaged(", code);
+    }
+
+    [Fact]
     public void ChatStyles_DoNotUseHardcodedWhiteForeground()
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Styles\ChatStyles.xaml");
@@ -279,6 +293,19 @@ public sealed class XamlComplianceTests
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Start\StartView.xaml");
 
         Assert.DoesNotContain("ChildrenTransitions=\"{x:Bind", xaml);
+    }
+
+    [Fact]
+    public void StartView_ComposerPreservesDirectLayoutWithoutSyntheticFocusHost()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Start\StartView.xaml");
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Start\StartView.xaml.cs");
+
+        Assert.Contains("<Border x:Name=\"ComposerShell\"", xaml);
+        Assert.Contains("Grid.Row=\"1\"", xaml);
+        Assert.DoesNotContain("x:Name=\"ComposerFocusHost\"", xaml);
+        Assert.DoesNotContain("FocusEngaged=\"OnComposerFocusHostFocusEngaged\"", xaml);
+        Assert.DoesNotContain("private void OnComposerFocusHostFocusEngaged(", code);
     }
 
     [Fact]
@@ -420,6 +447,97 @@ public sealed class XamlComplianceTests
         Assert.Contains("x:Uid=\"DiscoverSessionsConnectionError\"", xaml);
         Assert.Contains("x:Uid=\"DiscoverSessionsImportButton\"", xaml);
         Assert.Contains("x:Uid=\"DiscoverSessionsBackButton\"", xaml);
+    }
+
+    [Fact]
+    public void DiscoverSessionsPage_UsesNativeFocusEngagementOnPrimaryLists()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Discover\DiscoverSessionsPage.xaml");
+
+        Assert.Contains("x:Name=\"ProfilesList\"", xaml);
+        Assert.Contains("x:Name=\"SessionsList\"", xaml);
+        Assert.Contains("ProfilesList", xaml);
+        Assert.Contains("SessionsList", xaml);
+        Assert.Contains("IsFocusEngagementEnabled=\"True\"", xaml);
+    }
+
+    [Fact]
+    public void MainPage_SearchFlyout_DoesNotStealFocusFromSearchBoxOnOpenOrClose()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");
+        var code = LoadText(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
+
+        Assert.Contains("x:Name=\"SearchPanelBorder\"", xaml);
+        Assert.Contains("XYFocusKeyboardNavigation=\"Enabled\"", xaml);
+        Assert.Contains("IsTabStop=\"False\"", xaml);
+        Assert.DoesNotContain("private void TryFocusSearchPanelPrimaryAction()", code);
+        Assert.DoesNotContain("DispatcherQueue.TryEnqueue(TryFocusSearchPanelPrimaryAction)", code);
+        Assert.DoesNotContain("DispatcherQueue.TryEnqueue(() => TopSearchBox.Focus(FocusState.Programmatic))", code);
+    }
+
+    [Fact]
+    public void DependencyInjection_RegistersGamepadInputBehindAnAbstraction()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\DependencyInjection.cs");
+
+        Assert.Contains("IGamepadInputService", code);
+        Assert.DoesNotContain("new WindowsGamepadInputService(", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WindowsGamepadInputService_UsesRawFallbackAsASecondaryPath()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\WindowsGamepadInputService.cs");
+
+        Assert.Contains("RawGameController", code);
+        Assert.Contains("Gamepad.Gamepads", code);
+    }
+
+    [Fact]
+    public void MainPage_GamepadNavigation_UsesServiceAndDoesNotMaintainSyntheticSelectionState()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
+
+        Assert.Contains("IGamepadInputService", code);
+        Assert.DoesNotContain("currentGamepadIndex", code, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("selectedByGamepad", code, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void MainShellGamepadNavigationDispatcher_UsesNativeToggleAndExpandCollapsePatterns()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\MainShellGamepadNavigationDispatcher.cs");
+
+        Assert.Contains("IToggleProvider", code);
+        Assert.Contains("IExpandCollapseProvider", code);
+    }
+
+    [Fact]
+    public void WindowsRawGameControllerMapper_UsesTypedGameControllerButtonLabels()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\WindowsRawGameControllerMapper.cs");
+
+        Assert.Contains("GameControllerButtonLabel", code);
+        Assert.DoesNotContain("ToString()", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WindowsGamepadInputService_ConsidersActiveRawControllersEvenWhenStandardGamepadsAreConnected()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\WindowsGamepadInputService.cs");
+
+        Assert.Contains("foreach (var gamepad in", code);
+        Assert.Contains("foreach (var controller in", code);
+        Assert.DoesNotContain("var gamepad = GetPrimaryGamepad()", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MainShellGamepadNavigationDispatcher_BoundsDirectionalNavigationToTheFocusedVisualTree()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\MainShellGamepadNavigationDispatcher.cs");
+
+        Assert.Contains("GetNavigationSearchRoot()", code);
+        Assert.Contains("VisualTreeHelper.GetParent", code);
     }
 
 

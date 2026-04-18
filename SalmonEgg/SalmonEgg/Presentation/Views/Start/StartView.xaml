@@ -172,7 +172,8 @@
                 <ScrollViewer HorizontalScrollMode="Enabled"
                               HorizontalScrollBarVisibility="Hidden"
                               VerticalScrollMode="Disabled"
-                              VerticalScrollBarVisibility="Disabled">
+                              VerticalScrollBarVisibility="Disabled"
+                              XYFocusKeyboardNavigation="Enabled">
                     <ItemsControl x:Name="HeroSuggestionsHost"
                                   HorizontalAlignment="Center"
                                   ItemsSource="{x:Bind ViewModel.Suggestions, Mode=OneWay}">
@@ -234,10 +235,12 @@
                 </TransformGroup>
             </Border.RenderTransform>
             <Grid RowDefinitions="Auto,Auto"
-                  RowSpacing="12">
+                  RowSpacing="12"
+                  XYFocusKeyboardNavigation="Enabled">
                 <Grid Grid.Row="0"
                       ColumnDefinitions="*,Auto"
-                      ColumnSpacing="12">
+                      ColumnSpacing="12"
+                      XYFocusKeyboardNavigation="Enabled">
                     <TextBox x:Name="StartPromptBox"
                              x:Uid="ChatInputBox"
                              Text="{x:Bind ViewModel.StartPrompt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -283,7 +286,8 @@
                       Grid.Row="1"
                       x:Load="{x:Bind ViewModel.IsComposerExpanded, Mode=OneWay}"
                       ColumnDefinitions="*,*,Auto"
-                      ColumnSpacing="10">
+                      ColumnSpacing="10"
+                      XYFocusKeyboardNavigation="Enabled">
                     <ComboBox x:Name="StartAgentSelector"
                               Grid.Column="0"
                               AutomationProperties.AutomationId="StartView.AgentSelector"

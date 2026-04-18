@@ -30,7 +30,8 @@
         </Storyboard>
     </Page.Resources>
 
-    <Grid x:Name="LayoutRoot">
+    <Grid x:Name="LayoutRoot"
+          XYFocusKeyboardNavigation="Enabled">
         <Grid.ColumnDefinitions>
             <!-- Left Pane: Profiles -->
             <ColumnDefinition Width="320" />
@@ -138,6 +139,7 @@
                     SelectedItem="{x:Bind ViewModel.SelectedProfile, Mode=TwoWay}"
                     Visibility="{x:Bind ViewModel.ProfilesViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter='Invert'}"
                     SelectionMode="Single"
+                    IsFocusEngagementEnabled="True"
                     IsItemClickEnabled="True"
                     ItemClick="OnProfileItemClick">
                 <ListView.ItemTemplate>
@@ -374,6 +376,7 @@
                         Grid.Row="1"
                         Visibility="{x:Bind ViewModel.IsListVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                         ItemsSource="{x:Bind ViewModel.AgentSessions, Mode=OneWay}"
+                        IsFocusEngagementEnabled="True"
                         SelectionMode="None"
                         IsItemClickEnabled="False"
                         Padding="0,0,0,40">

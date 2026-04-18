@@ -7,6 +7,7 @@
     xmlns:converters="using:SalmonEgg.Presentation.Converters"
     xmlns:vm="using:SalmonEgg.Presentation.ViewModels.Chat"
     xmlns:models="using:SalmonEgg.Presentation.Models"
+    XYFocusKeyboardNavigation="Enabled"
     mc:Ignorable="d">
 
     <UserControl.Resources>
@@ -16,7 +17,8 @@
 
     <Border Padding="20,0,20,20"
             Background="Transparent">
-        <Grid MaxWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}">
+        <Grid MaxWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}"
+              XYFocusKeyboardNavigation="Enabled">
             <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
                 <!-- Slash commands menu -->
                 <Border Grid.Row="0"
@@ -26,7 +28,8 @@
                         CornerRadius="10"
                         Visibility="{x:Bind ViewModel.ShowSlashCommands, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                     <StackPanel Padding="8" Spacing="6">
-                        <ListView ItemsSource="{x:Bind ViewModel.FilteredSlashCommands, Mode=OneWay}"
+                        <ListView x:Name="SlashCommandsList"
+                                  ItemsSource="{x:Bind ViewModel.FilteredSlashCommands, Mode=OneWay}"
                                   SelectedItem="{x:Bind ViewModel.SelectedSlashCommand, Mode=TwoWay}"
                                   SelectionMode="Single"
                                   MaxHeight="220">
@@ -113,7 +116,9 @@
                         </Grid>
 
                         <!-- Bottom Tools Strip -->
-                        <Grid Grid.Row="1" ColumnDefinitions="*,Auto">
+                        <Grid Grid.Row="1"
+                              ColumnDefinitions="*,Auto"
+                              XYFocusKeyboardNavigation="Enabled">
                             <StackPanel Orientation="Horizontal"
                                         Spacing="8"
                                         HorizontalAlignment="Left"

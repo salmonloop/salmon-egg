@@ -295,6 +295,7 @@
                     <StackPanel x:Name="TitleBarLeftButtons"
                                 Grid.Column="0"
                                 Orientation="Horizontal"
+                                XYFocusKeyboardNavigation="Enabled"
                                 Spacing="4"
                                 Margin="8,0,0,0"
                                 VerticalAlignment="Center">
@@ -350,6 +351,7 @@
                                     </Style>
                                 </Flyout.FlyoutPresenterStyle>
                                 <Grid x:Name="SearchPanelBorder"
+                                      XYFocusKeyboardNavigation="Enabled"
                                       MinWidth="{x:Bind TopSearchBox.ActualWidth}"
                                       MaxWidth="{x:Bind TopSearchBox.ActualWidth}"
                                       HorizontalAlignment="Stretch">
@@ -363,7 +365,10 @@
                                                    VerticalAlignment="Center"
                                                    Opacity="0.8" />
                                     </StackPanel>
-                                    <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="400" HorizontalAlignment="Stretch">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                                  MaxHeight="400"
+                                                  HorizontalAlignment="Stretch"
+                                                  IsTabStop="False">
                                         <StackPanel HorizontalAlignment="Stretch">
                                             <muxc:ItemsRepeater ItemsSource="{x:Bind SearchVM.ResultGroups, Mode=OneWay}" HorizontalAlignment="Stretch">
                                                 <muxc:ItemsRepeater.Layout>
@@ -484,6 +489,7 @@
                     <StackPanel x:Name="TitleBarRightButtons"
                                 Grid.Column="2"
                                 Orientation="Horizontal"
+                                XYFocusKeyboardNavigation="Enabled"
                                 Spacing="8"
                                 VerticalAlignment="Center"
                                 Margin="0">

@@ -381,6 +381,26 @@ internal sealed class WindowsGuiAppSession : IDisposable
         Keyboard.Release(VirtualKeyShort.RETURN);
     }
 
+    public void PressUp()
+    {
+        PressKey(VirtualKeyShort.UP);
+    }
+
+    public void PressDown()
+    {
+        PressKey(VirtualKeyShort.DOWN);
+    }
+
+    public void PressLeft()
+    {
+        PressKey(VirtualKeyShort.LEFT);
+    }
+
+    public void PressRight()
+    {
+        PressKey(VirtualKeyShort.RIGHT);
+    }
+
     public bool? TryGetIsSelected(string automationId)
     {
         var element = TryFindByAutomationId(automationId, TimeSpan.FromSeconds(2));
@@ -414,6 +434,12 @@ internal sealed class WindowsGuiAppSession : IDisposable
     {
         ArgumentNullException.ThrowIfNull(element);
         element.Focus();
+    }
+
+    private static void PressKey(VirtualKeyShort key)
+    {
+        Keyboard.Press(key);
+        Keyboard.Release(key);
     }
 
     private static string NormalizeVisibleText(string? value)
