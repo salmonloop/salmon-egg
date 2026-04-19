@@ -70,16 +70,16 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
 
 
         // 计划条目
-       [ObservableProperty]
-       private PlanEntryViewModel? _planEntry;
+        [ObservableProperty]
+        private PlanEntryViewModel? _planEntry;
 
-       // 模式切换
-       [ObservableProperty]
-       private string? _modeId;
+        // 模式切换
+        [ObservableProperty]
+        private string? _modeId;
 
-       // 资源内容
-       [ObservableProperty]
-       private ResourceViewModel? _resourceViewModel;
+        // 资源内容
+        [ObservableProperty]
+        private ResourceViewModel? _resourceViewModel;
 
         public ChatMessageViewModel()
         {
@@ -146,7 +146,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
         public static ChatMessageViewModel CreateFromToolCall(string id, string? toolCallId, string? rawInput, string? rawOutput, ToolCallKind? kind, ToolCallStatus? status, string? title, bool isOutgoing = false)
         {
             var toolCallJson = !string.IsNullOrEmpty(rawInput) ? rawInput : (!string.IsNullOrEmpty(rawOutput) ? rawOutput : string.Empty);
-            
+
             return new ChatMessageViewModel
             {
                 Id = id,
@@ -180,105 +180,105 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
         }
 
         public static ChatMessageViewModel CreateFromModeChange(string id, string? modeId, string? title, bool isOutgoing = false)
-       {
-           return new ChatMessageViewModel
-           {
-               Id = id,
-               IsOutgoing = isOutgoing,
-               ContentType = "mode_change",
-               ModeId = modeId,
-               Title = title ?? "Mode Changed",
-               Timestamp = DateTime.Now
-           };
-       }
+        {
+            return new ChatMessageViewModel
+            {
+                Id = id,
+                IsOutgoing = isOutgoing,
+                ContentType = "mode_change",
+                ModeId = modeId,
+                Title = title ?? "Mode Changed",
+                Timestamp = DateTime.Now
+            };
+        }
 
-      public static ChatMessageViewModel CreateFromResourceContent(string id, ResourceContentBlock block, bool isOutgoing = false)
-      {
-          return new ChatMessageViewModel
-          {
-              Id = id,
-              IsOutgoing = isOutgoing,
-              ContentType = "resource_content",
-              Title = "Resource Content",
-              Timestamp = DateTime.Now,
-              ResourceViewModel = ResourceViewModel.CreateFromContent(block)
-          };
-      }
+        public static ChatMessageViewModel CreateFromResourceContent(string id, ResourceContentBlock block, bool isOutgoing = false)
+        {
+            return new ChatMessageViewModel
+            {
+                Id = id,
+                IsOutgoing = isOutgoing,
+                ContentType = "resource_content",
+                Title = "Resource Content",
+                Timestamp = DateTime.Now,
+                ResourceViewModel = ResourceViewModel.CreateFromContent(block)
+            };
+        }
 
-       public static ChatMessageViewModel CreateFromResourceLink(string id, ResourceLinkContentBlock block, bool isOutgoing = false)
-       {
-           return new ChatMessageViewModel
-           {
-               Id = id,
-               IsOutgoing = isOutgoing,
-               ContentType = "resource_link",
-               Title = block.Title ?? block.Name ?? "Resource Link",
-               Timestamp = DateTime.Now,
-               ResourceViewModel = ResourceViewModel.CreateFromLink(block)
-           };
-       }
+        public static ChatMessageViewModel CreateFromResourceLink(string id, ResourceLinkContentBlock block, bool isOutgoing = false)
+        {
+            return new ChatMessageViewModel
+            {
+                Id = id,
+                IsOutgoing = isOutgoing,
+                ContentType = "resource_link",
+                Title = block.Title ?? block.Name ?? "Resource Link",
+                Timestamp = DateTime.Now,
+                ResourceViewModel = ResourceViewModel.CreateFromLink(block)
+            };
+        }
 
 
         public bool HasTitle => !string.IsNullOrEmpty(Title);
         public bool HasTextContent => !string.IsNullOrEmpty(TextContent);
         public bool ShouldRenderMarkdown => MarkdownRenderMode == ChatMarkdownRenderMode.MarkdownReady;
         public bool ShouldRenderPlainText => !ShouldRenderMarkdown;
-       public bool HasImageContent => !string.IsNullOrEmpty(ImageData);
-       public bool HasAudioContent => !string.IsNullOrEmpty(AudioData);
-       public bool HasToolCall => !string.IsNullOrEmpty(ToolCallId);
-       public bool HasPlanEntry => PlanEntry != null;
-       public bool HasModeChange => !string.IsNullOrEmpty(ModeId);
-       public bool HasResourceContent => ResourceViewModel?.IsResourceContent == true;
-       public bool HasResourceLink => ResourceViewModel?.IsResourceLink == true;
+        public bool HasImageContent => !string.IsNullOrEmpty(ImageData);
+        public bool HasAudioContent => !string.IsNullOrEmpty(AudioData);
+        public bool HasToolCall => !string.IsNullOrEmpty(ToolCallId);
+        public bool HasPlanEntry => PlanEntry != null;
+        public bool HasModeChange => !string.IsNullOrEmpty(ModeId);
+        public bool HasResourceContent => ResourceViewModel?.IsResourceContent == true;
+        public bool HasResourceLink => ResourceViewModel?.IsResourceLink == true;
 
 
-       public string ToolCallStatusDisplayName => ToolCallStatus switch
-       {
-           Domain.Models.Tool.ToolCallStatus.Pending => "待处理",
-           Domain.Models.Tool.ToolCallStatus.InProgress => "进行中",
-           Domain.Models.Tool.ToolCallStatus.Completed => "已完成",
-           Domain.Models.Tool.ToolCallStatus.Failed => "失败",
-           Domain.Models.Tool.ToolCallStatus.Cancelled => "已取消",
-           _ => "未知"
-       };
+        public string ToolCallStatusDisplayName => ToolCallStatus switch
+        {
+            Domain.Models.Tool.ToolCallStatus.Pending => "待处理",
+            Domain.Models.Tool.ToolCallStatus.InProgress => "进行中",
+            Domain.Models.Tool.ToolCallStatus.Completed => "已完成",
+            Domain.Models.Tool.ToolCallStatus.Failed => "失败",
+            Domain.Models.Tool.ToolCallStatus.Cancelled => "已取消",
+            _ => "未知"
+        };
 
-       public string ToolCallKindDisplayName => ToolCallKind switch
-       {
-           Domain.Models.Tool.ToolCallKind.Read => "读取",
-           Domain.Models.Tool.ToolCallKind.Edit => "编辑",
-           Domain.Models.Tool.ToolCallKind.Delete => "删除",
-           Domain.Models.Tool.ToolCallKind.Move => "移动",
-           Domain.Models.Tool.ToolCallKind.Search => "搜索",
-           Domain.Models.Tool.ToolCallKind.Execute => "执行",
-           Domain.Models.Tool.ToolCallKind.SwitchMode => "切换模式",
-           Domain.Models.Tool.ToolCallKind.Think => "思考",
-           _ => "工具"
-       };
+        public string ToolCallKindDisplayName => ToolCallKind switch
+        {
+            Domain.Models.Tool.ToolCallKind.Read => "读取",
+            Domain.Models.Tool.ToolCallKind.Edit => "编辑",
+            Domain.Models.Tool.ToolCallKind.Delete => "删除",
+            Domain.Models.Tool.ToolCallKind.Move => "移动",
+            Domain.Models.Tool.ToolCallKind.Search => "搜索",
+            Domain.Models.Tool.ToolCallKind.Execute => "执行",
+            Domain.Models.Tool.ToolCallKind.SwitchMode => "切换模式",
+            Domain.Models.Tool.ToolCallKind.Think => "思考",
+            _ => "工具"
+        };
 
-       public bool HasToolCallJson => !string.IsNullOrWhiteSpace(ToolCallJson);
+        public bool HasToolCallJson => !string.IsNullOrWhiteSpace(ToolCallJson);
 
-       public void MarkMarkdownRenderFailed()
-       {
-           IsMarkdownFallbackSticky = true;
-           RefreshMarkdownRenderMode();
-       }
+        public void MarkMarkdownRenderFailed()
+        {
+            IsMarkdownFallbackSticky = true;
+            RefreshMarkdownRenderMode();
+        }
 
-       partial void OnIsOutgoingChanged(bool value) => RefreshMarkdownRenderMode();
+        partial void OnIsOutgoingChanged(bool value) => RefreshMarkdownRenderMode();
 
-       partial void OnContentTypeChanged(string value) => RefreshMarkdownRenderMode();
+        partial void OnContentTypeChanged(string value) => RefreshMarkdownRenderMode();
 
-       partial void OnTextContentChanged(string value) => RefreshMarkdownRenderMode();
+        partial void OnTextContentChanged(string value) => RefreshMarkdownRenderMode();
 
-       partial void OnIsMarkdownFallbackStickyChanged(bool value) => RefreshMarkdownRenderMode();
+        partial void OnIsMarkdownFallbackStickyChanged(bool value) => RefreshMarkdownRenderMode();
 
-       private void RefreshMarkdownRenderMode()
-       {
-           MarkdownRenderMode = ChatMarkdownRenderPolicy.Resolve(
-               ContentType,
-               IsOutgoing,
-               TextContent,
-               IsMarkdownFallbackSticky);
-       }
+        private void RefreshMarkdownRenderMode()
+        {
+            MarkdownRenderMode = ChatMarkdownRenderPolicy.Resolve(
+                ContentType,
+                IsOutgoing,
+                TextContent,
+                IsMarkdownFallbackSticky);
+        }
     }
 
     /// <summary>

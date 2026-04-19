@@ -3,7 +3,6 @@ using System.Threading;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Serilog;
 using SalmonEgg.Application.Services;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Application.UseCases;
@@ -14,6 +13,7 @@ using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Domain.Services.Security;
+using SalmonEgg.Infrastructure.Client;
 using SalmonEgg.Infrastructure.Logging;
 using SalmonEgg.Infrastructure.Network;
 using SalmonEgg.Infrastructure.Serialization;
@@ -21,26 +21,26 @@ using SalmonEgg.Infrastructure.Services;
 using SalmonEgg.Infrastructure.Services.Security;
 using SalmonEgg.Infrastructure.Storage;
 using SalmonEgg.Infrastructure.Transport;
-using SalmonEgg.Infrastructure.Client;
+using SalmonEgg.Presentation.Core.Mvux.Chat;
+using SalmonEgg.Presentation.Core.Mvux.ShellLayout;
+using SalmonEgg.Presentation.Core.Services;
+using SalmonEgg.Presentation.Core.Services.Chat;
+using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
+using SalmonEgg.Presentation.Core.Services.Search;
+using SalmonEgg.Presentation.Core.ViewModels.ShellLayout;
+using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.ViewModels.Start;
-using SalmonEgg.Presentation.Services;
-using SalmonEgg.Presentation.Core.Mvux.Chat;
-using SalmonEgg.Presentation.Core.Mvux.ShellLayout;
-using SalmonEgg.Presentation.Core.Services.Chat;
-using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
-using SalmonEgg.Presentation.Core.Services.Search;
-using SalmonEgg.Presentation.Core.ViewModels.ShellLayout;
+using Serilog;
 using Uno.Extensions.Reactive;
-using SalmonEgg.Presentation.Core.Services;
 
 namespace SalmonEgg;
 
 /// <summary>
-    /// Dependency injection container configuration
+/// Dependency injection container configuration
 /// Requirements: 7.5
 /// </summary>
 public static class DependencyInjection
@@ -96,22 +96,22 @@ public static class DependencyInjection
 
         // Connection Manager (factory method supporting dynamic transport selection)
         services.AddSingleton<IConnectionManager>(sp =>
-        	{
-        				var protocolService = sp.GetRequiredService<IAcpProtocolService>();
-        				var logger = sp.GetRequiredService<Serilog.ILogger>();
+            {
+                var protocolService = sp.GetRequiredService<IAcpProtocolService>();
+                var logger = sp.GetRequiredService<Serilog.ILogger>();
 
-        				Infrastructure.Network.ITransport TransportFactory(TransportType type)
-        				{
-        					var l = sp.GetRequiredService<Serilog.ILogger>();
-        					return type switch
-        					{
-        						TransportType.HttpSse => new HttpSseTransport(l),
-        						_ => new WebSocketTransport(l)
-        					};
-        				}
+                Infrastructure.Network.ITransport TransportFactory(TransportType type)
+                {
+                    var l = sp.GetRequiredService<Serilog.ILogger>();
+                    return type switch
+                    {
+                        TransportType.HttpSse => new HttpSseTransport(l),
+                        _ => new WebSocketTransport(l)
+                    };
+                }
 
-        				return new ConnectionManager(protocolService, logger, TransportFactory);
-        			});
+                return new ConnectionManager(protocolService, logger, TransportFactory);
+            });
     }
 
     private static void RegisterInfrastructureServices(IServiceCollection services)

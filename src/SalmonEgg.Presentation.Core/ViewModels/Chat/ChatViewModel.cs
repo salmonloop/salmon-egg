@@ -2531,45 +2531,45 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     }
 
     [RelayCommand]
-        private async Task ApplyTransportConfigAsync()
-        {
-            await ApplyTransportConfigCoreAsync(preserveConversation: false);
-        }
+    private async Task ApplyTransportConfigAsync()
+    {
+        await ApplyTransportConfigCoreAsync(preserveConversation: false);
+    }
 
-        /// <summary>
-        /// Core logic for applying a new transport configuration.
-        /// This method tears down the existing connection and establishes a new one,
-        /// optionally preserving the active conversation's local state.
-        /// </summary>
-        private async Task ApplyTransportConfigCoreAsync(bool preserveConversation)
+    /// <summary>
+    /// Core logic for applying a new transport configuration.
+    /// This method tears down the existing connection and establishes a new one,
+    /// optionally preserving the active conversation's local state.
+    /// </summary>
+    private async Task ApplyTransportConfigCoreAsync(bool preserveConversation)
+    {
+        try
         {
-            try
-            {
-                var result = preserveConversation
-                    ? await _acpConnectionCommands
-                        .ApplyTransportConfigurationAsync(
-                            TransportConfig,
-                            this,
-                            new AcpConnectionContext(CurrentSessionId, PreserveConversation: true),
-                            CancellationToken.None)
-                        .ConfigureAwait(false)
-                    : await _acpConnectionCommands
-                        .ApplyTransportConfigurationAsync(TransportConfig, this, preserveConversation)
-                        .ConfigureAwait(false);
+            var result = preserveConversation
+                ? await _acpConnectionCommands
+                    .ApplyTransportConfigurationAsync(
+                        TransportConfig,
+                        this,
+                        new AcpConnectionContext(CurrentSessionId, PreserveConversation: true),
+                        CancellationToken.None)
+                    .ConfigureAwait(false)
+                : await _acpConnectionCommands
+                    .ApplyTransportConfigurationAsync(TransportConfig, this, preserveConversation)
+                    .ConfigureAwait(false);
 
             CacheAuthMethods(result.InitializeResponse);
             ClearAuthenticationRequirement();
             UpdateAgentInfo();
 
-                if (string.IsNullOrWhiteSpace(CurrentSessionId))
-                {
-                    var sessionId = Guid.NewGuid().ToString("N");
-                    await _sessionManager.CreateSessionAsync(sessionId, GetActiveSessionCwdOrDefault()).ConfigureAwait(false);
-                    await ActivateConversationAsync(sessionId).ConfigureAwait(false);
-                }
-
-                ShowTransportConfigPanel = false;
+            if (string.IsNullOrWhiteSpace(CurrentSessionId))
+            {
+                var sessionId = Guid.NewGuid().ToString("N");
+                await _sessionManager.CreateSessionAsync(sessionId, GetActiveSessionCwdOrDefault()).ConfigureAwait(false);
+                await ActivateConversationAsync(sessionId).ConfigureAwait(false);
             }
+
+            ShowTransportConfigPanel = false;
+        }
         catch (OperationCanceledException)
         {
             Logger.LogDebug("Transport apply was superseded by a newer request.");
@@ -2578,7 +2578,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         {
             Logger.LogError(ex, "Error during connection");
         }
-        }
+    }
 
     private async Task ApplySessionNewResponseAsync(string conversationId, SessionNewResponse response)
     {
@@ -2594,7 +2594,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         var currentVersion = Interlocked.Read(ref _activationVersion);
         var delta = _acpSessionUpdateProjector.ProjectSessionLoad(response);
         await ApplySessionUpdateDeltaAsync(conversationId, delta).ConfigureAwait(true);
-        
+
         Logger.LogInformation(
             "Session load state projected: {Count} (ActivationVersion: {Version})",
             delta.AvailableModes?.Count ?? 0,
@@ -2607,40 +2607,40 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         ShowTransportConfigPanel = !ShowTransportConfigPanel;
     }
 
-       private void SubscribeToChatService(IChatService chatService)
-       {
-           chatService.SessionUpdateReceived += OnSessionUpdateReceived;
-           chatService.PermissionRequestReceived += OnPermissionRequestReceived;
-            chatService.FileSystemRequestReceived += OnFileSystemRequestReceived;
-            chatService.TerminalRequestReceived += OnTerminalRequestReceived;
-            chatService.AskUserRequestReceived += OnAskUserRequestReceived;
-            chatService.ErrorOccurred += OnErrorOccurred;
+    private void SubscribeToChatService(IChatService chatService)
+    {
+        chatService.SessionUpdateReceived += OnSessionUpdateReceived;
+        chatService.PermissionRequestReceived += OnPermissionRequestReceived;
+        chatService.FileSystemRequestReceived += OnFileSystemRequestReceived;
+        chatService.TerminalRequestReceived += OnTerminalRequestReceived;
+        chatService.AskUserRequestReceived += OnAskUserRequestReceived;
+        chatService.ErrorOccurred += OnErrorOccurred;
 
-           UpdateAgentInfo();
-       }
+        UpdateAgentInfo();
+    }
 
-       private void UnsubscribeFromChatService(IChatService chatService)
-       {
-           chatService.SessionUpdateReceived -= OnSessionUpdateReceived;
-           chatService.PermissionRequestReceived -= OnPermissionRequestReceived;
-            chatService.FileSystemRequestReceived -= OnFileSystemRequestReceived;
-            chatService.TerminalRequestReceived -= OnTerminalRequestReceived;
-            chatService.AskUserRequestReceived -= OnAskUserRequestReceived;
-            chatService.ErrorOccurred -= OnErrorOccurred;
+    private void UnsubscribeFromChatService(IChatService chatService)
+    {
+        chatService.SessionUpdateReceived -= OnSessionUpdateReceived;
+        chatService.PermissionRequestReceived -= OnPermissionRequestReceived;
+        chatService.FileSystemRequestReceived -= OnFileSystemRequestReceived;
+        chatService.TerminalRequestReceived -= OnTerminalRequestReceived;
+        chatService.AskUserRequestReceived -= OnAskUserRequestReceived;
+        chatService.ErrorOccurred -= OnErrorOccurred;
+    }
+
+    private void SubscribeToEvents()
+    {
+        // Only subscribe if _chatService is not null.
+        // In constructor, _chatService might be null; it will be created in ApplyTransportConfigAsync.
+        if (_chatService != null)
+        {
+            SubscribeToChatService(_chatService);
+
+            UpdateAgentInfo();
+
         }
-
-        private void SubscribeToEvents()
-      {
-          // Only subscribe if _chatService is not null. 
-          // In constructor, _chatService might be null; it will be created in ApplyTransportConfigAsync.
-          if (_chatService != null)
-          {
-              SubscribeToChatService(_chatService);
-
-              UpdateAgentInfo();
-
-          }
-      }
+    }
 
     private void OnSessionUpdateReceived(object? sender, SessionUpdateEventArgs e)
     {
@@ -3495,7 +3495,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     {
         Logger.LogError(ex, "Switching session failed (SessionId={SessionId})", sessionId);
 
-        _uiDispatcher.Enqueue(() => {
+        _uiDispatcher.Enqueue(() =>
+        {
             SetError($"Failed to switch session: {ex.Message}");
             IsSessionActive = !string.IsNullOrWhiteSpace(CurrentSessionId);
         });
@@ -3884,7 +3885,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             return;
         }
 
-        _uiDispatcher.Enqueue(() => {
+        _uiDispatcher.Enqueue(() =>
+        {
             ApplySessionSwitchPreview(conversationId);
         });
     }
@@ -3902,7 +3904,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             return;
         }
 
-        _uiDispatcher.Enqueue(() => {
+        _uiDispatcher.Enqueue(() =>
+        {
             ApplySessionSwitchPreviewClear(conversationId);
         });
     }
@@ -4014,7 +4017,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     private void OnPermissionRequestReceived(object? sender, PermissionRequestEventArgs e)
     {
-        _uiDispatcher.Enqueue(() => {
+        _uiDispatcher.Enqueue(() =>
+        {
             try
             {
                 var viewModel = new PermissionRequestViewModel
@@ -4054,7 +4058,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     private void OnFileSystemRequestReceived(object? sender, FileSystemRequestEventArgs e)
     {
-        _uiDispatcher.Enqueue(() => {
+        _uiDispatcher.Enqueue(() =>
+        {
             try
             {
                 var viewModel = new FileSystemRequestViewModel
@@ -4090,7 +4095,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     private void OnTerminalRequestReceived(object? sender, TerminalRequestEventArgs e)
     {
-        _uiDispatcher.Enqueue(() => {
+        _uiDispatcher.Enqueue(() =>
+        {
             try
             {
                 Logger.LogInformation("Terminal request received: Method={Method}, TerminalId={TerminalId}", e.Method, e.TerminalId);
@@ -4105,7 +4111,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     private void OnErrorOccurred(object? sender, string error)
     {
-        _uiDispatcher.Enqueue(() => {
+        _uiDispatcher.Enqueue(() =>
+        {
             SetError(error);
             Logger.LogError(error);
         });
@@ -4644,19 +4651,19 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 new CurrentModeUpdate(response.ModeId)))).ConfigureAwait(true);
     }
 
-   [RelayCommand]
+    [RelayCommand]
     private async Task InitializeAndConnectAsync()
     {
         if (IsInitializing || IsConnecting)
             return;
 
-       // If ChatService is not yet created, apply transport config first.
-       if (_chatService == null)
-       {
-           Logger.LogInformation("ChatService not yet created; calling ApplyTransportConfigAsync");
-           await ApplyTransportConfigCommand.ExecuteAsync(null);
-           return;
-       }
+        // If ChatService is not yet created, apply transport config first.
+        if (_chatService == null)
+        {
+            Logger.LogInformation("ChatService not yet created; calling ApplyTransportConfigAsync");
+            await ApplyTransportConfigCommand.ExecuteAsync(null);
+            return;
+        }
 
         try
         {
@@ -4670,8 +4677,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
             if (_chatService == null)
             {
-               throw new InvalidOperationException("Chat service is not initialized");
-           }
+                throw new InvalidOperationException("Chat service is not initialized");
+            }
 
             var initResponse = await _chatService.InitializeAsync(initParams);
             await _acpConnectionCoordinator
@@ -4700,9 +4707,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         return connectionState.SelectedProfileId;
     }
 
-     [RelayCommand]
-     private async Task CreateNewSessionAsync()
-     {
+    [RelayCommand]
+    private async Task CreateNewSessionAsync()
+    {
         if (IsConnecting)
             return;
 
@@ -4936,7 +4943,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         _transientNotificationCts = new CancellationTokenSource();
         var token = _transientNotificationCts.Token;
 
-        _uiDispatcher.Enqueue(() => {
+        _uiDispatcher.Enqueue(() =>
+        {
             TransientNotificationMessage = message.Trim();
             ShowTransientNotification = true;
         });
@@ -6595,7 +6603,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     private void ScheduleSessionSwitchOverlayDismissal(long activationVersion, string conversationId)
     {
-        _uiDispatcher.Enqueue(() => {
+        _uiDispatcher.Enqueue(() =>
+        {
             DismissSessionSwitchOverlay(activationVersion, conversationId);
         });
     }
@@ -6720,61 +6729,61 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         public CancellationToken CancellationToken { get; }
     }
 
-       public void Dispose()
+    public void Dispose()
     {
         Dispose(true);
         GC.SuppressFinalize(this);
     }
 
     protected virtual void Dispose(bool disposing)
-       {
-           if (_disposed)
-           {
-               return;
-           }
+    {
+        if (_disposed)
+        {
+            return;
+        }
 
-           _disposed = true;
+        _disposed = true;
 
-           if (!disposing)
-           {
-               return;
-           }
+        if (!disposing)
+        {
+            return;
+        }
 
-           if (_chatService != null)
-           {
-               UnsubscribeFromChatService(_chatService);
-           }
+        if (_chatService != null)
+        {
+            UnsubscribeFromChatService(_chatService);
+        }
 
-           _acpProfiles.PropertyChanged -= OnAcpProfilesPropertyChanged;
-           _acpProfiles.Profiles.CollectionChanged -= OnAcpProfilesCollectionChanged;
-           _preferences.PropertyChanged -= OnPreferencesPropertyChanged;
-           _preferences.Projects.CollectionChanged -= OnProjectAffinityPreferencesCollectionChanged;
-           _preferences.ProjectPathMappings.CollectionChanged -= OnProjectAffinityPreferencesCollectionChanged;
-           _conversationWorkspace.PropertyChanged -= OnConversationWorkspacePropertyChanged;
-           AttachPlanEntriesCollectionChanged(null);
-           if (_observedPendingAskUserRequest != null)
-           {
-               _observedPendingAskUserRequest.PropertyChanged -= OnPendingAskUserRequestPropertyChanged;
-               _observedPendingAskUserRequest = null;
-           }
+        _acpProfiles.PropertyChanged -= OnAcpProfilesPropertyChanged;
+        _acpProfiles.Profiles.CollectionChanged -= OnAcpProfilesCollectionChanged;
+        _preferences.PropertyChanged -= OnPreferencesPropertyChanged;
+        _preferences.Projects.CollectionChanged -= OnProjectAffinityPreferencesCollectionChanged;
+        _preferences.ProjectPathMappings.CollectionChanged -= OnProjectAffinityPreferencesCollectionChanged;
+        _conversationWorkspace.PropertyChanged -= OnConversationWorkspacePropertyChanged;
+        AttachPlanEntriesCollectionChanged(null);
+        if (_observedPendingAskUserRequest != null)
+        {
+            _observedPendingAskUserRequest.PropertyChanged -= OnPendingAskUserRequestPropertyChanged;
+            _observedPendingAskUserRequest = null;
+        }
 
-           _sendPromptCts?.Cancel();
-           _transientNotificationCts?.Cancel();
-           StopStoreProjection();
+        _sendPromptCts?.Cancel();
+        _transientNotificationCts?.Cancel();
+        StopStoreProjection();
 
-            try { _sendPromptCts?.Dispose(); } catch { }
-            try { _transientNotificationCts?.Dispose(); } catch { }
-            try { _conversationActivationCts?.Cancel(); } catch { }
-            try { _conversationActivationCts?.Dispose(); } catch { }
-            try { _conversationActivationGate.Dispose(); } catch { }
-            try { _remoteConversationActivationGate.Dispose(); } catch { }
+        try { _sendPromptCts?.Dispose(); } catch { }
+        try { _transientNotificationCts?.Dispose(); } catch { }
+        try { _conversationActivationCts?.Cancel(); } catch { }
+        try { _conversationActivationCts?.Dispose(); } catch { }
+        try { _conversationActivationGate.Dispose(); } catch { }
+        try { _remoteConversationActivationGate.Dispose(); } catch { }
 
-            _selectedProfileConnectTask = null;
-            _pendingSelectedProfileConnect = null;
-            _sendPromptCts = null;
-       _transientNotificationCts = null;
-       _conversationActivationCts = null;
-       }
+        _selectedProfileConnectTask = null;
+        _pendingSelectedProfileConnect = null;
+        _sendPromptCts = null;
+        _transientNotificationCts = null;
+        _conversationActivationCts = null;
+    }
 
     private void AttachPlanEntriesCollectionChanged(ObservableCollection<PlanEntryViewModel>? planEntries)
     {
