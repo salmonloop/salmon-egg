@@ -37,23 +37,22 @@ public sealed class PlatformShellService : IPlatformShellService
         return Task.FromResult(false);
     }
 
-    private static void TryOpenWithShell(string path)
+    internal static ProcessStartInfo CreateShellExecuteInfo(string path)
     {
         try
         {
             if (string.IsNullOrWhiteSpace(path))
             {
-                return;
+                return null;
             }
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                Process.Start(new ProcessStartInfo
+                return new ProcessStartInfo
                 {
                     FileName = path,
                     UseShellExecute = true
-                });
-                return;
+                };
             }
 
             string safePath = path;
@@ -77,10 +76,26 @@ public sealed class PlatformShellService : IPlatformShellService
             }
 
             psi.ArgumentList.Add(safePath);
-            Process.Start(psi);
+            return psi;
         }
         catch
         {
+            return null;
+        }
+    }
+
+    private static void TryOpenWithShell(string path)
+    {
+        var psi = CreateShellExecuteInfo(path);
+        if (psi != null)
+        {
+            try
+            {
+                Process.Start(psi);
+            }
+            catch
+            {
+            }
         }
     }
 }
