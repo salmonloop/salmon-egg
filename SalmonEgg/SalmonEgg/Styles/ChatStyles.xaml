@@ -47,24 +47,18 @@
                                                         Visibility="{x:Bind ShouldRenderMarkdown, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
                     </Grid>
 
-                    <!-- ToolCall JSON / 高级系统调用信息 -->
-                    <StackPanel Visibility="{x:Bind HasToolCallJson, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                                 Margin="0,4,0,0" Spacing="4">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Border Background="{ThemeResource SystemAccentColor}" CornerRadius="4" Padding="4,1">
-                                <TextBlock Text="{x:Bind ToolCallKindDisplayName, Mode=OneWay}" FontSize="10" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
-                            </Border>
-                            <TextBlock Text="{x:Bind ToolCallStatusDisplayName, Mode=OneWay}" FontSize="11" Opacity="0.7" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                        </StackPanel>
-                        <Border Background="{ThemeResource ControlFillColorTertiaryBrush}" CornerRadius="6" Padding="8,4">
-                            <TextBlock Text="{x:Bind ToolCallJson, Mode=OneWay}"
-                                       FontSize="11"
-                                       FontFamily="Consolas, Monospace"
-                                       TextWrapping="Wrap"
-                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                       Opacity="0.8"/>
-                        </Border>
-                    </StackPanel>
+                    <!-- 渐进式揭示的 ToolCall 胶囊 -->
+                    <controls:ToolCallPill 
+                        Visibility="{x:Bind HasToolCallJson, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                        Margin="0,4,0,0"
+                        ToolTitle="{x:Bind Title, Mode=OneWay}"
+                        ToolKind="{x:Bind ToolCallKind, Mode=OneWay}"
+                        Status="{x:Bind ToolCallStatus, Mode=OneWay}"
+                        IsInProgress="{x:Bind IsToolCallInProgress, Mode=OneWay}"
+                        IsCompleted="{x:Bind IsToolCallCompleted, Mode=OneWay}"
+                        IsFailed="{x:Bind IsToolCallFailed, Mode=OneWay}"
+                        RawPayload="{x:Bind ToolCallJson, Mode=OneWay}">
+                    </controls:ToolCallPill>
 
                     <!-- 时间戳 -->
                     <TextBlock Text="{x:Bind Timestamp, Mode=OneWay, Converter={StaticResource TimeFormatConverter}}"

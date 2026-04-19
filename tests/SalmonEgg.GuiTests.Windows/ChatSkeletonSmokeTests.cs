@@ -16,6 +16,52 @@ namespace SalmonEgg.GuiTests.Windows;
 public sealed class ChatSkeletonSmokeTests
 {
     [SkippableFact]
+    public void SelectSessionWithToolCall_CanOpenToolCallPillWithoutCrashing()
+    {
+        using var appData = GuiAppDataScope.CreateDeterministicToolCallData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-toolcall-session-01", TimeSpan.FromSeconds(15));
+        session.ActivateElement(sessionItem);
+
+        var loadingOverlay = session.TryFindByAutomationId("ChatView.LoadingOverlay", TimeSpan.FromSeconds(2));
+        if (loadingOverlay is not null)
+        {
+            var hidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(10));
+            Assert.True(hidden, "Loading overlay did not disappear for tool call scenario.");
+        }
+
+        var toolCallPillButton = session.FindByAutomationId("ToolCallPill.RootButton", TimeSpan.FromSeconds(10));
+        AutomationElement? payloadHeader = null;
+        AutomationElement? payloadText = null;
+
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            session.ClickElement(toolCallPillButton);
+            payloadHeader = session.TryFindVisibleTextAnywhere("调用参数详情", TimeSpan.FromSeconds(2))
+                ?? session.TryFindVisibleTextAnywhere("Payload details", TimeSpan.FromSeconds(2));
+            payloadText = session.TryFindVisibleTextAnywhere(
+                "{\"path\":\"C:/repo/appsettings.json\",\"query\":\"Logging\",\"arguments\":{\"line\":12}}",
+                TimeSpan.FromSeconds(2));
+
+            if (payloadHeader is not null && payloadText is not null)
+            {
+                break;
+            }
+
+            Thread.Sleep(150);
+        }
+
+        Assert.NotNull(payloadHeader);
+        Assert.NotNull(payloadText);
+
+        session.PressEscape();
+
+        var chatHeader = session.FindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(5));
+        Assert.Contains("GUI Tool Call Session 01", chatHeader.Name, StringComparison.Ordinal);
+    }
+
+    [SkippableFact]
     public void SelectSessionWithMarkdownMessages_UnclosedFenceStaysRaw_ClosedFenceRendersCodeWithoutFenceMarkers()
     {
         using var appData = GuiAppDataScope.CreateDeterministicMarkdownRenderData();

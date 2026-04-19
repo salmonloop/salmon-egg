@@ -56,14 +56,21 @@ public sealed class StdioTransportConnectionTests
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            return (
-                "powershell.exe",
+            // PowerShell cold start regularly exceeds StdioTransport's startup-exit observation window.
+            // Use a tiny batch file so this fixture really models an immediate process failure on Windows.
+            var scriptDirectory = Path.Combine(Path.GetTempPath(), "stdio-transport-tests", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(scriptDirectory);
+
+            var scriptPath = Path.Combine(scriptDirectory, "fail-fast.cmd");
+            File.WriteAllLines(
+                scriptPath,
                 [
-                    "-NoLogo",
-                    "-NoProfile",
-                    "-Command",
-                    $"[Console]::Error.WriteLine('{stderrMessage}'); exit 1"
+                    "@echo off",
+                    $"echo {EscapeForBatchEcho(stderrMessage)} 1>&2",
+                    "exit /b 1"
                 ]);
+
+            return (scriptPath, []);
         }
 
         return (
@@ -72,5 +79,17 @@ public sealed class StdioTransportConnectionTests
                 "-c",
                 $"printf '%s\\n' '{stderrMessage}' >&2; exit 1"
             ]);
+    }
+
+    private static string EscapeForBatchEcho(string value)
+    {
+        return value
+            .Replace("^", "^^", StringComparison.Ordinal)
+            .Replace("&", "^&", StringComparison.Ordinal)
+            .Replace("|", "^|", StringComparison.Ordinal)
+            .Replace("<", "^<", StringComparison.Ordinal)
+            .Replace(">", "^>", StringComparison.Ordinal)
+            .Replace("(", "^(", StringComparison.Ordinal)
+            .Replace(")", "^)", StringComparison.Ordinal);
     }
 }

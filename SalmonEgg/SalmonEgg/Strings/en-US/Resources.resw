@@ -77,6 +77,48 @@
   <data name="Appearance_ThemeSystem.Content" xml:space="preserve">
     <value>System</value>
   </data>
+  <data name="ToolCallPillPayloadTitle" xml:space="preserve">
+    <value>Payload details</value>
+  </data>
+  <data name="ToolCallPillKindRead" xml:space="preserve">
+    <value>Read file</value>
+  </data>
+  <data name="ToolCallPillKindEdit" xml:space="preserve">
+    <value>Edit file</value>
+  </data>
+  <data name="ToolCallPillKindDelete" xml:space="preserve">
+    <value>Delete file</value>
+  </data>
+  <data name="ToolCallPillKindMove" xml:space="preserve">
+    <value>Move file</value>
+  </data>
+  <data name="ToolCallPillKindSearch" xml:space="preserve">
+    <value>Search code</value>
+  </data>
+  <data name="ToolCallPillKindExecute" xml:space="preserve">
+    <value>Run command</value>
+  </data>
+  <data name="ToolCallPillKindSwitchMode" xml:space="preserve">
+    <value>Switch mode</value>
+  </data>
+  <data name="ToolCallPillKindThink" xml:space="preserve">
+    <value>Thinking</value>
+  </data>
+  <data name="ToolCallPillKindFetch" xml:space="preserve">
+    <value>Fetch data</value>
+  </data>
+  <data name="ToolCallPillKindDefault" xml:space="preserve">
+    <value>Tool call</value>
+  </data>
+  <data name="ToolCallPillSummaryPathLabel" xml:space="preserve">
+    <value>Path</value>
+  </data>
+  <data name="ToolCallPillSummaryQueryLabel" xml:space="preserve">
+    <value>Query</value>
+  </data>
+  <data name="ToolCallPillSummaryCommandLabel" xml:space="preserve">
+    <value>Command</value>
+  </data>
   <data name="Appearance_ThemeLight.Content" xml:space="preserve">
     <value>Light</value>
   </data>

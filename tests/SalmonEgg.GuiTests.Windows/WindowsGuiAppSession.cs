@@ -115,6 +115,15 @@ internal sealed class WindowsGuiAppSession : IDisposable
             $"AutomationId '{automationId}' was not found.")!;
     }
 
+    public AutomationElement FindByAutomationIdAnywhere(string automationId, TimeSpan? timeout = null)
+    {
+        return RetryUntil(
+            () => _automation.GetDesktop().FindFirstDescendant(cf => cf.ByAutomationId(automationId)),
+            element => element != null,
+            timeout ?? TimeSpan.FromSeconds(10),
+            $"AutomationId '{automationId}' was not found anywhere on the desktop.")!;
+    }
+
     public AutomationElement? TryFindByAutomationId(string automationId, TimeSpan? timeout = null)
     {
         try
@@ -425,6 +434,33 @@ internal sealed class WindowsGuiAppSession : IDisposable
             return element.Name;
         }
         catch
+        {
+            return null;
+        }
+    }
+
+    public AutomationElement? FindVisibleTextAnywhere(string text, TimeSpan? timeout = null)
+    {
+        var expectedText = NormalizeVisibleText(text);
+
+        return RetryUntil(
+            () => _automation.GetDesktop()
+                .FindAllDescendants(cf => cf.ByControlType(ControlType.Text))
+                .FirstOrDefault(element =>
+                    !TryGetIsOffscreen(element)
+                    && string.Equals(NormalizeVisibleText(element.Name), expectedText, StringComparison.Ordinal)),
+            element => element != null,
+            timeout ?? TimeSpan.FromSeconds(3),
+            $"Visible text '{text}' was not found anywhere on the desktop.");
+    }
+
+    public AutomationElement? TryFindVisibleTextAnywhere(string text, TimeSpan? timeout = null)
+    {
+        try
+        {
+            return FindVisibleTextAnywhere(text, timeout);
+        }
+        catch (TimeoutException)
         {
             return null;
         }

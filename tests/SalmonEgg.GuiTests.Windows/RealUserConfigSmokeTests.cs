@@ -11,6 +11,51 @@ namespace SalmonEgg.GuiTests.Windows;
 public sealed partial class RealUserConfigSmokeTests
 {
     [SkippableFact]
+    public void SelectSpecificRemoteBoundSession_ByConversationId_CompletesSlowLoadWithoutCrashing()
+    {
+        GuiTestGate.RequireEnabled();
+
+        var conversationId = Environment.GetEnvironmentVariable("SALMONEGG_GUI_TARGET_CONVERSATION_ID");
+        Skip.If(string.IsNullOrWhiteSpace(conversationId), "Set SALMONEGG_GUI_TARGET_CONVERSATION_ID to a real conversation id to validate a specific remote session.");
+
+        using var slowLoad = new EnvironmentVariableScope("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", "2000");
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var startItem = session.FindByAutomationId("MainNav.Start", TimeSpan.FromSeconds(10));
+        session.ActivateElement(startItem);
+        Thread.Sleep(500);
+
+        var sessionAutomationId = SessionAutomationId(conversationId!);
+        var sessionItem = session.FindByAutomationId(sessionAutomationId, TimeSpan.FromSeconds(10));
+        session.ActivateElement(sessionItem);
+
+        var loadingVisible = session.WaitUntilVisible("ChatView.LoadingOverlayStatus", TimeSpan.FromSeconds(15));
+        Assert.True(loadingVisible, $"Slow session/load never surfaced ChatView.LoadingOverlayStatus for conversation {conversationId}.");
+
+        var headerVisible = session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(30));
+        Assert.True(headerVisible, $"Conversation header did not appear while loading conversation {conversationId}.");
+
+        var transcriptVisible = WaitUntil(
+            () => CountVisibleTranscriptText(session.TryFindByAutomationId("ChatView.MessagesList", TimeSpan.FromMilliseconds(150))) > 0,
+            TimeSpan.FromSeconds(120),
+            TimeSpan.FromMilliseconds(250));
+        Assert.True(transcriptVisible, $"Conversation {conversationId} never projected any visible transcript content.");
+
+        var overlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(120));
+        Assert.True(overlayHidden, $"Conversation {conversationId} remained stuck behind the loading overlay or crashed before hydration completed.");
+
+        // Keep the real app alive past the initial overlay dismissal so slow-tail crashes
+        // during replay settlement still fail the smoke test.
+        Thread.Sleep(8000);
+
+        var headerStillVisible = session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(4));
+        var overlayStillHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(4));
+        Assert.True(
+            headerStillVisible && overlayStillHidden,
+            $"Conversation {conversationId} stopped rendering stably after the loading overlay cleared. headerStillVisible={headerStillVisible} overlayStillHidden={overlayStillHidden}");
+    }
+
+    [SkippableFact]
     public void SelectRemoteBoundSession_WithSlowSessionLoad_AutoScrollsToLatestMessageAfterHydration()
     {
         GuiTestGate.RequireEnabled();

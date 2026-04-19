@@ -874,4 +874,46 @@
   <data name="Acp_HydrationMode_LoadResponse.Description" xml:space="preserve">
     <value>在 session/load 返回后即判定加载完成，回放在后台继续进行。</value>
   </data>
+  <data name="ToolCallPillPayloadTitle" xml:space="preserve">
+    <value>调用参数详情</value>
+  </data>
+  <data name="ToolCallPillKindRead" xml:space="preserve">
+    <value>读取文件</value>
+  </data>
+  <data name="ToolCallPillKindEdit" xml:space="preserve">
+    <value>编辑文件</value>
+  </data>
+  <data name="ToolCallPillKindDelete" xml:space="preserve">
+    <value>删除文件</value>
+  </data>
+  <data name="ToolCallPillKindMove" xml:space="preserve">
+    <value>移动文件</value>
+  </data>
+  <data name="ToolCallPillKindSearch" xml:space="preserve">
+    <value>搜索代码</value>
+  </data>
+  <data name="ToolCallPillKindExecute" xml:space="preserve">
+    <value>执行命令</value>
+  </data>
+  <data name="ToolCallPillKindSwitchMode" xml:space="preserve">
+    <value>切换模式</value>
+  </data>
+  <data name="ToolCallPillKindThink" xml:space="preserve">
+    <value>思考中</value>
+  </data>
+  <data name="ToolCallPillKindFetch" xml:space="preserve">
+    <value>获取数据</value>
+  </data>
+  <data name="ToolCallPillKindDefault" xml:space="preserve">
+    <value>工具调用</value>
+  </data>
+  <data name="ToolCallPillSummaryPathLabel" xml:space="preserve">
+    <value>路径</value>
+  </data>
+  <data name="ToolCallPillSummaryQueryLabel" xml:space="preserve">
+    <value>查询</value>
+  </data>
+  <data name="ToolCallPillSummaryCommandLabel" xml:space="preserve">
+    <value>命令</value>
+  </data>
 </root>

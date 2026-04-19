@@ -40,7 +40,8 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var initTimeouts = timeouts ?? new AcpClient.AcpRequestTimeouts(
                 DefaultTimeout: TimeSpan.FromSeconds(5),
                 SessionNewTimeout: TimeSpan.FromSeconds(5),
-                SessionPromptTimeout: TimeSpan.FromSeconds(5));
+                SessionPromptTimeout: TimeSpan.FromSeconds(5),
+                SessionLoadTimeout: TimeSpan.FromSeconds(5));
 
             var client = new AcpClient(_transportMock.Object, parser, null, _errorLoggerMock.Object, initTimeouts);
 
@@ -72,7 +73,8 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var timeouts = new AcpClient.AcpRequestTimeouts(
                 DefaultTimeout: TimeSpan.FromMilliseconds(20),
                 SessionNewTimeout: TimeSpan.FromMilliseconds(500),
-                SessionPromptTimeout: TimeSpan.FromMilliseconds(500)
+                SessionPromptTimeout: TimeSpan.FromMilliseconds(500),
+                SessionLoadTimeout: TimeSpan.FromMilliseconds(500)
             );
 
             var parser = new MessageParser();
@@ -225,12 +227,13 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         [Fact]
-        public async Task NonPromptRequest_StillUsesDefaultTimeoutBudget()
+        public async Task LoadSessionAsync_SlowButValidResponse_UsesSessionLoadTimeoutBudget()
         {
             var timeouts = new AcpClient.AcpRequestTimeouts(
                 DefaultTimeout: TimeSpan.FromMilliseconds(50),
                 SessionNewTimeout: TimeSpan.FromMilliseconds(500),
-                SessionPromptTimeout: TimeSpan.FromMilliseconds(500)
+                SessionPromptTimeout: TimeSpan.FromMilliseconds(500),
+                SessionLoadTimeout: TimeSpan.FromMilliseconds(500)
             );
 
             var parser = new MessageParser();
@@ -239,15 +242,17 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             _transportMock.Setup(t => t.SendMessageAsync(It.IsRegex("session/load"), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(true);
 
-            // Delay response well beyond the default budget to avoid timing flakiness.
+            // Delay response beyond the default budget, but keep it safely within session/load timeout.
             var responseTrigger = Task.Run(async () => {
-                await Task.Delay(500);
+                await Task.Delay(200);
                 var response = new JsonRpcResponse(2, JsonSerializer.SerializeToElement(new { }, parser.Options));
                 _transportMock.Raise(t => t.MessageReceived += null, new MessageReceivedEventArgs(parser.SerializeMessage(response)));
             });
 
-            await Assert.ThrowsAsync<TimeoutException>(() => client.LoadSessionAsync(new SessionLoadParams("session-123", "cwd", null)));
+            var result = await client.LoadSessionAsync(new SessionLoadParams("session-123", "cwd", null));
             await responseTrigger;
+
+            Assert.NotNull(result);
         }
 
         [Fact]
@@ -256,7 +261,8 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var timeouts = new AcpClient.AcpRequestTimeouts(
                 DefaultTimeout: TimeSpan.FromSeconds(5),
                 SessionNewTimeout: TimeSpan.FromSeconds(5),
-                SessionPromptTimeout: TimeSpan.FromSeconds(5));
+                SessionPromptTimeout: TimeSpan.FromSeconds(5),
+                SessionLoadTimeout: TimeSpan.FromSeconds(5));
 
             var client = await CreateInitializedClientAsync(timeouts);
 
@@ -427,7 +433,8 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var timeouts = new AcpClient.AcpRequestTimeouts(
                 DefaultTimeout: TimeSpan.FromMilliseconds(20),
                 SessionNewTimeout: TimeSpan.FromMilliseconds(20),
-                SessionPromptTimeout: TimeSpan.FromMilliseconds(20)
+                SessionPromptTimeout: TimeSpan.FromMilliseconds(20),
+                SessionLoadTimeout: TimeSpan.FromMilliseconds(20)
             );
 
             var client = await CreateInitializedClientAsync(timeouts);
@@ -481,7 +488,8 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var timeouts = new AcpClient.AcpRequestTimeouts(
                 DefaultTimeout: TimeSpan.FromMilliseconds(50),
                 SessionNewTimeout: TimeSpan.FromSeconds(1),
-                SessionPromptTimeout: TimeSpan.FromMilliseconds(50));
+                SessionPromptTimeout: TimeSpan.FromMilliseconds(50),
+                SessionLoadTimeout: TimeSpan.FromSeconds(1));
 
             var client = await CreateInitializedClientAsync(timeouts);
 
@@ -518,7 +526,8 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var timeouts = new AcpClient.AcpRequestTimeouts(
                 DefaultTimeout: TimeSpan.FromMilliseconds(50),
                 SessionNewTimeout: TimeSpan.FromSeconds(1),
-                SessionPromptTimeout: TimeSpan.FromMilliseconds(50));
+                SessionPromptTimeout: TimeSpan.FromMilliseconds(50),
+                SessionLoadTimeout: TimeSpan.FromSeconds(1));
 
             var client = await CreateInitializedClientAsync(timeouts);
 

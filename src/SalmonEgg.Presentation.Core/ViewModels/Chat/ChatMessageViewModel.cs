@@ -68,6 +68,15 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
         [NotifyPropertyChangedFor(nameof(HasToolCallJson))]
         private string? _toolCallJson;
 
+        [ObservableProperty]
+        private bool _isToolCallInProgress;
+
+        [ObservableProperty]
+        private bool _isToolCallCompleted;
+
+        [ObservableProperty]
+        private bool _isToolCallFailed;
+
 
         // 计划条目
        [ObservableProperty]
@@ -147,7 +156,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
         {
             var toolCallJson = !string.IsNullOrEmpty(rawInput) ? rawInput : (!string.IsNullOrEmpty(rawOutput) ? rawOutput : string.Empty);
             
-            return new ChatMessageViewModel
+            var viewModel = new ChatMessageViewModel
             {
                 Id = id,
                 IsOutgoing = isOutgoing,
@@ -159,6 +168,9 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                 ToolCallJson = toolCallJson,
                 Timestamp = DateTime.Now
             };
+
+            viewModel.UpdateToolCallState();
+            return viewModel;
         }
 
         public static ChatMessageViewModel CreateFromPlanEntry(string id, PlanEntry entry, bool isOutgoing = false)
@@ -279,6 +291,15 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                TextContent,
                IsMarkdownFallbackSticky);
        }
+
+        private void UpdateToolCallState()
+        {
+            IsToolCallInProgress = ToolCallStatus is Domain.Models.Tool.ToolCallStatus.InProgress or Domain.Models.Tool.ToolCallStatus.Pending;
+            IsToolCallCompleted = ToolCallStatus == Domain.Models.Tool.ToolCallStatus.Completed;
+            IsToolCallFailed = ToolCallStatus is Domain.Models.Tool.ToolCallStatus.Failed or Domain.Models.Tool.ToolCallStatus.Cancelled;
+        }
+
+        partial void OnToolCallStatusChanged(Domain.Models.Tool.ToolCallStatus? value) => UpdateToolCallState();
     }
 
     /// <summary>

@@ -1582,7 +1582,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         }
 
         var keepLayoutLoading = false;
-        IsLayoutLoading = true;
+        await SetLayoutLoadingAsync(true).ConfigureAwait(false);
         try
         {
             var startAt = DateTimeOffset.UtcNow;
@@ -1615,9 +1615,20 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         {
             if (!keepLayoutLoading)
             {
-                IsLayoutLoading = false;
+                await SetLayoutLoadingAsync(false).ConfigureAwait(false);
             }
         }
+    }
+
+    private Task SetLayoutLoadingAsync(bool value)
+    {
+        if (_uiDispatcher.HasThreadAccess)
+        {
+            IsLayoutLoading = value;
+            return Task.CompletedTask;
+        }
+
+        return PostToUiAsync(() => IsLayoutLoading = value);
     }
 
     private async Task ApplyCurrentStoreProjectionAsync()

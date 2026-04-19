@@ -4674,6 +4674,26 @@ public class ChatViewModelTests
     }
 
     [Fact]
+    public async Task SelectAndHydrateConversationAsync_WhenInvokedOffUiThread_QueuesLayoutLoadingStateChangesOnUiDispatcher()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var activationCoordinator = new Mock<IConversationActivationCoordinator>();
+        activationCoordinator
+            .Setup(coordinator => coordinator.ActivateSessionAsync("conv-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConversationActivationResult(false, "conv-1", "ActivationFailed"));
+
+        await using var fixture = CreateViewModel(syncContext, conversationActivationCoordinator: activationCoordinator.Object);
+        syncContext.RunAll();
+
+        var switchTask = Task.Run(async () => await fixture.ViewModel.SwitchConversationAsync("conv-1"));
+
+        await WaitForConditionAsync(() => Task.FromResult(syncContext.PendingCount > 0));
+        await syncContext.RunUntilCompletedAsync(switchTask);
+
+        Assert.False(fixture.ViewModel.IsLayoutLoading);
+    }
+
+    [Fact]
     public async Task SelectAndHydrateConversationAsync_WhenActivatedConversationHasNoMessages_ClearsLayoutLoadingState()
     {
         var syncContext = new ImmediateSynchronizationContext();

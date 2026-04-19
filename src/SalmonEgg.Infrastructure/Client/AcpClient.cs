@@ -28,7 +28,8 @@ namespace SalmonEgg.Infrastructure.Client
         internal sealed record AcpRequestTimeouts(
             TimeSpan DefaultTimeout,
             TimeSpan SessionNewTimeout,
-            TimeSpan SessionPromptTimeout);
+            TimeSpan SessionPromptTimeout,
+            TimeSpan SessionLoadTimeout);
 
         private sealed record PendingInboundRequest(
             string Method,
@@ -146,7 +147,8 @@ namespace SalmonEgg.Infrastructure.Client
             _timeouts = new AcpRequestTimeouts(
                 DefaultRequestTimeout,
                 TimeSpan.FromMinutes(2),  // session/new timeout
-                TimeSpan.FromMinutes(2)); // session/prompt timeout
+                TimeSpan.FromMinutes(2),  // session/prompt timeout
+                TimeSpan.FromSeconds(45)); // session/load timeout
         }
 
         internal AcpClient(
@@ -299,7 +301,7 @@ namespace SalmonEgg.Infrastructure.Client
                 "session/load",
                 JsonSerializer.SerializeToElement(@params, typeof(SessionLoadParams), _parser.Options));
 
-            var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
+            var response = await SendRequestAsync(request, cancellationToken, _timeouts.SessionLoadTimeout).ConfigureAwait(false);
 
             if (response.IsError)
             {
