@@ -111,7 +111,14 @@ namespace SalmonEgg.Application.Services.Chat
                         case CurrentModeUpdate modeChange:
                             if (!string.IsNullOrEmpty(modeChange.NormalizedModeId))
                             {
-                                _currentMode = new SessionModeState { CurrentModeId = modeChange.NormalizedModeId! };
+                                if (_currentMode != null)
+                                {
+                                    _currentMode.CurrentModeId = modeChange.NormalizedModeId!;
+                                }
+                                else
+                                {
+                                    _currentMode = new SessionModeState { CurrentModeId = modeChange.NormalizedModeId! };
+                                }
                             }
                             break;
                         case ConfigOptionUpdate configOption:
@@ -247,6 +254,15 @@ namespace SalmonEgg.Application.Services.Chat
                 _currentPlan = null;
                 _currentMode = null;
 
+                if (response.Modes != null)
+                {
+                    _currentMode = new SessionModeState
+                    {
+                        CurrentModeId = response.Modes.CurrentModeId ?? string.Empty,
+                        AvailableModes = response.Modes.AvailableModes.Select(m => new SalmonEgg.Domain.Models.Session.SessionMode(m.Id, m.Name, m.Description)).ToList()
+                    };
+                }
+
                 if (!string.IsNullOrWhiteSpace(response.SessionId))
                 {
                     var session = GetOrCreateSession(response.SessionId, @params.Cwd);
@@ -300,6 +316,16 @@ namespace SalmonEgg.Application.Services.Chat
                 _sessionManager.UpdateSession(@params.SessionId, s => s.History.Clear());
 
                 var response = await _acpClient.LoadSessionAsync(@params, cancellationToken).ConfigureAwait(false);
+
+                if (response.Modes != null)
+                {
+                    _currentMode = new SessionModeState
+                    {
+                        CurrentModeId = response.Modes.CurrentModeId ?? string.Empty,
+                        AvailableModes = response.Modes.AvailableModes.Select(m => new SalmonEgg.Domain.Models.Session.SessionMode(m.Id, m.Name, m.Description)).ToList()
+                    };
+                }
+
                 try
                 {
                     var session = GetOrCreateSession(@params.SessionId, @params.Cwd);
@@ -407,7 +433,14 @@ namespace SalmonEgg.Application.Services.Chat
                 var response = await _acpClient.SetSessionModeAsync(@params);
                 if (!string.IsNullOrEmpty(@params.ModeId))
                 {
-                    _currentMode = new SessionModeState { CurrentModeId = @params.ModeId };
+                    if (_currentMode != null)
+                    {
+                        _currentMode.CurrentModeId = @params.ModeId;
+                    }
+                    else
+                    {
+                        _currentMode = new SessionModeState { CurrentModeId = @params.ModeId };
+                    }
                 }
                 return response;
             }
@@ -576,15 +609,23 @@ namespace SalmonEgg.Application.Services.Chat
             }
         }
 
-        public async Task<List<SalmonEgg.Domain.Models.Protocol.SessionMode>?> GetAvailableModesAsync()
+        public Task<List<SalmonEgg.Domain.Models.Protocol.SessionMode>?> GetAvailableModesAsync()
         {
             try
             {
-                if (string.IsNullOrEmpty(_currentSessionId))
-                    return null;
+                if (string.IsNullOrEmpty(_currentSessionId) || _currentMode?.AvailableModes == null)
+                    return Task.FromResult<List<SalmonEgg.Domain.Models.Protocol.SessionMode>?>(null);
 
-                // TODO: Modes should be cached from response or requested via separate protocol call if available.
-                return null;
+                var modes = _currentMode.AvailableModes
+                    .Select(m => new SalmonEgg.Domain.Models.Protocol.SessionMode
+                    {
+                        Id = m.Id,
+                        Name = m.Name,
+                        Description = m.Description
+                    })
+                    .ToList();
+
+                return Task.FromResult<List<SalmonEgg.Domain.Models.Protocol.SessionMode>?>(modes);
             }
             catch (Exception ex)
             {
