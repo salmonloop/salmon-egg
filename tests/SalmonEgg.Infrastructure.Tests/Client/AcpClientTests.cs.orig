@@ -36,7 +36,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             AgentCapabilities? capabilities = null)
         {
             var parser = new MessageParser(); // Use real parser for serialization
-            
+
             var initTimeouts = timeouts ?? new AcpClient.AcpRequestTimeouts(
                 DefaultTimeout: TimeSpan.FromSeconds(5),
                 SessionNewTimeout: TimeSpan.FromSeconds(5),
@@ -79,7 +79,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var client = await CreateInitializedClientAsync(
                 timeouts,
                 new AgentCapabilities(loadSession: true));
-            
+
             _transportMock.Setup(t => t.SendMessageAsync(It.IsRegex("session/new"), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(true);
 
@@ -191,8 +191,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             var initTrigger = Task.Run(async () =>
             {
-                // Make sure we wait long enough for InitializeAsync to start waiting on the message
-                await Task.Delay(200);
+                await Task.Delay(10);
                 var response = new JsonRpcResponse(1, JsonSerializer.SerializeToElement(initResponse, parser.Options));
                 _transportMock.Raise(
                     t => t.MessageReceived += null,
@@ -432,9 +431,9 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             );
 
             var client = await CreateInitializedClientAsync(timeouts);
-            
+
             var ex = await Assert.ThrowsAsync<TimeoutException>(() => client.CreateSessionAsync(new SessionNewParams("cwd", null)));
-            
+
             Assert.Contains("method=session/new", ex.Message);
             Assert.Contains("timeout=", ex.Message);
             Assert.Contains("lastRx=", ex.Message);
