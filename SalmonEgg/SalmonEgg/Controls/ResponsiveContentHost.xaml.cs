@@ -8,6 +8,7 @@ namespace SalmonEgg.Controls;
 public sealed partial class ResponsiveContentHost : UserControl
 {
     private bool _isUpdatingColumns;
+    private bool? _isWide;
 
     public static readonly DependencyProperty ChildProperty =
         DependencyProperty.Register(
@@ -21,14 +22,14 @@ public sealed partial class ResponsiveContentHost : UserControl
             nameof(MaxContentWidth),
             typeof(double),
             typeof(ResponsiveContentHost),
-            new PropertyMetadata(UiLayout.ContentMaxWidth, OnMaxContentWidthChanged));
+            new PropertyMetadata(UiLayout.ContentMaxWidth, OnLayoutPropertyChanged));
 
     public static readonly DependencyProperty MinGutterProperty =
         DependencyProperty.Register(
             nameof(MinGutter),
             typeof(double),
             typeof(ResponsiveContentHost),
-            new PropertyMetadata(24d, OnMaxContentWidthChanged));
+            new PropertyMetadata(24d, OnLayoutPropertyChanged));
 
     public object? Child
     {
@@ -53,10 +54,11 @@ public sealed partial class ResponsiveContentHost : UserControl
         InitializeComponent();
     }
 
-    private static void OnMaxContentWidthChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    private static void OnLayoutPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is ResponsiveContentHost host)
         {
+            host._isWide = null; // Force layout recalculation
             host.UpdateColumns(host.LayoutRoot?.ActualWidth ?? host.ActualWidth);
         }
     }
@@ -73,36 +75,56 @@ public sealed partial class ResponsiveContentHost : UserControl
             return;
         }
 
-        _isUpdatingColumns = true;
-        try
+        var max = MaxContentWidth;
+        var minGutter = Math.Max(0, MinGutter);
+
+        if (max <= 0)
         {
-            var max = MaxContentWidth;
-            var minGutter = Math.Max(0, MinGutter);
+            SetNarrow(minGutter);
+            return;
+        }
 
-            if (max <= 0)
+        var wideThreshold = max + (minGutter * 2);
+        bool shouldBeWide = availableWidth >= wideThreshold;
+
+        if (_isWide != shouldBeWide)
+        {
+            if (shouldBeWide)
             {
-                ContentColumn.Width = new GridLength(1, GridUnitType.Star);
-                LeftGutter.Width = new GridLength(minGutter, GridUnitType.Pixel);
-                RightGutter.Width = new GridLength(minGutter, GridUnitType.Pixel);
-                return;
-            }
-
-            var wideThreshold = max + (minGutter * 2);
-
-            if (availableWidth >= wideThreshold)
-            {
-                // Wide mode: Content is fixed, gutters take remaining space (1*)
-                ContentColumn.Width = new GridLength(max, GridUnitType.Pixel);
-                LeftGutter.Width = new GridLength(1, GridUnitType.Star);
-                RightGutter.Width = new GridLength(1, GridUnitType.Star);
+                SetWide(max);
             }
             else
             {
-                // Narrow mode: Content takes remaining space (1*), gutters are fixed to MinGutter
-                ContentColumn.Width = new GridLength(1, GridUnitType.Star);
-                LeftGutter.Width = new GridLength(minGutter, GridUnitType.Pixel);
-                RightGutter.Width = new GridLength(minGutter, GridUnitType.Pixel);
+                SetNarrow(minGutter);
             }
+        }
+    }
+
+    private void SetWide(double max)
+    {
+        _isUpdatingColumns = true;
+        try
+        {
+            _isWide = true;
+            ContentColumn.Width = new GridLength(max, GridUnitType.Pixel);
+            LeftGutter.Width = new GridLength(1, GridUnitType.Star);
+            RightGutter.Width = new GridLength(1, GridUnitType.Star);
+        }
+        finally
+        {
+            _isUpdatingColumns = false;
+        }
+    }
+
+    private void SetNarrow(double minGutter)
+    {
+        _isUpdatingColumns = true;
+        try
+        {
+            _isWide = false;
+            ContentColumn.Width = new GridLength(1, GridUnitType.Star);
+            LeftGutter.Width = new GridLength(minGutter, GridUnitType.Pixel);
+            RightGutter.Width = new GridLength(minGutter, GridUnitType.Pixel);
         }
         finally
         {
