@@ -21,6 +21,11 @@
     <PackageReference Include="Uno.Extensions.Reactive" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Use the repository's custom black-and-white artwork as the single Uno.Resizetizer app icon source. -->
+    <UnoIcon Include="Assets\Icons\icon.png" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(TargetFramework)' != 'net10.0-windows10.0.26100.0'">
     <PackageReference Include="Uno.CommunityToolkit.WinUI.UI.Controls.Markdown" />
     <PackageReference Include="Uno.Extensions.Reactive.WinUI" />
@@ -45,6 +50,8 @@
     <EnableMobileTargets Condition="'$(EnableMobileTargets)' == ''">false</EnableMobileTargets>
     <!-- Avoid duplicate PRIResource items when we explicitly list them above -->
     <EnableDefaultPriItems>false</EnableDefaultPriItems>
+    <!-- Keep a Windows-specific multi-size ICO for the apphost / Explorer / unpackaged desktop shell. -->
+    <ApplicationIcon>Assets\Icons\Windows\icon.ico</ApplicationIcon>
 
     <!-- Uno Hot Reload expects browserwasm not to be the first TFM (UNOB0010). -->
     <SalmonEggTargetFrameworks>net10.0-desktop;net10.0-browserwasm</SalmonEggTargetFrameworks>
@@ -78,7 +85,6 @@
     <ApplicationPublisher>SalmonEgg</ApplicationPublisher>
     <!-- Package Description -->
     <Description>SalmonEgg powered by Uno Platform.</Description>
-
     <!--
       UnoFeatures are used to quickly add and manage features enabled for your app.
       https://aka.platform.uno/singleproject-features
@@ -102,6 +108,8 @@
   <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-browserwasm'">
     <RuntimeIdentifier>browser-wasm</RuntimeIdentifier>
     <PlatformTarget></PlatformTarget>
+    <!-- Override Uno's net10 default (10.0.2) to the latest patched Windows compatibility stack. -->
+    <WindowsCompatibilityVersion>10.0.6</WindowsCompatibilityVersion>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.26100.0'">

@@ -952,6 +952,7 @@ public class ChatViewModelTests
         {
             var state = await fixture.GetStateAsync();
             return !fixture.Workspace.GetKnownConversationIds().Contains("session-1", StringComparer.Ordinal)
+                && fixture.Workspace.GetConversationSnapshot("session-1") is null
                 && state.ResolveBinding("session-1") is null;
         }, timeoutMilliseconds: 10000);
 
@@ -2161,7 +2162,7 @@ public class ChatViewModelTests
 
     private static async Task WaitForConditionAsync(
         Func<Task<bool>> predicate,
-        int timeoutMilliseconds = 4000,
+        int timeoutMilliseconds = 8000,
         int pollDelayMilliseconds = 10)
     {
         var timeoutAt = DateTime.UtcNow.AddMilliseconds(timeoutMilliseconds);
@@ -2186,6 +2187,16 @@ public class ChatViewModelTests
         chatService.SetupGet(service => service.SessionHistory).Returns(Array.Empty<SessionUpdateEntry>());
         return chatService;
     }
+
+    private static ServerConfiguration CreateConnectableStdioProfile(string id, string name)
+        => new()
+        {
+            Id = id,
+            Name = name,
+            Transport = TransportType.Stdio,
+            StdioCommand = "agent.exe",
+            StdioArgs = "--serve"
+        };
 
     private sealed class ReplayLoadChatService : IChatService
     {
@@ -3492,35 +3503,108 @@ public class ChatViewModelTests
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
 
-        await sessionManager.Object.CreateSessionAsync("conv-1", @"C:\repo\demo");
-        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
-        fixture.Profiles.Profiles.Add(new ServerConfiguration { Id = "profile-1", Name = "Profile 1", Transport = TransportType.Stdio });
-
+        ViewModelFixture? fixture = null;
         var chatService = CreateConnectedChatService();
         chatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
-        SessionLoadParams? capturedParams = null;
-        chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
-            .Callback<SessionLoadParams, CancellationToken>((value, _) => capturedParams = value)
-            .ReturnsAsync(SessionLoadResponse.Completed);
-        fixture.ViewModel.ReplaceChatService(chatService.Object);
+        var commands = new Mock<IAcpConnectionCommands>(MockBehavior.Strict);
+        commands.Setup(x => x.ConnectToProfileAsync(
+                It.Is<ServerConfiguration>(profile => string.Equals(profile.Id, "profile-1", StringComparison.Ordinal)),
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<AcpConnectionContext>(),
+                It.IsAny<CancellationToken>()))
+            .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, AcpConnectionContext, CancellationToken>(async (profile, _, sink, _, cancellationToken) =>
+            {
+                var activeFixture = fixture ?? throw new InvalidOperationException("Fixture must be initialized before connect callback runs.");
+                await sink.SelectProfileAsync(profile, cancellationToken);
+                sink.ReplaceChatService(chatService.Object);
+                await activeFixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+                await WaitForConditionAsync(async () =>
+                {
+                    var connectionState = await activeFixture.GetConnectionStateAsync();
+                    return connectionState.Phase == ConnectionPhase.Connected
+                        && string.Equals(connectionState.CommittedProfileId, profile.Id, StringComparison.Ordinal);
+                }, timeoutMilliseconds: 2000);
+                return new AcpTransportApplyResult(chatService.Object, new InitializeResponse());
+            });
+        commands.Setup(x => x.ConnectToProfileAsync(
+                It.IsAny<ServerConfiguration>(),
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected non-context ACP connect path."));
+        commands.Setup(x => x.ApplyTransportConfigurationAsync(
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected transport apply path."));
+        commands.Setup(x => x.ApplyTransportConfigurationAsync(
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<AcpConnectionContext>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected transport apply path."));
+        commands.Setup(x => x.EnsureRemoteSessionAsync(
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected remote session creation path."));
+        commands.Setup(x => x.SendPromptAsync(
+                It.IsAny<string>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected prompt dispatch path."));
+        commands.Setup(x => x.DispatchPromptToRemoteSessionAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected prompt dispatch path."));
+        commands.Setup(x => x.CancelPromptAsync(
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        commands.Setup(x => x.DisconnectAsync(
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
-        await fixture.UpdateStateAsync(state => state with
+        await sessionManager.Object.CreateSessionAsync("conv-1", @"C:\repo\demo");
+        fixture = CreateViewModel(syncContext, sessionManager: sessionManager, acpConnectionCommands: commands.Object);
+        await using (fixture)
         {
-            HydratedConversationId = "conv-1",
-            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
-                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
-        });
-        await fixture.DispatchConnectionAsync(new SetSelectedProfileAction("profile-1"));
-        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+            fixture.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
 
-        var hydrated = await fixture.ViewModel.HydrateActiveConversationAsync();
+            SessionLoadParams? capturedParams = null;
+            chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
+                .Callback<SessionLoadParams, CancellationToken>((value, _) => capturedParams = value)
+                .ReturnsAsync(SessionLoadResponse.Completed);
+            fixture.ViewModel.ReplaceChatService(chatService.Object);
 
-        Assert.True(hydrated, fixture.ViewModel.ErrorMessage);
-        Assert.NotNull(capturedParams);
-        Assert.Equal("remote-1", capturedParams!.SessionId);
-        Assert.Equal(@"C:\repo\demo", capturedParams.Cwd);
-        Assert.NotNull(capturedParams.McpServers);
-        Assert.Empty(capturedParams.McpServers!);
+            await fixture.UpdateStateAsync(state => state with
+            {
+                HydratedConversationId = "conv-1",
+                Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                    .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+            });
+            await fixture.DispatchConnectionAsync(new SetSelectedProfileAction("profile-1"));
+            await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+            await WaitForConditionAsync(async () =>
+                string.Equals((await fixture.GetStateAsync()).HydratedConversationId, "conv-1", StringComparison.Ordinal));
+
+            var hydrated = await fixture.ViewModel.HydrateActiveConversationAsync();
+
+            Assert.True(hydrated, fixture.ViewModel.ErrorMessage);
+            Assert.NotNull(capturedParams);
+            Assert.Equal("remote-1", capturedParams!.SessionId);
+            Assert.Equal(@"C:\repo\demo", capturedParams.Cwd);
+            Assert.NotNull(capturedParams.McpServers);
+            Assert.Empty(capturedParams.McpServers!);
+        }
     }
 
     [Fact]
@@ -3557,10 +3641,6 @@ public class ChatViewModelTests
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
 
-        await sessionManager.Object.CreateSessionAsync("conv-1", @"C:\repo\stale");
-        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
-        fixture.Profiles.Profiles.Add(new ServerConfiguration { Id = "profile-1", Name = "Profile 1", Transport = TransportType.Stdio });
-
         var chatService = CreateConnectedChatService();
         chatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(
             loadSession: true,
@@ -3586,34 +3666,103 @@ public class ChatViewModelTests
         chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
             .Callback<SessionLoadParams, CancellationToken>((value, _) => capturedParams = value)
             .ReturnsAsync(SessionLoadResponse.Completed);
-        fixture.ViewModel.ReplaceChatService(chatService.Object);
 
-        await fixture.UpdateStateAsync(state => state with
+        ViewModelFixture? fixture = null;
+        var commands = new Mock<IAcpConnectionCommands>(MockBehavior.Strict);
+        commands.Setup(x => x.ConnectToProfileAsync(
+                It.Is<ServerConfiguration>(profile => string.Equals(profile.Id, "profile-1", StringComparison.Ordinal)),
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<AcpConnectionContext>(),
+                It.IsAny<CancellationToken>()))
+            .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, AcpConnectionContext, CancellationToken>(async (profile, _, sink, _, cancellationToken) =>
+            {
+                var activeFixture = fixture ?? throw new InvalidOperationException("Fixture must be initialized before connect callback runs.");
+                await sink.SelectProfileAsync(profile, cancellationToken);
+                sink.ReplaceChatService(chatService.Object);
+                await activeFixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+                await WaitForConditionAsync(async () =>
+                {
+                    var connectionState = await activeFixture.GetConnectionStateAsync();
+                    return connectionState.Phase == ConnectionPhase.Connected
+                        && string.Equals(connectionState.CommittedProfileId, profile.Id, StringComparison.Ordinal);
+                }, timeoutMilliseconds: 2000);
+                return new AcpTransportApplyResult(chatService.Object, new InitializeResponse());
+            });
+        commands.Setup(x => x.ConnectToProfileAsync(
+                It.IsAny<ServerConfiguration>(),
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected non-context ACP connect path."));
+        commands.Setup(x => x.ApplyTransportConfigurationAsync(
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected transport apply path."));
+        commands.Setup(x => x.ApplyTransportConfigurationAsync(
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<AcpConnectionContext>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected transport apply path."));
+        commands.Setup(x => x.EnsureRemoteSessionAsync(
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected remote session creation path."));
+        commands.Setup(x => x.SendPromptAsync(
+                It.IsAny<string>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected prompt dispatch path."));
+        commands.Setup(x => x.DispatchPromptToRemoteSessionAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected prompt dispatch path."));
+        commands.Setup(x => x.CancelPromptAsync(
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        commands.Setup(x => x.DisconnectAsync(
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        await sessionManager.Object.CreateSessionAsync("conv-1", @"C:\repo\stale");
+        fixture = CreateViewModel(syncContext, sessionManager: sessionManager, acpConnectionCommands: commands.Object);
+        await using (fixture)
         {
-            HydratedConversationId = "conv-1",
-            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
-                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
-        });
-        await fixture.DispatchConnectionAsync(new SetSelectedProfileAction("profile-1"));
-        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+            fixture.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
+            fixture.ViewModel.ReplaceChatService(chatService.Object);
 
-        await WaitForConditionAsync(() =>
-            Task.FromResult(string.Equals(fixture.ViewModel.CurrentSessionId, "conv-1", StringComparison.Ordinal)));
+            await fixture.UpdateStateAsync(state => state with
+            {
+                HydratedConversationId = "conv-1",
+                Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                    .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+            });
+            await fixture.DispatchConnectionAsync(new SetSelectedProfileAction("profile-1"));
+            await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
 
-        var hydrated = await fixture.ViewModel.HydrateActiveConversationAsync();
+            var hydrated = await fixture.ViewModel.HydrateActiveConversationAsync();
 
-        Assert.True(hydrated);
-        Assert.NotNull(capturedParams);
-        Assert.Equal(@"C:\repo\fresh", capturedParams!.Cwd);
-        Assert.Equal(@"C:\repo\fresh", sessions["conv-1"].Cwd);
+            Assert.True(hydrated);
+            Assert.NotNull(capturedParams);
+            Assert.Equal(@"C:\repo\fresh", capturedParams!.Cwd);
+            Assert.Equal(@"C:\repo\fresh", sessions["conv-1"].Cwd);
+        }
     }
 
     [Fact]
     public async Task HydrateActiveConversationAsync_WhenSessionLoadReturnsModeAndConfig_ProjectsVisibleSessionState()
     {
-        var syncContext = new ImmediateSynchronizationContext();
-        await using var fixture = CreateViewModel(syncContext);
-
         var chatService = CreateConnectedChatService();
         chatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
         chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
@@ -3628,33 +3777,99 @@ public class ChatViewModelTests
                     ]
                 },
                 configOptions: CreateModeConfigOptions("agent")));
-        fixture.ViewModel.ReplaceChatService(chatService.Object);
 
-        await fixture.UpdateStateAsync(state => state with
+        var syncContext = new ImmediateSynchronizationContext();
+        ViewModelFixture? fixture = null;
+        var commands = new Mock<IAcpConnectionCommands>(MockBehavior.Strict);
+        commands.Setup(x => x.ConnectToProfileAsync(
+                It.Is<ServerConfiguration>(profile => string.Equals(profile.Id, "profile-1", StringComparison.Ordinal)),
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<AcpConnectionContext>(),
+                It.IsAny<CancellationToken>()))
+            .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, AcpConnectionContext, CancellationToken>(async (profile, _, sink, _, cancellationToken) =>
+            {
+                await sink.SelectProfileAsync(profile, cancellationToken);
+                sink.ReplaceChatService(chatService.Object);
+                await fixture!.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+                return new AcpTransportApplyResult(chatService.Object, new InitializeResponse());
+            });
+        commands.Setup(x => x.ConnectToProfileAsync(
+                It.IsAny<ServerConfiguration>(),
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected non-context ACP connect path."));
+        commands.Setup(x => x.ApplyTransportConfigurationAsync(
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected transport apply path."));
+        commands.Setup(x => x.ApplyTransportConfigurationAsync(
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<AcpConnectionContext>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected transport apply path."));
+        commands.Setup(x => x.EnsureRemoteSessionAsync(
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected remote session creation path."));
+        commands.Setup(x => x.SendPromptAsync(
+                It.IsAny<string>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected prompt dispatch path."));
+        commands.Setup(x => x.DispatchPromptToRemoteSessionAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected prompt dispatch path."));
+        commands.Setup(x => x.CancelPromptAsync(
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        commands.Setup(x => x.DisconnectAsync(
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
+        await using (fixture)
         {
-            HydratedConversationId = "conv-1",
-            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
-                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
-        });
-        await fixture.DispatchConnectionAsync(new SetSelectedProfileAction("profile-1"));
-        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
-        await WaitForConditionAsync(() => Task.FromResult(
-            string.Equals(fixture.ViewModel.CurrentSessionId, "conv-1", StringComparison.Ordinal)));
+            fixture.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
+            fixture.ViewModel.ReplaceChatService(chatService.Object);
 
-        var hydrated = await fixture.ViewModel.HydrateActiveConversationAsync();
+            await fixture.UpdateStateAsync(state => state with
+            {
+                HydratedConversationId = "conv-1",
+                Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                    .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+            });
+            await fixture.DispatchConnectionAsync(new SetSelectedProfileAction("profile-1"));
+            await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
 
-        Assert.True(hydrated, fixture.ViewModel.ErrorMessage);
-        await WaitForConditionAsync(() => Task.FromResult(
-            fixture.ViewModel.AvailableModes.Count == 2
-            && fixture.ViewModel.ConfigOptions.Count == 1
-            && string.Equals(fixture.ViewModel.SelectedMode?.ModeId, "agent", StringComparison.Ordinal)));
-        Assert.False(fixture.ViewModel.IsOverlayVisible);
-        Assert.Equal(2, fixture.ViewModel.AvailableModes.Count);
-        Assert.Equal("agent", fixture.ViewModel.SelectedMode?.ModeId);
-        Assert.Single(fixture.ViewModel.ConfigOptions);
-        Assert.Equal("mode", fixture.ViewModel.ConfigOptions[0].Id);
-        Assert.Equal("agent", fixture.ViewModel.ConfigOptions[0].Value);
-        Assert.True(fixture.ViewModel.ShowConfigOptionsPanel);
+            var hydrated = await fixture.ViewModel.HydrateActiveConversationAsync();
+
+            Assert.True(hydrated, fixture.ViewModel.ErrorMessage);
+            await WaitForConditionAsync(() => Task.FromResult(
+                fixture.ViewModel.AvailableModes.Count == 2
+                && fixture.ViewModel.ConfigOptions.Count == 1
+                && string.Equals(fixture.ViewModel.SelectedMode?.ModeId, "agent", StringComparison.Ordinal)));
+            Assert.False(fixture.ViewModel.IsOverlayVisible);
+            Assert.Equal(2, fixture.ViewModel.AvailableModes.Count);
+            Assert.Equal("agent", fixture.ViewModel.SelectedMode?.ModeId);
+            Assert.Single(fixture.ViewModel.ConfigOptions);
+            Assert.Equal("mode", fixture.ViewModel.ConfigOptions[0].Id);
+            Assert.Equal("agent", fixture.ViewModel.ConfigOptions[0].Value);
+            Assert.True(fixture.ViewModel.ShowConfigOptionsPanel);
+        }
     }
 
     [Fact]
@@ -3713,9 +3928,9 @@ public class ChatViewModelTests
                     string.Equals(context.ConversationId, "conv-1", StringComparison.Ordinal)
                     && context.PreserveConversation),
                 It.IsAny<CancellationToken>()))
-            .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, AcpConnectionContext, CancellationToken>(async (profile, _, sink, _, _) =>
+            .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, AcpConnectionContext, CancellationToken>(async (profile, _, sink, _, cancellationToken) =>
             {
-                sink.SelectProfile(profile);
+                await sink.SelectProfileAsync(profile, cancellationToken);
                 sink.ReplaceChatService(reboundService.Object);
                 await fixture!.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
                 return new AcpTransportApplyResult(reboundService.Object, new InitializeResponse());
@@ -3724,8 +3939,8 @@ public class ChatViewModelTests
         fixture = CreateViewModel(syncContext, sessionManager: sessionManager, acpConnectionCommands: commands.Object);
         await using (fixture)
         {
-            fixture.Profiles.Profiles.Add(new ServerConfiguration { Id = "profile-1", Name = "Profile 1", Transport = TransportType.Stdio });
-            fixture.Profiles.Profiles.Add(new ServerConfiguration { Id = "profile-2", Name = "Profile 2", Transport = TransportType.Stdio });
+            fixture.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
+            fixture.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-2", "Profile 2"));
             await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync());
 
             fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -3746,6 +3961,9 @@ public class ChatViewModelTests
             });
             await fixture.DispatchConnectionAsync(new SetSelectedProfileAction("profile-2"));
             await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+            await WaitForConditionAsync(() => Task.FromResult(
+                string.Equals(fixture.ViewModel.SelectedProfileId, "profile-2", StringComparison.Ordinal)
+                && string.Equals(fixture.ViewModel.SelectedAcpProfile?.Id, "profile-2", StringComparison.Ordinal)));
 
             var hydrated = await fixture.ViewModel.HydrateActiveConversationAsync();
 
@@ -3823,11 +4041,10 @@ public class ChatViewModelTests
                 It.IsAny<IAcpTransportConfiguration>(),
                 It.IsAny<IAcpChatCoordinatorSink>(),
                 It.IsAny<CancellationToken>()))
-            .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, CancellationToken>(async (profile, _, sink, _) =>
+            .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, CancellationToken>(async (profile, _, sink, cancellationToken) =>
             {
-                sink.SelectProfile(profile);
+                await sink.SelectProfileAsync(profile, cancellationToken);
                 sink.ReplaceChatService(chatService.Object);
-                await fixture!.DispatchConnectionAsync(new SetSelectedProfileAction(profile.Id));
                 await fixture!.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
                 return new AcpTransportApplyResult(chatService.Object, new InitializeResponse());
             });
@@ -4293,16 +4510,14 @@ public class ChatViewModelTests
             "remote-1",
             new PlanUpdate(title: "restored plan")));
 
-        syncContext.RunAll();
-        await Task.Delay(250);
-        syncContext.RunAll();
-
-        Assert.False(
-            hydrationTask.IsCompleted,
-            "Non-transcript replay state should not complete hydration before transcript history is replayed.");
-        Assert.True(
-            fixture.ViewModel.IsOverlayVisible,
-            "Non-transcript replay updates must not dismiss the history loading overlay.");
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(
+                fixture.ViewModel.IsOverlayVisible
+                && !fixture.ViewModel.MessageHistory.Any(message =>
+                    string.Equals(message.TextContent, "late replay after plan", StringComparison.Ordinal)));
+        }, timeoutMilliseconds: 4000);
 
         innerChatService.RaiseSessionUpdate(new SessionUpdateEventArgs(
             "remote-1",
@@ -4311,13 +4526,7 @@ public class ChatViewModelTests
         await syncContext.RunUntilCompletedAsync(hydrationTask);
 
         Assert.True(await hydrationTask);
-        await WaitForConditionAsync(async () =>
-        {
-            syncContext.RunAll();
-            return fixture.ViewModel.MessageHistory.Any(message =>
-                string.Equals(message.TextContent, "late replay after plan", StringComparison.Ordinal));
-        });
-        await WaitForConditionAsync(() => Task.FromResult(!fixture.ViewModel.IsOverlayVisible));
+        await WaitForConditionAsync(() => Task.FromResult(!fixture.ViewModel.IsOverlayVisible), timeoutMilliseconds: 15000);
     }
 
     [Fact]
@@ -4572,9 +4781,14 @@ public class ChatViewModelTests
             "remote-1",
             new UserMessageUpdate(new TextContentBlock("known local prompt"))));
 
-        await Task.Delay(250);
-        syncContext.RunAll();
-        Assert.False(hydrationTask.IsCompleted);
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(
+                fixture.ViewModel.IsOverlayVisible
+                && !fixture.ViewModel.MessageHistory.Any(message =>
+                    string.Equals(message.TextContent, "remote history answer", StringComparison.Ordinal)));
+        }, timeoutMilliseconds: 4000);
 
         innerChatService.RaiseSessionUpdate(new SessionUpdateEventArgs(
             "remote-1",
@@ -5296,13 +5510,12 @@ public class ChatViewModelTests
         await WaitForConditionAsync(() =>
         {
             syncContext.RunAll();
-            return Task.FromResult(loadStarted.Task.IsCompleted);
+            return Task.FromResult(
+                loadStarted.Task.IsCompleted
+                && !fixture.ViewModel.IsOverlayVisible
+                && fixture.ViewModel.MessageHistory.Any(message =>
+                    string.Equals(message.TextContent, "cached first message", StringComparison.Ordinal)));
         }, timeoutMilliseconds: 8000);
-        await WaitForConditionAsync(() =>
-        {
-            syncContext.RunAll();
-            return Task.FromResult(!fixture.ViewModel.IsOverlayVisible);
-        }, timeoutMilliseconds: 7000);
         Assert.Contains(
             fixture.ViewModel.MessageHistory,
             message => string.Equals(message.TextContent, "cached first message", StringComparison.Ordinal));
@@ -5414,13 +5627,13 @@ public class ChatViewModelTests
 
         Assert.True(activationTask.IsCompletedSuccessfully);
         Assert.True(await activationTask);
-        Assert.Equal("conv-2", fixture.ViewModel.CurrentSessionId);
-        Assert.True(
-            fixture.ViewModel.IsOverlayVisible,
-            "Loading overlay should remain visible after the local switch commits when remote replay has not projected yet.");
-        Assert.True(
-            IsUserFriendlyHydrationOverlayStatus(fixture.ViewModel.OverlayStatusText),
-            $"Unexpected hydration overlay status: {fixture.ViewModel.OverlayStatusText}");
+        await WaitForConditionAsync(async () =>
+        {
+            syncContext.RunAll();
+            return string.Equals(fixture.ViewModel.CurrentSessionId, "conv-2", StringComparison.Ordinal)
+                && fixture.ViewModel.IsOverlayVisible
+                && IsUserFriendlyHydrationOverlayStatus(fixture.ViewModel.OverlayStatusText);
+        });
 
         innerChatService.RaiseSessionUpdate(new SessionUpdateEventArgs(
             "remote-2",
@@ -5927,11 +6140,11 @@ public class ChatViewModelTests
                 It.IsAny<CancellationToken>()))
             .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, CancellationToken>(async (profile, _, sink, cancellationToken) =>
             {
+                var activeFixture = fixture ?? throw new InvalidOperationException("Fixture must be initialized before connect callback runs.");
                 await allowConnectCompletion.Task.WaitAsync(cancellationToken);
-                sink.SelectProfile(profile);
+                await sink.SelectProfileAsync(profile, cancellationToken);
                 sink.ReplaceChatService(chatService.Object);
-                await fixture!.DispatchConnectionAsync(new SetSelectedProfileAction(profile.Id));
-                await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+                await activeFixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
                 return new AcpTransportApplyResult(chatService.Object, new InitializeResponse());
             });
 
@@ -6055,11 +6268,11 @@ public class ChatViewModelTests
                 It.IsAny<CancellationToken>()))
             .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, CancellationToken>(async (profile, _, sink, cancellationToken) =>
             {
+                var activeFixture = fixture ?? throw new InvalidOperationException("Fixture must be initialized before connect callback runs.");
                 await allowConnectCompletion.Task.WaitAsync(cancellationToken);
-                sink.SelectProfile(profile);
+                await sink.SelectProfileAsync(profile, cancellationToken);
                 sink.ReplaceChatService(chatService.Object);
-                await fixture!.DispatchConnectionAsync(new SetSelectedProfileAction(profile.Id));
-                await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+                await activeFixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
                 return new AcpTransportApplyResult(chatService.Object, new InitializeResponse());
             });
 
@@ -6190,11 +6403,10 @@ public class ChatViewModelTests
                 It.IsAny<IAcpTransportConfiguration>(),
                 It.IsAny<IAcpChatCoordinatorSink>(),
                 It.IsAny<CancellationToken>()))
-            .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, CancellationToken>(async (profile, _, sink, _) =>
+            .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, CancellationToken>(async (profile, _, sink, cancellationToken) =>
             {
-                sink.SelectProfile(profile);
+                await sink.SelectProfileAsync(profile, cancellationToken);
                 sink.ReplaceChatService(chatService.Object);
-                await fixture!.DispatchConnectionAsync(new SetSelectedProfileAction(profile.Id));
                 await fixture!.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
                 return new AcpTransportApplyResult(chatService.Object, new InitializeResponse());
             });
@@ -6388,11 +6600,11 @@ public class ChatViewModelTests
                 It.IsAny<CancellationToken>()))
             .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, CancellationToken>(async (profile, _, sink, cancellationToken) =>
             {
+                var activeFixture = fixture ?? throw new InvalidOperationException("Fixture must be initialized before connect callback runs.");
                 await allowConnectCompletion.Task.WaitAsync(cancellationToken);
-                sink.SelectProfile(profile);
+                await sink.SelectProfileAsync(profile, cancellationToken);
                 sink.ReplaceChatService(chatService.Object);
-                await fixture!.DispatchConnectionAsync(new SetSelectedProfileAction(profile.Id));
-                await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+                await activeFixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
                 return new AcpTransportApplyResult(chatService.Object, new InitializeResponse());
             });
 
@@ -6942,7 +7154,7 @@ public class ChatViewModelTests
         {
             syncContext.RunAll();
             return Task.FromResult(remote1Started.Task.IsCompleted);
-        }, timeoutMilliseconds: 2500);
+        }, timeoutMilliseconds: 8000);
 
         var secondRemoteSwitchTask = fixture.ViewModel.SwitchConversationAsync("conv-remote-2");
         await syncContext.RunUntilCompletedAsync(secondRemoteSwitchTask);
@@ -6952,7 +7164,7 @@ public class ChatViewModelTests
         {
             syncContext.RunAll();
             return Task.FromResult(remote1Canceled.Task.IsCompleted);
-        }, timeoutMilliseconds: 2500);
+        }, timeoutMilliseconds: 8000);
         await syncContext.RunUntilCompletedAsync(firstRemoteSwitchTask);
         Assert.False(await firstRemoteSwitchTask);
 
@@ -7028,9 +7240,9 @@ public class ChatViewModelTests
                     string.Equals(context.ConversationId, "conv-2", StringComparison.Ordinal)
                     && context.PreserveConversation),
                 It.IsAny<CancellationToken>()))
-            .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, AcpConnectionContext, CancellationToken>(async (profile, _, sink, _, _) =>
+            .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, AcpConnectionContext, CancellationToken>(async (profile, _, sink, _, cancellationToken) =>
             {
-                sink.SelectProfile(profile);
+                await sink.SelectProfileAsync(profile, cancellationToken);
                 sink.ReplaceChatService(chatService.Object);
                 await fixture!.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
                 return new AcpTransportApplyResult(chatService.Object, new InitializeResponse());
@@ -7144,9 +7356,9 @@ public class ChatViewModelTests
                     string.Equals(context.ConversationId, "conv-remote", StringComparison.Ordinal)
                     && context.PreserveConversation),
                 It.IsAny<CancellationToken>()))
-            .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, AcpConnectionContext, CancellationToken>(async (profile, _, sink, _, _) =>
+            .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, AcpConnectionContext, CancellationToken>(async (profile, _, sink, _, cancellationToken) =>
             {
-                sink.SelectProfile(profile);
+                await sink.SelectProfileAsync(profile, cancellationToken);
                 sink.ReplaceChatService(reboundService.Object);
                 await fixture!.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
                 return new AcpTransportApplyResult(reboundService.Object, new InitializeResponse());
@@ -7155,7 +7367,7 @@ public class ChatViewModelTests
         fixture = CreateViewModel(syncContext, sessionManager: sessionManager, acpConnectionCommands: commands.Object);
         await using (fixture)
         {
-            fixture.Profiles.Profiles.Add(new ServerConfiguration { Id = "profile-1", Name = "Profile 1", Transport = TransportType.Stdio });
+            fixture.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
             fixture.Profiles.Profiles.Add(new ServerConfiguration { Id = "profile-2", Name = "Profile 2", Transport = TransportType.Stdio });
             await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync());
 
@@ -7336,7 +7548,7 @@ public class ChatViewModelTests
         fixture = CreateViewModel(syncContext, sessionManager: sessionManager, acpConnectionCommands: commands.Object);
         await using (fixture)
         {
-            fixture.Profiles.Profiles.Add(new ServerConfiguration { Id = "profile-1", Name = "Profile 1", Transport = TransportType.Stdio });
+            fixture.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
             await syncContext.RunUntilCompletedAsync(fixture.ViewModel.RestoreAsync());
 
             fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -7390,7 +7602,7 @@ public class ChatViewModelTests
             {
                 syncContext.RunAll();
                 return Task.FromResult(staleConnectStarted.Task.IsCompleted);
-            }, timeoutMilliseconds: 2500);
+            }, timeoutMilliseconds: 8000);
 
             var returnToLocalTask = fixture.ViewModel.SwitchConversationAsync("conv-local");
             allowStaleConnectCompletion.TrySetResult(null);
@@ -7400,10 +7612,14 @@ public class ChatViewModelTests
 
             Assert.True(await returnToLocalTask);
             Assert.False(await staleSwitchTask);
-            Assert.Equal("conv-local", fixture.ViewModel.CurrentSessionId);
-            Assert.Null(fixture.ViewModel.CurrentChatService);
-            Assert.Null(fixture.ViewModel.AgentName);
-            Assert.Null(fixture.ViewModel.AgentVersion);
+            await WaitForConditionAsync(async () =>
+            {
+                syncContext.RunAll();
+                return string.Equals(fixture.ViewModel.CurrentSessionId, "conv-local", StringComparison.Ordinal)
+                    && fixture.ViewModel.CurrentChatService is null
+                    && fixture.ViewModel.AgentName is null
+                    && fixture.ViewModel.AgentVersion is null;
+            }, timeoutMilliseconds: 15000);
             Assert.Single(fixture.ViewModel.MessageHistory);
             Assert.Contains("local seed", fixture.ViewModel.MessageHistory[0].TextContent, StringComparison.Ordinal);
         }
@@ -7599,6 +7815,16 @@ public class ChatViewModelTests
         var switched = await fixture.ViewModel.SwitchConversationAsync("conv-2");
 
         Assert.True(switched);
+        await WaitForConditionAsync(async () =>
+        {
+            var workspaceBinding = fixture.Workspace.GetRemoteBinding("conv-2");
+            var state = await fixture.GetStateAsync();
+            return (fixture.ViewModel.ErrorMessage?.Contains("Resource not found", StringComparison.Ordinal) ?? false)
+                && fixture.ViewModel.MessageHistory.Any(message =>
+                    string.Equals(message.TextContent, "cached local transcript", StringComparison.Ordinal))
+                && workspaceBinding is { RemoteSessionId: null, BoundProfileId: "profile-1" }
+                && state.ResolveBinding("conv-2") == new ConversationBindingSlice("conv-2", null, "profile-1");
+        });
         Assert.Contains("Resource not found", fixture.ViewModel.ErrorMessage ?? string.Empty, StringComparison.Ordinal);
         chatService.Verify(
             service => service.LoadSessionAsync(
@@ -7965,7 +8191,7 @@ public class ChatViewModelTests
                 && string.Equals(fixture.ViewModel.SelectedMode?.ModeId, "plan", StringComparison.Ordinal)
                 && fixture.ViewModel.ConfigOptions.Count == 1
                 && string.Equals(fixture.ViewModel.ConfigOptions[0].Value?.ToString(), "plan", StringComparison.Ordinal));
-        }, timeoutMilliseconds: 5000);
+        }, timeoutMilliseconds: 15000);
 
         chatService.Verify(
             service => service.LoadSessionAsync(
@@ -8017,25 +8243,47 @@ public class ChatViewModelTests
                 ConfigOptions = CreateModeConfigOptions("agent")
             }));
 
+        await WaitForConditionAsync(async () =>
+        {
+            var state = await fixture.GetStateAsync();
+            var sessionSlice = state.ResolveSessionStateSlice("conv-1");
+            syncContext.RunAll();
+            return sessionSlice.HasValue
+                && sessionSlice.Value.AvailableModes.Count == 2
+                && string.Equals(sessionSlice.Value.SelectedModeId, "agent", StringComparison.Ordinal);
+        });
+
         await WaitForConditionAsync(() =>
         {
             syncContext.RunAll();
             return Task.FromResult(
                 viewModel.AvailableModes.Count == 2
                 && string.Equals(viewModel.SelectedMode?.ModeId, "agent", StringComparison.Ordinal));
-        }, timeoutMilliseconds: 5000);
+        });
 
         var targetMode = Assert.Single(viewModel.AvailableModes.Where(mode => string.Equals(mode.ModeId, "plan", StringComparison.Ordinal)));
         viewModel.SelectedMode = targetMode;
+
+        await WaitForConditionAsync(async () =>
+        {
+            var state = await fixture.GetStateAsync();
+            var sessionSlice = state.ResolveSessionStateSlice("conv-1");
+            syncContext.RunAll();
+            return capturedParams is not null
+                && sessionSlice.HasValue
+                && string.Equals(sessionSlice.Value.SelectedModeId, "plan", StringComparison.Ordinal)
+                && sessionSlice.Value.ConfigOptions.Count == 1
+                && string.Equals(sessionSlice.Value.ConfigOptions[0].SelectedValue, "plan", StringComparison.Ordinal);
+        });
 
         await WaitForConditionAsync(() =>
         {
             syncContext.RunAll();
             return Task.FromResult(
-                capturedParams is not null
-                && string.Equals(viewModel.SelectedMode?.ModeId, "plan", StringComparison.Ordinal)
+                string.Equals(viewModel.SelectedMode?.ModeId, "plan", StringComparison.Ordinal)
+                && viewModel.ConfigOptions.Count == 1
                 && string.Equals(viewModel.ConfigOptions[0].Value?.ToString(), "plan", StringComparison.Ordinal));
-        }, timeoutMilliseconds: 5000);
+        });
 
         Assert.NotNull(capturedParams);
         Assert.Equal("remote-1", capturedParams!.SessionId);

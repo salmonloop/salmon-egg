@@ -231,7 +231,7 @@ public partial class App : global::Microsoft.UI.Xaml.Application
         {
         }
 
-        // Applies the generated icon.ico (from Assets/Icons/icon.svg) to the native window (Desktop/Windows).
+        // Applies the Uno.Resizetizer-generated window icon to the native window (Desktop/Windows).
 #if HAS_UNO
         MainWindow.SetWindowIcon();
 #endif

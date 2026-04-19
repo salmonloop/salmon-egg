@@ -711,7 +711,7 @@ public sealed class NavigationCoordinatorTests
     }
 
     [Fact]
-    public async Task ActivateSessionAsync_RemoteBoundConversation_UsesChatViewModelActivationPath()
+    public async Task ActivateSessionAsync_RemoteBoundConversation_ContinuesBackgroundHydrationWithBoundRemoteSession()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -724,32 +724,68 @@ public sealed class NavigationCoordinatorTests
                 new Session("session-2", @"C:\repo\two") { DisplayName = "Imported Session" });
             var preferences = CreatePreferencesWithProject();
             var shellNavigation = CreateShellNavigationService();
+            var runtimeState = new ShellNavigationRuntimeStateStore();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
+            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
             await chat.ViewModel.RestoreAsync();
 
             var bindResult = await chat.ViewModel.ConversationBindingCommands
                 .UpdateBindingAsync("session-2", "remote-2", null);
             Assert.Equal(BindingUpdateStatus.Success, bindResult.Status);
 
+            var loadStarted = new TaskCompletionSource<SessionLoadParams>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var allowLoadCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
             var chatService = new Mock<IChatService>();
             chatService.SetupGet(service => service.IsConnected).Returns(true);
             chatService.SetupGet(service => service.IsInitialized).Returns(true);
             chatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
             chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(SessionLoadResponse.Completed);
+                .Returns<SessionLoadParams, CancellationToken>(async (parameters, _) =>
+                {
+                    loadStarted.TrySetResult(parameters);
+                    await allowLoadCompletion.Task;
+                    return SessionLoadResponse.Completed;
+                });
             chat.ViewModel.ReplaceChatService(chatService.Object);
 
             var selectionStore = new ShellSelectionStateStore();
-            var coordinator = CreateCoordinator(selectionStore, chat.ViewModel, preferences, shellNavigation.Object);
-            using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState, selectionStore, coordinator);
+            var coordinator = CreateCoordinator(
+                selectionStore,
+                (IConversationSessionSwitcher)chat.ViewModel,
+                preferences,
+                shellNavigation.Object,
+                runtimeState);
+            using var navVm = CreateNavigationViewModel(
+                chat,
+                sessionManager.Object,
+                preferences,
+                navState,
+                selectionStore,
+                coordinator,
+                runtimeState: runtimeState);
 
             navVm.RebuildTree();
             var initialActivated = await chat.ViewModel.SwitchConversationAsync("session-1");
             Assert.True(initialActivated);
-            var activated = await coordinator.ActivateSessionAsync("session-2", "project-1");
+            var activationTask = coordinator.ActivateSessionAsync("session-2", "project-1");
 
-            Assert.True(activated);
+            Assert.True(await activationTask);
+            var loadParameters = await loadStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            var selection = Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
+            Assert.Equal("session-2", selection.SessionId);
+            Assert.Equal("project-1", preferences.LastSelectedProjectId);
+            Assert.Equal("remote-2", loadParameters.SessionId);
+            Assert.Equal(@"C:\repo\two", loadParameters.Cwd);
+            Assert.NotNull(runtimeState.ActiveSessionActivation);
+            Assert.Equal(SessionActivationPhase.RemoteHydrationPending, runtimeState.ActiveSessionActivation!.Phase);
+            Assert.True(runtimeState.IsSessionActivationInProgress);
+
+            allowLoadCompletion.TrySetResult(null);
+            await WaitForConditionAsync(() =>
+                runtimeState.ActiveSessionActivation?.Phase == SessionActivationPhase.Hydrated
+                && !runtimeState.IsSessionActivationInProgress,
+                maxAttempts: 100,
+                delayMilliseconds: 20);
             chatService.Verify(
                 service => service.LoadSessionAsync(
                     It.Is<SessionLoadParams>(parameters =>

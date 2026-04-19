@@ -12,7 +12,7 @@
   <Properties>
     <DisplayName>SalmonEgg</DisplayName>
     <PublisherDisplayName>SalmonEgg</PublisherDisplayName>
-    <Logo>Assets\Icons\iconLogo.png</Logo>
+    <Logo>Assets\Icons\Windows\iconLogo.png</Logo>
   </Properties>
 
   <Dependencies>
@@ -28,24 +28,25 @@
     <Application Id="App"
       Executable="$targetnametoken$.exe"
       EntryPoint="$targetentrypoint$">
-      <!-- Use Uno.Resizetizer-generated assets (from Assets/Icons/icon.svg) to avoid stale AppIcon.* files. -->
-      <uap:VisualElements Square44x44Logo="Assets\Icons\iconLogo.png"
-                          Square150x150Logo="Assets\Icons\iconLogo.png"
-                          DisplayName="Salmon Egg"
+      <uap:VisualElements DisplayName="Salmon Egg"
                           Description="AI Agent"
-                          BackgroundColor="transparent">
-        <uap:DefaultTile Square71x71Logo="Assets\Icons\SmallTile.png" Wide310x150Logo="Assets\Icons\WideTile.png" Square310x310Logo="Assets\Icons\LargeTile.png"/>
+                          BackgroundColor="transparent"
+                          Square44x44Logo="Assets\Icons\Windows\iconLogo.png"
+                          Square150x150Logo="Assets\Icons\Windows\iconLogo.png">
+        <uap:DefaultTile Square71x71Logo="Assets\Icons\Windows\SmallTile.png"
+                         Wide310x150Logo="Assets\Icons\Windows\WideTile.png"
+                         Square310x310Logo="Assets\Icons\Windows\LargeTile.png" />
         <uap:InitialRotationPreference>
           <uap:Rotation Preference="landscape"/>
           <uap:Rotation Preference="portrait"/>
           <uap:Rotation Preference="portraitFlipped"/>
           <uap:Rotation Preference="landscapeFlipped"/></uap:InitialRotationPreference>
-        <uap:SplashScreen Image="Assets\Icons\SplashScreen.png"/>
+        <uap:SplashScreen Image="Assets\Icons\Windows\SplashScreen.png" />
       </uap:VisualElements >
       <Extensions>
         <uap:Extension Category="windows.protocol">
           <uap:Protocol Name="s8p">
-            <uap:Logo>Assets\Icons\iconLogo.png</uap:Logo>
+            <uap:Logo>Assets\Icons\Windows\iconLogo.png</uap:Logo>
             <uap:DisplayName>Salmon Egg</uap:DisplayName>
           </uap:Protocol>
         </uap:Extension>

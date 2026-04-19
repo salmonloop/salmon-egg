@@ -593,8 +593,6 @@ public sealed class NavigationSmokeTests
             return;
         }
 
-        // [HACK-REMOVED]
-        // Assert.Equal("content", winner);
         Assert.Fail($"Expected visible selection to fall back to project, but winner was {winner ?? "<null>"}. {DumpSelectionSnapshot(session, sessionId, projectId, startId)}");
     }
 
@@ -628,13 +626,6 @@ public sealed class NavigationSmokeTests
                 winner = projectId;
                 return true;
             }
-
-            // [HACK-REMOVED]
-            // if (!sessionVisible && chatHeaderVisible)
-            // {
-            //     winner = "content";
-            //     return true;
-            // }
 
             if (startSelected)
             {

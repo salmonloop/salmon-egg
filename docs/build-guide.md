@@ -4,7 +4,7 @@
 
 ### 开发环境
 
-- **.NET 10.0 SDK**（推荐 10.0.200，允许 patch 前滚）
+- **.NET 10.0 SDK**（推荐 10.0.202，允许 patch 前滚）
   - 下载地址：https://dotnet.microsoft.com/download/dotnet/10.0
   - 验证安装：`dotnet --version`
 
@@ -135,8 +135,7 @@ dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj \
 # 安装 Android 工作负载（首次需要）
 dotnet workload install android
 
-# CI 固定的 manifest 版本（本地可不必）
-# dotnet workload install android --version 10.0.200-manifests.34a88a22
+# CI manifest 应与 `global.json` 中的 SDK patch 保持一致（当前为 10.0.202）
 
 # 运行在 Android 模拟器
 dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj \
