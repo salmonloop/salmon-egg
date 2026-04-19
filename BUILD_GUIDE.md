@@ -31,7 +31,7 @@ run.bat desktop
 ### 1. 环境要求
 
 - **.NET SDK**: 10.0 或更高版本
-  - 推荐版本：10.0.200（允许 patch 前滚）
+  - 推荐版本：10.0.202（允许 patch 前滚）
   - 下载地址: https://dotnet.microsoft.com/download/dotnet/10.0
   
 - **操作系统**:
@@ -46,7 +46,7 @@ run.bat desktop
 # 检查 .NET SDK 版本
 dotnet --version
 
-# 应该输出 10.0.2xx（推荐 10.0.200）
+# 应该输出 10.0.2xx（推荐 10.0.202）
 ```
 
 ### 3. 克隆代码（如果还没有）
@@ -95,7 +95,7 @@ run.bat
 > 证书复用：`.tools/run-winui3-msix.ps1` 现在会复用同一张开发证书，不应再在每次 `run.bat msix` 时重建证书或反复要求安装证书。
 > 历史根因：脚本曾使用 PowerShell 中不可靠的 `$Cert.GetRSAPrivateKey()` 调用来判断私钥可用性，导致有效的 RSA 私钥被误判为不可用，进而每次重建新证书；现已改为标准的 `RSACertificateExtensions.GetRSAPrivateKey(...)`。
 > 工具链锁定：Windows SDK 10.0.26100.0，signtool 来自 SDK 10.0.22621.0。
-> Workload manifest：CI 固定 10.0.200-manifests.34a88a22；本地允许最新。
+> Workload manifest：CI 应与 `global.json` 中的 .NET SDK patch 保持一致；当前仓库锁定 10.0.202，本地允许最新 patch manifest。
 > 验证口径：`dotnet build -f net10.0-windows10.0.26100.0` 不是本仓库的权威 WinUI 3 / MSIX 门禁；Windows 原生包请以 `build.bat msix` 或 `.tools/run-winui3-msix.ps1 -SkipInstall` 为准。`dotnet build` 主要用于 Core/Skia/Desktop/Wasm 验证。
 
 #### Visual Studio 调试（推荐 / 官方）

@@ -7,26 +7,25 @@
   -->
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageVersion Include="CommunityToolkit.Labs.WinUI.Controls.MarkdownTextBlock" Version="0.1.251217-build.2433" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.3" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.3" />
-    <PackageVersion Include="Microsoft.WindowsAppSDK" Version="1.8.260209005" />
-    <PackageVersion Include="Microsoft.WindowsAppSDK.WinUI" Version="1.8.260204000" />
-    <PackageVersion Include="Serilog.Extensions.Logging" Version="9.0.0" />
-    <PackageVersion Include="System.Security.Permissions" Version="6.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.6" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.6" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.6" />
+    <PackageVersion Include="Microsoft.WindowsAppSDK" Version="1.8.260317003" />
+    <PackageVersion Include="Microsoft.WindowsAppSDK.WinUI" Version="1.8.260224000" />
+    <PackageVersion Include="Serilog.Extensions.Logging" Version="10.0.0" />
+    <PackageVersion Include="System.Security.Permissions" Version="10.0.6" />
     <PackageVersion Include="Uno.WinUI.Lottie" Version="6.5.153" />
     <PackageVersion Include="Uno.Extensions.Reactive" Version="7.1.1" />
     <PackageVersion Include="Uno.Extensions.Reactive.WinUI" Version="7.1.1" />
     <PackageVersion Include="Uno.Extensions.Reactive.Messaging" Version="7.1.1" />
     <PackageVersion Include="Uno.CommunityToolkit.WinUI.UI.Controls.Markdown" Version="7.1.205" />
-    <PackageVersion Include="System.Security.Cryptography.Xml"
-                    Version="10.0.6"
-                    Condition="'$(TargetFramework)' == 'net10.0-browserwasm'" />
+    <!-- Uno 6.5.31 still resolves this transitively on desktop; pin the patched version centrally. -->
     <PackageVersion Include="Tmds.DBus.Protocol"
                     Version="0.21.3"
                     Condition="'$(TargetFramework)' == 'net10.0-desktop'" />

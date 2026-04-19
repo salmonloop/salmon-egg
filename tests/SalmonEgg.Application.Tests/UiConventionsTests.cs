@@ -318,6 +318,82 @@ public class UiConventionsTests
     }
 
     [Fact]
+    public void PackageManifest_ShouldReferenceWindowsSpecificIconAssets()
+    {
+        var repoRoot = FindRepoRoot();
+        var manifestFile = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Package.appxmanifest");
+        var document = ReadXml(manifestFile);
+        var application = document
+            .Descendants()
+            .Single(element => string.Equals(element.Name.LocalName, "Application", StringComparison.Ordinal));
+        var visualElements = application
+            .Elements()
+            .Single(element => string.Equals(element.Name.LocalName, "VisualElements", StringComparison.Ordinal));
+        var defaultTile = visualElements
+            .Elements()
+            .Single(element => string.Equals(element.Name.LocalName, "DefaultTile", StringComparison.Ordinal));
+        var splashScreen = visualElements
+            .Elements()
+            .Single(element => string.Equals(element.Name.LocalName, "SplashScreen", StringComparison.Ordinal));
+        var protocolLogo = application
+            .Descendants()
+            .Single(element => string.Equals(element.Name.LocalName, "Logo", StringComparison.Ordinal)
+                && string.Equals(element.Parent?.Name.LocalName, "Protocol", StringComparison.Ordinal));
+        var logo = document
+            .Descendants()
+            .SingleOrDefault(element => string.Equals(element.Name.LocalName, "Logo", StringComparison.Ordinal)
+                && string.Equals(element.Parent?.Name.LocalName, "Properties", StringComparison.Ordinal));
+        var properties = document
+            .Descendants()
+            .Single(element => string.Equals(element.Name.LocalName, "Properties", StringComparison.Ordinal));
+
+        Assert.NotNull(logo);
+        Assert.Equal(@"Assets\Icons\Windows\iconLogo.png", logo!.Value.Trim());
+        Assert.Equal("transparent", GetAttributeValueByLocalName(visualElements, "BackgroundColor"));
+        Assert.Equal(@"Assets\Icons\Windows\iconLogo.png", GetAttributeValueByLocalName(visualElements, "Square44x44Logo"));
+        Assert.Equal(@"Assets\Icons\Windows\iconLogo.png", GetAttributeValueByLocalName(visualElements, "Square150x150Logo"));
+        Assert.Equal(@"Assets\Icons\Windows\SmallTile.png", GetAttributeValueByLocalName(defaultTile, "Square71x71Logo"));
+        Assert.Equal(@"Assets\Icons\Windows\WideTile.png", GetAttributeValueByLocalName(defaultTile, "Wide310x150Logo"));
+        Assert.Equal(@"Assets\Icons\Windows\LargeTile.png", GetAttributeValueByLocalName(defaultTile, "Square310x310Logo"));
+        Assert.Equal(@"Assets\Icons\Windows\SplashScreen.png", GetAttributeValueByLocalName(splashScreen, "Image"));
+        Assert.Equal(@"Assets\Icons\Windows\iconLogo.png", protocolLogo.Value.Trim());
+        Assert.DoesNotContain(properties.Elements().Select(element => element.Value), value => value.Contains("appicon", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void UnoSingleProject_ShouldDeclareCustomPngAsUnoIconSourceAndWindowsIco()
+    {
+        var repoRoot = FindRepoRoot();
+        var projectFile = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "SalmonEgg.csproj");
+        var document = ReadXml(projectFile);
+        var propertyGroups = document
+            .Descendants("PropertyGroup")
+            .ToList();
+        var itemGroups = document
+            .Descendants("ItemGroup")
+            .ToList();
+        var appIcon = itemGroups
+            .Elements("UnoIcon")
+            .SingleOrDefault(element =>
+                string.Equals(element.Attribute("Include")?.Value?.Trim(), @"Assets\Icons\icon.png", StringComparison.Ordinal));
+        var applicationIcon = propertyGroups
+            .Elements("ApplicationIcon")
+            .SingleOrDefault();
+
+        Assert.NotNull(appIcon);
+        Assert.NotNull(applicationIcon);
+        Assert.Equal(@"Assets\Icons\Windows\icon.ico", applicationIcon!.Value.Trim());
+        Assert.Empty(propertyGroups.Elements("UnoIconBackgroundFile"));
+        Assert.Empty(propertyGroups.Elements("UnoIconForegroundFile"));
+        Assert.True(File.Exists(Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Assets", "Icons", "icon.png")));
+        Assert.True(File.Exists(Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Assets", "Icons", "Windows", "icon.ico")));
+        Assert.True(File.Exists(Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Assets", "Icons", "Windows", "iconLogo.scale-100.png")));
+        Assert.False(File.Exists(Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Assets", "Icons", "appicon.png")));
+        Assert.False(File.Exists(Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Assets", "Icons", "icon.svg")));
+        Assert.False(File.Exists(Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Assets", "Icons", "icon_foreground.svg")));
+    }
+
+    [Fact]
     public void ChatServiceFactory_ShouldNotDependOnAppLevelCapabilityManager()
     {
         var constructor = typeof(ChatServiceFactory).GetConstructors().Single();

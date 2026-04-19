@@ -252,8 +252,7 @@ dotnet test
 ```bash
 # 安装所需工作负载
 dotnet workload install android ios wasm-tools
-# CI 固定的 manifest 版本（本地可不必）
-# dotnet workload install android ios wasm-tools --version 10.0.200-manifests.34a88a22
+# CI manifest 应与 `global.json` 中的 SDK patch 保持一致（当前为 10.0.202）
 
 # 或者只安装需要的平台
 dotnet workload install wasm-tools  # 仅 WebAssembly

@@ -81,6 +81,10 @@ public sealed class MiniWindowCoordinator : IMiniWindowCoordinator
                 }
 #endif
 
+#if HAS_UNO
+                window.SetWindowIcon();
+#endif
+
                 window.Activate();
                 _miniWindow = window;
             }
