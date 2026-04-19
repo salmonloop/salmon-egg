@@ -739,6 +739,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         => activation.Phase is SessionActivationPhase.NavigatingToChatShell
             or SessionActivationPhase.SelectingConversation
             or SessionActivationPhase.Selected
+            or SessionActivationPhase.RemoteConnectionReady
             or SessionActivationPhase.RemoteHydrationPending
             or SessionActivationPhase.Hydrated;
 

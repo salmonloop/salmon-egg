@@ -272,7 +272,10 @@ public static class DependencyInjection
         services.AddSingleton<ChatViewModel>(sp =>
         {
             var dispatcher = sp.GetRequiredService<IUiDispatcher>();
-            return ActivatorUtilities.CreateInstance<ChatViewModel>(sp, dispatcher);
+            return ActivatorUtilities.CreateInstance<ChatViewModel>(
+                sp,
+                dispatcher,
+                sp.GetRequiredService<IShellNavigationRuntimeState>());
         });
         services.AddSingleton<IConversationSessionSwitcher>(sp => sp.GetRequiredService<ChatViewModel>());
 

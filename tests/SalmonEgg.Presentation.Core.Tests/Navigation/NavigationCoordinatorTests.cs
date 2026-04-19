@@ -895,6 +895,84 @@ public sealed class NavigationCoordinatorTests
 
     [Fact]
     [Trait("Suite", "Smoke")]
+    public async Task ActivateSessionAsync_RemoteBoundConversation_ProjectsShellActivationThroughHydrationLifecycle()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var sessionManager = CreateSessionManager(
+                new Session("session-2", @"C:\repo\two") { DisplayName = "Imported Session" });
+            var preferences = CreatePreferencesWithProject();
+            var shellNavigation = CreateShellNavigationService();
+            var runtimeState = new ShellNavigationRuntimeStateStore();
+
+            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
+            await chat.ViewModel.RestoreAsync();
+
+            var bindResult = await chat.ViewModel.ConversationBindingCommands
+                .UpdateBindingAsync("session-2", "remote-2", null);
+            Assert.Equal(BindingUpdateStatus.Success, bindResult.Status);
+
+            var loadStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var allowLoadCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var chatService = new Mock<IChatService>();
+            chatService.SetupGet(service => service.IsConnected).Returns(true);
+            chatService.SetupGet(service => service.IsInitialized).Returns(true);
+            chatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
+            chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
+                .Returns<SessionLoadParams, CancellationToken>(async (_, _) =>
+                {
+                    loadStarted.TrySetResult(null);
+                    await allowLoadCompletion.Task;
+                    return SessionLoadResponse.Completed;
+                });
+            chat.ViewModel.ReplaceChatService(chatService.Object);
+
+            var selectionStore = new ShellSelectionStateStore();
+            var coordinator = CreateCoordinator(
+                selectionStore,
+                (IConversationSessionSwitcher)chat.ViewModel,
+                preferences,
+                shellNavigation.Object,
+                runtimeState);
+            using var navVm = CreateNavigationViewModel(
+                chat,
+                sessionManager.Object,
+                preferences,
+                navState,
+                selectionStore,
+                coordinator,
+                runtimeState: runtimeState);
+
+            navVm.RebuildTree();
+
+            var activationTask = coordinator.ActivateSessionAsync("session-2", "project-1");
+            await loadStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+            Assert.True(activationTask.IsCompletedSuccessfully);
+            Assert.True(await activationTask);
+            Assert.NotNull(runtimeState.ActiveSessionActivation);
+            Assert.Equal(SessionActivationPhase.RemoteHydrationPending, runtimeState.ActiveSessionActivation!.Phase);
+            Assert.True(runtimeState.IsSessionActivationInProgress);
+
+            allowLoadCompletion.TrySetResult(null);
+            await WaitForConditionAsync(() =>
+                runtimeState.ActiveSessionActivation?.Phase == SessionActivationPhase.Hydrated
+                && !runtimeState.IsSessionActivationInProgress,
+                maxAttempts: 100,
+                delayMilliseconds: 20);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    [Trait("Suite", "Smoke")]
     public async Task ActivateSessionAsync_WhenRemoteHydrationFailsAfterSelectionCommit_SelectionStaysOnTarget()
     {
         var originalContext = SynchronizationContext.Current;
@@ -938,6 +1016,91 @@ public sealed class NavigationCoordinatorTests
             await WaitForConditionAsync(() => !chat.ViewModel.IsOverlayVisible);
             Assert.Contains("remote load failed", chat.ViewModel.ErrorMessage ?? string.Empty, StringComparison.Ordinal);
             selection = Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
+            Assert.Equal("session-2", selection.SessionId);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    [Trait("Suite", "Smoke")]
+    public async Task ActivateSessionAsync_WhenRemoteHydrationFailsAfterSelectionCommit_SameSessionRetryStartsNewActivation()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var sessionManager = CreateSessionManager(
+                new Session("session-2", @"C:\repo\two") { DisplayName = "Imported Session" });
+            var preferences = CreatePreferencesWithProject();
+            var shellNavigation = CreateShellNavigationService();
+            var runtimeState = new ShellNavigationRuntimeStateStore();
+
+            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
+            await chat.ViewModel.RestoreAsync();
+
+            var bindResult = await chat.ViewModel.ConversationBindingCommands
+                .UpdateBindingAsync("session-2", "remote-2", null);
+            Assert.Equal(BindingUpdateStatus.Success, bindResult.Status);
+
+            var loadAttempts = 0;
+            var chatService = new Mock<IChatService>();
+            chatService.SetupGet(service => service.IsConnected).Returns(true);
+            chatService.SetupGet(service => service.IsInitialized).Returns(true);
+            chatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
+            chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
+                .Returns<SessionLoadParams, CancellationToken>((_, _) =>
+                {
+                    var attempt = Interlocked.Increment(ref loadAttempts);
+                    return attempt == 1
+                        ? Task.FromException<SessionLoadResponse>(new InvalidOperationException("remote load failed"))
+                        : Task.FromResult(SessionLoadResponse.Completed);
+                });
+            chat.ViewModel.ReplaceChatService(chatService.Object);
+
+            var selectionStore = new ShellSelectionStateStore();
+            var coordinator = CreateCoordinator(
+                selectionStore,
+                (IConversationSessionSwitcher)chat.ViewModel,
+                preferences,
+                shellNavigation.Object,
+                runtimeState);
+            using var navVm = CreateNavigationViewModel(
+                chat,
+                sessionManager.Object,
+                preferences,
+                navState,
+                selectionStore,
+                coordinator,
+                runtimeState: runtimeState);
+
+            navVm.RebuildTree();
+
+            var firstActivation = coordinator.ActivateSessionAsync("session-2", "project-1");
+
+            Assert.True(await firstActivation);
+            await WaitForConditionAsync(() =>
+                runtimeState.ActiveSessionActivation?.Phase == SessionActivationPhase.Faulted
+                && !runtimeState.IsSessionActivationInProgress,
+                maxAttempts: 100,
+                delayMilliseconds: 20);
+            Assert.Equal(1, Volatile.Read(ref loadAttempts));
+
+            var retryActivation = coordinator.ActivateSessionAsync("session-2", "project-1");
+
+            Assert.True(await retryActivation);
+            await WaitForConditionAsync(() => Volatile.Read(ref loadAttempts) == 2, maxAttempts: 100, delayMilliseconds: 20);
+            await WaitForConditionAsync(() =>
+                runtimeState.ActiveSessionActivation?.Phase == SessionActivationPhase.Hydrated
+                && !runtimeState.IsSessionActivationInProgress,
+                maxAttempts: 100,
+                delayMilliseconds: 20);
+
+            var selection = Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
             Assert.Equal("session-2", selection.SessionId);
         }
         finally
@@ -1023,6 +1186,86 @@ public sealed class NavigationCoordinatorTests
             await secondLoadStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
             allowSecondLoadCompletion.TrySetResult(null);
             await WaitForConditionAsync(() => !chat.ViewModel.IsOverlayVisible);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    [Trait("Suite", "Smoke")]
+    public async Task ActivateStartAsync_WhileRemoteHydrationLaterFails_DoesNotSurfaceLateRemoteError()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var sessionManager = CreateSessionManager(
+                new Session("session-2", @"C:\repo\two") { DisplayName = "Imported Session" });
+            var preferences = CreatePreferencesWithProject();
+            var shellNavigation = CreateShellNavigationService();
+            var runtimeState = new ShellNavigationRuntimeStateStore();
+
+            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
+            await chat.ViewModel.RestoreAsync();
+
+            var bindResult = await chat.ViewModel.ConversationBindingCommands
+                .UpdateBindingAsync("session-2", "remote-2", null);
+            Assert.Equal(BindingUpdateStatus.Success, bindResult.Status);
+
+            var loadStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var allowLoadCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var loadCompleted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var chatService = new Mock<IChatService>();
+            chatService.SetupGet(service => service.IsConnected).Returns(true);
+            chatService.SetupGet(service => service.IsInitialized).Returns(true);
+            chatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
+            chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
+                .Returns<SessionLoadParams, CancellationToken>(async (_, _) =>
+                {
+                    loadStarted.TrySetResult(null);
+                    await allowLoadCompletion.Task;
+                    loadCompleted.TrySetResult(null);
+                    throw new InvalidOperationException("remote load failed");
+                });
+            chat.ViewModel.ReplaceChatService(chatService.Object);
+
+            var selectionStore = new ShellSelectionStateStore();
+            var coordinator = CreateCoordinator(
+                selectionStore,
+                (IConversationSessionSwitcher)chat.ViewModel,
+                preferences,
+                shellNavigation.Object,
+                runtimeState);
+            using var navVm = CreateNavigationViewModel(
+                chat,
+                sessionManager.Object,
+                preferences,
+                navState,
+                selectionStore,
+                coordinator,
+                runtimeState: runtimeState);
+
+            navVm.RebuildTree();
+
+            var activationTask = coordinator.ActivateSessionAsync("session-2", "project-1");
+            await loadStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            Assert.True(await activationTask);
+
+            Assert.True(await coordinator.ActivateStartAsync());
+            var selection = Assert.IsType<NavigationSelectionState.Start>(navVm.CurrentSelection);
+            Assert.Equal(NavigationSelectionState.StartSelection, selection);
+
+            allowLoadCompletion.TrySetResult(null);
+            await loadCompleted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            await Task.Delay(50);
+
+            Assert.Equal(ShellNavigationContent.Start, runtimeState.CurrentShellContent);
+            Assert.Null(runtimeState.ActiveSessionActivation);
+            Assert.True(string.IsNullOrWhiteSpace(chat.ViewModel.ErrorMessage), chat.ViewModel.ErrorMessage);
         }
         finally
         {
@@ -1139,7 +1382,8 @@ public sealed class NavigationCoordinatorTests
     private static ChatViewModelHarness CreateChatViewModel(
         SynchronizationContext syncContext,
         AppPreferencesViewModel preferences,
-        ISessionManager sessionManager)
+        ISessionManager sessionManager,
+        IShellNavigationRuntimeState? runtimeState = null)
     {
         var uiDispatcher = syncContext as IUiDispatcher ?? new ImmediateUiDispatcher();
         var state = State.Value(new object(), () => ChatState.Empty);
@@ -1212,7 +1456,8 @@ public sealed class NavigationCoordinatorTests
                 connectionStore,
                 uiDispatcher,
                 Mock.Of<IConversationPreviewStore>(),
-                vmLogger.Object);
+                vmLogger.Object,
+                shellNavigationRuntimeState: runtimeState);
             return new ChatViewModelHarness(
                 viewModel,
                 state,

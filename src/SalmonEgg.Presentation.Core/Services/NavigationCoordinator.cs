@@ -293,37 +293,57 @@ public sealed class NavigationCoordinator : INavigationCoordinator
 
     private void EndSessionActivationRequest(SessionActivationRequest request, bool committed)
     {
+        var shouldDisposeRequestCts = !committed;
         lock (_sessionActivationSync)
         {
             if (ReferenceEquals(_sessionActivationCts, request.CancellationTokenSource)
                 && IsLatestActivationToken(request.Version))
             {
-                _sessionActivationCts = null;
-                _runtimeState.IsSessionActivationInProgress = false;
-                _runtimeState.ActiveSessionActivationVersion = 0;
                 if (committed)
                 {
                     _runtimeState.DesiredSessionId = null;
                     _runtimeState.CommittedSessionId = request.SessionId;
                     _runtimeState.CommittedSessionActivationVersion = request.Version;
                 }
+                else
+                {
+                    _sessionActivationCts = null;
+                    _runtimeState.IsSessionActivationInProgress = false;
+                    _runtimeState.ActiveSessionActivationVersion = 0;
+                }
             }
         }
 
-        request.CancellationTokenSource.Dispose();
+        if (shouldDisposeRequestCts)
+        {
+            request.CancellationTokenSource.Dispose();
+        }
     }
 
     private void ClearPendingSessionPreviewState(long activationToken)
     {
-        if (!IsLatestActivationToken(activationToken))
+        CancellationTokenSource? pendingActivation = null;
+        var shouldDisposePendingActivation = false;
+        lock (_sessionActivationSync)
         {
-            return;
+            if (!IsLatestActivationToken(activationToken))
+            {
+                return;
+            }
+
+            pendingActivation = _sessionActivationCts;
+            _sessionActivationCts = null;
+            shouldDisposePendingActivation = pendingActivation is not null;
+            _runtimeState.DesiredSessionId = null;
+            _runtimeState.IsSessionActivationInProgress = false;
+            _runtimeState.ActiveSessionActivationVersion = 0;
+            _runtimeState.ActiveSessionActivation = null;
         }
 
-        _runtimeState.DesiredSessionId = null;
-        _runtimeState.IsSessionActivationInProgress = false;
-        _runtimeState.ActiveSessionActivationVersion = 0;
-        _runtimeState.ActiveSessionActivation = null;
+        if (shouldDisposePendingActivation)
+        {
+            pendingActivation!.Dispose();
+        }
     }
 
     private void PublishSessionActivationPhase(SessionActivationRequest request, SessionActivationPhase phase, string? reason = null)

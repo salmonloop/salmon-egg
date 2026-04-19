@@ -6,7 +6,8 @@ public enum SessionActivationPhase
     NavigatingToChatShell = 1,
     SelectingConversation = 2,
     Selected = 3,
-    RemoteHydrationPending = 4,
-    Hydrated = 5,
-    Faulted = 6
+    RemoteConnectionReady = 4,
+    RemoteHydrationPending = 5,
+    Hydrated = 6,
+    Faulted = 7
 }
