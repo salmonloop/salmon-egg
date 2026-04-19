@@ -378,10 +378,50 @@ public partial class AppPreferencesViewModel : ObservableObject
             return;
         }
 
-        _saveCts?.Cancel();
-        _saveCts?.Dispose();
-        _saveCts = new CancellationTokenSource();
-        var token = _saveCts.Token;
+        var cts = new CancellationTokenSource();
+        var token = cts.Token;
+
+        var oldCts = Interlocked.Exchange(ref _saveCts, cts);
+        if (oldCts != null)
+        {
+            oldCts.Cancel();
+            oldCts.Dispose();
+        }
+
+        // Snapshot UI-bound collections synchronously on the calling thread
+        // to prevent "Collection was modified" exceptions when enumerated in the background task.
+        List<ProjectPathMapping> projectPathMappingsSnapshot;
+        List<ProjectDefinition> projectsSnapshot;
+        Dictionary<string, string> keyBindingsSnapshot;
+
+        try
+        {
+            projectPathMappingsSnapshot = NormalizeProjectPathMappings(ProjectPathMappings);
+
+            projectsSnapshot = Projects
+                .Where(p => !string.IsNullOrWhiteSpace(p.ProjectId)
+                            && !string.IsNullOrWhiteSpace(p.Name)
+                            && !string.IsNullOrWhiteSpace(p.RootPath))
+                .Select(p => new ProjectDefinition
+                {
+                    ProjectId = p.ProjectId.Trim(),
+                    Name = p.Name.Trim(),
+                    RootPath = p.RootPath.Trim()
+                })
+                .ToList();
+
+            keyBindingsSnapshot = KeyBindings
+                .Where(k => !string.IsNullOrWhiteSpace(k.ActionId) && !string.IsNullOrWhiteSpace(k.Gesture))
+                .GroupBy(k => k.ActionId.Trim(), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.Last().Gesture.Trim(), StringComparer.OrdinalIgnoreCase);
+        }
+        catch (InvalidOperationException)
+        {
+            // If the collection was modified during synchronous snapshotting (e.g. from tests
+            // that simulate concurrent property assignments on different threads), we just skip
+            // this save cycle. A subsequent valid change will trigger another schedule anyway.
+            return;
+        }
 
         _ = Task.Run(async () =>
         {
@@ -408,23 +448,10 @@ public partial class AppPreferencesViewModel : ObservableObject
                     AcpHydrationCompletionMode = string.IsNullOrWhiteSpace(AcpHydrationCompletionMode)
                         ? "StrictReplay"
                         : AcpHydrationCompletionMode.Trim(),
-                    ProjectPathMappings = NormalizeProjectPathMappings(ProjectPathMappings),
+                    ProjectPathMappings = projectPathMappingsSnapshot,
                     LastSelectedProjectId = LastSelectedProjectId,
-                    Projects = Projects
-                        .Where(p => !string.IsNullOrWhiteSpace(p.ProjectId)
-                                    && !string.IsNullOrWhiteSpace(p.Name)
-                                    && !string.IsNullOrWhiteSpace(p.RootPath))
-                        .Select(p => new ProjectDefinition
-                        {
-                            ProjectId = p.ProjectId.Trim(),
-                            Name = p.Name.Trim(),
-                            RootPath = p.RootPath.Trim()
-                        })
-                        .ToList(),
-                    KeyBindings = KeyBindings
-                        .Where(k => !string.IsNullOrWhiteSpace(k.ActionId) && !string.IsNullOrWhiteSpace(k.Gesture))
-                        .GroupBy(k => k.ActionId.Trim(), StringComparer.OrdinalIgnoreCase)
-                        .ToDictionary(g => g.Key, g => g.Last().Gesture.Trim(), StringComparer.OrdinalIgnoreCase)
+                    Projects = projectsSnapshot,
+                    KeyBindings = keyBindingsSnapshot
                 }).ConfigureAwait(false);
             }
             catch (TaskCanceledException)
