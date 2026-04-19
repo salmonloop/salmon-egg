@@ -10,7 +10,7 @@ namespace SalmonEgg.Infrastructure.Tests.Services;
 public class PlatformShellServiceTests
 {
     [Fact]
-    public void CreateShellExecuteInfo_WhenPathStartsWithDash_PrependsDotSlash()
+    public void CreateShellExecuteInfo_WhenPathStartsWithDash_UsesDoubleDash()
     {
         // Act
         var result = PlatformShellService.CreateShellExecuteInfo("-foo");
@@ -25,13 +25,14 @@ public class PlatformShellServiceTests
         {
             Assert.False(result.UseShellExecute);
             Assert.Equal(RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? "open" : "xdg-open", result.FileName);
-            Assert.Single(result.ArgumentList);
-            Assert.Equal("./-foo", result.ArgumentList[0]);
+            Assert.Equal(2, result.ArgumentList.Count);
+            Assert.Equal("--", result.ArgumentList[0]);
+            Assert.Equal("-foo", result.ArgumentList[1]);
         }
     }
 
     [Fact]
-    public void CreateShellExecuteInfo_WhenPathStartsWithDoubleDash_PrependsDotSlash()
+    public void CreateShellExecuteInfo_WhenPathStartsWithDoubleDash_UsesDoubleDash()
     {
         // Act
         var result = PlatformShellService.CreateShellExecuteInfo("--env");
@@ -46,13 +47,14 @@ public class PlatformShellServiceTests
         {
             Assert.False(result.UseShellExecute);
             Assert.Equal(RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? "open" : "xdg-open", result.FileName);
-            Assert.Single(result.ArgumentList);
-            Assert.Equal("./--env", result.ArgumentList[0]);
+            Assert.Equal(2, result.ArgumentList.Count);
+            Assert.Equal("--", result.ArgumentList[0]);
+            Assert.Equal("--env", result.ArgumentList[1]);
         }
     }
 
     [Fact]
-    public void CreateShellExecuteInfo_WhenPathIsNormal_DoesNotPrepend()
+    public void CreateShellExecuteInfo_WhenPathIsNormal_UsesDoubleDash()
     {
         // Act
         var result = PlatformShellService.CreateShellExecuteInfo("normal/path/file.txt");
@@ -67,13 +69,14 @@ public class PlatformShellServiceTests
         {
             Assert.False(result.UseShellExecute);
             Assert.Equal(RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? "open" : "xdg-open", result.FileName);
-            Assert.Single(result.ArgumentList);
-            Assert.Equal("normal/path/file.txt", result.ArgumentList[0]);
+            Assert.Equal(2, result.ArgumentList.Count);
+            Assert.Equal("--", result.ArgumentList[0]);
+            Assert.Equal("normal/path/file.txt", result.ArgumentList[1]);
         }
     }
 
     [Fact]
-    public void CreateShellExecuteInfo_WhenPathIsDoubleDash_PrependsDotSlash()
+    public void CreateShellExecuteInfo_WhenPathIsDoubleDash_UsesDoubleDash()
     {
         // Act
         var result = PlatformShellService.CreateShellExecuteInfo("--");
@@ -88,8 +91,9 @@ public class PlatformShellServiceTests
         {
             Assert.False(result.UseShellExecute);
             Assert.Equal(RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? "open" : "xdg-open", result.FileName);
-            Assert.Single(result.ArgumentList);
-            Assert.Equal("./--", result.ArgumentList[0]);
+            Assert.Equal(2, result.ArgumentList.Count);
+            Assert.Equal("--", result.ArgumentList[0]);
+            Assert.Equal("--", result.ArgumentList[1]);
         }
     }
 }
