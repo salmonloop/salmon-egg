@@ -526,15 +526,26 @@ public sealed class StartViewModelTests
             var preferences = CreatePreferences();
             using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
+            var exception = new InvalidOperationException("boom");
             workflow.Setup(w => w.StartSessionAndSendAsync("launch", It.IsAny<CancellationToken>()))
-                .ThrowsAsync(new InvalidOperationException("boom"));
+                .ThrowsAsync(exception);
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+            var loggerMock = new Mock<ILogger<StartViewModel>>();
+            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object, loggerMock.Object);
             startViewModel.OnComposerLoaded();
             startViewModel.StartPrompt = "launch";
 
             await startViewModel.StartSessionAndSendCommand.ExecuteAsync(null);
+
+            loggerMock.Verify(
+                x => x.Log(
+                    LogLevel.Warning,
+                    It.IsAny<EventId>(),
+                    It.Is<It.IsAnyType>((v, t) => v != null && v.ToString()!.Contains("Start session failed")),
+                    exception,
+                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                Times.Once);
 
             Assert.False(startViewModel.IsStarting);
             Assert.Equal("launch", startViewModel.StartPrompt);
