@@ -78,7 +78,7 @@ public sealed class AppSettingsService : IAppSettingsService
     {
         if (settings is null) throw new ArgumentNullException(nameof(settings));
 
-        EnsureWritableSchema(_appYamlPath);
+        await EnsureWritableSchemaAsync(_appYamlPath).ConfigureAwait(false);
 
         var model = new AppSettingsYamlV1
         {
@@ -112,7 +112,7 @@ public sealed class AppSettingsService : IAppSettingsService
         await AtomicFile.WriteUtf8AtomicAsync(_appYamlPath, yaml).ConfigureAwait(false);
     }
 
-    private static void EnsureWritableSchema(string appYamlPath)
+    private static async Task EnsureWritableSchemaAsync(string appYamlPath)
     {
         if (!File.Exists(appYamlPath))
         {
@@ -121,7 +121,7 @@ public sealed class AppSettingsService : IAppSettingsService
 
         try
         {
-            var yaml = File.ReadAllText(appYamlPath);
+            var yaml = await File.ReadAllTextAsync(appYamlPath).ConfigureAwait(false);
             var existing = YamlSerialization.CreateDeserializer().Deserialize<AppSettingsYamlV1>(yaml);
             if (existing.SchemaVersion > CurrentSchemaVersion)
             {

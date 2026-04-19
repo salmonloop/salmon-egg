@@ -1007,8 +1007,10 @@ public sealed class AcpChatCoordinatorTests
 
         service
             .Setup(x => x.SendPromptAsync(It.IsAny<SessionPromptParams>(), It.IsAny<CancellationToken>()))
-            .Returns<SessionPromptParams, CancellationToken>((p, _) => {
-                if (first) {
+            .Returns<SessionPromptParams, CancellationToken>((p, _) =>
+            {
+                if (first)
+                {
                     first = false;
                     throw new AcpException(JsonRpcErrorCode.ResourceNotFound, "Not found");
                 }
