@@ -254,6 +254,11 @@ namespace SalmonEgg.Application.Services.Chat
                     session.State = SessionState.Active;
                 }
 
+                if (response.Modes != null)
+                {
+                    _currentMode = new SessionModeState { CurrentModeId = response.Modes.CurrentModeId ?? string.Empty, AvailableModes = response.Modes.AvailableModes.ConvertAll(m => new SalmonEgg.Domain.Models.Session.SessionMode(m.Id, m.Name, m.Description)) };
+                }
+
                 return response;
             }
             catch (Exception ex)
@@ -300,12 +305,17 @@ namespace SalmonEgg.Application.Services.Chat
                 _sessionManager.UpdateSession(@params.SessionId, s => s.History.Clear());
 
                 var response = await _acpClient.LoadSessionAsync(@params, cancellationToken).ConfigureAwait(false);
+                if (response.Modes != null)
+                {
+                    _currentMode = new SessionModeState { CurrentModeId = response.Modes.CurrentModeId ?? string.Empty, AvailableModes = response.Modes.AvailableModes.ConvertAll(m => new SalmonEgg.Domain.Models.Session.SessionMode(m.Id, m.Name, m.Description)) };
+                }
                 try
                 {
                     var session = GetOrCreateSession(@params.SessionId, @params.Cwd);
                     session.Cwd = @params.Cwd;
                     session.State = SessionState.Active;
                 }
+
                 catch
                 {
                     // Ignore session tracking failures
@@ -583,8 +593,7 @@ namespace SalmonEgg.Application.Services.Chat
                 if (string.IsNullOrEmpty(_currentSessionId))
                     return null;
 
-                // TODO: Modes should be cached from response or requested via separate protocol call if available.
-                return null;
+                return _currentMode?.AvailableModes.ConvertAll(m => new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = m.Id, Name = m.Name, Description = m.Description });
             }
             catch (Exception ex)
             {
