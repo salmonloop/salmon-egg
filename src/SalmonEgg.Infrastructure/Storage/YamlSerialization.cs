@@ -22,14 +22,14 @@ internal static class YamlSerialization
             .WithNodeTypeResolver(new StrictNodeTypeResolver(), s => s.OnTop())
             .Build();
 
-    private sealed class StrictNodeTypeResolver : INodeTypeResolver
+    internal sealed class StrictNodeTypeResolver : INodeTypeResolver
     {
         public bool Resolve(NodeEvent? nodeEvent, ref Type currentType)
         {
             if (nodeEvent?.Tag != null && !nodeEvent.Tag.IsEmpty)
             {
                 var tagValue = nodeEvent.Tag.Value;
-                if (!tagValue.StartsWith("tag:yaml.org,2002:", StringComparison.OrdinalIgnoreCase))
+                if (!tagValue.StartsWith("tag:yaml.org,2002:", StringComparison.Ordinal))
                 {
                     throw new YamlException(
                         nodeEvent.Start,
