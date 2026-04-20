@@ -101,7 +101,31 @@ public class MessageParserTests
     }
 
     [Fact]
-    public void Options_ShouldDeserialize_UsageUpdate_ExtensionPayload()
+    public void Options_ShouldDeserialize_UsageUpdate_OfficialMinimalPayload()
+    {
+        var json = """
+        {
+          "sessionId": "sess_usage",
+          "update": {
+            "sessionUpdate": "usage_update",
+            "used": 717,
+            "size": 200000
+          }
+        }
+        """;
+
+        var parser = new MessageParser();
+        var updateParams = JsonSerializer.Deserialize<SessionUpdateParams>(json, parser.Options);
+
+        Assert.NotNull(updateParams);
+        var usage = Assert.IsType<UsageUpdate>(updateParams!.Update);
+        Assert.Equal(717, usage.Used);
+        Assert.Equal(200000, usage.Size);
+        Assert.Null(usage.Cost);
+    }
+
+    [Fact]
+    public void Options_ShouldDeserialize_UsageUpdate_WithOfficialCostObject()
     {
         var json = """
         {
