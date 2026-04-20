@@ -5783,6 +5783,42 @@ public class ChatViewModelTests
     }
 
     [Fact]
+    public async Task Overlay_WhenPreviewIsPrimedBeforeChatShellNavigation_BecomesVisibleEvenWhileShellContentIsStart()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var runtimeState = new ShellNavigationRuntimeStateStore
+        {
+            CurrentShellContent = ShellNavigationContent.Start
+        };
+        await using var fixture = CreateViewModel(syncContext, shellNavigationRuntimeState: runtimeState);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync());
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Transcript =
+            [
+                new ConversationMessageSnapshot
+                {
+                    Id = "message-1",
+                    Timestamp = new DateTime(2026, 3, 25, 0, 0, 0, DateTimeKind.Utc),
+                    IsOutgoing = false,
+                    ContentType = "text",
+                    TextContent = "stale transcript"
+                }
+            ]
+        });
+
+        var preview = (IConversationActivationPreview)fixture.ViewModel;
+        preview.PrimeSessionSwitchPreview("conv-2");
+
+        Assert.Equal(ShellNavigationContent.Start, runtimeState.CurrentShellContent);
+        Assert.True(fixture.ViewModel.IsActivationOverlayVisible);
+        Assert.True(fixture.ViewModel.ShouldShowBlockingLoadingMask);
+        Assert.Contains("切换", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Overlay_WhenCurrentSessionChangesBeforeTranscriptReplacement_KeepsBlockingMaskForStaleVisibleTranscript()
     {
         var syncContext = new ImmediateSynchronizationContext();
@@ -5830,6 +5866,171 @@ public class ChatViewModelTests
         Assert.True(
             blockingMaskWhileTranscriptWasStale,
             "Blocking loading mask must remain visible while the new CurrentSessionId points at conv-2 but MessageHistory still contains the stale conv-1 transcript.");
+    }
+
+    [Fact]
+    public async Task VisibleConversationContent_WhenTranscriptOwnerIsStale_HidesHeaderTranscriptAndInputUntilProjectionCatchesUp()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync());
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Transcript =
+            [
+                new ConversationMessageSnapshot
+                {
+                    Id = "message-1",
+                    Timestamp = new DateTime(2026, 3, 25, 0, 0, 0, DateTimeKind.Utc),
+                    IsOutgoing = false,
+                    ContentType = "text",
+                    TextContent = "stale transcript"
+                }
+            ]
+        });
+
+        var preview = (IConversationActivationPreview)fixture.ViewModel;
+        preview.PrimeSessionSwitchPreview("conv-2");
+
+        (bool header, bool transcript, bool input)? visibleStateWhileTranscriptWasStale = null;
+        fixture.ViewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ChatViewModel.CurrentSessionId)
+                && string.Equals(fixture.ViewModel.CurrentSessionId, "conv-2", StringComparison.Ordinal)
+                && fixture.ViewModel.MessageHistory.Any(message =>
+                    string.Equals(message.TextContent, "stale transcript", StringComparison.Ordinal)))
+            {
+                visibleStateWhileTranscriptWasStale = (
+                    fixture.ViewModel.ShouldShowSessionHeader,
+                    fixture.ViewModel.ShouldShowTranscriptSurface,
+                    fixture.ViewModel.ShouldShowConversationInputSurface);
+            }
+        };
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-2",
+            Transcript = [],
+            IsHydrating = true
+        });
+
+        Assert.NotNull(visibleStateWhileTranscriptWasStale);
+        Assert.False(visibleStateWhileTranscriptWasStale.Value.header);
+        Assert.False(visibleStateWhileTranscriptWasStale.Value.transcript);
+        Assert.False(visibleStateWhileTranscriptWasStale.Value.input);
+    }
+
+    [Fact]
+    public async Task VisibleConversationContent_WhenShellHasNewLatestIntent_HidesHeaderTranscriptAndInputBeforeConversationSwitchCommits()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var runtimeState = new ShellNavigationRuntimeStateStore();
+        await using var fixture = CreateViewModel(syncContext, shellNavigationRuntimeState: runtimeState);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync());
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Transcript =
+            [
+                new ConversationMessageSnapshot
+                {
+                    Id = "message-1",
+                    Timestamp = new DateTime(2026, 3, 25, 0, 0, 0, DateTimeKind.Utc),
+                    IsOutgoing = false,
+                    ContentType = "text",
+                    TextContent = "restored transcript"
+                }
+            ]
+        });
+
+        Assert.True(fixture.ViewModel.ShouldShowSessionHeader);
+        Assert.True(fixture.ViewModel.ShouldShowTranscriptSurface);
+        Assert.True(fixture.ViewModel.ShouldShowConversationInputSurface);
+        Assert.True(fixture.ViewModel.ShouldShowActiveConversationRoot);
+        Assert.True(fixture.ViewModel.ShouldLoadActiveConversationRoot);
+
+        runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
+            "conv-2",
+            null,
+            Version: 7,
+            SessionActivationPhase.NavigatingToChatShell);
+        runtimeState.DesiredSessionId = "conv-2";
+        runtimeState.IsSessionActivationInProgress = true;
+
+        Assert.False(fixture.ViewModel.ShouldShowActiveConversationRoot);
+        Assert.False(fixture.ViewModel.ShouldLoadActiveConversationRoot);
+        Assert.False(fixture.ViewModel.ShouldShowSessionHeader);
+        Assert.False(fixture.ViewModel.ShouldShowTranscriptSurface);
+        Assert.False(fixture.ViewModel.ShouldShowConversationInputSurface);
+    }
+
+    [Fact]
+    public async Task VisibleConversationContent_WhenShellLatestIntentChanges_RaisesDerivedVisibilityNotifications()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var runtimeState = new ShellNavigationRuntimeStateStore();
+        await using var fixture = CreateViewModel(syncContext, shellNavigationRuntimeState: runtimeState);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync());
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Transcript =
+            [
+                new ConversationMessageSnapshot
+                {
+                    Id = "message-1",
+                    Timestamp = new DateTime(2026, 3, 25, 0, 0, 0, DateTimeKind.Utc),
+                    IsOutgoing = false,
+                    ContentType = "text",
+                    TextContent = "restored transcript"
+                }
+            ]
+        });
+
+        var raised = new List<string>();
+        fixture.ViewModel.PropertyChanged += (_, e) =>
+        {
+            if (!string.IsNullOrWhiteSpace(e.PropertyName))
+            {
+                raised.Add(e.PropertyName!);
+            }
+        };
+
+        runtimeState.DesiredSessionId = "conv-2";
+        runtimeState.IsSessionActivationInProgress = true;
+
+        Assert.Contains(nameof(ChatViewModel.ShouldShowSessionHeader), raised);
+        Assert.Contains(nameof(ChatViewModel.ShouldShowTranscriptSurface), raised);
+        Assert.Contains(nameof(ChatViewModel.ShouldLoadTranscriptSurface), raised);
+        Assert.Contains(nameof(ChatViewModel.ShouldShowConversationInputSurface), raised);
+        Assert.Contains(nameof(ChatViewModel.ShouldShowActiveConversationRoot), raised);
+        Assert.Contains(nameof(ChatViewModel.ShouldLoadActiveConversationRoot), raised);
+    }
+
+    [Fact]
+    public async Task VisibleConversationContent_WhenCurrentSessionOwnsVisibleState_KeepsHeaderAndInputVisible()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync());
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Transcript = [],
+            IsHydrating = false
+        });
+        fixture.ViewModel.IsSessionActive = true;
+
+        Assert.Equal("conv-1", fixture.ViewModel.CurrentSessionId);
+        Assert.False(fixture.ViewModel.ShouldShowBlockingLoadingMask);
+        Assert.True(fixture.ViewModel.ShouldShowSessionHeader);
+        Assert.False(fixture.ViewModel.ShouldShowTranscriptSurface);
+        Assert.True(fixture.ViewModel.ShouldShowConversationInputSurface);
     }
 
     [Fact]

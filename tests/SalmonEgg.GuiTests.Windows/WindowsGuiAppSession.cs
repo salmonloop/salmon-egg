@@ -472,6 +472,30 @@ internal sealed class WindowsGuiAppSession : IDisposable
         element.Focus();
     }
 
+    public void BringMainWindowToFront()
+    {
+        try
+        {
+            if (MainWindow.Patterns.Window.IsSupported)
+            {
+                MainWindow.Patterns.Window.Pattern.SetWindowVisualState(WindowVisualState.Normal);
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            MainWindow.Focus();
+        }
+        catch
+        {
+        }
+
+        Thread.Sleep(80);
+    }
+
     private static void PressKey(VirtualKeyShort key)
     {
         Keyboard.Press(key);

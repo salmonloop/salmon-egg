@@ -214,6 +214,34 @@ public sealed class ChatSkeletonSmokeTests
     }
 
     [SkippableFact]
+    public void SelectRemoteSessionFromStart_FirstFrame_DoesNotExposeAnyChatShellContentBeforeLoadingOverlay()
+    {
+        var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
+        Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", "1800");
+
+        try
+        {
+            using var appData = GuiAppDataScope.CreateDeterministicSlowRemoteReplayData(
+                cachedMessageCount: 1,
+                replayMessageCount: 24);
+            using var session = WindowsGuiAppSession.LaunchFresh();
+
+            var sessionItem = session.FindByAutomationId("MainNav.Session.gui-remote-conversation-01", TimeSpan.FromSeconds(15));
+            session.ActivateElement(sessionItem);
+
+            WaitForLoadingOverlayBeforeChatShell(
+                session,
+                appData,
+                expectedHeaderText: "GUI Remote Session 01",
+                scenario: "start-to-remote-first-frame-no-shell-leak");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", previousSlowLoadDelay);
+        }
+    }
+
+    [SkippableFact]
     public void SelectRemoteSessionFromStart_ShowsLoadingOverlayBeforeChatShell()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
@@ -1865,13 +1893,13 @@ public sealed class ChatSkeletonSmokeTests
                 return;
             }
 
-            if ((header is not null && headerName.Contains(expectedHeaderText, StringComparison.Ordinal)) || messagesVisible)
+            if (header is not null || messagesVisible)
             {
                 ThrowWithScreenshot(
                     session,
                     appData,
                     scenario,
-                    $"Chat shell became visible before the loading overlay. Timeline:{Environment.NewLine}{string.Join(Environment.NewLine, timeline)}");
+                    $"Chat shell became visible before the loading overlay. expectedHeader={expectedHeaderText} observedHeader={headerName} Timeline:{Environment.NewLine}{string.Join(Environment.NewLine, timeline)}");
             }
 
             Thread.Sleep(40);

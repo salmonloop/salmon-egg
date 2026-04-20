@@ -282,6 +282,20 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             && !string.IsNullOrWhiteSpace(_visibleTranscriptConversationId)
             && !string.Equals(_visibleTranscriptConversationId, CurrentSessionId, StringComparison.Ordinal);
 
+    private string? PendingShellActivationConversationId
+        => _shellNavigationRuntimeState?.IsSessionActivationInProgress == true
+            ? _shellNavigationRuntimeState.ActiveSessionActivation?.SessionId
+                ?? _shellNavigationRuntimeState.DesiredSessionId
+            : null;
+
+    private bool IsCurrentVisibleConversationSupersededByShellIntent
+        => IsSessionActive
+            && !string.IsNullOrWhiteSpace(PendingShellActivationConversationId)
+            && !string.Equals(PendingShellActivationConversationId, CurrentSessionId, StringComparison.Ordinal);
+
+    private bool IsBlockingStaleVisibleConversationContent
+        => ShouldShowBlockingLoadingMask && IsVisibleTranscriptStaleForCurrentSession;
+
     public bool IsActivationOverlayVisible
         => ResolveActivationOverlayVisualState().IsActivationOverlayVisible;
 
@@ -290,6 +304,26 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             || ShouldShowLayoutLoading;
 
     public bool HasVisibleTranscriptContent => MessageHistory.Count > 0;
+
+    public bool ShouldShowActiveConversationRoot
+        => IsSessionActive
+            && !IsBlockingStaleVisibleConversationContent
+            && !IsCurrentVisibleConversationSupersededByShellIntent;
+
+    public bool ShouldLoadActiveConversationRoot => ShouldShowActiveConversationRoot;
+
+    public bool ShouldShowSessionHeader
+        => ShouldShowActiveConversationRoot;
+
+    public bool ShouldShowTranscriptSurface
+        => ShouldShowActiveConversationRoot
+            && HasVisibleTranscriptContent
+            && !IsVisibleTranscriptStaleForCurrentSession;
+
+    public bool ShouldLoadTranscriptSurface => ShouldShowTranscriptSurface;
+
+    public bool ShouldShowConversationInputSurface
+        => ShouldShowActiveConversationRoot;
 
     public bool ShouldShowBlockingLoadingMask
         => ResolveActivationOverlayVisualState().ShowsBlockingMask;
@@ -952,7 +986,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     private void OnShellNavigationRuntimeStatePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(IShellNavigationRuntimeState.CurrentShellContent))
+        if (e.PropertyName == nameof(IShellNavigationRuntimeState.CurrentShellContent)
+            || e.PropertyName == nameof(IShellNavigationRuntimeState.DesiredSessionId)
+            || e.PropertyName == nameof(IShellNavigationRuntimeState.IsSessionActivationInProgress)
+            || e.PropertyName == nameof(IShellNavigationRuntimeState.ActiveSessionActivation))
         {
             RaiseOverlayStateChanged();
         }
@@ -2942,6 +2979,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     {
         OnPropertyChanged(nameof(IsActivationOverlayVisible));
         OnPropertyChanged(nameof(IsOverlayVisible));
+        OnPropertyChanged(nameof(ShouldShowActiveConversationRoot));
+        OnPropertyChanged(nameof(ShouldLoadActiveConversationRoot));
+        OnPropertyChanged(nameof(ShouldShowSessionHeader));
+        OnPropertyChanged(nameof(ShouldShowTranscriptSurface));
+        OnPropertyChanged(nameof(ShouldLoadTranscriptSurface));
+        OnPropertyChanged(nameof(ShouldShowConversationInputSurface));
         OnPropertyChanged(nameof(OverlayLoadingStage));
         OnPropertyChanged(nameof(OverlayStatusText));
         OnPropertyChanged(nameof(ShouldShowBlockingLoadingMask));
@@ -5685,6 +5728,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     {
         SendPromptCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(CanSendPromptUi));
+        OnPropertyChanged(nameof(ShouldShowActiveConversationRoot));
+        OnPropertyChanged(nameof(ShouldLoadActiveConversationRoot));
+        OnPropertyChanged(nameof(ShouldShowSessionHeader));
+        OnPropertyChanged(nameof(ShouldShowTranscriptSurface));
+        OnPropertyChanged(nameof(ShouldLoadTranscriptSurface));
+        OnPropertyChanged(nameof(ShouldShowConversationInputSurface));
     }
 
     public Task RestoreAsync(CancellationToken cancellationToken = default)

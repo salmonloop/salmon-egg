@@ -73,10 +73,11 @@
                    VerticalAlignment="Top"/>
 
         <!-- 已激活会话状态：对话界面 -->
-        <Grid
+        <Grid x:Name="ActiveConversationRoot"
               AutomationProperties.AutomationId="ChatView.ActiveRoot"
               Transitions="{x:Bind Motion.PageTransitions, Mode=OneWay}"
-              Visibility="{x:Bind ViewModel.IsSessionActive, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+              x:Load="{x:Bind ViewModel.ShouldLoadActiveConversationRoot, Mode=OneWay}"
+              Visibility="{x:Bind ViewModel.ShouldShowActiveConversationRoot, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
@@ -88,7 +89,8 @@
                     Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                     BorderThickness="0,0,0,1"
-                    Padding="16,8">
+                    Padding="16,8"
+                    Visibility="{x:Bind ViewModel.ShouldShowSessionHeader, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                 <StackPanel Spacing="8">
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
                         <StackPanel Orientation="Horizontal" Spacing="12">
@@ -138,8 +140,11 @@
 
             <Grid Grid.Row="1" RowDefinitions="*,Auto,Auto,Auto">
                 <!-- 消息列表 -->
-                <controls:ResponsiveContentHost Grid.Row="0"
-                                                MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}">
+                <controls:ResponsiveContentHost x:Name="TranscriptHost"
+                                                Grid.Row="0"
+                                                MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}"
+                                                x:Load="{x:Bind ViewModel.ShouldLoadTranscriptSurface, Mode=OneWay}"
+                                                Visibility="{x:Bind ViewModel.ShouldShowTranscriptSurface, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                     <controls:ResponsiveContentHost.Child>
                         <ListView x:Name="MessagesList"
                                   AutomationProperties.AutomationId="ChatView.MessagesList"
@@ -150,6 +155,7 @@
                                   HorizontalAlignment="Stretch"
                                   MinWidth="0"
                                   Loaded="OnMessagesListLoaded"
+                                  Unloaded="OnMessagesListUnloaded"
                                   LayoutUpdated="OnMessagesListLayoutUpdated">
                             <ListView.ItemContainerStyle>
                                 <Style TargetType="ListViewItem">
@@ -260,7 +266,8 @@
 
                 <!-- 输入区域 -->
                 <controls:ResponsiveContentHost Grid.Row="3"
-                                                MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}">
+                                                MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}"
+                                                Visibility="{x:Bind ViewModel.ShouldShowConversationInputSurface, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                     <controls:ResponsiveContentHost.Child>
                         <controls:ChatInputArea ViewModel="{x:Bind ViewModel, Mode=OneWay}"
                                                 SubmitCommand="{x:Bind ViewModel.SendPromptCommand}"
@@ -275,48 +282,5 @@
                                    SelectedTab="{x:Bind ViewModel.SelectedBottomPanelTab, Mode=TwoWay}" />
 
         </Grid>
-
-        <!-- 加载遮罩：覆盖空态与会话态的整个聊天页生命周期 -->
-        <ContentControl x:Name="LoadingOverlayPresenter"
-                        x:Uid="ChatViewLoadingOverlay"
-                        AutomationProperties.AutomationId="ChatView.LoadingOverlay"
-                        Grid.RowSpan="3"
-                        HorizontalAlignment="Stretch"
-                        VerticalAlignment="Stretch"
-                        HorizontalContentAlignment="Stretch"
-                        VerticalContentAlignment="Stretch"
-                        IsTabStop="False"
-                        IsHitTestVisible="{x:Bind ViewModel.ShouldShowBlockingLoadingMask, Mode=OneWay}"
-                        Visibility="{x:Bind ViewModel.ShouldShowLoadingOverlayPresenter, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-            <Grid>
-                <Border Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
-                        AutomationProperties.AutomationId="ChatView.LoadingOverlayMask"
-                        Visibility="{x:Bind ViewModel.ShouldShowBlockingLoadingMask, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                    <controls:ChatSkeleton VerticalAlignment="Stretch" HorizontalAlignment="Stretch" />
-                </Border>
-
-                <Grid>
-                    <!-- Status Pill overlay -->
-                    <Border VerticalAlignment="Bottom" 
-                            HorizontalAlignment="Center"
-                            Margin="0,0,0,48"
-                            Padding="16,8"
-                            Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                            BorderThickness="1"
-                            CornerRadius="20"
-                            Visibility="{x:Bind ViewModel.ShouldShowLoadingOverlayStatusPill, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                        <StackPanel Orientation="Horizontal" Spacing="10">
-                            <ProgressRing IsActive="True" Width="16" Height="16" />
-                            <TextBlock AutomationProperties.AutomationId="ChatView.LoadingOverlayStatus"
-                                       Text="{x:Bind ViewModel.OverlayStatusText, Mode=OneWay}"
-                                       FontSize="12"
-                                       FontWeight="Medium"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        </StackPanel>
-                    </Border>
-                </Grid>
-            </Grid>
-        </ContentControl>
     </Grid>
 </Page>

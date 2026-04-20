@@ -327,20 +327,30 @@ public sealed class NavigationCoreTests
         Assert.Contains("AutomationProperties.AutomationId=\"ChatView.CurrentSessionNameButton\"", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"ChatView.CurrentSessionNameEditor\"", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"ChatView.CurrentAgentDisplay\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("AutomationProperties.AutomationId=\"ChatView.LoadingOverlay\"", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"ChatView.MessagesList\"", xaml, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void ChatViewXaml_UsesAutomationCapableLoadingOverlayRoot()
+    public void MainPageXaml_UsesAutomationCapableChatLoadingOverlayRoot()
     {
-        var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml");
+        var xaml = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml");
 
         Assert.Contains("AutomationProperties.AutomationId=\"ChatView.LoadingOverlay\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("<ContentControl x:Name=\"LoadingOverlayPresenter\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("<ContentControl x:Name=\"ShellLoadingOverlayPresenter\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("<Grid AutomationProperties.AutomationId=\"ChatView.LoadingOverlay\"", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"ChatView.LoadingOverlayStatus\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("AutomationProperties.LiveSetting=\"Assertive\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatViewXaml_DoesNotOwnMainWindowLoadingOverlay()
+    {
+        var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml");
+
+        Assert.DoesNotContain("AutomationProperties.AutomationId=\"ChatView.LoadingOverlay\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ChatView.LoadingOverlayStatus", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ChatView.LoadingOverlayMask", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Uid=\"ChatViewLoadingOverlay\"", xaml, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -446,14 +446,15 @@ public sealed class XamlComplianceTests
     [Fact]
     public void ChatView_AskUserAndLoadingOverlayTextsAreLocalized()
     {
-        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml");
+        var chatXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml");
+        var shellXaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");
 
-        Assert.DoesNotContain("Text=\"Agent 需要你的输入\"", xaml);
-        Assert.DoesNotContain("Content=\"提交答案\"", xaml);
-        Assert.DoesNotContain("AutomationProperties.Name=\"会话加载中\"", xaml);
-        Assert.Contains("x:Uid=\"ChatViewAskUserTitle\"", xaml);
-        Assert.Contains("x:Uid=\"ChatViewAskUserSubmitButton\"", xaml);
-        Assert.Contains("x:Uid=\"ChatViewLoadingOverlay\"", xaml);
+        Assert.DoesNotContain("Text=\"Agent 需要你的输入\"", chatXaml);
+        Assert.DoesNotContain("Content=\"提交答案\"", chatXaml);
+        Assert.DoesNotContain("AutomationProperties.Name=\"会话加载中\"", shellXaml);
+        Assert.Contains("x:Uid=\"ChatViewAskUserTitle\"", chatXaml);
+        Assert.Contains("x:Uid=\"ChatViewAskUserSubmitButton\"", chatXaml);
+        Assert.Contains("x:Uid=\"ChatViewLoadingOverlay\"", shellXaml);
     }
 
     [Fact]
@@ -523,6 +524,19 @@ public sealed class XamlComplianceTests
         Assert.Contains("AutomationProperties.AutomationId=\"MiniChat.SessionSelector\"", miniChatXaml);
         Assert.Contains("AutomationProperties.AutomationId=\"{x:Bind AutomationId, Mode=OneTime}\"", miniChatXaml);
         Assert.Contains("public string AutomationId => $\"MiniChat.SessionItem.{ConversationId}\";", miniWindowItemVm);
+    }
+
+    [Fact]
+    public void ChatView_UsesDeferredTranscriptLoadingWithoutWholePageLifecycleHack()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml");
+        var codeBehind = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
+
+        Assert.Contains("x:Name=\"ActiveConversationRoot\"", xaml);
+        Assert.Contains("x:Load=\"{x:Bind ViewModel.ShouldLoadActiveConversationRoot, Mode=OneWay}\"", xaml);
+        Assert.Contains("x:Load=\"{x:Bind ViewModel.ShouldLoadTranscriptSurface, Mode=OneWay}\"", xaml);
+        Assert.Contains("Unloaded=\"OnMessagesListUnloaded\"", xaml);
+        Assert.Contains("private void OnMessagesListUnloaded", codeBehind);
     }
 
     [Fact]

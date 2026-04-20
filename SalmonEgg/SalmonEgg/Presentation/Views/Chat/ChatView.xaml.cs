@@ -156,6 +156,12 @@ namespace SalmonEgg.Presentation.Views.Chat
             UpdateTranscriptViewportAutomationState();
         }
 
+        private void OnMessagesListUnloaded(object sender, RoutedEventArgs e)
+        {
+            DetachScrollViewer();
+            UpdateTranscriptViewportAutomationState();
+        }
+
         private void AttachScrollViewer()
         {
             DetachScrollViewer();

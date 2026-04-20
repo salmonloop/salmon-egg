@@ -592,6 +592,196 @@ public sealed partial class RealUserConfigSmokeTests
     }
 
     [SkippableFact]
+    public void SelectRemoteBoundSession_FromStart_DoesNotExposeAnyChatShellContentBeforeLoadingOverlay()
+    {
+        GuiTestGate.RequireEnabled();
+
+        var candidates = RealUserConfigProbe.LoadReplayBackedCandidates();
+        Skip.If(candidates.Count == 0, "No real remote-bound conversations with recent session/load + session/update evidence were found in the current SalmonEgg app data.");
+        var targetConversationId = Environment.GetEnvironmentVariable("SALMONEGG_GUI_TARGET_CONVERSATION_ID");
+
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var startItem = session.FindByAutomationId("MainNav.Start", TimeSpan.FromSeconds(10));
+        session.ActivateElement(startItem);
+        Thread.Sleep(500);
+
+        var candidate = !string.IsNullOrWhiteSpace(targetConversationId)
+            ? candidates.FirstOrDefault(item =>
+                string.Equals(item.ConversationId, targetConversationId, StringComparison.Ordinal)
+                && session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null)
+            : candidates.FirstOrDefault(item => session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null);
+        Skip.If(candidate is null, $"No replay-backed conversation is currently visible in the left navigation. Target={targetConversationId ?? "<none>"} Candidates: {string.Join(", ", candidates.Select(c => c.ConversationId))}");
+
+        var sessionItem = session.FindByAutomationId(SessionAutomationId(candidate.ConversationId), TimeSpan.FromSeconds(10));
+        session.ActivateElement(sessionItem);
+
+        var timeline = new List<string>();
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        var sawOverlay = false;
+
+        while (DateTime.UtcNow < deadline)
+        {
+            var overlayVisible =
+                session.TryFindByAutomationId("ChatView.LoadingOverlayMask", TimeSpan.FromMilliseconds(100)) is not null
+                || session.TryFindByAutomationId("ChatView.LoadingOverlayStatus", TimeSpan.FromMilliseconds(100)) is not null
+                || session.TryFindByAutomationId("ChatView.LoadingOverlay", TimeSpan.FromMilliseconds(100)) is not null;
+            var header = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(100));
+            var headerName = header?.Name ?? "<missing>";
+            var messagesVisible = session.TryFindByAutomationId("ChatView.MessagesList", TimeSpan.FromMilliseconds(100)) is not null;
+
+            timeline.Add(
+                $"{DateTime.UtcNow:HH:mm:ss.fff} overlay={overlayVisible} header={headerName} messages={messagesVisible}");
+
+            if (overlayVisible)
+            {
+                sawOverlay = true;
+                break;
+            }
+
+            if (header is not null || messagesVisible)
+            {
+                throw new Xunit.Sdk.XunitException(
+                    $"Real-config first-open leaked chat shell content before loading overlay for conversation {candidate.ConversationId}.{Environment.NewLine}{string.Join(Environment.NewLine, timeline)}");
+            }
+
+            Thread.Sleep(80);
+        }
+
+        Assert.True(
+            sawOverlay,
+            $"Real-config first-open never surfaced loading overlay for conversation {candidate.ConversationId}.{Environment.NewLine}{string.Join(Environment.NewLine, timeline)}");
+    }
+
+    [SkippableFact]
+    public void SelectRemoteBoundSession_FromStart_HighFrequencyProbe_DoesNotExposeActiveRootBeforeLoadingOverlay()
+    {
+        GuiTestGate.RequireEnabled();
+
+        var candidates = RealUserConfigProbe.LoadReplayBackedCandidates();
+        Skip.If(candidates.Count == 0, "No real remote-bound conversations with recent session/load + session/update evidence were found in the current SalmonEgg app data.");
+        var targetConversationId = Environment.GetEnvironmentVariable("SALMONEGG_GUI_TARGET_CONVERSATION_ID");
+        Skip.If(string.IsNullOrWhiteSpace(targetConversationId), "Set SALMONEGG_GUI_TARGET_CONVERSATION_ID to run the high-frequency first-frame probe for a specific real conversation.");
+
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var startItem = session.FindByAutomationId("MainNav.Start", TimeSpan.FromSeconds(10));
+        session.ActivateElement(startItem);
+        Thread.Sleep(500);
+
+        var candidate = candidates.FirstOrDefault(item =>
+            string.Equals(item.ConversationId, targetConversationId, StringComparison.Ordinal)
+            && session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null);
+        Skip.If(candidate is null, $"Target conversation '{targetConversationId}' is not currently visible in the left navigation.");
+
+        var sessionItem = session.FindByAutomationId(SessionAutomationId(candidate.ConversationId), TimeSpan.FromSeconds(10));
+        session.ActivateElement(sessionItem);
+
+        var timeline = new List<string>();
+        var stopwatch = Stopwatch.StartNew();
+        var deadline = DateTime.UtcNow + TimeSpan.FromMilliseconds(1500);
+        var sawOverlay = false;
+
+        while (DateTime.UtcNow < deadline)
+        {
+            var overlayVisible =
+                session.MainWindow.FindFirstDescendant(cf => cf.ByAutomationId("ChatView.LoadingOverlayMask")) is not null
+                || session.MainWindow.FindFirstDescendant(cf => cf.ByAutomationId("ChatView.LoadingOverlayStatus")) is not null
+                || session.MainWindow.FindFirstDescendant(cf => cf.ByAutomationId("ChatView.LoadingOverlay")) is not null;
+            var activeRootVisible = session.MainWindow.FindFirstDescendant(cf => cf.ByAutomationId("ChatView.ActiveRoot")) is not null;
+            var header = session.MainWindow.FindFirstDescendant(cf => cf.ByAutomationId("ChatView.CurrentSessionNameButton"));
+            var messagesVisible = session.MainWindow.FindFirstDescendant(cf => cf.ByAutomationId("ChatView.MessagesList")) is not null;
+            var headerName = header?.Name ?? "<missing>";
+
+            timeline.Add(
+                $"{stopwatch.ElapsedMilliseconds,5}ms overlay={overlayVisible} activeRoot={activeRootVisible} header={headerName} messages={messagesVisible}");
+
+            if (overlayVisible)
+            {
+                sawOverlay = true;
+                break;
+            }
+
+            if (activeRootVisible || header is not null || messagesVisible)
+            {
+                var captureRoot = Path.Combine(Path.GetTempPath(), "SalmonEgg.GuiTests");
+                Directory.CreateDirectory(captureRoot);
+                var screenshotPath = Path.Combine(
+                    captureRoot,
+                    $"real-config-first-frame-leak-{candidate.ConversationId}-{DateTime.UtcNow:yyyyMMddHHmmssfff}.png");
+                screenshotPath = TryCaptureMainWindow(session, screenshotPath);
+                throw new Xunit.Sdk.XunitException(
+                    $"High-frequency probe observed chat shell content before loading overlay for conversation {candidate.ConversationId}.{Environment.NewLine}Capture: {screenshotPath}{Environment.NewLine}{string.Join(Environment.NewLine, timeline)}");
+            }
+
+            Thread.Sleep(10);
+        }
+
+        Assert.True(
+            sawOverlay,
+            $"High-frequency probe did not observe loading overlay within the initial sampling window for conversation {candidate.ConversationId}.{Environment.NewLine}{string.Join(Environment.NewLine, timeline)}");
+    }
+
+    [SkippableFact]
+    public void SelectRemoteBoundSession_FromStart_CapturesFirstFramesForManualAudit()
+    {
+        GuiTestGate.RequireEnabled();
+
+        var candidates = RealUserConfigProbe.LoadReplayBackedCandidates();
+        Skip.If(candidates.Count == 0, "No real remote-bound conversations with recent session/load + session/update evidence were found in the current SalmonEgg app data.");
+        var targetConversationId = Environment.GetEnvironmentVariable("SALMONEGG_GUI_TARGET_CONVERSATION_ID");
+        Skip.If(string.IsNullOrWhiteSpace(targetConversationId), "Set SALMONEGG_GUI_TARGET_CONVERSATION_ID to capture first-frame screenshots for a specific real conversation.");
+
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var startItem = session.FindByAutomationId("MainNav.Start", TimeSpan.FromSeconds(10));
+        session.ActivateElement(startItem);
+        Thread.Sleep(500);
+
+        var candidate = candidates.FirstOrDefault(item =>
+            string.Equals(item.ConversationId, targetConversationId, StringComparison.Ordinal)
+            && session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null);
+        Skip.If(candidate is null, $"Target conversation '{targetConversationId}' is not currently visible in the left navigation.");
+
+        var captureRoot = Path.Combine(
+            Path.GetTempPath(),
+            "SalmonEgg.GuiTests",
+            $"first-frame-audit-{candidate.ConversationId}-{DateTime.UtcNow:yyyyMMddHHmmssfff}");
+        Directory.CreateDirectory(captureRoot);
+
+        var sessionItem = session.FindByAutomationId(SessionAutomationId(candidate.ConversationId), TimeSpan.FromSeconds(10));
+        session.ActivateElement(sessionItem);
+
+        var timeline = new List<string>();
+        var stopwatch = Stopwatch.StartNew();
+        for (var index = 0; index < 18; index++)
+        {
+            session.BringMainWindowToFront();
+            var overlayVisible =
+                session.MainWindow.FindFirstDescendant(cf => cf.ByAutomationId("ChatView.LoadingOverlayMask")) is not null
+                || session.MainWindow.FindFirstDescendant(cf => cf.ByAutomationId("ChatView.LoadingOverlayStatus")) is not null
+                || session.MainWindow.FindFirstDescendant(cf => cf.ByAutomationId("ChatView.LoadingOverlay")) is not null;
+            var activeRootVisible = session.MainWindow.FindFirstDescendant(cf => cf.ByAutomationId("ChatView.ActiveRoot")) is not null;
+            var header = session.MainWindow.FindFirstDescendant(cf => cf.ByAutomationId("ChatView.CurrentSessionNameButton"));
+            var messagesVisible = session.MainWindow.FindFirstDescendant(cf => cf.ByAutomationId("ChatView.MessagesList")) is not null;
+            var headerName = header?.Name ?? "<missing>";
+            var screenshotPath = Path.Combine(captureRoot, $"frame-{index:00}-{stopwatch.ElapsedMilliseconds:0000}ms.png");
+            session.MainWindow.CaptureToFile(screenshotPath);
+
+            timeline.Add(
+                $"{stopwatch.ElapsedMilliseconds,5}ms overlay={overlayVisible} activeRoot={activeRootVisible} header={headerName} messages={messagesVisible} shot={screenshotPath}");
+
+            Thread.Sleep(16);
+        }
+
+        var timelinePath = Path.Combine(captureRoot, "timeline.txt");
+        File.WriteAllLines(timelinePath, timeline);
+        Console.WriteLine($"First-frame audit capture root: {captureRoot}");
+
+        Assert.True(File.Exists(timelinePath), $"Expected timeline capture to exist at {timelinePath}.");
+    }
+
+    [SkippableFact]
     public void SelectRemoteBoundSession_FromStart_DoesNotSnapBackToStartSelection()
     {
         GuiTestGate.RequireEnabled();
