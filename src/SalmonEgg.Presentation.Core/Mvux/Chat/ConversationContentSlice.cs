@@ -13,4 +13,7 @@ public readonly record struct ConversationSessionStateSlice(
     IImmutableList<ConversationModeOptionSnapshot> AvailableModes,
     string? SelectedModeId,
     IImmutableList<ConversationConfigOptionSnapshot> ConfigOptions,
-    bool ShowConfigOptionsPanel);
+    bool ShowConfigOptionsPanel,
+    IImmutableList<ConversationAvailableCommandSnapshot> AvailableCommands,
+    ConversationSessionInfoSnapshot? SessionInfo,
+    ConversationUsageSnapshot? Usage);

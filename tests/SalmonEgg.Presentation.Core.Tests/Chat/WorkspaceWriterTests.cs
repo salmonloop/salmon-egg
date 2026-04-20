@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Conversation;
+using SalmonEgg.Domain.Models.Plan;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
@@ -87,7 +88,10 @@ public sealed class WorkspaceWriterTests
                     ImmutableList.Create(new ConversationModeOptionSnapshot { ModeId = "agent", ModeName = "Agent" }),
                     "agent",
                     ImmutableList<ConversationConfigOptionSnapshot>.Empty,
-                    false)),
+                    false,
+                    ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+                    null,
+                    null)),
             Generation: 1), scheduleSave: false);
         await writer.FlushAsync();
 
@@ -96,6 +100,169 @@ public sealed class WorkspaceWriterTests
         Assert.Single(snapshot!.Transcript);
         Assert.Equal("background", snapshot.Transcript[0].TextContent);
         Assert.Equal("agent", snapshot.SelectedModeId);
+    }
+
+    [Fact]
+    public async Task FlushAsync_BackgroundAuxiliarySessionState_DoesNotOverwriteExistingTranscriptAndPlan()
+    {
+        var dispatcher = new ImmediateUiDispatcher();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(dispatcher);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, dispatcher);
+        using var writer = new WorkspaceWriter(workspace, dispatcher, TimeSpan.Zero);
+
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-bg",
+            Transcript:
+            [
+                CreateTextMessage("bg-1", "persisted transcript")
+            ],
+            Plan:
+            [
+                new ConversationPlanEntrySnapshot
+                {
+                    Content = "persisted plan",
+                    Status = PlanEntryStatus.InProgress,
+                    Priority = PlanEntryPriority.High
+                }
+            ],
+            ShowPlanPanel: true,
+            PlanTitle: "Persisted plan title",
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
+
+        writer.Enqueue(new ChatState(
+            HydratedConversationId: "session-active",
+            ConversationSessionStates: ImmutableDictionary<string, ConversationSessionStateSlice>.Empty.Add(
+                "session-bg",
+                new ConversationSessionStateSlice(
+                    ImmutableList<ConversationModeOptionSnapshot>.Empty,
+                    null,
+                    ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+                    false,
+                    ImmutableList.Create(new ConversationAvailableCommandSnapshot("plan", "Planning command", "goal")),
+                    new ConversationSessionInfoSnapshot
+                    {
+                        Title = "Background title",
+                        Meta = new Dictionary<string, object?>(StringComparer.Ordinal)
+                        {
+                            ["source"] = "store"
+                        }
+                    },
+                    new ConversationUsageSnapshot(
+                        9,
+                        256,
+                        new ConversationUsageCostSnapshot(2.5m, "USD")))),
+            Generation: 1), scheduleSave: false);
+        await writer.FlushAsync();
+
+        var snapshot = workspace.GetConversationSnapshot("session-bg");
+        Assert.NotNull(snapshot);
+        Assert.Single(snapshot!.Transcript);
+        Assert.Equal("persisted transcript", snapshot.Transcript[0].TextContent);
+        Assert.Single(snapshot.Plan);
+        Assert.Equal("persisted plan", snapshot.Plan[0].Content);
+        Assert.True(snapshot.ShowPlanPanel);
+        Assert.Equal("Persisted plan title", snapshot.PlanTitle);
+        var command = Assert.Single(snapshot.AvailableCommands ?? Array.Empty<ConversationAvailableCommandSnapshot>());
+        Assert.Equal("plan", command.Name);
+        Assert.NotNull(snapshot.SessionInfo);
+        Assert.Equal("Background title", snapshot.SessionInfo!.Title);
+        Assert.Equal("store", snapshot.SessionInfo.Meta!["source"]);
+        Assert.NotNull(snapshot.Usage);
+        Assert.Equal(9, snapshot.Usage!.Used);
+    }
+
+    [Fact]
+    public async Task FlushAsync_BackgroundContentOnlyUpdate_PreservesExistingSessionState()
+    {
+        var dispatcher = new ImmediateUiDispatcher();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(dispatcher);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, dispatcher);
+        using var writer = new WorkspaceWriter(workspace, dispatcher, TimeSpan.Zero);
+
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-bg",
+            Transcript:
+            [
+                CreateTextMessage("bg-1", "persisted transcript")
+            ],
+            Plan:
+            [
+                new ConversationPlanEntrySnapshot
+                {
+                    Content = "persisted plan",
+                    Status = PlanEntryStatus.InProgress,
+                    Priority = PlanEntryPriority.High
+                }
+            ],
+            ShowPlanPanel: true,
+            PlanTitle: "Persisted plan title",
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
+            AvailableModes:
+            [
+                new ConversationModeOptionSnapshot
+                {
+                    ModeId = "agent",
+                    ModeName = "Agent"
+                }
+            ],
+            SelectedModeId: "agent",
+            ConfigOptions:
+            [
+                new ConversationConfigOptionSnapshot
+                {
+                    Id = "mode",
+                    Name = "Mode",
+                    SelectedValue = "agent"
+                }
+            ],
+            ShowConfigOptionsPanel: true,
+            AvailableCommands:
+            [
+                new ConversationAvailableCommandSnapshot("plan", "Planning command", "goal")
+            ],
+            SessionInfo: new ConversationSessionInfoSnapshot
+            {
+                Title = "Background title"
+            },
+            Usage: new ConversationUsageSnapshot(
+                9,
+                256,
+                new ConversationUsageCostSnapshot(2.5m, "USD"))));
+
+        writer.Enqueue(new ChatState(
+            HydratedConversationId: "session-active",
+            ConversationContents: ImmutableDictionary<string, ConversationContentSlice>.Empty.Add(
+                "session-bg",
+                new ConversationContentSlice(
+                    ImmutableList.Create(CreateTextMessage("bg-2", "fresh transcript")),
+                    ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                    false,
+                    null)),
+            Generation: 1), scheduleSave: false);
+        await writer.FlushAsync();
+
+        var snapshot = workspace.GetConversationSnapshot("session-bg");
+        Assert.NotNull(snapshot);
+        Assert.Single(snapshot!.Transcript);
+        Assert.Equal("fresh transcript", snapshot.Transcript[0].TextContent);
+        var availableMode = Assert.Single(snapshot.AvailableModes ?? Array.Empty<ConversationModeOptionSnapshot>());
+        Assert.Equal("agent", availableMode.ModeId);
+        Assert.Equal("agent", snapshot.SelectedModeId);
+        var configOption = Assert.Single(snapshot.ConfigOptions ?? Array.Empty<ConversationConfigOptionSnapshot>());
+        Assert.Equal("mode", configOption.Id);
+        Assert.True(snapshot.ShowConfigOptionsPanel);
+        var command = Assert.Single(snapshot.AvailableCommands ?? Array.Empty<ConversationAvailableCommandSnapshot>());
+        Assert.Equal("plan", command.Name);
+        Assert.NotNull(snapshot.SessionInfo);
+        Assert.Equal("Background title", snapshot.SessionInfo!.Title);
+        Assert.NotNull(snapshot.Usage);
+        Assert.Equal(9, snapshot.Usage!.Used);
     }
 
     private static ChatConversationWorkspace CreateWorkspace(

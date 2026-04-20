@@ -346,7 +346,10 @@ public class ChatReducerTests
                     "agent",
                     ImmutableList.Create(
                         new ConversationConfigOptionSnapshot { Id = "mode", Name = "Mode", SelectedValue = "agent" }),
-                    true))
+                    true,
+                    ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+                    null,
+                    null))
         };
 
         var projected = ChatReducer.Reduce(initialState, new MergeConversationSessionStateAction(
@@ -373,6 +376,233 @@ public class ChatReducerTests
         Assert.Empty(clearedSlice!.Value.AvailableModes);
         Assert.Null(clearedSlice.Value.SelectedModeId);
         Assert.Single(clearedSlice.Value.ConfigOptions);
+    }
+
+    [Fact]
+    public void MergeConversationSessionState_PreservesExistingSessionInfoMetadata_ForPartialUpdates()
+    {
+        var initialState = ChatState.Empty with
+        {
+            HydratedConversationId = "conv-1",
+            ConversationSessionStates = ImmutableDictionary<string, ConversationSessionStateSlice>.Empty.Add(
+                "conv-1",
+                new ConversationSessionStateSlice(
+                    ImmutableList<ConversationModeOptionSnapshot>.Empty,
+                    null,
+                    ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+                    false,
+                    ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+                    new ConversationSessionInfoSnapshot
+                    {
+                        Title = "before",
+                        Meta = new Dictionary<string, object?>(StringComparer.Ordinal)
+                        {
+                            ["existing"] = "value",
+                            ["shared"] = "before"
+                        }
+                    },
+                    null))
+        };
+
+        var next = ChatReducer.Reduce(initialState, new MergeConversationSessionStateAction(
+            "conv-1",
+            SessionInfo: new ConversationSessionInfoSnapshot
+            {
+                Description = "after",
+                Meta = new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["shared"] = "after",
+                    ["added"] = 2
+                }
+            }));
+
+        var sessionState = next.ResolveSessionStateSlice("conv-1");
+        Assert.NotNull(sessionState);
+        var sessionInfo = sessionState!.Value.SessionInfo;
+        Assert.NotNull(sessionInfo);
+        Assert.Equal("before", sessionInfo!.Title);
+        Assert.Equal("after", sessionInfo.Description);
+        Assert.Equal("value", sessionInfo.Meta!["existing"]);
+        Assert.Equal("after", sessionInfo.Meta["shared"]);
+        Assert.Equal(2, sessionInfo.Meta["added"]);
+    }
+
+    [Fact]
+    public void MergeConversationSessionState_PreservesExistingSessionInfoStringFields_WhenIncomingValuesAreEmptyOrWhitespace()
+    {
+        var initialState = ChatState.Empty with
+        {
+            HydratedConversationId = "conv-1",
+            ConversationSessionStates = ImmutableDictionary<string, ConversationSessionStateSlice>.Empty.Add(
+                "conv-1",
+                new ConversationSessionStateSlice(
+                    ImmutableList<ConversationModeOptionSnapshot>.Empty,
+                    null,
+                    ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+                    false,
+                    ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+                    new ConversationSessionInfoSnapshot
+                    {
+                        Title = "before title",
+                        Description = "before description",
+                        Cwd = @"C:\repo\before"
+                    },
+                    null))
+        };
+
+        var next = ChatReducer.Reduce(initialState, new MergeConversationSessionStateAction(
+            "conv-1",
+            SessionInfo: new ConversationSessionInfoSnapshot
+            {
+                Title = string.Empty,
+                Description = "   ",
+                Cwd = "\t",
+                UpdatedAtUtc = new DateTime(2026, 3, 3, 0, 0, 0, DateTimeKind.Utc)
+            }));
+
+        var sessionState = next.ResolveSessionStateSlice("conv-1");
+        Assert.NotNull(sessionState);
+        var sessionInfo = sessionState!.Value.SessionInfo;
+        Assert.NotNull(sessionInfo);
+        Assert.Equal("before title", sessionInfo!.Title);
+        Assert.Equal("before description", sessionInfo.Description);
+        Assert.Equal(@"C:\repo\before", sessionInfo.Cwd);
+        Assert.Equal(new DateTime(2026, 3, 3, 0, 0, 0, DateTimeKind.Utc), sessionInfo.UpdatedAtUtc);
+    }
+
+    [Fact]
+    public void MergeConversationSessionState_IgnoresWhitespaceFields_AndMergesMetadata()
+    {
+        var initialState = ChatState.Empty with
+        {
+            HydratedConversationId = "conv-1",
+            ConversationSessionStates = ImmutableDictionary<string, ConversationSessionStateSlice>.Empty.Add(
+                "conv-1",
+                new ConversationSessionStateSlice(
+                    ImmutableList<ConversationModeOptionSnapshot>.Empty,
+                    null,
+                    ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+                    false,
+                    ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+                    new ConversationSessionInfoSnapshot
+                    {
+                        Title = "before title",
+                        Description = "before description",
+                        Cwd = @"C:\repo\before",
+                        Meta = new Dictionary<string, object?>(StringComparer.Ordinal)
+                        {
+                            ["existing"] = "value",
+                            ["shared"] = "before"
+                        }
+                    },
+                    null))
+        };
+
+        var next = ChatReducer.Reduce(initialState, new MergeConversationSessionStateAction(
+            "conv-1",
+            SessionInfo: new ConversationSessionInfoSnapshot
+            {
+                Title = " ",
+                Description = "\t",
+                Cwd = " ",
+                UpdatedAtUtc = new DateTime(2026, 3, 4, 0, 0, 0, DateTimeKind.Utc),
+                Meta = new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["shared"] = "after",
+                    ["added"] = 2
+                }
+            }));
+
+        var sessionState = next.ResolveSessionStateSlice("conv-1");
+        Assert.NotNull(sessionState);
+        var sessionInfo = sessionState!.Value.SessionInfo;
+        Assert.NotNull(sessionInfo);
+        Assert.Equal("before title", sessionInfo!.Title);
+        Assert.Equal("before description", sessionInfo.Description);
+        Assert.Equal(@"C:\repo\before", sessionInfo.Cwd);
+        Assert.Equal(new DateTime(2026, 3, 4, 0, 0, 0, DateTimeKind.Utc), sessionInfo.UpdatedAtUtc);
+        Assert.Equal("value", sessionInfo.Meta!["existing"]);
+        Assert.Equal("after", sessionInfo.Meta["shared"]);
+        Assert.Equal(2, sessionInfo.Meta["added"]);
+    }
+
+    [Fact]
+    public void MergeConversationSessionState_WhitespaceSessionInfoFields_PreserveExistingValues()
+    {
+        var initialState = ChatState.Empty with
+        {
+            HydratedConversationId = "conv-1",
+            ConversationSessionStates = ImmutableDictionary<string, ConversationSessionStateSlice>.Empty.Add(
+                "conv-1",
+                new ConversationSessionStateSlice(
+                    ImmutableList<ConversationModeOptionSnapshot>.Empty,
+                    null,
+                    ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+                    false,
+                    ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+                    new ConversationSessionInfoSnapshot
+                    {
+                        Title = "before",
+                        Description = "existing description",
+                        Cwd = @"C:\repo\one",
+                        UpdatedAtUtc = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)
+                    },
+                    null))
+        };
+
+        var next = ChatReducer.Reduce(initialState, new MergeConversationSessionStateAction(
+            "conv-1",
+            SessionInfo: new ConversationSessionInfoSnapshot
+            {
+                Title = string.Empty,
+                Description = "   ",
+                Cwd = "\t",
+                UpdatedAtUtc = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)
+            }));
+
+        var sessionInfo = next.ResolveSessionStateSlice("conv-1")!.Value.SessionInfo;
+        Assert.NotNull(sessionInfo);
+        Assert.Equal("before", sessionInfo!.Title);
+        Assert.Equal("existing description", sessionInfo.Description);
+        Assert.Equal(@"C:\repo\one", sessionInfo.Cwd);
+        Assert.Equal(new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc), sessionInfo.UpdatedAtUtc);
+    }
+
+    [Fact]
+    public void SetConversationSessionState_ClonesSessionInfoMetadata_FromCallerOwnedDictionary()
+    {
+        var meta = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["source"] = "before"
+        };
+        var sessionInfo = new ConversationSessionInfoSnapshot
+        {
+            Title = "title",
+            Meta = meta
+        };
+
+        var next = ChatReducer.Reduce(
+            ChatState.Empty with { HydratedConversationId = "conv-1" },
+            new SetConversationSessionStateAction(
+                "conv-1",
+                ImmutableList<ConversationModeOptionSnapshot>.Empty,
+                null,
+                ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+                false,
+                ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+                sessionInfo,
+                null));
+
+        meta["source"] = "after";
+        sessionInfo.Meta!["added"] = 2;
+
+        var sessionState = next.ResolveSessionStateSlice("conv-1");
+        Assert.NotNull(sessionState);
+        var storedSessionInfo = sessionState!.Value.SessionInfo;
+        Assert.NotNull(storedSessionInfo);
+        Assert.Equal("before", storedSessionInfo!.Meta!["source"]);
+        Assert.False(storedSessionInfo.Meta.ContainsKey("added"));
+        Assert.NotSame(meta, storedSessionInfo.Meta);
     }
 
     [Fact]

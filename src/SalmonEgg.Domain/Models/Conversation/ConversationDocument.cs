@@ -49,6 +49,12 @@ namespace SalmonEgg.Domain.Models.Conversation
 
         public bool ShowConfigOptionsPanel { get; set; }
 
+        public ConversationSessionInfoSnapshot? SessionInfo { get; set; }
+
+        public List<ConversationAvailableCommandSnapshot> AvailableCommands { get; set; } = new();
+
+        public ConversationUsageSnapshot? Usage { get; set; }
+
         public List<ConversationPlanEntrySnapshot> Plan { get; set; } = new();
 
         public bool ShowPlanPanel { get; set; }
@@ -91,6 +97,76 @@ namespace SalmonEgg.Domain.Models.Conversation
         public string? Description { get; set; }
     }
 
+    public sealed class ConversationSessionInfoSnapshot
+    {
+        public string? Title { get; set; }
+
+        public string? Description { get; set; }
+
+        public string? Cwd { get; set; }
+
+        public DateTime? UpdatedAtUtc { get; set; }
+
+        public Dictionary<string, object?>? Meta { get; set; }
+    }
+
+    public sealed class ConversationAvailableCommandSnapshot
+    {
+        public ConversationAvailableCommandSnapshot()
+        {
+        }
+
+        public ConversationAvailableCommandSnapshot(string name, string description, string? inputHint)
+        {
+            Name = name;
+            Description = description;
+            InputHint = inputHint;
+        }
+
+        public string Name { get; set; } = string.Empty;
+
+        public string Description { get; set; } = string.Empty;
+
+        public string? InputHint { get; set; }
+    }
+
+    public sealed class ConversationUsageSnapshot
+    {
+        public ConversationUsageSnapshot()
+        {
+        }
+
+        public ConversationUsageSnapshot(int? used, int? size, ConversationUsageCostSnapshot? cost)
+        {
+            Used = used;
+            Size = size;
+            Cost = cost;
+        }
+
+        public int? Used { get; set; }
+
+        public int? Size { get; set; }
+
+        public ConversationUsageCostSnapshot? Cost { get; set; }
+    }
+
+    public sealed class ConversationUsageCostSnapshot
+    {
+        public ConversationUsageCostSnapshot()
+        {
+        }
+
+        public ConversationUsageCostSnapshot(decimal? amount, string? currency)
+        {
+            Amount = amount;
+            Currency = currency;
+        }
+
+        public decimal? Amount { get; set; }
+
+        public string? Currency { get; set; }
+    }
+
     public sealed class ConversationMessageSnapshot
     {
         public string Id { get; set; } = string.Empty;
@@ -120,6 +196,8 @@ namespace SalmonEgg.Domain.Models.Conversation
         public ToolCallStatus? ToolCallStatus { get; set; }
 
         public string? ToolCallJson { get; set; }
+
+        public List<ToolCallContent>? ToolCallContent { get; set; }
 
         public ConversationPlanEntrySnapshot? PlanEntry { get; set; }
 

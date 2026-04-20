@@ -163,7 +163,10 @@ public sealed class ChatStateProjectorTests
                     ImmutableList.Create(new ConversationModeOptionSnapshot { ModeId = "agent", ModeName = "Agent" }),
                     "agent",
                     ImmutableList.Create(new ConversationConfigOptionSnapshot { Id = "mode", Name = "Mode", SelectedValue = "agent" }),
-                    true))
+                    true,
+                    ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+                    null,
+                    null))
         };
 
         var projection = projector.Apply(storeState, ChatConnectionState.Empty, "conv-2", null);

@@ -5,8 +5,10 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Domain.Models.Conversation;
+using SalmonEgg.Domain.Models.Tool;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Core.Services;
+using System.Text.Json;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 
@@ -157,6 +159,7 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
         var contentSlice = state.ResolveContentSlice(conversationId);
         var sessionStateSlice = state.ResolveSessionStateSlice(conversationId);
         var isHydratedConversation = string.Equals(state.HydratedConversationId, conversationId, StringComparison.Ordinal);
+        var existingSnapshot = _workspace.GetConversationSnapshot(conversationId);
         if (contentSlice is null
             && sessionStateSlice is null
             && (!isHydratedConversation || (state.Transcript is null && state.PlanEntries is null)))
@@ -164,25 +167,57 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             return null;
         }
 
-        var transcript = (contentSlice?.Transcript ?? (isHydratedConversation ? state.Transcript : null) ?? ImmutableList<ConversationMessageSnapshot>.Empty)
+        var hasProjectedContent = contentSlice is not null
+            || (isHydratedConversation && HasProjectedConversationContent(state.Transcript, state.PlanEntries, state.ShowPlanPanel, state.PlanTitle));
+        var transcriptSource = hasProjectedContent
+            ? contentSlice?.Transcript ?? (isHydratedConversation ? state.Transcript : null)
+            : existingSnapshot?.Transcript;
+        var planEntriesSource = hasProjectedContent
+            ? contentSlice?.PlanEntries ?? (isHydratedConversation ? state.PlanEntries : null)
+            : existingSnapshot?.Plan;
+        var transcript = (transcriptSource ?? ImmutableList<ConversationMessageSnapshot>.Empty)
             .Where(static message => !IsThinkingPlaceholder(message))
             .Select(CloneMessageSnapshot)
             .ToArray();
-        var planEntries = (contentSlice?.PlanEntries ?? (isHydratedConversation ? state.PlanEntries : null) ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty)
+        var planEntries = (planEntriesSource ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty)
             .Select(ClonePlanEntrySnapshot)
             .OfType<ConversationPlanEntrySnapshot>()
             .ToArray();
-        var availableModes = (sessionStateSlice?.AvailableModes ?? (isHydratedConversation ? state.AvailableModes : null) ?? ImmutableList<ConversationModeOptionSnapshot>.Empty)
+        ConversationModeOptionSnapshot[] availableModes = (sessionStateSlice?.AvailableModes ?? (isHydratedConversation ? state.AvailableModes : null) ?? ImmutableList<ConversationModeOptionSnapshot>.Empty)
             .Select(CloneModeOptionSnapshot)
             .ToArray();
-        var configOptions = (sessionStateSlice?.ConfigOptions ?? (isHydratedConversation ? state.ConfigOptions : null) ?? ImmutableList<ConversationConfigOptionSnapshot>.Empty)
+        ConversationConfigOptionSnapshot[] configOptions = (sessionStateSlice?.ConfigOptions ?? (isHydratedConversation ? state.ConfigOptions : null) ?? ImmutableList<ConversationConfigOptionSnapshot>.Empty)
             .Select(CloneConfigOptionSnapshot)
             .ToArray();
-        var selectedModeId = sessionStateSlice?.SelectedModeId ?? (isHydratedConversation ? state.SelectedModeId : null);
-        var showConfigOptionsPanel = sessionStateSlice?.ShowConfigOptionsPanel ?? (isHydratedConversation && state.ShowConfigOptionsPanel);
-        var showPlanPanel = contentSlice?.ShowPlanPanel ?? (isHydratedConversation && state.ShowPlanPanel);
-        var planTitle = contentSlice?.PlanTitle ?? (isHydratedConversation ? state.PlanTitle : null);
-        var existingSnapshot = _workspace.GetConversationSnapshot(conversationId);
+        ConversationAvailableCommandSnapshot[] availableCommands = (sessionStateSlice?.AvailableCommands ?? (isHydratedConversation ? state.AvailableCommands : null) ?? ImmutableList<ConversationAvailableCommandSnapshot>.Empty)
+            .Select(CloneAvailableCommandSnapshot)
+            .ToArray();
+        string? selectedModeId = sessionStateSlice?.SelectedModeId ?? (isHydratedConversation ? state.SelectedModeId : null);
+        bool showConfigOptionsPanel = sessionStateSlice?.ShowConfigOptionsPanel ?? (isHydratedConversation && state.ShowConfigOptionsPanel);
+        ConversationSessionInfoSnapshot? sessionInfo = ConversationSessionInfoSnapshots.Clone(sessionStateSlice?.SessionInfo ?? (isHydratedConversation ? state.SessionInfo : null));
+        ConversationUsageSnapshot? usage = CloneUsageSnapshot(sessionStateSlice?.Usage ?? (isHydratedConversation ? state.Usage : null));
+        if (sessionStateSlice is null && !isHydratedConversation && existingSnapshot is not null)
+        {
+            availableModes = (existingSnapshot.AvailableModes ?? Array.Empty<ConversationModeOptionSnapshot>())
+                .Select(CloneModeOptionSnapshot)
+                .ToArray();
+            configOptions = (existingSnapshot.ConfigOptions ?? Array.Empty<ConversationConfigOptionSnapshot>())
+                .Select(CloneConfigOptionSnapshot)
+                .ToArray();
+            availableCommands = (existingSnapshot.AvailableCommands ?? Array.Empty<ConversationAvailableCommandSnapshot>())
+                .Select(CloneAvailableCommandSnapshot)
+                .ToArray();
+            selectedModeId = existingSnapshot.SelectedModeId;
+            showConfigOptionsPanel = existingSnapshot.ShowConfigOptionsPanel;
+            sessionInfo = ConversationSessionInfoSnapshots.Clone(existingSnapshot.SessionInfo);
+            usage = CloneUsageSnapshot(existingSnapshot.Usage);
+        }
+        var showPlanPanel = hasProjectedContent
+            ? contentSlice?.ShowPlanPanel ?? (isHydratedConversation && state.ShowPlanPanel)
+            : existingSnapshot?.ShowPlanPanel ?? false;
+        var planTitle = hasProjectedContent
+            ? contentSlice?.PlanTitle ?? (isHydratedConversation ? state.PlanTitle : null)
+            : existingSnapshot?.PlanTitle;
         var runtimeState = state.ResolveRuntimeState(conversationId);
         var hasProjectedData = HasProjectedData(
             transcript,
@@ -191,6 +226,9 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             selectedModeId,
             configOptions,
             showConfigOptionsPanel,
+            availableCommands,
+            sessionInfo,
+            usage,
             showPlanPanel,
             planTitle);
         if (!hasProjectedData
@@ -210,6 +248,9 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
                 selectedModeId,
                 configOptions,
                 showConfigOptionsPanel,
+                availableCommands,
+                sessionInfo,
+                usage,
                 showPlanPanel,
                 planTitle)
             ? existingSnapshot.LastUpdatedAt
@@ -226,7 +267,10 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             availableModes,
             selectedModeId,
             configOptions,
-            showConfigOptionsPanel);
+            showConfigOptionsPanel,
+            availableCommands,
+            sessionInfo,
+            usage);
     }
 
     private static bool HasSnapshotData(ConversationWorkspaceSnapshot snapshot)
@@ -237,8 +281,21 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             snapshot.SelectedModeId,
             snapshot.ConfigOptions ?? Array.Empty<ConversationConfigOptionSnapshot>(),
             snapshot.ShowConfigOptionsPanel,
+            snapshot.AvailableCommands ?? Array.Empty<ConversationAvailableCommandSnapshot>(),
+            snapshot.SessionInfo,
+            snapshot.Usage,
             snapshot.ShowPlanPanel,
             snapshot.PlanTitle);
+
+    private static bool HasProjectedConversationContent(
+        IReadOnlyList<ConversationMessageSnapshot>? transcript,
+        IReadOnlyList<ConversationPlanEntrySnapshot>? planEntries,
+        bool showPlanPanel,
+        string? planTitle)
+        => (transcript?.Count ?? 0) > 0
+            || (planEntries?.Count ?? 0) > 0
+            || showPlanPanel
+            || !string.IsNullOrWhiteSpace(planTitle);
 
     private static bool HasProjectedData(
         IReadOnlyList<ConversationMessageSnapshot> transcript,
@@ -247,15 +304,21 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
         string? selectedModeId,
         IReadOnlyList<ConversationConfigOptionSnapshot> configOptions,
         bool showConfigOptionsPanel,
+        IReadOnlyList<ConversationAvailableCommandSnapshot> availableCommands,
+        ConversationSessionInfoSnapshot? sessionInfo,
+        ConversationUsageSnapshot? usage,
         bool showPlanPanel,
         string? planTitle)
         => transcript.Count > 0
             || planEntries.Count > 0
             || availableModes.Count > 0
             || configOptions.Count > 0
+            || availableCommands.Count > 0
             || showConfigOptionsPanel
             || showPlanPanel
             || !string.IsNullOrWhiteSpace(selectedModeId)
+            || sessionInfo is not null
+            || usage is not null
             || !string.IsNullOrWhiteSpace(planTitle);
 
     private TimeSpan ComputeDelay()
@@ -344,6 +407,9 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
         string? selectedModeId,
         IReadOnlyList<ConversationConfigOptionSnapshot> configOptions,
         bool showConfigOptionsPanel,
+        IReadOnlyList<ConversationAvailableCommandSnapshot> availableCommands,
+        ConversationSessionInfoSnapshot? sessionInfo,
+        ConversationUsageSnapshot? usage,
         bool showPlanPanel,
         string? planTitle)
     {
@@ -353,6 +419,9 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             && string.Equals(existingSnapshot.PlanTitle, planTitle, StringComparison.Ordinal)
             && ModeSequencesEqual(existingSnapshot.AvailableModes ?? Array.Empty<ConversationModeOptionSnapshot>(), availableModes)
             && ConfigOptionSequencesEqual(existingSnapshot.ConfigOptions ?? Array.Empty<ConversationConfigOptionSnapshot>(), configOptions)
+            && AvailableCommandSequencesEqual(existingSnapshot.AvailableCommands ?? Array.Empty<ConversationAvailableCommandSnapshot>(), availableCommands)
+            && SessionInfoEquals(existingSnapshot.SessionInfo, sessionInfo)
+            && UsageEquals(existingSnapshot.Usage, usage)
             && MessageSequencesEqual(existingSnapshot.Transcript, transcript)
             && PlanSequencesEqual(existingSnapshot.Plan, planEntries);
     }
@@ -389,6 +458,26 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
         for (var i = 0; i < left.Count; i++)
         {
             if (!ConfigOptionEquals(left[i], right[i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool AvailableCommandSequencesEqual(
+        IReadOnlyList<ConversationAvailableCommandSnapshot> left,
+        IReadOnlyList<ConversationAvailableCommandSnapshot> right)
+    {
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < left.Count; i++)
+        {
+            if (!AvailableCommandEquals(left[i], right[i]))
             {
                 return false;
             }
@@ -453,8 +542,32 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             && left.ToolCallKind == right.ToolCallKind
             && left.ToolCallStatus == right.ToolCallStatus
             && string.Equals(left.ToolCallJson, right.ToolCallJson, StringComparison.Ordinal)
+            && ToolCallContentEquals(left.ToolCallContent, right.ToolCallContent)
             && string.Equals(left.ModeId, right.ModeId, StringComparison.Ordinal)
             && PlanEntryEquals(left.PlanEntry, right.PlanEntry);
+    }
+
+    private static bool ToolCallContentEquals(IReadOnlyList<ToolCallContent>? left, IReadOnlyList<ToolCallContent>? right)
+    {
+        if (left is null || right is null)
+        {
+            return left is null && right is null;
+        }
+
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < left.Count; i++)
+        {
+            if (!string.Equals(JsonSerializer.Serialize(left[i]), JsonSerializer.Serialize(right[i]), StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool PlanEntryEquals(ConversationPlanEntrySnapshot? left, ConversationPlanEntrySnapshot? right)
@@ -485,6 +598,80 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             && string.Equals(left.ValueType, right.ValueType, StringComparison.Ordinal)
             && string.Equals(left.SelectedValue, right.SelectedValue, StringComparison.Ordinal)
             && ConfigOptionChoiceSequencesEqual(left.Options ?? [], right.Options ?? []);
+    }
+
+    private static bool AvailableCommandEquals(ConversationAvailableCommandSnapshot left, ConversationAvailableCommandSnapshot right)
+    {
+        return string.Equals(left.Name, right.Name, StringComparison.Ordinal)
+            && string.Equals(left.Description, right.Description, StringComparison.Ordinal)
+            && string.Equals(left.InputHint, right.InputHint, StringComparison.Ordinal);
+    }
+
+    private static bool SessionInfoEquals(ConversationSessionInfoSnapshot? left, ConversationSessionInfoSnapshot? right)
+    {
+        if (left is null || right is null)
+        {
+            return left is null && right is null;
+        }
+
+        return string.Equals(left.Title, right.Title, StringComparison.Ordinal)
+            && string.Equals(left.Description, right.Description, StringComparison.Ordinal)
+            && string.Equals(left.Cwd, right.Cwd, StringComparison.Ordinal)
+            && left.UpdatedAtUtc == right.UpdatedAtUtc
+            && MetadataEquals(left.Meta, right.Meta);
+    }
+
+    private static bool UsageEquals(ConversationUsageSnapshot? left, ConversationUsageSnapshot? right)
+    {
+        if (left is null || right is null)
+        {
+            return left is null && right is null;
+        }
+
+        return left.Used == right.Used
+            && left.Size == right.Size
+            && UsageCostEquals(left.Cost, right.Cost);
+    }
+
+    private static bool UsageCostEquals(ConversationUsageCostSnapshot? left, ConversationUsageCostSnapshot? right)
+    {
+        if (left is null || right is null)
+        {
+            return left is null && right is null;
+        }
+
+        return left.Amount == right.Amount
+            && string.Equals(left.Currency, right.Currency, StringComparison.Ordinal);
+    }
+
+    private static bool MetadataEquals(
+        IReadOnlyDictionary<string, object?>? left,
+        IReadOnlyDictionary<string, object?>? right)
+    {
+        if (left is null || right is null)
+        {
+            return left is null && right is null;
+        }
+
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        foreach (var pair in left)
+        {
+            if (!right.TryGetValue(pair.Key, out var rightValue))
+            {
+                return false;
+            }
+
+            if (!Equals(pair.Value, rightValue))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool ConfigOptionChoiceSequencesEqual(
@@ -531,9 +718,28 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             ToolCallKind = snapshot.ToolCallKind,
             ToolCallStatus = snapshot.ToolCallStatus,
             ToolCallJson = snapshot.ToolCallJson,
+            ToolCallContent = CloneToolCallContentList(snapshot.ToolCallContent),
             PlanEntry = ClonePlanEntrySnapshot(snapshot.PlanEntry),
             ModeId = snapshot.ModeId
         };
+
+    private static List<ToolCallContent>? CloneToolCallContentList(IReadOnlyList<ToolCallContent>? content)
+    {
+        if (content is null)
+        {
+            return null;
+        }
+
+        var cloned = new List<ToolCallContent>(content.Count);
+        foreach (var item in content)
+        {
+            var json = JsonSerializer.Serialize(item);
+            cloned.Add(JsonSerializer.Deserialize<ToolCallContent>(json)
+                ?? throw new InvalidOperationException("Failed to clone tool call content."));
+        }
+
+        return cloned;
+    }
 
     private static ConversationPlanEntrySnapshot? ClonePlanEntrySnapshot(ConversationPlanEntrySnapshot? snapshot)
     {
@@ -579,6 +785,24 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             Name = snapshot.Name,
             Description = snapshot.Description
         };
+
+    private static ConversationAvailableCommandSnapshot CloneAvailableCommandSnapshot(ConversationAvailableCommandSnapshot snapshot)
+        => new(snapshot.Name, snapshot.Description, snapshot.InputHint);
+
+    private static ConversationUsageSnapshot? CloneUsageSnapshot(ConversationUsageSnapshot? snapshot)
+    {
+        if (snapshot is null)
+        {
+            return null;
+        }
+
+        return new ConversationUsageSnapshot(
+            snapshot.Used,
+            snapshot.Size,
+            snapshot.Cost is null
+                ? null
+                : new ConversationUsageCostSnapshot(snapshot.Cost.Amount, snapshot.Cost.Currency));
+    }
 
     private sealed class PendingWrite
     {

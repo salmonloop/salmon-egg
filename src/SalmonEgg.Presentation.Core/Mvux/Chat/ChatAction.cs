@@ -95,7 +95,10 @@ public sealed record SetConversationSessionStateAction(
     IImmutableList<ConversationModeOptionSnapshot> AvailableModes,
     string? SelectedModeId,
     IImmutableList<ConversationConfigOptionSnapshot> ConfigOptions,
-    bool ShowConfigOptionsPanel) : ChatAction;
+    bool ShowConfigOptionsPanel,
+    IImmutableList<ConversationAvailableCommandSnapshot>? AvailableCommands = null,
+    ConversationSessionInfoSnapshot? SessionInfo = null,
+    ConversationUsageSnapshot? Usage = null) : ChatAction;
 
 public sealed record MergeConversationSessionStateAction(
     string? ConversationId,
@@ -103,7 +106,10 @@ public sealed record MergeConversationSessionStateAction(
     string? SelectedModeId = null,
     bool HasSelectedModeId = false,
     IImmutableList<ConversationConfigOptionSnapshot>? ConfigOptions = null,
-    bool? ShowConfigOptionsPanel = null) : ChatAction;
+    bool? ShowConfigOptionsPanel = null,
+    IImmutableList<ConversationAvailableCommandSnapshot>? AvailableCommands = null,
+    ConversationSessionInfoSnapshot? SessionInfo = null,
+    ConversationUsageSnapshot? Usage = null) : ChatAction;
 
 public sealed record ReplacePlanEntriesAction(
     string? ConversationId,

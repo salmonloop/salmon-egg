@@ -6,11 +6,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Moq;
+using SalmonEgg.Domain.Models.Content;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Domain.Models.Plan;
 using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Domain.Models.Session;
+using SalmonEgg.Domain.Models.Tool;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
@@ -195,6 +197,56 @@ public sealed class ChatConversationWorkspaceTests
         var configOption = Assert.Single(conversation.ConfigOptions);
         Assert.Equal("mode", configOption.Id);
         Assert.Equal("plan", configOption.SelectedValue);
+    }
+
+    [Fact]
+    public async Task UpsertConversationSnapshot_PreservesStructuredToolCallContentInSnapshotsAndPersistence()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript:
+            [
+                new ConversationMessageSnapshot
+                {
+                    Id = "tool-1",
+                    ContentType = "tool_call",
+                    ToolCallId = "call-1",
+                    ToolCallStatus = ToolCallStatus.InProgress,
+                    ToolCallContent = new List<ToolCallContent>
+                    {
+                        new ContentToolCallContent(new ResourceLinkContentBlock("https://example.com/doc"))
+                    },
+                    Timestamp = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)
+                }
+            ],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
+
+        var snapshot = workspace.GetConversationSnapshot("session-1");
+        var toolCall = Assert.Single(snapshot!.Transcript);
+        var structuredContent = Assert.Single(toolCall.ToolCallContent!);
+        var content = Assert.IsType<ContentToolCallContent>(structuredContent);
+        var resourceLink = Assert.IsType<ResourceLinkContentBlock>(content.Content);
+        Assert.Equal("https://example.com/doc", resourceLink.Uri);
+
+        await workspace.SaveAsync();
+
+        var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
+        var conversation = Assert.Single(saved.Conversations);
+        var savedToolCall = Assert.Single(conversation.Messages);
+        var savedStructuredContent = Assert.Single(savedToolCall.ToolCallContent!);
+        var savedContent = Assert.IsType<ContentToolCallContent>(savedStructuredContent);
+        var savedResourceLink = Assert.IsType<ResourceLinkContentBlock>(savedContent.Content);
+        Assert.Equal("https://example.com/doc", savedResourceLink.Uri);
     }
 
     [Fact]
@@ -926,6 +978,266 @@ public sealed class ChatConversationWorkspaceTests
         Assert.DoesNotContain("session-1", workspace.GetKnownConversationIds());
         Assert.Null(workspace.GetConversationSnapshot("session-1"));
         Assert.Null(sessionManager.GetSession("session-1"));
+    }
+
+    [Fact]
+    public async Task ApplySessionInfoSnapshotAsync_PartialUpdate_MergesMetadataWithoutDroppingMeta()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            SessionInfo: new ConversationSessionInfoSnapshot
+            {
+                Title = "Original title",
+                Description = "Original description",
+                Cwd = @"C:\repo\one",
+                UpdatedAtUtc = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                Meta = new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["existing"] = "value",
+                    ["shared"] = "before"
+                }
+            }));
+
+        await workspace.ApplySessionInfoSnapshotAsync(
+            "session-1",
+            new ConversationSessionInfoSnapshot
+            {
+                Description = "Updated description",
+                UpdatedAtUtc = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+                Meta = new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["shared"] = "after",
+                    ["added"] = 2
+                }
+            });
+
+        var snapshot = workspace.GetConversationSnapshot("session-1");
+        Assert.NotNull(snapshot);
+        var sessionInfo = Assert.IsType<ConversationSessionInfoSnapshot>(snapshot!.SessionInfo);
+        Assert.Equal("Original title", sessionInfo.Title);
+        Assert.Equal("Updated description", sessionInfo.Description);
+        Assert.Equal(@"C:\repo\one", sessionInfo.Cwd);
+        Assert.Equal(new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc), sessionInfo.UpdatedAtUtc);
+        Assert.Equal("value", sessionInfo.Meta!["existing"]);
+        Assert.Equal("after", sessionInfo.Meta["shared"]);
+        Assert.Equal(2, sessionInfo.Meta["added"]);
+    }
+
+    [Fact]
+    public async Task ApplySessionInfoSnapshotAsync_EmptyOrWhitespaceStrings_PreserveExistingSessionInfoFields()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            SessionInfo: new ConversationSessionInfoSnapshot
+            {
+                Title = "Original title",
+                Description = "Original description",
+                Cwd = @"C:\repo\one"
+            }));
+
+        await workspace.ApplySessionInfoSnapshotAsync(
+            "session-1",
+            new ConversationSessionInfoSnapshot
+            {
+                Title = string.Empty,
+                Description = "   ",
+                Cwd = "\t",
+                UpdatedAtUtc = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)
+            });
+
+        var snapshot = workspace.GetConversationSnapshot("session-1");
+        Assert.NotNull(snapshot);
+        var sessionInfo = Assert.IsType<ConversationSessionInfoSnapshot>(snapshot!.SessionInfo);
+        Assert.Equal("Original title", sessionInfo.Title);
+        Assert.Equal("Original description", sessionInfo.Description);
+        Assert.Equal(@"C:\repo\one", sessionInfo.Cwd);
+        Assert.Equal(new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc), sessionInfo.UpdatedAtUtc);
+    }
+
+    [Fact]
+    public async Task ApplySessionInfoSnapshotAsync_WhitespaceFields_StillMergeMetadata()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            SessionInfo: new ConversationSessionInfoSnapshot
+            {
+                Title = "Original title",
+                Description = "Original description",
+                Cwd = @"C:\repo\one",
+                UpdatedAtUtc = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                Meta = new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["existing"] = "value",
+                    ["shared"] = "before"
+                }
+            }));
+
+        await workspace.ApplySessionInfoSnapshotAsync(
+            "session-1",
+            new ConversationSessionInfoSnapshot
+            {
+                Title = " ",
+                Description = "\t",
+                Cwd = " ",
+                UpdatedAtUtc = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+                Meta = new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["shared"] = "after",
+                    ["added"] = 2
+                }
+            });
+
+        var snapshot = workspace.GetConversationSnapshot("session-1");
+        Assert.NotNull(snapshot);
+        var sessionInfo = Assert.IsType<ConversationSessionInfoSnapshot>(snapshot!.SessionInfo);
+        Assert.Equal("Original title", sessionInfo.Title);
+        Assert.Equal("Original description", sessionInfo.Description);
+        Assert.Equal(@"C:\repo\one", sessionInfo.Cwd);
+        Assert.Equal(new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc), sessionInfo.UpdatedAtUtc);
+        Assert.Equal("value", sessionInfo.Meta!["existing"]);
+        Assert.Equal("after", sessionInfo.Meta["shared"]);
+        Assert.Equal(2, sessionInfo.Meta["added"]);
+    }
+
+    [Fact]
+    public async Task ApplySessionInfoSnapshotAsync_WhitespaceFields_PreserveExistingValues()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            SessionInfo: new ConversationSessionInfoSnapshot
+            {
+                Title = "Original title",
+                Description = "Original description",
+                Cwd = @"C:\repo\one",
+                UpdatedAtUtc = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)
+            }));
+
+        await workspace.ApplySessionInfoSnapshotAsync(
+            "session-1",
+            new ConversationSessionInfoSnapshot
+            {
+                Title = string.Empty,
+                Description = "   ",
+                Cwd = "\t",
+                UpdatedAtUtc = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)
+            });
+
+        var sessionInfo = workspace.GetConversationSnapshot("session-1")!.SessionInfo;
+        Assert.NotNull(sessionInfo);
+        Assert.Equal("Original title", sessionInfo!.Title);
+        Assert.Equal("Original description", sessionInfo.Description);
+        Assert.Equal(@"C:\repo\one", sessionInfo.Cwd);
+        Assert.Equal(new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc), sessionInfo.UpdatedAtUtc);
+    }
+
+    [Fact]
+    public async Task SaveAsync_SessionScopedCommandsAndUsage_RoundTrips()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+
+        using (var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext))
+        {
+            workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+                ConversationId: "session-1",
+                Transcript: [],
+                Plan: [],
+                ShowPlanPanel: false,
+                PlanTitle: null,
+                CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                AvailableCommands:
+                [
+                    new ConversationAvailableCommandSnapshot("plan", "Planning command", "target")
+                ],
+                Usage: new ConversationUsageSnapshot(
+                    3,
+                    99,
+                    new ConversationUsageCostSnapshot(1.25m, "USD"))));
+
+            await workspace.SaveAsync();
+        }
+
+        var saved = store.LastSavedDocument;
+        Assert.NotNull(saved);
+        var savedConversation = Assert.Single(saved!.Conversations);
+        var savedCommand = Assert.Single(savedConversation.AvailableCommands);
+        Assert.Equal("plan", savedCommand.Name);
+        Assert.Equal("Planning command", savedCommand.Description);
+        Assert.Equal("target", savedCommand.InputHint);
+        Assert.NotNull(savedConversation.Usage);
+        Assert.Equal(3, savedConversation.Usage!.Used);
+        Assert.Equal(99, savedConversation.Usage.Size);
+        Assert.NotNull(savedConversation.Usage.Cost);
+        Assert.Equal(1.25m, savedConversation.Usage.Cost!.Amount);
+        Assert.Equal("USD", savedConversation.Usage.Cost.Currency);
+
+        store.LoadResult = saved;
+        using var restoredWorkspace = CreateWorkspace(store, new FakeSessionManager(), preferences, syncContext);
+        await restoredWorkspace.RestoreAsync();
+
+        var restored = restoredWorkspace.GetConversationSnapshot("session-1");
+        Assert.NotNull(restored);
+        var restoredCommand = Assert.Single(restored!.AvailableCommands ?? Array.Empty<ConversationAvailableCommandSnapshot>());
+        Assert.Equal("plan", restoredCommand.Name);
+        Assert.Equal("Planning command", restoredCommand.Description);
+        Assert.Equal("target", restoredCommand.InputHint);
+        Assert.NotNull(restored.Usage);
+        Assert.Equal(3, restored.Usage!.Used);
+        Assert.Equal(99, restored.Usage.Size);
+        Assert.NotNull(restored.Usage.Cost);
+        Assert.Equal(1.25m, restored.Usage.Cost!.Amount);
+        Assert.Equal("USD", restored.Usage.Cost.Currency);
     }
 
     [Fact]

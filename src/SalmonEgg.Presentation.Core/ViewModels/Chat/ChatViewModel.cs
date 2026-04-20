@@ -9,6 +9,7 @@ using System.Linq;
 using System.ComponentModel;
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Diagnostics;
@@ -1258,6 +1259,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 projection.SelectedModeId,
                 projection.ConfigOptions,
                 projection.ShowConfigOptionsPanel);
+            ApplySlashCommandProjection(projection.AvailableCommands);
             TryCompletePendingHistoryOverlayDismissal(projection);
             RefreshProjectAffinityCorrectionState(projection.HydratedConversationId);
             ApplyProjectAffinityOverrideCommand.NotifyCanExecuteChanged();
@@ -1990,6 +1992,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             ToolCallKind = vm.ToolCallKind,
             ToolCallStatus = vm.ToolCallStatus,
             ToolCallJson = vm.ToolCallJson,
+            ToolCallContent = CloneToolCallContentList(vm.ToolCallContent),
             PlanEntry = vm.PlanEntry != null
                 ? new ConversationPlanEntrySnapshot
                 {
@@ -2021,6 +2024,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             ToolCallKind = s.ToolCallKind,
             ToolCallStatus = s.ToolCallStatus,
             ToolCallJson = s.ToolCallJson,
+            ToolCallContent = CloneToolCallContentList(s.ToolCallContent),
             ModeId = s.ModeId
         };
 
@@ -2053,8 +2057,41 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             && viewModel.ToolCallKind == snapshot.ToolCallKind
             && viewModel.ToolCallStatus == snapshot.ToolCallStatus
             && string.Equals(viewModel.ToolCallJson, snapshot.ToolCallJson, StringComparison.Ordinal)
+            && ToolCallContentEquals(viewModel.ToolCallContent, snapshot.ToolCallContent)
             && string.Equals(viewModel.ModeId, snapshot.ModeId, StringComparison.Ordinal)
             && PlanEntryMatches(viewModel.PlanEntry, snapshot.PlanEntry);
+    }
+
+    private static bool ToolCallContentEquals(
+        IReadOnlyList<Domain.Models.Tool.ToolCallContent>? viewModel,
+        IReadOnlyList<Domain.Models.Tool.ToolCallContent>? snapshot)
+    {
+        if (ReferenceEquals(viewModel, snapshot))
+        {
+            return true;
+        }
+
+        if (viewModel is null || snapshot is null)
+        {
+            return viewModel is null && snapshot is null;
+        }
+
+        if (viewModel.Count != snapshot.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < viewModel.Count; i++)
+        {
+            var left = JsonSerializer.Serialize(viewModel[i]);
+            var right = JsonSerializer.Serialize(snapshot[i]);
+            if (!string.Equals(left, right, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool PlanEntryMatches(PlanEntryViewModel? viewModel, ConversationPlanEntrySnapshot? snapshot)
@@ -2092,6 +2129,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             ToolCallKind = snapshot.ToolCallKind,
             ToolCallStatus = snapshot.ToolCallStatus,
             ToolCallJson = snapshot.ToolCallJson,
+            ToolCallContent = CloneToolCallContentList(snapshot.ToolCallContent),
             PlanEntry = ClonePlanEntrySnapshot(snapshot.PlanEntry),
             ModeId = snapshot.ModeId
         };
@@ -2858,16 +2896,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                         ? activeConversationId
                         : null);
 
-            if (e.Update is SessionInfoUpdate sessionInfoUpdate)
-            {
-                if (!string.IsNullOrWhiteSpace(boundConversationId))
-                {
-                    await ApplySessionInfoUpdateAsync(boundConversationId!, sessionInfoUpdate).ConfigureAwait(true);
-                }
-
-                return;
-            }
-
             if (string.IsNullOrWhiteSpace(boundConversationId))
             {
                 return;
@@ -2952,16 +2980,23 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                     targetConversationId,
                     _acpSessionUpdateProjector.Project(new SessionUpdateEventArgs(e.SessionId, optionUpdate))).ConfigureAwait(true);
             }
-            else if (e.Update is UsageUpdate)
+            else if (e.Update is SessionInfoUpdate sessionInfoUpdate)
             {
-                // Known protocol extension: usage telemetry does not currently drive visible turn or transcript state.
+                await ApplySessionUpdateDeltaAsync(
+                    targetConversationId,
+                    _acpSessionUpdateProjector.Project(new SessionUpdateEventArgs(e.SessionId, sessionInfoUpdate))).ConfigureAwait(true);
+            }
+            else if (e.Update is UsageUpdate usageUpdate)
+            {
+                await ApplySessionUpdateDeltaAsync(
+                    targetConversationId,
+                    _acpSessionUpdateProjector.Project(new SessionUpdateEventArgs(e.SessionId, usageUpdate))).ConfigureAwait(true);
             }
             else if (e.Update is AvailableCommandsUpdate commandsUpdate)
             {
-                if (isActiveTarget)
-                {
-                    UpdateSlashCommands(commandsUpdate);
-                }
+                await ApplySessionUpdateDeltaAsync(
+                    targetConversationId,
+                    _acpSessionUpdateProjector.Project(new SessionUpdateEventArgs(e.SessionId, commandsUpdate))).ConfigureAwait(true);
             }
             else if (e.Update != null)
             {
@@ -3360,27 +3395,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             case StopReason.MaxTurnRequests:
                 await _chatStore.Dispatch(new CompleteTurnAction(conversationId, turnId)).ConfigureAwait(true);
                 break;
-        }
-    }
-
-    private async Task ApplySessionInfoUpdateAsync(string conversationId, SessionInfoUpdate update)
-    {
-        if (string.IsNullOrWhiteSpace(conversationId) || update is null)
-        {
-            return;
-        }
-
-        await _conversationWorkspace
-            .ApplySessionInfoUpdateAsync(
-                conversationId,
-                update.Title,
-                updatedAtUtc: ParseSessionUpdatedAtUtc(update.UpdatedAt),
-                allowRegisterWhenMissing: true)
-            .ConfigureAwait(true);
-
-        if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
-        {
-            CurrentSessionDisplayName = ResolveSessionDisplayName(conversationId);
         }
     }
 
@@ -3916,16 +3930,16 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         }).ConfigureAwait(false);
     }
 
-    private void UpdateSlashCommands(AvailableCommandsUpdate update)
+    private void ApplySlashCommandProjection(IReadOnlyList<ConversationAvailableCommandSnapshot> commands)
     {
         AvailableSlashCommands.Clear();
-        foreach (var cmd in update.AvailableCommands)
+        foreach (var cmd in commands)
         {
             AvailableSlashCommands.Add(new SlashCommandViewModel
             {
                 Name = cmd.Name,
                 Description = cmd.Description,
-                InputHint = cmd.Input?.Hint
+                InputHint = cmd.InputHint
             });
         }
 
@@ -4531,7 +4545,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             ToolCallId = toolCall.ToolCallId,
             ToolCallKind = toolCall.Kind,
             ToolCallStatus = toolCall.Status,
-            ToolCallJson = TryGetRawJson(toolCall.RawInput)
+            ToolCallJson = TryGetRawJson(toolCall.RawInput),
+            ToolCallContent = CloneToolCallContentList(toolCall.Content)
         };
     }
 
@@ -4579,6 +4594,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 ToolCallKind = toolCallStatusUpdate.Kind ?? existing.ToolCallKind,
                 ToolCallStatus = toolCallStatusUpdate.Status ?? existing.ToolCallStatus,
                 ToolCallJson = TryGetRawJson(toolCallStatusUpdate.RawInput) ?? existing.ToolCallJson,
+                ToolCallContent = toolCallStatusUpdate.Content is not null
+                    ? CloneToolCallContentList(toolCallStatusUpdate.Content)
+                    : existing.ToolCallContent,
                 PlanEntry = ClonePlanEntrySnapshot(existing.PlanEntry),
                 ModeId = existing.ModeId
             };
@@ -4599,12 +4617,37 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             ToolCallId = toolCallStatusUpdate.ToolCallId,
             ToolCallKind = toolCallStatusUpdate.Kind,
             ToolCallStatus = toolCallStatusUpdate.Status,
-            ToolCallJson = TryGetRawJson(toolCallStatusUpdate.RawInput)
+            ToolCallJson = TryGetRawJson(toolCallStatusUpdate.RawInput),
+            ToolCallContent = CloneToolCallContentList(toolCallStatusUpdate.Content)
         };
     }
 
     private static string? TryGetRawJson(System.Text.Json.JsonElement? element)
         => element?.GetRawText();
+
+    private static List<Domain.Models.Tool.ToolCallContent>? CloneToolCallContentList(
+        IReadOnlyList<Domain.Models.Tool.ToolCallContent>? content)
+    {
+        if (content is null)
+        {
+            return null;
+        }
+
+        var cloned = new List<Domain.Models.Tool.ToolCallContent>(content.Count);
+        foreach (var item in content)
+        {
+            cloned.Add(CloneToolCallContent(item));
+        }
+
+        return cloned;
+    }
+
+    private static Domain.Models.Tool.ToolCallContent CloneToolCallContent(Domain.Models.Tool.ToolCallContent content)
+    {
+        var json = JsonSerializer.Serialize(content);
+        return JsonSerializer.Deserialize<Domain.Models.Tool.ToolCallContent>(json)
+            ?? throw new InvalidOperationException("Failed to clone tool call content.");
+    }
 
     private static string ResolveToolCallOutput(
         System.Text.Json.JsonElement? rawOutput,
@@ -4722,6 +4765,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 ToolCallKind = existing.ToolCallKind,
                 ToolCallStatus = Domain.Models.Tool.ToolCallStatus.Cancelled,
                 ToolCallJson = existing.ToolCallJson,
+                ToolCallContent = CloneToolCallContentList(existing.ToolCallContent),
                 PlanEntry = ClonePlanEntrySnapshot(existing.PlanEntry),
                 ModeId = existing.ModeId
             })).ConfigureAwait(true);
@@ -4741,6 +4785,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         var nextConfigOptions = delta.ConfigOptions != null
             ? delta.ConfigOptions.Select(ToConversationConfigOptionSnapshot).ToImmutableList()
             : null;
+        var nextAvailableCommands = delta.AvailableCommands != null
+            ? delta.AvailableCommands.Select(ToConversationAvailableCommandSnapshot).ToImmutableList()
+            : null;
+        var nextSessionInfo = ToConversationSessionInfoSnapshot(delta.SessionInfo);
+        var nextUsage = ToConversationUsageSnapshot(delta.Usage);
         var hasSelectedModeId = !string.IsNullOrWhiteSpace(delta.SelectedModeId)
             || delta.AvailableModes is { Count: 0 };
         var nextSelectedModeId = !string.IsNullOrWhiteSpace(delta.SelectedModeId)
@@ -4758,7 +4807,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             nextSelectedModeId,
             hasSelectedModeId,
             nextConfigOptions,
-            nextShowConfigOptionsPanel)).ConfigureAwait(true);
+            nextShowConfigOptionsPanel,
+            nextAvailableCommands,
+            nextSessionInfo,
+            nextUsage)).ConfigureAwait(true);
 
         if (delta.PlanEntries != null)
         {
@@ -4767,6 +4819,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 delta.PlanEntries.ToImmutableList(),
                 delta.ShowPlanPanel ?? true,
                 delta.PlanTitle)).ConfigureAwait(true);
+        }
+
+        if (nextSessionInfo is not null)
+        {
+            await PersistProjectedSessionInfoSnapshotAsync(conversationId).ConfigureAwait(true);
         }
     }
 
@@ -4825,6 +4882,57 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 })
                 .ToList()
         };
+
+    private static ConversationAvailableCommandSnapshot ToConversationAvailableCommandSnapshot(AcpAvailableCommandSnapshot command)
+        => new(command.Name, command.Description, command.InputHint);
+
+    private static ConversationSessionInfoSnapshot? ToConversationSessionInfoSnapshot(AcpSessionInfoSnapshot? sessionInfo)
+    {
+        if (sessionInfo is null)
+        {
+            return null;
+        }
+
+        var normalizedTitle = string.IsNullOrWhiteSpace(sessionInfo.Title) ? null : sessionInfo.Title;
+        var normalizedDescription = string.IsNullOrWhiteSpace(sessionInfo.Description) ? null : sessionInfo.Description;
+        var normalizedCwd = string.IsNullOrWhiteSpace(sessionInfo.Cwd) ? null : sessionInfo.Cwd;
+        var normalizedUpdatedAt = string.IsNullOrWhiteSpace(sessionInfo.UpdatedAt) ? null : sessionInfo.UpdatedAt;
+        var normalizedMeta = sessionInfo.Meta is { Count: > 0 }
+            ? new Dictionary<string, object?>(sessionInfo.Meta, StringComparer.Ordinal)
+            : null;
+        if (normalizedTitle is null
+            && normalizedDescription is null
+            && normalizedCwd is null
+            && normalizedUpdatedAt is null
+            && normalizedMeta is null)
+        {
+            return null;
+        }
+
+        return new ConversationSessionInfoSnapshot
+        {
+            Title = normalizedTitle,
+            Description = normalizedDescription,
+            Cwd = normalizedCwd,
+            UpdatedAtUtc = ParseSessionUpdatedAtUtc(normalizedUpdatedAt),
+            Meta = normalizedMeta
+        };
+    }
+
+    private static ConversationUsageSnapshot? ToConversationUsageSnapshot(AcpUsageSnapshot? usage)
+    {
+        if (usage is null)
+        {
+            return null;
+        }
+
+        return new ConversationUsageSnapshot(
+            usage.Used,
+            usage.Size,
+            usage.Cost is null
+                ? null
+                : new ConversationUsageCostSnapshot(usage.Cost.Amount, usage.Cost.Currency));
+    }
 
     private void SyncModesFromConfigOptions()
     {
@@ -6035,8 +6143,15 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            await RefreshRemoteSessionMetadataFromSsotAsync(conversationId, binding, chatService, cancellationToken).ConfigureAwait(false);
             await ResetConversationProjectionForResyncAsync(conversationId, cancellationToken).ConfigureAwait(false);
+            var preloadedSessionInfo = await LoadRemoteSessionInfoSnapshotFromSsotAsync(conversationId, binding, chatService, cancellationToken).ConfigureAwait(false);
+            if (preloadedSessionInfo is not null)
+            {
+                await ApplySessionInfoSnapshotProjectionAsync(
+                    conversationId,
+                    preloadedSessionInfo,
+                    cancellationToken).ConfigureAwait(false);
+            }
             await SetHydrationOverlayPhaseAsync(
                     conversationId,
                     activationVersion,
@@ -6579,6 +6694,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        var storeState = await _chatStore.State ?? ChatState.Empty;
+        var preservedSessionState = storeState.ResolveSessionStateSlice(conversationId);
+        var preservedSessionInfo = ConversationSessionInfoSnapshots.Clone(
+            preservedSessionState?.SessionInfo);
         await _chatStore.Dispatch(new ClearTurnAction(conversationId)).ConfigureAwait(false);
         await _chatStore.Dispatch(new HydrateConversationAction(
             conversationId,
@@ -6591,7 +6710,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             ImmutableList<ConversationModeOptionSnapshot>.Empty,
             SelectedModeId: null,
             ImmutableList<ConversationConfigOptionSnapshot>.Empty,
-            ShowConfigOptionsPanel: false)).ConfigureAwait(false);
+            ShowConfigOptionsPanel: false,
+            preservedSessionState?.AvailableCommands ?? ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+            SessionInfo: preservedSessionInfo,
+            Usage: preservedSessionState?.Usage)).ConfigureAwait(false);
     }
 
     private async Task<bool> TryRestoreConversationProjectionFromWorkspaceSnapshotAsync(string conversationId)
@@ -7164,7 +7286,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         return AcpHydrationCompletionMode.StrictReplay;
     }
 
-    private async Task RefreshRemoteSessionMetadataFromSsotAsync(
+    private async Task<ConversationSessionInfoSnapshot?> LoadRemoteSessionInfoSnapshotFromSsotAsync(
         string conversationId,
         ConversationBindingSlice binding,
         IChatService chatService,
@@ -7174,7 +7296,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             || string.IsNullOrWhiteSpace(binding.RemoteSessionId)
             || chatService.AgentCapabilities?.SessionCapabilities?.List is null)
         {
-            return;
+            return null;
         }
 
         AgentSessionInfo? sessionInfo;
@@ -7193,23 +7315,61 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 "Failed to refresh remote session metadata before hydration. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
                 conversationId,
                 binding.RemoteSessionId);
+            return null;
+        }
+
+        if (sessionInfo is null)
+        {
+            return null;
+        }
+
+        return ToConversationSessionInfoSnapshot(new AcpSessionInfoSnapshot(
+            sessionInfo.Title,
+            sessionInfo.Description,
+            sessionInfo.Cwd,
+            sessionInfo.UpdatedAt,
+            sessionInfo.Meta));
+    }
+
+    private async Task ApplySessionInfoSnapshotProjectionAsync(
+        string conversationId,
+        ConversationSessionInfoSnapshot sessionInfo,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId) || sessionInfo is null)
+        {
             return;
         }
 
+        await _chatStore.Dispatch(new MergeConversationSessionStateAction(
+            conversationId,
+            SessionInfo: ConversationSessionInfoSnapshots.Clone(sessionInfo))).ConfigureAwait(false);
+        await PersistProjectedSessionInfoSnapshotAsync(conversationId, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task PersistProjectedSessionInfoSnapshotAsync(
+        string conversationId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return;
+        }
+
+        var storeState = await _chatStore.State ?? ChatState.Empty;
+        var sessionInfo = ConversationSessionInfoSnapshots.Clone(storeState.ResolveSessionStateSlice(conversationId)?.SessionInfo);
         if (sessionInfo is null)
         {
             return;
         }
 
         await _conversationWorkspace
-            .ApplySessionInfoUpdateAsync(
+            .ApplySessionInfoSnapshotAsync(
                 conversationId,
-                sessionInfo.Title,
-                cwd: sessionInfo.Cwd,
-                updatedAtUtc: ParseSessionUpdatedAtUtc(sessionInfo.UpdatedAt),
+                sessionInfo,
                 allowRegisterWhenMissing: true,
                 cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
+            .ConfigureAwait(true);
 
         if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
         {

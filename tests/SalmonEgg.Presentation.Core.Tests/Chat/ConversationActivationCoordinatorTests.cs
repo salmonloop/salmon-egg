@@ -204,6 +204,92 @@ public sealed class ConversationActivationCoordinatorTests
     }
 
     [Fact]
+    public async Task ActivateSessionAsync_HydratesWorkspaceContent_WhenOnlyAuxiliarySessionStateIsProjected()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var preferences = CreatePreferences(syncContext);
+        var workspaceStore = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
+        using var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript:
+            [
+                CreateTextMessage("workspace-1", "workspace transcript")
+            ],
+            Plan:
+            [
+                new ConversationPlanEntrySnapshot
+                {
+                    Content = "workspace plan",
+                    Status = PlanEntryStatus.InProgress,
+                    Priority = PlanEntryPriority.High
+                }
+            ],
+            ShowPlanPanel: true,
+            PlanTitle: "workspace title",
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+
+        var state = State.Value(new object(), () => ChatState.Empty with
+        {
+            ConversationSessionStates = ImmutableDictionary<string, ConversationSessionStateSlice>.Empty.Add(
+                "session-1",
+                new ConversationSessionStateSlice(
+                    ImmutableList<ConversationModeOptionSnapshot>.Empty,
+                    null,
+                    ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+                    false,
+                    ImmutableList.Create(new ConversationAvailableCommandSnapshot("plan", "Planning command", "goal")),
+                    new ConversationSessionInfoSnapshot
+                    {
+                        Title = "store title",
+                        Meta = new Dictionary<string, object?>(StringComparer.Ordinal)
+                        {
+                            ["source"] = "store"
+                        }
+                    },
+                    new ConversationUsageSnapshot(
+                        5,
+                        128,
+                        new ConversationUsageCostSnapshot(1.5m, "USD"))))
+        });
+        var chatStore = CreateChatStore(state);
+        var connectionStore = CreateConnectionStore();
+        var bindingCommands = new BindingCoordinator(workspace, chatStore);
+        var coordinator = new ConversationActivationCoordinator(
+            workspace,
+            bindingCommands,
+            chatStore,
+            connectionStore,
+            Mock.Of<ILogger<ConversationActivationCoordinator>>());
+
+        var result = await coordinator.ActivateSessionAsync("session-1");
+
+        Assert.True(result.Succeeded);
+        var currentState = Assert.IsType<ChatState>(await state);
+        Assert.Equal("session-1", currentState.HydratedConversationId);
+        Assert.NotNull(currentState.Transcript);
+        Assert.Single(currentState.Transcript!);
+        Assert.Equal("workspace transcript", currentState.Transcript[0].TextContent);
+        Assert.NotNull(currentState.PlanEntries);
+        Assert.Single(currentState.PlanEntries!);
+        Assert.Equal("workspace plan", currentState.PlanEntries[0].Content);
+        Assert.True(currentState.ShowPlanPanel);
+        Assert.Equal("workspace title", currentState.PlanTitle);
+
+        var sessionState = currentState.ResolveSessionStateSlice("session-1");
+        Assert.NotNull(sessionState);
+        var command = Assert.Single(sessionState!.Value.AvailableCommands);
+        Assert.Equal("plan", command.Name);
+        Assert.NotNull(sessionState.Value.SessionInfo);
+        Assert.Equal("store title", sessionState.Value.SessionInfo!.Title);
+        Assert.NotNull(sessionState.Value.Usage);
+        Assert.Equal(5, sessionState.Value.Usage!.Used);
+    }
+
+    [Fact]
     public async Task ActivateSessionAsync_HydratesSnapshot_WhenStoreIsEmptyAndGenerationIsZero()
     {
         var syncContext = new ImmediateSynchronizationContext();
@@ -254,6 +340,158 @@ public sealed class ConversationActivationCoordinatorTests
         Assert.NotNull(currentState.PlanEntries);
         Assert.Single(currentState.PlanEntries!);
         Assert.Null(currentState.Binding);
+    }
+
+    [Fact]
+    public async Task ActivateSessionAsync_HydratesMissingAuxiliarySessionState_FromWorkspaceSnapshot()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var preferences = CreatePreferences(syncContext);
+        var workspaceStore = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
+        using var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+            AvailableCommands:
+            [
+                new ConversationAvailableCommandSnapshot("plan", "Planning command", "goal")
+            ],
+            SessionInfo: new ConversationSessionInfoSnapshot
+            {
+                Title = "workspace title"
+            },
+            Usage: new ConversationUsageSnapshot(3, 42, new ConversationUsageCostSnapshot(1.25m, "USD"))));
+        workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-a");
+
+        var state = State.Value(new object(), () => ChatState.Empty with
+        {
+            HydratedConversationId = "session-1",
+            ConversationSessionStates = ImmutableDictionary<string, ConversationSessionStateSlice>.Empty.Add(
+                "session-1",
+                new ConversationSessionStateSlice(
+                    ImmutableList.Create(new ConversationModeOptionSnapshot { ModeId = "agent", ModeName = "Agent", Description = "Agent mode" }),
+                    "agent",
+                    ImmutableList.Create(new ConversationConfigOptionSnapshot { Id = "mode", Name = "Mode", SelectedValue = "agent" }),
+                    true,
+                    ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+                    null,
+                    null))
+        });
+        var chatStore = CreateChatStore(state);
+        var connectionStore = CreateConnectionStore();
+        var bindingCommands = new BindingCoordinator(workspace, chatStore);
+        var coordinator = new ConversationActivationCoordinator(
+            workspace,
+            bindingCommands,
+            chatStore,
+            connectionStore,
+            Mock.Of<ILogger<ConversationActivationCoordinator>>());
+
+        var result = await coordinator.ActivateSessionAsync("session-1");
+
+        Assert.True(result.Succeeded);
+        var currentState = Assert.IsType<ChatState>(await state);
+        var sessionState = Assert.NotNull(currentState.ResolveSessionStateSlice("session-1"));
+        Assert.Equal("agent", sessionState.SelectedModeId);
+        var command = Assert.Single(sessionState.AvailableCommands);
+        Assert.Equal("plan", command.Name);
+        Assert.NotNull(sessionState.SessionInfo);
+        Assert.Equal("workspace title", sessionState.SessionInfo!.Title);
+        Assert.NotNull(sessionState.Usage);
+        Assert.Equal(3, sessionState.Usage!.Used);
+    }
+
+    [Fact]
+    public async Task ActivateSessionAsync_HydratesPrimarySessionState_WhenOnlyAuxiliarySessionStateIsProjected()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var preferences = CreatePreferences(syncContext);
+        var workspaceStore = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
+        using var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+            AvailableModes:
+            [
+                new ConversationModeOptionSnapshot
+                {
+                    ModeId = "agent",
+                    ModeName = "Agent",
+                    Description = "Agent mode"
+                }
+            ],
+            SelectedModeId: "agent",
+            ConfigOptions:
+            [
+                new ConversationConfigOptionSnapshot
+                {
+                    Id = "mode",
+                    Name = "Mode",
+                    SelectedValue = "agent"
+                }
+            ],
+            ShowConfigOptionsPanel: true));
+
+        var state = State.Value(new object(), () => ChatState.Empty with
+        {
+            ConversationSessionStates = ImmutableDictionary<string, ConversationSessionStateSlice>.Empty.Add(
+                "session-1",
+                new ConversationSessionStateSlice(
+                    ImmutableList<ConversationModeOptionSnapshot>.Empty,
+                    null,
+                    ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+                    false,
+                    ImmutableList.Create(new ConversationAvailableCommandSnapshot("plan", "Planning command", "goal")),
+                    new ConversationSessionInfoSnapshot
+                    {
+                        Title = "store title"
+                    },
+                    new ConversationUsageSnapshot(
+                        5,
+                        128,
+                        new ConversationUsageCostSnapshot(1.5m, "USD"))))
+        });
+        var chatStore = CreateChatStore(state);
+        var connectionStore = CreateConnectionStore();
+        var bindingCommands = new BindingCoordinator(workspace, chatStore);
+        var coordinator = new ConversationActivationCoordinator(
+            workspace,
+            bindingCommands,
+            chatStore,
+            connectionStore,
+            Mock.Of<ILogger<ConversationActivationCoordinator>>());
+
+        var result = await coordinator.ActivateSessionAsync("session-1");
+
+        Assert.True(result.Succeeded);
+        var currentState = Assert.IsType<ChatState>(await state);
+        var sessionState = Assert.NotNull(currentState.ResolveSessionStateSlice("session-1"));
+        var availableMode = Assert.Single(sessionState.AvailableModes);
+        Assert.Equal("agent", availableMode.ModeId);
+        Assert.Equal("agent", sessionState.SelectedModeId);
+        var configOption = Assert.Single(sessionState.ConfigOptions);
+        Assert.Equal("mode", configOption.Id);
+        Assert.True(sessionState.ShowConfigOptionsPanel);
+        var command = Assert.Single(sessionState.AvailableCommands);
+        Assert.Equal("plan", command.Name);
+        Assert.NotNull(sessionState.SessionInfo);
+        Assert.Equal("store title", sessionState.SessionInfo!.Title);
+        Assert.NotNull(sessionState.Usage);
+        Assert.Equal(5, sessionState.Usage!.Used);
     }
 
     [Fact]

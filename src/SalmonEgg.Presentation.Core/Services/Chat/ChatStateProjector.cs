@@ -64,6 +64,9 @@ public sealed class ChatStateProjector : IChatStateProjector
         var configOptions = sessionStateSlice?.ConfigOptions
             ?? storeState.ConfigOptions
             ?? ImmutableList<ConversationConfigOptionSnapshot>.Empty;
+        var availableCommands = sessionStateSlice?.AvailableCommands
+            ?? storeState.AvailableCommands
+            ?? ImmutableList<ConversationAvailableCommandSnapshot>.Empty;
 
         return new ChatUiProjection(
             HydratedConversationId: hydratedConversationId,
@@ -90,6 +93,7 @@ public sealed class ChatStateProjector : IChatStateProjector
             SelectedModeId: sessionStateSlice?.SelectedModeId ?? storeState.SelectedModeId,
             ConfigOptions: configOptions,
             ShowConfigOptionsPanel: sessionStateSlice?.ShowConfigOptionsPanel ?? storeState.ShowConfigOptionsPanel,
+            AvailableCommands: availableCommands,
             IsHydrating: storeState.IsHydrating,
             IsTurnStatusVisible: isTurnStatusVisible,
             TurnStatusText: turnStatusText,
@@ -153,6 +157,7 @@ public sealed record ChatUiProjection(
     string? SelectedModeId,
     IReadOnlyList<ConversationConfigOptionSnapshot> ConfigOptions,
     bool ShowConfigOptionsPanel,
+    IReadOnlyList<ConversationAvailableCommandSnapshot> AvailableCommands,
     bool IsHydrating,
     bool IsTurnStatusVisible,
     string TurnStatusText,

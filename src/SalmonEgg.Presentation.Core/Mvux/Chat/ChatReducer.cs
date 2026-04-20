@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using SalmonEgg.Domain.Models.Conversation;
+using SalmonEgg.Domain.Models.Tool;
+using System.Text.Json;
 
 namespace SalmonEgg.Presentation.Core.Mvux.Chat;
 
@@ -123,7 +126,10 @@ public static class ChatReducer
                         setSessionState.AvailableModes,
                         setSessionState.SelectedModeId,
                         setSessionState.ConfigOptions,
-                        setSessionState.ShowConfigOptionsPanel))
+                        setSessionState.ShowConfigOptionsPanel,
+                        setSessionState.AvailableCommands ?? ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+                        ConversationSessionInfoSnapshots.Clone(setSessionState.SessionInfo),
+                        CloneUsageSnapshot(setSessionState.Usage)))
             }),
             MergeConversationSessionStateAction mergeSessionState => Mutate(current, current with
             {
@@ -136,7 +142,10 @@ public static class ChatReducer
                         mergeSessionState.SelectedModeId,
                         mergeSessionState.HasSelectedModeId,
                         mergeSessionState.ConfigOptions,
-                        mergeSessionState.ShowConfigOptionsPanel))
+                        mergeSessionState.ShowConfigOptionsPanel,
+                        mergeSessionState.AvailableCommands,
+                        mergeSessionState.SessionInfo,
+                        mergeSessionState.Usage))
             }),
             UpdateMessageAction updateMessage when !string.IsNullOrWhiteSpace(current.HydratedConversationId) => Mutate(current, current with
             {
@@ -208,7 +217,10 @@ public static class ChatReducer
             AvailableModes = sessionState?.AvailableModes,
             SelectedModeId = sessionState?.SelectedModeId,
             ConfigOptions = sessionState?.ConfigOptions,
-            ShowConfigOptionsPanel = sessionState?.ShowConfigOptionsPanel ?? false
+            ShowConfigOptionsPanel = sessionState?.ShowConfigOptionsPanel ?? false,
+            AvailableCommands = sessionState?.AvailableCommands,
+            SessionInfo = sessionState?.SessionInfo,
+            Usage = sessionState?.Usage
         };
     }
 
@@ -270,6 +282,9 @@ public static class ChatReducer
             SelectedModeId = sessionState?.SelectedModeId,
             ConfigOptions = sessionState?.ConfigOptions,
             ShowConfigOptionsPanel = sessionState?.ShowConfigOptionsPanel ?? false,
+            AvailableCommands = sessionState?.AvailableCommands,
+            SessionInfo = sessionState?.SessionInfo,
+            Usage = sessionState?.Usage,
             IsHydrating = false,
             IsPromptInFlight = false,
             ActiveTurn = null
@@ -332,18 +347,42 @@ public static class ChatReducer
         string? selectedModeId,
         bool hasSelectedModeId,
         IImmutableList<ConversationConfigOptionSnapshot>? configOptions,
-        bool? showConfigOptionsPanel)
+        bool? showConfigOptionsPanel,
+        IImmutableList<ConversationAvailableCommandSnapshot>? availableCommands,
+        ConversationSessionInfoSnapshot? sessionInfo,
+        ConversationUsageSnapshot? usage)
     {
         var current = existing ?? new ConversationSessionStateSlice(
             ImmutableList<ConversationModeOptionSnapshot>.Empty,
             null,
             ImmutableList<ConversationConfigOptionSnapshot>.Empty,
-            false);
+            false,
+            ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+            null,
+            null);
         return new ConversationSessionStateSlice(
             availableModes ?? current.AvailableModes,
             hasSelectedModeId ? selectedModeId : current.SelectedModeId,
             configOptions ?? current.ConfigOptions,
-            showConfigOptionsPanel ?? current.ShowConfigOptionsPanel);
+            showConfigOptionsPanel ?? current.ShowConfigOptionsPanel,
+            availableCommands ?? current.AvailableCommands,
+            sessionInfo is null ? current.SessionInfo : ConversationSessionInfoSnapshots.Merge(current.SessionInfo, sessionInfo),
+            usage is null ? current.Usage : CloneUsageSnapshot(usage));
+    }
+
+    private static ConversationUsageSnapshot? CloneUsageSnapshot(ConversationUsageSnapshot? usage)
+    {
+        if (usage is null)
+        {
+            return null;
+        }
+
+        return new ConversationUsageSnapshot(
+            usage.Used,
+            usage.Size,
+            usage.Cost is null
+                ? null
+                : new ConversationUsageCostSnapshot(usage.Cost.Amount, usage.Cost.Currency));
     }
 
     private static IImmutableList<ConversationMessageSnapshot>? ResolveTranscript(ChatState current, string? conversationId)
@@ -446,6 +485,7 @@ public static class ChatReducer
             ToolCallKind = source.ToolCallKind,
             ToolCallStatus = source.ToolCallStatus,
             ToolCallJson = source.ToolCallJson,
+            ToolCallContent = CloneToolCallContentList(source.ToolCallContent),
             PlanEntry = source.PlanEntry is null
                 ? null
                 : new ConversationPlanEntrySnapshot
@@ -455,6 +495,24 @@ public static class ChatReducer
                     Priority = source.PlanEntry.Priority
                 },
             ModeId = source.ModeId
-        };
+            };
+    }
+
+    private static List<ToolCallContent>? CloneToolCallContentList(IReadOnlyList<ToolCallContent>? content)
+    {
+        if (content is null)
+        {
+            return null;
+        }
+
+        var cloned = new List<ToolCallContent>(content.Count);
+        foreach (var item in content)
+        {
+            var json = JsonSerializer.Serialize(item);
+            cloned.Add(JsonSerializer.Deserialize<ToolCallContent>(json)
+                ?? throw new InvalidOperationException("Failed to clone tool call content."));
+        }
+
+        return cloned;
     }
 }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -8,7 +9,9 @@ using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Domain.Models.Session;
+using SalmonEgg.Domain.Models.Tool;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Core.Services;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
@@ -307,7 +310,10 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 binding.AvailableModes.Select(CloneModeOption).ToArray(),
                 binding.SelectedModeId,
                 binding.ConfigOptions.Select(CloneConfigOption).ToArray(),
-                binding.ShowConfigOptionsPanel);
+                binding.ShowConfigOptionsPanel,
+                binding.AvailableCommands.Select(CloneAvailableCommand).ToArray(),
+                ConversationSessionInfoSnapshots.Clone(binding.SessionInfo),
+                CloneUsage(binding.Usage));
         }
     }
 
@@ -428,6 +434,10 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             binding.ConfigOptions.Clear();
             binding.ConfigOptions.AddRange((snapshot.ConfigOptions ?? Array.Empty<ConversationConfigOptionSnapshot>()).Select(CloneConfigOption));
             binding.ShowConfigOptionsPanel = snapshot.ShowConfigOptionsPanel;
+            binding.AvailableCommands.Clear();
+            binding.AvailableCommands.AddRange((snapshot.AvailableCommands ?? Array.Empty<ConversationAvailableCommandSnapshot>()).Select(CloneAvailableCommand));
+            binding.SessionInfo = ConversationSessionInfoSnapshots.Clone(snapshot.SessionInfo);
+            binding.Usage = CloneUsage(snapshot.Usage);
             binding.ShowPlanPanel = snapshot.ShowPlanPanel;
             binding.PlanTitle = snapshot.PlanTitle;
         }
@@ -494,6 +504,30 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             return;
         }
 
+        await ApplySessionInfoSnapshotAsync(
+            conversationId,
+            new ConversationSessionInfoSnapshot
+            {
+                Title = title,
+                Cwd = cwd,
+                UpdatedAtUtc = updatedAtUtc
+            },
+            allowRegisterWhenMissing,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task ApplySessionInfoSnapshotAsync(
+        string conversationId,
+        ConversationSessionInfoSnapshot sessionInfo,
+        bool allowRegisterWhenMissing = false,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        if (string.IsNullOrWhiteSpace(conversationId) || sessionInfo is null)
+        {
+            return;
+        }
+
         var knownConversation = false;
         var tombstonedConversation = false;
         await PostToContextAsync(() =>
@@ -552,7 +586,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                     binding = RegisterConversationCore(
                         conversationId,
                         default,
-                        updatedAtUtc ?? DateTime.UtcNow,
+                        sessionInfo.UpdatedAtUtc ?? DateTime.UtcNow,
                         bumpVersion: true,
                         clearTombstone: false,
                         out var registeredConversationListChanged);
@@ -560,9 +594,16 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 }
 
                 var metadataChanged = false;
-                if (!string.IsNullOrWhiteSpace(title))
+                var mergedSessionInfo = ConversationSessionInfoSnapshots.Merge(binding.SessionInfo, sessionInfo);
+                if (!SessionInfoEquals(binding.SessionInfo, mergedSessionInfo))
                 {
-                    var sanitized = SessionNamePolicy.Sanitize(title);
+                    binding.SessionInfo = mergedSessionInfo;
+                    metadataChanged = true;
+                }
+
+                if (!string.IsNullOrWhiteSpace(mergedSessionInfo?.Title))
+                {
+                    var sanitized = SessionNamePolicy.Sanitize(mergedSessionInfo.Title);
                     var finalName = string.IsNullOrWhiteSpace(sanitized)
                         ? SessionNamePolicy.CreateDefault(conversationId)
                         : sanitized;
@@ -573,7 +614,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                     }
                 }
 
-                var normalizedCwd = string.IsNullOrWhiteSpace(cwd) ? null : cwd.Trim();
+                var normalizedCwd = string.IsNullOrWhiteSpace(mergedSessionInfo?.Cwd) ? null : mergedSessionInfo.Cwd.Trim();
                 if (!string.IsNullOrWhiteSpace(normalizedCwd))
                 {
                     var existingCwd = _sessionManager.GetSession(conversationId)?.Cwd?.Trim();
@@ -584,7 +625,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                     }
                 }
 
-                if (updatedAtUtc is DateTime parsedUpdatedAt
+                if (mergedSessionInfo?.UpdatedAtUtc is DateTime parsedUpdatedAt
                     && parsedUpdatedAt != default
                     && parsedUpdatedAt > binding.LastUpdatedAt)
                 {
@@ -693,7 +734,10 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                     CloneMessages(binding.Transcript).ToArray(),
                     binding.AvailableModes.Select(CloneModeOption).ToArray(),
                     binding.ConfigOptions.Select(CloneConfigOption).ToArray(),
-                    binding.Plan.Select(ClonePlanEntry).ToArray()))
+                    binding.Plan.Select(ClonePlanEntry).ToArray(),
+                    binding.AvailableCommands.Select(CloneAvailableCommand).ToArray(),
+                    ConversationSessionInfoSnapshots.Clone(binding.SessionInfo),
+                    CloneUsage(binding.Usage)))
                 .ToArray();
         }
 
@@ -723,6 +767,8 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 ProjectAffinityOverrideProjectId = conversationState.ProjectAffinityOverrideProjectId,
                 SelectedModeId = conversationState.SelectedModeId,
                 ShowConfigOptionsPanel = conversationState.ShowConfigOptionsPanel,
+                SessionInfo = ConversationSessionInfoSnapshots.Clone(conversationState.SessionInfo),
+                Usage = CloneUsage(conversationState.Usage),
                 ShowPlanPanel = conversationState.ShowPlanPanel,
                 PlanTitle = conversationState.PlanTitle
             };
@@ -730,6 +776,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             record.Messages.AddRange(conversationState.Transcript);
             record.AvailableModes.AddRange(conversationState.AvailableModes);
             record.ConfigOptions.AddRange(conversationState.ConfigOptions);
+            record.AvailableCommands.AddRange(conversationState.AvailableCommands);
             record.Plan.AddRange(conversationState.Plan);
 
             document.Conversations.Add(record);
@@ -794,6 +841,10 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 binding.ConfigOptions.Clear();
                 binding.ConfigOptions.AddRange((conversation.ConfigOptions ?? []).Select(CloneConfigOption));
                 binding.ShowConfigOptionsPanel = conversation.ShowConfigOptionsPanel;
+                binding.AvailableCommands.Clear();
+                binding.AvailableCommands.AddRange((conversation.AvailableCommands ?? []).Select(CloneAvailableCommand));
+                binding.SessionInfo = ConversationSessionInfoSnapshots.Clone(conversation.SessionInfo);
+                binding.Usage = CloneUsage(conversation.Usage);
                 binding.Plan.Clear();
                 binding.Plan.AddRange((conversation.Plan ?? []).Select(ClonePlanEntry));
                 binding.ShowPlanPanel = conversation.ShowPlanPanel;
@@ -986,9 +1037,28 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             ToolCallKind = source.ToolCallKind,
             ToolCallStatus = source.ToolCallStatus,
             ToolCallJson = source.ToolCallJson,
+            ToolCallContent = CloneToolCallContentList(source.ToolCallContent),
             PlanEntry = source.PlanEntry is null ? null : ClonePlanEntry(source.PlanEntry),
             ModeId = source.ModeId
         };
+
+    private static List<ToolCallContent>? CloneToolCallContentList(IReadOnlyList<ToolCallContent>? content)
+    {
+        if (content is null)
+        {
+            return null;
+        }
+
+        var cloned = new List<ToolCallContent>(content.Count);
+        foreach (var item in content)
+        {
+            var json = JsonSerializer.Serialize(item);
+            cloned.Add(JsonSerializer.Deserialize<ToolCallContent>(json)
+                ?? throw new InvalidOperationException("Failed to clone tool call content."));
+        }
+
+        return cloned;
+    }
 
     private static IEnumerable<ConversationMessageSnapshot> CloneMessages(IEnumerable<ConversationMessageSnapshot> source)
     {
@@ -1041,6 +1111,61 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             Description = source.Description
         };
 
+    private static ConversationAvailableCommandSnapshot CloneAvailableCommand(ConversationAvailableCommandSnapshot source)
+        => new(source.Name, source.Description, source.InputHint);
+
+    private static ConversationUsageSnapshot? CloneUsage(ConversationUsageSnapshot? source)
+    {
+        if (source is null)
+        {
+            return null;
+        }
+
+        return new ConversationUsageSnapshot(
+            source.Used,
+            source.Size,
+            source.Cost is null
+                ? null
+                : new ConversationUsageCostSnapshot(source.Cost.Amount, source.Cost.Currency));
+    }
+
+    private static bool SessionInfoEquals(ConversationSessionInfoSnapshot? left, ConversationSessionInfoSnapshot? right)
+    {
+        if (left is null || right is null)
+        {
+            return left is null && right is null;
+        }
+
+        if (!string.Equals(left.Title, right.Title, StringComparison.Ordinal)
+            || !string.Equals(left.Description, right.Description, StringComparison.Ordinal)
+            || !string.Equals(left.Cwd, right.Cwd, StringComparison.Ordinal)
+            || left.UpdatedAtUtc != right.UpdatedAtUtc)
+        {
+            return false;
+        }
+
+        if (left.Meta is null || right.Meta is null)
+        {
+            return left.Meta is null && right.Meta is null;
+        }
+
+        if (left.Meta.Count != right.Meta.Count)
+        {
+            return false;
+        }
+
+        foreach (var pair in left.Meta)
+        {
+            if (!right.Meta.TryGetValue(pair.Key, out var rightValue)
+                || !Equals(pair.Value, rightValue))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private async Task PostToContextAsync(Action action, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -1071,7 +1196,10 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         ConversationMessageSnapshot[] Transcript,
         ConversationModeOptionSnapshot[] AvailableModes,
         ConversationConfigOptionSnapshot[] ConfigOptions,
-        ConversationPlanEntrySnapshot[] Plan);
+        ConversationPlanEntrySnapshot[] Plan,
+        ConversationAvailableCommandSnapshot[] AvailableCommands,
+        ConversationSessionInfoSnapshot? SessionInfo,
+        ConversationUsageSnapshot? Usage);
 
     private sealed class ConversationBinding
     {
@@ -1103,6 +1231,12 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
 
         public bool ShowConfigOptionsPanel { get; set; }
 
+        public List<ConversationAvailableCommandSnapshot> AvailableCommands { get; } = new();
+
+        public ConversationSessionInfoSnapshot? SessionInfo { get; set; }
+
+        public ConversationUsageSnapshot? Usage { get; set; }
+
         public List<ConversationMessageSnapshot> Transcript { get; } = new();
 
         public List<ConversationPlanEntrySnapshot> Plan { get; } = new();
@@ -1126,7 +1260,10 @@ public sealed record ConversationWorkspaceSnapshot(
     IReadOnlyList<ConversationModeOptionSnapshot>? AvailableModes = null,
     string? SelectedModeId = null,
     IReadOnlyList<ConversationConfigOptionSnapshot>? ConfigOptions = null,
-    bool ShowConfigOptionsPanel = false);
+    bool ShowConfigOptionsPanel = false,
+    IReadOnlyList<ConversationAvailableCommandSnapshot>? AvailableCommands = null,
+    ConversationSessionInfoSnapshot? SessionInfo = null,
+    ConversationUsageSnapshot? Usage = null);
 
 public sealed record ConversationRemoteBindingState(
     string ConversationId,

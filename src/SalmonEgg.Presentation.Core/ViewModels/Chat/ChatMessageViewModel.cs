@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using CommunityToolkit.Mvvm.ComponentModel;
 using SalmonEgg.Domain.Models.Content;
 using SalmonEgg.Domain.Models.Plan;
@@ -73,6 +74,9 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
         [NotifyPropertyChangedFor(nameof(HasToolCallJson))]
         [NotifyPropertyChangedFor(nameof(ShouldShowToolCallPill))]
         private string? _toolCallJson;
+
+        [ObservableProperty]
+        private IReadOnlyList<ToolCallContent>? _toolCallContent;
 
         [ObservableProperty]
         private bool _isToolCallInProgress;

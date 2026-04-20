@@ -5,6 +5,7 @@ using SalmonEgg.Domain.Models.Content;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Models.Plan;
 using SalmonEgg.Domain.Models.Session;
+using SalmonEgg.Domain.Models.Tool;
 using SalmonEgg.Infrastructure.Serialization;
 
 namespace SalmonEgg.Infrastructure.Tests.Serialization;
@@ -108,7 +109,7 @@ public class MessageParserTests
           "sessionId": "sess_usage",
           "update": {
             "sessionUpdate": "usage_update",
-            "used": 717,
+            "used": 53000,
             "size": 200000
           }
         }
@@ -119,7 +120,7 @@ public class MessageParserTests
 
         Assert.NotNull(updateParams);
         var usage = Assert.IsType<UsageUpdate>(updateParams!.Update);
-        Assert.Equal(717, usage.Used);
+        Assert.Equal(53000, usage.Used);
         Assert.Equal(200000, usage.Size);
         Assert.Null(usage.Cost);
     }
@@ -152,6 +153,217 @@ public class MessageParserTests
         Assert.NotNull(usage.Cost);
         Assert.Equal(0.16861m, usage.Cost!.Amount);
         Assert.Equal("USD", usage.Cost.Currency);
+    }
+
+    [Fact]
+    public void Options_ShouldDeserialize_ToolCallStatusUpdate_OfficialPartialPayload()
+    {
+        var json = """
+        {
+          "sessionId": "sess_abc123def456",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_001",
+            "status": "in_progress",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": "Found 3 configuration files..."
+                }
+              }
+            ]
+          }
+        }
+        """;
+
+        var parser = new MessageParser();
+        var updateParams = JsonSerializer.Deserialize<SessionUpdateParams>(json, parser.Options);
+
+        Assert.NotNull(updateParams);
+        var update = Assert.IsType<ToolCallStatusUpdate>(updateParams!.Update);
+        Assert.Equal("call_001", update.ToolCallId);
+        Assert.Equal(ToolCallStatus.InProgress, update.Status);
+        Assert.Null(update.Title);
+        Assert.Null(update.Kind);
+        Assert.NotNull(update.Content);
+        Assert.NotEmpty(update.Content!);
+    }
+
+    [Fact]
+    public void Options_ShouldDeserialize_SessionLoadReplayChunks_OfficialPayloads()
+    {
+        var parser = new MessageParser();
+
+        var userJson = """
+        {
+          "sessionId": "sess_789xyz",
+          "update": {
+            "sessionUpdate": "user_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "What's the capital of France?"
+            }
+          }
+        }
+        """;
+
+        var agentJson = """
+        {
+          "sessionId": "sess_789xyz",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "The capital of France is Paris."
+            }
+          }
+        }
+        """;
+
+        var userUpdate = JsonSerializer.Deserialize<SessionUpdateParams>(userJson, parser.Options);
+        var agentUpdate = JsonSerializer.Deserialize<SessionUpdateParams>(agentJson, parser.Options);
+
+        var userMessage = Assert.IsType<UserMessageUpdate>(userUpdate!.Update);
+        var userContent = Assert.IsType<TextContentBlock>(userMessage.Content);
+        Assert.Equal("What's the capital of France?", userContent.Text);
+
+        var agentMessage = Assert.IsType<AgentMessageUpdate>(agentUpdate!.Update);
+        var agentContent = Assert.IsType<TextContentBlock>(agentMessage.Content);
+        Assert.Equal("The capital of France is Paris.", agentContent.Text);
+    }
+
+    [Fact]
+    public void Options_ShouldDeserialize_CurrentModeUpdate_OfficialPayload()
+    {
+        var json = """
+        {
+          "sessionId": "sess_mode",
+          "update": {
+            "sessionUpdate": "current_mode_update",
+            "modeId": "code"
+          }
+        }
+        """;
+
+        var parser = new MessageParser();
+        var updateParams = JsonSerializer.Deserialize<SessionUpdateParams>(json, parser.Options);
+
+        Assert.NotNull(updateParams);
+        var mode = Assert.IsType<CurrentModeUpdate>(updateParams!.Update);
+        Assert.Equal("code", mode.LegacyModeId);
+        Assert.Equal("code", mode.NormalizedModeId);
+        Assert.Null(mode.Title);
+    }
+
+    [Fact]
+    public void Options_ShouldDeserialize_ConfigOptionUpdate_OfficialPayload()
+    {
+        var json = """
+        {
+          "sessionId": "sess_config",
+          "update": {
+            "sessionUpdate": "config_option_update",
+            "configOptions": [
+              {
+                "id": "mode",
+                "name": "Session Mode",
+                "type": "select",
+                "currentValue": "code",
+                "options": [
+                  {
+                    "value": "code",
+                    "name": "Code"
+                  },
+                  {
+                    "value": "plan",
+                    "name": "Plan"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+        """;
+
+        var parser = new MessageParser();
+        var updateParams = JsonSerializer.Deserialize<SessionUpdateParams>(json, parser.Options);
+
+        Assert.NotNull(updateParams);
+        var config = Assert.IsType<ConfigOptionUpdate>(updateParams!.Update);
+        Assert.Single(config.ConfigOptions!);
+        Assert.Equal("mode", config.ConfigOptions![0].Id);
+        Assert.Equal("code", config.ConfigOptions[0].CurrentValue);
+    }
+
+    [Fact]
+    public void Options_ShouldDeserialize_AvailableCommandsUpdate_OfficialPayload()
+    {
+        var json = """
+        {
+          "sessionId": "sess_commands",
+          "update": {
+            "sessionUpdate": "available_commands_update",
+            "availableCommands": [
+              {
+                "name": "web",
+                "description": "Search the web for information",
+                "input": {
+                  "hint": "query to search for"
+                }
+              },
+              {
+                "name": "test",
+                "description": "Run the project's tests",
+                "input": {
+                  "hint": "test command"
+                }
+              }
+            ]
+          }
+        }
+        """;
+
+        var parser = new MessageParser();
+        var updateParams = JsonSerializer.Deserialize<SessionUpdateParams>(json, parser.Options);
+
+        Assert.NotNull(updateParams);
+        var commands = Assert.IsType<AvailableCommandsUpdate>(updateParams!.Update);
+        Assert.Equal(2, commands.AvailableCommands.Count);
+        Assert.Equal("web", commands.AvailableCommands[0].Name);
+        Assert.Equal("query to search for", commands.AvailableCommands[0].Input!.Hint);
+    }
+
+    [Fact]
+    public void Options_ShouldDeserialize_SessionInfoUpdate_OfficialPartialPayload()
+    {
+        var json = """
+        {
+          "sessionId": "sess_info",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": "Debug authentication timeout",
+            "_meta": {
+              "projectName": "api-server",
+              "branch": "main"
+            }
+          }
+        }
+        """;
+
+        var parser = new MessageParser();
+        var updateParams = JsonSerializer.Deserialize<SessionUpdateParams>(json, parser.Options);
+
+        Assert.NotNull(updateParams);
+        var sessionInfo = Assert.IsType<SessionInfoUpdate>(updateParams!.Update);
+        Assert.Equal("Debug authentication timeout", sessionInfo.Title);
+        Assert.Null(sessionInfo.Description);
+        Assert.Null(sessionInfo.Cwd);
+        Assert.Null(sessionInfo.UpdatedAt);
+        Assert.NotNull(sessionInfo.Meta);
+        Assert.Equal("api-server", ReadMetaValue(sessionInfo.Meta!["projectName"]));
+        Assert.Equal("main", ReadMetaValue(sessionInfo.Meta["branch"]));
     }
 
     [Fact]

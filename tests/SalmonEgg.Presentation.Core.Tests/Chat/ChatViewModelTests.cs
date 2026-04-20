@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Collections.Generic;
@@ -2002,6 +2001,199 @@ public class ChatViewModelTests
     }
 
     [Fact]
+    public async Task StoreTranscript_WithStructuredToolCallContent_ProjectsToMessageHistoryWithoutLoss()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        syncContext.RunAll();
+
+        var snapshot = new ConversationMessageSnapshot
+        {
+            Id = "tool-1",
+            ContentType = "tool_call",
+            ToolCallId = "call-1",
+            ToolCallStatus = ToolCallStatus.InProgress,
+            ToolCallContent = new List<ToolCallContent>
+            {
+                new ContentToolCallContent(new ImageContentBlock("image-data", "image/png"))
+            },
+            Timestamp = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)
+        };
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "session-1",
+            Transcript = ImmutableList<ConversationMessageSnapshot>.Empty.Add(snapshot)
+        });
+
+        await Task.Delay(50);
+        syncContext.RunAll();
+
+        var projected = Assert.Single(fixture.ViewModel.MessageHistory);
+        var structuredContent = Assert.Single(projected.ToolCallContent!);
+        var content = Assert.IsType<ContentToolCallContent>(structuredContent);
+        var image = Assert.IsType<ImageContentBlock>(content.Content);
+        Assert.Equal("image-data", image.Data);
+        Assert.Equal("image/png", image.MimeType);
+    }
+
+    [Fact]
+    public async Task ProcessSessionUpdateAsync_ToolCallUpdate_WithImageContent_PreservesStructuredContent()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        var chatService = CreateConnectedChatService();
+        fixture.ViewModel.ReplaceChatService(chatService.Object);
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty.Add(
+                "conv-1",
+                new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+        });
+        syncContext.RunAll();
+
+        chatService.Raise(
+            service => service.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs("remote-1", new ToolCallUpdate
+            {
+                ToolCallId = "tool-image",
+                Status = ToolCallStatus.InProgress,
+                Title = "image tool",
+                Content = new List<ToolCallContent>
+                {
+                    new ContentToolCallContent(new ImageContentBlock("image-data", "image/png"))
+                }
+            }));
+
+        await WaitForConditionAsync(async () =>
+        {
+            syncContext.RunAll();
+            var state = await fixture.GetStateAsync();
+            var transcript = state.ConversationContents?.TryGetValue("conv-1", out var content) == true
+                ? content.Transcript
+                : ImmutableList<ConversationMessageSnapshot>.Empty;
+            return transcript.Any(message => string.Equals(message.ToolCallId, "tool-image", StringComparison.Ordinal));
+        });
+
+        var finalState = await fixture.GetStateAsync();
+        var snapshot = Assert.Single(finalState.ConversationContents!["conv-1"].Transcript);
+        Assert.True(string.IsNullOrWhiteSpace(snapshot.TextContent));
+
+        var structuredContent = GetStructuredToolCallContent(snapshot);
+        var toolCallContent = Assert.Single(structuredContent);
+        var content = Assert.IsType<ContentToolCallContent>(toolCallContent);
+        var image = Assert.IsType<ImageContentBlock>(content.Content);
+        Assert.Equal("image-data", image.Data);
+        Assert.Equal("image/png", image.MimeType);
+    }
+
+    [Fact]
+    public async Task ProcessSessionUpdateAsync_ToolCallUpdate_WithResourceLinkContent_PreservesStructuredContent()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        var chatService = CreateConnectedChatService();
+        fixture.ViewModel.ReplaceChatService(chatService.Object);
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty.Add(
+                "conv-1",
+                new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+        });
+        syncContext.RunAll();
+
+        chatService.Raise(
+            service => service.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs("remote-1", new ToolCallUpdate
+            {
+                ToolCallId = "tool-resource-link",
+                Status = ToolCallStatus.InProgress,
+                Title = "resource link tool",
+                Content = new List<ToolCallContent>
+                {
+                    new ContentToolCallContent(new ResourceLinkContentBlock("https://example.com/doc"))
+                }
+            }));
+
+        await WaitForConditionAsync(async () =>
+        {
+            syncContext.RunAll();
+            var state = await fixture.GetStateAsync();
+            var transcript = state.ConversationContents?.TryGetValue("conv-1", out var content) == true
+                ? content.Transcript
+                : ImmutableList<ConversationMessageSnapshot>.Empty;
+            return transcript.Any(message => string.Equals(message.ToolCallId, "tool-resource-link", StringComparison.Ordinal));
+        });
+
+        var finalState = await fixture.GetStateAsync();
+        var snapshot = Assert.Single(finalState.ConversationContents!["conv-1"].Transcript);
+        Assert.True(string.IsNullOrWhiteSpace(snapshot.TextContent));
+
+        var structuredContent = GetStructuredToolCallContent(snapshot);
+        var toolCallContent = Assert.Single(structuredContent);
+        var content = Assert.IsType<ContentToolCallContent>(toolCallContent);
+        var resourceLink = Assert.IsType<ResourceLinkContentBlock>(content.Content);
+        Assert.Equal("https://example.com/doc", resourceLink.Uri);
+    }
+
+    [Fact]
+    public async Task ProcessSessionUpdateAsync_ToolCallUpdate_WithMixedContent_PreservesStructuredContentAndTextFallback()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        var chatService = CreateConnectedChatService();
+        fixture.ViewModel.ReplaceChatService(chatService.Object);
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty.Add(
+                "conv-1",
+                new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+        });
+        syncContext.RunAll();
+
+        chatService.Raise(
+            service => service.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs("remote-1", new ToolCallUpdate
+            {
+                ToolCallId = "tool-mixed",
+                Status = ToolCallStatus.InProgress,
+                Title = "mixed tool",
+                Content = new List<ToolCallContent>
+                {
+                    new ContentToolCallContent(new TextContentBlock("alpha")),
+                    new ContentToolCallContent(new ImageContentBlock("image-data", "image/png")),
+                    new ContentToolCallContent(new ResourceLinkContentBlock("https://example.com/doc"))
+                }
+            }));
+
+        await WaitForConditionAsync(async () =>
+        {
+            syncContext.RunAll();
+            var state = await fixture.GetStateAsync();
+            var transcript = state.ConversationContents?.TryGetValue("conv-1", out var content) == true
+                ? content.Transcript
+                : ImmutableList<ConversationMessageSnapshot>.Empty;
+            return transcript.Any(message => string.Equals(message.ToolCallId, "tool-mixed", StringComparison.Ordinal));
+        });
+
+        var finalState = await fixture.GetStateAsync();
+        var snapshot = Assert.Single(finalState.ConversationContents!["conv-1"].Transcript);
+        Assert.Equal("alpha", snapshot.TextContent);
+
+        var structuredContent = GetStructuredToolCallContent(snapshot);
+        Assert.Equal(3, structuredContent.Count);
+        Assert.IsType<TextContentBlock>(Assert.IsType<ContentToolCallContent>(structuredContent[0]).Content);
+        Assert.IsType<ImageContentBlock>(Assert.IsType<ContentToolCallContent>(structuredContent[1]).Content);
+        Assert.IsType<ResourceLinkContentBlock>(Assert.IsType<ContentToolCallContent>(structuredContent[2]).Content);
+    }
+
+    [Fact]
     public async Task Dispose_CancelsStoreSubscription_DoesNotUpdateAfterDispose()
     {
         var initialState = ChatState.Empty with { ActiveTurn = null };
@@ -2583,6 +2775,12 @@ public class ChatViewModelTests
         return chatService;
     }
 
+    private static IReadOnlyList<ToolCallContent> GetStructuredToolCallContent(ConversationMessageSnapshot snapshot)
+    {
+        Assert.NotNull(snapshot.ToolCallContent);
+        return snapshot.ToolCallContent!;
+    }
+
     private static ServerConfiguration CreateConnectableStdioProfile(string id, string name)
         => new()
         {
@@ -3145,7 +3343,11 @@ public class ChatViewModelTests
                             ContentType = "tool_call",
                             ToolCallId = "tool-current",
                             ToolCallStatus = ToolCallStatus.InProgress,
-                            Title = "current"
+                            Title = "current",
+                            ToolCallContent = new List<ToolCallContent>
+                            {
+                                new ContentToolCallContent(new ResourceLinkContentBlock("https://example.com/tool-current"))
+                            }
                         }),
                     ImmutableList<ConversationPlanEntrySnapshot>.Empty,
                     false,
@@ -3178,7 +3380,12 @@ public class ChatViewModelTests
             ?? ImmutableList<ConversationMessageSnapshot>.Empty;
         Assert.Equal(ChatTurnPhase.Cancelled, finalState.ActiveTurn!.Phase);
         Assert.Equal(ToolCallStatus.InProgress, finalTranscript.Single(message => string.Equals(message.Id, "tool-old", StringComparison.Ordinal)).ToolCallStatus);
-        Assert.Equal(ToolCallStatus.Cancelled, finalTranscript.Single(message => string.Equals(message.Id, "tool-current", StringComparison.Ordinal)).ToolCallStatus);
+        var cancelledCurrent = finalTranscript.Single(message => string.Equals(message.Id, "tool-current", StringComparison.Ordinal));
+        Assert.Equal(ToolCallStatus.Cancelled, cancelledCurrent.ToolCallStatus);
+        var structuredContent = Assert.Single(cancelledCurrent.ToolCallContent!);
+        var content = Assert.IsType<ContentToolCallContent>(structuredContent);
+        var resourceLink = Assert.IsType<ResourceLinkContentBlock>(content.Content);
+        Assert.Equal("https://example.com/tool-current", resourceLink.Uri);
 
         commands.Verify(x => x.CancelPromptAsync(It.IsAny<IAcpChatCoordinatorSink>(), "User cancelled"), Times.Once);
     }
@@ -3605,6 +3812,137 @@ public class ChatViewModelTests
         Assert.Equal(expectedUpdatedAt, catalogItem.LastUpdatedAt);
     }
 
+    [Fact]
+    public async Task ProcessSessionUpdateAsync_SessionInfoUpdate_PreservesWhitespaceFieldsConsistentlyAcrossStoreAndWorkspace()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
+        var sessionManager = new Mock<ISessionManager>();
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .Returns<string, string?>((sessionId, cwd) =>
+            {
+                var session = new Session(sessionId, cwd);
+                sessions[sessionId] = session;
+                return Task.FromResult(session);
+            });
+        sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
+            .Returns<string>(sessionId => sessions.TryGetValue(sessionId, out var session) ? session : null);
+        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
+            .Returns<string, Action<Session>, bool>((sessionId, update, updateActivity) =>
+            {
+                if (!sessions.TryGetValue(sessionId, out var session))
+                {
+                    return false;
+                }
+
+                update(session);
+                if (updateActivity)
+                {
+                    session.UpdateActivity();
+                }
+
+                return true;
+            });
+        sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
+            .Returns<string>(sessionId => sessions.Remove(sessionId));
+
+        await sessionManager.Object.CreateSessionAsync("conv-1", @"C:\repo\demo");
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+            SessionInfo: new ConversationSessionInfoSnapshot
+            {
+                Title = "Original title",
+                Description = "Original description",
+                Cwd = @"C:\repo\demo",
+                UpdatedAtUtc = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                Meta = new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["existing"] = "value",
+                    ["shared"] = "before"
+                }
+            }));
+        var chatService = CreateConnectedChatService();
+        fixture.ViewModel.ReplaceChatService(chatService.Object);
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1")),
+            ConversationSessionStates = ImmutableDictionary<string, ConversationSessionStateSlice>.Empty
+                .Add("conv-1", new ConversationSessionStateSlice(
+                    ImmutableList<ConversationModeOptionSnapshot>.Empty,
+                    null,
+                    ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+                    false,
+                    ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+                    new ConversationSessionInfoSnapshot
+                    {
+                        Title = "Original title",
+                        Description = "Original description",
+                        Cwd = @"C:\repo\demo",
+                        UpdatedAtUtc = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                        Meta = new Dictionary<string, object?>(StringComparer.Ordinal)
+                        {
+                            ["existing"] = "value",
+                            ["shared"] = "before"
+                        }
+                    },
+                    null))
+        });
+        await Task.Delay(50);
+
+        chatService.Raise(
+            service => service.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs(
+                "remote-1",
+                new SessionInfoUpdate
+                {
+                    Title = string.Empty,
+                    Description = "   ",
+                    Cwd = "\t",
+                    UpdatedAt = "2026-03-24T03:00:00Z",
+                    Meta = new Dictionary<string, object?>(StringComparer.Ordinal)
+                    {
+                        ["shared"] = "after",
+                        ["added"] = 2
+                    }
+                }));
+
+        await WaitForConditionAsync(async () =>
+        {
+            var state = await fixture.GetStateAsync();
+            var sessionState = state.ResolveSessionStateSlice("conv-1");
+            var workspaceSnapshot = fixture.Workspace.GetConversationSnapshot("conv-1");
+            return sessionState?.SessionInfo?.Meta?.ContainsKey("added") == true
+                && workspaceSnapshot?.SessionInfo?.Meta?.ContainsKey("added") == true;
+        });
+
+        var finalState = await fixture.GetStateAsync();
+        var storeSessionInfo = Assert.IsType<ConversationSessionInfoSnapshot>(
+            finalState.ResolveSessionStateSlice("conv-1")!.Value.SessionInfo);
+        var workspaceSessionInfo = Assert.IsType<ConversationSessionInfoSnapshot>(
+            fixture.Workspace.GetConversationSnapshot("conv-1")!.SessionInfo);
+
+        Assert.Equal("Original title", storeSessionInfo.Title);
+        Assert.Equal("Original description", storeSessionInfo.Description);
+        Assert.Equal(@"C:\repo\demo", storeSessionInfo.Cwd);
+        Assert.Equal(storeSessionInfo.Title, workspaceSessionInfo.Title);
+        Assert.Equal(storeSessionInfo.Description, workspaceSessionInfo.Description);
+        Assert.Equal(storeSessionInfo.Cwd, workspaceSessionInfo.Cwd);
+        Assert.Equal(storeSessionInfo.UpdatedAtUtc, workspaceSessionInfo.UpdatedAtUtc);
+        Assert.Equal(storeSessionInfo.Meta!["existing"], workspaceSessionInfo.Meta!["existing"]);
+        Assert.Equal(storeSessionInfo.Meta["shared"], workspaceSessionInfo.Meta["shared"]);
+        Assert.Equal(storeSessionInfo.Meta["added"], workspaceSessionInfo.Meta["added"]);
+    }
+
     private sealed class FakeVoiceInputService : IVoiceInputService
     {
         public bool IsSupported { get; set; }
@@ -3913,7 +4251,74 @@ public class ChatViewModelTests
     }
 
     [Fact]
-    public async Task ProcessSessionUpdateAsync_UsageUpdate_IsSafeNoOpWithoutUnhandledLog()
+    public async Task ProcessSessionUpdateAsync_AvailableCommandsUpdate_SurvivesActiveConversationSwitches()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        var viewModel = fixture.ViewModel;
+        var chatService = CreateConnectedChatService();
+        viewModel.ReplaceChatService(chatService.Object);
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+                .Add("conv-2", new ConversationBindingSlice("conv-2", "remote-2", "profile-1"))
+        });
+        syncContext.RunAll();
+
+        chatService.Raise(
+            service => service.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs(
+                "remote-1",
+                new AvailableCommandsUpdate
+                {
+                    AvailableCommands =
+                    [
+                        new AvailableCommand
+                        {
+                            Name = "plan",
+                            Description = "Planning command",
+                            Input = new AvailableCommandInput
+                            {
+                                Hint = "target"
+                            }
+                        }
+                    ]
+                }));
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(
+                viewModel.AvailableSlashCommands.Count == 1
+                && string.Equals(viewModel.AvailableSlashCommands[0].Name, "plan", StringComparison.Ordinal));
+        });
+
+        await fixture.DispatchAsync(new SelectConversationAction("conv-2"));
+        syncContext.RunAll();
+        Assert.Empty(viewModel.AvailableSlashCommands);
+
+        await fixture.DispatchAsync(new SelectConversationAction("conv-1"));
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(
+                viewModel.AvailableSlashCommands.Count == 1
+                && string.Equals(viewModel.AvailableSlashCommands[0].Name, "plan", StringComparison.Ordinal));
+        });
+
+        var state = await fixture.GetStateAsync();
+        var sessionState = Assert.NotNull(state.ResolveSessionStateSlice("conv-1"));
+        var command = Assert.Single(sessionState!.AvailableCommands);
+        Assert.Equal("plan", command.Name);
+        Assert.Equal("Planning command", command.Description);
+        Assert.Equal("target", command.InputHint);
+    }
+
+    [Fact]
+    public async Task ProcessSessionUpdateAsync_UsageUpdate_RetainsUsageInSessionStateWithoutUnhandledLog()
     {
         var syncContext = new QueueingSynchronizationContext();
         await using var fixture = CreateViewModel(syncContext);
@@ -3936,13 +4341,31 @@ public class ChatViewModelTests
 
         chatService.Raise(
             service => service.SessionUpdateReceived += null,
-            new SessionUpdateEventArgs("remote-1", new UsageUpdate()));
+            new SessionUpdateEventArgs(
+                "remote-1",
+                new UsageUpdate
+                {
+                    Used = 7,
+                    Size = 128,
+                    Cost = new UsageCost
+                    {
+                        Amount = 1.5m,
+                        Currency = "USD"
+                    }
+                }));
 
         await Task.Delay(50);
         syncContext.RunAll();
 
         var state = await fixture.GetStateAsync();
         Assert.Equal(ChatTurnPhase.WaitingForAgent, state.ActiveTurn!.Phase);
+        var sessionState = Assert.NotNull(state.ResolveSessionStateSlice("conv-1"));
+        Assert.NotNull(sessionState!.Usage);
+        Assert.Equal(7, sessionState.Usage!.Used);
+        Assert.Equal(128, sessionState.Usage.Size);
+        Assert.NotNull(sessionState.Usage.Cost);
+        Assert.Equal(1.5m, sessionState.Usage.Cost!.Amount);
+        Assert.Equal("USD", sessionState.Usage.Cost.Currency);
 
         var newLogInvocations = fixture.ViewModelLogger.Invocations.Skip(logInvocationCountBefore);
         Assert.DoesNotContain(newLogInvocations, invocation =>
@@ -4244,6 +4667,385 @@ public class ChatViewModelTests
             Assert.NotNull(capturedParams);
             Assert.Equal(@"C:\repo\fresh", capturedParams!.Cwd);
             Assert.Equal(@"C:\repo\fresh", sessions["conv-1"].Cwd);
+            var finalState = await fixture.GetStateAsync();
+            var storeSessionInfo = Assert.IsType<ConversationSessionInfoSnapshot>(
+                finalState.ResolveSessionStateSlice("conv-1")!.Value.SessionInfo);
+            var workspaceSessionInfo = Assert.IsType<ConversationSessionInfoSnapshot>(
+                fixture.Workspace.GetConversationSnapshot("conv-1")!.SessionInfo);
+            Assert.Equal("Remote title", storeSessionInfo.Title);
+            Assert.Equal(workspaceSessionInfo.Title, storeSessionInfo.Title);
+            Assert.Equal(workspaceSessionInfo.Cwd, storeSessionInfo.Cwd);
+            Assert.Equal(workspaceSessionInfo.UpdatedAtUtc, storeSessionInfo.UpdatedAtUtc);
+        }
+    }
+
+    [Fact]
+    public async Task HydrateActiveConversationAsync_FollowedByWhitespaceSessionInfoUpdate_KeepsStoreAndWorkspaceSessionInfoAligned()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
+        var sessionManager = new Mock<ISessionManager>();
+        sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.TryGetValue(id, out var session) ? session : null);
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .Returns<string, string?>((id, cwd) =>
+            {
+                var session = new Session(id, cwd);
+                sessions[id] = session;
+                return Task.FromResult(session);
+            });
+        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
+            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
+            {
+                if (!sessions.TryGetValue(id, out var session))
+                {
+                    return false;
+                }
+
+                update(session);
+                if (updateActivity)
+                {
+                    session.UpdateActivity();
+                }
+
+                return true;
+            });
+        sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.Remove(id));
+
+        var chatService = CreateConnectedChatService();
+        chatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(
+            loadSession: true,
+            sessionCapabilities: new SessionCapabilities
+            {
+                List = new SessionListCapabilities()
+            }));
+        chatService.Setup(service => service.ListSessionsAsync(It.IsAny<SessionListParams>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SessionListResponse
+            {
+                Sessions =
+                [
+                    new AgentSessionInfo
+                    {
+                        SessionId = "remote-1",
+                        Cwd = @"C:\repo\fresh",
+                        Title = "Remote title",
+                        UpdatedAt = "2026-03-28T12:34:56Z"
+                    }
+                ]
+            });
+        chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(SessionLoadResponse.Completed);
+
+        ViewModelFixture? fixture = null;
+        var commands = new Mock<IAcpConnectionCommands>(MockBehavior.Strict);
+        commands.Setup(x => x.ConnectToProfileAsync(
+                It.Is<ServerConfiguration>(profile => string.Equals(profile.Id, "profile-1", StringComparison.Ordinal)),
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<AcpConnectionContext>(),
+                It.IsAny<CancellationToken>()))
+            .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, AcpConnectionContext, CancellationToken>(async (profile, _, sink, _, cancellationToken) =>
+            {
+                var activeFixture = fixture ?? throw new InvalidOperationException("Fixture must be initialized before connect callback runs.");
+                await sink.SelectProfileAsync(profile, cancellationToken);
+                sink.ReplaceChatService(chatService.Object);
+                await activeFixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+                await WaitForConditionAsync(async () =>
+                {
+                    var connectionState = await activeFixture.GetConnectionStateAsync();
+                    return connectionState.Phase == ConnectionPhase.Connected
+                        && string.Equals(connectionState.CommittedProfileId, profile.Id, StringComparison.Ordinal);
+                }, timeoutMilliseconds: 2000);
+                return new AcpTransportApplyResult(chatService.Object, new InitializeResponse());
+            });
+        commands.Setup(x => x.ConnectToProfileAsync(
+                It.IsAny<ServerConfiguration>(),
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected non-context ACP connect path."));
+        commands.Setup(x => x.ApplyTransportConfigurationAsync(
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected transport apply path."));
+        commands.Setup(x => x.ApplyTransportConfigurationAsync(
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<AcpConnectionContext>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected transport apply path."));
+        commands.Setup(x => x.EnsureRemoteSessionAsync(
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected remote session creation path."));
+        commands.Setup(x => x.SendPromptAsync(
+                It.IsAny<string>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected prompt dispatch path."));
+        commands.Setup(x => x.DispatchPromptToRemoteSessionAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected prompt dispatch path."));
+        commands.Setup(x => x.CancelPromptAsync(
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        commands.Setup(x => x.DisconnectAsync(
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        await sessionManager.Object.CreateSessionAsync("conv-1", @"C:\repo\stale");
+        fixture = CreateViewModel(syncContext, sessionManager: sessionManager, acpConnectionCommands: commands.Object);
+        await using (fixture)
+        {
+            fixture.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
+            fixture.ViewModel.ReplaceChatService(chatService.Object);
+
+            await fixture.UpdateStateAsync(state => state with
+            {
+                HydratedConversationId = "conv-1",
+                Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                    .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+            });
+            await fixture.DispatchConnectionAsync(new SetSelectedProfileAction("profile-1"));
+            await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+
+            var hydrated = await fixture.ViewModel.HydrateActiveConversationAsync();
+            Assert.True(hydrated);
+
+            chatService.Raise(
+                service => service.SessionUpdateReceived += null,
+                new SessionUpdateEventArgs(
+                    "remote-1",
+                    new SessionInfoUpdate
+                    {
+                        Title = "   ",
+                        Cwd = "\t",
+                        UpdatedAt = "2026-03-29T01:02:03Z"
+                    }));
+
+            await WaitForConditionAsync(async () =>
+            {
+                var state = await fixture.GetStateAsync();
+                return state.ResolveSessionStateSlice("conv-1")?.SessionInfo?.UpdatedAtUtc
+                    == new DateTime(2026, 3, 29, 1, 2, 3, DateTimeKind.Utc);
+            });
+
+            var finalState = await fixture.GetStateAsync();
+            var storeSessionInfo = Assert.IsType<ConversationSessionInfoSnapshot>(
+                finalState.ResolveSessionStateSlice("conv-1")!.Value.SessionInfo);
+            var workspaceSessionInfo = Assert.IsType<ConversationSessionInfoSnapshot>(
+                fixture.Workspace.GetConversationSnapshot("conv-1")!.SessionInfo);
+
+            Assert.Equal("Remote title", storeSessionInfo.Title);
+            Assert.Equal(@"C:\repo\fresh", storeSessionInfo.Cwd);
+            Assert.Equal(storeSessionInfo.Title, workspaceSessionInfo.Title);
+            Assert.Equal(storeSessionInfo.Cwd, workspaceSessionInfo.Cwd);
+            Assert.Equal(storeSessionInfo.UpdatedAtUtc, workspaceSessionInfo.UpdatedAtUtc);
+        }
+    }
+
+    [Fact]
+    public async Task ProcessSessionUpdateAsync_SessionInfoUpdate_WithEmptyPayload_DoesNotCreateSessionInfoState()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        var chatService = CreateConnectedChatService();
+        fixture.ViewModel.ReplaceChatService(chatService.Object);
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+        });
+
+        chatService.Raise(
+            service => service.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs(
+                "remote-1",
+                new SessionInfoUpdate
+                {
+                    Meta = new Dictionary<string, object?>(StringComparer.Ordinal)
+                }));
+
+        await Task.Delay(50);
+
+        var state = await fixture.GetStateAsync();
+        Assert.Null(state.ResolveSessionStateSlice("conv-1")?.SessionInfo);
+        Assert.Null(fixture.Workspace.GetConversationSnapshot("conv-1")?.SessionInfo);
+    }
+
+    [Fact]
+    public async Task ProcessSessionUpdateAsync_SessionInfoUpdate_WithWhitespaceOnlyPayload_DoesNotCreateSessionInfoState()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        var chatService = CreateConnectedChatService();
+        fixture.ViewModel.ReplaceChatService(chatService.Object);
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+        });
+
+        chatService.Raise(
+            service => service.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs(
+                "remote-1",
+                new SessionInfoUpdate
+                {
+                    Title = "   ",
+                    Description = "\t",
+                    Cwd = "  ",
+                    UpdatedAt = "   "
+                }));
+
+        await Task.Delay(50);
+
+        var state = await fixture.GetStateAsync();
+        Assert.Null(state.ResolveSessionStateSlice("conv-1")?.SessionInfo);
+        Assert.Null(fixture.Workspace.GetConversationSnapshot("conv-1")?.SessionInfo);
+    }
+
+    [Fact]
+    public async Task HydrateActiveConversationAsync_PreservesAvailableCommandsAndUsageAcrossResync()
+    {
+        var chatService = CreateConnectedChatService();
+        chatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(
+            loadSession: true,
+            sessionCapabilities: new SessionCapabilities
+            {
+                List = new SessionListCapabilities()
+            }));
+        chatService.Setup(service => service.ListSessionsAsync(It.IsAny<SessionListParams>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SessionListResponse
+            {
+                Sessions =
+                [
+                    new AgentSessionInfo
+                    {
+                        SessionId = "remote-1",
+                        Cwd = @"C:\repo\fresh",
+                        Title = "Remote title",
+                        UpdatedAt = "2026-03-28T12:34:56Z"
+                    }
+                ]
+            });
+        chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(SessionLoadResponse.Completed);
+
+        var syncContext = new ImmediateSynchronizationContext();
+        ViewModelFixture? fixture = null;
+        var commands = new Mock<IAcpConnectionCommands>(MockBehavior.Strict);
+        commands.Setup(x => x.ConnectToProfileAsync(
+                It.Is<ServerConfiguration>(profile => string.Equals(profile.Id, "profile-1", StringComparison.Ordinal)),
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<AcpConnectionContext>(),
+                It.IsAny<CancellationToken>()))
+            .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, AcpConnectionContext, CancellationToken>(async (profile, _, sink, _, cancellationToken) =>
+            {
+                await sink.SelectProfileAsync(profile, cancellationToken);
+                sink.ReplaceChatService(chatService.Object);
+                await fixture!.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+                return new AcpTransportApplyResult(chatService.Object, new InitializeResponse());
+            });
+        commands.Setup(x => x.ConnectToProfileAsync(
+                It.IsAny<ServerConfiguration>(),
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected non-context ACP connect path."));
+        commands.Setup(x => x.ApplyTransportConfigurationAsync(
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected transport apply path."));
+        commands.Setup(x => x.ApplyTransportConfigurationAsync(
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<AcpConnectionContext>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected transport apply path."));
+        commands.Setup(x => x.EnsureRemoteSessionAsync(
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected remote session creation path."));
+        commands.Setup(x => x.SendPromptAsync(
+                It.IsAny<string>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected prompt dispatch path."));
+        commands.Setup(x => x.DispatchPromptToRemoteSessionAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("Unexpected prompt dispatch path."));
+        commands.Setup(x => x.CancelPromptAsync(
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        commands.Setup(x => x.DisconnectAsync(
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
+        await using (fixture)
+        {
+            fixture.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
+            fixture.ViewModel.ReplaceChatService(chatService.Object);
+
+            await fixture.UpdateStateAsync(state => state with
+            {
+                HydratedConversationId = "conv-1",
+                Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                    .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1")),
+                ConversationSessionStates = ImmutableDictionary<string, ConversationSessionStateSlice>.Empty
+                    .Add("conv-1", new ConversationSessionStateSlice(
+                        ImmutableList<ConversationModeOptionSnapshot>.Empty,
+                        null,
+                        ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+                        false,
+                        ImmutableList.Create(new ConversationAvailableCommandSnapshot("plan", "Planning command", "goal")),
+                        null,
+                        new ConversationUsageSnapshot(7, 128, new ConversationUsageCostSnapshot(1.5m, "USD"))))
+            });
+            await fixture.DispatchConnectionAsync(new SetSelectedProfileAction("profile-1"));
+            await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+
+            var hydrated = await fixture.ViewModel.HydrateActiveConversationAsync();
+
+            Assert.True(hydrated);
+            var finalState = await fixture.GetStateAsync();
+            var sessionState = Assert.NotNull(finalState.ResolveSessionStateSlice("conv-1"));
+            var command = Assert.Single(sessionState.AvailableCommands);
+            Assert.Equal("plan", command.Name);
+            Assert.NotNull(sessionState.Usage);
+            Assert.Equal(7, sessionState.Usage!.Used);
+            Assert.Equal(128, sessionState.Usage.Size);
+            Assert.NotNull(sessionState.Usage.Cost);
+            Assert.Equal(1.5m, sessionState.Usage.Cost!.Amount);
         }
     }
 
@@ -9675,7 +10477,10 @@ public class ChatViewModelTests
                     "agent",
                     ImmutableList.Create(
                         new ConversationConfigOptionSnapshot { Id = "mode", Name = "Mode", SelectedValue = "agent" }),
-                    true))
+                    true,
+                    ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+                    null,
+                    null))
         });
 
         await WaitForConditionAsync(() =>

@@ -57,28 +57,66 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
             }
 
             var currentState = await _chatStore.State ?? ChatState.Empty;
-            var shouldHydrate = hydrationMode == ConversationActivationHydrationMode.WorkspaceSnapshot
-                && ShouldHydrate(currentState, sessionId);
+            var snapshot = hydrationMode == ConversationActivationHydrationMode.WorkspaceSnapshot
+                ? _conversationWorkspace.GetConversationSnapshot(sessionId)
+                : null;
+            var shouldHydrateContent = hydrationMode == ConversationActivationHydrationMode.WorkspaceSnapshot
+                && ShouldHydrateContent(currentState, sessionId);
+            var sessionState = currentState.ResolveSessionStateSlice(sessionId);
+            var shouldHydrateSessionState = hydrationMode == ConversationActivationHydrationMode.WorkspaceSnapshot
+                && ShouldHydratePrimarySessionState(currentState, sessionId);
+            var shouldHydrateAuxiliarySessionState = hydrationMode == ConversationActivationHydrationMode.WorkspaceSnapshot
+                && ShouldHydrateAuxiliarySessionState(sessionState, snapshot);
             if (!string.Equals(currentState.HydratedConversationId, sessionId, StringComparison.Ordinal))
             {
                 await _chatStore.Dispatch(new SelectConversationAction(sessionId));
             }
 
-            if (shouldHydrate)
+            if (shouldHydrateContent || shouldHydrateSessionState || shouldHydrateAuxiliarySessionState)
             {
-                var snapshot = _conversationWorkspace.GetConversationSnapshot(sessionId);
-                await _chatStore.Dispatch(new HydrateConversationAction(
-                    sessionId,
-                    snapshot?.Transcript.ToImmutableList() ?? ImmutableList<ConversationMessageSnapshot>.Empty,
-                    snapshot?.Plan.ToImmutableList() ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-                    snapshot?.ShowPlanPanel ?? false,
-                    snapshot?.PlanTitle)).ConfigureAwait(false);
-                await _chatStore.Dispatch(new SetConversationSessionStateAction(
-                    sessionId,
-                    snapshot?.AvailableModes?.ToImmutableList() ?? ImmutableList<ConversationModeOptionSnapshot>.Empty,
-                    snapshot?.SelectedModeId,
-                    snapshot?.ConfigOptions?.ToImmutableList() ?? ImmutableList<ConversationConfigOptionSnapshot>.Empty,
-                    snapshot?.ShowConfigOptionsPanel ?? false)).ConfigureAwait(false);
+                if (shouldHydrateContent)
+                {
+                    await _chatStore.Dispatch(new HydrateConversationAction(
+                        sessionId,
+                        snapshot?.Transcript.ToImmutableList() ?? ImmutableList<ConversationMessageSnapshot>.Empty,
+                        snapshot?.Plan.ToImmutableList() ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                        snapshot?.ShowPlanPanel ?? false,
+                        snapshot?.PlanTitle)).ConfigureAwait(false);
+                }
+
+                if (shouldHydrateSessionState)
+                {
+                    await _chatStore.Dispatch(new SetConversationSessionStateAction(
+                        sessionId,
+                        snapshot?.AvailableModes?.ToImmutableList() ?? ImmutableList<ConversationModeOptionSnapshot>.Empty,
+                        snapshot?.SelectedModeId,
+                        snapshot?.ConfigOptions?.ToImmutableList() ?? ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+                        snapshot?.ShowConfigOptionsPanel ?? false,
+                        ShouldHydrateAvailableCommands(sessionState, snapshot)
+                            ? snapshot?.AvailableCommands?.ToImmutableList() ?? ImmutableList<ConversationAvailableCommandSnapshot>.Empty
+                            : sessionState?.AvailableCommands ?? ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+                        ShouldHydrateSessionInfo(sessionState, snapshot)
+                            ? snapshot?.SessionInfo
+                            : sessionState?.SessionInfo,
+                        ShouldHydrateUsage(sessionState, snapshot)
+                            ? snapshot?.Usage
+                            : sessionState?.Usage)).ConfigureAwait(false);
+                }
+                else if (shouldHydrateAuxiliarySessionState)
+                {
+                    await _chatStore.Dispatch(new MergeConversationSessionStateAction(
+                        sessionId,
+                        AvailableCommands: ShouldHydrateAvailableCommands(sessionState, snapshot)
+                            ? snapshot?.AvailableCommands?.ToImmutableList() ?? ImmutableList<ConversationAvailableCommandSnapshot>.Empty
+                            : null,
+                        SessionInfo: ShouldHydrateSessionInfo(sessionState, snapshot)
+                            ? snapshot?.SessionInfo
+                            : null,
+                        Usage: ShouldHydrateUsage(sessionState, snapshot)
+                            ? snapshot?.Usage
+                            : null)).ConfigureAwait(false);
+                }
+
                 await _chatStore.Dispatch(new SetIsHydratingAction(false)).ConfigureAwait(false);
             }
 
@@ -145,7 +183,7 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
             .ConfigureAwait(false);
     }
 
-    private static bool ShouldHydrate(ChatState state, string sessionId)
+    private static bool ShouldHydrateContent(ChatState state, string sessionId)
     {
         ArgumentNullException.ThrowIfNull(state);
         var content = state.ResolveContentSlice(sessionId)
@@ -154,12 +192,27 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
                 ImmutableList<ConversationPlanEntrySnapshot>.Empty,
                 false,
                 null);
+        var runtimeState = state.ResolveRuntimeState(sessionId);
+        if (runtimeState?.Phase == ConversationRuntimePhase.Warm)
+        {
+            return false;
+        }
+
+        return !HasProjectedConversationContent(content);
+    }
+
+    private static bool ShouldHydratePrimarySessionState(ChatState state, string sessionId)
+    {
+        ArgumentNullException.ThrowIfNull(state);
         var sessionState = state.ResolveSessionStateSlice(sessionId)
             ?? new ConversationSessionStateSlice(
                 ImmutableList<ConversationModeOptionSnapshot>.Empty,
                 null,
                 ImmutableList<ConversationConfigOptionSnapshot>.Empty,
-                false);
+                false,
+                ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+                null,
+                null);
 
         var runtimeState = state.ResolveRuntimeState(sessionId);
         if (runtimeState?.Phase == ConversationRuntimePhase.Warm)
@@ -167,20 +220,45 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
             return false;
         }
 
-        return !HasProjectedConversationData(content, sessionState);
+        return !HasProjectedPrimarySessionState(sessionState);
     }
 
-    private static bool HasProjectedConversationData(
-        ConversationContentSlice content,
-        ConversationSessionStateSlice sessionState)
+    private static bool HasProjectedConversationContent(ConversationContentSlice content)
         => content.Transcript.Count > 0
             || content.PlanEntries.Count > 0
             || content.ShowPlanPanel
-            || !string.IsNullOrWhiteSpace(content.PlanTitle)
-            || sessionState.AvailableModes.Count > 0
+            || !string.IsNullOrWhiteSpace(content.PlanTitle);
+
+    private static bool HasProjectedPrimarySessionState(ConversationSessionStateSlice sessionState)
+        => sessionState.AvailableModes.Count > 0
             || sessionState.ConfigOptions.Count > 0
             || sessionState.ShowConfigOptionsPanel
             || !string.IsNullOrWhiteSpace(sessionState.SelectedModeId);
+
+    private static bool ShouldHydrateAuxiliarySessionState(
+        ConversationSessionStateSlice? sessionState,
+        ConversationWorkspaceSnapshot? snapshot)
+        => ShouldHydrateAvailableCommands(sessionState, snapshot)
+            || ShouldHydrateSessionInfo(sessionState, snapshot)
+            || ShouldHydrateUsage(sessionState, snapshot);
+
+    private static bool ShouldHydrateAvailableCommands(
+        ConversationSessionStateSlice? sessionState,
+        ConversationWorkspaceSnapshot? snapshot)
+        => (sessionState?.AvailableCommands.Count ?? 0) == 0
+            && (snapshot?.AvailableCommands?.Count ?? 0) > 0;
+
+    private static bool ShouldHydrateSessionInfo(
+        ConversationSessionStateSlice? sessionState,
+        ConversationWorkspaceSnapshot? snapshot)
+        => sessionState?.SessionInfo is null
+            && snapshot?.SessionInfo is not null;
+
+    private static bool ShouldHydrateUsage(
+        ConversationSessionStateSlice? sessionState,
+        ConversationWorkspaceSnapshot? snapshot)
+        => sessionState?.Usage is null
+            && snapshot?.Usage is not null;
 
     private async Task<ConversationMutationResult> RemoveConversationAsync(
         string conversationId,

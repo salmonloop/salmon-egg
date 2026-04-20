@@ -512,4 +512,130 @@ public class AcpSessionUpdateProjectorTests
         Assert.Equal("Show the current plan", command.Description);
         Assert.Equal("scope", command.InputHint);
     }
+
+    [Fact]
+    public void Project_CurrentModeUpdate_MapsOfficialModeIdPayload()
+    {
+        var projector = new AcpSessionUpdateProjector();
+        var delta = projector.Project(new SessionUpdateEventArgs(
+            "remote-1",
+            new CurrentModeUpdate
+            {
+                LegacyModeId = "code"
+            }));
+
+        Assert.Equal("code", delta.SelectedModeId);
+    }
+
+    [Fact]
+    public void Project_ConfigOptionUpdate_MapsOfficialSessionModeExample()
+    {
+        var projector = new AcpSessionUpdateProjector();
+        var delta = projector.Project(new SessionUpdateEventArgs(
+            "remote-1",
+            new ConfigOptionUpdate
+            {
+                ConfigOptions = new List<ConfigOption>
+                {
+                    new()
+                    {
+                        Id = "mode",
+                        Name = "Session Mode",
+                        Type = "select",
+                        CurrentValue = "code",
+                        Options = new List<ConfigOptionValue>
+                        {
+                            new() { Value = "code", Name = "Code" },
+                            new() { Value = "plan", Name = "Plan" }
+                        }
+                    }
+                }
+            }));
+
+        Assert.True(delta.ShowConfigOptionsPanel);
+        Assert.Equal("code", delta.SelectedModeId);
+        Assert.Equal(2, delta.AvailableModes?.Count);
+        Assert.Equal("code", delta.AvailableModes![0].ModeId);
+        Assert.Single(delta.ConfigOptions!);
+    }
+
+    [Fact]
+    public void Project_AvailableCommandsUpdate_MapsOfficialCommandsExample()
+    {
+        var projector = new AcpSessionUpdateProjector();
+        var delta = projector.Project(new SessionUpdateEventArgs(
+            "remote-1",
+            new AvailableCommandsUpdate
+            {
+                AvailableCommands = new List<AvailableCommand>
+                {
+                    new()
+                    {
+                        Name = "web",
+                        Description = "Search the web for information",
+                        Input = new AvailableCommandInput
+                        {
+                            Hint = "query to search for"
+                        }
+                    },
+                    new()
+                    {
+                        Name = "test",
+                        Description = "Run the project's tests",
+                        Input = new AvailableCommandInput
+                        {
+                            Hint = "test command"
+                        }
+                    }
+                }
+            }));
+
+        Assert.NotNull(delta.AvailableCommands);
+        Assert.Equal(2, delta.AvailableCommands!.Count);
+        Assert.Equal("web", delta.AvailableCommands[0].Name);
+        Assert.Equal("query to search for", delta.AvailableCommands[0].InputHint);
+    }
+
+    [Fact]
+    public void Project_SessionInfoUpdate_MapsOfficialPartialPayload()
+    {
+        var projector = new AcpSessionUpdateProjector();
+        var delta = projector.Project(new SessionUpdateEventArgs(
+            "remote-1",
+            new SessionInfoUpdate
+            {
+                Title = "Debug authentication timeout",
+                Meta = new Dictionary<string, object?>
+                {
+                    ["projectName"] = "api-server",
+                    ["branch"] = "main"
+                }
+            }));
+
+        Assert.NotNull(delta.SessionInfo);
+        Assert.Equal("Debug authentication timeout", delta.SessionInfo!.Title);
+        Assert.Null(delta.SessionInfo.Description);
+        Assert.Null(delta.SessionInfo.Cwd);
+        Assert.Null(delta.SessionInfo.UpdatedAt);
+        Assert.Equal("api-server", delta.SessionInfo.Meta!["projectName"]);
+        Assert.Equal("main", delta.SessionInfo.Meta["branch"]);
+    }
+
+    [Fact]
+    public void Project_UsageUpdate_MapsOfficialMinimalPayload()
+    {
+        var projector = new AcpSessionUpdateProjector();
+        var delta = projector.Project(new SessionUpdateEventArgs(
+            "remote-1",
+            new UsageUpdate
+            {
+                Used = 53000,
+                Size = 200000
+            }));
+
+        Assert.NotNull(delta.Usage);
+        Assert.Equal(53000, delta.Usage!.Used);
+        Assert.Equal(200000, delta.Usage.Size);
+        Assert.Null(delta.Usage.Cost);
+    }
 }
