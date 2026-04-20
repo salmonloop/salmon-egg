@@ -423,10 +423,22 @@ namespace SalmonEgg.Domain.Models.Protocol
         public Dictionary<string, object?>? Meta { get; set; }
 
         /// <summary>
+        /// 会话工作目录（可选）。
+        /// </summary>
+        [JsonPropertyName("cwd")]
+        public string? Cwd { get; set; }
+
+        /// <summary>
         /// 会话标题（可选）。
         /// </summary>
         [JsonPropertyName("title")]
         public string? Title { get; set; }
+
+        /// <summary>
+        /// 会话描述（可选）。
+        /// </summary>
+        [JsonPropertyName("description")]
+        public string? Description { get; set; }
 
         /// <summary>
         /// 最近更新时间（UTC iso8601）。

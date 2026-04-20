@@ -171,6 +171,7 @@ public class MessageParserTests
               "sessionId": "sess_list_1",
               "cwd": "/home/user/project",
               "title": "Existing session",
+              "description": "Session summary",
               "updatedAt": "2026-03-22T19:00:00Z",
               "_meta": {
                 "source": "unit-test",
@@ -188,13 +189,25 @@ public class MessageParserTests
         Assert.Single(response!.Sessions);
 
         var session = response.Sessions[0];
-        var metaProperty = session.GetType().GetProperty("Meta");
-        Assert.NotNull(metaProperty);
+        Assert.Equal("Session summary", session.Description);
 
-        var meta = metaProperty!.GetValue(session) as Dictionary<string, object?>;
+        var meta = session.Meta;
         Assert.NotNull(meta);
-        Assert.Equal("unit-test", ((JsonElement)meta!["source"]!).GetString());
-        Assert.Equal(3, ((JsonElement)meta["rank"]!).GetInt32());
+        Assert.Equal("unit-test", ReadMetaValue(meta!["source"]));
+        Assert.Equal("3", ReadMetaValue(meta["rank"]));
+    }
+
+    private static string? ReadMetaValue(object? value)
+    {
+        return value switch
+        {
+            null => null,
+            JsonElement element when element.ValueKind == JsonValueKind.String => element.GetString(),
+            JsonElement element when element.ValueKind == JsonValueKind.Number => element.GetRawText(),
+            JsonElement element when element.ValueKind == JsonValueKind.True => bool.TrueString.ToLowerInvariant(),
+            JsonElement element when element.ValueKind == JsonValueKind.False => bool.FalseString.ToLowerInvariant(),
+            _ => value.ToString()
+        };
     }
 }
 
