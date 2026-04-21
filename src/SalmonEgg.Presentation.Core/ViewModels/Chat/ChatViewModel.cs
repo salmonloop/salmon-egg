@@ -3423,10 +3423,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         }
 
         var warmRuntimeSnapshot = (await _chatStore.State ?? ChatState.Empty).ResolveRuntimeState(sessionId);
-        var warmReuseBinding = await ResolveConversationBindingAsync(sessionId, cancellationToken).ConfigureAwait(false);
-        var canReuseWarmRemoteConversation = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
+        var initialWarmReuseBinding = await ResolveConversationBindingAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        var canOptimisticallyReuseWarmRemoteConversation = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
             warmRuntimeSnapshot,
-            warmReuseBinding,
+            initialWarmReuseBinding,
             ConnectionInstanceId);
 
         await SetConversationRuntimeStateAsync(
@@ -3445,11 +3445,22 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             ((IConversationActivationPreview)this).ClearSessionSwitchPreview(sessionId);
             await PostToUiAsync(() =>
             {
-                SetConversationOverlayOwners(
-                    sessionSwitchConversationId: sessionId,
-                    connectionLifecycleConversationId: null,
-                    historyConversationId: null);
-                IsSessionSwitching = true;
+                if (canOptimisticallyReuseWarmRemoteConversation)
+                {
+                    SetConversationOverlayOwners(
+                        sessionSwitchConversationId: null,
+                        connectionLifecycleConversationId: null,
+                        historyConversationId: null);
+                    IsSessionSwitching = false;
+                }
+                else
+                {
+                    SetConversationOverlayOwners(
+                        sessionSwitchConversationId: sessionId,
+                        connectionLifecycleConversationId: null,
+                        historyConversationId: null);
+                    IsSessionSwitching = true;
+                }
             }).ConfigureAwait(false);
             Logger.LogInformation(
                 "Conversation activation phase completed. phase=OverlayPrimed conversationId={ConversationId} activationVersion={ActivationVersion} elapsedMs={ElapsedMs}",
@@ -3504,7 +3515,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 return false;
             }
 
-            if (canReuseWarmRemoteConversation)
+            var warmReuseBinding = await ResolveConversationBindingAsync(sessionId, activationLease.CancellationToken).ConfigureAwait(false);
+            var warmReuseConnectionInstanceId = ConnectionInstanceId;
+            if (ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
+                    warmRuntimeSnapshot,
+                    warmReuseBinding,
+                    warmReuseConnectionInstanceId))
             {
                 Logger.LogInformation(
                     "Skipping remote hydration because the selected conversation is already warm. ConversationId={ConversationId}",
@@ -3514,7 +3530,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                         ConversationRuntimePhase.Warm,
                         warmReuseBinding,
                         reason: "WarmReuse",
-                        activationLease.CancellationToken)
+                        activationLease.CancellationToken,
+                        connectionInstanceId: warmReuseConnectionInstanceId)
                     .ConfigureAwait(false);
                 activationLease.CancellationToken.ThrowIfCancellationRequested();
                 NotifyConversationListChanged();
@@ -7235,14 +7252,16 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             phase,
             binding: null,
             reason,
-            cancellationToken);
+            cancellationToken,
+            connectionInstanceId: null);
 
     private async Task SetConversationRuntimeStateAsync(
         string conversationId,
         ConversationRuntimePhase phase,
         ConversationBindingSlice? binding,
         string? reason,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? connectionInstanceId = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(conversationId))
@@ -7252,6 +7271,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
         var currentState = await _chatStore.State ?? ChatState.Empty;
         var existingRuntime = currentState.ResolveRuntimeState(conversationId);
+        var effectiveConnectionInstanceId = connectionInstanceId ?? ConnectionInstanceId;
         var remoteSessionId = binding?.RemoteSessionId;
         var profileId = binding?.ProfileId;
         if (string.IsNullOrWhiteSpace(remoteSessionId) || string.IsNullOrWhiteSpace(profileId))
@@ -7264,7 +7284,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             && ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
                 existingRuntime,
                 binding ?? currentState.ResolveBinding(conversationId),
-                ConnectionInstanceId))
+                effectiveConnectionInstanceId))
         {
             phase = ConversationRuntimePhase.Warm;
         }
@@ -7272,7 +7292,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         var runtimeState = new ConversationRuntimeSlice(
             ConversationId: conversationId,
             Phase: phase,
-            ConnectionInstanceId: ConnectionInstanceId,
+            ConnectionInstanceId: effectiveConnectionInstanceId,
             RemoteSessionId: remoteSessionId,
             ProfileId: profileId,
             Reason: reason,
@@ -7282,7 +7302,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             "Conversation runtime stage transitioned. ConversationId={ConversationId} Stage={Stage} ConnectionInstanceId={ConnectionInstanceId} RemoteSessionId={RemoteSessionId} ProfileId={ProfileId} Reason={Reason}",
             conversationId,
             phase,
-            ConnectionInstanceId,
+            effectiveConnectionInstanceId,
             remoteSessionId,
             profileId,
             reason);

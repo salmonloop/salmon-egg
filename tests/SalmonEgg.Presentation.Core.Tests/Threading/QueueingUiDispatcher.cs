@@ -15,6 +15,8 @@ public sealed class QueueingUiDispatcher : IUiDispatcher
 
     public bool HasThreadAccess => false;
 
+    public int PendingCount => _callbacks.Count;
+
     public void Enqueue(Action action)
     {
         _callbacks.Enqueue(action);

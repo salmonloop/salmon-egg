@@ -350,12 +350,39 @@ public sealed class AcpConnectionCoordinatorTests
             Mock.Of<ILogger<AcpConnectionCoordinator>>());
 
         await coordinator.ResetAsync();
+        await WaitForConditionAsync(async () =>
+        {
+            var state = await connectionState ?? throw new InvalidOperationException("Connection state was not updated.");
+            return state.Phase == ConnectionPhase.Disconnected
+                && string.Equals(state.ConnectionInstanceId, "conn-1", StringComparison.Ordinal)
+                && state.SelectedProfileId is null
+                && state.Generation == 6;
+        });
 
         var updated = await connectionState ?? throw new InvalidOperationException("Connection state was not updated.");
         Assert.Equal(ConnectionPhase.Disconnected, updated.Phase);
         Assert.Equal("conn-1", updated.ConnectionInstanceId);
         Assert.Null(updated.SelectedProfileId);
         Assert.Equal(6, updated.Generation);
+    }
+
+    private static async Task WaitForConditionAsync(
+        Func<Task<bool>> predicate,
+        int timeoutMilliseconds = 2000,
+        int pollDelayMilliseconds = 10)
+    {
+        var timeoutAt = DateTime.UtcNow.AddMilliseconds(timeoutMilliseconds);
+        while (DateTime.UtcNow < timeoutAt)
+        {
+            if (await predicate().ConfigureAwait(false))
+            {
+                return;
+            }
+
+            await Task.Delay(pollDelayMilliseconds).ConfigureAwait(false);
+        }
+
+        Assert.True(await predicate().ConfigureAwait(false), "Timed out waiting for expected asynchronous condition.");
     }
 
     private sealed class FakeSink : IAcpChatCoordinatorSink

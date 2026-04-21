@@ -1140,6 +1140,92 @@ public sealed class ChatSkeletonSmokeTests
     }
 
     [SkippableFact]
+    public void HydratedRemoteSession_SwitchToOtherRemoteSessionAndBack_ReturnsHotWithoutRemoteReload()
+    {
+        var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
+        Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", "1500");
+
+        try
+        {
+            using var appData = GuiAppDataScope.CreateDeterministicSlowRemoteReplayData(
+                cachedMessageCount: 1,
+                replayMessageCount: 24,
+                remoteConversationCount: 2);
+            using var session = WindowsGuiAppSession.LaunchFresh();
+
+            var remoteItemA = session.FindByAutomationId("MainNav.Session.gui-remote-conversation-01", TimeSpan.FromSeconds(15));
+            var remoteItemB = session.FindByAutomationId("MainNav.Session.gui-remote-conversation-02", TimeSpan.FromSeconds(15));
+
+            session.ActivateElement(remoteItemA);
+            var initialOverlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(30));
+            Assert.True(initialOverlayHidden, "Initial remote session A hydration did not complete before switching to session B.");
+
+            var initialHeader = WaitForSessionHeader(
+                session,
+                expectedTitle: "GUI Remote Session 01",
+                scenario: "remote-a-b-a-hot-return-initial-a",
+                appData);
+            Assert.Contains("GUI Remote Session 01", initialHeader.Name, StringComparison.Ordinal);
+
+            session.ActivateElement(remoteItemB);
+            var secondOverlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(30));
+            Assert.True(secondOverlayHidden, "Remote session B hydration did not complete before returning to session A.");
+
+            var secondHeader = WaitForSessionHeader(
+                session,
+                expectedTitle: "GUI Remote Session 02",
+                scenario: "remote-a-b-a-hot-return-session-b",
+                appData);
+            Assert.Contains("GUI Remote Session 02", secondHeader.Name, StringComparison.Ordinal);
+
+            remoteItemA = session.FindByAutomationId("MainNav.Session.gui-remote-conversation-01", TimeSpan.FromSeconds(10));
+            session.ActivateElement(remoteItemA);
+
+            var hotHeaderVisible = session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(4));
+            Assert.True(hotHeaderVisible, "Returning to remote session A did not restore the chat header quickly.");
+
+            var hotHeader = session.FindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(1));
+            Assert.Contains("GUI Remote Session 01", hotHeader.Name, StringComparison.Ordinal);
+
+            var hotOverlayTimeline = new List<string>();
+            var hotOverlayDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+            while (DateTime.UtcNow < hotOverlayDeadline)
+            {
+                var hotOverlayMaskVisible = session.TryFindByAutomationId("ChatView.LoadingOverlayMask", TimeSpan.FromMilliseconds(100)) is not null;
+                var hotOverlayStatusVisible = session.TryFindByAutomationId("ChatView.LoadingOverlayStatus", TimeSpan.FromMilliseconds(100)) is not null;
+
+                hotOverlayTimeline.Add(
+                    $"{DateTime.UtcNow:HH:mm:ss.fff} mask={hotOverlayMaskVisible} status={hotOverlayStatusVisible}");
+
+                if (hotOverlayMaskVisible || hotOverlayStatusVisible)
+                {
+                    ThrowWithScreenshot(
+                        session,
+                        appData,
+                        "remote-a-b-a-hot-return-overlay-visible",
+                        $"Returning to remote session A surfaced the loading overlay instead of staying hot.{Environment.NewLine}{string.Join(Environment.NewLine, hotOverlayTimeline)}");
+                }
+
+                Thread.Sleep(100);
+            }
+
+            var appDataRoot = Environment.GetEnvironmentVariable("SALMONEGG_APPDATA_ROOT")
+                ?? throw new Xunit.Sdk.XunitException("SALMONEGG_APPDATA_ROOT was not set for deterministic GUI smoke data.");
+            var logsRoot = Path.Combine(
+                appDataRoot,
+                "logs");
+            var sessionALoadCount = CountSessionLoadEvents(logsRoot, "gui-remote-session-01");
+            Assert.Equal(
+                1,
+                sessionALoadCount);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", previousSlowLoadDelay);
+        }
+    }
+
+    [SkippableFact]
     public void DiscoverProfileSwitch_SlowPreviousProfile_DoesNotOverwriteLatestSessionsList()
     {
         try
@@ -2230,6 +2316,34 @@ public sealed class ChatSkeletonSmokeTests
 
         throw new Xunit.Sdk.XunitException(
             $"{message}{Environment.NewLine}Screenshot: {screenshotDescriptor}{Environment.NewLine}boot.log:{Environment.NewLine}{appData.ReadBootLogTail()}{Environment.NewLine}conversations:{Environment.NewLine}{appData.ReadConversationsJson()}");
+    }
+
+    private static int CountSessionLoadEvents(string logsRoot, string sessionId)
+    {
+        if (!Directory.Exists(logsRoot))
+        {
+            throw new Xunit.Sdk.XunitException($"Expected deterministic logs root at '{logsRoot}' but the directory was missing.");
+        }
+
+        var logFiles = Directory.EnumerateFiles(logsRoot, "app-*.log")
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .ToArray();
+
+        return logFiles.Sum(logFile =>
+            ReadLinesAllowSharedRead(logFile).Count(line =>
+                line.Contains("\"method\":\"session/load\"", StringComparison.Ordinal)
+                && line.Contains($"\"sessionId\":\"{sessionId}\"", StringComparison.Ordinal)));
+    }
+
+    private static IEnumerable<string> ReadLinesAllowSharedRead(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var reader = new StreamReader(stream);
+
+        while (reader.ReadLine() is { } line)
+        {
+            yield return line;
+        }
     }
 
     private static IReadOnlyList<AutomationElement> FindVisibleListItems(AutomationElement list)

@@ -45,6 +45,7 @@ public class ShellLayoutNavigationStateAdapterTests
 
         await store.SetPaneOpenAsync(false);
         await WaitForConditionAsync(() => adapter.IsPaneOpen == false);
+        await WaitForConditionAsync(() => dispatcher.PendingCount == 1);
 
         Assert.Equal(0, changedCount);
         dispatcher.RunAll();

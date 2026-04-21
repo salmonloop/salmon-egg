@@ -171,10 +171,14 @@ public sealed class NavigationCoordinator : INavigationCoordinator
     {
         var activationGateEntered = false;
         var committed = false;
+        var shouldPrimeSessionSwitchPreview = _runtimeState.CurrentShellContent != ShellNavigationContent.Chat;
 
         try
         {
-            _conversationActivationPreview?.PrimeSessionSwitchPreview(request.SessionId);
+            if (shouldPrimeSessionSwitchPreview)
+            {
+                _conversationActivationPreview?.PrimeSessionSwitchPreview(request.SessionId);
+            }
             var navigationResult = await NavigateToChatAsync(request.Version).ConfigureAwait(true);
             if (!navigationResult.Succeeded
                 || !IsLatestActivationToken(request.Version)
@@ -238,7 +242,10 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         }
         finally
         {
-            _conversationActivationPreview?.ClearSessionSwitchPreview(request.SessionId);
+            if (shouldPrimeSessionSwitchPreview)
+            {
+                _conversationActivationPreview?.ClearSessionSwitchPreview(request.SessionId);
+            }
             if (activationGateEntered)
             {
                 _sessionActivationGate.Release();

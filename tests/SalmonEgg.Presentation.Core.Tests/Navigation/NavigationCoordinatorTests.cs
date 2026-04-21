@@ -362,6 +362,36 @@ public sealed class NavigationCoordinatorTests
     }
 
     [Fact]
+    public async Task ActivateSessionAsync_WhenAlreadyOnChatShell_DoesNotPrimeSessionSwitchPreview()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferencesWithProject();
+            var selectionStore = new ShellSelectionStateStore();
+            var shellNavigation = CreateShellNavigationService();
+            var runtimeState = new ShellNavigationRuntimeStateStore
+            {
+                CurrentShellContent = ShellNavigationContent.Chat
+            };
+            var activationCoordinator = new PreviewingConversationSessionSwitcher((_, _) => Task.FromResult(true));
+            var coordinator = CreateCoordinator(selectionStore, activationCoordinator, preferences, shellNavigation.Object, runtimeState);
+
+            await coordinator.ActivateSessionAsync("session-1", "project-1");
+
+            Assert.Empty(activationCoordinator.PrimedConversationIds);
+            Assert.Empty(activationCoordinator.ClearedConversationIds);
+            Assert.Equal(new[] { "session-1" }, activationCoordinator.ActivatedSessionIds);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public async Task ActivateSessionAsync_SameCommittedSessionLatestIntent_IgnoresDuplicateWithoutRenavigation()
     {
         var originalContext = SynchronizationContext.Current;
@@ -1564,6 +1594,38 @@ public sealed class NavigationCoordinatorTests
         {
             ActivatedSessionIds.Add(sessionId);
             return _onActivate(sessionId, cancellationToken);
+        }
+    }
+
+    private sealed class PreviewingConversationSessionSwitcher : IConversationSessionSwitcher, IConversationActivationPreview
+    {
+        private readonly Func<string, CancellationToken, Task<bool>> _onActivate;
+
+        public PreviewingConversationSessionSwitcher(Func<string, CancellationToken, Task<bool>> onActivate)
+        {
+            _onActivate = onActivate;
+        }
+
+        public List<string> ActivatedSessionIds { get; } = new();
+
+        public List<string> PrimedConversationIds { get; } = new();
+
+        public List<string> ClearedConversationIds { get; } = new();
+
+        public Task<bool> SwitchConversationAsync(string sessionId, CancellationToken cancellationToken = default)
+        {
+            ActivatedSessionIds.Add(sessionId);
+            return _onActivate(sessionId, cancellationToken);
+        }
+
+        public void PrimeSessionSwitchPreview(string conversationId)
+        {
+            PrimedConversationIds.Add(conversationId);
+        }
+
+        public void ClearSessionSwitchPreview(string conversationId)
+        {
+            ClearedConversationIds.Add(conversationId);
         }
     }
 
