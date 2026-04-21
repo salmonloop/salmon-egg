@@ -243,6 +243,11 @@ public static class DependencyInjection
         services.AddSingleton<ConversationCatalogPresenter>();
         services.AddSingleton<IConversationCatalogReadModel>(sp =>
             sp.GetRequiredService<ConversationCatalogPresenter>());
+        services.AddSingleton<IState<ConversationAttentionState>>(sp => State.Value(sp, () => ConversationAttentionState.Empty));
+        services.AddSingleton<IConversationAttentionStore, ConversationAttentionStore>();
+        services.AddSingleton<ConversationCatalogDisplayPresenter>();
+        services.AddSingleton<IConversationCatalogDisplayReadModel>(sp =>
+            sp.GetRequiredService<ConversationCatalogDisplayPresenter>());
         services.AddSingleton<IProjectAffinityResolver, ProjectAffinityResolver>();
         services.AddSingleton<INavigationProjectPreferences>(sp =>
             new NavigationProjectPreferencesAdapter(sp.GetRequiredService<AppPreferencesViewModel>()));

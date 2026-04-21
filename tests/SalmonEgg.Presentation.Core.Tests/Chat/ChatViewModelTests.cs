@@ -59,6 +59,8 @@ public class ChatViewModelTests
     {
         var state = State.Value(new object(), () => ChatState.Empty);
         var connectionState = State.Value(new object(), () => ChatConnectionState.Empty);
+        var attentionState = State.Value(new object(), () => ConversationAttentionState.Empty);
+        var attentionStore = new ConversationAttentionStore(attentionState);
         var connectionStore = new ChatConnectionStore(connectionState);
         var chatStore = new RecordingChatStore(state);
         var transportFactory = new Mock<ITransportFactory>();
@@ -170,6 +172,7 @@ public class ChatViewModelTests
                 uiDispatcher,
                 previewStore ?? Mock.Of<IConversationPreviewStore>(),
                 vmLogger.Object,
+                conversationAttentionStore: attentionStore,
                 acpConnectionCommands: acpConnectionCommands,
                 conversationActivationCoordinator: conversationActivationCoordinator,
                 bindingCommands: bindingCommands,
@@ -186,6 +189,7 @@ public class ChatViewModelTests
                 conversationStore,
                 preferences,
                 profiles,
+                attentionState,
                 chatStore,
                 vmLogger);
         }
@@ -1031,6 +1035,175 @@ public class ChatViewModelTests
                 !message.IsOutgoing
                 && string.Equals(message.TextContent, "hello after create", StringComparison.Ordinal)));
         });
+    }
+
+    [Fact]
+    public async Task ProcessSessionUpdateAsync_BackgroundAgentMessage_MarksUnreadAttentionOnBoundConversation()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        var chatService = CreateConnectedChatService();
+        await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-foreground",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-foreground", new ConversationBindingSlice("conv-foreground", "remote-foreground", "profile-1"))
+                .Add("conv-background", new ConversationBindingSlice("conv-background", "remote-background", "profile-1"))
+        });
+
+        chatService.Raise(
+            service => service.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs("remote-background", new AgentMessageUpdate(new TextContentBlock("background update"))));
+
+        await WaitForConditionAsync(async () =>
+        {
+            var attentionState = await fixture.GetAttentionStateAsync();
+            return HasUnreadAttention(attentionState, "conv-background");
+        });
+
+        var finalAttentionState = await fixture.GetAttentionStateAsync();
+        Assert.True(HasUnreadAttention(finalAttentionState, "conv-background"));
+        Assert.False(HasUnreadAttention(finalAttentionState, "conv-foreground"));
+    }
+
+    [Fact]
+    public async Task SwitchConversationAsync_ClearsUnreadAttentionWhenConversationIsHydrated()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
+        var sessionManager = new Mock<ISessionManager>();
+        sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.TryGetValue(id, out var session) ? session : null);
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .Returns<string, string?>((id, cwd) =>
+            {
+                var session = new Session(id, cwd);
+                sessions[id] = session;
+                return Task.FromResult(session);
+            });
+        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
+            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
+            {
+                if (!sessions.TryGetValue(id, out var session))
+                {
+                    return false;
+                }
+
+                update(session);
+                if (updateActivity)
+                {
+                    session.UpdateActivity();
+                }
+
+                return true;
+            });
+        sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.Remove(id));
+
+        await sessionManager.Object.CreateSessionAsync("conv-foreground", @"C:\repo\foreground");
+        await sessionManager.Object.CreateSessionAsync("conv-background", @"C:\repo\background");
+
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync());
+
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-foreground",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 4, 20, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 4, 20, 0, 0, 0, DateTimeKind.Utc)));
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-background",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 4, 20, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 4, 20, 0, 0, 0, DateTimeKind.Utc)));
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-foreground",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-foreground", new ConversationBindingSlice("conv-foreground", "remote-foreground", "profile-1"))
+                .Add("conv-background", new ConversationBindingSlice("conv-background", "remote-background", "profile-1"))
+        });
+
+        await WaitForConditionAsync(() =>
+            Task.FromResult(string.Equals(fixture.ViewModel.CurrentSessionId, "conv-foreground", StringComparison.Ordinal)));
+
+        var backgroundChatService = CreateConnectedChatService();
+        backgroundChatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
+        backgroundChatService.Setup(service => service.LoadSessionAsync(
+                It.IsAny<SessionLoadParams>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(SessionLoadResponse.Completed);
+        await fixture.ViewModel.ReplaceChatServiceAsync(backgroundChatService.Object);
+        await fixture.DispatchConnectionAsync(new SetSelectedProfileAction("profile-1"));
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+
+        backgroundChatService.Raise(
+            service => service.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs("remote-background", new AgentMessageUpdate(new TextContentBlock("background update"))));
+
+        await WaitForConditionAsync(async () =>
+        {
+            var attentionState = await fixture.GetAttentionStateAsync();
+            return HasUnreadAttention(attentionState, "conv-background");
+        });
+
+        await fixture.ViewModel.SwitchConversationAsync("conv-background");
+        await WaitForConditionAsync(() =>
+            Task.FromResult(string.Equals(fixture.ViewModel.CurrentSessionId, "conv-background", StringComparison.Ordinal)));
+
+        await WaitForConditionAsync(async () =>
+        {
+            var attentionState = await fixture.GetAttentionStateAsync();
+            return !HasUnreadAttention(attentionState, "conv-background");
+        });
+
+        var finalAttentionState = await fixture.GetAttentionStateAsync();
+        Assert.True(finalAttentionState.TryGetConversation("conv-background", out var slice));
+        Assert.NotNull(slice);
+        Assert.False(slice!.HasUnread);
+    }
+
+    [Fact]
+    public async Task ProcessSessionUpdateAsync_SessionInfoUpdate_DoesNotMarkUnreadAttention()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        var chatService = CreateConnectedChatService();
+        await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-foreground",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-foreground", new ConversationBindingSlice("conv-foreground", "remote-foreground", "profile-1"))
+                .Add("conv-background", new ConversationBindingSlice("conv-background", "remote-background", "profile-1"))
+        });
+
+        var initialActionCount = fixture.ChatStore.Actions.Count;
+        chatService.Raise(
+            service => service.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs("remote-background", new SessionInfoUpdate
+            {
+                Title = "Background title",
+                Cwd = @"C:\repo\background",
+                UpdatedAt = "2026-04-21T00:00:00Z"
+            }));
+
+        await WaitForConditionAsync(() => Task.FromResult(fixture.ChatStore.Actions.Count > initialActionCount));
+
+        var attentionState = await fixture.GetAttentionStateAsync();
+        Assert.False(HasUnreadAttention(attentionState, "conv-background"));
+        Assert.False(HasUnreadAttention(attentionState, "conv-foreground"));
     }
 
     [Fact]
@@ -2818,6 +2991,9 @@ public class ChatViewModelTests
         return snapshot.ToolCallContent!;
     }
 
+    private static bool HasUnreadAttention(ConversationAttentionState attentionState, string conversationId)
+        => attentionState.TryGetConversation(conversationId, out var slice) && slice is { HasUnread: true };
+
     private static ServerConfiguration CreateConnectableStdioProfile(string id, string name)
         => new()
         {
@@ -2987,6 +3163,7 @@ public class ChatViewModelTests
     {
         private readonly IState<ChatState> _state;
         private readonly IState<ChatConnectionState> _connectionState;
+        private readonly IState<ConversationAttentionState> _attentionState;
         private readonly IChatConnectionStore _connectionStore;
         private readonly IChatStore _store;
         private readonly ChatConversationWorkspace _workspace;
@@ -3009,12 +3186,14 @@ public class ChatViewModelTests
             Mock<IConversationStore> conversationStore,
             AppPreferencesViewModel preferences,
             AcpProfilesViewModel profiles,
+            IState<ConversationAttentionState> attentionState,
             RecordingChatStore chatStore,
             Mock<ILogger<ChatViewModel>> viewModelLogger)
         {
             ViewModel = viewModel;
             _state = state;
             _connectionState = connectionState;
+            _attentionState = attentionState;
             _connectionStore = connectionStore;
             _store = store;
             _workspace = workspace;
@@ -3029,6 +3208,8 @@ public class ChatViewModelTests
 
         public async Task<ChatConnectionState> GetConnectionStateAsync() => await _connectionState ?? ChatConnectionState.Empty;
 
+        public async Task<ConversationAttentionState> GetAttentionStateAsync() => await _attentionState ?? ConversationAttentionState.Empty;
+
         public ValueTask DispatchAsync(ChatAction action) => _store.Dispatch(action);
 
         public ValueTask DispatchConnectionAsync(ChatConnectionAction action) => _connectionStore.Dispatch(action);
@@ -3041,6 +3222,7 @@ public class ChatViewModelTests
             ViewModel.Dispose();
             _workspace.Dispose();
             await _connectionState.DisposeAsync();
+            await _attentionState.DisposeAsync();
             await _state.DisposeAsync();
         }
 

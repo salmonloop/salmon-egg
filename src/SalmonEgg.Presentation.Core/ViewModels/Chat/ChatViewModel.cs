@@ -101,6 +101,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private readonly IChatStateProjector _chatStateProjector;
     private readonly IAcpSessionUpdateProjector _acpSessionUpdateProjector;
     private readonly IChatConnectionStore _chatConnectionStore;
+    private readonly IConversationAttentionStore? _conversationAttentionStore;
     private IChatService? _chatService;
     private readonly IUiDispatcher _uiDispatcher;
     private readonly IConversationPreviewStore _previewStore;
@@ -897,6 +898,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         IUiDispatcher uiDispatcher,
         IConversationPreviewStore previewStore,
         ILogger<ChatViewModel> logger,
+        IConversationAttentionStore? conversationAttentionStore = null,
         IAcpConnectionCommands? acpConnectionCommands = null,
         IConversationActivationCoordinator? conversationActivationCoordinator = null,
         IConversationBindingCommands? bindingCommands = null,
@@ -927,6 +929,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         _chatStateProjector = chatStateProjector ?? throw new ArgumentNullException(nameof(chatStateProjector));
         _acpSessionUpdateProjector = acpSessionUpdateProjector ?? new AcpSessionUpdateProjector();
         _chatConnectionStore = chatConnectionStore ?? throw new ArgumentNullException(nameof(chatConnectionStore));
+        _conversationAttentionStore = conversationAttentionStore;
         _projectAffinityResolver = projectAffinityResolver ?? new ProjectAffinityResolver();
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
         _previewStore = previewStore ?? throw new ArgumentNullException(nameof(previewStore));
@@ -2475,6 +2478,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             }
 
             await PostToUiAsync(() => RemoveBottomPanelState(conversationId)).ConfigureAwait(false);
+            await RemoveConversationAttentionAsync(conversationId).ConfigureAwait(false);
             return result;
         }
         catch (Exception ex)
@@ -2890,6 +2894,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 await AdvanceActiveTurnPhaseAsync(activeTurn, ChatTurnPhase.Responding).ConfigureAwait(true);
                 await HandleAgentContentChunkAsync(targetConversationId, messageUpdate.Content).ConfigureAwait(true);
                 RecordTranscriptProjectionObservation(e.SessionId);
+                if (!isActiveTarget)
+                {
+                    await MarkConversationUnreadAttentionAsync(targetConversationId, ConversationAttentionSource.AgentMessage).ConfigureAwait(false);
+                }
             }
             else if (e.Update is AgentThoughtUpdate)
             {
@@ -3385,6 +3393,41 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         await AddMessageToHistoryAsync(conversationId, content, isOutgoing: false).ConfigureAwait(true);
     }
 
+    private async Task MarkConversationUnreadAttentionAsync(string conversationId, ConversationAttentionSource source)
+    {
+        var attentionStore = _conversationAttentionStore;
+        if (attentionStore is null || string.IsNullOrWhiteSpace(conversationId))
+        {
+            return;
+        }
+
+        await attentionStore.Dispatch(
+                new MarkConversationUnreadAction(conversationId, source, DateTime.UtcNow))
+            .ConfigureAwait(false);
+    }
+
+    private async Task ClearConversationUnreadAttentionAsync(string conversationId)
+    {
+        var attentionStore = _conversationAttentionStore;
+        if (attentionStore is null || string.IsNullOrWhiteSpace(conversationId))
+        {
+            return;
+        }
+
+        await attentionStore.Dispatch(new ClearConversationUnreadAction(conversationId)).ConfigureAwait(false);
+    }
+
+    private async Task RemoveConversationAttentionAsync(string conversationId)
+    {
+        var attentionStore = _conversationAttentionStore;
+        if (attentionStore is null || string.IsNullOrWhiteSpace(conversationId))
+        {
+            return;
+        }
+
+        await attentionStore.Dispatch(new RemoveConversationAttentionAction(conversationId)).ConfigureAwait(false);
+    }
+
     private async Task AppendAgentTextChunkAsync(string? conversationId, string chunk)
     {
         if (string.IsNullOrWhiteSpace(chunk) || string.IsNullOrWhiteSpace(conversationId))
@@ -3533,6 +3576,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                         activationLease.CancellationToken,
                         connectionInstanceId: warmReuseConnectionInstanceId)
                     .ConfigureAwait(false);
+                await ClearConversationUnreadAttentionAsync(sessionId).ConfigureAwait(false);
                 activationLease.CancellationToken.ThrowIfCancellationRequested();
                 NotifyConversationListChanged();
                 return true;
@@ -3685,6 +3729,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             Logger.LogInformation(
                 "Skipping remote hydration because the selected conversation is already warm. ConversationId={ConversationId}",
                 sessionId);
+            await ClearConversationUnreadAttentionAsync(sessionId).ConfigureAwait(false);
             return true;
         }
 
@@ -3731,6 +3776,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             var hydrated = await EnsureActiveConversationRemoteHydratedAsync(sessionId, activationVersion, cancellationToken).ConfigureAwait(false);
             if (hydrated)
             {
+                await ClearConversationUnreadAttentionAsync(sessionId).ConfigureAwait(false);
                 await TryPublishShellSessionActivationPhaseAsync(
                         sessionId,
                         activationVersion,
@@ -5979,6 +6025,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 reason: "MarkedHydrated",
                 cancellationToken)
             .ConfigureAwait(false);
+        await ClearConversationUnreadAttentionAsync(conversationId!).ConfigureAwait(false);
     }
 
     public async Task MarkConversationRemoteHydratedAsync(
@@ -5999,6 +6046,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 reason: "MarkedHydrated",
                 cancellationToken)
             .ConfigureAwait(false);
+        if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
+        {
+            await ClearConversationUnreadAttentionAsync(conversationId).ConfigureAwait(false);
+        }
     }
 
     public Task ApplyConversationSessionLoadResponseAsync(
