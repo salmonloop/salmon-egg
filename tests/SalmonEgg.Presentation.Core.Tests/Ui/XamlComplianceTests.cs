@@ -538,6 +538,11 @@ public sealed class XamlComplianceTests
         Assert.Contains("x:Load=\"{x:Bind ViewModel.ShouldLoadTranscriptSurface, Mode=OneWay}\"", xaml);
         Assert.Contains("Unloaded=\"OnMessagesListUnloaded\"", xaml);
         Assert.Contains("private void OnMessagesListUnloaded", codeBehind);
+        Assert.Contains("PointerPressed=\"OnMessagesListPointerPressed\"", xaml);
+        Assert.Contains("PointerWheelChanged=\"OnMessagesListPointerWheelChanged\"", xaml);
+        Assert.Contains("KeyDown=\"OnMessagesListKeyDown\"", xaml);
+        Assert.DoesNotContain("FindScrollViewer(", codeBehind, StringComparison.Ordinal);
+        Assert.DoesNotContain("VisualTreeHelper.", codeBehind, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -10,6 +10,7 @@ using SalmonEgg.Presentation.Models;
 using SalmonEgg.Presentation.Utilities;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.Core.ViewModels.ShellLayout;
+using Windows.Foundation;
 
 namespace SalmonEgg.Presentation.Views.Chat
 {
@@ -25,12 +26,10 @@ namespace SalmonEgg.Presentation.Views.Chat
         private bool _userScrolledUp;
         private const double BottomThreshold = 10;
         private const int MaxInitialScrollAttempts = 8;
-        private ScrollViewer? _scrollViewer;
         private bool _suspendAutoScrollTracking;
         private bool _manualScrollIntentPending;
         private bool _wasOverlayVisible;
         private bool _scrollToBottomScheduled;
-        private bool _programmaticScrollInProgress;
         private int _scrollScheduleGeneration;
         private string _transcriptViewportAutomationState = "inactive";
         private ObservableCollection<ChatMessageViewModel>? _trackedMessageHistory;
@@ -54,7 +53,6 @@ namespace SalmonEgg.Presentation.Views.Chat
             _wasOverlayVisible = ViewModel.IsActivationOverlayVisible;
             _initialScrollGate.MarkPending();
             EnsureMessageTracking();
-            AttachScrollViewer();
             BeginLayoutLoadingIfPendingMessages();
             RequestInitialScroll();
             RestoreViewportForWarmResume();
@@ -73,8 +71,6 @@ namespace SalmonEgg.Presentation.Views.Chat
             _isViewLoaded = false;
             unchecked { _scrollScheduleGeneration++; }
             _scrollToBottomScheduled = false;
-            _programmaticScrollInProgress = false;
-            DetachScrollViewer();
             _initialScrollGate.CancelInFlight();
             UpdateTranscriptViewportAutomationState();
             if (_isTrackingMessages)
@@ -150,7 +146,6 @@ namespace SalmonEgg.Presentation.Views.Chat
 
         private void OnMessagesListLoaded(object sender, RoutedEventArgs e)
         {
-            AttachScrollViewer();
             BeginLayoutLoadingIfPendingMessages();
             RequestInitialScroll();
             UpdateTranscriptViewportAutomationState();
@@ -158,29 +153,19 @@ namespace SalmonEgg.Presentation.Views.Chat
 
         private void OnMessagesListUnloaded(object sender, RoutedEventArgs e)
         {
-            DetachScrollViewer();
             UpdateTranscriptViewportAutomationState();
-        }
-
-        private void AttachScrollViewer()
-        {
-            DetachScrollViewer();
-            _scrollViewer = FindScrollViewer(MessagesList);
-            if (_scrollViewer == null)
-            {
-                return;
-            }
-
-            _scrollViewer.ViewChanged += ScrollViewer_ViewChanged;
-            _scrollViewer.PointerPressed += ScrollViewer_PointerPressed;
-            _scrollViewer.PointerWheelChanged += ScrollViewer_PointerWheelChanged;
-            _scrollViewer.KeyDown += ScrollViewer_KeyDown;
         }
 
         private void OnMessagesListLayoutUpdated(object? sender, object e)
         {
             var lastItemContainerGenerated = HasLastItemContainerGenerated(ViewModel.MessageHistory.Count);
             RefreshLayoutLoadingState(lastItemContainerGenerated);
+
+            if (_manualScrollIntentPending && !_initialScrollGate.HasPending && !_suspendAutoScrollTracking)
+            {
+                _userScrolledUp = !IsListViewportAtBottom();
+                _manualScrollIntentPending = false;
+            }
 
             if (!_initialScrollGate.HasPending || _userScrolledUp)
             {
@@ -201,66 +186,19 @@ namespace SalmonEgg.Presentation.Views.Chat
             UpdateTranscriptViewportAutomationState();
         }
 
-        private void ScrollViewer_ViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
-        {
-            if (_scrollViewer == null) return;
-
-            // Only evaluate at-bottom when the scroll has settled (not intermediate).
-            // During virtualization layout changes, intermediate frames have transient
-            // ScrollableHeight values that cause false at-bottom detection.
-            if (e.IsIntermediate)
-            {
-                return;
-            }
-
-            if (_initialScrollGate.HasPending)
-            {
-                if (!_userScrolledUp)
-                {
-                    TryCompletePendingInitialScroll();
-                }
-
-                UpdateTranscriptViewportAutomationState();
-                return;
-            }
-
-            if (_suspendAutoScrollTracking)
-            {
-                UpdateTranscriptViewportAutomationState();
-                return;
-            }
-
-            if (_programmaticScrollInProgress)
-            {
-                _programmaticScrollInProgress = false;
-                UpdateTranscriptViewportAutomationState();
-                return;
-            }
-
-            if (!_manualScrollIntentPending)
-            {
-                UpdateTranscriptViewportAutomationState();
-                return;
-            }
-
-            _userScrolledUp = !IsScrollViewerAtBottom();
-            _manualScrollIntentPending = false;
-            UpdateTranscriptViewportAutomationState();
-        }
-
-        private void ScrollViewer_PointerPressed(object sender, PointerRoutedEventArgs e)
+        private void OnMessagesListPointerPressed(object sender, PointerRoutedEventArgs e)
         {
             _manualScrollIntentPending = true;
             StopInitialScrollForManualInteraction();
         }
 
-        private void ScrollViewer_PointerWheelChanged(object sender, PointerRoutedEventArgs e)
+        private void OnMessagesListPointerWheelChanged(object sender, PointerRoutedEventArgs e)
         {
             _manualScrollIntentPending = true;
             StopInitialScrollForManualInteraction();
         }
 
-        private void ScrollViewer_KeyDown(object sender, KeyRoutedEventArgs e)
+        private void OnMessagesListKeyDown(object sender, KeyRoutedEventArgs e)
         {
             if (e.Key is Windows.System.VirtualKey.Up
                 or Windows.System.VirtualKey.Down
@@ -274,35 +212,8 @@ namespace SalmonEgg.Presentation.Views.Chat
             }
         }
 
-        private static ScrollViewer? FindScrollViewer(DependencyObject element)
-        {
-            if (element is ScrollViewer sv) return sv;
-
-            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(element); i++)
-            {
-                var child = VisualTreeHelper.GetChild(element, i);
-                var result = FindScrollViewer(child);
-                if (result != null) return result;
-            }
-
-            return null;
-        }
-
         private void RequestScrollToBottom()
         {
-            if (MessagesList != null && ViewModel.MessageHistory.Count > 0)
-            {
-                MessagesList.ScrollIntoView(ViewModel.MessageHistory.Last());
-            }
-
-            if (_scrollViewer != null)
-            {
-                _programmaticScrollInProgress = true;
-                _scrollViewer.ChangeView(null, _scrollViewer.ScrollableHeight, null);
-                return;
-            }
-
-            // Fallback: use internal ScrollIntoView if ScrollViewer is not found yet.
             if (MessagesList != null && ViewModel.MessageHistory.Count > 0)
             {
                 MessagesList.ScrollIntoView(ViewModel.MessageHistory.Last());
@@ -487,7 +398,7 @@ namespace SalmonEgg.Presentation.Views.Chat
 
         private bool TryScrollInitialLoadToBottom(int itemCount)
         {
-            if (MessagesList is null || _scrollViewer is null)
+            if (MessagesList is null)
             {
                 return false;
             }
@@ -496,7 +407,6 @@ namespace SalmonEgg.Presentation.Views.Chat
 
             // Avoid synchronous UpdateLayout(); rely on virtualizer's async layout pass
             // and the retry mechanism in InitialScrollAttemptPolicy.
-            _scrollViewer.ChangeView(null, _scrollViewer.ScrollableHeight, null);
             return IsInitialScrollReadyAndAtBottom(itemCount);
         }
 
@@ -512,7 +422,7 @@ namespace SalmonEgg.Presentation.Views.Chat
                 return false;
             }
 
-            return IsScrollViewerAtBottom();
+            return IsListViewportAtBottom();
         }
 
         private bool HasLastItemContainerGenerated(int itemCount)
@@ -525,19 +435,33 @@ namespace SalmonEgg.Presentation.Views.Chat
             return MessagesList.ContainerFromIndex(itemCount - 1) is not null;
         }
 
-        private bool IsScrollViewerAtBottom()
+        private bool IsListViewportAtBottom()
         {
-            if (_scrollViewer is null)
+            if (MessagesList is null)
             {
                 return false;
             }
 
-            return _scrollViewer.VerticalOffset >= _scrollViewer.ScrollableHeight - BottomThreshold;
+            var itemCount = ViewModel.MessageHistory.Count;
+            if (itemCount <= 0)
+            {
+                return true;
+            }
+
+            if (MessagesList.ContainerFromIndex(itemCount - 1) is not FrameworkElement lastItemContainer)
+            {
+                return false;
+            }
+
+            Point relativeOrigin = lastItemContainer.TransformToVisual(MessagesList).TransformPoint(default);
+            var lastItemBottom = relativeOrigin.Y + lastItemContainer.ActualHeight;
+            var viewportBottom = MessagesList.ActualHeight - BottomThreshold;
+            return lastItemBottom <= viewportBottom;
         }
 
         private bool TryCompletePendingInitialScroll(bool? lastItemContainerGenerated = null)
         {
-            if (!_initialScrollGate.HasPending || MessagesList is null || _scrollViewer is null)
+            if (!_initialScrollGate.HasPending || MessagesList is null)
             {
                 return false;
             }
@@ -549,7 +473,7 @@ namespace SalmonEgg.Presentation.Views.Chat
             }
 
             var hasLastItemContainer = lastItemContainerGenerated ?? HasLastItemContainerGenerated(itemCount);
-            if (!hasLastItemContainer || !IsScrollViewerAtBottom())
+            if (!hasLastItemContainer || !IsListViewportAtBottom())
             {
                 return false;
             }
@@ -559,21 +483,6 @@ namespace SalmonEgg.Presentation.Views.Chat
             RefreshLayoutLoadingState(true);
             UpdateTranscriptViewportAutomationState();
             return true;
-        }
-
-        private void DetachScrollViewer()
-        {
-            if (_scrollViewer is null)
-            {
-                return;
-            }
-
-            _scrollViewer.ViewChanged -= ScrollViewer_ViewChanged;
-            _scrollViewer.PointerPressed -= ScrollViewer_PointerPressed;
-            _scrollViewer.PointerWheelChanged -= ScrollViewer_PointerWheelChanged;
-            _scrollViewer.KeyDown -= ScrollViewer_KeyDown;
-            _scrollViewer = null;
-            UpdateTranscriptViewportAutomationState();
         }
 
 
@@ -601,7 +510,6 @@ namespace SalmonEgg.Presentation.Views.Chat
             _userScrolledUp = false;
             _suspendAutoScrollTracking = false;
             _manualScrollIntentPending = false;
-            _programmaticScrollInProgress = false;
             UpdateTranscriptViewportAutomationState();
         }
 
@@ -695,12 +603,12 @@ namespace SalmonEgg.Presentation.Views.Chat
                 return "pending";
             }
 
-            if (_scrollViewer is null)
+            if (!HasLastItemContainerGenerated(ViewModel.MessageHistory.Count))
             {
                 return "untracked";
             }
 
-            return IsScrollViewerAtBottom() ? "bottom" : "not_bottom";
+            return IsListViewportAtBottom() ? "bottom" : "not_bottom";
         }
 
         private void OnSessionNameClick(object sender, RoutedEventArgs e)

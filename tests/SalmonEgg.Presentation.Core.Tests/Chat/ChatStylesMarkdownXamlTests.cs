@@ -47,10 +47,28 @@ public sealed class ChatStylesMarkdownXamlTests
         Assert.Contains("Click=\"OnCopyMessageClick\"", xaml, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("en")]
+    [InlineData("en-US")]
+    [InlineData("zh-Hans")]
+    public void ChatMessageCopyMenu_UsesTextLocalizationKey(string localeFolder)
+    {
+        var resources = LoadResourcesResw(localeFolder);
+
+        Assert.Contains("ChatMessageCopyMenu.Text", resources, StringComparison.Ordinal);
+        Assert.DoesNotContain("ChatMessageCopyMenu.Content", resources, StringComparison.Ordinal);
+    }
+
     private static string LoadChatStylesXaml()
     {
         var root = FindRepoRoot();
         return File.ReadAllText(Path.Combine(root, "SalmonEgg", "SalmonEgg", "Styles", "ChatStyles.xaml"));
+    }
+
+    private static string LoadResourcesResw(string localeFolder)
+    {
+        var root = FindRepoRoot();
+        return File.ReadAllText(Path.Combine(root, "SalmonEgg", "SalmonEgg", "Strings", localeFolder, "Resources.resw"));
     }
 
     private static string FindRepoRoot()

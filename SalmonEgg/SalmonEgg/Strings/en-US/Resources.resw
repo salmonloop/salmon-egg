@@ -754,7 +754,7 @@
   <data name="ChatViewLoadingOverlay.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Session loading</value>
   </data>
-  <data name="ChatMessageCopyMenu.Content" xml:space="preserve">
+  <data name="ChatMessageCopyMenu.Text" xml:space="preserve">
     <value>Copy message</value>
   </data>
   <data name="DataStorage_ClearCacheDialog.Title" xml:space="preserve">
