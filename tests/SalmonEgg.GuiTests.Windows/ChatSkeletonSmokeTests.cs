@@ -92,6 +92,36 @@ public sealed class ChatSkeletonSmokeTests
     }
 
     [SkippableFact]
+    public void SelectSessionWithMarkdownMessages_DoubleClickCodeBlock_DoesNotCrash()
+    {
+        using var appData = GuiAppDataScope.CreateDeterministicMarkdownRenderData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-markdown-session-01", TimeSpan.FromSeconds(15));
+        session.ActivateElement(sessionItem);
+
+        var loadingOverlay = session.TryFindByAutomationId("ChatView.LoadingOverlay", TimeSpan.FromSeconds(2));
+        if (loadingOverlay is not null)
+        {
+            var hidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(10));
+            Assert.True(hidden, "Loading overlay did not disappear for markdown double-click scenario.");
+        }
+
+        var messagesList = session.FindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(10));
+        var codeLine = session.FindVisibleText("var done = true;", messagesList, TimeSpan.FromSeconds(8));
+        Assert.NotNull(codeLine);
+
+        session.DoubleClickElement(codeLine!);
+        Thread.Sleep(400);
+
+        var header = session.FindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(8));
+        Assert.Contains("GUI Markdown Session 01", header.Name, StringComparison.Ordinal);
+
+        var stillVisible = session.TryFindVisibleText("var done = true;", messagesList, TimeSpan.FromSeconds(4));
+        Assert.NotNull(stillVisible);
+    }
+
+    [SkippableFact]
     public void SelectSessionWithContent_ShowsSkeletonLoader_ThenContent()
     {
         // Use withContent: true to ensure there are messages to be rendered.

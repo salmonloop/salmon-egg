@@ -355,6 +355,33 @@ internal sealed class WindowsGuiAppSession : IDisposable
         ActivateElement(element);
     }
 
+    public void DoubleClickElement(AutomationElement element)
+    {
+        ArgumentNullException.ThrowIfNull(element);
+
+        try
+        {
+            element.Focus();
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            var point = element.GetClickablePoint();
+            Mouse.DoubleClick(point);
+            return;
+        }
+        catch
+        {
+        }
+
+        ClickElement(element);
+        Thread.Sleep(50);
+        ClickElement(element);
+    }
+
     public void OpenContextMenu(AutomationElement element)
     {
         ArgumentNullException.ThrowIfNull(element);

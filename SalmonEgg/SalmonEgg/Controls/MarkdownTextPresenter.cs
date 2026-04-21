@@ -13,6 +13,7 @@ public sealed class MarkdownTextPresenter : Grid
 #else
     private readonly CommunityToolkit.WinUI.UI.Controls.MarkdownTextBlock _markdown = new();
 #endif
+    private bool _requestedIsTextSelectionEnabled;
 
     public static readonly DependencyProperty TextProperty = DependencyProperty.Register(
         nameof(Text),
@@ -82,7 +83,9 @@ public sealed class MarkdownTextPresenter : Grid
     {
         if (d is MarkdownTextPresenter presenter)
         {
-            presenter.ApplyMarkdownText((string?)e.NewValue);
+            var text = (string?)e.NewValue;
+            presenter.ApplyMarkdownText(text);
+            presenter.ApplyTextSelectionMode(text);
         }
     }
 
@@ -90,7 +93,8 @@ public sealed class MarkdownTextPresenter : Grid
     {
         if (d is MarkdownTextPresenter presenter)
         {
-            presenter._markdown.IsTextSelectionEnabled = (bool)e.NewValue;
+            presenter._requestedIsTextSelectionEnabled = (bool)e.NewValue;
+            presenter.ApplyTextSelectionMode(presenter.Text);
         }
     }
 
@@ -127,6 +131,45 @@ public sealed class MarkdownTextPresenter : Grid
             MessageViewModel?.MarkMarkdownRenderFailed();
             _markdown.Text = string.Empty;
         }
+    }
+
+    private void ApplyTextSelectionMode(string? text)
+    {
+#if WINDOWS
+        // CommunityToolkit.Labs MarkdownTextBlock can crash on WinUI when fenced code blocks
+        // receive word-selection gestures (double click). Keep selection enabled for plain markdown.
+        var shouldDisableForCodeFence = ContainsClosedCodeFence(text);
+        _markdown.IsTextSelectionEnabled = _requestedIsTextSelectionEnabled && !shouldDisableForCodeFence;
+#else
+        _markdown.IsTextSelectionEnabled = _requestedIsTextSelectionEnabled;
+#endif
+    }
+
+    private static bool ContainsClosedCodeFence(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        var span = text.AsSpan();
+        const string fence = "```";
+        var fenceCount = 0;
+        var index = 0;
+
+        while (index <= span.Length - fence.Length)
+        {
+            if (span.Slice(index, fence.Length).SequenceEqual(fence.AsSpan()))
+            {
+                fenceCount++;
+                index += fence.Length;
+                continue;
+            }
+
+            index++;
+        }
+
+        return fenceCount >= 2;
     }
 
 #if WINDOWS
