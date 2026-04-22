@@ -205,31 +205,50 @@ public sealed partial class RealUserConfigSmokeTests
     {
         GuiTestGate.RequireEnabled();
 
-        var remoteCandidates = RealUserConfigProbe.LoadReplayBackedCandidates();
+        var explicitWarmConversationId = Environment.GetEnvironmentVariable("SALMONEGG_GUI_MINI_WARM_CONVERSATION_ID");
+        var explicitRemoteConversationId = Environment.GetEnvironmentVariable("SALMONEGG_GUI_MINI_REMOTE_CONVERSATION_ID");
+        var remoteCandidates = RealUserConfigProbe.LoadReplayBackedCandidates(includeAllProfiles: true);
         var localCandidates = RealUserConfigProbe.LoadPureLocalCandidates();
-        Skip.If(remoteCandidates.Count < 2 && localCandidates.Count == 0, "Need either one pure local candidate plus one remote candidate, or at least two remote candidates, to validate warm-cache mini-window switching.");
+        Skip.If(
+            remoteCandidates.Count < 2 && localCandidates.Count == 0 && string.IsNullOrWhiteSpace(explicitWarmConversationId) && string.IsNullOrWhiteSpace(explicitRemoteConversationId),
+            "Need either one pure local candidate plus one remote candidate, or at least two remote candidates, to validate warm-cache mini-window switching. You can also set SALMONEGG_GUI_MINI_WARM_CONVERSATION_ID and SALMONEGG_GUI_MINI_REMOTE_CONVERSATION_ID to pin a specific pair.");
 
         using var slowLoad = new EnvironmentVariableScope("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", "2000");
         using var session = WindowsGuiAppSession.LaunchFresh();
 
         EnsureMainWindowWideForTitleBarCommands(session);
 
-        var warmLocalCandidate = localCandidates
-            .Where(item => item.LocalMessageCount > 0)
-            .FirstOrDefault(item => session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null);
+        var warmLocalCandidate = TryResolveWarmLocalCandidate(
+            localCandidates,
+            explicitWarmConversationId,
+            session);
 
         var visibleRemoteCandidates = remoteCandidates
+            .Where(item => item.LocalMessageCount > 0)
             .Where(item => session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null)
             .ToArray();
-        Skip.If(visibleRemoteCandidates.Length == 0, $"No visible replay-backed remote conversation is available. Candidates: {string.Join(", ", remoteCandidates.Select(c => c.ConversationId))}");
+        Skip.If(
+            visibleRemoteCandidates.Length == 0 && string.IsNullOrWhiteSpace(explicitRemoteConversationId),
+            $"No visible replay-backed remote conversation is available. Candidates: {string.Join(", ", remoteCandidates.Select(c => c.ConversationId))}");
 
-        var warmConversationId = warmLocalCandidate?.ConversationId
-            ?? visibleRemoteCandidates.FirstOrDefault()?.ConversationId;
-        Skip.If(string.IsNullOrWhiteSpace(warmConversationId), "Could not determine a warm-cache source conversation.");
+        var warmConversationId = ResolveWarmConversationId(
+            warmLocalCandidate,
+            visibleRemoteCandidates,
+            explicitWarmConversationId,
+            session);
+        Skip.If(
+            string.IsNullOrWhiteSpace(warmConversationId),
+            "Could not determine a warm-cache source conversation. Set SALMONEGG_GUI_MINI_WARM_CONVERSATION_ID to pin one explicitly.");
 
-        var remoteCandidate = visibleRemoteCandidates
-            .FirstOrDefault(item => !string.Equals(item.ConversationId, warmConversationId, StringComparison.Ordinal));
-        Skip.If(remoteCandidate is null, $"No second visible replay-backed remote conversation distinct from warm source {warmConversationId} is available.");
+        var remoteCandidate = ResolveRemoteMiniTargetCandidate(
+            remoteCandidates,
+            visibleRemoteCandidates,
+            explicitRemoteConversationId,
+            warmConversationId,
+            session);
+        Skip.If(
+            remoteCandidate is null,
+            $"No visible replay-backed remote conversation distinct from warm source {warmConversationId} is available. Set SALMONEGG_GUI_MINI_REMOTE_CONVERSATION_ID to pin one explicitly.");
 
         var warmItem = session.FindByAutomationId(SessionAutomationId(warmConversationId), TimeSpan.FromSeconds(10));
         var remoteItem = session.FindByAutomationId(SessionAutomationId(remoteCandidate.ConversationId), TimeSpan.FromSeconds(10));
@@ -241,6 +260,11 @@ public sealed partial class RealUserConfigSmokeTests
 
         var warmHeaderVisible = session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(10));
         Assert.True(warmHeaderVisible, $"Warm-cache source conversation header did not appear for {warmConversationId}.");
+
+        var warmOverlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(60));
+        Skip.If(
+            !warmOverlayHidden,
+            $"Warm-cache source conversation {warmConversationId} did not finish projecting transcript content within the budget.");
 
         var warmMessages = session.TryFindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(5));
         Skip.If(warmMessages is null, $"Messages list did not become available for warm-cache source conversation {warmConversationId}.");
@@ -1446,6 +1470,71 @@ public sealed partial class RealUserConfigSmokeTests
         session.ActivateElement(button);
     }
 
+    private static RealLocalCandidate? TryResolveWarmLocalCandidate(
+        IReadOnlyList<RealLocalCandidate> localCandidates,
+        string? explicitWarmConversationId,
+        WindowsGuiAppSession session)
+    {
+        if (!string.IsNullOrWhiteSpace(explicitWarmConversationId))
+        {
+            var explicitLocal = localCandidates.FirstOrDefault(item =>
+                string.Equals(item.ConversationId, explicitWarmConversationId, StringComparison.Ordinal)
+                && item.LocalMessageCount > 0);
+            if (explicitLocal is not null
+                && session.TryFindByAutomationId(SessionAutomationId(explicitLocal.ConversationId), TimeSpan.FromSeconds(1)) is not null)
+            {
+                return explicitLocal;
+            }
+        }
+
+        return localCandidates
+            .Where(item => item.LocalMessageCount > 0)
+            .FirstOrDefault(item => session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null);
+    }
+
+    private static string? ResolveWarmConversationId(
+        RealLocalCandidate? warmLocalCandidate,
+        IReadOnlyList<RealReplayCandidate> visibleRemoteCandidates,
+        string? explicitWarmConversationId,
+        WindowsGuiAppSession session)
+    {
+        if (warmLocalCandidate is not null)
+        {
+            return warmLocalCandidate.ConversationId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(explicitWarmConversationId)
+            && session.TryFindByAutomationId(SessionAutomationId(explicitWarmConversationId), TimeSpan.FromSeconds(1)) is not null)
+        {
+            return explicitWarmConversationId;
+        }
+
+        return visibleRemoteCandidates.FirstOrDefault()?.ConversationId;
+    }
+
+    private static RealReplayCandidate? ResolveRemoteMiniTargetCandidate(
+        IReadOnlyList<RealReplayCandidate> remoteCandidates,
+        IReadOnlyList<RealReplayCandidate> visibleRemoteCandidates,
+        string? explicitRemoteConversationId,
+        string warmConversationId,
+        WindowsGuiAppSession session)
+    {
+        if (!string.IsNullOrWhiteSpace(explicitRemoteConversationId))
+        {
+            var explicitRemote = remoteCandidates.FirstOrDefault(item =>
+                string.Equals(item.ConversationId, explicitRemoteConversationId, StringComparison.Ordinal));
+            if (explicitRemote is not null
+                && !string.Equals(explicitRemote.ConversationId, warmConversationId, StringComparison.Ordinal)
+                && session.TryFindByAutomationId(SessionAutomationId(explicitRemote.ConversationId), TimeSpan.FromSeconds(1)) is not null)
+            {
+                return explicitRemote;
+            }
+        }
+
+        return visibleRemoteCandidates.FirstOrDefault(item =>
+            !string.Equals(item.ConversationId, warmConversationId, StringComparison.Ordinal));
+    }
+
     private static void SelectMiniWindowConversation(
         WindowsGuiAppSession session,
         string conversationId,
@@ -1752,7 +1841,7 @@ public sealed partial class RealUserConfigSmokeTests
         private static readonly TimeSpan ReplayEvidenceRecencyWindow = TimeSpan.FromDays(14);
         private const int ReplayEvidenceLogScanLimit = 20;
 
-        public static IReadOnlyList<RealReplayCandidate> LoadReplayBackedCandidates()
+        public static IReadOnlyList<RealReplayCandidate> LoadReplayBackedCandidates(bool includeAllProfiles = false)
         {
             var appDataRoot = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -1767,7 +1856,7 @@ public sealed partial class RealUserConfigSmokeTests
             }
 
             var selectedProfileId = ReadYamlScalar(appYamlPath, "last_selected_server_id");
-            if (string.IsNullOrWhiteSpace(selectedProfileId))
+            if (!includeAllProfiles && string.IsNullOrWhiteSpace(selectedProfileId))
             {
                 return [];
             }
@@ -1791,7 +1880,7 @@ public sealed partial class RealUserConfigSmokeTests
                 var boundProfileId = ReadString(conversationElement, "boundProfileId");
                 var displayName = ReadString(conversationElement, "displayName");
                 var remoteSessionId = ReadString(conversationElement, "remoteSessionId");
-                if (!string.Equals(boundProfileId, selectedProfileId, StringComparison.Ordinal)
+                if ((!includeAllProfiles && !string.Equals(boundProfileId, selectedProfileId, StringComparison.Ordinal))
                     || string.IsNullOrWhiteSpace(remoteSessionId)
                     || !replayedRemoteIds.Contains(remoteSessionId))
                 {
