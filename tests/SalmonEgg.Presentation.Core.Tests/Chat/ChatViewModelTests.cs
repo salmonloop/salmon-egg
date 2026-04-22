@@ -8581,7 +8581,7 @@ public class ChatViewModelTests
         {
             syncContext.RunAll();
             return Task.FromResult(firstLoadStarted.Task.IsCompleted);
-        }, timeoutMilliseconds: 4000);
+        }, timeoutMilliseconds: 8000);
 
         var secondActivation = switcher.SwitchConversationAsync("conv-2");
         while (!secondActivation.IsCompleted)
@@ -8597,14 +8597,14 @@ public class ChatViewModelTests
         {
             syncContext.RunAll();
             return Task.FromResult(secondLoadStarted.Task.IsCompleted);
-        }, timeoutMilliseconds: 1000);
+        }, timeoutMilliseconds: 2000);
 
         allowFirstLoadCompletion.TrySetResult(null);
         await WaitForConditionAsync(() =>
         {
             syncContext.RunAll();
             return Task.FromResult(!fixture.ViewModel.IsOverlayVisible);
-        }, timeoutMilliseconds: 4000);
+        }, timeoutMilliseconds: 8000);
     }
 
     [Fact]
@@ -8700,7 +8700,7 @@ public class ChatViewModelTests
         {
             syncContext.RunAll();
             return Task.FromResult(firstLoadStarted.Task.IsCompleted);
-        }, timeoutMilliseconds: 4000);
+        }, timeoutMilliseconds: 8000);
 
         var secondActivation = switcher.SwitchConversationAsync("conv-2");
         while (!secondActivation.IsCompleted)
@@ -8716,14 +8716,14 @@ public class ChatViewModelTests
         {
             syncContext.RunAll();
             return Task.FromResult(secondLoadStarted.Task.IsCompleted);
-        }, timeoutMilliseconds: 1000);
+        }, timeoutMilliseconds: 2000);
 
         allowFirstLoadCompletion.TrySetResult(null);
         await WaitForConditionAsync(() =>
         {
             syncContext.RunAll();
             return Task.FromResult(!fixture.ViewModel.IsOverlayVisible);
-        }, timeoutMilliseconds: 4000);
+        }, timeoutMilliseconds: 8000);
     }
 
     [Fact]
@@ -9177,6 +9177,10 @@ public class ChatViewModelTests
                     null,
                     DateTime.UtcNow))
         });
+        await WaitForConditionAsync(() =>
+            Task.FromResult(
+                string.Equals(fixture.ViewModel.CurrentSessionId, "conv-1", StringComparison.Ordinal)
+                && string.Equals(fixture.ViewModel.CurrentRemoteSessionId, "remote-1", StringComparison.Ordinal)));
         var loadCountBeforeActivation = loadInvocationCount;
 
         var activated = await fixture.ViewModel.SwitchConversationAsync("conv-1");

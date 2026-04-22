@@ -483,11 +483,50 @@ internal sealed class WindowsGuiAppSession : IDisposable
             $"Visible text '{text}' was not found anywhere on the desktop.");
     }
 
+    public AutomationElement? FindVisibleElementByNameAnywhere(string name, TimeSpan? timeout = null)
+    {
+        var expectedName = NormalizeVisibleText(name);
+
+        return RetryUntil(
+            () => _automation.GetDesktop()
+                .FindAllDescendants()
+                .FirstOrDefault(element =>
+                {
+                    try
+                    {
+                        return !TryGetIsOffscreen(element)
+                            && string.Equals(
+                                NormalizeVisibleText(element.Name),
+                                expectedName,
+                                StringComparison.Ordinal);
+                    }
+                    catch
+                    {
+                        return false;
+                    }
+                }),
+            element => element != null,
+            timeout ?? TimeSpan.FromSeconds(3),
+            $"Visible element '{name}' was not found anywhere on the desktop.");
+    }
+
     public AutomationElement? TryFindVisibleTextAnywhere(string text, TimeSpan? timeout = null)
     {
         try
         {
             return FindVisibleTextAnywhere(text, timeout);
+        }
+        catch (TimeoutException)
+        {
+            return null;
+        }
+    }
+
+    public AutomationElement? TryFindVisibleElementByNameAnywhere(string name, TimeSpan? timeout = null)
+    {
+        try
+        {
+            return FindVisibleElementByNameAnywhere(name, timeout);
         }
         catch (TimeoutException)
         {
@@ -535,7 +574,7 @@ internal sealed class WindowsGuiAppSession : IDisposable
             MainWindow.CaptureToFile(path);
             return;
         }
-        catch (Exception ex) when (ex is COMException or Win32Exception or InvalidOperationException)
+        catch (Exception ex) when (ex is COMException or Win32Exception or InvalidOperationException or ArgumentException)
         {
             if (!TryCaptureWindowWithScreenCopy(path))
             {
@@ -565,24 +604,31 @@ internal sealed class WindowsGuiAppSession : IDisposable
 
     private bool TryCaptureWindowWithScreenCopy(string path)
     {
-        using var process = Process.GetProcessById(_application.ProcessId);
-        var hwnd = process.MainWindowHandle;
-        if (hwnd == IntPtr.Zero || !NativeMethods.TryGetWindowRect(hwnd, out var rect))
+        try
+        {
+            using var process = Process.GetProcessById(_application.ProcessId);
+            var hwnd = process.MainWindowHandle;
+            if (hwnd == IntPtr.Zero || !NativeMethods.TryGetWindowRect(hwnd, out var rect))
+            {
+                return false;
+            }
+
+            var width = Math.Max(1, rect.Right - rect.Left);
+            var height = Math.Max(1, rect.Bottom - rect.Top);
+
+            using var bitmap = new Bitmap(width, height);
+            using (var graphics = Graphics.FromImage(bitmap))
+            {
+                graphics.CopyFromScreen(rect.Left, rect.Top, 0, 0, new Size(width, height));
+            }
+
+            bitmap.Save(path, ImageFormat.Png);
+            return File.Exists(path);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
             return false;
         }
-
-        var width = Math.Max(1, rect.Right - rect.Left);
-        var height = Math.Max(1, rect.Bottom - rect.Top);
-
-        using var bitmap = new Bitmap(width, height);
-        using (var graphics = Graphics.FromImage(bitmap))
-        {
-            graphics.CopyFromScreen(rect.Left, rect.Top, 0, 0, new Size(width, height));
-        }
-
-        bitmap.Save(path, ImageFormat.Png);
-        return File.Exists(path);
     }
 
     public bool IsFocusWithinAutomationId(string automationId, int maxDepth = 16)

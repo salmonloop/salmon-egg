@@ -122,6 +122,42 @@ public sealed class ChatSkeletonSmokeTests
     }
 
     [SkippableFact]
+    public void MarkdownSession_AfterDiscoverRoundTrip_RetainsRenderedCodeAndDoesNotCrash()
+    {
+        using var appData = GuiAppDataScope.CreateDeterministicMarkdownRenderData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        OpenMarkdownSessionAndAssertReady(session);
+
+        var discoverItem = session.FindByAutomationId("MainNav.DiscoverSessions", TimeSpan.FromSeconds(10));
+        session.ActivateElement(discoverItem);
+        Assert.True(
+            session.WaitUntilVisible("DiscoverSessions.Title", TimeSpan.FromSeconds(10)),
+            "Discover sessions page did not become visible.");
+
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-markdown-session-01", TimeSpan.FromSeconds(10));
+        session.ActivateElement(sessionItem);
+
+        AssertMarkdownSessionStableAfterReturn(session);
+    }
+
+    [SkippableFact]
+    public void MarkdownSession_AfterAcpSettingsRoundTrip_RetainsRenderedCodeAndDoesNotCrash()
+    {
+        using var appData = GuiAppDataScope.CreateDeterministicMarkdownRenderData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        OpenMarkdownSessionAndAssertReady(session);
+
+        NavigateToAcpSettings(session);
+
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-markdown-session-01", TimeSpan.FromSeconds(10));
+        session.ActivateElement(sessionItem);
+
+        AssertMarkdownSessionStableAfterReturn(session);
+    }
+
+    [SkippableFact]
     public void SelectSessionWithContent_ShowsSkeletonLoader_ThenContent()
     {
         // Use withContent: true to ensure there are messages to be rendered.
@@ -2229,6 +2265,66 @@ public sealed class ChatSkeletonSmokeTests
             appData,
             scenario,
             $"Loading overlay did not become visible before timeout.{Environment.NewLine}{string.Join(Environment.NewLine, timeline)}");
+    }
+
+    private static void OpenMarkdownSessionAndAssertReady(WindowsGuiAppSession session)
+    {
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-markdown-session-01", TimeSpan.FromSeconds(15));
+        session.ActivateElement(sessionItem);
+
+        var loadingOverlay = session.TryFindByAutomationId("ChatView.LoadingOverlay", TimeSpan.FromSeconds(2));
+        if (loadingOverlay is not null)
+        {
+            var hidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(10));
+            Assert.True(hidden, "Loading overlay did not disappear for markdown round-trip scenario.");
+        }
+    }
+
+    private static void NavigateToAcpSettings(WindowsGuiAppSession session)
+    {
+        var settingsItem = session.FindByAutomationId("SettingsItem", TimeSpan.FromSeconds(10));
+        session.ActivateElement(settingsItem);
+
+        var acpSettingsItem = session.TryFindVisibleElementByNameAnywhere("Agent (ACP)", TimeSpan.FromSeconds(10));
+        Assert.True(acpSettingsItem is not null, "Agent (ACP) settings entry did not become visible after opening the main settings item.");
+
+        session.ActivateElement(acpSettingsItem!);
+
+        var acpVisible = false;
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (session.TryFindByAutomationId("Acp.PathMappings.Section", TimeSpan.FromMilliseconds(150)) is not null
+                || session.TryFindByAutomationId("Acp.PathMappings.List", TimeSpan.FromMilliseconds(150)) is not null)
+            {
+                acpVisible = true;
+                break;
+            }
+
+            Thread.Sleep(100);
+        }
+
+        Assert.True(acpVisible, "ACP settings page did not become visible after selecting Agent (ACP).");
+    }
+
+    private static void AssertMarkdownSessionStableAfterReturn(WindowsGuiAppSession session)
+    {
+        var header = session.FindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(8));
+        Assert.Contains("GUI Markdown Session 01", header.Name, StringComparison.Ordinal);
+
+        var messagesList = session.FindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(10));
+        var renderedCodeLine = session.TryFindVisibleText("var done = true;", messagesList, TimeSpan.FromSeconds(8));
+        Assert.NotNull(renderedCodeLine);
+
+        var visibleTexts = session.GetVisibleTexts(messagesList);
+        Assert.Contains(visibleTexts, text => text.Contains("var done = true;", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            visibleTexts,
+            text => text.Contains("```", StringComparison.Ordinal) && text.Contains("var done = true;", StringComparison.Ordinal));
+
+        Assert.True(
+            session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(2)),
+            "Loading overlay reappeared after markdown round-trip.");
     }
 
     private static void WaitForLoadingOverlayBeforeRemoteHeaderOnWarmSwitch(
