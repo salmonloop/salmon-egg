@@ -66,6 +66,21 @@ public class MessageParserTests
     }
 
     [Fact]
+    public void Options_ShouldSerialize_SessionPromptParams_WithMessageId()
+    {
+        var parser = new MessageParser();
+        var parameters = new SessionPromptParams(
+            "sess-1",
+            new List<ContentBlock> { new TextContentBlock("hello") },
+            messageId: "client-msg-42");
+
+        var json = JsonSerializer.Serialize(parameters, parser.Options);
+        using var doc = JsonDocument.Parse(json);
+
+        Assert.Equal("client-msg-42", doc.RootElement.GetProperty("messageId").GetString());
+    }
+
+    [Fact]
     public void SerializeMessage_ShouldKeepResultNull_ForJsonRpcResponses()
     {
         var parser = new MessageParser();
@@ -99,6 +114,24 @@ public class MessageParserTests
 
         Assert.NotNull(response);
         Assert.Equal(expected, response!.StopReason);
+    }
+
+    [Fact]
+    public void Options_ShouldDeserialize_SessionPromptResponse_WithUserMessageId()
+    {
+        var parser = new MessageParser();
+        var json = """
+        {
+          "stopReason": "end_turn",
+          "userMessageId": "server-msg-42"
+        }
+        """;
+
+        var response = JsonSerializer.Deserialize<SessionPromptResponse>(json, parser.Options);
+
+        Assert.NotNull(response);
+        Assert.Equal(StopReason.EndTurn, response!.StopReason);
+        Assert.Equal("server-msg-42", response.UserMessageId);
     }
 
     [Fact]

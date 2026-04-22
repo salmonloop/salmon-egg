@@ -68,6 +68,7 @@ public interface IAcpConnectionCommands
 
     Task<AcpPromptDispatchResult> SendPromptAsync(
         string promptText,
+        string? promptMessageId,
         IAcpChatCoordinatorSink sink,
         System.Func<CancellationToken, Task<bool>> authenticateAsync,
         CancellationToken cancellationToken = default);
@@ -75,6 +76,7 @@ public interface IAcpConnectionCommands
     Task<AcpPromptDispatchResult> DispatchPromptToRemoteSessionAsync(
         string remoteSessionId,
         string promptText,
+        string? promptMessageId,
         IAcpChatCoordinatorSink sink,
         System.Func<CancellationToken, Task<bool>> authenticateAsync,
         CancellationToken cancellationToken = default);

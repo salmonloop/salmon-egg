@@ -40,6 +40,12 @@ namespace SalmonEgg.Domain.Models.Protocol
         public List<string>? StopSequences { get; set; }
 
         /// <summary>
+        /// 客户端消息 ID（可选）。
+        /// </summary>
+        [JsonPropertyName("messageId")]
+        public string? MessageId { get; set; }
+
+        /// <summary>
         /// 创建新的 SessionPromptParams 实例。
         /// </summary>
         public SessionPromptParams()
@@ -54,13 +60,15 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// <param name="prompt">提示内容块数组</param>
         /// <param name="maxTokens">最大令牌数</param>
         /// <param name="stopSequences">停止序列</param>
-        public SessionPromptParams(string sessionId, List<ContentBlock> prompt, int? maxTokens = null, List<string>? stopSequences = null)
+        /// <param name="messageId">客户端消息 ID</param>
+        public SessionPromptParams(string sessionId, List<ContentBlock> prompt, int? maxTokens = null, List<string>? stopSequences = null, string? messageId = null)
         {
             SessionId = sessionId;
             Prompt = prompt;
 
             MaxTokens = maxTokens;
             StopSequences = stopSequences;
+            MessageId = messageId;
         }
     }
 
@@ -78,6 +86,12 @@ namespace SalmonEgg.Domain.Models.Protocol
         public StopReason StopReason { get; set; }
 
         /// <summary>
+        /// 用户消息 ID（可选）。
+        /// </summary>
+        [JsonPropertyName("userMessageId")]
+        public string? UserMessageId { get; set; }
+
+        /// <summary>
         /// 创建新的 SessionPromptResponse 实例。
         /// </summary>
         public SessionPromptResponse()
@@ -88,9 +102,11 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// 创建新的 SessionPromptResponse 实例。
         /// </summary>
         /// <param name="stopReason">停止原因</param>
-        public SessionPromptResponse(StopReason stopReason)
+        /// <param name="userMessageId">用户消息 ID</param>
+        public SessionPromptResponse(StopReason stopReason, string? userMessageId = null)
         {
             StopReason = stopReason;
+            UserMessageId = userMessageId;
         }
     }
 }

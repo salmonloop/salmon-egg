@@ -25,9 +25,26 @@ public interface IAcpSessionCommandOrchestrator
         Func<IAcpChatCoordinatorSink, Func<CancellationToken, Task<bool>>, Action, CancellationToken, Task<AcpRemoteSessionResult>> ensureRemoteSessionAsync,
         CancellationToken cancellationToken = default);
 
+    Task<AcpPromptDispatchResult> SendPromptAsync(
+        string promptText,
+        string? promptMessageId,
+        IAcpChatCoordinatorSink sink,
+        Func<CancellationToken, Task<bool>> authenticateAsync,
+        Func<IAcpChatCoordinatorSink, Func<CancellationToken, Task<bool>>, Action, CancellationToken, Task<AcpRemoteSessionResult>> ensureRemoteSessionAsync,
+        CancellationToken cancellationToken = default);
+
     Task<AcpPromptDispatchResult> DispatchPromptToRemoteSessionAsync(
         string remoteSessionId,
         string promptText,
+        IAcpChatCoordinatorSink sink,
+        Func<CancellationToken, Task<bool>> authenticateAsync,
+        Func<IAcpChatCoordinatorSink, Func<CancellationToken, Task<bool>>, Action, CancellationToken, Task<AcpRemoteSessionResult>> ensureRemoteSessionAsync,
+        CancellationToken cancellationToken = default);
+
+    Task<AcpPromptDispatchResult> DispatchPromptToRemoteSessionAsync(
+        string remoteSessionId,
+        string promptText,
+        string? promptMessageId,
         IAcpChatCoordinatorSink sink,
         Func<CancellationToken, Task<bool>> authenticateAsync,
         Func<IAcpChatCoordinatorSink, Func<CancellationToken, Task<bool>>, Action, CancellationToken, Task<AcpRemoteSessionResult>> ensureRemoteSessionAsync,
@@ -107,6 +124,21 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
         Func<CancellationToken, Task<bool>> authenticateAsync,
         Func<IAcpChatCoordinatorSink, Func<CancellationToken, Task<bool>>, Action, CancellationToken, Task<AcpRemoteSessionResult>> ensureRemoteSessionAsync,
         CancellationToken cancellationToken = default)
+        => await SendPromptAsync(
+            promptText,
+            promptMessageId: null,
+            sink,
+            authenticateAsync,
+            ensureRemoteSessionAsync,
+            cancellationToken).ConfigureAwait(false);
+
+    public async Task<AcpPromptDispatchResult> SendPromptAsync(
+        string promptText,
+        string? promptMessageId,
+        IAcpChatCoordinatorSink sink,
+        Func<CancellationToken, Task<bool>> authenticateAsync,
+        Func<IAcpChatCoordinatorSink, Func<CancellationToken, Task<bool>>, Action, CancellationToken, Task<AcpRemoteSessionResult>> ensureRemoteSessionAsync,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(promptText))
         {
@@ -139,6 +171,7 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
         return await DispatchPromptToRemoteSessionAsync(
             remoteSessionId,
             promptText,
+            promptMessageId,
             sink,
             authenticateAsync,
             ensureRemoteSessionAsync,
@@ -148,6 +181,23 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
     public async Task<AcpPromptDispatchResult> DispatchPromptToRemoteSessionAsync(
         string remoteSessionId,
         string promptText,
+        IAcpChatCoordinatorSink sink,
+        Func<CancellationToken, Task<bool>> authenticateAsync,
+        Func<IAcpChatCoordinatorSink, Func<CancellationToken, Task<bool>>, Action, CancellationToken, Task<AcpRemoteSessionResult>> ensureRemoteSessionAsync,
+        CancellationToken cancellationToken = default)
+        => await DispatchPromptToRemoteSessionAsync(
+            remoteSessionId,
+            promptText,
+            promptMessageId: null,
+            sink,
+            authenticateAsync,
+            ensureRemoteSessionAsync,
+            cancellationToken).ConfigureAwait(false);
+
+    public async Task<AcpPromptDispatchResult> DispatchPromptToRemoteSessionAsync(
+        string remoteSessionId,
+        string promptText,
+        string? promptMessageId,
         IAcpChatCoordinatorSink sink,
         Func<CancellationToken, Task<bool>> authenticateAsync,
         Func<IAcpChatCoordinatorSink, Func<CancellationToken, Task<bool>>, Action, CancellationToken, Task<AcpRemoteSessionResult>> ensureRemoteSessionAsync,
@@ -165,7 +215,8 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
         var chatService = RequireReadyChatService(sink);
         var promptParams = new SessionPromptParams(
             remoteSessionId,
-            new List<ContentBlock> { new TextContentBlock { Text = promptText } });
+            new List<ContentBlock> { new TextContentBlock { Text = promptText } },
+            messageId: promptMessageId);
 
         try
         {
@@ -198,7 +249,8 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
                 recreated.RemoteSessionId,
                 promptParams.Prompt,
                 promptParams.MaxTokens,
-                promptParams.StopSequences);
+                promptParams.StopSequences,
+                promptParams.MessageId);
 
             var response = await chatService.SendPromptAsync(retryParams, cancellationToken).ConfigureAwait(false);
             return new AcpPromptDispatchResult(retryParams.SessionId, response, RetriedAfterSessionRecovery: true);

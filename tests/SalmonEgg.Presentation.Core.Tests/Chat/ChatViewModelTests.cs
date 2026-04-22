@@ -3451,7 +3451,7 @@ public class ChatViewModelTests
 
         commands.Setup(x => x.EnsureRemoteSessionAsync(It.IsAny<IAcpChatCoordinatorSink>(), It.IsAny<System.Func<CancellationToken, Task<bool>>>(), It.IsAny<CancellationToken>()))
             .Returns(tcsSession.Task);
-        commands.Setup(x => x.DispatchPromptToRemoteSessionAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IAcpChatCoordinatorSink>(), It.IsAny<System.Func<CancellationToken, Task<bool>>>(), It.IsAny<CancellationToken>()))
+        commands.Setup(x => x.DispatchPromptToRemoteSessionAsync(It.IsAny<string>(), It.IsAny<string>(), null, It.IsAny<IAcpChatCoordinatorSink>(), It.IsAny<System.Func<CancellationToken, Task<bool>>>(), It.IsAny<CancellationToken>()))
             .Returns(tcsPrompt.Task);
 
         await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
@@ -3531,6 +3531,7 @@ public class ChatViewModelTests
         commands.Setup(x => x.DispatchPromptToRemoteSessionAsync(
                 It.IsAny<string>(),
                 It.IsAny<string>(),
+                null,
                 It.IsAny<IAcpChatCoordinatorSink>(),
                 It.IsAny<Func<CancellationToken, Task<bool>>>(),
                 It.IsAny<CancellationToken>()))
@@ -3612,6 +3613,7 @@ public class ChatViewModelTests
         commands.Setup(x => x.DispatchPromptToRemoteSessionAsync(
                 "remote-1",
                 "show modes",
+                null,
                 It.IsAny<IAcpChatCoordinatorSink>(),
                 It.IsAny<Func<CancellationToken, Task<bool>>>(),
                 It.IsAny<CancellationToken>()))
@@ -3680,6 +3682,7 @@ public class ChatViewModelTests
         commands.Setup(x => x.DispatchPromptToRemoteSessionAsync(
                 "remote-1",
                 "show modes",
+                null,
                 It.IsAny<IAcpChatCoordinatorSink>(),
                 It.IsAny<Func<CancellationToken, Task<bool>>>(),
                 It.IsAny<CancellationToken>()))
@@ -3728,7 +3731,7 @@ public class ChatViewModelTests
         var commands = new Mock<IAcpConnectionCommands>(MockBehavior.Strict);
         commands.Setup(x => x.EnsureRemoteSessionAsync(It.IsAny<IAcpChatCoordinatorSink>(), It.IsAny<System.Func<CancellationToken, Task<bool>>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new AcpRemoteSessionResult("remote-1", new SessionNewResponse("remote-1"), false));
-        commands.Setup(x => x.DispatchPromptToRemoteSessionAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IAcpChatCoordinatorSink>(), It.IsAny<System.Func<CancellationToken, Task<bool>>>(), It.IsAny<CancellationToken>()))
+        commands.Setup(x => x.DispatchPromptToRemoteSessionAsync(It.IsAny<string>(), It.IsAny<string>(), null, It.IsAny<IAcpChatCoordinatorSink>(), It.IsAny<System.Func<CancellationToken, Task<bool>>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new AcpPromptDispatchResult("remote-1", new SessionPromptResponse(StopReason.Cancelled), false));
 
         await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
@@ -3939,7 +3942,7 @@ public class ChatViewModelTests
         var commands = new Mock<IAcpConnectionCommands>(MockBehavior.Strict);
         commands.Setup(x => x.EnsureRemoteSessionAsync(It.IsAny<IAcpChatCoordinatorSink>(), It.IsAny<System.Func<CancellationToken, Task<bool>>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new AcpRemoteSessionResult("remote-1", new SessionNewResponse("remote-1"), false));
-        commands.Setup(x => x.DispatchPromptToRemoteSessionAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IAcpChatCoordinatorSink>(), It.IsAny<System.Func<CancellationToken, Task<bool>>>(), It.IsAny<CancellationToken>()))
+        commands.Setup(x => x.DispatchPromptToRemoteSessionAsync(It.IsAny<string>(), It.IsAny<string>(), null, It.IsAny<IAcpChatCoordinatorSink>(), It.IsAny<System.Func<CancellationToken, Task<bool>>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new AcpPromptDispatchResult("remote-1", new SessionPromptResponse(StopReason.Refusal), false));
 
         await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
@@ -4981,6 +4984,7 @@ public class ChatViewModelTests
             .Throws(new Xunit.Sdk.XunitException("Unexpected remote session creation path."));
         commands.Setup(x => x.SendPromptAsync(
                 It.IsAny<string>(),
+                null,
                 It.IsAny<IAcpChatCoordinatorSink>(),
                 It.IsAny<Func<CancellationToken, Task<bool>>>(),
                 It.IsAny<CancellationToken>()))
@@ -4988,6 +4992,7 @@ public class ChatViewModelTests
         commands.Setup(x => x.DispatchPromptToRemoteSessionAsync(
                 It.IsAny<string>(),
                 It.IsAny<string>(),
+                null,
                 It.IsAny<IAcpChatCoordinatorSink>(),
                 It.IsAny<Func<CancellationToken, Task<bool>>>(),
                 It.IsAny<CancellationToken>()))
@@ -5143,6 +5148,7 @@ public class ChatViewModelTests
             .Throws(new Xunit.Sdk.XunitException("Unexpected remote session creation path."));
         commands.Setup(x => x.SendPromptAsync(
                 It.IsAny<string>(),
+                null,
                 It.IsAny<IAcpChatCoordinatorSink>(),
                 It.IsAny<Func<CancellationToken, Task<bool>>>(),
                 It.IsAny<CancellationToken>()))
@@ -5150,6 +5156,7 @@ public class ChatViewModelTests
         commands.Setup(x => x.DispatchPromptToRemoteSessionAsync(
                 It.IsAny<string>(),
                 It.IsAny<string>(),
+                null,
                 It.IsAny<IAcpChatCoordinatorSink>(),
                 It.IsAny<Func<CancellationToken, Task<bool>>>(),
                 It.IsAny<CancellationToken>()))
@@ -5416,6 +5423,7 @@ public class ChatViewModelTests
             .Throws(new Xunit.Sdk.XunitException("Unexpected remote session creation path."));
         commands.Setup(x => x.SendPromptAsync(
                 It.IsAny<string>(),
+                null,
                 It.IsAny<IAcpChatCoordinatorSink>(),
                 It.IsAny<Func<CancellationToken, Task<bool>>>(),
                 It.IsAny<CancellationToken>()))
@@ -5423,6 +5431,7 @@ public class ChatViewModelTests
         commands.Setup(x => x.DispatchPromptToRemoteSessionAsync(
                 It.IsAny<string>(),
                 It.IsAny<string>(),
+                null,
                 It.IsAny<IAcpChatCoordinatorSink>(),
                 It.IsAny<Func<CancellationToken, Task<bool>>>(),
                 It.IsAny<CancellationToken>()))
@@ -5621,6 +5630,7 @@ public class ChatViewModelTests
             .Throws(new Xunit.Sdk.XunitException("Unexpected remote session creation path."));
         commands.Setup(x => x.SendPromptAsync(
                 It.IsAny<string>(),
+                null,
                 It.IsAny<IAcpChatCoordinatorSink>(),
                 It.IsAny<Func<CancellationToken, Task<bool>>>(),
                 It.IsAny<CancellationToken>()))
@@ -5628,6 +5638,7 @@ public class ChatViewModelTests
         commands.Setup(x => x.DispatchPromptToRemoteSessionAsync(
                 It.IsAny<string>(),
                 It.IsAny<string>(),
+                null,
                 It.IsAny<IAcpChatCoordinatorSink>(),
                 It.IsAny<Func<CancellationToken, Task<bool>>>(),
                 It.IsAny<CancellationToken>()))
@@ -5740,6 +5751,7 @@ public class ChatViewModelTests
             .Throws(new Xunit.Sdk.XunitException("Unexpected remote session creation path."));
         commands.Setup(x => x.SendPromptAsync(
                 It.IsAny<string>(),
+                null,
                 It.IsAny<IAcpChatCoordinatorSink>(),
                 It.IsAny<Func<CancellationToken, Task<bool>>>(),
                 It.IsAny<CancellationToken>()))
@@ -5747,6 +5759,7 @@ public class ChatViewModelTests
         commands.Setup(x => x.DispatchPromptToRemoteSessionAsync(
                 It.IsAny<string>(),
                 It.IsAny<string>(),
+                null,
                 It.IsAny<IAcpChatCoordinatorSink>(),
                 It.IsAny<Func<CancellationToken, Task<bool>>>(),
                 It.IsAny<CancellationToken>()))
@@ -10332,6 +10345,7 @@ public class ChatViewModelTests
             .Throws(new Xunit.Sdk.XunitException("Unexpected remote session creation path."));
         commands.Setup(x => x.SendPromptAsync(
                 It.IsAny<string>(),
+                null,
                 It.IsAny<IAcpChatCoordinatorSink>(),
                 It.IsAny<Func<CancellationToken, Task<bool>>>(),
                 It.IsAny<CancellationToken>()))
@@ -10339,6 +10353,7 @@ public class ChatViewModelTests
         commands.Setup(x => x.DispatchPromptToRemoteSessionAsync(
                 It.IsAny<string>(),
                 It.IsAny<string>(),
+                null,
                 It.IsAny<IAcpChatCoordinatorSink>(),
                 It.IsAny<Func<CancellationToken, Task<bool>>>(),
                 It.IsAny<CancellationToken>()))

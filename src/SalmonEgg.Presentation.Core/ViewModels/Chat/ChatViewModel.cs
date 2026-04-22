@@ -5391,7 +5391,13 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
                 // Step 3: Dispatch the prompt to the identified remote session
                 var promptDispatchResult = await _acpConnectionCommands
-                    .DispatchPromptToRemoteSessionAsync(sessionResult.RemoteSessionId, promptText, this, TryAuthenticateAsync, token)
+                    .DispatchPromptToRemoteSessionAsync(
+                        sessionResult.RemoteSessionId,
+                        promptText,
+                        promptMessageId: null,
+                        this,
+                        TryAuthenticateAsync,
+                        token)
                     .ConfigureAwait(false);
 
                 await ApplyPromptDispatchResultAsync(conversationId, turnId, promptDispatchResult.Response).ConfigureAwait(false);

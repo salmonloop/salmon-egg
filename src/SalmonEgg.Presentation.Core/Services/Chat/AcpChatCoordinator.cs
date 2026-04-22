@@ -356,12 +356,14 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
 
     public async Task<AcpPromptDispatchResult> SendPromptAsync(
         string promptText,
+        string? promptMessageId,
         IAcpChatCoordinatorSink sink,
         Func<CancellationToken, Task<bool>> authenticateAsync,
         CancellationToken cancellationToken = default)
     {
         return await _sessionCommandOrchestrator.SendPromptAsync(
                 promptText,
+                promptMessageId,
                 sink,
                 authenticateAsync,
                 (targetSink, auth, markHydrated, token) => _sessionCommandOrchestrator.EnsureRemoteSessionAsync(
@@ -376,6 +378,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
     public async Task<AcpPromptDispatchResult> DispatchPromptToRemoteSessionAsync(
         string remoteSessionId,
         string promptText,
+        string? promptMessageId,
         IAcpChatCoordinatorSink sink,
         Func<CancellationToken, Task<bool>> authenticateAsync,
         CancellationToken cancellationToken = default)
@@ -383,6 +386,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         return await _sessionCommandOrchestrator.DispatchPromptToRemoteSessionAsync(
                 remoteSessionId,
                 promptText,
+                promptMessageId,
                 sink,
                 authenticateAsync,
                 (targetSink, auth, markHydrated, token) => _sessionCommandOrchestrator.EnsureRemoteSessionAsync(
