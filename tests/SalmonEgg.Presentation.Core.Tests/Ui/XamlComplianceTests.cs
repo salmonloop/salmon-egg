@@ -546,6 +546,21 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void MiniChatView_UsesNativeTranscriptInteractionWithoutWholePageLifecycleHack()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml");
+        var codeBehind = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs");
+
+        Assert.Contains("Unloaded=\"OnMessagesListUnloaded\"", xaml);
+        Assert.Contains("private void OnMessagesListUnloaded", codeBehind);
+        Assert.Contains("PointerPressed=\"OnMessagesListPointerPressed\"", xaml);
+        Assert.Contains("PointerWheelChanged=\"OnMessagesListPointerWheelChanged\"", xaml);
+        Assert.Contains("KeyDown=\"OnMessagesListKeyDown\"", xaml);
+        Assert.DoesNotContain("FindScrollViewer(", codeBehind, StringComparison.Ordinal);
+        Assert.DoesNotContain("VisualTreeHelper.", codeBehind, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AgentProfileEditor_InteractiveTextsExposeLocalizationUids()
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AgentProfileEditorPage.xaml");

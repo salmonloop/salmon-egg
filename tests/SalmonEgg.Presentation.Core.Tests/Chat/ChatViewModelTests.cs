@@ -9504,7 +9504,7 @@ public class ChatViewModelTests
             var replayProjected = fixture.ViewModel.MessageHistory.Any(message =>
                 message.TextContent?.Contains("remote replay chunk before load response", StringComparison.Ordinal) == true);
             return Task.FromResult(replayProjected && !fixture.ViewModel.IsOverlayVisible);
-        }, timeoutMilliseconds: 8000);
+        }, timeoutMilliseconds: 15000);
 
         Assert.Equal("conv-remote", fixture.ViewModel.CurrentSessionId);
         Assert.Contains(

@@ -110,6 +110,10 @@
                   HorizontalAlignment="Stretch"
                   MinWidth="0"
                   Loaded="OnMessagesListLoaded"
+                  Unloaded="OnMessagesListUnloaded"
+                  PointerPressed="OnMessagesListPointerPressed"
+                  PointerWheelChanged="OnMessagesListPointerWheelChanged"
+                  KeyDown="OnMessagesListKeyDown"
                   LayoutUpdated="OnMessagesListLayoutUpdated" />
 
         <!-- Turn Status Bar -->
