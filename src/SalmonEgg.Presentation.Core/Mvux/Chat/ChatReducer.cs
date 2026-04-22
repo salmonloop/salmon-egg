@@ -43,7 +43,14 @@ public static class ChatReducer
             SetPromptInFlightAction setPromptInFlight => Mutate(current, current with { IsPromptInFlight = setPromptInFlight.IsInFlight }),
             BeginTurnAction begin => Mutate(current, current with
             {
-                ActiveTurn = new ActiveTurnState(begin.ConversationId, begin.TurnId, begin.InitialPhase, DateTime.UtcNow, DateTime.UtcNow)
+                ActiveTurn = new ActiveTurnState(
+                    begin.ConversationId,
+                    begin.TurnId,
+                    begin.InitialPhase,
+                    DateTime.UtcNow,
+                    DateTime.UtcNow,
+                    PendingUserMessageLocalId: begin.PendingUserMessageLocalId,
+                    PendingUserMessageText: begin.PendingUserMessageText)
             }),
             AdvanceTurnPhaseAction advance when MatchesActiveTurn(current.ActiveTurn, advance.ConversationId, advance.TurnId)
                 && !IsTerminalPhase(current.ActiveTurn!.Phase) => Mutate(current, current with
@@ -481,6 +488,7 @@ public static class ChatReducer
             ImageMimeType = source.ImageMimeType,
             AudioData = source.AudioData,
             AudioMimeType = source.AudioMimeType,
+            ProtocolMessageId = source.ProtocolMessageId,
             ToolCallId = source.ToolCallId,
             ToolCallKind = source.ToolCallKind,
             ToolCallStatus = source.ToolCallStatus,

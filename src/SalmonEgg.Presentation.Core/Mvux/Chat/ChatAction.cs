@@ -62,7 +62,12 @@ public sealed record SetIsHydratingAction(bool IsHydrating) : ChatAction;
 /// </summary>
 public sealed record SetPromptInFlightAction(bool IsInFlight) : ChatAction;
 
-public sealed record BeginTurnAction(string ConversationId, string TurnId, ChatTurnPhase InitialPhase) : ChatAction;
+public sealed record BeginTurnAction(
+    string ConversationId,
+    string TurnId,
+    ChatTurnPhase InitialPhase,
+    string? PendingUserMessageLocalId = null,
+    string? PendingUserMessageText = null) : ChatAction;
 
 public sealed record AdvanceTurnPhaseAction(string ConversationId, string TurnId, ChatTurnPhase NewPhase, string? ToolCallId = null, string? ToolTitle = null) : ChatAction;
 

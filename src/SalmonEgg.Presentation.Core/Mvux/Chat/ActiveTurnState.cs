@@ -10,4 +10,6 @@ public sealed record ActiveTurnState(
     DateTime LastUpdatedAtUtc,
     string? ToolCallId = null,
     string? ToolTitle = null,
-    string? FailureMessage = null);
+    string? FailureMessage = null,
+    string? PendingUserMessageLocalId = null,
+    string? PendingUserMessageText = null);

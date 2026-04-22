@@ -3516,6 +3516,87 @@ public class ChatViewModelTests
     }
 
     [Fact]
+    public async Task SendPromptAsync_WhenRemoteEchoesUserMessageChunk_DoesNotAppendDuplicateOutgoingMessage()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var commands = new Mock<IAcpConnectionCommands>(MockBehavior.Strict);
+        var tcsSession = new TaskCompletionSource<AcpRemoteSessionResult>();
+        var tcsPrompt = new TaskCompletionSource<AcpPromptDispatchResult>();
+
+        commands.Setup(x => x.EnsureRemoteSessionAsync(
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(tcsSession.Task);
+        commands.Setup(x => x.DispatchPromptToRemoteSessionAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(tcsPrompt.Task);
+
+        await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
+        var viewModel = fixture.ViewModel;
+        var chatService = CreateConnectedChatService();
+        viewModel.ReplaceChatService(chatService.Object);
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+        });
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+        syncContext.RunAll();
+        await Task.Delay(50);
+        syncContext.RunAll();
+
+        viewModel.CurrentPrompt = "hello";
+        syncContext.RunAll();
+        await Task.Delay(50);
+        syncContext.RunAll();
+
+        var sendTask = viewModel.SendPromptCommand.ExecuteAsync(null);
+
+        await WaitForConditionAsync(async () =>
+        {
+            syncContext.RunAll();
+            return (await fixture.GetStateAsync()).ActiveTurn?.Phase == ChatTurnPhase.CreatingRemoteSession;
+        });
+
+        tcsSession.SetResult(new AcpRemoteSessionResult("remote-1", new SessionNewResponse("remote-1"), false));
+
+        await WaitForConditionAsync(async () =>
+        {
+            syncContext.RunAll();
+            return (await fixture.GetStateAsync()).ActiveTurn?.Phase == ChatTurnPhase.WaitingForAgent;
+        });
+        await fixture.DispatchAsync(new SetBindingSliceAction(new ConversationBindingSlice("conv-1", "remote-1", null)));
+        syncContext.RunAll();
+
+        var baselineUpsertCount = fixture.ChatStore.Actions.OfType<UpsertTranscriptMessageAction>().Count();
+        chatService.Raise(
+            service => service.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs("remote-1", new UserMessageUpdate(new TextContentBlock("hello"))));
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            var currentUpsertCount = fixture.ChatStore.Actions.OfType<UpsertTranscriptMessageAction>().Count();
+            return Task.FromResult(currentUpsertCount > baselineUpsertCount);
+        });
+
+        var transcript = (await fixture.GetStateAsync()).ResolveContentSlice("conv-1")?.Transcript
+            ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+        Assert.Single(transcript.Where(message =>
+            message.IsOutgoing
+            && string.Equals(message.TextContent, "hello", StringComparison.Ordinal)));
+
+        tcsPrompt.SetResult(new AcpPromptDispatchResult("remote-1", new SessionPromptResponse(), false));
+        await sendTask;
+    }
+
+    [Fact]
     public async Task SendPromptAsync_WhenRemoteSessionIsCreated_ProjectsSessionModesFromSessionNewResponse()
     {
         var syncContext = new QueueingSynchronizationContext();
@@ -3921,6 +4002,64 @@ public class ChatViewModelTests
 
         var state = await fixture.GetStateAsync();
         Assert.Equal(ChatTurnPhase.Thinking, state.ActiveTurn!.Phase);
+    }
+
+    [Fact]
+    public async Task ProcessSessionUpdateAsync_UserMessageUpdate_WithMatchingProtocolMessageId_ReusesExistingOutgoingMessage()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        var viewModel = fixture.ViewModel;
+        var chatService = CreateConnectedChatService();
+        viewModel.ReplaceChatService(chatService.Object);
+
+        var initialState = (await fixture.GetStateAsync()) with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1")),
+            ConversationContents = ImmutableDictionary<string, ConversationContentSlice>.Empty.Add(
+                "conv-1",
+                new ConversationContentSlice(
+                    ImmutableList.Create(new ConversationMessageSnapshot
+                    {
+                        Id = "local-1",
+                        IsOutgoing = true,
+                        ContentType = "text",
+                        TextContent = "hello",
+                        ProtocolMessageId = "msg-1",
+                        Timestamp = new DateTime(2026, 4, 22, 0, 0, 0, DateTimeKind.Utc)
+                    }),
+                    ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                    false,
+                    null))
+        };
+        await fixture.UpdateStateAsync(_ => initialState);
+        syncContext.RunAll();
+
+        chatService.Raise(
+            service => service.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs("remote-1", new UserMessageUpdate(new TextContentBlock("hello"))
+            {
+                MessageId = "msg-1"
+            }));
+
+        await WaitForConditionAsync(async () =>
+        {
+            syncContext.RunAll();
+            var transcript = (await fixture.GetStateAsync()).ResolveContentSlice("conv-1")?.Transcript
+                ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+            return transcript.Count == 1
+                && string.Equals(transcript[0].Id, "local-1", StringComparison.Ordinal)
+                && string.Equals(transcript[0].ProtocolMessageId, "msg-1", StringComparison.Ordinal);
+        });
+
+        var state = await fixture.GetStateAsync();
+        var transcript = state.ResolveContentSlice("conv-1")?.Transcript
+            ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+        Assert.Single(transcript);
+        Assert.Equal("local-1", transcript[0].Id);
+        Assert.Equal("msg-1", transcript[0].ProtocolMessageId);
     }
 
     [Fact]
@@ -6589,6 +6728,11 @@ public class ChatViewModelTests
             return Task.FromResult(combinedText.Contains("remote history answer", StringComparison.Ordinal));
         }, timeoutMilliseconds: 4000);
         await WaitForConditionAsync(() => Task.FromResult(!fixture.ViewModel.IsOverlayVisible), timeoutMilliseconds: 6000);
+
+        var duplicatedPromptCount = fixture.ViewModel.MessageHistory.Count(message =>
+            message.IsOutgoing
+            && string.Equals(message.TextContent, "known local prompt", StringComparison.Ordinal));
+        Assert.Equal(1, duplicatedPromptCount);
     }
 
     [Fact]

@@ -1997,6 +1997,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             ImageMimeType = vm.ImageMimeType ?? string.Empty,
             AudioData = vm.AudioData ?? string.Empty,
             AudioMimeType = vm.AudioMimeType ?? string.Empty,
+            ProtocolMessageId = null,
             ToolCallId = vm.ToolCallId,
             ToolCallKind = vm.ToolCallKind,
             ToolCallStatus = vm.ToolCallStatus,
@@ -2102,6 +2103,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             ImageMimeType = snapshot.ImageMimeType,
             AudioData = snapshot.AudioData,
             AudioMimeType = snapshot.AudioMimeType,
+            ProtocolMessageId = snapshot.ProtocolMessageId,
             ToolCallId = snapshot.ToolCallId,
             ToolCallKind = snapshot.ToolCallKind,
             ToolCallStatus = snapshot.ToolCallStatus,
@@ -2906,7 +2908,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             }
             else if (e.Update is UserMessageUpdate userMessageUpdate && userMessageUpdate.Content != null)
             {
-                await AddMessageToHistoryAsync(targetConversationId, userMessageUpdate.Content, isOutgoing: true).ConfigureAwait(true);
+                await UpsertUserMessageChunkAsync(targetConversationId, userMessageUpdate, activeTurn).ConfigureAwait(true);
                 RecordTranscriptProjectionObservation(e.SessionId);
             }
             else if (e.Update is ToolCallUpdate toolCallUpdate)
@@ -4580,13 +4582,100 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         return UpsertTranscriptSnapshotAsync(conversationId, CreateContentSnapshot(content, isOutgoing));
     }
 
-    private ConversationMessageSnapshot CreateContentSnapshot(ContentBlock content, bool isOutgoing)
+    private async Task UpsertUserMessageChunkAsync(
+        string conversationId,
+        UserMessageUpdate userMessageUpdate,
+        ActiveTurnState? activeTurn)
+    {
+        var content = userMessageUpdate.Content;
+        if (content is null)
+        {
+            return;
+        }
+
+        var currentState = await _chatStore.State ?? ChatState.Empty;
+        var transcript = currentState.ResolveContentSlice(conversationId)?.Transcript
+            ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+        var existing = ResolveExistingOutgoingUserMessageSnapshot(
+            transcript,
+            userMessageUpdate.MessageId,
+            content,
+            activeTurn);
+        var snapshot = existing is null
+            ? CreateContentSnapshot(content, isOutgoing: true, protocolMessageId: userMessageUpdate.MessageId)
+            : CreateContentSnapshot(
+                content,
+                isOutgoing: true,
+                id: existing.Id,
+                timestamp: existing.Timestamp,
+                protocolMessageId: userMessageUpdate.MessageId ?? existing.ProtocolMessageId);
+
+        await UpsertTranscriptSnapshotAsync(conversationId, snapshot).ConfigureAwait(true);
+    }
+
+    private static ConversationMessageSnapshot? ResolveExistingOutgoingUserMessageSnapshot(
+        IImmutableList<ConversationMessageSnapshot> transcript,
+        string? protocolMessageId,
+        ContentBlock content,
+        ActiveTurnState? activeTurn)
+    {
+        if (!string.IsNullOrWhiteSpace(protocolMessageId))
+        {
+            var byProtocolMessageId = transcript.LastOrDefault(message =>
+                message.IsOutgoing
+                && string.Equals(message.ProtocolMessageId, protocolMessageId, StringComparison.Ordinal));
+            if (byProtocolMessageId is not null)
+            {
+                return byProtocolMessageId;
+            }
+        }
+
+        if (!CanReusePendingLocalUserMessage(activeTurn, content))
+        {
+            return null;
+        }
+
+        return transcript.LastOrDefault(message =>
+            message.IsOutgoing
+            && string.Equals(message.Id, activeTurn!.PendingUserMessageLocalId, StringComparison.Ordinal));
+    }
+
+    private static bool CanReusePendingLocalUserMessage(ActiveTurnState? activeTurn, ContentBlock content)
+    {
+        if (activeTurn is null
+            || string.IsNullOrWhiteSpace(activeTurn.PendingUserMessageLocalId)
+            || IsTerminalTurnPhase(activeTurn.Phase))
+        {
+            return false;
+        }
+
+        if (content is not TextContentBlock textContent)
+        {
+            return false;
+        }
+
+        return string.Equals(
+            textContent.Text ?? string.Empty,
+            activeTurn.PendingUserMessageText ?? string.Empty,
+            StringComparison.Ordinal);
+    }
+
+    private static bool IsTerminalTurnPhase(ChatTurnPhase phase)
+        => phase is ChatTurnPhase.Completed or ChatTurnPhase.Failed or ChatTurnPhase.Cancelled;
+
+    private ConversationMessageSnapshot CreateContentSnapshot(
+        ContentBlock content,
+        bool isOutgoing,
+        string? id = null,
+        DateTime? timestamp = null,
+        string? protocolMessageId = null)
     {
         var snapshot = new ConversationMessageSnapshot
         {
-            Id = Guid.NewGuid().ToString(),
-            Timestamp = DateTime.UtcNow,
-            IsOutgoing = isOutgoing
+            Id = string.IsNullOrWhiteSpace(id) ? Guid.NewGuid().ToString() : id,
+            Timestamp = timestamp ?? DateTime.UtcNow,
+            IsOutgoing = isOutgoing,
+            ProtocolMessageId = protocolMessageId
         };
 
         switch (content)
@@ -4680,6 +4769,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 ImageMimeType = existing.ImageMimeType,
                 AudioData = existing.AudioData,
                 AudioMimeType = existing.AudioMimeType,
+                ProtocolMessageId = existing.ProtocolMessageId,
                 ToolCallId = existing.ToolCallId,
                 ToolCallKind = toolCallStatusUpdate.Kind ?? existing.ToolCallKind,
                 ToolCallStatus = toolCallStatusUpdate.Status ?? existing.ToolCallStatus,
@@ -4837,6 +4927,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 ImageMimeType = existing.ImageMimeType,
                 AudioData = existing.AudioData,
                 AudioMimeType = existing.AudioMimeType,
+                ProtocolMessageId = existing.ProtocolMessageId,
                 ToolCallId = existing.ToolCallId,
                 ToolCallKind = existing.ToolCallKind,
                 ToolCallStatus = Domain.Models.Tool.ToolCallStatus.Cancelled,
@@ -5259,19 +5350,25 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         var promptText = CurrentPrompt;
         var conversationId = CurrentSessionId!;
         var turnId = Guid.NewGuid().ToString();
+        var userContent = new TextContentBlock { Text = promptText };
+        var userSnapshot = CreateContentSnapshot(userContent, isOutgoing: true);
 
         try
         {
             ClearError();
             await _chatStore.Dispatch(new SetPromptInFlightAction(true));
-            await _chatStore.Dispatch(new BeginTurnAction(conversationId, turnId, ChatTurnPhase.CreatingRemoteSession));
+            await _chatStore.Dispatch(new BeginTurnAction(
+                conversationId,
+                turnId,
+                ChatTurnPhase.CreatingRemoteSession,
+                PendingUserMessageLocalId: userSnapshot.Id,
+                PendingUserMessageText: promptText));
 
             // Clear input immediately for better UX
             CurrentPrompt = string.Empty;
 
             // Add user message to history
-            var userContent = new TextContentBlock { Text = promptText };
-            await AddMessageToHistoryAsync(conversationId, userContent, isOutgoing: true).ConfigureAwait(true);
+            await UpsertTranscriptSnapshotAsync(conversationId, userSnapshot).ConfigureAwait(true);
 
             if (_chatService != null)
             {

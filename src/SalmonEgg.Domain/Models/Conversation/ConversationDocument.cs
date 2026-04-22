@@ -189,6 +189,8 @@ namespace SalmonEgg.Domain.Models.Conversation
 
         public string AudioMimeType { get; set; } = string.Empty;
 
+        public string? ProtocolMessageId { get; set; }
+
         public string? ToolCallId { get; set; }
 
         public ToolCallKind? ToolCallKind { get; set; }

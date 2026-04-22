@@ -69,6 +69,9 @@ namespace SalmonEgg.Domain.Models.Protocol
     [JsonDerivedType(typeof(UsageUpdate), "usage_update")]
     public class SessionUpdate
     {
+        [JsonPropertyName("messageId")]
+        public string? MessageId { get; set; }
+
         // Keep unknown fields so we can safely ignore newer protocol updates without crashing.
         [JsonExtensionData]
         public Dictionary<string, JsonElement>? ExtensionData { get; set; }
