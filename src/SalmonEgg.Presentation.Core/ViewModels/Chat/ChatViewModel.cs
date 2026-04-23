@@ -3393,13 +3393,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             return;
         }
 
-        var resolvedProtocolMessageId = string.IsNullOrWhiteSpace(responseUserMessageId)
-            ? requestMessageId
-            : responseUserMessageId;
-        if (string.IsNullOrWhiteSpace(resolvedProtocolMessageId))
+        if (string.IsNullOrWhiteSpace(responseUserMessageId))
         {
             return;
         }
+
+        var resolvedProtocolMessageId = responseUserMessageId;
 
         var currentState = await _chatStore.State ?? ChatState.Empty;
         var transcript = currentState.ResolveContentSlice(conversationId)?.Transcript
@@ -5407,9 +5406,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         var promptText = CurrentPrompt;
         var conversationId = CurrentSessionId!;
         var turnId = Guid.NewGuid().ToString();
-        var promptMessageId = Guid.NewGuid().ToString("N");
+        var promptMessageId = Guid.NewGuid().ToString("D");
         var userContent = new TextContentBlock { Text = promptText };
-        var userSnapshot = CreateContentSnapshot(userContent, isOutgoing: true, protocolMessageId: promptMessageId);
+        var userSnapshot = CreateContentSnapshot(userContent, isOutgoing: true);
 
         try
         {
