@@ -1839,6 +1839,38 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private Task PostToUiAsync(Action action) => _uiDispatcher.EnqueueAsync(action);
     private Task PostToUiAsync(Func<Task> function) => _uiDispatcher.EnqueueAsync(function);
 
+    private void ClearCurrentPromptOnUiThread()
+    {
+        if (_uiDispatcher.HasThreadAccess)
+        {
+            CurrentPrompt = string.Empty;
+            return;
+        }
+
+        _ = PostToUiAsync(() => CurrentPrompt = string.Empty);
+    }
+
+    private void RestoreCurrentPromptOnUiThread(string promptText)
+    {
+        if (_uiDispatcher.HasThreadAccess)
+        {
+            if (string.IsNullOrWhiteSpace(CurrentPrompt))
+            {
+                CurrentPrompt = promptText;
+            }
+
+            return;
+        }
+
+        _ = PostToUiAsync(() =>
+        {
+            if (string.IsNullOrWhiteSpace(CurrentPrompt))
+            {
+                CurrentPrompt = promptText;
+            }
+        });
+    }
+
     public Task RestoreConversationsAsync()
         => RestoreAsync();
 
@@ -4668,17 +4700,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 return byProtocolMessageId;
             }
 
-            if (activeTurn is not null
-                && !string.IsNullOrWhiteSpace(activeTurn.PendingUserMessageLocalId)
-                && string.Equals(activeTurn.PendingUserProtocolMessageId, protocolMessageId, StringComparison.Ordinal))
+            var pendingOptimisticOutgoingMessage = ResolvePendingOptimisticOutgoingMessage(transcript, activeTurn);
+            if (pendingOptimisticOutgoingMessage is not null)
             {
-                var byPendingProtocolId = transcript.LastOrDefault(message =>
-                    message.IsOutgoing
-                    && string.Equals(message.Id, activeTurn.PendingUserMessageLocalId, StringComparison.Ordinal));
-                if (byPendingProtocolId is not null)
-                {
-                    return byPendingProtocolId;
-                }
+                return pendingOptimisticOutgoingMessage;
             }
         }
 
@@ -4690,6 +4715,21 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         return transcript.LastOrDefault(message =>
             message.IsOutgoing
             && string.Equals(message.Id, activeTurn!.PendingUserMessageLocalId, StringComparison.Ordinal));
+    }
+
+    private static ConversationMessageSnapshot? ResolvePendingOptimisticOutgoingMessage(
+        IImmutableList<ConversationMessageSnapshot> transcript,
+        ActiveTurnState? activeTurn)
+    {
+        if (activeTurn is null || string.IsNullOrWhiteSpace(activeTurn.PendingUserMessageLocalId))
+        {
+            return null;
+        }
+
+        return transcript.LastOrDefault(message =>
+            message.IsOutgoing
+            && string.Equals(message.Id, activeTurn.PendingUserMessageLocalId, StringComparison.Ordinal)
+            && string.IsNullOrWhiteSpace(message.ProtocolMessageId));
     }
 
     private static bool CanReusePendingLocalUserMessage(ActiveTurnState? activeTurn, ContentBlock content)
@@ -5423,7 +5463,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 PendingUserMessageText: promptText));
 
             // Clear input immediately for better UX
-            CurrentPrompt = string.Empty;
+            ClearCurrentPromptOnUiThread();
 
             // Add user message to history
             await UpsertTranscriptSnapshotAsync(conversationId, userSnapshot).ConfigureAwait(true);
@@ -5479,10 +5519,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
             await _chatStore.Dispatch(new FailTurnAction(conversationId, turnId, "Timed out"));
 
-            if (string.IsNullOrWhiteSpace(CurrentPrompt))
-            {
-                CurrentPrompt = promptText;
-            }
+            RestoreCurrentPromptOnUiThread(promptText);
 
             ShowTransientNotificationToast("Agent no response (timeout). Please check if the agent needs login/initialization or try again later.");
         }
@@ -5494,10 +5531,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             await _chatStore.Dispatch(new FailTurnAction(conversationId, turnId, ex.Message));
 
             // Restore text so the user can retry quickly.
-            if (string.IsNullOrWhiteSpace(CurrentPrompt))
-            {
-                CurrentPrompt = promptText;
-            }
+            RestoreCurrentPromptOnUiThread(promptText);
 
             ShowTransientNotificationToast("Send failed, please try again later.");
         }

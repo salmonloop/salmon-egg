@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text;
 using System.Text.Json;
 
@@ -6,6 +7,12 @@ namespace SalmonEgg.GuiTests.Windows;
 internal sealed class GuiAppDataScope : IDisposable
 {
     private const string AppDataRootEnvVar = "SALMONEGG_APPDATA_ROOT";
+    private const string FakeReplaySessionIdEnvVar = "SALMONEGG_GUI_FAKE_REMOTE_REPLAY_SESSION_ID";
+    private const string FakeReplayMessageCountEnvVar = "SALMONEGG_GUI_FAKE_REMOTE_REPLAY_MESSAGE_COUNT";
+    private const string PromptAckModeEnvVar = "SALMONEGG_GUI_PROMPT_ACK_MODE";
+    private const string LateUserMessageIdEnvVar = "SALMONEGG_GUI_LATE_USER_MESSAGE_ID";
+    private const string LateUserMessageTextEnvVar = "SALMONEGG_GUI_LATE_USER_MESSAGE_TEXT";
+    private const string LateUserMessageDelayMsEnvVar = "SALMONEGG_GUI_LATE_USER_MESSAGE_DELAY_MS";
     private readonly string _appDataRoot;
     private readonly string _configDirectory;
     private readonly string _conversationsDirectory;
@@ -27,6 +34,7 @@ internal sealed class GuiAppDataScope : IDisposable
     private readonly string? _previousFakeReplaySessionId;
     private readonly string? _previousFakeReplayMessageCount;
     private readonly string? _previousGuiControlFile;
+    private readonly IReadOnlyDictionary<string, string?> _environmentRestoreMap;
     private bool _disposed;
 
     private GuiAppDataScope(
@@ -47,7 +55,8 @@ internal sealed class GuiAppDataScope : IDisposable
         string? previousGuiAppDataRootOverride,
         string? previousFakeReplaySessionId = null,
         string? previousFakeReplayMessageCount = null,
-        string? previousGuiControlFile = null)
+        string? previousGuiControlFile = null,
+        IReadOnlyDictionary<string, string?>? environmentRestoreMap = null)
     {
         _appDataRoot = appDataRoot;
         _configDirectory = Path.GetDirectoryName(appYamlPath)!;
@@ -70,6 +79,7 @@ internal sealed class GuiAppDataScope : IDisposable
         _previousFakeReplaySessionId = previousFakeReplaySessionId;
         _previousFakeReplayMessageCount = previousFakeReplayMessageCount;
         _previousGuiControlFile = previousGuiControlFile;
+        _environmentRestoreMap = environmentRestoreMap ?? new Dictionary<string, string?>();
     }
 
     public static GuiAppDataScope CreateDeterministicLeftNavData(
@@ -257,6 +267,66 @@ internal sealed class GuiAppDataScope : IDisposable
         return scope;
     }
 
+    public static GuiAppDataScope CreateDeterministicPromptAckRaceData()
+    {
+        GuiTestGate.RequireEnabled();
+        WindowsGuiAppSession.StopAllRunningInstances();
+
+        const string profileId = "gui-slow-remote-profile";
+        var appDataRoot = ResolveAppDataRoot();
+        var previousGuiAppDataRootOverride = Environment.GetEnvironmentVariable(AppDataRootEnvVar);
+        var previousFakeReplaySessionId = Environment.GetEnvironmentVariable(FakeReplaySessionIdEnvVar);
+        var previousFakeReplayMessageCount = Environment.GetEnvironmentVariable(FakeReplayMessageCountEnvVar);
+        var environmentRestoreMap = CaptureEnvironmentVariables(
+            PromptAckModeEnvVar,
+            LateUserMessageIdEnvVar,
+            LateUserMessageTextEnvVar,
+            LateUserMessageDelayMsEnvVar);
+
+        Environment.SetEnvironmentVariable(AppDataRootEnvVar, appDataRoot);
+
+        var appYamlPath = Path.Combine(appDataRoot, "config", "app.yaml");
+        var conversationsPath = Path.Combine(appDataRoot, "conversations", "conversations.v1.json");
+        var serverYamlPath = Path.Combine(appDataRoot, "config", "servers", profileId + ".yaml");
+        var projectRootPath = Path.Combine(Path.GetTempPath(), "SalmonEgg.GuiTests", "remote-project-1");
+
+        var scope = new GuiAppDataScope(
+            appDataRoot,
+            appYamlPath,
+            conversationsPath,
+            serverYamlPath,
+            secondaryServerYamlPath: null,
+            File.Exists(appYamlPath) ? File.ReadAllBytes(appYamlPath) : null,
+            File.Exists(appYamlPath),
+            File.Exists(conversationsPath) ? File.ReadAllBytes(conversationsPath) : null,
+            File.Exists(conversationsPath),
+            File.Exists(serverYamlPath) ? File.ReadAllBytes(serverYamlPath) : null,
+            File.Exists(serverYamlPath),
+            originalSecondaryServerYaml: null,
+            secondaryServerYamlExisted: false,
+            projectRootPath,
+            previousGuiAppDataRootOverride,
+            previousFakeReplaySessionId,
+            previousFakeReplayMessageCount,
+            previousGuiControlFile: null,
+            environmentRestoreMap);
+
+        scope.SeedSlowRemoteReplay(
+            profileId,
+            cachedMessageCount: 0,
+            replayMessageCount: 1,
+            includeLocalConversation: false,
+            localMessageCount: 3,
+            remoteConversationCount: 1);
+
+        Environment.SetEnvironmentVariable(PromptAckModeEnvVar, "late-authoritative-update");
+        Environment.SetEnvironmentVariable(LateUserMessageIdEnvVar, "gui-server-user-77");
+        Environment.SetEnvironmentVariable(LateUserMessageDelayMsEnvVar, "400");
+        Environment.SetEnvironmentVariable(LateUserMessageTextEnvVar, "hello");
+
+        return scope;
+    }
+
     public static GuiAppDataScope CreateDeterministicBackgroundAttentionData(
         int cachedMessageCount = 1,
         int replayMessageCount = 24)
@@ -407,6 +477,10 @@ internal sealed class GuiAppDataScope : IDisposable
         Environment.SetEnvironmentVariable("SALMONEGG_GUI_FAKE_REMOTE_REPLAY_SESSION_ID", _previousFakeReplaySessionId);
         Environment.SetEnvironmentVariable("SALMONEGG_GUI_FAKE_REMOTE_REPLAY_MESSAGE_COUNT", _previousFakeReplayMessageCount);
         Environment.SetEnvironmentVariable("SALMONEGG_GUI_CONTROL_FILE", _previousGuiControlFile);
+        foreach (var pair in _environmentRestoreMap)
+        {
+            Environment.SetEnvironmentVariable(pair.Key, pair.Value);
+        }
 
         try
         {
@@ -430,14 +504,38 @@ internal sealed class GuiAppDataScope : IDisposable
 
         try
         {
-            return string.Join(
-                Environment.NewLine,
-                File.ReadLines(bootLogPath)
-                    .TakeLast(lineCount));
+            return ReadTailAllowSharedRead(bootLogPath, lineCount);
         }
         catch (Exception ex)
         {
             return $"<boot.log unreadable: {ex.Message}>";
+        }
+    }
+
+    public string ReadLatestAppLogTail(int lineCount = 80)
+    {
+        var logsRoot = Path.Combine(_appDataRoot, "logs");
+        if (!Directory.Exists(logsRoot))
+        {
+            return "<app logs missing>";
+        }
+
+        try
+        {
+            var latestLogPath = Directory.EnumerateFiles(logsRoot, "app-*.log")
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .FirstOrDefault();
+
+            if (string.IsNullOrWhiteSpace(latestLogPath) || !File.Exists(latestLogPath))
+            {
+                return "<app log missing>";
+            }
+
+            return ReadTailAllowSharedRead(latestLogPath, lineCount);
+        }
+        catch (Exception ex)
+        {
+            return $"<app log unreadable: {ex.Message}>";
         }
     }
 
@@ -1047,5 +1145,35 @@ internal sealed class GuiAppDataScope : IDisposable
         catch
         {
         }
+    }
+
+    private static IReadOnlyDictionary<string, string?> CaptureEnvironmentVariables(params string[] names)
+    {
+        var snapshot = new Dictionary<string, string?>(StringComparer.Ordinal);
+        foreach (var name in names)
+        {
+            snapshot[name] = Environment.GetEnvironmentVariable(name);
+        }
+
+        return snapshot;
+    }
+
+    private static string ReadTailAllowSharedRead(string path, int lineCount)
+    {
+        var lines = new Queue<string>(Math.Max(lineCount, 1));
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var reader = new StreamReader(stream);
+
+        while (reader.ReadLine() is { } line)
+        {
+            if (lines.Count == lineCount)
+            {
+                lines.Dequeue();
+            }
+
+            lines.Enqueue(line);
+        }
+
+        return string.Join(Environment.NewLine, lines);
     }
 }

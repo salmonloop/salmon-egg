@@ -3516,6 +3516,72 @@ public class ChatViewModelTests
     }
 
     [Fact]
+    public async Task SendPromptAsync_WhenInvokedOffUiThread_QueuesCurrentPromptClearAndRestoreOnUiDispatcher()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var commands = new Mock<IAcpConnectionCommands>(MockBehavior.Strict);
+        var promptDispatch = new TaskCompletionSource<AcpPromptDispatchResult>();
+
+        commands.Setup(x => x.EnsureRemoteSessionAsync(
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AcpRemoteSessionResult("remote-1", new SessionNewResponse("remote-1"), false));
+        commands.Setup(x => x.DispatchPromptToRemoteSessionAsync(
+                "remote-1",
+                "/plan",
+                It.IsAny<string?>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(promptDispatch.Task);
+
+        await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
+        var viewModel = fixture.ViewModel;
+        viewModel.ReplaceChatService(CreateConnectedChatService().Object);
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+        });
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+        syncContext.RunAll();
+        await Task.Delay(50);
+        syncContext.RunAll();
+
+        viewModel.CurrentPrompt = "/plan";
+        syncContext.RunAll();
+        await Task.Delay(50);
+        syncContext.RunAll();
+
+        var sendTask = Task.Run(() => viewModel.SendPromptCommand.ExecuteAsync(null));
+
+        await WaitForConditionAsync(() => Task.FromResult(syncContext.PendingCount > 0));
+
+        Assert.Equal("/plan", viewModel.CurrentPrompt);
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(string.IsNullOrEmpty(viewModel.CurrentPrompt));
+        });
+
+        promptDispatch.SetException(new TimeoutException("timed out"));
+
+        await WaitForConditionAsync(() => Task.FromResult(syncContext.PendingCount > 0));
+
+        Assert.Equal(string.Empty, viewModel.CurrentPrompt);
+
+        await syncContext.RunUntilCompletedAsync(sendTask);
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(string.Equals(viewModel.CurrentPrompt, "/plan", StringComparison.Ordinal));
+        });
+    }
+
+    [Fact]
     public async Task SendPromptAsync_UsesCanonicalUuidFormat_ForPromptMessageId()
     {
         var syncContext = new QueueingSynchronizationContext();
@@ -3874,6 +3940,74 @@ public class ChatViewModelTests
         Assert.Single(finalTranscript);
         Assert.Equal(optimisticMessageId, finalTranscript[0].Id);
         Assert.Equal("server-auth-1", finalTranscript[0].ProtocolMessageId);
+    }
+
+    [Fact]
+    public async Task ProcessSessionUpdateAsync_UserMessageUpdate_AfterPromptCompletes_WithDifferentAuthoritativeId_ReusesExistingOptimisticOutgoingMessage()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        var viewModel = fixture.ViewModel;
+        var chatService = CreateConnectedChatService();
+        viewModel.ReplaceChatService(chatService.Object);
+
+        var initialState = (await fixture.GetStateAsync()) with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1")),
+            ActiveTurn = new ActiveTurnState(
+                "conv-1",
+                "turn-1",
+                ChatTurnPhase.Completed,
+                DateTime.UtcNow,
+                DateTime.UtcNow,
+                PendingUserMessageLocalId: "local-1",
+                PendingUserProtocolMessageId: "client-request-1",
+                PendingUserMessageText: "hello"),
+            ConversationContents = ImmutableDictionary<string, ConversationContentSlice>.Empty.Add(
+                "conv-1",
+                new ConversationContentSlice(
+                    ImmutableList.Create(new ConversationMessageSnapshot
+                    {
+                        Id = "local-1",
+                        IsOutgoing = true,
+                        ContentType = "text",
+                        TextContent = "hello",
+                        ProtocolMessageId = null,
+                        Timestamp = new DateTime(2026, 4, 23, 0, 0, 0, DateTimeKind.Utc)
+                    }),
+                    ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                    false,
+                    null))
+        };
+        await fixture.UpdateStateAsync(_ => initialState);
+        syncContext.RunAll();
+
+        chatService.Raise(
+            service => service.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs("remote-1", new UserMessageUpdate(new TextContentBlock("hello"))
+            {
+                MessageId = "server-auth-77"
+            }));
+
+        await WaitForConditionAsync(async () =>
+        {
+            syncContext.RunAll();
+            var transcript = (await fixture.GetStateAsync()).ResolveContentSlice("conv-1")?.Transcript
+                ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+            return transcript.Count == 1
+                && string.Equals(transcript[0].Id, "local-1", StringComparison.Ordinal)
+                && string.Equals(transcript[0].ProtocolMessageId, "server-auth-77", StringComparison.Ordinal);
+        });
+
+        var state = await fixture.GetStateAsync();
+        var transcript = state.ResolveContentSlice("conv-1")?.Transcript
+            ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+        Assert.Single(transcript);
+        Assert.Equal("local-1", transcript[0].Id);
+        Assert.Equal("server-auth-77", transcript[0].ProtocolMessageId);
+        Assert.Equal("hello", transcript[0].TextContent);
     }
 
     [Fact]

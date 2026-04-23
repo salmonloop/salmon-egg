@@ -143,7 +143,7 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
             case nameof(ChatViewModel.IsSessionActive):
             case nameof(ChatViewModel.IsConnected):
             case nameof(ChatViewModel.CanSendPromptUi):
-                UpdateCanSubmitUi();
+                RequestUpdateCanSubmitUi();
                 break;
         }
     }
@@ -172,6 +172,17 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
 
     private void OnSubmitCommandCanExecuteChanged(object? sender, EventArgs e)
     {
+        RequestUpdateCanSubmitUi();
+    }
+
+    private void RequestUpdateCanSubmitUi()
+    {
+        if (DispatcherQueue != null && !DispatcherQueue.HasThreadAccess)
+        {
+            DispatcherQueue.TryEnqueue(UpdateCanSubmitUi);
+            return;
+        }
+
         UpdateCanSubmitUi();
     }
 

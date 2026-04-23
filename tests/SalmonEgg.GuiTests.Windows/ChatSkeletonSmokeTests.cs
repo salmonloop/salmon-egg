@@ -280,6 +280,56 @@ public sealed class ChatSkeletonSmokeTests
     }
 
     [SkippableFact]
+    public void SendPrompt_WhenPromptResponseOmitsUserMessageId_AndLateAuthoritativeUserUpdateArrives_ShowsSingleOutgoingBubble()
+    {
+        using var appData = GuiAppDataScope.CreateDeterministicPromptAckRaceData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-remote-conversation-01", TimeSpan.FromSeconds(15));
+        session.ActivateElement(sessionItem);
+
+        var overlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(30));
+        Assert.True(overlayHidden, "Prompt ack race scenario remained stuck behind the loading overlay.");
+
+        var inputBox = session.FindByAutomationId("InputBox", TimeSpan.FromSeconds(10)).AsTextBox();
+        session.ClickElement(inputBox);
+        inputBox.Enter("hello");
+
+        var sendReady = WaitUntilElementEnabled(
+            session,
+            "SendButton",
+            TimeSpan.FromSeconds(5));
+        Assert.True(sendReady, "SendButton did not become enabled after entering prompt text.");
+
+        var sendButton = session.FindByAutomationId("SendButton", TimeSpan.FromSeconds(10));
+        session.ClickElement(sendButton);
+
+        var messagesList = session.FindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(10));
+        var helloVisible = session.TryFindVisibleText("hello", messagesList, TimeSpan.FromSeconds(8));
+        Assert.NotNull(helloVisible);
+
+        WaitForPromptAckRaceEvidence(
+            session,
+            appData,
+            expectedText: "hello",
+            expectedCount: 1,
+            requiredAppLogFragments: new[]
+            {
+                "\"method\":\"session/new\"",
+                "\"method\":\"session/prompt\"",
+                "\"method\":\"session/update\"",
+                "\"messageId\":\"gui-server-user-77\""
+            },
+            timeout: TimeSpan.FromSeconds(10));
+
+        var appLogTail = appData.ReadLatestAppLogTail();
+        Assert.Contains("\"method\":\"session/new\"", appLogTail, StringComparison.Ordinal);
+        Assert.Contains("\"method\":\"session/prompt\"", appLogTail, StringComparison.Ordinal);
+        Assert.Contains("\"method\":\"session/update\"", appLogTail, StringComparison.Ordinal);
+        Assert.Contains("\"messageId\":\"gui-server-user-77\"", appLogTail, StringComparison.Ordinal);
+    }
+
+    [SkippableFact]
     public void SelectRemoteSessionFromStart_FirstFrame_DoesNotExposeAnyChatShellContentBeforeLoadingOverlay()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
@@ -2632,6 +2682,91 @@ public sealed class ChatSkeletonSmokeTests
             ReadLinesAllowSharedRead(logFile).Count(line =>
                 line.Contains("\"method\":\"session/load\"", StringComparison.Ordinal)
                 && line.Contains($"\"sessionId\":\"{sessionId}\"", StringComparison.Ordinal)));
+    }
+
+    private static string WaitForPromptAckRaceEvidence(
+        WindowsGuiAppSession session,
+        GuiAppDataScope appData,
+        string expectedText,
+        int expectedCount,
+        IReadOnlyList<string> requiredAppLogFragments,
+        TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        var lastHelloCount = -1;
+        var lastAppLogTail = string.Empty;
+
+        while (DateTime.UtcNow < deadline)
+        {
+            var messagesList = session.TryFindByAutomationId("ChatView.MessagesList", TimeSpan.FromMilliseconds(150));
+            lastHelloCount = messagesList is null ? 0 : CountVisibleExactText(messagesList, expectedText);
+            lastAppLogTail = appData.ReadLatestAppLogTail(120);
+
+            if (lastHelloCount == expectedCount
+                && requiredAppLogFragments.All(fragment => lastAppLogTail.Contains(fragment, StringComparison.Ordinal)))
+            {
+                return lastAppLogTail;
+            }
+
+            Thread.Sleep(150);
+        }
+
+        ThrowWithScreenshot(
+            session,
+            appData,
+            "prompt-ack-race-single-outgoing-bubble",
+            $"Timed out waiting for a single visible '{expectedText}' bubble plus recovery-path ACP evidence. count={lastHelloCount}{Environment.NewLine}app.log:{Environment.NewLine}{lastAppLogTail}");
+        throw new Xunit.Sdk.XunitException("Unreachable");
+    }
+
+    private static int CountVisibleExactText(AutomationElement scope, string expectedText)
+    {
+        return scope
+            .FindAllDescendants(cf => cf.ByControlType(ControlType.Text))
+            .Count(element =>
+            {
+                try
+                {
+                    return !element.IsOffscreen
+                        && string.Equals(
+                            element.Name?.Trim(),
+                            expectedText,
+                            StringComparison.Ordinal);
+                }
+                catch
+                {
+                    return false;
+                }
+            });
+    }
+
+    private static bool WaitUntilElementEnabled(
+        WindowsGuiAppSession session,
+        string automationId,
+        TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            var element = session.TryFindByAutomationId(automationId, TimeSpan.FromMilliseconds(150));
+            if (element is not null)
+            {
+                try
+                {
+                    if (element.IsEnabled)
+                    {
+                        return true;
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            Thread.Sleep(120);
+        }
+
+        return false;
     }
 
     private static IEnumerable<string> ReadLinesAllowSharedRead(string path)

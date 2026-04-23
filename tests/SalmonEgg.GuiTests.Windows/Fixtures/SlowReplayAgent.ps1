@@ -40,6 +40,14 @@ $replayStartDelayMs = if ($PSBoundParameters.ContainsKey('ReplayStartDelayMs')) 
 $chunkDelayMs = if ($PSBoundParameters.ContainsKey('ChunkDelayMs')) { $ChunkDelayMs } else { 12 }
 $listDelayMs = if ($PSBoundParameters.ContainsKey('ListDelayMs')) { $ListDelayMs } else { 0 }
 $controlFilePath = $env:SALMONEGG_GUI_CONTROL_FILE
+$promptAckMode = $env:SALMONEGG_GUI_PROMPT_ACK_MODE
+$promptLateUserMessageId = $env:SALMONEGG_GUI_LATE_USER_MESSAGE_ID
+$promptLateUserMessageText = $env:SALMONEGG_GUI_LATE_USER_MESSAGE_TEXT
+$promptLateUserMessageDelayMs = 0
+if (-not [int]::TryParse($env:SALMONEGG_GUI_LATE_USER_MESSAGE_DELAY_MS, [ref]$promptLateUserMessageDelayMs))
+{
+    $promptLateUserMessageDelayMs = 0
+}
 
 Add-Type -TypeDefinition @"
 using System;
@@ -200,6 +208,37 @@ function New-LoadResult([string]$sessionSuffix)
     }
 }
 
+function New-SessionResult([string]$targetSessionId)
+{
+    $sessionSuffix = Resolve-SessionSuffix $targetSessionId
+    $loadResult = New-LoadResult $sessionSuffix
+
+    return @{
+        sessionId = $targetSessionId
+        modes = $loadResult.modes
+        configOptions = $loadResult.configOptions
+    }
+}
+
+function Resolve-PromptText($requestParams)
+{
+    if ($null -eq $requestParams -or $null -eq $requestParams.prompt)
+    {
+        return $promptLateUserMessageText
+    }
+
+    foreach ($block in @($requestParams.prompt))
+    {
+        $text = [string]$block.text
+        if (-not [string]::IsNullOrWhiteSpace($text))
+        {
+            return $text
+        }
+    }
+
+    return $promptLateUserMessageText
+}
+
 function Send-ControlledBackgroundUpdate
 {
     if ([string]::IsNullOrWhiteSpace($controlFilePath) -or -not (Test-Path $controlFilePath))
@@ -350,6 +389,60 @@ try
                         updatedAt = '2026-03-29T12:00:00Z'
                     }
                 )
+            }
+
+            continue
+        }
+
+        'session/new'
+        {
+            Send-Response $message.id (New-SessionResult $sessionId)
+            continue
+        }
+
+        'session/prompt'
+        {
+            $requestedSessionId = [string]$message.params.sessionId
+            if ([string]::IsNullOrWhiteSpace($requestedSessionId))
+            {
+                $requestedSessionId = $sessionId
+            }
+
+            $requestMessageId = [string]$message.params.messageId
+            $promptText = Resolve-PromptText $message.params
+
+            if ($promptAckMode -eq 'late-authoritative-update')
+            {
+                Send-Response $message.id @{
+                    stopReason = 'end_turn'
+                }
+
+                if ($promptLateUserMessageDelayMs -gt 0)
+                {
+                    Start-Sleep -Milliseconds $promptLateUserMessageDelayMs
+                }
+
+                $lateUserMessageId = if (-not [string]::IsNullOrWhiteSpace($promptLateUserMessageId))
+                {
+                    $promptLateUserMessageId
+                }
+                else
+                {
+                    $requestMessageId
+                }
+
+                Send-SessionUpdate $requestedSessionId @{
+                    sessionUpdate = 'user_message_chunk'
+                    messageId = $lateUserMessageId
+                    content = (New-TextContent $promptText)
+                }
+
+                continue
+            }
+
+            Send-Response $message.id @{
+                stopReason = 'end_turn'
+                userMessageId = $requestMessageId
             }
 
             continue
