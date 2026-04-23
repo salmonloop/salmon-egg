@@ -1325,6 +1325,53 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
+    public void UpsertConversationSnapshot_WhenIncomingSnapshotOmitsSessionInfo_PreservesExistingSessionInfoAuthority()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            SessionInfo: new ConversationSessionInfoSnapshot
+            {
+                Title = "Original title",
+                Cwd = @"C:\repo\one"
+            }));
+
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript:
+            [
+                CreateTextMessage("m-1", "fresh transcript")
+            ],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+            SessionInfo: null));
+
+        var snapshot = workspace.GetConversationSnapshot("session-1");
+        Assert.NotNull(snapshot);
+        Assert.Single(snapshot!.Transcript);
+        Assert.NotNull(snapshot.SessionInfo);
+        Assert.Equal("Original title", snapshot.SessionInfo!.Title);
+        Assert.Equal(@"C:\repo\one", snapshot.SessionInfo.Cwd);
+
+        var catalogItem = Assert.Single(workspace.GetCatalog());
+        Assert.Equal(@"C:\repo\one", catalogItem.Cwd);
+    }
+
+    [Fact]
     public async Task GetCatalog_WhenLocalConversationSessionIsMissing_UsesRemoteSessionSetupCwd()
     {
         var syncContext = new ImmediateSynchronizationContext();

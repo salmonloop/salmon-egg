@@ -982,7 +982,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
             case nameof(ChatConversationWorkspace.ConversationListVersion):
                 ConversationListVersion = _conversationWorkspace.ConversationListVersion;
-                _conversationCatalogPresenter.Refresh(_conversationWorkspace.GetCatalog());
+                var refreshedCatalog = _conversationWorkspace.GetCatalog();
+                _conversationCatalogPresenter.Refresh(refreshedCatalog);
                 OnPropertyChanged(nameof(GetKnownConversationIds));
                 RefreshMiniWindowSessions();
                 RefreshProjectAffinityCorrectionState();
@@ -1951,7 +1952,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private void NotifyConversationListChanged()
     {
         ConversationListVersion = _conversationWorkspace.ConversationListVersion;
-        _conversationCatalogPresenter.Refresh(_conversationWorkspace.GetCatalog());
+        var catalog = _conversationWorkspace.GetCatalog();
+        _conversationCatalogPresenter.Refresh(catalog);
         OnPropertyChanged(nameof(GetKnownConversationIds));
         RefreshMiniWindowSessions();
     }

@@ -470,6 +470,21 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
             var projects = GetProjectDefinitions();
             var sessionsByProject = GetSessionsByProject(projects);
+#if DEBUG
+            if (CurrentSelection is NavigationSelectionState.Session selectedSession
+                && !string.IsNullOrWhiteSpace(selectedSession.SessionId))
+            {
+                var currentCatalogItem = _conversationCatalogPresenter.Snapshot
+                    .FirstOrDefault(item => string.Equals(item.ConversationId, selectedSession.SessionId, StringComparison.Ordinal));
+                _logger.LogInformation(
+                    "Navigation rebuild evaluating selected session. SessionId={SessionId} CatalogCwd={CatalogCwd} BoundProfileId={BoundProfileId} RemoteSessionId={RemoteSessionId} SnapshotCount={SnapshotCount}",
+                    selectedSession.SessionId,
+                    currentCatalogItem?.Cwd,
+                    currentCatalogItem?.BoundProfileId,
+                    currentCatalogItem?.RemoteSessionId,
+                    _conversationCatalogPresenter.Snapshot.Count);
+            }
+#endif
 
             // Index of where project items start (after Start, SessionsLabel, AddProject)
             int itemIndex = 3;
@@ -974,7 +989,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     {
         ArgumentNullException.ThrowIfNull(item);
 
-        return _projectAffinityResolver.Resolve(new ProjectAffinityRequest(
+        var resolution = _projectAffinityResolver.Resolve(new ProjectAffinityRequest(
             RemoteCwd: item.Cwd,
             BoundProfileId: item.BoundProfileId,
             RemoteSessionId: item.RemoteSessionId,
@@ -982,6 +997,18 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             Projects: _projectPreferences.Projects,
             PathMappings: _projectPreferences.ProjectPathMappings,
             UnclassifiedProjectId: UnclassifiedProjectId));
+#if DEBUG
+        _logger.LogDebug(
+            "Project affinity resolved. ConversationId={ConversationId} Cwd={Cwd} RemoteSessionId={RemoteSessionId} BoundProfileId={BoundProfileId} OverrideProjectId={OverrideProjectId} EffectiveProjectId={EffectiveProjectId} Source={Source}",
+            item.ConversationId,
+            item.Cwd,
+            item.RemoteSessionId,
+            item.BoundProfileId,
+            item.ProjectAffinityOverrideProjectId,
+            resolution.EffectiveProjectId,
+            resolution.Source);
+#endif
+        return resolution;
     }
 
     private IEnumerable<string> GetKnownConversationIds()

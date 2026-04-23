@@ -436,8 +436,11 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             binding.ShowConfigOptionsPanel = snapshot.ShowConfigOptionsPanel;
             binding.AvailableCommands.Clear();
             binding.AvailableCommands.AddRange((snapshot.AvailableCommands ?? Array.Empty<ConversationAvailableCommandSnapshot>()).Select(CloneAvailableCommand));
+            var mergedSessionInfo = snapshot.SessionInfo is null
+                ? ConversationSessionInfoSnapshots.Clone(binding.SessionInfo)
+                : ConversationSessionInfoSnapshots.Merge(binding.SessionInfo, snapshot.SessionInfo);
             binding.SessionInfo = EnsureSessionInfoCarriesEstablishedCwd(
-                ConversationSessionInfoSnapshots.Clone(snapshot.SessionInfo),
+                mergedSessionInfo,
                 ResolveEstablishedConversationCwd(binding));
             binding.Usage = CloneUsage(snapshot.Usage);
             binding.ShowPlanPanel = snapshot.ShowPlanPanel;
@@ -1226,6 +1229,11 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
     {
         ArgumentNullException.ThrowIfNull(binding);
 
+        if (!string.IsNullOrWhiteSpace(binding.SessionInfo?.Cwd))
+        {
+            return binding.SessionInfo.Cwd.Trim();
+        }
+
         var localCwd = _sessionManager.GetSession(binding.ConversationId)?.Cwd;
         if (!string.IsNullOrWhiteSpace(localCwd))
         {
@@ -1241,9 +1249,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             }
         }
 
-        return string.IsNullOrWhiteSpace(binding.SessionInfo?.Cwd)
-            ? null
-            : binding.SessionInfo.Cwd.Trim();
+        return null;
     }
 
     private sealed record PersistedConversationState(

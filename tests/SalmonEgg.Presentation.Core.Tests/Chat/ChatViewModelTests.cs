@@ -20,6 +20,7 @@ using SalmonEgg.Domain.Models.ConversationPreview;
 using SalmonEgg.Domain.Models.JsonRpc;
 using SalmonEgg.Domain.Models.Plan;
 using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Domain.Models.Tool;
@@ -214,6 +215,13 @@ public class ChatViewModelTests
         IConversationCatalogReadModel catalog,
         IUiDispatcher uiDispatcher)
         => new(catalog, uiDispatcher);
+
+    private static ConversationCatalogPresenter GetConversationCatalogPresenter(ChatViewModel viewModel)
+    {
+        var field = typeof(ChatViewModel).GetField("_conversationCatalogPresenter", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        return Assert.IsType<ConversationCatalogPresenter>(field!.GetValue(viewModel));
+    }
 
     [Fact]
     public async Task RestoreAsync_IsExplicitAndOnlyRestoresWorkspaceOnce()
@@ -1022,7 +1030,7 @@ public class ChatViewModelTests
     [Fact]
     public async Task CreateNewSessionCommand_LiveUpdatesFromCreatedRemoteSession_ProjectIntoMessageHistory()
     {
-        var syncContext = new ImmediateSynchronizationContext();
+        var syncContext = new QueueingSynchronizationContext();
         await using var fixture = CreateViewModel(syncContext);
         fixture.Preferences.LastSelectedServerId = "profile-1";
 
@@ -3050,6 +3058,24 @@ public class ChatViewModelTests
         public async Task EnqueueAsync(Func<Task> function)
         {
             await function().ConfigureAwait(false);
+        }
+    }
+
+    private sealed class FakeNavigationPaneState : INavigationPaneState
+    {
+        public bool IsPaneOpen { get; private set; }
+
+        public event EventHandler? PaneStateChanged;
+
+        public void SetPaneOpen(bool isOpen)
+        {
+            if (IsPaneOpen == isOpen)
+            {
+                return;
+            }
+
+            IsPaneOpen = isOpen;
+            PaneStateChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -6181,6 +6207,146 @@ public class ChatViewModelTests
             finalState.ResolveSessionStateSlice("conv-1")!.Value.SessionInfo);
         Assert.Equal("Remote title", storeSessionInfo.Title);
         Assert.Equal(@"C:\repo\stale", storeSessionInfo.Cwd);
+    }
+
+    [Fact]
+    public async Task RestoreAndHydrateRemoteConversation_WhenSessionListReportsDifferentCwd_NavigationKeepsProjectGrouping()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
+        var sessionManager = new Mock<ISessionManager>();
+        sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.TryGetValue(id, out var session) ? session : null);
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .Returns<string, string?>((id, cwd) =>
+            {
+                var session = new Session(id, cwd);
+                sessions[id] = session;
+                return Task.FromResult(session);
+            });
+        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
+            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
+            {
+                if (!sessions.TryGetValue(id, out var session))
+                {
+                    return false;
+                }
+
+                update(session);
+                if (updateActivity)
+                {
+                    session.UpdateActivity();
+                }
+
+                return true;
+            });
+        sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.Remove(id));
+
+        var conversationStore = new Mock<IConversationStore>();
+        conversationStore.Setup(s => s.LoadAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConversationDocument
+            {
+                LastActiveConversationId = null,
+                Conversations =
+                {
+                    new ConversationRecord
+                    {
+                        ConversationId = "conv-1",
+                        DisplayName = "Remote title",
+                        CreatedAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                        LastUpdatedAt = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+                        Cwd = @"C:\repo\stale",
+                        RemoteSessionId = "remote-1",
+                        BoundProfileId = "profile-1"
+                    }
+                }
+            });
+
+        var releaseSessionList = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var chatService = CreateConnectedChatService();
+        chatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(
+            loadSession: true,
+            sessionCapabilities: new SessionCapabilities
+            {
+                List = new SessionListCapabilities()
+            }));
+        chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(SessionLoadResponse.Completed);
+        chatService.Setup(service => service.ListSessionsAsync(It.IsAny<SessionListParams>(), It.IsAny<CancellationToken>()))
+            .Returns<SessionListParams?, CancellationToken>(async (_, cancellationToken) =>
+            {
+                await releaseSessionList.Task.WaitAsync(cancellationToken);
+                return new SessionListResponse
+                {
+                    Sessions =
+                    [
+                        new AgentSessionInfo
+                        {
+                            SessionId = "remote-1",
+                            Cwd = @"C:\Users\shang\AppData\Local\SalmonEgg",
+                            Title = "Remote title",
+                            UpdatedAt = "2026-03-28T12:34:56Z"
+                        }
+                    ]
+                };
+            });
+
+        await using var fixture = CreateViewModel(syncContext, conversationStore: conversationStore, sessionManager: sessionManager);
+        fixture.ViewModel.ReplaceChatService(chatService.Object);
+        fixture.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
+        fixture.Preferences.Projects.Add(new ProjectDefinition
+        {
+            ProjectId = "project-1",
+            Name = "Project One",
+            RootPath = @"C:\repo\stale"
+        });
+        fixture.Preferences.ProjectPathMappings.Add(new ProjectPathMapping
+        {
+            ProfileId = "profile-1",
+            RemoteRootPath = @"C:\repo\stale",
+            LocalRootPath = @"C:\repo\stale"
+        });
+
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetSelectedProfileAction("profile-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected)).AsTask());
+
+        var navState = new FakeNavigationPaneState();
+        var selectionStore = new ShellSelectionStateStore();
+        selectionStore.SetSelection(new NavigationSelectionState.Session("conv-1"));
+        var runtimeState = new ShellNavigationRuntimeStateStore();
+        using var navVm = new MainNavigationViewModel(
+            fixture.ViewModel,
+            new NavigationProjectPreferencesAdapter(fixture.Preferences),
+            Mock.Of<IUiInteractionService>(),
+            Mock.Of<INavigationCoordinator>(),
+            Mock.Of<ILogger<MainNavigationViewModel>>(),
+            navState,
+            Mock.Of<IShellLayoutMetricsSink>(),
+            new NavigationSelectionProjector(),
+            selectionStore,
+            runtimeState,
+            GetConversationCatalogPresenter(fixture.ViewModel),
+            new ProjectAffinityResolver(),
+            syncContext);
+
+        navVm.RebuildTree();
+        Assert.Equal("project-1", navVm.TryGetProjectIdForSession("conv-1"));
+
+        var hydrationTask = fixture.ViewModel.HydrateActiveConversationAsync();
+        releaseSessionList.TrySetResult(null);
+
+        await AwaitWithSynchronizationContextAsync(syncContext, hydrationTask);
+        var hydrated = await hydrationTask;
+        Assert.True(hydrated, fixture.ViewModel.ErrorMessage);
+
+        await WaitForConditionAsync(
+            () => Task.FromResult(string.Equals(GetConversationCatalogPresenter(fixture.ViewModel).Snapshot.Single().DisplayName, "Remote title", StringComparison.Ordinal)),
+            timeoutMilliseconds: 2000);
+        Assert.Equal(@"C:\repo\stale", fixture.Workspace.GetConversationSnapshot("conv-1")!.SessionInfo!.Cwd);
+        Assert.Equal(@"C:\repo\stale", GetConversationCatalogPresenter(fixture.ViewModel).Snapshot.Single().Cwd);
+        Assert.Equal("project-1", navVm.TryGetProjectIdForSession("conv-1"));
     }
 
     [Fact]

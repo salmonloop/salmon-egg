@@ -206,6 +206,54 @@ public sealed class WorkspaceWriterTests
     }
 
     [Fact]
+    public async Task FlushAsync_HydratedConversationWithoutProjectedSessionInfo_PreservesExistingSessionInfoAuthority()
+    {
+        var dispatcher = new ImmediateUiDispatcher();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(dispatcher);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, dispatcher);
+        using var writer = new WorkspaceWriter(workspace, dispatcher, TimeSpan.Zero);
+
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript:
+            [
+                CreateTextMessage("m-0", "persisted transcript")
+            ],
+            Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
+            SessionInfo: new ConversationSessionInfoSnapshot
+            {
+                Title = "Persisted title",
+                Cwd = @"C:\repo\one"
+            }));
+
+        writer.Enqueue(new ChatState(
+            HydratedConversationId: "session-1",
+            ConversationContents: ImmutableDictionary<string, ConversationContentSlice>.Empty.Add(
+                "session-1",
+                new ConversationContentSlice(
+                    ImmutableList.Create(CreateTextMessage("m-1", "fresh transcript")),
+                    ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                    false,
+                    null)),
+            Generation: 1), scheduleSave: false);
+        await writer.FlushAsync();
+
+        var snapshot = workspace.GetConversationSnapshot("session-1");
+        Assert.NotNull(snapshot);
+        Assert.Single(snapshot!.Transcript);
+        Assert.Equal("fresh transcript", snapshot.Transcript[0].TextContent);
+        Assert.NotNull(snapshot.SessionInfo);
+        Assert.Equal("Persisted title", snapshot.SessionInfo!.Title);
+        Assert.Equal(@"C:\repo\one", snapshot.SessionInfo.Cwd);
+    }
+
+    [Fact]
     public async Task FlushAsync_BackgroundAuxiliarySessionState_PreservesExistingPrimarySessionState()
     {
         var dispatcher = new ImmediateUiDispatcher();
