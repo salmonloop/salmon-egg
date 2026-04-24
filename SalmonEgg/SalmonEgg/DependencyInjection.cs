@@ -249,6 +249,9 @@ public static class DependencyInjection
         services.AddSingleton<IConversationCatalogDisplayReadModel>(sp =>
             sp.GetRequiredService<ConversationCatalogDisplayPresenter>());
         services.AddSingleton<IProjectAffinityResolver, ProjectAffinityResolver>();
+        services.AddSingleton<ILocalTerminalCwdResolver, LocalTerminalCwdResolver>();
+        services.AddSingleton<ILocalTerminalSessionManager, LocalTerminalSessionManager>();
+        services.AddSingleton<LocalTerminalPanelCoordinator>();
         services.AddSingleton<INavigationProjectPreferences>(sp =>
             new NavigationProjectPreferencesAdapter(sp.GetRequiredService<AppPreferencesViewModel>()));
         services.AddSingleton<INavigationProjectSelectionStore>(sp =>

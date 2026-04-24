@@ -44,6 +44,7 @@ public sealed class ChatViewXamlTests
 
         Assert.Contains("TerminalSessions=\"{x:Bind ViewModel.TerminalSessions, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("SelectedTerminalSession=\"{x:Bind ViewModel.SelectedTerminalSession, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("LocalTerminalSession=\"{x:Bind ViewModel.ActiveLocalTerminalSession, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -54,6 +55,8 @@ public sealed class ChatViewXamlTests
 
         Assert.Contains("controls:XtermTerminalView", xaml, StringComparison.Ordinal);
         Assert.Contains("IsTerminalTabSelected", xaml, StringComparison.Ordinal);
+        Assert.Contains("Session=\"{x:Bind EffectiveLocalTerminalSession, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ContentText=\"{x:Bind LocalTerminalContentText, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
     }
 
     [Fact]

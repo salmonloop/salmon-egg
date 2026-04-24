@@ -99,6 +99,8 @@ logs/
 *.log
 /.dotnet-cli-home/
 /.dotnet-cli/
+/.dotnet/
+/.dotnet_cli/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

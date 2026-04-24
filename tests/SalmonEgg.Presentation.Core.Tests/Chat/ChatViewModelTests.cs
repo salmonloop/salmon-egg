@@ -57,7 +57,8 @@ public class ChatViewModelTests
         IConversationBindingCommands? bindingCommands = null,
         IVoiceInputService? voiceInputService = null,
         IConversationPreviewStore? previewStore = null,
-        IShellNavigationRuntimeState? shellNavigationRuntimeState = null)
+        IShellNavigationRuntimeState? shellNavigationRuntimeState = null,
+        LocalTerminalPanelCoordinator? localTerminalPanelCoordinator = null)
     {
         var state = State.Value(new object(), () => ChatState.Empty);
         var connectionState = State.Value(new object(), () => ChatConnectionState.Empty);
@@ -180,7 +181,8 @@ public class ChatViewModelTests
                 bindingCommands: bindingCommands,
                 acpConnectionCoordinator: acpConnectionCoordinatorFactory?.Invoke(connectionStore),
                 shellNavigationRuntimeState: shellNavigationRuntimeState,
-                voiceInputService: voiceInputService);
+                voiceInputService: voiceInputService,
+                localTerminalPanelCoordinator: localTerminalPanelCoordinator);
             return new ViewModelFixture(
                 viewModel,
                 state,
@@ -221,6 +223,35 @@ public class ChatViewModelTests
         var field = typeof(ChatViewModel).GetField("_conversationCatalogPresenter", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(field);
         return Assert.IsType<ConversationCatalogPresenter>(field!.GetValue(viewModel));
+    }
+
+    private static Mock<ISessionManager> CreateSessionManagerWithStore()
+    {
+        var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
+        var sessionManager = new Mock<ISessionManager>();
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .Returns<string, string?>((sessionId, cwd) =>
+            {
+                var session = new Session(sessionId, cwd);
+                sessions[sessionId] = session;
+                return Task.FromResult(session);
+            });
+        sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
+            .Returns<string>(sessionId => sessions.TryGetValue(sessionId, out var session) ? session : null);
+        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
+            .Returns<string, Action<Session>, bool>((sessionId, update, updateActivity) =>
+            {
+                if (!sessions.TryGetValue(sessionId, out var session))
+                {
+                    return false;
+                }
+
+                update(session);
+                return true;
+            });
+        sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
+            .Returns<string>(sessionId => sessions.Remove(sessionId));
+        return sessionManager;
     }
 
     [Fact]
@@ -1428,7 +1459,62 @@ public class ChatViewModelTests
     }
 
     [Fact]
-    public async Task TerminalRequestReceived_Create_SelectsTerminalTabAndAddsSession()
+    public async Task LocalTerminalPanel_LocalConversation_UsesConversationCwd()
+    {
+        var sessionManager = CreateSessionManagerWithStore();
+        var localTerminalManager = new RecordingLocalTerminalSessionManager();
+        var coordinator = new LocalTerminalPanelCoordinator(
+            localTerminalManager,
+            new LocalTerminalCwdResolver(() => @"C:\Users\shang"),
+            new ImmediateUiDispatcher());
+        await using var fixture = CreateViewModel(
+            sessionManager: sessionManager,
+            localTerminalPanelCoordinator: coordinator);
+
+        await sessionManager.Object.CreateSessionAsync("conversation-local", @"C:\repo\local");
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conversation-local"
+        });
+
+        await WaitForConditionAsync(() => Task.FromResult(
+            fixture.ViewModel.ActiveLocalTerminalSession?.ConversationId == "conversation-local"));
+
+        Assert.Equal(@"C:\repo\local", localTerminalManager.LastRequestedCwd);
+        Assert.Equal(@"C:\repo\local", fixture.ViewModel.ActiveLocalTerminalSession?.CurrentWorkingDirectory);
+    }
+
+    [Fact]
+    public async Task LocalTerminalPanel_RemoteBoundConversation_UsesUserHome()
+    {
+        var sessionManager = CreateSessionManagerWithStore();
+        var localTerminalManager = new RecordingLocalTerminalSessionManager();
+        var coordinator = new LocalTerminalPanelCoordinator(
+            localTerminalManager,
+            new LocalTerminalCwdResolver(() => @"C:\Users\shang"),
+            new ImmediateUiDispatcher());
+        await using var fixture = CreateViewModel(
+            sessionManager: sessionManager,
+            localTerminalPanelCoordinator: coordinator);
+
+        await sessionManager.Object.CreateSessionAsync("conversation-remote", @"Z:\remote\repo");
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conversation-remote",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty.Add(
+                "conversation-remote",
+                new ConversationBindingSlice("conversation-remote", "remote-session-1", "profile-1"))
+        });
+
+        await WaitForConditionAsync(() => Task.FromResult(
+            fixture.ViewModel.ActiveLocalTerminalSession?.ConversationId == "conversation-remote"));
+
+        Assert.Equal(@"C:\Users\shang", localTerminalManager.LastRequestedCwd);
+        Assert.Equal(@"C:\Users\shang", fixture.ViewModel.ActiveLocalTerminalSession?.CurrentWorkingDirectory);
+    }
+
+    [Fact]
+    public async Task TerminalRequestReceived_Create_PreservesPublicBottomPanelSelectionWhileAddingSession()
     {
         await using var fixture = CreateViewModel();
         var chatService = CreateConnectedChatService();
@@ -1443,6 +1529,12 @@ public class ChatViewModelTests
         });
         await WaitForConditionAsync(() => Task.FromResult(fixture.ViewModel.BottomPanelTabs.Count == 2));
 
+        var outputTab = fixture.ViewModel.BottomPanelTabs[1];
+        Assert.Equal("output", outputTab.Id);
+        fixture.ViewModel.SelectedBottomPanelTab = outputTab;
+        await WaitForConditionAsync(() => Task.FromResult(
+            string.Equals(fixture.ViewModel.SelectedBottomPanelTab?.Id, "output", StringComparison.Ordinal)));
+
         chatService.Raise(
             service => service.TerminalRequestReceived += null,
             chatService.Object,
@@ -1456,13 +1548,13 @@ public class ChatViewModelTests
 
         await WaitForConditionAsync(() => Task.FromResult(
             fixture.ViewModel.TerminalSessions.Count == 1
-            && fixture.ViewModel.SelectedTerminalSession?.TerminalId == "terminal-1"
-            && fixture.ViewModel.SelectedBottomPanelTab?.Id == "terminal"));
+            && fixture.ViewModel.SelectedTerminalSession?.TerminalId == "terminal-1"));
 
         var terminal = Assert.Single(fixture.ViewModel.TerminalSessions);
         Assert.Equal("terminal-1", terminal.TerminalId);
         Assert.Equal("terminal/create", terminal.LastMethod);
         Assert.Equal(string.Empty, terminal.Output);
+        Assert.Equal("output", fixture.ViewModel.SelectedBottomPanelTab?.Id);
     }
 
     [Fact]
@@ -1510,7 +1602,7 @@ public class ChatViewModelTests
     }
 
     [Fact]
-    public async Task TerminalStateChangedReceived_ProjectsRealOutputLifecycleIntoTerminalPanel()
+    public async Task TerminalStateChangedReceived_ProjectsLifecycleWithoutOwningPublicBottomPanelSelection()
     {
         await using var fixture = CreateViewModel();
         var chatService = CreateConnectedChatService();
@@ -1525,6 +1617,12 @@ public class ChatViewModelTests
         });
         await WaitForConditionAsync(() => Task.FromResult(fixture.ViewModel.BottomPanelTabs.Count == 2));
 
+        var outputTab = fixture.ViewModel.BottomPanelTabs[1];
+        Assert.Equal("output", outputTab.Id);
+        fixture.ViewModel.SelectedBottomPanelTab = outputTab;
+        await WaitForConditionAsync(() => Task.FromResult(
+            string.Equals(fixture.ViewModel.SelectedBottomPanelTab?.Id, "output", StringComparison.Ordinal)));
+
         chatService.Raise(
             service => service.TerminalStateChangedReceived += null,
             chatService.Object,
@@ -1534,8 +1632,7 @@ public class ChatViewModelTests
                 "terminal/create"));
 
         await WaitForConditionAsync(() => Task.FromResult(
-            fixture.ViewModel.SelectedTerminalSession?.TerminalId == "terminal-1"
-            && fixture.ViewModel.SelectedBottomPanelTab?.Id == "terminal"));
+            fixture.ViewModel.SelectedTerminalSession?.TerminalId == "terminal-1"));
 
         chatService.Raise(
             service => service.TerminalStateChangedReceived += null,
@@ -1579,6 +1676,7 @@ public class ChatViewModelTests
             fixture.ViewModel.SelectedTerminalSession?.IsReleased == true));
 
         Assert.False(fixture.ViewModel.SelectedTerminalSession!.IsTruncated);
+        Assert.Equal("output", fixture.ViewModel.SelectedBottomPanelTab?.Id);
     }
 
     [Fact]
@@ -3824,6 +3922,77 @@ public class ChatViewModelTests
         {
             DisposeAsync().AsTask().GetAwaiter().GetResult();
         }
+    }
+
+    private sealed class RecordingLocalTerminalSessionManager : ILocalTerminalSessionManager
+    {
+        private readonly Dictionary<string, RecordingLocalTerminalSession> _sessions = new(StringComparer.Ordinal);
+
+        public string? LastRequestedCwd { get; private set; }
+
+        public ValueTask<ILocalTerminalSession> GetOrCreateAsync(
+            string conversationId,
+            string preferredCwd,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            LastRequestedCwd = preferredCwd;
+            if (!_sessions.TryGetValue(conversationId, out var session))
+            {
+                session = new RecordingLocalTerminalSession(conversationId, preferredCwd);
+                _sessions.Add(conversationId, session);
+            }
+
+            return ValueTask.FromResult<ILocalTerminalSession>(session);
+        }
+
+        public ValueTask DisposeConversationAsync(string conversationId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            _sessions.Remove(conversationId);
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            _sessions.Clear();
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingLocalTerminalSession : ILocalTerminalSession
+    {
+        public RecordingLocalTerminalSession(string conversationId, string currentWorkingDirectory)
+        {
+            ConversationId = conversationId;
+            CurrentWorkingDirectory = currentWorkingDirectory;
+        }
+
+        public string ConversationId { get; }
+
+        public string CurrentWorkingDirectory { get; }
+
+        public bool CanAcceptInput => true;
+
+        public event EventHandler<string>? OutputReceived;
+
+        public event EventHandler? StateChanged;
+
+        public ValueTask WriteInputAsync(string input, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            OutputReceived?.Invoke(this, input);
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask ResizeAsync(int columns, int rows, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            StateChanged?.Invoke(this, EventArgs.Empty);
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     private sealed class DisplayCatalogTestScope : IDisposable, IAsyncDisposable

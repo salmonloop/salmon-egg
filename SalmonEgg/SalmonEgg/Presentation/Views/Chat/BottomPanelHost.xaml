@@ -65,7 +65,8 @@
                     Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                     BorderThickness="1">
-                <controls:XtermTerminalView ContentText="{x:Bind SelectedTerminalContent, Mode=OneWay}" />
+                <controls:XtermTerminalView Session="{x:Bind EffectiveLocalTerminalSession, Mode=OneWay}"
+                                            ContentText="{x:Bind LocalTerminalContentText, Mode=OneWay}" />
             </Border>
 
             <Border Visibility="{x:Bind IsTerminalTabSelected, Mode=OneWay, Converter={StaticResource InverseBoolToVisibilityConverter}}"

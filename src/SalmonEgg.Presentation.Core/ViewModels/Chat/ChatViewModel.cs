@@ -102,6 +102,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private readonly IAcpSessionUpdateProjector _acpSessionUpdateProjector;
     private readonly IChatConnectionStore _chatConnectionStore;
     private readonly IConversationAttentionStore? _conversationAttentionStore;
+    private readonly LocalTerminalPanelCoordinator? _localTerminalPanelCoordinator;
     private IChatService? _chatService;
     private readonly IUiDispatcher _uiDispatcher;
     private readonly IConversationPreviewStore _previewStore;
@@ -135,6 +136,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private readonly object _conversationActivationSync = new();
     private readonly SemaphoreSlim _conversationActivationGate = new(1, 1);
     private readonly SemaphoreSlim _remoteConversationActivationGate = new(1, 1);
+    private long _localTerminalActivationVersion;
 
     private CancellationTokenSource? _conversationActivationCts;
     private CancellationTokenSource? _ambientConnectionRequestCts;
@@ -842,6 +844,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private TerminalPanelSessionViewModel? _selectedTerminalSession;
 
     [ObservableProperty]
+    private LocalTerminalPanelSessionViewModel? _activeLocalTerminalSession;
+
+    [ObservableProperty]
     private bool _showPermissionDialog;
 
     [ObservableProperty]
@@ -914,7 +919,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         IAcpConnectionCoordinator? acpConnectionCoordinator = null,
         IProjectAffinityResolver? projectAffinityResolver = null,
         IShellNavigationRuntimeState? shellNavigationRuntimeState = null,
-        IVoiceInputService? voiceInputService = null)
+        IVoiceInputService? voiceInputService = null,
+        LocalTerminalPanelCoordinator? localTerminalPanelCoordinator = null)
         : base(logger)
     {
         _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
@@ -944,6 +950,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         _previewStore = previewStore ?? throw new ArgumentNullException(nameof(previewStore));
         _voiceInputService = voiceInputService ?? NoOpVoiceInputService.Instance;
         _shellNavigationRuntimeState = shellNavigationRuntimeState;
+        _localTerminalPanelCoordinator = localTerminalPanelCoordinator;
         ApplyProjectAffinityOverrideCommand = new RelayCommand(ApplyProjectAffinityOverride, () => CanApplyProjectAffinityOverride);
         ClearProjectAffinityOverrideCommand = new RelayCommand(ClearProjectAffinityOverride, () => CanClearProjectAffinityOverride);
         _acpConnectionCommands = acpConnectionCommands
@@ -1729,6 +1736,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         }
 
         SyncBottomPanelState(value);
+        _ = ActivateLocalTerminalPanelAsync(value);
         SyncPendingAskUserRequestState(value);
         RefreshProjectAffinityCorrectionState(value);
         ApplyProjectAffinityOverrideCommand.NotifyCanExecuteChanged();
@@ -4272,6 +4280,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         {
             TerminalSessions = new ObservableCollection<TerminalPanelSessionViewModel>();
             SelectedTerminalSession = null;
+            ActiveLocalTerminalSession = null;
             return;
         }
 
@@ -4283,6 +4292,71 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
         TerminalSessions = sessions;
         SelectedTerminalSession = ResolveSelectedTerminalSession(conversationId, sessions);
+    }
+
+    private async Task ActivateLocalTerminalPanelAsync(string? conversationId)
+    {
+        var version = Interlocked.Increment(ref _localTerminalActivationVersion);
+        if (_localTerminalPanelCoordinator is null || string.IsNullOrWhiteSpace(conversationId))
+        {
+            ActiveLocalTerminalSession = null;
+            return;
+        }
+
+        try
+        {
+            var state = await _chatStore.State ?? ChatState.Empty;
+            var binding = state.ResolveBinding(conversationId);
+            var isLocalSession = binding is null || string.IsNullOrWhiteSpace(binding.RemoteSessionId);
+            var sessionInfoCwd = ResolveLocalTerminalSessionInfoCwd(conversationId, state);
+            var terminalSession = await _localTerminalPanelCoordinator
+                .ActivateAsync(conversationId, isLocalSession, sessionInfoCwd)
+                .ConfigureAwait(true);
+
+            if (version == Interlocked.Read(ref _localTerminalActivationVersion)
+                && string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
+            {
+                ActiveLocalTerminalSession = terminalSession;
+            }
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException ex)
+        {
+            Logger.LogWarning(ex, "Failed to activate local terminal panel. ConversationId={ConversationId}", conversationId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Unexpected error while activating local terminal panel. ConversationId={ConversationId}", conversationId);
+        }
+    }
+
+    private string? ResolveLocalTerminalSessionInfoCwd(string conversationId, ChatState state)
+    {
+        var sessionCwd = _sessionManager.GetSession(conversationId)?.Cwd?.Trim();
+        if (!string.IsNullOrWhiteSpace(sessionCwd))
+        {
+            return sessionCwd;
+        }
+
+        return state.ResolveSessionStateSlice(conversationId)?.SessionInfo?.Cwd?.Trim();
+    }
+
+    private async Task RemoveLocalTerminalSessionAsync(string conversationId)
+    {
+        if (_localTerminalPanelCoordinator is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _localTerminalPanelCoordinator.RemoveConversationAsync(conversationId).ConfigureAwait(false);
+        }
+        catch (ObjectDisposedException)
+        {
+        }
     }
 
     private TerminalPanelSessionViewModel? ResolveSelectedTerminalSession(
@@ -4314,6 +4388,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         _selectedTerminalIdByConversation.Remove(conversationId);
         RemovePendingAskUserRequestState(conversationId);
         _ = _chatStore.Dispatch(new ClearConversationRuntimeStateAction(conversationId));
+        _ = RemoveLocalTerminalSessionAsync(conversationId);
 
         if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
         {
@@ -4321,6 +4396,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             SelectedBottomPanelTab = null;
             TerminalSessions = new ObservableCollection<TerminalPanelSessionViewModel>();
             SelectedTerminalSession = null;
+            ActiveLocalTerminalSession = null;
         }
     }
 
@@ -4742,7 +4818,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         {
             TerminalSessions = _terminalSessionsByConversation[conversationId];
             SelectedTerminalSession = terminal;
-            SelectBottomPanelTab("terminal");
         }
     }
 
@@ -8581,6 +8656,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             try { _transientNotificationCts?.Dispose(); } catch { }
             try { _conversationActivationCts?.Cancel(); } catch { }
             try { _conversationActivationCts?.Dispose(); } catch { }
+            try { _localTerminalPanelCoordinator?.DisposeAsync().AsTask().GetAwaiter().GetResult(); } catch { }
             try { _conversationActivationGate.Dispose(); } catch { }
             try { _remoteConversationActivationGate.Dispose(); } catch { }
 

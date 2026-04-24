@@ -284,7 +284,8 @@
                                    TabsSource="{x:Bind ViewModel.BottomPanelTabs, Mode=OneWay}"
                                    SelectedTab="{x:Bind ViewModel.SelectedBottomPanelTab, Mode=TwoWay}"
                                    TerminalSessions="{x:Bind ViewModel.TerminalSessions, Mode=OneWay}"
-                                   SelectedTerminalSession="{x:Bind ViewModel.SelectedTerminalSession, Mode=OneWay}" />
+                                   SelectedTerminalSession="{x:Bind ViewModel.SelectedTerminalSession, Mode=OneWay}"
+                                   LocalTerminalSession="{x:Bind ViewModel.ActiveLocalTerminalSession, Mode=OneWay}" />
 
         </Grid>
     </Grid>

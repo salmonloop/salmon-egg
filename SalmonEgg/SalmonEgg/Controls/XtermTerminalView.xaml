@@ -6,7 +6,7 @@
 
     <Grid Background="#0B0D0F">
         <WebView2 x:Name="TerminalWebView"
-                  AutomationProperties.Name="{x:Bind ContentText, Mode=OneWay}"
+                  AutomationProperties.Name="{x:Bind RenderedText, Mode=OneWay}"
                   AutomationProperties.AutomationId="BottomPanel.TerminalWebView" />
 
         <TextBlock x:Name="FallbackText"

@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
+using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using Windows.ApplicationModel.Resources;
 
@@ -19,10 +20,12 @@ public sealed partial class BottomPanelHost : UserControl
 
     public string SelectedTabTitle => GetResourceString(SelectedTab?.TitleResourceKey);
 
-    public string SelectedTerminalContent => SelectedTerminalSession?.Output ?? string.Empty;
-
     public bool IsTerminalTabSelected =>
         string.Equals(SelectedTab?.Id, "terminal", StringComparison.Ordinal);
+
+    public ILocalTerminalSession? EffectiveLocalTerminalSession => LocalTerminalSession?.Session;
+
+    public string LocalTerminalContentText => LocalTerminalSession?.OutputText ?? string.Empty;
 
     public ObservableCollection<BottomPanelTabViewModel>? TabsSource
     {
@@ -73,6 +76,19 @@ public sealed partial class BottomPanelHost : UserControl
         DependencyProperty.Register(
             nameof(SelectedTerminalSession),
             typeof(TerminalPanelSessionViewModel),
+            typeof(BottomPanelHost),
+            new PropertyMetadata(null, OnTerminalStateChanged));
+
+    public LocalTerminalPanelSessionViewModel? LocalTerminalSession
+    {
+        get => (LocalTerminalPanelSessionViewModel?)GetValue(LocalTerminalSessionProperty);
+        set => SetValue(LocalTerminalSessionProperty, value);
+    }
+
+    public static readonly DependencyProperty LocalTerminalSessionProperty =
+        DependencyProperty.Register(
+            nameof(LocalTerminalSession),
+            typeof(LocalTerminalPanelSessionViewModel),
             typeof(BottomPanelHost),
             new PropertyMetadata(null, OnTerminalStateChanged));
 
