@@ -149,11 +149,26 @@
       return;
     }
 
+    echoInput(data);
     postWebViewMessage({
       kind: 'input',
       data
     });
   });
+
+  function echoInput(data) {
+    if (data === '\r') {
+      terminal.write('\r\n');
+      return;
+    }
+
+    if (data === '\u007f') {
+      terminal.write('\b \b');
+      return;
+    }
+
+    terminal.write(data);
+  }
 
   function setInputEnabled(enabled) {
     inputEnabled = enabled !== false;

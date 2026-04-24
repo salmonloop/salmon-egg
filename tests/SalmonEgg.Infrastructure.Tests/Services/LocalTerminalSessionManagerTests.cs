@@ -1,5 +1,7 @@
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Infrastructure.Services;
+using System.Collections.Concurrent;
+using System.Runtime.InteropServices;
 
 namespace SalmonEgg.Infrastructure.Tests.Services;
 
@@ -184,6 +186,27 @@ public sealed class LocalTerminalSessionManagerTests
     }
 
     [Fact]
+    public async Task ProcessBackedSession_WriteInputAsync_StreamsShellOutput()
+    {
+        // Arrange
+        var output = new ConcurrentQueue<string>();
+        await using var manager = new LocalTerminalSessionManager();
+        var session = await manager.GetOrCreateAsync("conversation-process", Environment.CurrentDirectory);
+        session.OutputReceived += (_, text) => output.Enqueue(text);
+        var token = "salmon-local-terminal-smoke";
+        var command = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? $"echo {token}\r\n"
+            : $"echo {token}\n";
+
+        // Act
+        await session.WriteInputAsync(command);
+        var sawOutput = await WaitForAsync(() => string.Concat(output).Contains(token, StringComparison.Ordinal));
+
+        // Assert
+        Assert.True(sawOutput, string.Concat(output));
+    }
+
+    [Fact]
     public async Task DisposeAsync_WhenCreationIsInFlight_DisposesCreatedSessionBeforeCompleting()
     {
         // Arrange
@@ -264,6 +287,22 @@ public sealed class LocalTerminalSessionManagerTests
         Func<string, string, CancellationToken, ValueTask<ILocalTerminalSession>> sessionFactory)
     {
         return new LocalTerminalSessionManager(sessionFactory);
+    }
+
+    private static async Task<bool> WaitForAsync(Func<bool> predicate)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (predicate())
+            {
+                return true;
+            }
+
+            await Task.Delay(50);
+        }
+
+        return predicate();
     }
 
     private sealed class FakeLocalTerminalSession : ILocalTerminalSession

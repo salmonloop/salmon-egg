@@ -6,6 +6,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Threading;
 using FlaUI.Core.Definitions;
 using FlaUI.Core;
@@ -16,6 +17,7 @@ using FlaUI.UIA3;
 
 namespace SalmonEgg.GuiTests.Windows;
 
+[SupportedOSPlatform("windows")]
 internal sealed class WindowsGuiAppSession : IDisposable
 {
     private const string ProcessName = "SalmonEgg";
@@ -44,9 +46,10 @@ internal sealed class WindowsGuiAppSession : IDisposable
 
         if (existing == null)
         {
+            using var activationEnvironment = ActivationEnvironmentScope.ApplySalmonEggVariables();
             var launchedAtUtc = DateTime.UtcNow;
-            LaunchInstalledMsix(executablePath);
-            existing = WaitForProcess(executablePath, launchedAtUtc, TimeSpan.FromSeconds(20));
+            var activatedProcessId = LaunchInstalledMsix(executablePath);
+            existing = WaitForProcess(executablePath, launchedAtUtc, TimeSpan.FromSeconds(20), activatedProcessId);
         }
 
         var automation = new UIA3Automation();
@@ -68,10 +71,11 @@ internal sealed class WindowsGuiAppSession : IDisposable
         var currentInstall = GuiTestGate.GetRequiredCurrentInstall();
         var executablePath = currentInstall.InstalledExecutablePath
             ?? throw new InvalidOperationException(currentInstall.FailureMessage);
+        using var activationEnvironment = ActivationEnvironmentScope.ApplySalmonEggVariables();
         var launchedAtUtc = DateTime.UtcNow;
-        LaunchInstalledMsix(executablePath);
+        var activatedProcessId = LaunchInstalledMsix(executablePath);
 
-        var process = WaitForProcess(executablePath, launchedAtUtc, TimeSpan.FromSeconds(20));
+        var process = WaitForProcess(executablePath, launchedAtUtc, TimeSpan.FromSeconds(20), activatedProcessId);
 
         return AttachToProcess(process, ownsProcess: true);
     }
@@ -730,10 +734,16 @@ internal sealed class WindowsGuiAppSession : IDisposable
         }
     }
 
-    private static void LaunchInstalledMsix(string executablePath)
+    private static int? LaunchInstalledMsix(string executablePath)
     {
         var manifest = MsixManifestInfo.LoadFromRepo();
-        var appUserModelId = $"{manifest.IdentityName}!{manifest.ApplicationId}";
+        var appUserModelId = ResolveAppUserModelId(manifest);
+
+        if (TryActivateApplication(appUserModelId, out var processId))
+        {
+            return processId;
+        }
+
         var process = Process.Start(new ProcessStartInfo
         {
             FileName = "explorer.exe",
@@ -746,6 +756,42 @@ internal sealed class WindowsGuiAppSession : IDisposable
             throw new InvalidOperationException(
                 $"Failed to launch installed SalmonEgg package '{appUserModelId}' from '{executablePath}'.");
         }
+
+        return null;
+    }
+
+    private static string ResolveAppUserModelId(MsixManifestInfo manifest)
+    {
+        return TryResolveInstalledPackageFamilyName(manifest.IdentityName, out var packageFamilyName)
+            ? $"{packageFamilyName}!{manifest.ApplicationId}"
+            : $"{manifest.IdentityName}!{manifest.ApplicationId}";
+    }
+
+    private static bool TryResolveInstalledPackageFamilyName(string identityName, out string packageFamilyName)
+    {
+        packageFamilyName = string.Empty;
+        using var process = new Process();
+        process.StartInfo = new ProcessStartInfo
+        {
+            FileName = "powershell.exe",
+            Arguments = $"-NoLogo -NoProfile -ExecutionPolicy Bypass -Command \"(Get-AppxPackage -Name '{identityName}' | Select-Object -First 1 -ExpandProperty PackageFamilyName)\"",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        process.Start();
+        var output = process.StandardOutput.ReadToEnd().Trim();
+        process.WaitForExit();
+
+        if (process.ExitCode != 0 || string.IsNullOrWhiteSpace(output))
+        {
+            return false;
+        }
+
+        packageFamilyName = output;
+        return true;
     }
 
     private static string ResolveInstalledExecutablePath(string identityName)
@@ -810,18 +856,47 @@ internal sealed class WindowsGuiAppSession : IDisposable
                 && string.Equals(candidatePath, executablePath, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static Process WaitForProcess(string executablePath, DateTime launchedAtUtc, TimeSpan timeout)
+    private static Process WaitForProcess(
+        string executablePath,
+        DateTime launchedAtUtc,
+        TimeSpan timeout,
+        int? activatedProcessId)
     {
         return RetryUntil(
-            () => Process.GetProcessesByName(ProcessName)
-                .OrderByDescending(process => process.StartTime)
-                .FirstOrDefault(process =>
-                    (TryGetProcessExecutablePath(process, out var candidatePath)
-                        && string.Equals(candidatePath, executablePath, StringComparison.OrdinalIgnoreCase))
-                    || WasProcessStartedAfter(process, launchedAtUtc)),
+            () => FindActivatedProcess(activatedProcessId)
+                ?? Process.GetProcessesByName(ProcessName)
+                    .OrderByDescending(process => process.StartTime)
+                    .FirstOrDefault(process =>
+                        (TryGetProcessExecutablePath(process, out var candidatePath)
+                            && string.Equals(candidatePath, executablePath, StringComparison.OrdinalIgnoreCase))
+                        || WasProcessStartedAfter(process, launchedAtUtc)),
             process => process != null,
             timeout,
             $"Timed out waiting for SalmonEgg process from installed executable '{executablePath}'.")!;
+    }
+
+    private static Process? FindActivatedProcess(int? processId)
+    {
+        if (processId is null or <= 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            var process = Process.GetProcessById(processId.Value);
+            if (!process.HasExited)
+            {
+                return process;
+            }
+
+            process.Dispose();
+            return null;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or Win32Exception)
+        {
+            return null;
+        }
     }
 
     private static bool TryGetProcessExecutablePath(Process process, out string executablePath)
@@ -874,6 +949,82 @@ internal sealed class WindowsGuiAppSession : IDisposable
 
         return TryGetProcessExecutablePath(process, out var candidatePath)
             && string.Equals(candidatePath, targetExecutablePath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryActivateApplication(string appUserModelId, out int processId)
+    {
+        processId = 0;
+        try
+        {
+            var activationManagerType = Type.GetTypeFromCLSID(NativeMethods.ApplicationActivationManagerClsid, throwOnError: true)
+                ?? throw new COMException("ApplicationActivationManager CLSID could not be resolved.");
+            var activationManager = (NativeMethods.IApplicationActivationManager)
+                Activator.CreateInstance(activationManagerType)!;
+            var hresult = activationManager.ActivateApplication(
+                appUserModelId,
+                null,
+                NativeMethods.ActivateOptions.None,
+                out processId);
+
+            if (hresult < 0)
+            {
+                Marshal.ThrowExceptionForHR(hresult);
+            }
+
+            return processId > 0;
+        }
+        catch (Exception ex) when (ex is COMException or UnauthorizedAccessException or InvalidCastException or BadImageFormatException or ArgumentException)
+        {
+            processId = 0;
+            return false;
+        }
+    }
+
+    private sealed class ActivationEnvironmentScope : IDisposable
+    {
+        private readonly IReadOnlyDictionary<string, string?> _previousUserValues;
+        private bool _disposed;
+
+        private ActivationEnvironmentScope(IReadOnlyDictionary<string, string?> previousUserValues)
+        {
+            _previousUserValues = previousUserValues;
+        }
+
+        public static ActivationEnvironmentScope ApplySalmonEggVariables()
+        {
+            var currentProcessVariables = Environment.GetEnvironmentVariables();
+            var previousUserValues = new Dictionary<string, string?>(StringComparer.Ordinal);
+
+            foreach (var key in currentProcessVariables.Keys.OfType<string>())
+            {
+                if (!key.StartsWith("SALMONEGG_", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                previousUserValues[key] = Environment.GetEnvironmentVariable(key, EnvironmentVariableTarget.User);
+                Environment.SetEnvironmentVariable(
+                    key,
+                    currentProcessVariables[key]?.ToString(),
+                    EnvironmentVariableTarget.User);
+            }
+
+            return new ActivationEnvironmentScope(previousUserValues);
+        }
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            foreach (var pair in _previousUserValues)
+            {
+                Environment.SetEnvironmentVariable(pair.Key, pair.Value, EnvironmentVariableTarget.User);
+            }
+        }
     }
 
     private static WindowsGuiAppSession AttachToProcess(Process process, bool ownsProcess)
@@ -1005,6 +1156,40 @@ internal sealed class WindowsGuiAppSession : IDisposable
             public int Top;
             public int Right;
             public int Bottom;
+        }
+
+        [Flags]
+        public enum ActivateOptions
+        {
+            None = 0
+        }
+
+        public static readonly Guid ApplicationActivationManagerClsid = new("45BA127D-10A8-46EA-8AB7-56EA9078943C");
+
+        [ComImport]
+        [Guid("2E941141-7F97-4756-BA1D-9DECDE894A3D")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IApplicationActivationManager
+        {
+            [PreserveSig]
+            int ActivateApplication(
+                [MarshalAs(UnmanagedType.LPWStr)] string appUserModelId,
+                [MarshalAs(UnmanagedType.LPWStr)] string? arguments,
+                ActivateOptions options,
+                out int processId);
+
+            [PreserveSig]
+            int ActivateForFile(
+                [MarshalAs(UnmanagedType.LPWStr)] string appUserModelId,
+                IntPtr itemArray,
+                [MarshalAs(UnmanagedType.LPWStr)] string? verb,
+                out int processId);
+
+            [PreserveSig]
+            int ActivateForProtocol(
+                [MarshalAs(UnmanagedType.LPWStr)] string appUserModelId,
+                IntPtr itemArray,
+                out int processId);
         }
     }
 

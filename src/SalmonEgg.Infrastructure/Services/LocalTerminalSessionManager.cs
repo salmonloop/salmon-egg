@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -304,10 +305,14 @@ public sealed class LocalTerminalSessionManager : ILocalTerminalSessionManager
 
     private sealed class ProcessBackedLocalTerminalSession : ILocalTerminalSession
     {
+        private const int OutputReadBufferSize = 1024;
+        private const int MaxBufferedOutputCharacters = 1_000_000;
+
         private readonly object _gate = new();
         private readonly SemaphoreSlim _inputGate = new(1, 1);
         private readonly Process _process;
         private readonly List<string> _outputBuffer = new();
+        private int _bufferedOutputCharacters;
         private bool _canAcceptInput;
         private bool _disposed;
         private EventHandler<string>? _outputReceived;
@@ -369,8 +374,6 @@ public sealed class LocalTerminalSessionManager : ILocalTerminalSessionManager
 
         public void AttachToRunningProcess()
         {
-            _process.OutputDataReceived += OnOutputDataReceived;
-            _process.ErrorDataReceived += OnErrorDataReceived;
             _process.Exited += OnProcessExited;
 
             lock (_gate)
@@ -378,8 +381,8 @@ public sealed class LocalTerminalSessionManager : ILocalTerminalSessionManager
                 _canAcceptInput = true;
             }
 
-            _process.BeginOutputReadLine();
-            _process.BeginErrorReadLine();
+            _ = PumpOutputAsync(_process.StandardOutput);
+            _ = PumpOutputAsync(_process.StandardError);
 
             if (_process.HasExited)
             {
@@ -447,8 +450,6 @@ public sealed class LocalTerminalSessionManager : ILocalTerminalSessionManager
                 _canAcceptInput = false;
             }
 
-            _process.OutputDataReceived -= OnOutputDataReceived;
-            _process.ErrorDataReceived -= OnErrorDataReceived;
             _process.Exited -= OnProcessExited;
 
             try
@@ -484,14 +485,34 @@ public sealed class LocalTerminalSessionManager : ILocalTerminalSessionManager
             return default;
         }
 
-        private void OnOutputDataReceived(object? sender, DataReceivedEventArgs args)
+        private async Task PumpOutputAsync(StreamReader reader)
         {
-            PublishOutput(args.Data);
-        }
+            var buffer = new char[OutputReadBufferSize];
+            try
+            {
+                while (true)
+                {
+                    var read = await reader.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
+                    if (read <= 0)
+                    {
+                        return;
+                    }
 
-        private void OnErrorDataReceived(object? sender, DataReceivedEventArgs args)
-        {
-            PublishOutput(args.Data);
+                    PublishOutput(new string(buffer, 0, read));
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+            catch (InvalidOperationException)
+            {
+            }
+            catch (IOException)
+            {
+            }
+            catch
+            {
+            }
         }
 
         private void OnProcessExited(object? sender, EventArgs args)
@@ -501,20 +522,31 @@ public sealed class LocalTerminalSessionManager : ILocalTerminalSessionManager
 
         private void PublishOutput(string? data)
         {
-            if (data == null)
+            if (string.IsNullOrEmpty(data))
             {
                 return;
             }
 
-            var output = data + Environment.NewLine;
+            var output = data;
             EventHandler<string>? handler;
             lock (_gate)
             {
                 _outputBuffer.Add(output);
+                _bufferedOutputCharacters += output.Length;
+                TrimOutputBuffer();
                 handler = _outputReceived;
             }
 
             handler?.Invoke(this, output);
+        }
+
+        private void TrimOutputBuffer()
+        {
+            while (_bufferedOutputCharacters > MaxBufferedOutputCharacters && _outputBuffer.Count > 0)
+            {
+                _bufferedOutputCharacters -= _outputBuffer[0].Length;
+                _outputBuffer.RemoveAt(0);
+            }
         }
 
         private void MarkInputUnavailable()

@@ -331,7 +331,7 @@ public sealed class ChatSkeletonSmokeTests
     }
 
     [SkippableFact]
-    public void SendPrompt_WhenAgentInvokesTerminalTool_ShowsTerminalPanelAndOutput()
+    public void SendPrompt_WhenAgentInvokesTerminalTool_DoesNotProjectAcpOutputIntoPublicTerminalPanel()
     {
         using var appData = GuiAppDataScope.CreateDeterministicTerminalToolData();
         using var session = WindowsGuiAppSession.LaunchFresh();
@@ -367,21 +367,22 @@ public sealed class ChatSkeletonSmokeTests
         var lastTerminalName = string.Empty;
         var lastAppLogTail = string.Empty;
         var sawTerminalView = false;
-        var sawOutputText = false;
+        var sawRequiredLogs = false;
 
         while (DateTime.UtcNow < deadline)
         {
             sawTerminalView = session.TryFindByAutomationId("BottomPanel.TerminalWebView", TimeSpan.FromMilliseconds(150)) is not null;
             lastTerminalName = session.TryGetElementName("BottomPanel.TerminalWebView", TimeSpan.FromMilliseconds(150)) ?? string.Empty;
-            sawOutputText =
-                lastTerminalName.Contains("hello-terminal", StringComparison.Ordinal)
-                || session.TryFindVisibleTextAnywhere("hello-terminal", TimeSpan.FromMilliseconds(150)) is not null;
             lastAppLogTail = appData.ReadLatestAppLogTail(160);
+            sawRequiredLogs = requiredAppLogFragments.All(fragment => lastAppLogTail.Contains(fragment, StringComparison.Ordinal));
 
-            if (sawTerminalView
-                && sawOutputText
-                && requiredAppLogFragments.All(fragment => lastAppLogTail.Contains(fragment, StringComparison.Ordinal)))
+            if (sawRequiredLogs)
             {
+                if (sawTerminalView)
+                {
+                    Assert.DoesNotContain("hello-terminal", lastTerminalName, StringComparison.Ordinal);
+                }
+
                 return;
             }
 
@@ -392,7 +393,7 @@ public sealed class ChatSkeletonSmokeTests
             session,
             appData,
             "terminal-tool-output-panel",
-            $"Terminal output did not stabilize in the bottom panel. sawTerminalView={sawTerminalView} terminalName='{lastTerminalName}'{Environment.NewLine}app.log:{Environment.NewLine}{lastAppLogTail}");
+            $"Terminal tool events did not complete. sawTerminalView={sawTerminalView} sawRequiredLogs={sawRequiredLogs} terminalName='{lastTerminalName}'{Environment.NewLine}app.log:{Environment.NewLine}{lastAppLogTail}");
     }
 
     [SkippableFact]
