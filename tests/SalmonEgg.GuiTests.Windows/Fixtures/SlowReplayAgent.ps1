@@ -43,11 +43,21 @@ $controlFilePath = $env:SALMONEGG_GUI_CONTROL_FILE
 $promptAckMode = $env:SALMONEGG_GUI_PROMPT_ACK_MODE
 $promptLateUserMessageId = $env:SALMONEGG_GUI_LATE_USER_MESSAGE_ID
 $promptLateUserMessageText = $env:SALMONEGG_GUI_LATE_USER_MESSAGE_TEXT
+$terminalSmokeEnabled = $env:SALMONEGG_GUI_TERMINAL_SMOKE_ENABLED -eq '1'
+$terminalSmokeOutput = if ([string]::IsNullOrWhiteSpace($env:SALMONEGG_GUI_TERMINAL_SMOKE_OUTPUT))
+{
+    'hello-terminal'
+}
+else
+{
+    $env:SALMONEGG_GUI_TERMINAL_SMOKE_OUTPUT
+}
 $promptLateUserMessageDelayMs = 0
 if (-not [int]::TryParse($env:SALMONEGG_GUI_LATE_USER_MESSAGE_DELAY_MS, [ref]$promptLateUserMessageDelayMs))
 {
     $promptLateUserMessageDelayMs = 0
 }
+$nextOutboundRequestId = 9000
 
 Add-Type -TypeDefinition @"
 using System;
@@ -206,6 +216,105 @@ function New-LoadResult([string]$sessionSuffix)
             }
         )
     }
+}
+
+function Send-AgentRequest([string]$method, [hashtable]$params)
+{
+    $requestId = $script:nextOutboundRequestId
+    $script:nextOutboundRequestId++
+
+    Write-JsonLine @{
+        jsonrpc = '2.0'
+        id = $requestId
+        method = $method
+        params = $params
+    }
+
+    return $requestId
+}
+
+function Wait-AgentResponse([int]$requestId, [int]$timeoutMs = 8000)
+{
+    $deadline = [DateTime]::UtcNow.AddMilliseconds($timeoutMs)
+    while ([DateTime]::UtcNow -lt $deadline)
+    {
+        $line = $null
+        if (-not $linePump.TryTake([ref]$line, 50))
+        {
+            if ($linePump.IsCompleted)
+            {
+                break
+            }
+
+            continue
+        }
+
+        if ([string]::IsNullOrWhiteSpace($line))
+        {
+            continue
+        }
+
+        $message = $line | ConvertFrom-Json
+        if ($null -eq $message.id)
+        {
+            continue
+        }
+
+        if ([string]$message.id -ne [string]$requestId)
+        {
+            continue
+        }
+
+        if ($null -ne $message.error)
+        {
+            throw "Agent request '$requestId' failed: $($message.error.message)"
+        }
+
+        return $message.result
+    }
+
+    throw "Timed out waiting for client response '$requestId'."
+}
+
+function Invoke-TerminalSmoke([string]$targetSessionId)
+{
+    if (-not $terminalSmokeEnabled)
+    {
+        return
+    }
+
+    $createResponse = Wait-AgentResponse (Send-AgentRequest 'terminal/create' @{
+            sessionId = $targetSessionId
+            command = 'powershell.exe'
+            args = @(
+                '-NoLogo',
+                '-NoProfile',
+                '-Command',
+                "Write-Output '$terminalSmokeOutput'"
+            )
+            outputByteLimit = 4096
+        })
+
+    $terminalId = [string]$createResponse.terminalId
+    if ([string]::IsNullOrWhiteSpace($terminalId))
+    {
+        throw 'Terminal smoke did not receive a terminalId.'
+    }
+
+    [void](Wait-AgentResponse (Send-AgentRequest 'terminal/wait_for_exit' @{
+                sessionId = $targetSessionId
+                terminalId = $terminalId
+            }))
+
+    [void](Wait-AgentResponse (Send-AgentRequest 'terminal/output' @{
+                sessionId = $targetSessionId
+                terminalId = $terminalId
+            }))
+
+    [void](Wait-AgentResponse (Send-AgentRequest 'terminal/release' @{
+                sessionId = $targetSessionId
+                terminalId = $terminalId
+            }))
 }
 
 function New-SessionResult([string]$targetSessionId)
@@ -444,6 +553,8 @@ try
                 stopReason = 'end_turn'
                 userMessageId = $requestMessageId
             }
+
+            Invoke-TerminalSmoke $requestedSessionId
 
             continue
         }

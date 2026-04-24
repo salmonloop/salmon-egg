@@ -43,6 +43,11 @@ namespace SalmonEgg.Domain.Services
         event EventHandler<TerminalRequestEventArgs>? TerminalRequestReceived;
 
         /// <summary>
+        /// 终端状态事件。当客户端执行 ACP terminal 请求并获得状态快照时触发。
+        /// </summary>
+        event EventHandler<TerminalStateChangedEventArgs>? TerminalStateChangedReceived;
+
+        /// <summary>
         /// Ask-user 请求事件。当 Agent 需要用户结构化回答时触发。
         /// </summary>
         event EventHandler<AskUserRequestEventArgs>? AskUserRequestReceived;

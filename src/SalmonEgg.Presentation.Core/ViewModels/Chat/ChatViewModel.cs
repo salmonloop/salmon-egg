@@ -142,6 +142,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private long _connectionGeneration;
     private string? _connectionInstanceId;
     private readonly Dictionary<string, BottomPanelState> _bottomPanelStateByConversation = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ObservableCollection<TerminalPanelSessionViewModel>> _terminalSessionsByConversation = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _selectedTerminalIdByConversation = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AskUserRequestViewModel> _pendingAskUserRequestsByConversation = new(StringComparer.Ordinal);
     private readonly ObservableCollection<AskUserQuestionViewModel> _emptyAskUserQuestions = new();
     private readonly object _sessionUpdateTrackingSync = new();
@@ -832,6 +834,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     [ObservableProperty]
     private BottomPanelTabViewModel? _selectedBottomPanelTab;
+
+    [ObservableProperty]
+    private ObservableCollection<TerminalPanelSessionViewModel> _terminalSessions = new();
+
+    [ObservableProperty]
+    private TerminalPanelSessionViewModel? _selectedTerminalSession;
 
     [ObservableProperty]
     private bool _showPermissionDialog;
@@ -2854,6 +2862,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
            chatService.PermissionRequestReceived += OnPermissionRequestReceived;
             chatService.FileSystemRequestReceived += OnFileSystemRequestReceived;
             chatService.TerminalRequestReceived += OnTerminalRequestReceived;
+            chatService.TerminalStateChangedReceived += OnTerminalStateChangedReceived;
             chatService.AskUserRequestReceived += OnAskUserRequestReceived;
             chatService.ErrorOccurred += OnErrorOccurred;
 
@@ -2866,6 +2875,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
            chatService.PermissionRequestReceived -= OnPermissionRequestReceived;
             chatService.FileSystemRequestReceived -= OnFileSystemRequestReceived;
             chatService.TerminalRequestReceived -= OnTerminalRequestReceived;
+            chatService.TerminalStateChangedReceived -= OnTerminalStateChangedReceived;
             chatService.AskUserRequestReceived -= OnAskUserRequestReceived;
             chatService.ErrorOccurred -= OnErrorOccurred;
         }
@@ -4223,6 +4233,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         {
             BottomPanelTabs = new ObservableCollection<BottomPanelTabViewModel>();
             SelectedBottomPanelTab = null;
+            SyncTerminalPanelState(conversationId);
             return;
         }
 
@@ -4235,6 +4246,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         EnsureSelectedBottomPanelTab(state);
         BottomPanelTabs = state.Tabs;
         SelectedBottomPanelTab = state.Selected;
+        SyncTerminalPanelState(conversationId);
     }
 
     private static ObservableCollection<BottomPanelTabViewModel> CreateDefaultBottomPanelTabs()
@@ -4254,6 +4266,42 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         state.Selected = state.Tabs.FirstOrDefault();
     }
 
+    private void SyncTerminalPanelState(string? conversationId)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            TerminalSessions = new ObservableCollection<TerminalPanelSessionViewModel>();
+            SelectedTerminalSession = null;
+            return;
+        }
+
+        if (!_terminalSessionsByConversation.TryGetValue(conversationId, out var sessions))
+        {
+            sessions = new ObservableCollection<TerminalPanelSessionViewModel>();
+            _terminalSessionsByConversation[conversationId] = sessions;
+        }
+
+        TerminalSessions = sessions;
+        SelectedTerminalSession = ResolveSelectedTerminalSession(conversationId, sessions);
+    }
+
+    private TerminalPanelSessionViewModel? ResolveSelectedTerminalSession(
+        string conversationId,
+        ObservableCollection<TerminalPanelSessionViewModel> sessions)
+    {
+        if (_selectedTerminalIdByConversation.TryGetValue(conversationId, out var selectedId))
+        {
+            var selected = sessions.FirstOrDefault(session =>
+                string.Equals(session.TerminalId, selectedId, StringComparison.Ordinal));
+            if (selected != null)
+            {
+                return selected;
+            }
+        }
+
+        return sessions.LastOrDefault();
+    }
+
     private void RemoveBottomPanelState(string conversationId)
     {
         if (string.IsNullOrWhiteSpace(conversationId))
@@ -4262,6 +4310,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         }
 
         _bottomPanelStateByConversation.Remove(conversationId);
+        _terminalSessionsByConversation.Remove(conversationId);
+        _selectedTerminalIdByConversation.Remove(conversationId);
         RemovePendingAskUserRequestState(conversationId);
         _ = _chatStore.Dispatch(new ClearConversationRuntimeStateAction(conversationId));
 
@@ -4269,6 +4319,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         {
             BottomPanelTabs = new ObservableCollection<BottomPanelTabViewModel>();
             SelectedBottomPanelTab = null;
+            TerminalSessions = new ObservableCollection<TerminalPanelSessionViewModel>();
+            SelectedTerminalSession = null;
         }
     }
 
@@ -4544,13 +4596,222 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             try
             {
                 Logger.LogInformation("Terminal request received: Method={Method}, TerminalId={TerminalId}", e.Method, e.TerminalId);
-                ShowTransientNotificationToast($"Terminal request: {e.Method}");
+                _ = ProcessTerminalRequestAsync(e);
             }
             catch (Exception ex)
             {
                 Logger.LogError(ex, "Error processing terminal request");
             }
         });
+    }
+
+    private void OnTerminalStateChangedReceived(object? sender, TerminalStateChangedEventArgs e)
+    {
+        _uiDispatcher.Enqueue(() => {
+            try
+            {
+                _ = ProcessTerminalStateChangedAsync(e);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error processing terminal state update");
+            }
+        });
+    }
+
+    private async Task ProcessTerminalRequestAsync(TerminalRequestEventArgs request)
+    {
+        try
+        {
+            var conversationId = await ResolveConversationIdForRemoteSessionAsync(request.SessionId).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(conversationId))
+            {
+                Logger.LogWarning("Terminal request ignored because no bound conversation matched remote session {RemoteSessionId}", request.SessionId);
+                return;
+            }
+
+            await PostToUiAsync(() => ApplyTerminalRequestProjection(conversationId, request)).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error processing terminal request");
+        }
+    }
+
+    private async Task ProcessTerminalStateChangedAsync(TerminalStateChangedEventArgs update)
+    {
+        try
+        {
+            var conversationId = await ResolveConversationIdForRemoteSessionAsync(update.SessionId).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(conversationId))
+            {
+                Logger.LogWarning("Terminal state ignored because no bound conversation matched remote session {RemoteSessionId}", update.SessionId);
+                return;
+            }
+
+            await PostToUiAsync(() => ApplyTerminalStateProjection(conversationId, update)).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error processing terminal state update");
+        }
+    }
+
+    private void ApplyTerminalRequestProjection(string conversationId, TerminalRequestEventArgs request)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return;
+        }
+
+        var terminalId = string.IsNullOrWhiteSpace(request.TerminalId)
+            ? TryReadTerminalId(request.RawParams)
+            : request.TerminalId;
+        if (string.IsNullOrWhiteSpace(terminalId))
+        {
+            return;
+        }
+
+        var terminal = GetOrCreateTerminalSession(conversationId, terminalId);
+
+        terminal.LastMethod = request.Method ?? string.Empty;
+        ApplyTerminalPayload(terminal, request.RawParams);
+        SelectTerminalForConversation(conversationId, terminal);
+    }
+
+    private void ApplyTerminalStateProjection(string conversationId, TerminalStateChangedEventArgs update)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId) || string.IsNullOrWhiteSpace(update.TerminalId))
+        {
+            return;
+        }
+
+        var terminal = GetOrCreateTerminalSession(conversationId, update.TerminalId);
+        terminal.LastMethod = update.Method ?? string.Empty;
+
+        if (update.Output != null)
+        {
+            terminal.Output = update.Output;
+        }
+
+        if (update.Truncated.HasValue)
+        {
+            terminal.IsTruncated = update.Truncated.Value;
+        }
+
+        if (update.ExitStatus != null)
+        {
+            terminal.ExitCode = update.ExitStatus.ExitCode;
+        }
+
+        if (update.IsReleased)
+        {
+            terminal.IsReleased = true;
+        }
+
+        SelectTerminalForConversation(conversationId, terminal);
+    }
+
+    private TerminalPanelSessionViewModel GetOrCreateTerminalSession(string conversationId, string terminalId)
+    {
+        if (!_terminalSessionsByConversation.TryGetValue(conversationId, out var sessions))
+        {
+            sessions = new ObservableCollection<TerminalPanelSessionViewModel>();
+            _terminalSessionsByConversation[conversationId] = sessions;
+        }
+
+        var terminal = sessions.FirstOrDefault(session =>
+            string.Equals(session.TerminalId, terminalId, StringComparison.Ordinal));
+        if (terminal != null)
+        {
+            return terminal;
+        }
+
+        terminal = new TerminalPanelSessionViewModel(terminalId)
+        {
+            DisplayName = terminalId
+        };
+        sessions.Add(terminal);
+        return terminal;
+    }
+
+    private void SelectTerminalForConversation(string conversationId, TerminalPanelSessionViewModel terminal)
+    {
+        _selectedTerminalIdByConversation[conversationId] = terminal.TerminalId;
+        if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
+        {
+            TerminalSessions = _terminalSessionsByConversation[conversationId];
+            SelectedTerminalSession = terminal;
+            SelectBottomPanelTab("terminal");
+        }
+    }
+
+    private void SelectBottomPanelTab(string tabId)
+    {
+        if (BottomPanelTabs.FirstOrDefault(tab =>
+            string.Equals(tab.Id, tabId, StringComparison.Ordinal)) is { } tab)
+        {
+            SelectedBottomPanelTab = tab;
+        }
+    }
+
+    private static string? TryReadTerminalId(object? rawParams)
+    {
+        return TryGetRawParamsElement(rawParams, out var element)
+            && element.ValueKind == JsonValueKind.Object
+            && element.TryGetProperty("terminalId", out var terminalId)
+            && terminalId.ValueKind == JsonValueKind.String
+                ? terminalId.GetString()
+                : null;
+    }
+
+    private static void ApplyTerminalPayload(TerminalPanelSessionViewModel terminal, object? rawParams)
+    {
+        if (!TryGetRawParamsElement(rawParams, out var rawElement) || rawElement.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        if (rawElement.TryGetProperty("output", out var output) && output.ValueKind == JsonValueKind.String)
+        {
+            terminal.Output = output.GetString() ?? string.Empty;
+        }
+
+        if (rawElement.TryGetProperty("truncated", out var truncated)
+            && truncated.ValueKind is JsonValueKind.True or JsonValueKind.False)
+        {
+            terminal.IsTruncated = truncated.GetBoolean();
+        }
+
+        if (rawElement.TryGetProperty("exitStatus", out var exitStatus)
+            && exitStatus.ValueKind == JsonValueKind.Object
+            && exitStatus.TryGetProperty("exitCode", out var exitCode)
+            && exitCode.ValueKind == JsonValueKind.Number
+            && exitCode.TryGetInt32(out var value))
+        {
+            terminal.ExitCode = value;
+        }
+
+        if (string.Equals(terminal.LastMethod, "terminal/release", StringComparison.Ordinal))
+        {
+            terminal.IsReleased = true;
+        }
+    }
+
+    private static bool TryGetRawParamsElement(object? rawParams, out JsonElement element)
+    {
+        switch (rawParams)
+        {
+            case JsonElement jsonElement:
+                element = jsonElement;
+                return true;
+            case JsonDocument jsonDocument:
+                element = jsonDocument.RootElement;
+                return true;
+            default:
+                element = default;
+                return false;
+        }
     }
 
     private void OnErrorOccurred(object? sender, string error)

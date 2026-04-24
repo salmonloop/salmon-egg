@@ -44,8 +44,9 @@ internal sealed class WindowsGuiAppSession : IDisposable
 
         if (existing == null)
         {
+            var launchedAtUtc = DateTime.UtcNow;
             LaunchInstalledMsix(executablePath);
-            existing = WaitForProcess(executablePath, TimeSpan.FromSeconds(20));
+            existing = WaitForProcess(executablePath, launchedAtUtc, TimeSpan.FromSeconds(20));
         }
 
         var automation = new UIA3Automation();
@@ -67,9 +68,10 @@ internal sealed class WindowsGuiAppSession : IDisposable
         var currentInstall = GuiTestGate.GetRequiredCurrentInstall();
         var executablePath = currentInstall.InstalledExecutablePath
             ?? throw new InvalidOperationException(currentInstall.FailureMessage);
+        var launchedAtUtc = DateTime.UtcNow;
         LaunchInstalledMsix(executablePath);
 
-        var process = WaitForProcess(executablePath, TimeSpan.FromSeconds(20));
+        var process = WaitForProcess(executablePath, launchedAtUtc, TimeSpan.FromSeconds(20));
 
         return AttachToProcess(process, ownsProcess: true);
     }
@@ -730,17 +732,19 @@ internal sealed class WindowsGuiAppSession : IDisposable
 
     private static void LaunchInstalledMsix(string executablePath)
     {
+        var manifest = MsixManifestInfo.LoadFromRepo();
+        var appUserModelId = $"{manifest.IdentityName}!{manifest.ApplicationId}";
         var process = Process.Start(new ProcessStartInfo
         {
-            FileName = executablePath,
-            WorkingDirectory = Path.GetDirectoryName(executablePath),
-            UseShellExecute = false
+            FileName = "explorer.exe",
+            Arguments = $"shell:AppsFolder\\{appUserModelId}",
+            UseShellExecute = true
         });
 
         if (process == null)
         {
             throw new InvalidOperationException(
-                $"Failed to launch installed SalmonEgg executable '{executablePath}'.");
+                $"Failed to launch installed SalmonEgg package '{appUserModelId}' from '{executablePath}'.");
         }
     }
 
@@ -806,14 +810,15 @@ internal sealed class WindowsGuiAppSession : IDisposable
                 && string.Equals(candidatePath, executablePath, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static Process WaitForProcess(string executablePath, TimeSpan timeout)
+    private static Process WaitForProcess(string executablePath, DateTime launchedAtUtc, TimeSpan timeout)
     {
         return RetryUntil(
             () => Process.GetProcessesByName(ProcessName)
                 .OrderByDescending(process => process.StartTime)
                 .FirstOrDefault(process =>
-                    TryGetProcessExecutablePath(process, out var candidatePath)
-                    && string.Equals(candidatePath, executablePath, StringComparison.OrdinalIgnoreCase)),
+                    (TryGetProcessExecutablePath(process, out var candidatePath)
+                        && string.Equals(candidatePath, executablePath, StringComparison.OrdinalIgnoreCase))
+                    || WasProcessStartedAfter(process, launchedAtUtc)),
             process => process != null,
             timeout,
             $"Timed out waiting for SalmonEgg process from installed executable '{executablePath}'.")!;
@@ -829,6 +834,18 @@ internal sealed class WindowsGuiAppSession : IDisposable
         catch
         {
             executablePath = string.Empty;
+            return false;
+        }
+    }
+
+    private static bool WasProcessStartedAfter(Process process, DateTime launchedAtUtc)
+    {
+        try
+        {
+            return process.StartTime.ToUniversalTime() >= launchedAtUtc.AddSeconds(-2);
+        }
+        catch
+        {
             return false;
         }
     }

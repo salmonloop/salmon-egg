@@ -19,6 +19,11 @@ public sealed partial class BottomPanelHost : UserControl
 
     public string SelectedTabTitle => GetResourceString(SelectedTab?.TitleResourceKey);
 
+    public string SelectedTerminalContent => SelectedTerminalSession?.Output ?? string.Empty;
+
+    public bool IsTerminalTabSelected =>
+        string.Equals(SelectedTab?.Id, "terminal", StringComparison.Ordinal);
+
     public ObservableCollection<BottomPanelTabViewModel>? TabsSource
     {
         get => (ObservableCollection<BottomPanelTabViewModel>?)GetValue(TabsSourceProperty);
@@ -45,6 +50,32 @@ public sealed partial class BottomPanelHost : UserControl
             typeof(BottomPanelHost),
             new PropertyMetadata(null, OnSelectedTabChanged));
 
+    public ObservableCollection<TerminalPanelSessionViewModel>? TerminalSessions
+    {
+        get => (ObservableCollection<TerminalPanelSessionViewModel>?)GetValue(TerminalSessionsProperty);
+        set => SetValue(TerminalSessionsProperty, value);
+    }
+
+    public static readonly DependencyProperty TerminalSessionsProperty =
+        DependencyProperty.Register(
+            nameof(TerminalSessions),
+            typeof(ObservableCollection<TerminalPanelSessionViewModel>),
+            typeof(BottomPanelHost),
+            new PropertyMetadata(null, OnTerminalStateChanged));
+
+    public TerminalPanelSessionViewModel? SelectedTerminalSession
+    {
+        get => (TerminalPanelSessionViewModel?)GetValue(SelectedTerminalSessionProperty);
+        set => SetValue(SelectedTerminalSessionProperty, value);
+    }
+
+    public static readonly DependencyProperty SelectedTerminalSessionProperty =
+        DependencyProperty.Register(
+            nameof(SelectedTerminalSession),
+            typeof(TerminalPanelSessionViewModel),
+            typeof(BottomPanelHost),
+            new PropertyMetadata(null, OnTerminalStateChanged));
+
     private static void OnTabsSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is BottomPanelHost host)
@@ -55,6 +86,14 @@ public sealed partial class BottomPanelHost : UserControl
     }
 
     private static void OnSelectedTabChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is BottomPanelHost host)
+        {
+            host.Bindings.Update();
+        }
+    }
+
+    private static void OnTerminalStateChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is BottomPanelHost host)
         {

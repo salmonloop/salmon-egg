@@ -763,6 +763,8 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var parser = new MessageParser();
             var client = await CreateInitializedClientAsync();
             var sentMessages = new ConcurrentQueue<string>();
+            var terminalStates = new ConcurrentQueue<TerminalStateChangedEventArgs>();
+            client.TerminalStateChangedReceived += (_, args) => terminalStates.Enqueue(args);
 
             _transportMock
                 .Setup(t => t.SendMessageAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -793,6 +795,11 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 parser.Options);
             Assert.NotNull(createResult);
             Assert.False(string.IsNullOrWhiteSpace(createResult!.TerminalId));
+            Assert.Contains(
+                terminalStates,
+                state => state.SessionId == "session-1"
+                    && state.TerminalId == createResult.TerminalId
+                    && state.Method == "terminal/create");
 
             var waitRequest = new JsonRpcRequest(
                 100,
@@ -816,6 +823,12 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 parser.Options);
             Assert.NotNull(waitResult);
             Assert.Equal(0, waitResult!.ExitCode);
+            Assert.Contains(
+                terminalStates,
+                state => state.SessionId == "session-1"
+                    && state.TerminalId == createResult.TerminalId
+                    && state.Method == "terminal/wait_for_exit"
+                    && state.ExitStatus?.ExitCode == 0);
 
             var outputRequest = new JsonRpcRequest(
                 101,
@@ -841,9 +854,39 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             Assert.Contains(".", outputResult!.Output);
             Assert.NotNull(outputResult.ExitStatus);
             Assert.Equal(0, outputResult.ExitStatus!.ExitCode);
+            Assert.Contains(
+                terminalStates,
+                state => state.SessionId == "session-1"
+                    && state.TerminalId == createResult.TerminalId
+                    && state.Method == "terminal/output"
+                    && state.Output?.Contains(".", StringComparison.Ordinal) == true
+                    && state.ExitStatus?.ExitCode == 0);
+
+            var killRequest = new JsonRpcRequest(
+                103,
+                "terminal/kill",
+                JsonSerializer.SerializeToElement(
+                    new TerminalKillRequest
+                    {
+                        SessionId = "session-1",
+                        TerminalId = createResult.TerminalId
+                    },
+                    parser.Options));
+
+            _transportMock.Raise(
+                t => t.MessageReceived += null,
+                new MessageReceivedEventArgs(parser.SerializeMessage(killRequest)));
+
+            var killResponse = await WaitForResponseAsync(parser, sentMessages, responseId: 103);
+            Assert.False(killResponse.IsError);
+            Assert.Contains(
+                terminalStates,
+                state => state.SessionId == "session-1"
+                    && state.TerminalId == createResult.TerminalId
+                    && state.Method == "terminal/kill");
 
             var releaseRequest = new JsonRpcRequest(
-                102,
+                104,
                 "terminal/release",
                 JsonSerializer.SerializeToElement(
                     new TerminalReleaseRequest
@@ -857,8 +900,14 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 t => t.MessageReceived += null,
                 new MessageReceivedEventArgs(parser.SerializeMessage(releaseRequest)));
 
-            var releaseResponse = await WaitForResponseAsync(parser, sentMessages, responseId: 102);
+            var releaseResponse = await WaitForResponseAsync(parser, sentMessages, responseId: 104);
             Assert.False(releaseResponse.IsError);
+            Assert.Contains(
+                terminalStates,
+                state => state.SessionId == "session-1"
+                    && state.TerminalId == createResult.TerminalId
+                    && state.Method == "terminal/release"
+                    && state.IsReleased);
         }
 
         [Theory]

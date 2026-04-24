@@ -13,6 +13,8 @@ internal sealed class GuiAppDataScope : IDisposable
     private const string LateUserMessageIdEnvVar = "SALMONEGG_GUI_LATE_USER_MESSAGE_ID";
     private const string LateUserMessageTextEnvVar = "SALMONEGG_GUI_LATE_USER_MESSAGE_TEXT";
     private const string LateUserMessageDelayMsEnvVar = "SALMONEGG_GUI_LATE_USER_MESSAGE_DELAY_MS";
+    private const string TerminalSmokeEnabledEnvVar = "SALMONEGG_GUI_TERMINAL_SMOKE_ENABLED";
+    private const string TerminalSmokeOutputEnvVar = "SALMONEGG_GUI_TERMINAL_SMOKE_OUTPUT";
     private readonly string _appDataRoot;
     private readonly string _configDirectory;
     private readonly string _conversationsDirectory;
@@ -323,6 +325,62 @@ internal sealed class GuiAppDataScope : IDisposable
         Environment.SetEnvironmentVariable(LateUserMessageIdEnvVar, "gui-server-user-77");
         Environment.SetEnvironmentVariable(LateUserMessageDelayMsEnvVar, "400");
         Environment.SetEnvironmentVariable(LateUserMessageTextEnvVar, "hello");
+
+        return scope;
+    }
+
+    public static GuiAppDataScope CreateDeterministicTerminalToolData()
+    {
+        GuiTestGate.RequireEnabled();
+        WindowsGuiAppSession.StopAllRunningInstances();
+
+        const string profileId = "gui-slow-remote-profile";
+        var appDataRoot = ResolveAppDataRoot();
+        var previousGuiAppDataRootOverride = Environment.GetEnvironmentVariable(AppDataRootEnvVar);
+        var previousFakeReplaySessionId = Environment.GetEnvironmentVariable(FakeReplaySessionIdEnvVar);
+        var previousFakeReplayMessageCount = Environment.GetEnvironmentVariable(FakeReplayMessageCountEnvVar);
+        var environmentRestoreMap = CaptureEnvironmentVariables(
+            TerminalSmokeEnabledEnvVar,
+            TerminalSmokeOutputEnvVar);
+
+        Environment.SetEnvironmentVariable(AppDataRootEnvVar, appDataRoot);
+
+        var appYamlPath = Path.Combine(appDataRoot, "config", "app.yaml");
+        var conversationsPath = Path.Combine(appDataRoot, "conversations", "conversations.v1.json");
+        var serverYamlPath = Path.Combine(appDataRoot, "config", "servers", profileId + ".yaml");
+        var projectRootPath = Path.Combine(Path.GetTempPath(), "SalmonEgg.GuiTests", "remote-project-1");
+
+        var scope = new GuiAppDataScope(
+            appDataRoot,
+            appYamlPath,
+            conversationsPath,
+            serverYamlPath,
+            secondaryServerYamlPath: null,
+            File.Exists(appYamlPath) ? File.ReadAllBytes(appYamlPath) : null,
+            File.Exists(appYamlPath),
+            File.Exists(conversationsPath) ? File.ReadAllBytes(conversationsPath) : null,
+            File.Exists(conversationsPath),
+            File.Exists(serverYamlPath) ? File.ReadAllBytes(serverYamlPath) : null,
+            File.Exists(serverYamlPath),
+            originalSecondaryServerYaml: null,
+            secondaryServerYamlExisted: false,
+            projectRootPath,
+            previousGuiAppDataRootOverride,
+            previousFakeReplaySessionId,
+            previousFakeReplayMessageCount,
+            previousGuiControlFile: null,
+            environmentRestoreMap);
+
+        scope.SeedSlowRemoteReplay(
+            profileId,
+            cachedMessageCount: 0,
+            replayMessageCount: 1,
+            includeLocalConversation: false,
+            localMessageCount: 3,
+            remoteConversationCount: 1);
+
+        Environment.SetEnvironmentVariable(TerminalSmokeEnabledEnvVar, "1");
+        Environment.SetEnvironmentVariable(TerminalSmokeOutputEnvVar, "hello-terminal");
 
         return scope;
     }

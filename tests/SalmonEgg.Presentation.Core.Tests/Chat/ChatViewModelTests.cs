@@ -1428,6 +1428,200 @@ public class ChatViewModelTests
     }
 
     [Fact]
+    public async Task TerminalRequestReceived_Create_SelectsTerminalTabAndAddsSession()
+    {
+        await using var fixture = CreateViewModel();
+        var chatService = CreateConnectedChatService();
+        await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conversation-terminal-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty.Add(
+                "conversation-terminal-1",
+                new ConversationBindingSlice("conversation-terminal-1", "remote-session-1", "profile-1"))
+        });
+        await WaitForConditionAsync(() => Task.FromResult(fixture.ViewModel.BottomPanelTabs.Count == 2));
+
+        chatService.Raise(
+            service => service.TerminalRequestReceived += null,
+            chatService.Object,
+            new TerminalRequestEventArgs(
+                "request-1",
+                "remote-session-1",
+                "terminal-1",
+                "terminal/create",
+                ParseJsonParams("""{"terminalId":"terminal-1","command":"dotnet"}"""),
+                _ => Task.FromResult(false)));
+
+        await WaitForConditionAsync(() => Task.FromResult(
+            fixture.ViewModel.TerminalSessions.Count == 1
+            && fixture.ViewModel.SelectedTerminalSession?.TerminalId == "terminal-1"
+            && fixture.ViewModel.SelectedBottomPanelTab?.Id == "terminal"));
+
+        var terminal = Assert.Single(fixture.ViewModel.TerminalSessions);
+        Assert.Equal("terminal-1", terminal.TerminalId);
+        Assert.Equal("terminal/create", terminal.LastMethod);
+        Assert.Equal(string.Empty, terminal.Output);
+    }
+
+    [Fact]
+    public async Task TerminalRequestReceived_SyntheticOutputPayload_UpdatesExistingSessionOutput()
+    {
+        await using var fixture = CreateViewModel();
+        var chatService = CreateConnectedChatService();
+        await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conversation-terminal-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty.Add(
+                "conversation-terminal-1",
+                new ConversationBindingSlice("conversation-terminal-1", "remote-session-1", "profile-1"))
+        });
+        await WaitForConditionAsync(() => Task.FromResult(fixture.ViewModel.BottomPanelTabs.Count == 2));
+
+        chatService.Raise(
+            service => service.TerminalRequestReceived += null,
+            chatService.Object,
+            new TerminalRequestEventArgs(
+                "request-1",
+                "remote-session-1",
+                "terminal-1",
+                "terminal/create",
+                ParseJsonParams("""{"terminalId":"terminal-1"}"""),
+                _ => Task.FromResult(false)));
+
+        chatService.Raise(
+            service => service.TerminalRequestReceived += null,
+            chatService.Object,
+            new TerminalRequestEventArgs(
+                "request-2",
+                "remote-session-1",
+                "terminal-1",
+                "terminal/output",
+                ParseJsonParams("""{"terminalId":"terminal-1","output":"hello\n","truncated":false}"""),
+                _ => Task.FromResult(false)));
+
+        await WaitForConditionAsync(() => Task.FromResult(
+            fixture.ViewModel.SelectedTerminalSession?.Output.Contains("hello", StringComparison.Ordinal) == true));
+
+        Assert.False(fixture.ViewModel.SelectedTerminalSession!.IsTruncated);
+    }
+
+    [Fact]
+    public async Task TerminalStateChangedReceived_ProjectsRealOutputLifecycleIntoTerminalPanel()
+    {
+        await using var fixture = CreateViewModel();
+        var chatService = CreateConnectedChatService();
+        await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conversation-terminal-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty.Add(
+                "conversation-terminal-1",
+                new ConversationBindingSlice("conversation-terminal-1", "remote-session-1", "profile-1"))
+        });
+        await WaitForConditionAsync(() => Task.FromResult(fixture.ViewModel.BottomPanelTabs.Count == 2));
+
+        chatService.Raise(
+            service => service.TerminalStateChangedReceived += null,
+            chatService.Object,
+            new TerminalStateChangedEventArgs(
+                "remote-session-1",
+                "terminal-1",
+                "terminal/create"));
+
+        await WaitForConditionAsync(() => Task.FromResult(
+            fixture.ViewModel.SelectedTerminalSession?.TerminalId == "terminal-1"
+            && fixture.ViewModel.SelectedBottomPanelTab?.Id == "terminal"));
+
+        chatService.Raise(
+            service => service.TerminalStateChangedReceived += null,
+            chatService.Object,
+            new TerminalStateChangedEventArgs(
+                "remote-session-1",
+                "terminal-1",
+                "terminal/output",
+                "hello\n",
+                false,
+                new TerminalExitStatus { ExitCode = 0 }));
+
+        await WaitForConditionAsync(() => Task.FromResult(
+            fixture.ViewModel.SelectedTerminalSession?.Output.Contains("hello", StringComparison.Ordinal) == true
+            && fixture.ViewModel.SelectedTerminalSession.ExitCode == 0));
+
+        chatService.Raise(
+            service => service.TerminalStateChangedReceived += null,
+            chatService.Object,
+            new TerminalStateChangedEventArgs(
+                "remote-session-1",
+                "terminal-1",
+                "terminal/kill"));
+
+        await WaitForConditionAsync(() => Task.FromResult(
+            string.Equals(
+                fixture.ViewModel.SelectedTerminalSession?.LastMethod,
+                "terminal/kill",
+                StringComparison.Ordinal)));
+
+        chatService.Raise(
+            service => service.TerminalStateChangedReceived += null,
+            chatService.Object,
+            new TerminalStateChangedEventArgs(
+                "remote-session-1",
+                "terminal-1",
+                "terminal/release",
+                isReleased: true));
+
+        await WaitForConditionAsync(() => Task.FromResult(
+            fixture.ViewModel.SelectedTerminalSession?.IsReleased == true));
+
+        Assert.False(fixture.ViewModel.SelectedTerminalSession!.IsTruncated);
+    }
+
+    [Fact]
+    public async Task TerminalRequestReceived_ForBackgroundRemoteSession_DoesNotAttachToActiveConversation()
+    {
+        await using var fixture = CreateViewModel();
+        var chatService = CreateConnectedChatService();
+        await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conversation-2",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conversation-1", new ConversationBindingSlice("conversation-1", "remote-session-1", "profile-1"))
+                .Add("conversation-2", new ConversationBindingSlice("conversation-2", "remote-session-2", "profile-1"))
+        });
+        await WaitForConditionAsync(() => Task.FromResult(fixture.ViewModel.BottomPanelTabs.Count == 2));
+
+        chatService.Raise(
+            service => service.TerminalRequestReceived += null,
+            chatService.Object,
+            new TerminalRequestEventArgs(
+                "request-1",
+                "remote-session-1",
+                "terminal-1",
+                "terminal/create",
+                ParseJsonParams("""{"terminalId":"terminal-1"}"""),
+                _ => Task.FromResult(false)));
+
+        await Task.Delay(100);
+        Assert.Empty(fixture.ViewModel.TerminalSessions);
+        Assert.Null(fixture.ViewModel.SelectedTerminalSession);
+        Assert.Equal("terminal", fixture.ViewModel.SelectedBottomPanelTab?.Id);
+
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "conversation-1" });
+        await WaitForConditionAsync(() => Task.FromResult(
+            string.Equals(fixture.ViewModel.CurrentSessionId, "conversation-1", StringComparison.Ordinal)));
+        await WaitForConditionAsync(() => Task.FromResult(
+            fixture.ViewModel.TerminalSessions.Count == 1
+            && fixture.ViewModel.SelectedTerminalSession?.TerminalId == "terminal-1"));
+    }
+
+    [Fact]
     public async Task ArchiveConversation_CurrentSession_ClearsBottomPanelStateAndDoesNotReviveSelection()
     {
         var activation = new Mock<IConversationActivationCoordinator>();
@@ -3132,6 +3326,12 @@ public class ChatViewModelTests
         Assert.True(await predicate().ConfigureAwait(false), "Timed out waiting for expected asynchronous condition.");
     }
 
+    private static JsonElement ParseJsonParams(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.Clone();
+    }
+
     private static Mock<IChatService> CreateConnectedChatService()
     {
         var chatService = new Mock<IChatService>();
@@ -3195,6 +3395,12 @@ public class ChatViewModelTests
         }
 
         public event EventHandler<TerminalRequestEventArgs>? TerminalRequestReceived
+        {
+            add { }
+            remove { }
+        }
+
+        public event EventHandler<TerminalStateChangedEventArgs>? TerminalStateChangedReceived
         {
             add { }
             remove { }
@@ -3316,6 +3522,12 @@ public class ChatViewModelTests
         }
 
         public event EventHandler<TerminalRequestEventArgs>? TerminalRequestReceived
+        {
+            add { }
+            remove { }
+        }
+
+        public event EventHandler<TerminalStateChangedEventArgs>? TerminalStateChangedReceived
         {
             add { }
             remove { }

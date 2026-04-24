@@ -89,8 +89,7 @@
       UnoFeatures are used to quickly add and manage features enabled for your app.
       https://aka.platform.uno/singleproject-features
     -->
-    <UnoFeatures>
-    </UnoFeatures>
+    <UnoFeatures>WebView;</UnoFeatures>
 
     <!-- Suppress MVVM Toolkit AOT warning until partial properties are enabled in this codebase -->
     <NoWarn>$(NoWarn);MVVMTK0045</NoWarn>
@@ -101,9 +100,16 @@
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-desktop'">
-    <UnoFeatures>SkiaRenderer;</UnoFeatures>
+    <UnoFeatures>SkiaRenderer;WebView;</UnoFeatures>
     <PlatformTarget>x64</PlatformTarget>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="Assets\Terminal\**\*.*" />
+    <Content Include="Assets\Terminal\**\*.*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 
   <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-browserwasm'">
     <RuntimeIdentifier>browser-wasm</RuntimeIdentifier>

@@ -261,6 +261,11 @@ namespace SalmonEgg.Domain.Models.Protocol
         public object? Params { get; set; }
 
         /// <summary>
+        /// Raw request parameters as received from the protocol request.
+        /// </summary>
+        public object? RawParams => Params;
+
+        /// <summary>
         /// Response callback.
         /// </summary>
         public Func<object, Task<bool>> Respond { get; set; } = null!;
@@ -289,6 +294,48 @@ namespace SalmonEgg.Domain.Models.Protocol
             Method = method;
             Params = @params;
             Respond = respond;
+        }
+    }
+
+    /// <summary>
+    /// Event arguments for client-owned terminal state snapshots.
+    /// </summary>
+    public class TerminalStateChangedEventArgs : EventArgs
+    {
+        public string SessionId { get; set; } = string.Empty;
+
+        public string TerminalId { get; set; } = string.Empty;
+
+        public string Method { get; set; } = string.Empty;
+
+        public string? Output { get; set; }
+
+        public bool? Truncated { get; set; }
+
+        public TerminalExitStatus? ExitStatus { get; set; }
+
+        public bool IsReleased { get; set; }
+
+        public TerminalStateChangedEventArgs()
+        {
+        }
+
+        public TerminalStateChangedEventArgs(
+            string sessionId,
+            string terminalId,
+            string method,
+            string? output = null,
+            bool? truncated = null,
+            TerminalExitStatus? exitStatus = null,
+            bool isReleased = false)
+        {
+            SessionId = sessionId;
+            TerminalId = terminalId;
+            Method = method;
+            Output = output;
+            Truncated = truncated;
+            ExitStatus = exitStatus;
+            IsReleased = isReleased;
         }
     }
 }

@@ -36,6 +36,7 @@ namespace SalmonEgg.Application.Services.Chat
         public event EventHandler<PermissionRequestEventArgs>? PermissionRequestReceived;
         public event EventHandler<FileSystemRequestEventArgs>? FileSystemRequestReceived;
         public event EventHandler<TerminalRequestEventArgs>? TerminalRequestReceived;
+        public event EventHandler<TerminalStateChangedEventArgs>? TerminalStateChangedReceived;
         public event EventHandler<AskUserRequestEventArgs>? AskUserRequestReceived;
         public event EventHandler<string>? ErrorOccurred;
 
@@ -49,6 +50,7 @@ namespace SalmonEgg.Application.Services.Chat
             _acpClient.PermissionRequestReceived += OnPermissionRequestReceived;
             _acpClient.FileSystemRequestReceived += OnFileSystemRequestReceived;
             _acpClient.TerminalRequestReceived += OnTerminalRequestReceived;
+            _acpClient.TerminalStateChangedReceived += OnTerminalStateChangedReceived;
             _acpClient.AskUserRequestReceived += OnAskUserRequestReceived;
             _acpClient.ErrorOccurred += OnErrorOccurred;
         }
@@ -617,6 +619,7 @@ namespace SalmonEgg.Application.Services.Chat
             _acpClient.PermissionRequestReceived -= OnPermissionRequestReceived;
             _acpClient.FileSystemRequestReceived -= OnFileSystemRequestReceived;
             _acpClient.TerminalRequestReceived -= OnTerminalRequestReceived;
+            _acpClient.TerminalStateChangedReceived -= OnTerminalStateChangedReceived;
             _acpClient.AskUserRequestReceived -= OnAskUserRequestReceived;
             _acpClient.ErrorOccurred -= OnErrorOccurred;
         }
@@ -624,6 +627,11 @@ namespace SalmonEgg.Application.Services.Chat
         private void OnTerminalRequestReceived(object? sender, TerminalRequestEventArgs e)
         {
             TerminalRequestReceived?.Invoke(this, e);
+        }
+
+        private void OnTerminalStateChangedReceived(object? sender, TerminalStateChangedEventArgs e)
+        {
+            TerminalStateChangedReceived?.Invoke(this, e);
         }
     }
 }

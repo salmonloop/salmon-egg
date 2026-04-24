@@ -331,6 +331,71 @@ public sealed class ChatSkeletonSmokeTests
     }
 
     [SkippableFact]
+    public void SendPrompt_WhenAgentInvokesTerminalTool_ShowsTerminalPanelAndOutput()
+    {
+        using var appData = GuiAppDataScope.CreateDeterministicTerminalToolData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-remote-conversation-01", TimeSpan.FromSeconds(15));
+        session.ActivateElement(sessionItem);
+
+        var overlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(30));
+        Assert.True(overlayHidden, "Terminal tool scenario remained stuck behind the loading overlay.");
+
+        var inputBox = session.FindByAutomationId("InputBox", TimeSpan.FromSeconds(10)).AsTextBox();
+        session.ClickElement(inputBox);
+        inputBox.Enter("run terminal");
+
+        var sendReady = WaitUntilElementEnabled(
+            session,
+            "SendButton",
+            TimeSpan.FromSeconds(5));
+        Assert.True(sendReady, "SendButton did not become enabled for terminal tool scenario.");
+
+        var sendButton = session.FindByAutomationId("SendButton", TimeSpan.FromSeconds(10));
+        session.ClickElement(sendButton);
+
+        var requiredAppLogFragments = new[]
+        {
+            "Terminal request received: Method=terminal/create",
+            "Terminal request received: Method=terminal/wait_for_exit",
+            "Terminal request received: Method=terminal/output",
+            "Terminal request received: Method=terminal/release"
+        };
+
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(20);
+        var lastTerminalName = string.Empty;
+        var lastAppLogTail = string.Empty;
+        var sawTerminalView = false;
+        var sawOutputText = false;
+
+        while (DateTime.UtcNow < deadline)
+        {
+            sawTerminalView = session.TryFindByAutomationId("BottomPanel.TerminalWebView", TimeSpan.FromMilliseconds(150)) is not null;
+            lastTerminalName = session.TryGetElementName("BottomPanel.TerminalWebView", TimeSpan.FromMilliseconds(150)) ?? string.Empty;
+            sawOutputText =
+                lastTerminalName.Contains("hello-terminal", StringComparison.Ordinal)
+                || session.TryFindVisibleTextAnywhere("hello-terminal", TimeSpan.FromMilliseconds(150)) is not null;
+            lastAppLogTail = appData.ReadLatestAppLogTail(160);
+
+            if (sawTerminalView
+                && sawOutputText
+                && requiredAppLogFragments.All(fragment => lastAppLogTail.Contains(fragment, StringComparison.Ordinal)))
+            {
+                return;
+            }
+
+            Thread.Sleep(150);
+        }
+
+        ThrowWithScreenshot(
+            session,
+            appData,
+            "terminal-tool-output-panel",
+            $"Terminal output did not stabilize in the bottom panel. sawTerminalView={sawTerminalView} terminalName='{lastTerminalName}'{Environment.NewLine}app.log:{Environment.NewLine}{lastAppLogTail}");
+    }
+
+    [SkippableFact]
     public void SelectRemoteSessionFromStart_FirstFrame_DoesNotExposeAnyChatShellContentBeforeLoadingOverlay()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");

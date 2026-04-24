@@ -98,6 +98,7 @@ TestResults/
 logs/
 *.log
 /.dotnet-cli-home/
+/.dotnet-cli/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

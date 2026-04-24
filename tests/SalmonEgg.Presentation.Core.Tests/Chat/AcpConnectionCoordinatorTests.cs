@@ -521,6 +521,12 @@ public sealed class AcpConnectionCoordinatorTests
             remove { }
         }
 
+        public event EventHandler<TerminalStateChangedEventArgs>? TerminalStateChangedReceived
+        {
+            add { }
+            remove { }
+        }
+
         public event EventHandler<AskUserRequestEventArgs>? AskUserRequestReceived
         {
             add { }

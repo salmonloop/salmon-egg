@@ -4,11 +4,15 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:converters="using:SalmonEgg.Presentation.Converters"
+    xmlns:controls="using:SalmonEgg.Controls"
     xmlns:vm="using:SalmonEgg.Presentation.ViewModels.Chat"
     xmlns:local="using:SalmonEgg.Presentation.Views.Chat"
     mc:Ignorable="d">
 
     <UserControl.Resources>
+        <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+        <converters:InverseBoolConverter x:Key="InverseBoolToVisibilityConverter" />
         <local:ResourceKeyToStringConverter x:Key="ResourceKeyToStringConverter" />
         <local:TabAutomationIdConverter x:Key="TabAutomationIdConverter" />
     </UserControl.Resources>
@@ -54,21 +58,31 @@
             </ListView.ItemTemplate>
         </ListView>
 
-        <Border Grid.Row="1"
-                Margin="12,0,12,12"
-                Padding="16"
-                CornerRadius="12"
-                Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                BorderThickness="1">
-            <StackPanel Spacing="8">
-                <TextBlock Text="{x:Bind SelectedTabTitle, Mode=OneWay}"
-                           FontSize="16"
-                           FontWeight="SemiBold" />
-                <TextBlock x:Uid="BottomPanelPlaceholder"
-                           Opacity="0.7"
-                           TextWrapping="Wrap" />
-            </StackPanel>
-        </Border>
+        <Grid Grid.Row="1"
+              Margin="12,0,12,12">
+            <Border Visibility="{x:Bind IsTerminalTabSelected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                    CornerRadius="12"
+                    Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                    BorderThickness="1">
+                <controls:XtermTerminalView ContentText="{x:Bind SelectedTerminalContent, Mode=OneWay}" />
+            </Border>
+
+            <Border Visibility="{x:Bind IsTerminalTabSelected, Mode=OneWay, Converter={StaticResource InverseBoolToVisibilityConverter}}"
+                    Padding="16"
+                    CornerRadius="12"
+                    Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                    BorderThickness="1">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="{x:Bind SelectedTabTitle, Mode=OneWay}"
+                               FontSize="16"
+                               FontWeight="SemiBold" />
+                    <TextBlock x:Uid="BottomPanelPlaceholder"
+                               Opacity="0.7"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+        </Grid>
     </Grid>
 </UserControl>

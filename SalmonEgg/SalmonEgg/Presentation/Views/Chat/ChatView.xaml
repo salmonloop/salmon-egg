@@ -282,7 +282,9 @@
             <local:BottomPanelHost Grid.Row="2"
                                    Visibility="{x:Bind LayoutVM.BottomPanelVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                    TabsSource="{x:Bind ViewModel.BottomPanelTabs, Mode=OneWay}"
-                                   SelectedTab="{x:Bind ViewModel.SelectedBottomPanelTab, Mode=TwoWay}" />
+                                   SelectedTab="{x:Bind ViewModel.SelectedBottomPanelTab, Mode=TwoWay}"
+                                   TerminalSessions="{x:Bind ViewModel.TerminalSessions, Mode=OneWay}"
+                                   SelectedTerminalSession="{x:Bind ViewModel.SelectedTerminalSession, Mode=OneWay}" />
 
         </Grid>
     </Grid>

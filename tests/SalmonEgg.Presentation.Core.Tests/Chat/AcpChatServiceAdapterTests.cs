@@ -291,6 +291,12 @@ public sealed class AcpChatServiceAdapterTests
             remove { }
         }
 
+        public event EventHandler<TerminalStateChangedEventArgs>? TerminalStateChangedReceived
+        {
+            add { }
+            remove { }
+        }
+
         public event EventHandler<AskUserRequestEventArgs>? AskUserRequestReceived
         {
             add { }

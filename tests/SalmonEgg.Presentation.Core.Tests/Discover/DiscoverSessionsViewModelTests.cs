@@ -1214,6 +1214,12 @@ public sealed class DiscoverSessionsViewModelTests
             remove { }
         }
 
+        public event EventHandler<TerminalStateChangedEventArgs>? TerminalStateChangedReceived
+        {
+            add { }
+            remove { }
+        }
+
         public event EventHandler<AskUserRequestEventArgs>? AskUserRequestReceived
         {
             add { }

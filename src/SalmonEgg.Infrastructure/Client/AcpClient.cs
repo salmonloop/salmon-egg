@@ -90,6 +90,11 @@ namespace SalmonEgg.Infrastructure.Client
         public event EventHandler<TerminalRequestEventArgs>? TerminalRequestReceived;
 
         /// <summary>
+        /// 终端状态事件。
+        /// </summary>
+        public event EventHandler<TerminalStateChangedEventArgs>? TerminalStateChangedReceived;
+
+        /// <summary>
         /// Ask-user 请求事件。
         /// </summary>
         public event EventHandler<AskUserRequestEventArgs>? AskUserRequestReceived;
@@ -1221,41 +1226,59 @@ namespace SalmonEgg.Infrastructure.Client
                     case "terminal/create":
                         var createRequest = JsonSerializer.Deserialize<TerminalCreateRequest>(rawParams.GetRawText(), _parser.Options)
                             ?? throw new InvalidOperationException("Failed to deserialize terminal/create request.");
-                        await SendTerminalSuccessResponseAsync(
-                            messageId,
-                            await _terminalSessionManager.CreateAsync(createRequest).ConfigureAwait(false)).ConfigureAwait(false);
+                        var createResponse = await _terminalSessionManager.CreateAsync(createRequest).ConfigureAwait(false);
+                        PublishTerminalStateChanged(sessionId, createResponse.TerminalId, request.Method);
+                        await SendTerminalSuccessResponseAsync(messageId, createResponse).ConfigureAwait(false);
                         break;
 
                     case "terminal/output":
                         var outputRequest = JsonSerializer.Deserialize<TerminalOutputRequest>(rawParams.GetRawText(), _parser.Options)
                             ?? throw new InvalidOperationException("Failed to deserialize terminal/output request.");
-                        await SendTerminalSuccessResponseAsync(
-                            messageId,
-                            await _terminalSessionManager.GetOutputAsync(outputRequest).ConfigureAwait(false)).ConfigureAwait(false);
+                        var outputResponse = await _terminalSessionManager.GetOutputAsync(outputRequest).ConfigureAwait(false);
+                        PublishTerminalStateChanged(
+                            sessionId,
+                            outputRequest.TerminalId,
+                            request.Method,
+                            outputResponse.Output,
+                            outputResponse.Truncated,
+                            outputResponse.ExitStatus);
+                        await SendTerminalSuccessResponseAsync(messageId, outputResponse).ConfigureAwait(false);
                         break;
 
                     case "terminal/wait_for_exit":
                         var waitRequest = JsonSerializer.Deserialize<TerminalWaitForExitRequest>(rawParams.GetRawText(), _parser.Options)
                             ?? throw new InvalidOperationException("Failed to deserialize terminal/wait_for_exit request.");
-                        await SendTerminalSuccessResponseAsync(
-                            messageId,
-                            await _terminalSessionManager.WaitForExitAsync(waitRequest).ConfigureAwait(false)).ConfigureAwait(false);
+                        var waitResponse = await _terminalSessionManager.WaitForExitAsync(waitRequest).ConfigureAwait(false);
+                        PublishTerminalStateChanged(
+                            sessionId,
+                            waitRequest.TerminalId,
+                            request.Method,
+                            exitStatus: new TerminalExitStatus
+                            {
+                                ExitCode = waitResponse.ExitCode,
+                                Signal = waitResponse.Signal
+                            });
+                        await SendTerminalSuccessResponseAsync(messageId, waitResponse).ConfigureAwait(false);
                         break;
 
                     case "terminal/kill":
                         var killRequest = JsonSerializer.Deserialize<TerminalKillRequest>(rawParams.GetRawText(), _parser.Options)
                             ?? throw new InvalidOperationException("Failed to deserialize terminal/kill request.");
-                        await SendTerminalSuccessResponseAsync(
-                            messageId,
-                            await _terminalSessionManager.KillAsync(killRequest).ConfigureAwait(false)).ConfigureAwait(false);
+                        var killResponse = await _terminalSessionManager.KillAsync(killRequest).ConfigureAwait(false);
+                        PublishTerminalStateChanged(sessionId, killRequest.TerminalId, request.Method);
+                        await SendTerminalSuccessResponseAsync(messageId, killResponse).ConfigureAwait(false);
                         break;
 
                     case "terminal/release":
                         var releaseRequest = JsonSerializer.Deserialize<TerminalReleaseRequest>(rawParams.GetRawText(), _parser.Options)
                             ?? throw new InvalidOperationException("Failed to deserialize terminal/release request.");
-                        await SendTerminalSuccessResponseAsync(
-                            messageId,
-                            await _terminalSessionManager.ReleaseAsync(releaseRequest).ConfigureAwait(false)).ConfigureAwait(false);
+                        var releaseResponse = await _terminalSessionManager.ReleaseAsync(releaseRequest).ConfigureAwait(false);
+                        PublishTerminalStateChanged(
+                            sessionId,
+                            releaseRequest.TerminalId,
+                            request.Method,
+                            isReleased: true);
+                        await SendTerminalSuccessResponseAsync(messageId, releaseResponse).ConfigureAwait(false);
                         break;
 
                     default:
@@ -1286,6 +1309,32 @@ namespace SalmonEgg.Infrastructure.Client
         {
             RemovePendingInboundTracking(messageId?.ToString() ?? string.Empty);
             await SendResponseAsync(new JsonRpcResponse(messageId, JsonSerializer.SerializeToElement(result, _parser.Options))).ConfigureAwait(false);
+        }
+
+        private void PublishTerminalStateChanged(
+            string sessionId,
+            string terminalId,
+            string method,
+            string? output = null,
+            bool? truncated = null,
+            TerminalExitStatus? exitStatus = null,
+            bool isReleased = false)
+        {
+            if (string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(terminalId))
+            {
+                return;
+            }
+
+            TerminalStateChangedReceived?.Invoke(
+                this,
+                new TerminalStateChangedEventArgs(
+                    sessionId,
+                    terminalId,
+                    method,
+                    output,
+                    truncated,
+                    exitStatus,
+                    isReleased));
         }
 
         private async Task CancelPendingInboundRequestsForSessionAsync(string sessionId)

@@ -66,6 +66,12 @@ public sealed class AcpChatServiceAdapter : IChatService, IAcpSessionUpdateBuffe
         remove => _inner.TerminalRequestReceived -= value;
     }
 
+    public event EventHandler<TerminalStateChangedEventArgs>? TerminalStateChangedReceived
+    {
+        add => _inner.TerminalStateChangedReceived += value;
+        remove => _inner.TerminalStateChangedReceived -= value;
+    }
+
     public event EventHandler<AskUserRequestEventArgs>? AskUserRequestReceived
     {
         add => _inner.AskUserRequestReceived += value;

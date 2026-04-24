@@ -37,6 +37,35 @@ public sealed class ChatViewXamlTests
         Assert.DoesNotContain("SelectedItem=\"{x:Bind ViewModel.SelectedAcpProfile, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ChatViewXaml_BindsTerminalPanelStateIntoBottomPanelHost()
+    {
+        var xaml = LoadChatViewXaml();
+
+        Assert.Contains("TerminalSessions=\"{x:Bind ViewModel.TerminalSessions, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("SelectedTerminalSession=\"{x:Bind ViewModel.SelectedTerminalSession, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BottomPanelHostXaml_UsesXtermTerminalViewForTerminalTab()
+    {
+        var root = FindRepoRoot();
+        var xaml = File.ReadAllText(Path.Combine(root, "SalmonEgg", "SalmonEgg", "Presentation", "Views", "Chat", "BottomPanelHost.xaml"));
+
+        Assert.Contains("controls:XtermTerminalView", xaml, StringComparison.Ordinal);
+        Assert.Contains("IsTerminalTabSelected", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void XtermTerminalViewXaml_FallbackBindsTerminalContent()
+    {
+        var root = FindRepoRoot();
+        var xaml = File.ReadAllText(Path.Combine(root, "SalmonEgg", "SalmonEgg", "Controls", "XtermTerminalView.xaml"));
+
+        Assert.Contains("Text=\"{x:Bind ContentText, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.Name=\"{x:Bind ContentText, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+    }
+
     private static string LoadChatViewXaml()
     {
         var root = FindRepoRoot();

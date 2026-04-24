@@ -173,11 +173,33 @@ function Get-ValidCodeSigningCert {
     return ($null -ne $rsaKey)
 }
 
+function Read-ProtectedSecret {
+    param([Parameter(Mandatory = $true)] [string] $SecretCachePath)
+
+    $protectedSecret = Get-Content -Path $SecretCachePath -ErrorAction Stop | Select-Object -First 1
+    if ([string]::IsNullOrWhiteSpace($protectedSecret)) {
+        throw "Protected secret cache '$SecretCachePath' is empty."
+    }
+
+    $secureSecret = ConvertTo-SecureString -String $protectedSecret -ErrorAction Stop
+    return [System.Net.NetworkCredential]::new('', $secureSecret).Password
+}
+
+function Write-ProtectedSecret {
+    param(
+        [Parameter(Mandatory = $true)] [string] $SecretCachePath,
+        [Parameter(Mandatory = $true)] [Security.SecureString] $Secret
+    )
+
+    $protectedSecret = ConvertFrom-SecureString -SecureString $Secret
+    Set-Content -Path $SecretCachePath -Value $protectedSecret -Encoding ASCII
+}
+
 function Get-OrCreateDevCert {
     param(
         [Parameter(Mandatory = $true)] [string] $Subject,
         [Parameter(Mandatory = $true)] [string] $PfxPath,
-        [Parameter(Mandatory = $true)] [string] $PasswordPath
+        [Parameter(Mandatory = $true)] [string] $SecretCachePath
     )
 
     $candidates = Get-CertificatesFromStore -Subject $Subject -StoreName 'My' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
@@ -186,21 +208,27 @@ function Get-OrCreateDevCert {
         return $cert
     }
 
-    if ((Test-Path $PfxPath) -and (Test-Path $PasswordPath)) {
-        $pfxPassword = Get-Content -Path $PasswordPath -ErrorAction Stop | Select-Object -First 1
-        $imported = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
-            $PfxPath,
-            $pfxPassword,
-            [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable -bor
-            [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::PersistKeySet -bor
-            [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::UserKeySet
-        )
-        Add-CertificateToStore -Cert $imported -StoreName 'My' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
+    if ((Test-Path $PfxPath) -and (Test-Path $SecretCachePath)) {
+        try {
+            $pfxPassword = Read-ProtectedSecret -SecretCachePath $SecretCachePath
+            $imported = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
+                $PfxPath,
+                $pfxPassword,
+                [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable -bor
+                [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::PersistKeySet -bor
+                [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::UserKeySet
+            )
+            Add-CertificateToStore -Cert $imported -StoreName 'My' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
 
-        $candidates = Get-CertificatesFromStore -Subject $Subject -StoreName 'My' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
-        $cert = $candidates | Where-Object { Get-ValidCodeSigningCert -Cert $_ } | Select-Object -First 1
-        if ($cert) {
-            return $cert
+            $candidates = Get-CertificatesFromStore -Subject $Subject -StoreName 'My' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
+            $cert = $candidates | Where-Object { Get-ValidCodeSigningCert -Cert $_ } | Select-Object -First 1
+            if ($cert) {
+                return $cert
+            }
+        } catch {
+            Write-Host "WARN: Cached signing certificate could not be imported; recreating cache. $($_.Exception.Message)"
+            Remove-Item -Force -Path $PfxPath -ErrorAction SilentlyContinue
+            Remove-Item -Force -Path $SecretCachePath -ErrorAction SilentlyContinue
         }
     }
 
@@ -228,7 +256,7 @@ function Get-OrCreateDevCert {
             $password = [Guid]::NewGuid().ToString("N")
             $secure = ConvertTo-SecureString -String $password -AsPlainText -Force
             Export-PfxCertificate -Cert $created -FilePath $PfxPath -Password $secure | Out-Null
-            Set-Content -Path $PasswordPath -Value $password -Encoding ASCII
+            Write-ProtectedSecret -SecretCachePath $SecretCachePath -Secret $secure
             return $created
         }
     } catch {
@@ -263,7 +291,7 @@ function Get-OrCreateDevCert {
 
     Add-CertificateToStore -Cert $persisted -StoreName 'My' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
     Export-PfxCertificate -Cert $persisted -FilePath $PfxPath -Password (ConvertTo-SecureString -String $password -AsPlainText -Force) | Out-Null
-    Set-Content -Path $PasswordPath -Value $password -Encoding ASCII
+    Write-ProtectedSecret -SecretCachePath $SecretCachePath -Secret (ConvertTo-SecureString -String $password -AsPlainText -Force)
     return $persisted
 }
 
@@ -515,7 +543,7 @@ function Invoke-LoggedProcess {
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $certCacheDir = Join-Path $repoRoot '.tools\certs'
 $certPfxPath = Join-Path $certCacheDir 'SalmonEgg-dev.pfx'
-$certPasswordPath = Join-Path $certCacheDir 'SalmonEgg-dev.pfx.pass'
+$certSecretCachePath = Join-Path $certCacheDir 'SalmonEgg-dev.pfx.secret'
 New-Item -ItemType Directory -Force -Path $certCacheDir | Out-Null
 
 # Ensure dotnet first-time setup and tool caches go to a writable location
@@ -526,19 +554,58 @@ $env:DOTNET_CLI_HOME = $dotnetCliHome
 $env:DOTNET_SKIP_FIRST_TIME_EXPERIENCE = '1'
 $env:DOTNET_NOLOGO = '1'
 
+$repoNuGetPackages = Join-Path $repoRoot '.dotnet-cli\.nuget\packages'
+$userNuGetPackages = Join-Path $HOME '.nuget\packages'
+if (-not $env:NUGET_PACKAGES) {
+    if (Test-Path $userNuGetPackages) {
+        $env:NUGET_PACKAGES = $userNuGetPackages
+    } else {
+        New-Item -ItemType Directory -Force -Path $repoNuGetPackages | Out-Null
+        $env:NUGET_PACKAGES = $repoNuGetPackages
+    }
+}
+
+function Remove-RestoreArtifacts {
+    param([Parameter(Mandatory = $true)] [string] $ProjectPath)
+
+    $projectDirectory = Split-Path -Parent $ProjectPath
+    $projectFileName = Split-Path -Leaf $ProjectPath
+    $objDirectory = Join-Path $projectDirectory 'obj'
+    if (-not (Test-Path $objDirectory)) {
+        return
+    }
+
+    $pathsToRemove = @(
+        (Join-Path $objDirectory 'project.assets.json'),
+        (Join-Path $objDirectory 'project.nuget.cache'),
+        (Join-Path $objDirectory "$projectFileName.nuget.dgspec.json"),
+        (Join-Path $objDirectory "$projectFileName.nuget.g.props"),
+        (Join-Path $objDirectory "$projectFileName.nuget.g.targets")
+    )
+
+    foreach ($path in $pathsToRemove) {
+        if (Test-Path $path) {
+            Remove-Item -Force -Path $path -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 $project = Join-Path $repoRoot 'SalmonEgg\SalmonEgg\SalmonEgg.csproj'
-$presentationCoreProject = Join-Path $repoRoot 'src\SalmonEgg.Presentation.Core\SalmonEgg.Presentation.Core.csproj'
+$referenceProjects = @(
+    (Join-Path $repoRoot 'src\SalmonEgg.Domain\SalmonEgg.Domain.csproj'),
+    (Join-Path $repoRoot 'src\SalmonEgg.Application\SalmonEgg.Application.csproj'),
+    (Join-Path $repoRoot 'src\SalmonEgg.Infrastructure\SalmonEgg.Infrastructure.csproj'),
+    (Join-Path $repoRoot 'src\SalmonEgg.Presentation.Core\SalmonEgg.Presentation.Core.csproj')
+)
 $tfm = 'net10.0-windows10.0.26100.0'
 $publishProfile = 'Properties/PublishProfiles/win-msix-x64.pubxml'
 $msixOutDir = Join-Path $repoRoot 'artifacts\msix'
 $msixLogDir = Join-Path $repoRoot 'artifacts\logs\msix'
 $logStamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $restoreLogPath = Join-Path $msixLogDir "$logStamp-restore.log"
-$referenceBuildLogPath = Join-Path $msixLogDir "$logStamp-reference-build.log"
 $publishLogPath = Join-Path $msixLogDir "$logStamp-publish.log"
 $signLogPath = Join-Path $msixLogDir "$logStamp-sign.log"
 $restoreBinLogPath = Join-Path $msixLogDir "$logStamp-restore.binlog"
-$referenceBuildBinLogPath = Join-Path $msixLogDir "$logStamp-reference-build.binlog"
 $publishBinLogPath = Join-Path $msixLogDir "$logStamp-publish.binlog"
 $currentInstallMarkerPath = Join-Path $msixOutDir 'current-install.json'
 
@@ -562,6 +629,9 @@ Invoke-LoggedProcess `
         '/p:EnableWinUIBuild=true',
         '/p:IsolatedMsixBuild=true',
         '/p:BuildProjectReferences=false',
+        "/p:RestorePackagesPath=$($env:NUGET_PACKAGES)",
+        '/p:RestoreIgnoreFailedSources=true',
+        '/p:NuGetAudit=false',
         "/bl:$restoreBinLogPath",
         '/v:minimal'
     ) `
@@ -569,20 +639,32 @@ Invoke-LoggedProcess `
     -StepName 'Restoring WinUI app with isolated intermediates' `
     -DisplayCommand "MSBuild Restore (binlog: $restoreBinLogPath)"
 
-Invoke-LoggedProcess `
-    -FilePath 'dotnet' `
-    -Arguments @(
-        'build',
-        $presentationCoreProject,
-        '-c', $Configuration,
-        '-f', 'net10.0',
-        '-nodeReuse:false',
-        "-bl:$referenceBuildBinLogPath",
-        '-v:minimal'
-    ) `
-    -LogPath $referenceBuildLogPath `
-    -StepName 'Rebuilding net10.0 reference projects after WinUI restore' `
-    -DisplayCommand "dotnet build Presentation.Core (binlog: $referenceBuildBinLogPath)"
+foreach ($referenceProject in $referenceProjects) {
+    Remove-RestoreArtifacts -ProjectPath $referenceProject
+}
+
+foreach ($referenceProject in $referenceProjects) {
+    $referenceProjectName = [System.IO.Path]::GetFileNameWithoutExtension($referenceProject)
+    $referenceRestoreLogPath = Join-Path $msixLogDir "$logStamp-reference-restore-$referenceProjectName.log"
+    $referenceRestoreBinLogPath = Join-Path $msixLogDir "$logStamp-reference-restore-$referenceProjectName.binlog"
+
+    Invoke-LoggedProcess `
+        -FilePath $msbuild `
+        -Arguments @(
+            $referenceProject,
+            '/t:Restore',
+            "/p:Configuration=$Configuration",
+            '/p:TargetFramework=net10.0',
+            "/p:RestorePackagesPath=$($env:NUGET_PACKAGES)",
+            '/p:RestoreIgnoreFailedSources=true',
+            '/p:NuGetAudit=false',
+            "-bl:$referenceRestoreBinLogPath",
+            '/v:minimal'
+        ) `
+        -LogPath $referenceRestoreLogPath `
+        -StepName "Refreshing net10.0 assets for $referenceProjectName" `
+        -DisplayCommand "MSBuild Restore ($referenceProjectName, binlog: $referenceRestoreBinLogPath)"
+}
 
 Invoke-LoggedProcess `
     -FilePath $msbuild `
@@ -594,8 +676,11 @@ Invoke-LoggedProcess `
         "/p:PublishProfile=$publishProfile",
         '/p:EnableWinUIBuild=true',
         '/p:IsolatedMsixBuild=true',
-        '/p:BuildProjectReferences=false',
+        '/p:BuildProjectReferences=true',
         '/p:Restore=false',
+        "/p:RestorePackagesPath=$($env:NUGET_PACKAGES)",
+        '/p:RestoreIgnoreFailedSources=true',
+        '/p:NuGetAudit=false',
         "/bl:$publishBinLogPath",
         '/v:minimal'
     ) `
@@ -613,7 +698,7 @@ if (-not $msix) {
 
 $isAdmin = Test-IsAdmin
 $certSubject = 'CN=SalmonEgg'
-$cert = Get-OrCreateDevCert -Subject $certSubject -PfxPath $certPfxPath -PasswordPath $certPasswordPath
+$cert = Get-OrCreateDevCert -Subject $certSubject -PfxPath $certPfxPath -SecretCachePath $certSecretCachePath
 $signTool = Get-SignToolPath
 
 Write-Host "Signing MSIX with cert '$certSubject' ($($cert.Thumbprint))..."
