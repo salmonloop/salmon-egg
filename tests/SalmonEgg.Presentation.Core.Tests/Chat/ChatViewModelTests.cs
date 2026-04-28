@@ -3972,6 +3972,8 @@ public class ChatViewModelTests
 
         public string CurrentWorkingDirectory { get; }
 
+        public LocalTerminalTransportMode TransportMode => LocalTerminalTransportMode.Pipe;
+
         public bool CanAcceptInput => true;
 
         public event EventHandler<string>? OutputReceived;

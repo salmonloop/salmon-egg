@@ -69,6 +69,18 @@ public sealed class ChatViewXamlTests
         Assert.Contains("AutomationProperties.Name=\"{x:Bind ContentText, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void XtermHost_UsesOfficialParserHooksAndWindowsPtyCompatibility()
+    {
+        var root = FindRepoRoot();
+        var script = File.ReadAllText(Path.Combine(root, "SalmonEgg", "SalmonEgg", "Assets", "Terminal", "xterm-host.js"));
+
+        Assert.Contains("terminal.parser.registerCsiHandler", script, StringComparison.Ordinal);
+        Assert.Contains("windowsPty", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("replaceAll('\\u001b[?9001h'", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("replaceAll('\\u001b[?9001l'", script, StringComparison.Ordinal);
+    }
+
     private static string LoadChatViewXaml()
     {
         var root = FindRepoRoot();

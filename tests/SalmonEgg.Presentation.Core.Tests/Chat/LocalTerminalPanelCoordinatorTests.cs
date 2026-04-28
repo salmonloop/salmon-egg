@@ -22,6 +22,7 @@ public class LocalTerminalPanelCoordinatorTests
         // Act
         var conversationId = sessionType.GetProperty("ConversationId");
         var currentWorkingDirectory = sessionType.GetProperty("CurrentWorkingDirectory");
+        var transportMode = sessionType.GetProperty("TransportMode");
         var canAcceptInput = sessionType.GetProperty("CanAcceptInput");
         var outputReceived = sessionType.GetEvent("OutputReceived");
         var stateChanged = sessionType.GetEvent("StateChanged");
@@ -32,6 +33,7 @@ public class LocalTerminalPanelCoordinatorTests
         // Assert
         Assert.NotNull(conversationId);
         Assert.NotNull(currentWorkingDirectory);
+        Assert.NotNull(transportMode);
         Assert.NotNull(canAcceptInput);
         Assert.NotNull(outputReceived);
         Assert.Equal(typeof(EventHandler<string>), outputReceived!.EventHandlerType);
@@ -374,6 +376,8 @@ public class LocalTerminalPanelCoordinatorTests
         public string ConversationId { get; }
 
         public string CurrentWorkingDirectory { get; private set; }
+
+        public LocalTerminalTransportMode TransportMode => LocalTerminalTransportMode.Pipe;
 
         public bool CanAcceptInput { get; private set; }
 

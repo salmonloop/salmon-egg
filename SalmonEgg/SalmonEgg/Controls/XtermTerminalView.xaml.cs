@@ -75,6 +75,11 @@ public sealed partial class XtermTerminalView : UserControl
         private set => SetValue(RenderedTextProperty, value);
     }
 
+    private string EffectiveTransportMode =>
+        Session?.TransportMode == LocalTerminalTransportMode.PseudoConsole
+            ? "pseudoConsole"
+            : "pipe";
+
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         _isViewActive = true;
@@ -395,6 +400,7 @@ public sealed partial class XtermTerminalView : UserControl
                 {
                     Kind = "replace",
                     HostId = _currentHostId,
+                    TransportMode = EffectiveTransportMode,
                     Text = text ?? string.Empty
                 }));
     }
@@ -413,6 +419,7 @@ public sealed partial class XtermTerminalView : UserControl
                 {
                     Kind = channel == TerminalOutputChannel.Stdout ? "stdout" : "stderr",
                     HostId = _currentHostId,
+                    TransportMode = EffectiveTransportMode,
                     Text = text
                 }));
     }
@@ -429,7 +436,8 @@ public sealed partial class XtermTerminalView : UserControl
                 new TerminalHostMessage
                 {
                     Kind = "clear",
-                    HostId = _currentHostId
+                    HostId = _currentHostId,
+                    TransportMode = EffectiveTransportMode
                 }));
     }
 
@@ -455,6 +463,7 @@ public sealed partial class XtermTerminalView : UserControl
                 {
                     Kind = "setInputEnabled",
                     HostId = _currentHostId,
+                    TransportMode = EffectiveTransportMode,
                     Enabled = Session is not null && Session.CanAcceptInput
                 }));
         await QueueHostResizeAsync();
@@ -487,6 +496,7 @@ public sealed partial class XtermTerminalView : UserControl
                 {
                     Kind = "hostSize",
                     HostId = _currentHostId,
+                    TransportMode = EffectiveTransportMode,
                     Width = width,
                     Height = height
                 }));
@@ -645,6 +655,11 @@ public sealed partial class XtermTerminalView : UserControl
         writer.WriteString("kind", message.Kind);
         writer.WriteString("hostId", message.HostId);
 
+        if (!string.IsNullOrWhiteSpace(message.TransportMode))
+        {
+            writer.WriteString("transportMode", message.TransportMode);
+        }
+
         if (message.Text is not null)
         {
             writer.WriteString("text", message.Text);
@@ -741,6 +756,8 @@ public sealed partial class XtermTerminalView : UserControl
         public string Kind { get; init; } = string.Empty;
 
         public string HostId { get; init; } = string.Empty;
+
+        public string? TransportMode { get; init; }
 
         public string? Text { get; init; }
 

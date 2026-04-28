@@ -328,6 +328,8 @@ public sealed class LocalTerminalSessionManager : ILocalTerminalSessionManager
 
         public string CurrentWorkingDirectory { get; }
 
+        public LocalTerminalTransportMode TransportMode => LocalTerminalTransportMode.Pipe;
+
         public bool CanAcceptInput
         {
             get
@@ -407,7 +409,7 @@ public sealed class LocalTerminalSessionManager : ILocalTerminalSessionManager
             await _inputGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                await _process.StandardInput.WriteAsync(input).ConfigureAwait(false);
+                await _process.StandardInput.WriteAsync(NormalizePipeInput(input)).ConfigureAwait(false);
                 await _process.StandardInput.FlushAsync().ConfigureAwait(false);
             }
             catch (ObjectDisposedException)
@@ -513,6 +515,14 @@ public sealed class LocalTerminalSessionManager : ILocalTerminalSessionManager
             catch
             {
             }
+        }
+
+        private static string NormalizePipeInput(string input)
+        {
+            return input
+                .Replace("\r\n", "\n", StringComparison.Ordinal)
+                .Replace('\r', '\n')
+                .Replace("\n", Environment.NewLine, StringComparison.Ordinal);
         }
 
         private void OnProcessExited(object? sender, EventArgs args)

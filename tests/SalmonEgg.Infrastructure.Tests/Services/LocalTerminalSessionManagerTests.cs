@@ -207,6 +207,24 @@ public sealed class LocalTerminalSessionManagerTests
     }
 
     [Fact]
+    public async Task ProcessBackedSession_WriteInputAsync_TreatsCarriageReturnAsEnter()
+    {
+        // Arrange
+        var output = new ConcurrentQueue<string>();
+        await using var manager = new LocalTerminalSessionManager();
+        var session = await manager.GetOrCreateAsync("conversation-process-enter", Environment.CurrentDirectory);
+        session.OutputReceived += (_, text) => output.Enqueue(text);
+        var token = "salmon-local-terminal-enter";
+
+        // Act
+        await session.WriteInputAsync($"echo {token}\r");
+        var sawOutput = await WaitForAsync(() => string.Concat(output).Contains(token, StringComparison.Ordinal));
+
+        // Assert
+        Assert.True(sawOutput, string.Concat(output));
+    }
+
+    [Fact]
     public async Task DisposeAsync_WhenCreationIsInFlight_DisposesCreatedSessionBeforeCompleting()
     {
         // Arrange
@@ -316,6 +334,8 @@ public sealed class LocalTerminalSessionManagerTests
         public string ConversationId { get; }
 
         public string CurrentWorkingDirectory { get; }
+
+        public LocalTerminalTransportMode TransportMode => LocalTerminalTransportMode.Pipe;
 
         public bool CanAcceptInput { get; private set; } = true;
 

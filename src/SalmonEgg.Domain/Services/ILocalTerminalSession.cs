@@ -13,6 +13,8 @@ public interface ILocalTerminalSession : IAsyncDisposable
 
     string CurrentWorkingDirectory { get; }
 
+    LocalTerminalTransportMode TransportMode { get; }
+
     bool CanAcceptInput { get; }
 
     event EventHandler<string>? OutputReceived;

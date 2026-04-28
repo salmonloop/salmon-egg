@@ -16,6 +16,8 @@
   let isDisposed = false;
   let resizeFrame = 0;
   let resizeObserver = null;
+  let transportMode = 'pipe';
+  let win32InputMode = false;
 
   const terminal = new Terminal({
     convertEol: true,
@@ -23,6 +25,7 @@
     fontFamily: 'Cascadia Mono, Consolas, monospace',
     fontSize: 13,
     lineHeight: 1.2,
+    scrollback: 5000,
     theme: {
       background: '#0b0d0f',
       foreground: '#e6edf3',
@@ -32,6 +35,7 @@
   });
 
   terminal.open(terminalElement);
+  installTerminalModeHandlers();
 
   function postWebViewMessage(message) {
     try {
@@ -149,7 +153,10 @@
       return;
     }
 
-    echoInput(data);
+    if (transportMode === 'pipe') {
+      echoInput(data);
+    }
+
     postWebViewMessage({
       kind: 'input',
       data
@@ -175,6 +182,46 @@
     terminal.options.cursorBlink = inputEnabled;
   }
 
+  function setTransportMode(nextMode) {
+    transportMode = nextMode === 'pseudoConsole' ? 'pseudoConsole' : 'pipe';
+    if (transportMode !== 'pseudoConsole') {
+      win32InputMode = false;
+    }
+
+    applyTransportOptions();
+  }
+
+  function applyTransportOptions() {
+    terminal.options.convertEol = transportMode === 'pipe';
+    terminal.options.windowsPty = transportMode === 'pseudoConsole'
+      ? { backend: 'conpty' }
+      : undefined;
+  }
+
+  function installTerminalModeHandlers() {
+    if (!terminal.parser || typeof terminal.parser.registerCsiHandler !== 'function') {
+      return;
+    }
+
+    terminal.parser.registerCsiHandler({ prefix: '?', final: 'h' }, (params) => {
+      if (transportMode !== 'pseudoConsole' || params.length !== 1 || params[0] !== 9001) {
+        return false;
+      }
+
+      win32InputMode = true;
+      return true;
+    });
+
+    terminal.parser.registerCsiHandler({ prefix: '?', final: 'l' }, (params) => {
+      if (transportMode !== 'pseudoConsole' || params.length !== 1 || params[0] !== 9001) {
+        return false;
+      }
+
+      win32InputMode = false;
+      return true;
+    });
+  }
+
   function dispatchHostCommand(command) {
     if (!command || typeof command.kind !== 'string') {
       reportError('invalid-command', 'Terminal host command is missing a kind.');
@@ -184,6 +231,8 @@
     if (command.hostId && command.hostId !== hostId) {
       return;
     }
+
+    setTransportMode(command.transportMode);
 
     switch (command.kind) {
       case 'replace':
@@ -263,6 +312,7 @@
   });
 
   terminal.focus();
+  applyTransportOptions();
   window.requestAnimationFrame(() => {
     publishResize('ready');
     postWebViewMessage({
