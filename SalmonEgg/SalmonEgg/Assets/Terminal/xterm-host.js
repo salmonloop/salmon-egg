@@ -16,7 +16,7 @@
   let isDisposed = false;
   let resizeFrame = 0;
   let resizeObserver = null;
-  let transportMode = 'pipe';
+  let transportMode = 'pseudoConsole';
   let win32InputMode = false;
 
   const terminal = new Terminal({
@@ -153,29 +153,11 @@
       return;
     }
 
-    if (transportMode === 'pipe') {
-      echoInput(data);
-    }
-
     postWebViewMessage({
       kind: 'input',
       data
     });
   });
-
-  function echoInput(data) {
-    if (data === '\r') {
-      terminal.write('\r\n');
-      return;
-    }
-
-    if (data === '\u007f') {
-      terminal.write('\b \b');
-      return;
-    }
-
-    terminal.write(data);
-  }
 
   function setInputEnabled(enabled) {
     inputEnabled = enabled !== false;
@@ -183,17 +165,14 @@
   }
 
   function setTransportMode(nextMode) {
-    transportMode = nextMode === 'pseudoConsole' ? 'pseudoConsole' : 'pipe';
-    if (transportMode !== 'pseudoConsole') {
-      win32InputMode = false;
-    }
-
+    transportMode = 'pseudoConsole';
     applyTransportOptions();
   }
 
   function applyTransportOptions() {
-    terminal.options.convertEol = transportMode === 'pipe';
-    terminal.options.windowsPty = transportMode === 'pseudoConsole'
+    terminal.options.convertEol = false;
+    terminal.options.windowsPty =
+      transportMode === 'pseudoConsole'
       ? { backend: 'conpty' }
       : undefined;
   }

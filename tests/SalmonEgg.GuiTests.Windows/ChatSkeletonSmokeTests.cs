@@ -331,69 +331,82 @@ public sealed class ChatSkeletonSmokeTests
     }
 
     [SkippableFact]
-    public void SendPrompt_WhenAgentInvokesTerminalTool_DoesNotProjectAcpOutputIntoPublicTerminalPanel()
+    public void SelectLocalSession_TerminalPanel_ShowsPrompt_AndExecutesCommand()
     {
-        using var appData = GuiAppDataScope.CreateDeterministicTerminalToolData();
-        using var session = WindowsGuiAppSession.LaunchFresh();
+        const string guiLocalTerminalSmokeCommandEnvVar = "SALMONEGG_GUI_LOCAL_TERMINAL_SMOKE_COMMAND";
+        var previousSmokeCommand = Environment.GetEnvironmentVariable(guiLocalTerminalSmokeCommandEnvVar);
+        Environment.SetEnvironmentVariable(guiLocalTerminalSmokeCommandEnvVar, "cd\r");
 
-        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-remote-conversation-01", TimeSpan.FromSeconds(15));
-        session.ActivateElement(sessionItem);
-
-        var overlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(30));
-        Assert.True(overlayHidden, "Terminal tool scenario remained stuck behind the loading overlay.");
-
-        var inputBox = session.FindByAutomationId("InputBox", TimeSpan.FromSeconds(10)).AsTextBox();
-        session.ClickElement(inputBox);
-        inputBox.Enter("run terminal");
-
-        var sendReady = WaitUntilElementEnabled(
-            session,
-            "SendButton",
-            TimeSpan.FromSeconds(5));
-        Assert.True(sendReady, "SendButton did not become enabled for terminal tool scenario.");
-
-        var sendButton = session.FindByAutomationId("SendButton", TimeSpan.FromSeconds(10));
-        session.ClickElement(sendButton);
-
-        var requiredAppLogFragments = new[]
+        try
         {
-            "Terminal request received: Method=terminal/create",
-            "Terminal request received: Method=terminal/wait_for_exit",
-            "Terminal request received: Method=terminal/output",
-            "Terminal request received: Method=terminal/release"
-        };
+            using var appData = GuiAppDataScope.CreateDeterministicLeftNavData(
+                sessionCount: 1,
+                withContent: true,
+                messageCountPerSession: 4);
+            using var session = WindowsGuiAppSession.LaunchFresh();
+            EnsureMainWindowWideForTitleBarCommands(session);
 
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(20);
-        var lastTerminalName = string.Empty;
-        var lastAppLogTail = string.Empty;
-        var sawTerminalView = false;
-        var sawRequiredLogs = false;
+            var sessionItem = session.FindByAutomationId("MainNav.Session.gui-session-01", TimeSpan.FromSeconds(15));
+            session.ActivateElement(sessionItem);
+            var header = WaitForSessionHeader(
+                session,
+                "GUI Session 01",
+                "local-terminal-header",
+                appData);
+            Assert.Contains("GUI Session 01", header.Name, StringComparison.Ordinal);
 
-        while (DateTime.UtcNow < deadline)
-        {
-            sawTerminalView = session.TryFindByAutomationId("BottomPanel.TerminalWebView", TimeSpan.FromMilliseconds(150)) is not null;
-            lastTerminalName = session.TryGetElementName("BottomPanel.TerminalWebView", TimeSpan.FromMilliseconds(150)) ?? string.Empty;
-            lastAppLogTail = appData.ReadLatestAppLogTail(160);
-            sawRequiredLogs = requiredAppLogFragments.All(fragment => lastAppLogTail.Contains(fragment, StringComparison.Ordinal));
-
-            if (sawRequiredLogs)
+            _ = EnsureTerminalPanelVisible(session, appData, "local-terminal-open");
+            const string expectedPromptFragment = "project-1>";
+            if (!WaitForAutomationNameContains(
+                    session,
+                    "BottomPanel.TerminalWebView",
+                    expectedPromptFragment,
+                    TimeSpan.FromSeconds(15)))
             {
-                if (sawTerminalView)
-                {
-                    Assert.DoesNotContain("hello-terminal", lastTerminalName, StringComparison.Ordinal);
-                }
-
-                return;
+                ThrowWithScreenshot(
+                    session,
+                    appData,
+                    "local-terminal-initial-prompt",
+                    $"Local terminal did not expose the initial prompt fragment '{expectedPromptFragment}'. terminalName='{session.TryGetElementName("BottomPanel.TerminalWebView", TimeSpan.FromMilliseconds(150)) ?? string.Empty}'");
             }
 
-            Thread.Sleep(150);
-        }
+            var expectedWorkingDirectory = Path.Combine(Path.GetTempPath(), "SalmonEgg.GuiTests", "project-1");
+            var commandOutputObserved = false;
+            var commandDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+            while (DateTime.UtcNow < commandDeadline)
+            {
+                var terminalName = session.TryGetElementName("BottomPanel.TerminalWebView", TimeSpan.FromMilliseconds(150)) ?? string.Empty;
+                if (CountOccurrences(terminalName, expectedWorkingDirectory) >= 3)
+                {
+                    commandOutputObserved = true;
+                    break;
+                }
 
-        ThrowWithScreenshot(
-            session,
-            appData,
-            "terminal-tool-output-panel",
-            $"Terminal tool events did not complete. sawTerminalView={sawTerminalView} sawRequiredLogs={sawRequiredLogs} terminalName='{lastTerminalName}'{Environment.NewLine}app.log:{Environment.NewLine}{lastAppLogTail}");
+                Thread.Sleep(120);
+            }
+
+            if (!commandOutputObserved)
+            {
+                ThrowWithScreenshot(
+                    session,
+                    appData,
+                    "local-terminal-command-output",
+                    $"Local terminal did not echo cwd after running 'cd'. terminalName='{session.TryGetElementName("BottomPanel.TerminalWebView", TimeSpan.FromMilliseconds(150)) ?? string.Empty}'");
+            }
+
+            var messagesList = FindElementOrThrowWithScreenshot(
+                session,
+                appData,
+                "ChatView.MessagesList",
+                TimeSpan.FromSeconds(5),
+                "local-terminal-messages-list");
+            var leakedToTranscript = session.TryFindVisibleText(expectedWorkingDirectory, messagesList, TimeSpan.FromSeconds(1));
+            Assert.Null(leakedToTranscript);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(guiLocalTerminalSmokeCommandEnvVar, previousSmokeCommand);
+        }
     }
 
     [SkippableFact]
@@ -2978,6 +2991,49 @@ public sealed class ChatSkeletonSmokeTests
         return false;
     }
 
+    private static AutomationElement EnsureTerminalPanelVisible(
+        WindowsGuiAppSession session,
+        GuiAppDataScope appData,
+        string scenario)
+    {
+        var existingView = session.TryFindByAutomationId("BottomPanel.TerminalWebView", TimeSpan.FromSeconds(2));
+        if (existingView is not null)
+        {
+            return existingView;
+        }
+
+        var bottomPanelButton = FindElementOrThrowWithScreenshot(
+            session,
+            appData,
+            "TitleBar.BottomPanel",
+            TimeSpan.FromSeconds(5),
+            $"{scenario}-toggle-button");
+        if (bottomPanelButton.Patterns.Toggle.IsSupported
+            && bottomPanelButton.Patterns.Toggle.Pattern.ToggleState.Value != ToggleState.On)
+        {
+            bottomPanelButton.Patterns.Toggle.Pattern.Toggle();
+        }
+        else
+        {
+            session.ActivateElement(bottomPanelButton);
+        }
+
+        var terminalTab = FindElementOrThrowWithScreenshot(
+            session,
+            appData,
+            "BottomPanelTab.terminal",
+            TimeSpan.FromSeconds(5),
+            $"{scenario}-terminal-tab");
+        session.ActivateElement(FindSelectableAncestor(terminalTab));
+
+        return FindElementOrThrowWithScreenshot(
+            session,
+            appData,
+            "BottomPanel.TerminalWebView",
+            TimeSpan.FromSeconds(10),
+            $"{scenario}-terminal-view");
+    }
+
     private static bool WaitForAutomationNameNotContains(
         WindowsGuiAppSession session,
         string automationId,
@@ -2998,6 +3054,28 @@ public sealed class ChatSkeletonSmokeTests
         }
 
         return false;
+    }
+
+    private static int CountOccurrences(string source, string value)
+    {
+        if (string.IsNullOrEmpty(source) || string.IsNullOrEmpty(value))
+        {
+            return 0;
+        }
+
+        var count = 0;
+        var startIndex = 0;
+        while (true)
+        {
+            var matchIndex = source.IndexOf(value, startIndex, StringComparison.OrdinalIgnoreCase);
+            if (matchIndex < 0)
+            {
+                return count;
+            }
+
+            count++;
+            startIndex = matchIndex + value.Length;
+        }
     }
 
     private static bool IsUserFriendlyLoadingStatus(string status)

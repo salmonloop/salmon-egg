@@ -43,15 +43,6 @@ $controlFilePath = $env:SALMONEGG_GUI_CONTROL_FILE
 $promptAckMode = $env:SALMONEGG_GUI_PROMPT_ACK_MODE
 $promptLateUserMessageId = $env:SALMONEGG_GUI_LATE_USER_MESSAGE_ID
 $promptLateUserMessageText = $env:SALMONEGG_GUI_LATE_USER_MESSAGE_TEXT
-$terminalSmokeEnabled = $env:SALMONEGG_GUI_TERMINAL_SMOKE_ENABLED -eq '1'
-$terminalSmokeOutput = if ([string]::IsNullOrWhiteSpace($env:SALMONEGG_GUI_TERMINAL_SMOKE_OUTPUT))
-{
-    'hello-terminal'
-}
-else
-{
-    $env:SALMONEGG_GUI_TERMINAL_SMOKE_OUTPUT
-}
 $promptLateUserMessageDelayMs = 0
 if (-not [int]::TryParse($env:SALMONEGG_GUI_LATE_USER_MESSAGE_DELAY_MS, [ref]$promptLateUserMessageDelayMs))
 {
@@ -274,47 +265,6 @@ function Wait-AgentResponse([int]$requestId, [int]$timeoutMs = 8000)
     }
 
     throw "Timed out waiting for client response '$requestId'."
-}
-
-function Invoke-TerminalSmoke([string]$targetSessionId)
-{
-    if (-not $terminalSmokeEnabled)
-    {
-        return
-    }
-
-    $createResponse = Wait-AgentResponse (Send-AgentRequest 'terminal/create' @{
-            sessionId = $targetSessionId
-            command = 'powershell.exe'
-            args = @(
-                '-NoLogo',
-                '-NoProfile',
-                '-Command',
-                "Write-Output '$terminalSmokeOutput'"
-            )
-            outputByteLimit = 4096
-        })
-
-    $terminalId = [string]$createResponse.terminalId
-    if ([string]::IsNullOrWhiteSpace($terminalId))
-    {
-        throw 'Terminal smoke did not receive a terminalId.'
-    }
-
-    [void](Wait-AgentResponse (Send-AgentRequest 'terminal/wait_for_exit' @{
-                sessionId = $targetSessionId
-                terminalId = $terminalId
-            }))
-
-    [void](Wait-AgentResponse (Send-AgentRequest 'terminal/output' @{
-                sessionId = $targetSessionId
-                terminalId = $terminalId
-            }))
-
-    [void](Wait-AgentResponse (Send-AgentRequest 'terminal/release' @{
-                sessionId = $targetSessionId
-                terminalId = $terminalId
-            }))
 }
 
 function New-SessionResult([string]$targetSessionId)
@@ -553,8 +503,6 @@ try
                 stopReason = 'end_turn'
                 userMessageId = $requestMessageId
             }
-
-            Invoke-TerminalSmoke $requestedSessionId
 
             continue
         }

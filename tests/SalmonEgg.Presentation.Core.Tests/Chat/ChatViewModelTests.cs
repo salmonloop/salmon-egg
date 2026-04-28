@@ -3972,7 +3972,7 @@ public class ChatViewModelTests
 
         public string CurrentWorkingDirectory { get; }
 
-        public LocalTerminalTransportMode TransportMode => LocalTerminalTransportMode.Pipe;
+        public LocalTerminalTransportMode TransportMode => LocalTerminalTransportMode.PseudoConsole;
 
         public bool CanAcceptInput => true;
 

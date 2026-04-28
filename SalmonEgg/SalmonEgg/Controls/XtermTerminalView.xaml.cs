@@ -15,6 +15,7 @@ namespace SalmonEgg.Controls;
 public sealed partial class XtermTerminalView : UserControl
 {
     private const string TerminalHostName = "salmon-terminal";
+    private const string GuiLocalTerminalSmokeCommandEnvVar = "SALMONEGG_GUI_LOCAL_TERMINAL_SMOKE_COMMAND";
 
     public static readonly DependencyProperty ContentTextProperty =
         DependencyProperty.Register(
@@ -48,6 +49,8 @@ public sealed partial class XtermTerminalView : UserControl
     private string _currentHostId = CreateHostId();
     private string _pendingContent = string.Empty;
     private ILocalTerminalSession? _attachedSession;
+    private bool _guiLocalTerminalSmokeCommandSent;
+    private string? _guiLocalTerminalSmokeCommand;
 
     public XtermTerminalView()
     {
@@ -132,11 +135,13 @@ public sealed partial class XtermTerminalView : UserControl
             return;
         }
 
+        view._sessionGeneration++;
         view.DetachSession(e.OldValue as ILocalTerminalSession);
         view.AttachSession(e.NewValue as ILocalTerminalSession);
-        view._sessionGeneration++;
         view._sessionHasLiveOutput = false;
         view.ClearPendingCommands(static _ => true);
+        view._guiLocalTerminalSmokeCommandSent = false;
+        view._guiLocalTerminalSmokeCommand = Environment.GetEnvironmentVariable(GuiLocalTerminalSmokeCommandEnvVar);
         _ = view.ResetTerminalBridgeAsync();
     }
 
@@ -467,6 +472,28 @@ public sealed partial class XtermTerminalView : UserControl
                     Enabled = Session is not null && Session.CanAcceptInput
                 }));
         await QueueHostResizeAsync();
+        await TryInjectGuiSmokeCommandAsync(session);
+    }
+
+    private async Task TryInjectGuiSmokeCommandAsync(ILocalTerminalSession? session)
+    {
+        if (_guiLocalTerminalSmokeCommandSent
+            || session is null
+            || !ReferenceEquals(session, Session)
+            || !session.CanAcceptInput
+            || string.IsNullOrWhiteSpace(_guiLocalTerminalSmokeCommand))
+        {
+            return;
+        }
+
+        try
+        {
+            await session.WriteInputAsync(_guiLocalTerminalSmokeCommand);
+            _guiLocalTerminalSmokeCommandSent = true;
+        }
+        catch
+        {
+        }
     }
 
     private Task QueueHostResizeAsync()

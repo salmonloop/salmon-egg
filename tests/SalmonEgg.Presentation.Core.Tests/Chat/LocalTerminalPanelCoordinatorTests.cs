@@ -377,7 +377,7 @@ public class LocalTerminalPanelCoordinatorTests
 
         public string CurrentWorkingDirectory { get; private set; }
 
-        public LocalTerminalTransportMode TransportMode => LocalTerminalTransportMode.Pipe;
+        public LocalTerminalTransportMode TransportMode => LocalTerminalTransportMode.PseudoConsole;
 
         public bool CanAcceptInput { get; private set; }
 

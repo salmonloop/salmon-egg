@@ -1,11 +1,12 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Porta.Pty;
 using SalmonEgg.Domain.Services;
 
 namespace SalmonEgg.Infrastructure.Services;
@@ -15,13 +16,15 @@ namespace SalmonEgg.Infrastructure.Services;
 /// </summary>
 public sealed class LocalTerminalSessionManager : ILocalTerminalSessionManager
 {
+    private const int DefaultInitialColumns = 120;
+    private const int DefaultInitialRows = 32;
     private readonly ConcurrentDictionary<string, SessionEntry> _sessions = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private readonly Func<string, string, CancellationToken, ValueTask<ILocalTerminalSession>> _sessionFactory;
     private int _disposed;
 
     public LocalTerminalSessionManager()
-        : this(CreateProcessBackedSessionAsync)
+        : this(CreatePtyBackedSessionAsync)
     {
     }
 
@@ -122,7 +125,7 @@ public sealed class LocalTerminalSessionManager : ILocalTerminalSessionManager
         }
     }
 
-    private static ValueTask<ILocalTerminalSession> CreateProcessBackedSessionAsync(
+    private static async ValueTask<ILocalTerminalSession> CreatePtyBackedSessionAsync(
         string conversationId,
         string preferredCwd,
         CancellationToken cancellationToken)
@@ -130,51 +133,43 @@ public sealed class LocalTerminalSessionManager : ILocalTerminalSessionManager
         cancellationToken.ThrowIfCancellationRequested();
 
         var launchInfo = ResolveShellLaunchInfo();
-        var process = new Process
+        var options = new PtyOptions
         {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = launchInfo.FileName,
-                Arguments = launchInfo.Arguments,
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                WorkingDirectory = preferredCwd
-            },
-            EnableRaisingEvents = true
+            Name = $"salmonegg-local-terminal-{conversationId}",
+            Cols = DefaultInitialColumns,
+            Rows = DefaultInitialRows,
+            Cwd = preferredCwd,
+            App = launchInfo.App,
+            CommandLine = launchInfo.Arguments,
+            Environment = CaptureEnvironmentVariables()
         };
 
-        var session = new ProcessBackedLocalTerminalSession(conversationId, preferredCwd, process);
+        var connection = await PtyProvider.SpawnAsync(options, cancellationToken).ConfigureAwait(false);
+        var session = new PtyBackedLocalTerminalSession(conversationId, preferredCwd, connection);
+        session.AttachToRunningConnection();
+        return session;
+    }
 
-        try
+    private static Dictionary<string, string> CaptureEnvironmentVariables()
+    {
+        var comparer = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+        var environment = new Dictionary<string, string>(comparer);
+        foreach (var keyObject in Environment.GetEnvironmentVariables().Keys)
         {
-            if (!process.Start())
+            if (keyObject is not string key || string.IsNullOrWhiteSpace(key))
             {
-                throw new InvalidOperationException($"Failed to start local shell '{launchInfo.FileName}'.");
+                continue;
             }
 
-            session.AttachToRunningProcess();
-            return new ValueTask<ILocalTerminalSession>(session);
+            if (Environment.GetEnvironmentVariable(key) is { } value)
+            {
+                environment[key] = value;
+            }
         }
-        catch
-        {
-            try
-            {
-                if (!process.HasExited)
-                {
-                    process.Kill();
-                    process.WaitForExit(5000);
-                }
-            }
-            catch
-            {
-            }
 
-            process.Dispose();
-            throw;
-        }
+        return environment;
     }
 
     private static ShellLaunchInfo ResolveShellLaunchInfo()
@@ -184,23 +179,26 @@ public sealed class LocalTerminalSessionManager : ILocalTerminalSessionManager
             var comSpec = Environment.GetEnvironmentVariable("COMSPEC");
             return new ShellLaunchInfo(
                 string.IsNullOrWhiteSpace(comSpec) ? "cmd.exe" : comSpec,
-                "/Q");
+                new[] { "/Q" });
         }
 
-        return new ShellLaunchInfo("sh", string.Empty);
+        var shellPath = Environment.GetEnvironmentVariable("SHELL");
+        return new ShellLaunchInfo(
+            string.IsNullOrWhiteSpace(shellPath) ? "/bin/sh" : shellPath,
+            new[] { "-i" });
     }
 
     private sealed class ShellLaunchInfo
     {
-        public ShellLaunchInfo(string fileName, string arguments)
+        public ShellLaunchInfo(string app, string[] arguments)
         {
-            FileName = fileName;
+            App = app;
             Arguments = arguments;
         }
 
-        public string FileName { get; }
+        public string App { get; }
 
-        public string Arguments { get; }
+        public string[] Arguments { get; }
     }
 
     private sealed class SessionEntry
@@ -303,32 +301,51 @@ public sealed class LocalTerminalSessionManager : ILocalTerminalSessionManager
         }
     }
 
-    private sealed class ProcessBackedLocalTerminalSession : ILocalTerminalSession
+    private sealed class PtyBackedLocalTerminalSession : ILocalTerminalSession
     {
         private const int OutputReadBufferSize = 1024;
         private const int MaxBufferedOutputCharacters = 1_000_000;
 
         private readonly object _gate = new();
         private readonly SemaphoreSlim _inputGate = new(1, 1);
-        private readonly Process _process;
+        private readonly IPtyConnection _connection;
+        private readonly StreamReader _outputReader;
+        private readonly StreamWriter _inputWriter;
         private readonly List<string> _outputBuffer = new();
         private int _bufferedOutputCharacters;
         private bool _canAcceptInput;
         private bool _disposed;
         private EventHandler<string>? _outputReceived;
 
-        public ProcessBackedLocalTerminalSession(string conversationId, string currentWorkingDirectory, Process process)
+        public PtyBackedLocalTerminalSession(
+            string conversationId,
+            string currentWorkingDirectory,
+            IPtyConnection connection)
         {
             ConversationId = conversationId;
             CurrentWorkingDirectory = currentWorkingDirectory;
-            _process = process;
+            _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+            _outputReader = new StreamReader(
+                _connection.ReaderStream,
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+                detectEncodingFromByteOrderMarks: false,
+                bufferSize: OutputReadBufferSize,
+                leaveOpen: true);
+            _inputWriter = new StreamWriter(
+                _connection.WriterStream,
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+                bufferSize: OutputReadBufferSize,
+                leaveOpen: true)
+            {
+                AutoFlush = true
+            };
         }
 
         public string ConversationId { get; }
 
         public string CurrentWorkingDirectory { get; }
 
-        public LocalTerminalTransportMode TransportMode => LocalTerminalTransportMode.Pipe;
+        public LocalTerminalTransportMode TransportMode => LocalTerminalTransportMode.PseudoConsole;
 
         public bool CanAcceptInput
         {
@@ -374,22 +391,16 @@ public sealed class LocalTerminalSessionManager : ILocalTerminalSessionManager
 
         public event EventHandler? StateChanged;
 
-        public void AttachToRunningProcess()
+        public void AttachToRunningConnection()
         {
-            _process.Exited += OnProcessExited;
+            _connection.ProcessExited += OnProcessExited;
 
             lock (_gate)
             {
                 _canAcceptInput = true;
             }
 
-            _ = PumpOutputAsync(_process.StandardOutput);
-            _ = PumpOutputAsync(_process.StandardError);
-
-            if (_process.HasExited)
-            {
-                MarkInputUnavailable();
-            }
+            _ = PumpOutputAsync();
         }
 
         public async ValueTask WriteInputAsync(string input, CancellationToken cancellationToken = default)
@@ -409,18 +420,18 @@ public sealed class LocalTerminalSessionManager : ILocalTerminalSessionManager
             await _inputGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                await _process.StandardInput.WriteAsync(NormalizePipeInput(input)).ConfigureAwait(false);
-                await _process.StandardInput.FlushAsync().ConfigureAwait(false);
+                await _inputWriter.WriteAsync(input).ConfigureAwait(false);
+                await _inputWriter.FlushAsync().ConfigureAwait(false);
             }
             catch (ObjectDisposedException)
             {
                 MarkInputUnavailable();
                 throw new InvalidOperationException("Local terminal session is not accepting input.");
             }
-            catch (InvalidOperationException)
+            catch (IOException)
             {
                 MarkInputUnavailable();
-                throw;
+                throw new InvalidOperationException("Local terminal session is not accepting input.");
             }
             finally
             {
@@ -431,8 +442,14 @@ public sealed class LocalTerminalSessionManager : ILocalTerminalSessionManager
         public ValueTask ResizeAsync(int columns, int rows, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (columns <= 0 || rows <= 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(columns),
+                    "Terminal size must be positive.");
+            }
 
-            // PTY/ConPTY sizing will be added behind this isolated seam in a later iteration.
+            _connection.Resize(columns, rows);
             return default;
         }
 
@@ -452,11 +469,11 @@ public sealed class LocalTerminalSessionManager : ILocalTerminalSessionManager
                 _canAcceptInput = false;
             }
 
-            _process.Exited -= OnProcessExited;
+            _connection.ProcessExited -= OnProcessExited;
 
             try
             {
-                _process.StandardInput.Close();
+                _inputWriter.Dispose();
             }
             catch
             {
@@ -464,18 +481,28 @@ public sealed class LocalTerminalSessionManager : ILocalTerminalSessionManager
 
             try
             {
-                if (!_process.HasExited)
-                {
-                    _process.Kill();
-                    _process.WaitForExit(5000);
-                }
+                _outputReader.Dispose();
             }
             catch
             {
             }
             finally
             {
-                _process.Dispose();
+                try
+                {
+                    _connection.Kill();
+                }
+                catch
+                {
+                }
+
+                try
+                {
+                    _connection.Dispose();
+                }
+                catch
+                {
+                }
                 _inputGate.Dispose();
             }
 
@@ -487,16 +514,17 @@ public sealed class LocalTerminalSessionManager : ILocalTerminalSessionManager
             return default;
         }
 
-        private async Task PumpOutputAsync(StreamReader reader)
+        private async Task PumpOutputAsync()
         {
             var buffer = new char[OutputReadBufferSize];
             try
             {
                 while (true)
                 {
-                    var read = await reader.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
+                    var read = await _outputReader.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
                     if (read <= 0)
                     {
+                        MarkInputUnavailable();
                         return;
                     }
 
@@ -505,27 +533,19 @@ public sealed class LocalTerminalSessionManager : ILocalTerminalSessionManager
             }
             catch (ObjectDisposedException)
             {
-            }
-            catch (InvalidOperationException)
-            {
+                MarkInputUnavailable();
             }
             catch (IOException)
             {
+                MarkInputUnavailable();
             }
             catch
             {
+                MarkInputUnavailable();
             }
         }
 
-        private static string NormalizePipeInput(string input)
-        {
-            return input
-                .Replace("\r\n", "\n", StringComparison.Ordinal)
-                .Replace('\r', '\n')
-                .Replace("\n", Environment.NewLine, StringComparison.Ordinal);
-        }
-
-        private void OnProcessExited(object? sender, EventArgs args)
+        private void OnProcessExited(object? sender, PtyExitedEventArgs args)
         {
             MarkInputUnavailable();
         }

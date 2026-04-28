@@ -192,6 +192,7 @@ public sealed class LocalTerminalSessionManagerTests
         var output = new ConcurrentQueue<string>();
         await using var manager = new LocalTerminalSessionManager();
         var session = await manager.GetOrCreateAsync("conversation-process", Environment.CurrentDirectory);
+        Assert.Equal(LocalTerminalTransportMode.PseudoConsole, session.TransportMode);
         session.OutputReceived += (_, text) => output.Enqueue(text);
         var token = "salmon-local-terminal-smoke";
         var command = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
@@ -335,7 +336,7 @@ public sealed class LocalTerminalSessionManagerTests
 
         public string CurrentWorkingDirectory { get; }
 
-        public LocalTerminalTransportMode TransportMode => LocalTerminalTransportMode.Pipe;
+        public LocalTerminalTransportMode TransportMode => LocalTerminalTransportMode.PseudoConsole;
 
         public bool CanAcceptInput { get; private set; } = true;
 
