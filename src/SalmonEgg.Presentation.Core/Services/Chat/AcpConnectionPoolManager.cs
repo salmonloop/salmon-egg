@@ -11,7 +11,7 @@ public interface IAcpConnectionPoolManager
 {
     Task<AcpConnectionSessionCleanupResult> CleanupBeforeApplyAsync(
         IChatService? activeService,
-        string? selectedProfileId,
+        AcpConnectionDependencySnapshot dependencySnapshot,
         CancellationToken cancellationToken = default);
 
     bool TryGetReusableSession(
@@ -59,14 +59,16 @@ public sealed class AcpConnectionPoolManager : IAcpConnectionPoolManager
 
     public async Task<AcpConnectionSessionCleanupResult> CleanupBeforeApplyAsync(
         IChatService? activeService,
-        string? selectedProfileId,
+        AcpConnectionDependencySnapshot dependencySnapshot,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(dependencySnapshot);
+
         var result = await _sessionCleaner
             .CleanupStaleAsync(
                 activeService,
-                isPinned: IsSoftPinnedSession,
-                isHardPinned: session => IsHardPinnedSession(session, selectedProfileId),
+                isPinned: session => IsSoftPinnedSession(session, dependencySnapshot),
+                isHardPinned: session => IsHardPinnedSession(session, dependencySnapshot),
                 cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
@@ -153,10 +155,15 @@ public sealed class AcpConnectionPoolManager : IAcpConnectionPoolManager
             Volatile.Read(ref _cacheMisses),
             Volatile.Read(ref _sessionUpserts));
 
-    private static bool IsSoftPinnedSession(AcpConnectionSession session)
-        => session.InitializeResponse.AgentCapabilities?.LoadSession != true;
+    private static bool IsSoftPinnedSession(
+        AcpConnectionSession session,
+        AcpConnectionDependencySnapshot dependencySnapshot)
+        => session.InitializeResponse.AgentCapabilities?.LoadSession != true
+           && dependencySnapshot.ProfilesRequiredByRemoteBindings.Contains(session.ProfileId);
 
-    private static bool IsHardPinnedSession(AcpConnectionSession session, string? selectedProfileId)
-        => !string.IsNullOrWhiteSpace(selectedProfileId)
-           && string.Equals(session.ProfileId, selectedProfileId, StringComparison.Ordinal);
+    private static bool IsHardPinnedSession(
+        AcpConnectionSession session,
+        AcpConnectionDependencySnapshot dependencySnapshot)
+        => !string.IsNullOrWhiteSpace(dependencySnapshot.SelectedProfileId)
+           && string.Equals(session.ProfileId, dependencySnapshot.SelectedProfileId, StringComparison.Ordinal);
 }

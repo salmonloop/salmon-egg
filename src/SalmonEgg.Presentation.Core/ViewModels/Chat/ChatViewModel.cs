@@ -878,6 +878,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     public string? CurrentConnectionStatus { get; private set; }
 
     private readonly IChatStore _chatStore;
+    private readonly IAuthoritativeRemoteSessionRouter _authoritativeRemoteSessionRouter;
 
     private sealed class ChatServiceFactoryAdapter : IAcpChatServiceFactory
     {
@@ -920,10 +921,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         IProjectAffinityResolver? projectAffinityResolver = null,
         IShellNavigationRuntimeState? shellNavigationRuntimeState = null,
         IVoiceInputService? voiceInputService = null,
-        LocalTerminalPanelCoordinator? localTerminalPanelCoordinator = null)
+        LocalTerminalPanelCoordinator? localTerminalPanelCoordinator = null,
+        IAuthoritativeRemoteSessionRouter? authoritativeRemoteSessionRouter = null)
         : base(logger)
     {
         _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
+        _authoritativeRemoteSessionRouter = authoritativeRemoteSessionRouter ?? new AuthoritativeRemoteSessionRouter(chatStore);
         _chatServiceFactory = chatServiceFactory ?? throw new ArgumentNullException(nameof(chatServiceFactory));
         _configurationService = configurationService ?? throw new ArgumentNullException(nameof(configurationService));
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
@@ -2921,17 +2924,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     {
         try
         {
-            // SECURITY/PROTOCOL CHECK: Only store-authoritative bindings can project updates.
-            // Projection targets the bound conversation slice (SSOT), while visible transcript
-            // mutation still follows the currently hydrated conversation projection.
             var storeState = await _chatStore.State ?? ChatState.Empty;
             var activeConversationId = storeState.ActiveTurn?.ConversationId ?? storeState.HydratedConversationId;
             var activeBinding = storeState.ResolveBinding(activeConversationId);
-            var boundConversationId = ResolveConversationIdForRemoteSession(storeState, e.SessionId)
-                ?? (!string.IsNullOrWhiteSpace(activeConversationId)
-                    && string.Equals(activeBinding?.RemoteSessionId, e.SessionId, StringComparison.Ordinal)
-                        ? activeConversationId
-                        : null);
+            var boundConversationId =
+                !string.IsNullOrWhiteSpace(activeConversationId)
+                && string.Equals(activeBinding?.RemoteSessionId, e.SessionId, StringComparison.Ordinal)
+                    ? activeConversationId
+                    : _authoritativeRemoteSessionRouter.ResolveConversationId(storeState, e.SessionId);
 
             if (string.IsNullOrWhiteSpace(boundConversationId))
             {
@@ -4485,7 +4485,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     {
         try
         {
-            var conversationId = await ResolveConversationIdForRemoteSessionAsync(e.SessionId).ConfigureAwait(false);
+            var conversationId = await _authoritativeRemoteSessionRouter.ResolveConversationIdAsync(e.SessionId).ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(conversationId))
             {
                 Logger.LogWarning("Ask-user request ignored because no bound conversation matched remote session {RemoteSessionId}", e.SessionId);
@@ -4518,49 +4518,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         {
             Logger.LogError(ex, "Error processing ask-user request");
         }
-    }
-
-    private async Task<string?> ResolveConversationIdForRemoteSessionAsync(string remoteSessionId)
-    {
-        if (string.IsNullOrWhiteSpace(remoteSessionId))
-        {
-            return null;
-        }
-
-        var state = await _chatStore.State ?? ChatState.Empty;
-        return ResolveConversationIdForRemoteSession(state, remoteSessionId);
-    }
-
-    private string? ResolveConversationIdForRemoteSession(ChatState state, string remoteSessionId)
-    {
-        if (string.IsNullOrWhiteSpace(remoteSessionId))
-        {
-            return null;
-        }
-
-        if (state.Bindings != null)
-        {
-            foreach (var binding in state.Bindings)
-            {
-                if (string.Equals(binding.Value.RemoteSessionId, remoteSessionId, StringComparison.Ordinal))
-                {
-                    return binding.Key;
-                }
-            }
-        }
-
-        foreach (var conversationId in _conversationWorkspace.GetKnownConversationIds())
-        {
-            var workspaceBinding = _conversationWorkspace.GetRemoteBinding(conversationId);
-            if (string.Equals(workspaceBinding?.RemoteSessionId, remoteSessionId, StringComparison.Ordinal))
-            {
-                return conversationId;
-            }
-        }
-
-        return string.Equals(_currentRemoteSessionId, remoteSessionId, StringComparison.Ordinal)
-            ? CurrentSessionId
-            : null;
     }
 
     private void SyncPendingAskUserRequestState(string? conversationId)
@@ -4699,7 +4656,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     {
         try
         {
-            var conversationId = await ResolveConversationIdForRemoteSessionAsync(request.SessionId).ConfigureAwait(false);
+            var conversationId = await _authoritativeRemoteSessionRouter.ResolveConversationIdAsync(request.SessionId).ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(conversationId))
             {
                 Logger.LogWarning("Terminal request ignored because no bound conversation matched remote session {RemoteSessionId}", request.SessionId);
@@ -4718,7 +4675,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     {
         try
         {
-            var conversationId = await ResolveConversationIdForRemoteSessionAsync(update.SessionId).ConfigureAwait(false);
+            var conversationId = await _authoritativeRemoteSessionRouter.ResolveConversationIdAsync(update.SessionId).ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(conversationId))
             {
                 Logger.LogWarning("Terminal state ignored because no bound conversation matched remote session {RemoteSessionId}", update.SessionId);
@@ -5676,72 +5633,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
         _configAuthoritativeConversationIds.Remove(conversationId);
     }
-
-   [RelayCommand]
-    private async Task InitializeAndConnectAsync()
-    {
-        if (IsInitializing || IsConnecting)
-        {
-            return;
-        }
-
-        // If ChatService is not yet created, apply transport config first.
-        if (_chatService == null)
-        {
-            Logger.LogInformation("ChatService not yet created; calling ApplyTransportConfigAsync");
-            await ApplyTransportConfigCommand.ExecuteAsync(null);
-            return;
-        }
-
-        try
-        {
-            ClearError();
-            var selectedProfileId = await ResolveSelectedProfileIdAsync().ConfigureAwait(false);
-            await _acpConnectionCoordinator
-                .SetInitializingAsync(selectedProfileId)
-                .ConfigureAwait(false);
-
-            var initParams = AcpInitializeRequestFactory.CreateDefault();
-
-            if (_chatService == null)
-            {
-                throw new InvalidOperationException("Chat service is not initialized");
-            }
-
-            var initResponse = await _chatService.InitializeAsync(initParams);
-            var connectionState = await _chatConnectionStore.State ?? ChatConnectionState.Empty;
-            if (string.IsNullOrWhiteSpace(connectionState.ConnectionInstanceId))
-            {
-                await _acpConnectionCoordinator
-                    .SetConnectionInstanceIdAsync(Guid.NewGuid().ToString("N"))
-                    .ConfigureAwait(false);
-            }
-
-            await _acpConnectionCoordinator
-                .SetConnectedAsync(selectedProfileId)
-                .ConfigureAwait(false);
-            UpdateAgentInfo();
-            CacheAuthMethods(initResponse);
-            await _acpConnectionCoordinator.ClearAuthenticationRequiredAsync().ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            await PublishDisconnectedConnectionStateAsync(ex.Message).ConfigureAwait(false);
-            Logger.LogError(ex, "Initialization failed");
-            SetError($"Initialization failed: {ex.Message}");
-        }
-    }
-    private async Task<string?> ResolveSelectedProfileIdAsync()
-    {
-        if (!string.IsNullOrWhiteSpace(SelectedAcpProfile?.Id))
-        {
-            return SelectedAcpProfile!.Id;
-        }
-
-        var connectionState = await _chatConnectionStore.State ?? ChatConnectionState.Empty;
-        return connectionState.SelectedProfileId;
-    }
-
     private async Task PublishDisconnectedConnectionStateAsync(string? errorMessage)
     {
         await _acpConnectionCoordinator.SetConnectionInstanceIdAsync(null).ConfigureAwait(false);

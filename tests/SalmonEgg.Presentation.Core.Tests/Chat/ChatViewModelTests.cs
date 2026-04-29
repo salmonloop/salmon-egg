@@ -218,6 +218,20 @@ public class ChatViewModelTests
         IUiDispatcher uiDispatcher)
         => new(catalog, uiDispatcher);
 
+    private static void SetCurrentRemoteSessionId(ChatViewModel viewModel, string? remoteSessionId)
+    {
+        var field = typeof(ChatViewModel).GetField("_currentRemoteSessionId", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        field!.SetValue(viewModel, remoteSessionId);
+    }
+
+    private static void SetCurrentSessionId(ChatViewModel viewModel, string? conversationId)
+    {
+        var field = typeof(ChatViewModel).GetField("_currentSessionId", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        field!.SetValue(viewModel, conversationId);
+    }
+
     private static ConversationCatalogPresenter GetConversationCatalogPresenter(ChatViewModel viewModel)
     {
         var field = typeof(ChatViewModel).GetField("_conversationCatalogPresenter", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -931,124 +945,77 @@ public class ChatViewModelTests
     }
 
     [Fact]
-    public async Task InitializeAndConnectCommand_UsesSharedDefaultInitializeRequest()
+    public async Task ConnectToAcpProfileCommand_UsesConnectionCommandsDefaultConnectPath()
     {
-        await using var fixture = CreateViewModel();
-        var chatService = CreateConnectedChatService();
+        var commands = new Mock<IAcpConnectionCommands>(MockBehavior.Strict);
+        var chatService = new Mock<IChatService>(MockBehavior.Strict);
+        chatService.SetupGet(service => service.IsConnected).Returns(true);
+        chatService.SetupGet(service => service.IsInitialized).Returns(true);
 
-        chatService
-            .Setup(service => service.InitializeAsync(It.IsAny<InitializeParams>()))
-            .ReturnsAsync(new InitializeResponse(
-                1,
-                new AgentInfo("agent", "1.0.0"),
-                new AgentCapabilities()));
+        var profile = new ServerConfiguration
+        {
+            Id = "profile-1",
+            Name = "Profile 1",
+            Transport = TransportType.Stdio
+        };
 
-        fixture.ViewModel.ReplaceChatService(chatService.Object);
+        commands
+            .Setup(x => x.ConnectToProfileAsync(
+                It.Is<ServerConfiguration>(candidate => ReferenceEquals(candidate, profile)),
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AcpTransportApplyResult(
+                chatService.Object,
+                new InitializeResponse(
+                    1,
+                    new AgentInfo("agent", "1.0.0"),
+                    new AgentCapabilities())));
 
-        await fixture.ViewModel.InitializeAndConnectCommand.ExecuteAsync(null);
+        await using var fixture = CreateViewModel(acpConnectionCommands: commands.Object);
+        fixture.Profiles.Profiles.Add(profile);
 
-        chatService.Verify(service => service.InitializeAsync(It.Is<InitializeParams>(parameters =>
-            parameters.ProtocolVersion == 1
-            && string.Equals(parameters.ClientInfo.Name, "SalmonEgg", StringComparison.Ordinal)
-            && string.Equals(parameters.ClientInfo.Title, "SalmonEgg", StringComparison.Ordinal)
-            && string.Equals(parameters.ClientInfo.Version, "1.0.0", StringComparison.Ordinal)
-            && parameters.ClientCapabilities.Terminal == null
-            && parameters.ClientCapabilities.Fs == null
-            && parameters.ClientCapabilities.SupportsExtension(ClientCapabilityMetadata.AskUserExtensionMethod))),
-            Times.Once);
+        await fixture.ViewModel.ConnectToAcpProfileCommand.ExecuteAsync(profile);
+
+        commands.Verify(x => x.ConnectToProfileAsync(
+            It.Is<ServerConfiguration>(candidate => ReferenceEquals(candidate, profile)),
+            It.IsAny<IAcpTransportConfiguration>(),
+            It.IsAny<IAcpChatCoordinatorSink>(),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task InitializeAndConnectCommand_DrivesStoreBackedInitializingThenConnectedLifecycle()
+    public async Task ConnectToAcpProfileCommand_Failure_TransitionsToDisconnectedStoreError()
     {
-        var syncContext = new QueueingSynchronizationContext();
-        var initializeStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var initializeRelease = new TaskCompletionSource<InitializeResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
-        await using var fixture = CreateViewModel(
-            syncContext,
-            acpConnectionCoordinatorFactory: store => new AcpConnectionCoordinator(
-                store,
-                Mock.Of<ILogger<AcpConnectionCoordinator>>()));
-        var chatService = CreateConnectedChatService();
-
-        chatService
-            .Setup(service => service.InitializeAsync(It.IsAny<InitializeParams>()))
-            .Returns(async () =>
-            {
-                initializeStarted.TrySetResult(true);
-                return await initializeRelease.Task;
-            });
-
-        fixture.ViewModel.ReplaceChatService(chatService.Object);
-        await fixture.DispatchConnectionAsync(new SetSelectedProfileAction("profile-1"));
-        syncContext.RunAll();
-
-        var commandTask = fixture.ViewModel.InitializeAndConnectCommand.ExecuteAsync(null);
-        await initializeStarted.Task;
-
-        await WaitForConditionAsync(async () =>
+        var commands = new Mock<IAcpConnectionCommands>(MockBehavior.Strict);
+        var profile = new ServerConfiguration
         {
-            syncContext.RunAll();
-            var connectionState = await fixture.GetConnectionStateAsync();
-            return connectionState.Phase == ConnectionPhase.Initializing
-                && string.Equals(connectionState.SelectedProfileId, "profile-1", StringComparison.Ordinal)
-                && fixture.ViewModel.IsInitializing
-                && !fixture.ViewModel.IsConnected;
-        });
+            Id = "profile-1",
+            Name = "Profile 1",
+            Transport = TransportType.Stdio
+        };
 
-        initializeRelease.SetResult(new InitializeResponse(
-            1,
-            new AgentInfo("agent", "1.0.0"),
-            new AgentCapabilities()));
-
-        await syncContext.RunUntilCompletedAsync(commandTask);
-        syncContext.RunAll();
-
-        var finalConnectionState = await fixture.GetConnectionStateAsync();
-        Assert.Equal(ConnectionPhase.Connected, finalConnectionState.Phase);
-        Assert.Equal("profile-1", finalConnectionState.SelectedProfileId);
-        Assert.False(string.IsNullOrWhiteSpace(finalConnectionState.ConnectionInstanceId));
-        await WaitForConditionAsync(() =>
-        {
-            syncContext.RunAll();
-            return Task.FromResult(
-                !fixture.ViewModel.IsInitializing
-                && fixture.ViewModel.IsConnected
-                && !fixture.ViewModel.HasConnectionError
-                && !string.IsNullOrWhiteSpace(fixture.ViewModel.ConnectionInstanceId)
-                && string.Equals(fixture.ViewModel.CurrentConnectionStatus, "Connected", StringComparison.Ordinal));
-        });
-    }
-
-    [Fact]
-    public async Task InitializeAndConnectCommand_Failure_TransitionsToDisconnectedStoreError()
-    {
-        var syncContext = new QueueingSynchronizationContext();
-        await using var fixture = CreateViewModel(
-            syncContext,
-            acpConnectionCoordinatorFactory: store => new AcpConnectionCoordinator(
-                store,
-                Mock.Of<ILogger<AcpConnectionCoordinator>>()));
-        var chatService = CreateConnectedChatService();
-
-        chatService
-            .Setup(service => service.InitializeAsync(It.IsAny<InitializeParams>()))
+        commands
+            .Setup(x => x.ConnectToProfileAsync(
+                It.Is<ServerConfiguration>(candidate => ReferenceEquals(candidate, profile)),
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("boom"));
 
-        fixture.ViewModel.ReplaceChatService(chatService.Object);
-        await fixture.DispatchConnectionAsync(new SetSelectedProfileAction("profile-1"));
-        syncContext.RunAll();
+        await using var fixture = CreateViewModel(acpConnectionCommands: commands.Object);
+        fixture.Profiles.Profiles.Add(profile);
 
-        await fixture.ViewModel.InitializeAndConnectCommand.ExecuteAsync(null);
-        syncContext.RunAll();
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => fixture.ViewModel.ConnectToAcpProfileCommand.ExecuteAsync(profile));
+
+        Assert.Equal("boom", exception.Message);
 
         var connectionState = await fixture.GetConnectionStateAsync();
         Assert.Equal(ConnectionPhase.Disconnected, connectionState.Phase);
-        Assert.Equal("profile-1", connectionState.SelectedProfileId);
         Assert.Equal("boom", connectionState.Error);
         await WaitForConditionAsync(() =>
         {
-            syncContext.RunAll();
             return Task.FromResult(
                 !fixture.ViewModel.IsInitializing
                 && !fixture.ViewModel.IsConnected
@@ -1093,7 +1060,7 @@ public class ChatViewModelTests
     }
 
     [Fact]
-    public async Task ProcessSessionUpdateAsync_BackgroundAgentMessage_UsesWorkspaceBindingFallbackWhenStoreBindingIsMissing()
+    public async Task ProcessSessionUpdateAsync_BackgroundAgentMessage_DoesNotRouteWorkspaceOnlyBinding()
     {
         var syncContext = new ImmediateSynchronizationContext();
         await RunWithSynchronizationContextAsync(syncContext, async () =>
@@ -1132,15 +1099,42 @@ public class ChatViewModelTests
                 service => service.SessionUpdateReceived += null,
                 new SessionUpdateEventArgs("remote-background", new AgentMessageUpdate(new TextContentBlock("background update"))));
 
-            await WaitForConditionAsync(async () =>
-            {
-                var attentionState = await fixture.GetAttentionStateAsync();
-                return HasUnreadAttention(attentionState, "conv-background");
-            });
+            await Task.Delay(200);
 
             var finalAttentionState = await fixture.GetAttentionStateAsync();
-            Assert.True(HasUnreadAttention(finalAttentionState, "conv-background"));
+            Assert.False(HasUnreadAttention(finalAttentionState, "conv-background"));
             Assert.False(HasUnreadAttention(finalAttentionState, "conv-foreground"));
+        });
+    }
+
+    [Fact]
+    public async Task ProcessSessionUpdateAsync_AgentMessage_DoesNotRouteFromStaleCurrentRemoteSessionState()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        await RunWithSynchronizationContextAsync(syncContext, async () =>
+        {
+            await using var fixture = CreateViewModel(syncContext);
+            var chatService = CreateConnectedChatService();
+            await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+
+            await fixture.UpdateStateAsync(state => state with
+            {
+                HydratedConversationId = "conv-active",
+                Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+            });
+
+            SetCurrentSessionId(fixture.ViewModel, "conv-active");
+            SetCurrentRemoteSessionId(fixture.ViewModel, "remote-stale");
+
+            chatService.Raise(
+                service => service.SessionUpdateReceived += null,
+                new SessionUpdateEventArgs("remote-stale", new AgentMessageUpdate(new TextContentBlock("stale update"))));
+
+            await Task.Delay(200);
+
+            Assert.Empty(fixture.ViewModel.MessageHistory);
+            var finalAttentionState = await fixture.GetAttentionStateAsync();
+            Assert.False(HasUnreadAttention(finalAttentionState, "conv-active"));
         });
     }
 

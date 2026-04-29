@@ -425,7 +425,7 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
             {
                 if (!_connectionState.IsConnected)
                 {
-                    await _connectionCommands.InitializeAndConnectCommand.ExecuteAsync(null);
+                    await ConnectToProfileAsync(Profiles.SelectedProfile);
                 }
 
                 return;

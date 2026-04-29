@@ -170,6 +170,12 @@ public static class DependencyInjection
 
         services.AddSingleton<IState<ChatState>>(sp => State.Value(sp, () => ChatState.Empty));
         services.AddSingleton<IChatStore, ChatStore>();
+        services.AddSingleton<IAcpConnectionDependencySnapshotProvider>(sp =>
+            new AcpConnectionDependencySnapshotProvider(
+                sp.GetRequiredService<IChatStore>(),
+                sp.GetRequiredService<IChatConnectionStore>()));
+        services.AddSingleton<IAuthoritativeRemoteSessionRouter>(sp =>
+            new AuthoritativeRemoteSessionRouter(sp.GetRequiredService<IChatStore>()));
         services.AddSingleton<IState<ChatConnectionState>>(sp => State.Value(sp, () => ChatConnectionState.Empty));
         services.AddSingleton<IChatConnectionStore, ChatConnectionStore>();
         services.AddSingleton<IAcpConnectionCoordinator>(sp =>
@@ -270,6 +276,7 @@ public static class DependencyInjection
                 sp.GetRequiredService<IAcpConnectionSessionRegistry>(),
                 sp.GetRequiredService<IAcpConnectionSessionCleaner>(),
                 sp.GetRequiredService<IAcpConnectionPoolManager>(),
+                sp.GetRequiredService<IAcpConnectionDependencySnapshotProvider>(),
                 sp.GetRequiredService<IAcpSessionCommandOrchestrator>());
         });
         services.AddSingleton<IChatService>(sp =>

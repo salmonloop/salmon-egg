@@ -24,6 +24,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
     private readonly IAcpConnectionCoordinator _connectionCoordinator;
     private readonly IAcpConnectionSessionRegistry _sessionRegistry;
     private readonly IAcpConnectionPoolManager _connectionPoolManager;
+    private readonly IAcpConnectionDependencySnapshotProvider _connectionDependencySnapshotProvider;
     private readonly IAcpSessionCommandOrchestrator _sessionCommandOrchestrator;
     private readonly ILogger<AcpChatCoordinator> _logger;
     private readonly int _sessionUpdateBufferLimit;
@@ -38,6 +39,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         IAcpConnectionSessionRegistry? sessionRegistry = null,
         IAcpConnectionSessionCleaner? sessionCleaner = null,
         IAcpConnectionPoolManager? connectionPoolManager = null,
+        IAcpConnectionDependencySnapshotProvider? connectionDependencySnapshotProvider = null,
         IAcpSessionCommandOrchestrator? sessionCommandOrchestrator = null,
         int sessionUpdateBufferLimit = DefaultSessionUpdateBufferLimit)
     {
@@ -61,6 +63,8 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             _sessionRegistry,
             cleaner,
             NullLogger<AcpConnectionPoolManager>.Instance);
+        _connectionDependencySnapshotProvider = connectionDependencySnapshotProvider
+            ?? NoopAcpConnectionDependencySnapshotProvider.Instance;
         _sessionCommandOrchestrator = sessionCommandOrchestrator ?? new AcpSessionCommandOrchestrator(
             NullLogger<AcpSessionCommandOrchestrator>.Instance);
         _sessionUpdateBufferLimit = sessionUpdateBufferLimit;
@@ -136,10 +140,13 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         }
 
         var selectedProfileId = sink.SelectedProfileId;
+        var dependencySnapshot = await _connectionDependencySnapshotProvider
+            .GetSnapshotAsync(cancellationToken)
+            .ConfigureAwait(false);
         var cleanupResult = await _connectionPoolManager
             .CleanupBeforeApplyAsync(
                 sink.CurrentChatService,
-                selectedProfileId,
+                dependencySnapshot,
                 cancellationToken)
             .ConfigureAwait(false);
         if (cleanupResult.RemovedCount > 0 || cleanupResult.DisposeFailureCount > 0)

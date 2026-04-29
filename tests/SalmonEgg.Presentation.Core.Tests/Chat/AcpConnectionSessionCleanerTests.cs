@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Immutable;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -198,6 +199,58 @@ public sealed class AcpConnectionSessionCleanerTests
         Assert.True(registry.TryGetByProfile("selected", out _));
         Assert.False(registry.TryGetByProfile("soft-old", out _));
         Assert.True(registry.TryGetByProfile("soft-recent", out _));
+    }
+
+    [Fact]
+    public async Task CleanupBeforeApplyAsync_NonLoadableBoundProfile_RemainsPinned()
+    {
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        var logger = new Mock<ILogger<AcpConnectionSessionCleaner>>();
+        var cleaner = CreateCleaner(
+            registry,
+            logger.Object,
+            new AcpConnectionEvictionOptions
+            {
+                EnablePolicyEviction = true,
+                MaxWarmProfiles = 0
+            });
+        var poolManager = new AcpConnectionPoolManager(
+            registry,
+            cleaner,
+            Mock.Of<ILogger<AcpConnectionPoolManager>>());
+
+        var loadUnsupported = WrapAdapter(CreateChatService(isConnected: true, isInitialized: true).Object);
+        var evictable = WrapAdapter(CreateChatService(isConnected: true, isInitialized: true).Object);
+
+        registry.Upsert(new AcpConnectionSession(
+            "profile-a",
+            loadUnsupported,
+            CreateInitializeResponse("agent-a", loadSession: false),
+            CreateReuseKey("sig-a"))
+        {
+            LastUsedUtc = DateTime.UtcNow.AddMinutes(-10)
+        });
+        registry.Upsert(new AcpConnectionSession(
+            "profile-b",
+            evictable,
+            CreateInitializeResponse("agent-b", loadSession: true),
+            CreateReuseKey("sig-b"))
+        {
+            LastUsedUtc = DateTime.UtcNow.AddMinutes(-8)
+        });
+
+        var snapshot = new AcpConnectionDependencySnapshot(
+            SelectedProfileId: "profile-z",
+            ProfilesRequiredByRemoteBindings: ImmutableHashSet.Create(StringComparer.Ordinal, "profile-a"));
+
+        var result = await poolManager.CleanupBeforeApplyAsync(
+            activeService: null,
+            snapshot,
+            CancellationToken.None);
+
+        Assert.Equal(1, result.RemovedCount);
+        Assert.True(registry.TryGetByProfile("profile-a", out _));
+        Assert.False(registry.TryGetByProfile("profile-b", out _));
     }
 
     private static InitializeResponse CreateInitializeResponse(string name, bool loadSession = true)

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.ComponentModel;
 using System.Threading;
 using System.Threading.Tasks;
@@ -76,6 +77,47 @@ public sealed class AcpChatCoordinatorTests
         connectionCoordinator.Verify(
             x => x.ClearAuthenticationRequiredAsync(It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task ConnectToProfileAsync_UsesAuthoritativeDependencySnapshotDuringCleanup()
+    {
+        var transport = new FakeTransportConfiguration();
+        var sink = new FakeSink();
+        var service = CreateChatService();
+        var factory = new Mock<IAcpChatServiceFactory>();
+        var logger = new Mock<ILogger<AcpChatCoordinator>>();
+        var snapshotProvider = new Mock<IAcpConnectionDependencySnapshotProvider>(MockBehavior.Strict);
+        var poolManager = new RecordingConnectionPoolManager();
+        var expectedSnapshot = new AcpConnectionDependencySnapshot(
+            "profile-1",
+            ImmutableHashSet.Create(StringComparer.Ordinal, "profile-a"));
+
+        factory
+            .Setup(x => x.CreateChatService(TransportType.Stdio, "agent.exe", "--serve", null))
+            .Returns(service.Object);
+        snapshotProvider
+            .Setup(x => x.GetSnapshotAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedSnapshot);
+
+        var sut = new AcpChatCoordinator(
+            factory.Object,
+            logger.Object,
+            connectionPoolManager: poolManager,
+            connectionDependencySnapshotProvider: snapshotProvider.Object);
+        var profile = new ServerConfiguration
+        {
+            Id = "profile-1",
+            Name = "Local Agent",
+            Transport = TransportType.Stdio,
+            StdioCommand = "agent.exe",
+            StdioArgs = "--serve"
+        };
+
+        await sut.ConnectToProfileAsync(profile, transport, sink);
+
+        Assert.Equal(expectedSnapshot, poolManager.LastCleanupSnapshot);
+        snapshotProvider.Verify(x => x.GetSnapshotAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -1549,6 +1591,46 @@ public sealed class AcpChatCoordinatorTests
         service.Setup(x => x.InitializeAsync(It.IsAny<InitializeParams>()))
             .ReturnsAsync(new InitializeResponse(1, new AgentInfo("agent", "1.0.0"), agentCapabilities ?? new AgentCapabilities()));
         return service;
+    }
+
+    private sealed class RecordingConnectionPoolManager : IAcpConnectionPoolManager
+    {
+        public AcpConnectionDependencySnapshot? LastCleanupSnapshot { get; private set; }
+
+        public Task<AcpConnectionSessionCleanupResult> CleanupBeforeApplyAsync(
+            IChatService? activeService,
+            AcpConnectionDependencySnapshot dependencySnapshot,
+            CancellationToken cancellationToken = default)
+        {
+            LastCleanupSnapshot = dependencySnapshot;
+            return Task.FromResult(new AcpConnectionSessionCleanupResult(0, 0));
+        }
+
+        public bool TryGetReusableSession(
+            string? selectedProfileId,
+            AcpConnectionReuseKey reuseKey,
+            out AcpConnectionSession session)
+        {
+            session = default!;
+            return false;
+        }
+
+        public void RecordSession(
+            string profileId,
+            AcpChatServiceAdapter service,
+            InitializeResponse initializeResponse,
+            AcpConnectionReuseKey reuseKey,
+            string? connectionInstanceId)
+        {
+        }
+
+        public bool RemoveByService(IChatService service, out string profileId)
+        {
+            profileId = string.Empty;
+            return false;
+        }
+
+        public AcpConnectionPoolMetricsSnapshot GetMetricsSnapshot() => new(0, 0, 0, 0);
     }
 
     private sealed class FakeTransportConfiguration : IAcpTransportConfiguration

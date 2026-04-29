@@ -26,8 +26,6 @@ public interface ISettingsAcpConnectionState : INotifyPropertyChanged
 
 public interface ISettingsAcpConnectionCommands
 {
-    IAsyncRelayCommand InitializeAndConnectCommand { get; }
-
     IAsyncRelayCommand DisconnectCommand { get; }
 
     Task ConnectToAcpProfileAsync(ServerConfiguration profile);
@@ -120,8 +118,6 @@ internal sealed class CompositeSettingsChatConnection : ISettingsChatConnection
 
     public bool HasConnectionError => _state.HasConnectionError;
 
-    public IAsyncRelayCommand InitializeAndConnectCommand => _commands.InitializeAndConnectCommand;
-
     public IAsyncRelayCommand DisconnectCommand => _commands.DisconnectCommand;
 
     public Task ConnectToAcpProfileAsync(ServerConfiguration profile) => _commands.ConnectToAcpProfileAsync(profile);
@@ -139,8 +135,6 @@ public sealed class LazySettingsAcpConnectionCommandsAdapter : ISettingsAcpConne
     {
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
     }
-
-    public IAsyncRelayCommand InitializeAndConnectCommand => _inner.Value.InitializeAndConnectCommand;
 
     public IAsyncRelayCommand DisconnectCommand => _inner.Value.DisconnectCommand;
 
@@ -180,8 +174,6 @@ public sealed class SettingsChatConnectionAdapter : ISettingsChatConnection
     public string? ConnectionErrorMessage => _chatViewModel.ConnectionErrorMessage;
 
     public bool HasConnectionError => _chatViewModel.HasConnectionError;
-
-    public IAsyncRelayCommand InitializeAndConnectCommand => _chatViewModel.InitializeAndConnectCommand;
 
     public IAsyncRelayCommand DisconnectCommand => _chatViewModel.DisconnectCommand;
 
