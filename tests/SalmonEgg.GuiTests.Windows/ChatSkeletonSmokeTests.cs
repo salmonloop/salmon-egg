@@ -410,6 +410,78 @@ public sealed class ChatSkeletonSmokeTests
     }
 
     [SkippableFact]
+    public void AuxiliaryPanels_AfterCloseAndReopen_RetainContentInsteadOfBlankSurface()
+    {
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData(
+            sessionCount: 1,
+            withContent: true,
+            messageCountPerSession: 4);
+        using var session = WindowsGuiAppSession.LaunchFresh();
+        EnsureMainWindowWideForTitleBarCommands(session);
+
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-session-01", TimeSpan.FromSeconds(15));
+        session.ActivateElement(sessionItem);
+        var header = WaitForSessionHeader(
+            session,
+            "GUI Session 01",
+            "auxiliary-panels-reopen-header",
+            appData);
+        Assert.Contains("GUI Session 01", header.Name, StringComparison.Ordinal);
+
+        _ = EnsureTerminalPanelVisible(session, appData, "auxiliary-panels-bottom-initial-open");
+        ToggleButton(session, "TitleBar.BottomPanel");
+        Assert.True(
+            WaitUntilToggleState(session, "TitleBar.BottomPanel", ToggleState.Off, TimeSpan.FromSeconds(5)),
+            "Bottom panel toggle button did not switch off after close toggle.");
+        Assert.True(
+            WaitUntilOffscreenOrMissing(session, "BottomPanel.TerminalWebView", TimeSpan.FromSeconds(5)),
+            "Bottom panel did not hide after close toggle.");
+        _ = EnsureTerminalPanelVisible(session, appData, "auxiliary-panels-bottom-reopen");
+        Assert.True(
+            WaitForAutomationNameContains(
+                session,
+                "BottomPanel.TerminalWebView",
+                "project-1>",
+                TimeSpan.FromSeconds(15)),
+            $"Bottom panel reopened without terminal content. terminalName='{session.TryGetElementName("BottomPanel.TerminalWebView", TimeSpan.FromMilliseconds(150)) ?? string.Empty}'");
+
+        ToggleButton(session, "TitleBar.TodoPanel");
+        Assert.True(
+            session.WaitUntilVisible("RightPanel.Title", TimeSpan.FromSeconds(5)),
+            "Todo panel title did not become visible after open toggle.");
+        Assert.True(
+            WaitForAutomationNameContains(
+                session,
+                "RightPanel.Title",
+                "Todo",
+                TimeSpan.FromSeconds(5)),
+            $"Todo panel title was blank after first open. titleName='{session.TryGetElementName("RightPanel.Title", TimeSpan.FromMilliseconds(150)) ?? string.Empty}'");
+        Assert.True(
+            session.WaitUntilVisible("RightPanel.TodoEmptyTitle", TimeSpan.FromSeconds(5)),
+            "Todo panel empty title did not render on first open.");
+
+        ToggleButton(session, "TitleBar.TodoPanel");
+        Assert.True(
+            WaitUntilOffscreenOrMissing(session, "RightPanel.Title", TimeSpan.FromSeconds(5)),
+            "Todo panel did not hide after close toggle.");
+
+        ToggleButton(session, "TitleBar.TodoPanel");
+        Assert.True(
+            session.WaitUntilVisible("RightPanel.Title", TimeSpan.FromSeconds(5)),
+            "Todo panel title did not become visible after reopen toggle.");
+        Assert.True(
+            WaitForAutomationNameContains(
+                session,
+                "RightPanel.Title",
+                "Todo",
+                TimeSpan.FromSeconds(5)),
+            $"Todo panel title was blank after reopen. titleName='{session.TryGetElementName("RightPanel.Title", TimeSpan.FromMilliseconds(150)) ?? string.Empty}'");
+        Assert.True(
+            session.WaitUntilVisible("RightPanel.TodoEmptyTitle", TimeSpan.FromSeconds(5)),
+            "Todo panel reopened without empty-state content.");
+    }
+
+    [SkippableFact]
     public void SelectRemoteSessionFromStart_FirstFrame_DoesNotExposeAnyChatShellContentBeforeLoadingOverlay()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
@@ -2841,6 +2913,79 @@ public sealed class ChatSkeletonSmokeTests
                 catch
                 {
                 }
+            }
+
+            Thread.Sleep(120);
+        }
+
+        return false;
+    }
+
+    private static void ToggleButton(WindowsGuiAppSession session, string automationId)
+    {
+        var element = session.FindByAutomationId(automationId, TimeSpan.FromSeconds(5));
+        if (element.Patterns.Toggle.IsSupported)
+        {
+            element.Patterns.Toggle.Pattern.Toggle();
+            return;
+        }
+
+        session.ClickElement(element);
+    }
+
+    private static bool WaitUntilToggleState(
+        WindowsGuiAppSession session,
+        string automationId,
+        ToggleState expectedState,
+        TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            var element = session.TryFindByAutomationId(automationId, TimeSpan.FromMilliseconds(150));
+            if (element is not null && element.Patterns.Toggle.IsSupported)
+            {
+                try
+                {
+                    if (element.Patterns.Toggle.Pattern.ToggleState.Value == expectedState)
+                    {
+                        return true;
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            Thread.Sleep(120);
+        }
+
+        return false;
+    }
+
+    private static bool WaitUntilOffscreenOrMissing(
+        WindowsGuiAppSession session,
+        string automationId,
+        TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            var element = session.TryFindByAutomationId(automationId, TimeSpan.FromMilliseconds(150));
+            if (element is null)
+            {
+                return true;
+            }
+
+            try
+            {
+                if (element.IsOffscreen)
+                {
+                    return true;
+                }
+            }
+            catch
+            {
             }
 
             Thread.Sleep(120);

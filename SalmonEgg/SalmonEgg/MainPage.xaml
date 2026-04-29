@@ -624,6 +624,7 @@
             </controls:ResizeGrip>
 
                 <Grid x:Name="RightPanelColumn"
+                  AutomationProperties.AutomationId="RightPanel.Root"
                   Grid.Column="1"
                   Background="{ThemeResource LayerFillColorDefaultBrush}"
                   BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
@@ -637,7 +638,8 @@
                 </Grid.RowDefinitions>
 
                 <Grid Grid.Row="0" Height="48" Padding="16,0,8,0">
-                    <TextBlock x:Name="RightPanelTitle" 
+                    <TextBlock x:Name="RightPanelTitle"
+                               AutomationProperties.AutomationId="RightPanel.Title"
                                Text="{x:Bind GetRightPanelTitle(LayoutVM.RightPanelMode, ChatVM.CurrentPlanTitle), Mode=OneWay}" 
                                VerticalAlignment="Center" 
                                Style="{ThemeResource BodyStrongTextBlockStyle}" />
@@ -671,7 +673,7 @@
                                 </ListView>
 
                                 <StackPanel Visibility="{x:Bind ChatVM.ShouldShowPlanEmpty, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,40">
-                                    <TextBlock x:Uid="PlanEmptyTitle" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                    <TextBlock x:Uid="PlanEmptyTitle" AutomationProperties.AutomationId="RightPanel.TodoEmptyTitle" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" />
                                     <TextBlock x:Uid="PlanEmptySubtitle" Opacity="0.7" Margin="0,8,0,0" TextAlignment="Center" HorizontalAlignment="Center" />
                                 </StackPanel>
                             </Grid>

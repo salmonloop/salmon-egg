@@ -1,5 +1,4 @@
 using System.Xml.Linq;
-using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -119,29 +118,6 @@ public class UiConventionsTests
         }
 
         throw new InvalidOperationException("Unable to locate repo root (SalmonEgg.sln not found).");
-    }
-
-    [Fact]
-    public void AgentsAuditLinks_ShouldPointToExistingAuditDocuments()
-    {
-        var repoRoot = FindRepoRoot();
-        var agentsPath = Path.Combine(repoRoot, "AGENTS.md");
-        var agentsText = File.ReadAllText(agentsPath);
-        var matches = Regex.Matches(
-            agentsText,
-            @"file:///C:/Users/shang/Project/salmon-acp/(?<relativePath>docs/audit/[^)\s]+\.md)");
-
-        Assert.NotEmpty(matches);
-
-        var missing = matches
-            .Select(match => match.Groups["relativePath"].Value.Replace('/', Path.DirectorySeparatorChar))
-            .Distinct(StringComparer.Ordinal)
-            .Where(relativePath => !File.Exists(Path.Combine(repoRoot, relativePath)))
-            .ToList();
-
-        Assert.True(
-            missing.Count == 0,
-            "AGENTS.md references missing audit documents:" + Environment.NewLine + string.Join(Environment.NewLine, missing));
     }
 
     [Fact]

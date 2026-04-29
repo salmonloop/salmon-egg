@@ -220,6 +220,18 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void MainPage_RightPanelExposesAutomationAnchorsForSmoke()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");
+
+        Assert.Contains("x:Name=\"RightPanelColumn\"", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"RightPanel.Root\"", xaml);
+        Assert.Contains("x:Name=\"RightPanelTitle\"", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"RightPanel.Title\"", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"RightPanel.TodoEmptyTitle\"", xaml);
+    }
+
+    [Fact]
     public void ChatInputArea_IconButtonsAccessibleAndTouchSized()
     {
         var sendButton = FindElementByName(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml", "SendButton");
