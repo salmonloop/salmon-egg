@@ -59,6 +59,14 @@ public sealed partial class MainPage : Page
     private double _leftNavResizeStartX;
     private double _leftNavResizeStartWidth;
 
+    private bool _isRightPanelAnimating;
+    private bool _isBottomPanelAnimating;
+    private double _lastRightPanelWidth;
+    private double _lastBottomPanelHeight;
+    private bool _suppressPanelAnimations;
+    private bool _pendingRightPanelToggle;
+    private bool _pendingBottomPanelToggle;
+
     private readonly DeferredActionGate<string> _archiveOnFlyoutClosed = new(StringComparer.Ordinal);
     private readonly DeferredActionGate<string> _moveOnFlyoutClosed = new(StringComparer.Ordinal);
     private readonly DeferredActionGate<string> _renameOnFlyoutClosed = new(StringComparer.Ordinal);
@@ -416,6 +424,33 @@ public sealed partial class MainPage : Page
 
     private void ResetChatAuxiliaryPanelsOnChatExit()
     {
+        var needsSuppression = false;
+
+        if (_isRightPanelAnimating)
+        {
+            ((Microsoft.UI.Xaml.Media.Animation.Storyboard)Resources["RightPanelSlideIn"]).Stop();
+            ((Microsoft.UI.Xaml.Media.Animation.Storyboard)Resources["RightPanelSlideOut"]).Stop();
+            RightPanelColumn.Visibility = Visibility.Collapsed;
+            _isRightPanelAnimating = false;
+            _pendingRightPanelToggle = false;
+            needsSuppression = true;
+        }
+
+        if (_isBottomPanelAnimating)
+        {
+            ((Microsoft.UI.Xaml.Media.Animation.Storyboard)Resources["BottomPanelSlideUp"]).Stop();
+            ((Microsoft.UI.Xaml.Media.Animation.Storyboard)Resources["BottomPanelSlideDown"]).Stop();
+            BottomPanelHost.Visibility = Visibility.Collapsed;
+            _isBottomPanelAnimating = false;
+            _pendingBottomPanelToggle = false;
+            needsSuppression = true;
+        }
+
+        if (needsSuppression)
+        {
+            _suppressPanelAnimations = true;
+        }
+
         _metricsSink.ReportClearAuxiliaryPanels();
     }
 
@@ -1002,12 +1037,226 @@ public sealed partial class MainPage : Page
         LeftNavResizer.ReleasePointerCapture(pointer);
     }
 
+    private void AnimateRightPanelOpen()
+    {
+        if (!UiMotion.Current.IsAnimationEnabled)
+        {
+            RightPanelColumn.Visibility = Visibility.Visible;
+            RightPanelColumn.Opacity = 1;
+            return;
+        }
+
+        _lastRightPanelWidth = LayoutVM.RightPanelWidth;
+        if (_lastRightPanelWidth <= 0)
+        {
+            RightPanelColumn.Visibility = Visibility.Visible;
+            RightPanelColumn.Opacity = 1;
+            return;
+        }
+
+        RightPanelTranslate.X = _lastRightPanelWidth;
+        RightPanelColumn.Opacity = 0;
+        RightPanelColumn.Visibility = Visibility.Visible;
+
+        var sb = (Microsoft.UI.Xaml.Media.Animation.Storyboard)Resources["RightPanelSlideIn"];
+        sb.Begin();
+        _isRightPanelAnimating = true;
+
+        EventHandler<object>? handler = null;
+        handler = (_, _) =>
+        {
+            sb.Completed -= handler;
+            _isRightPanelAnimating = false;
+
+            if (_pendingRightPanelToggle)
+            {
+                _pendingRightPanelToggle = false;
+                AnimateRightPanelClose();
+            }
+        };
+        sb.Completed += handler;
+    }
+
+    private void AnimateRightPanelClose()
+    {
+        if (!UiMotion.Current.IsAnimationEnabled)
+        {
+            RightPanelColumn.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var slideWidth = LayoutVM.RightPanelWidth;
+        if (slideWidth <= 0)
+        {
+            RightPanelColumn.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var sb = (Microsoft.UI.Xaml.Media.Animation.Storyboard)Resources["RightPanelSlideOut"];
+        var translateAnim = (Microsoft.UI.Xaml.Media.Animation.DoubleAnimation)sb.Children[0];
+        translateAnim.To = slideWidth;
+
+        sb.Begin();
+        _isRightPanelAnimating = true;
+
+        EventHandler<object>? handler = null;
+        handler = (_, _) =>
+        {
+            sb.Completed -= handler;
+            RightPanelColumn.Visibility = Visibility.Collapsed;
+            _isRightPanelAnimating = false;
+
+            if (_pendingRightPanelToggle)
+            {
+                _pendingRightPanelToggle = false;
+                AnimateRightPanelOpen();
+            }
+        };
+        sb.Completed += handler;
+    }
+
+    private void AnimateBottomPanelOpen()
+    {
+        if (!UiMotion.Current.IsAnimationEnabled)
+        {
+            BottomPanelHost.Visibility = Visibility.Visible;
+            BottomPanelHost.Opacity = 1;
+            return;
+        }
+
+        _lastBottomPanelHeight = LayoutVM.BottomPanelHeight;
+        if (_lastBottomPanelHeight <= 0)
+        {
+            BottomPanelHost.Visibility = Visibility.Visible;
+            BottomPanelHost.Opacity = 1;
+            return;
+        }
+
+        BottomPanelTranslate.Y = _lastBottomPanelHeight;
+        BottomPanelHost.Opacity = 0;
+        BottomPanelHost.Visibility = Visibility.Visible;
+
+        var sb = (Microsoft.UI.Xaml.Media.Animation.Storyboard)Resources["BottomPanelSlideUp"];
+        sb.Begin();
+        _isBottomPanelAnimating = true;
+
+        EventHandler<object>? handler = null;
+        handler = (_, _) =>
+        {
+            sb.Completed -= handler;
+            _isBottomPanelAnimating = false;
+
+            if (_pendingBottomPanelToggle)
+            {
+                _pendingBottomPanelToggle = false;
+                AnimateBottomPanelClose();
+            }
+        };
+        sb.Completed += handler;
+    }
+
+    private void AnimateBottomPanelClose()
+    {
+        if (!UiMotion.Current.IsAnimationEnabled)
+        {
+            BottomPanelHost.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var slideHeight = LayoutVM.BottomPanelHeight;
+        if (slideHeight <= 0)
+        {
+            BottomPanelHost.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var sb = (Microsoft.UI.Xaml.Media.Animation.Storyboard)Resources["BottomPanelSlideDown"];
+        var translateAnim = (Microsoft.UI.Xaml.Media.Animation.DoubleAnimation)sb.Children[0];
+        translateAnim.To = slideHeight;
+
+        sb.Begin();
+        _isBottomPanelAnimating = true;
+
+        EventHandler<object>? handler = null;
+        handler = (_, _) =>
+        {
+            sb.Completed -= handler;
+            BottomPanelHost.Visibility = Visibility.Collapsed;
+            _isBottomPanelAnimating = false;
+
+            if (_pendingBottomPanelToggle)
+            {
+                _pendingBottomPanelToggle = false;
+                AnimateBottomPanelOpen();
+            }
+        };
+        sb.Completed += handler;
+    }
+
     private void OnLayoutViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (!DispatcherQueue.HasThreadAccess)
         {
             _ = DispatcherQueue.TryEnqueue(() => OnLayoutViewModelPropertyChanged(sender, e));
             return;
+        }
+
+        if (_suppressPanelAnimations)
+        {
+            if (e.PropertyName == nameof(ShellLayoutViewModel.RightPanelVisible))
+            {
+                RightPanelColumn.Visibility = LayoutVM.RightPanelVisible
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+                RightPanelColumn.Opacity = 1;
+            }
+
+            if (e.PropertyName == nameof(ShellLayoutViewModel.BottomPanelVisible))
+            {
+                BottomPanelHost.Visibility = LayoutVM.BottomPanelVisible
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+                BottomPanelHost.Opacity = 1;
+            }
+
+            if (!LayoutVM.RightPanelVisible && !LayoutVM.BottomPanelVisible)
+            {
+                _suppressPanelAnimations = false;
+            }
+
+            return;
+        }
+
+        if (e.PropertyName == nameof(ShellLayoutViewModel.RightPanelVisible))
+        {
+            if (LayoutVM.RightPanelVisible && !_isRightPanelAnimating)
+            {
+                AnimateRightPanelOpen();
+            }
+            else if (!LayoutVM.RightPanelVisible && !_isRightPanelAnimating)
+            {
+                AnimateRightPanelClose();
+            }
+            else if (_isRightPanelAnimating)
+            {
+                _pendingRightPanelToggle = true;
+            }
+        }
+
+        if (e.PropertyName == nameof(ShellLayoutViewModel.BottomPanelVisible))
+        {
+            if (LayoutVM.BottomPanelVisible && !_isBottomPanelAnimating)
+            {
+                AnimateBottomPanelOpen();
+            }
+            else if (!LayoutVM.BottomPanelVisible && !_isBottomPanelAnimating)
+            {
+                AnimateBottomPanelClose();
+            }
+            else if (_isBottomPanelAnimating)
+            {
+                _pendingBottomPanelToggle = true;
+            }
         }
 
         if (e.PropertyName == nameof(ShellLayoutViewModel.IsNavPaneOpen))

@@ -274,6 +274,59 @@
             </Setter>
         </Style>
 
+        <!-- Panel slide-from-edge animations (Fluent "Fast" 167ms) -->
+        <Storyboard x:Key="RightPanelSlideIn">
+            <DoubleAnimation Storyboard.TargetName="RightPanelTranslate"
+                             Storyboard.TargetProperty="X"
+                             To="0" Duration="0:0:0.167">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseOut" />
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="RightPanelColumn"
+                             Storyboard.TargetProperty="Opacity"
+                             To="1" Duration="0:0:0.167" />
+        </Storyboard>
+
+        <Storyboard x:Key="RightPanelSlideOut">
+            <DoubleAnimation Storyboard.TargetName="RightPanelTranslate"
+                             Storyboard.TargetProperty="X"
+                             Duration="0:0:0.167">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseIn" />
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="RightPanelColumn"
+                             Storyboard.TargetProperty="Opacity"
+                             To="0" Duration="0:0:0.167" />
+        </Storyboard>
+
+        <Storyboard x:Key="BottomPanelSlideUp">
+            <DoubleAnimation Storyboard.TargetName="BottomPanelTranslate"
+                             Storyboard.TargetProperty="Y"
+                             To="0" Duration="0:0:0.167">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseOut" />
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="BottomPanelHost"
+                             Storyboard.TargetProperty="Opacity"
+                             To="1" Duration="0:0:0.167" />
+        </Storyboard>
+
+        <Storyboard x:Key="BottomPanelSlideDown">
+            <DoubleAnimation Storyboard.TargetName="BottomPanelTranslate"
+                             Storyboard.TargetProperty="Y"
+                             Duration="0:0:0.167">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseIn" />
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="BottomPanelHost"
+                             Storyboard.TargetProperty="Opacity"
+                             To="0" Duration="0:0:0.167" />
+        </Storyboard>
+
     </Page.Resources>
 
     <Grid x:Name="LayoutRoot">
@@ -517,13 +570,17 @@
                             </ContentControl>
                         </Grid>
 
-                        <chatViews:BottomPanelHost Grid.Row="1"
-                                                   Visibility="{x:Bind LayoutVM.BottomPanelVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                        <chatViews:BottomPanelHost x:Name="BottomPanelHost"
+                                                   Grid.Row="1"
                                                    TabsSource="{x:Bind ChatVM.BottomPanelTabs, Mode=OneWay}"
                                                    SelectedTab="{x:Bind ChatVM.SelectedBottomPanelTab, Mode=TwoWay}"
                                                    TerminalSessions="{x:Bind ChatVM.TerminalSessions, Mode=OneWay}"
                                                    SelectedTerminalSession="{x:Bind ChatVM.SelectedTerminalSession, Mode=OneWay}"
-                                                   LocalTerminalSession="{x:Bind ChatVM.ActiveLocalTerminalSession, Mode=OneWay}" />
+                                                   LocalTerminalSession="{x:Bind ChatVM.ActiveLocalTerminalSession, Mode=OneWay}">
+                            <chatViews:BottomPanelHost.RenderTransform>
+                                <TranslateTransform x:Name="BottomPanelTranslate" />
+                            </chatViews:BottomPanelHost.RenderTransform>
+                        </chatViews:BottomPanelHost>
                     </Grid>
                 </NavigationView.Content>
             </NavigationView>
@@ -568,7 +625,6 @@
 
                 <Grid x:Name="RightPanelColumn"
                   Grid.Column="1"
-                  Visibility="{x:Bind LayoutVM.RightPanelVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                   Background="{ThemeResource LayerFillColorDefaultBrush}"
                   BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                   BorderThickness="1,0,0,0">
