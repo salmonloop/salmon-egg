@@ -1,3 +1,0 @@
-C:\Users\shang\Project\salmon-acp\SalmonEgg\SalmonEgg\Presentation\ViewModels\Chat\ChatMessageViewModel.cs:228: Domain.Models.Plan.PlanEntryStatus _status (no initializer)
-C:\Users\shang\Project\salmon-acp\SalmonEgg\SalmonEgg\Presentation\ViewModels\Chat\ChatMessageViewModel.cs:231: Domain.Models.Plan.PlanEntryPriority _priority (no initializer)
-C:\Users\shang\Project\salmon-acp\SalmonEgg\SalmonEgg\Presentation\ViewModels\ConfigurationEditorViewModel.cs:43: TransportType _transport (no initializer)
