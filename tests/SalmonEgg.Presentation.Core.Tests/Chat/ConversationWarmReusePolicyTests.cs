@@ -17,7 +17,7 @@ public class ConversationWarmReusePolicyTests
             "conn-1",
             "remote-1",
             "profile-1",
-            "seed",
+            "SessionLoadCompleted",
             new DateTime(2026, 4, 21, 0, 0, 0, DateTimeKind.Utc));
 
         var result = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(runtime, binding, "conn-1");
@@ -39,6 +39,24 @@ public class ConversationWarmReusePolicyTests
             DateTime.UtcNow);
 
         var result = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(runtime, binding, "conn-2");
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void CanReuseRemoteWarmConversation_WhenWarmReasonIsNotAuthoritative_ReturnsFalse()
+    {
+        var binding = new ConversationBindingSlice("conv-1", "remote-1", "profile-1");
+        var runtime = new ConversationRuntimeSlice(
+            "conv-1",
+            ConversationRuntimePhase.Warm,
+            "conn-1",
+            "remote-1",
+            "profile-1",
+            "SeedWarm",
+            DateTime.UtcNow);
+
+        var result = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(runtime, binding, "conn-1");
 
         Assert.False(result);
     }

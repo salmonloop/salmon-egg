@@ -157,10 +157,13 @@ public sealed partial class RealUserConfigSmokeTests
         var initialOverlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(60));
         Assert.True(initialOverlayHidden, $"Initial remote hydration did not finish for conversation {candidate.ConversationId}.");
 
+        EnsureMainWindowWideForTitleBarCommands(session);
+
         var settingsItem = session.FindByAutomationId("SettingsItem", TimeSpan.FromSeconds(10));
         session.ActivateElement(settingsItem);
 
-        var acpSettingsItem = session.TryFindVisibleElementByNameAnywhere("Agent (ACP)", TimeSpan.FromSeconds(10));
+        var acpSettingsItem = session.TryFindByAutomationId("SettingsNav.AgentAcp", TimeSpan.FromSeconds(10))
+            ?? session.TryFindVisibleElementByNameAnywhere("Agent (ACP)", TimeSpan.FromSeconds(10));
         Assert.True(acpSettingsItem is not null, "Agent (ACP) settings entry did not become visible after opening the main settings item.");
 
         session.ActivateElement(acpSettingsItem!);

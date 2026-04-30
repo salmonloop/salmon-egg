@@ -35,6 +35,7 @@ public sealed class ShellSessionActivationOverlayViewModel : ObservableObject, I
 
     private readonly ChatViewModel _chatViewModel;
     private readonly IShellNavigationRuntimeState _runtimeState;
+    private readonly IUiDispatcher _uiDispatcher;
 
     public ShellSessionActivationOverlayViewModel(
         ChatViewModel chatViewModel,
@@ -42,6 +43,7 @@ public sealed class ShellSessionActivationOverlayViewModel : ObservableObject, I
     {
         _chatViewModel = chatViewModel ?? throw new ArgumentNullException(nameof(chatViewModel));
         _runtimeState = runtimeState ?? throw new ArgumentNullException(nameof(runtimeState));
+        _uiDispatcher = _chatViewModel.Dispatcher;
 
         _chatViewModel.PropertyChanged += OnChatViewModelPropertyChanged;
         _runtimeState.PropertyChanged += OnRuntimeStatePropertyChanged;
@@ -76,10 +78,7 @@ public sealed class ShellSessionActivationOverlayViewModel : ObservableObject, I
             return;
         }
 
-        foreach (var propertyName in projectionProperties)
-        {
-            OnPropertyChanged(propertyName);
-        }
+        RunOnUi(() => RaiseProjectionChanged(projectionProperties));
     }
 
     private void OnRuntimeStatePropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -89,7 +88,7 @@ public sealed class ShellSessionActivationOverlayViewModel : ObservableObject, I
             || e.PropertyName == nameof(IShellNavigationRuntimeState.IsSessionActivationInProgress)
             || e.PropertyName == nameof(IShellNavigationRuntimeState.ActiveSessionActivation))
         {
-            RaiseProjectionChanged();
+            RunOnUi(RaiseProjectionChanged);
         }
     }
 
@@ -100,5 +99,24 @@ public sealed class ShellSessionActivationOverlayViewModel : ObservableObject, I
         OnPropertyChanged(nameof(ShowsStatusPill));
         OnPropertyChanged(nameof(ShowsPresenter));
         OnPropertyChanged(nameof(StatusText));
+    }
+
+    private void RaiseProjectionChanged(IEnumerable<string> propertyNames)
+    {
+        foreach (var propertyName in propertyNames)
+        {
+            OnPropertyChanged(propertyName);
+        }
+    }
+
+    private void RunOnUi(Action action)
+    {
+        if (_uiDispatcher.HasThreadAccess)
+        {
+            action();
+            return;
+        }
+
+        _uiDispatcher.Enqueue(action);
     }
 }

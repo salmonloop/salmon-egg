@@ -31,13 +31,34 @@
                         SelectionChanged="OnSettingsNavSelectionChanged"
                         Margin="0,0,0,16">
             <NavigationView.MenuItems>
-                <NavigationViewItem x:Uid="SettingsNav_General" Content="常规" Tag="General" />
-                <NavigationViewItem x:Uid="SettingsNav_Appearance" Content="外观" Tag="Appearance" />
-                <NavigationViewItem x:Uid="SettingsNav_AgentAcp" Content="Agent (ACP)" Tag="AgentAcp" />
-                <NavigationViewItem x:Uid="SettingsNav_DataStorage" Content="数据与存储" Tag="DataStorage" />
-                <NavigationViewItem x:Uid="SettingsNav_Shortcuts" Content="快捷键" Tag="Shortcuts" />
-                <NavigationViewItem x:Uid="SettingsNav_Diagnostics" Content="诊断与日志" Tag="Diagnostics" />
-                <NavigationViewItem x:Uid="SettingsNav_About" Content="关于" Tag="About" />
+                <NavigationViewItem x:Uid="SettingsNav_General"
+                                    Content="常规"
+                                    Tag="General"
+                                    AutomationProperties.AutomationId="SettingsNav.General" />
+                <NavigationViewItem x:Uid="SettingsNav_Appearance"
+                                    Content="外观"
+                                    Tag="Appearance"
+                                    AutomationProperties.AutomationId="SettingsNav.Appearance" />
+                <NavigationViewItem x:Uid="SettingsNav_AgentAcp"
+                                    Content="Agent (ACP)"
+                                    Tag="AgentAcp"
+                                    AutomationProperties.AutomationId="SettingsNav.AgentAcp" />
+                <NavigationViewItem x:Uid="SettingsNav_DataStorage"
+                                    Content="数据与存储"
+                                    Tag="DataStorage"
+                                    AutomationProperties.AutomationId="SettingsNav.DataStorage" />
+                <NavigationViewItem x:Uid="SettingsNav_Shortcuts"
+                                    Content="快捷键"
+                                    Tag="Shortcuts"
+                                    AutomationProperties.AutomationId="SettingsNav.Shortcuts" />
+                <NavigationViewItem x:Uid="SettingsNav_Diagnostics"
+                                    Content="诊断与日志"
+                                    Tag="Diagnostics"
+                                    AutomationProperties.AutomationId="SettingsNav.Diagnostics" />
+                <NavigationViewItem x:Uid="SettingsNav_About"
+                                    Content="关于"
+                                    Tag="About"
+                                    AutomationProperties.AutomationId="SettingsNav.About" />
             </NavigationView.MenuItems>
         </NavigationView>
 

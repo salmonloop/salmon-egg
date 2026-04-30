@@ -193,7 +193,7 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
                 false,
                 null);
         var runtimeState = state.ResolveRuntimeState(sessionId);
-        if (runtimeState?.Phase == ConversationRuntimePhase.Warm)
+        if (ConversationWarmReusePolicy.HasAuthoritativeWarmRuntime(runtimeState))
         {
             return false;
         }
@@ -215,7 +215,7 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
                 null);
 
         var runtimeState = state.ResolveRuntimeState(sessionId);
-        if (runtimeState?.Phase == ConversationRuntimePhase.Warm)
+        if (ConversationWarmReusePolicy.HasAuthoritativeWarmRuntime(runtimeState))
         {
             return false;
         }

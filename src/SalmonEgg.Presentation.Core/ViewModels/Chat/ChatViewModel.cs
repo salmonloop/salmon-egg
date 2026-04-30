@@ -3723,37 +3723,22 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
             var warmReuseBinding = await ResolveConversationBindingAsync(sessionId, activationLease.CancellationToken).ConfigureAwait(false);
             var warmReuseConnectionInstanceId = ConnectionInstanceId;
-            if (ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
+            var canReuseWarmConversationAfterSelection = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
                     warmRuntimeSnapshot,
                     warmReuseBinding,
-                    warmReuseConnectionInstanceId))
+                    warmReuseConnectionInstanceId);
+            if (!canReuseWarmConversationAfterSelection)
             {
+                var warmDenialReason = ConversationWarmReusePolicy.GetWarmReuseDenialReason(
+                    warmRuntimeSnapshot, warmReuseBinding, warmReuseConnectionInstanceId);
                 Logger.LogInformation(
-                    "Skipping remote hydration because the selected conversation is already warm. ConversationId={ConversationId}",
-                    sessionId);
-                await SetConversationRuntimeStateAsync(
-                        sessionId,
-                        ConversationRuntimePhase.Warm,
-                        warmReuseBinding,
-                        reason: "WarmReuse",
-                        activationLease.CancellationToken,
-                        connectionInstanceId: warmReuseConnectionInstanceId)
-                    .ConfigureAwait(false);
-                await ClearConversationUnreadAttentionAsync(sessionId).ConfigureAwait(false);
-                activationLease.CancellationToken.ThrowIfCancellationRequested();
-                NotifyConversationListChanged();
-                return true;
+                    "Warm reuse denied after connection established, falling back to slow hydration. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId} ExpectedConnectionInstanceId={ExpectedConnectionInstanceId} ActualConnectionInstanceId={ActualConnectionInstanceId} Reason={Reason}",
+                    sessionId,
+                    warmReuseBinding?.RemoteSessionId,
+                    warmRuntimeSnapshot?.ConnectionInstanceId,
+                    warmReuseConnectionInstanceId,
+                    warmDenialReason);
             }
-
-            var warmDenialReason = ConversationWarmReusePolicy.GetWarmReuseDenialReason(
-                warmRuntimeSnapshot, warmReuseBinding, warmReuseConnectionInstanceId);
-            Logger.LogInformation(
-                "Warm reuse denied after connection established, falling back to slow hydration. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId} ExpectedConnectionInstanceId={ExpectedConnectionInstanceId} ActualConnectionInstanceId={ActualConnectionInstanceId} Reason={Reason}",
-                sessionId,
-                warmReuseBinding?.RemoteSessionId,
-                warmRuntimeSnapshot?.ConnectionInstanceId,
-                warmReuseConnectionInstanceId,
-                warmDenialReason);
 
             await SetConversationRuntimeStateAsync(
                     sessionId,
@@ -3788,6 +3773,29 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 "Conversation activation selected phase completed. ConversationId={ConversationId} ElapsedMs={ElapsedMs}",
                 sessionId,
                 activationStopwatch.ElapsedMilliseconds);
+            if (canReuseWarmConversationAfterSelection)
+            {
+                Logger.LogInformation(
+                    "Skipping remote hydration because the selected conversation is already warm. ConversationId={ConversationId}",
+                    sessionId);
+                await SetConversationRuntimeStateAsync(
+                        sessionId,
+                        ConversationRuntimePhase.Warm,
+                        warmReuseBinding,
+                        reason: "WarmReuse",
+                        activationLease.CancellationToken,
+                        connectionInstanceId: warmReuseConnectionInstanceId)
+                    .ConfigureAwait(false);
+                await ClearConversationUnreadAttentionAsync(sessionId).ConfigureAwait(false);
+                activationLease.CancellationToken.ThrowIfCancellationRequested();
+                NotifyConversationListChanged();
+                Logger.LogInformation(
+                    "Conversation activation fully completed. ConversationId={ConversationId} ElapsedMs={ElapsedMs}",
+                    sessionId,
+                    activationStopwatch.ElapsedMilliseconds);
+                return true;
+            }
+
             if (activationHydrationMode == ConversationActivationHydrationMode.WorkspaceSnapshot)
             {
                 await DismissSessionSwitchOverlayAsync(activationLease.Version, sessionId).ConfigureAwait(false);
@@ -7296,6 +7304,23 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         if (intent == ServiceReplaceIntent.ForegroundOwner)
         {
             await _chatStore.Dispatch(new ResetConversationRuntimeStatesAction()).ConfigureAwait(false);
+        }
+
+        if (_uiDispatcher.HasThreadAccess)
+        {
+            FinalizeChatServiceReplacement(chatService, intent);
+            return;
+        }
+
+        await PostToUiAsync(() => FinalizeChatServiceReplacement(chatService, intent)).ConfigureAwait(false);
+    }
+
+    private void FinalizeChatServiceReplacement(
+        IChatService? chatService,
+        ServiceReplaceIntent intent)
+    {
+        if (intent == ServiceReplaceIntent.ForegroundOwner)
+        {
             _remoteHydrationSessionUpdateBaselineCounts.Clear();
             _remoteHydrationKnownTranscriptBaselineCounts.Clear();
             _remoteHydrationKnownTranscriptGrowthGraceDeadlineUtc.Clear();
@@ -7304,6 +7329,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             _pendingAskUserRequestsByConversation.Clear();
             PendingAskUserRequest = null;
         }
+
         _chatService = chatService;
         if (chatService != null)
         {
@@ -7954,15 +7980,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         {
             remoteSessionId ??= existingRuntime?.RemoteSessionId ?? currentState.ResolveBinding(conversationId)?.RemoteSessionId;
             profileId ??= existingRuntime?.ProfileId ?? currentState.ResolveBinding(conversationId)?.ProfileId;
-        }
-
-        if (phase == ConversationRuntimePhase.Selected
-            && ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
-                existingRuntime,
-                binding ?? currentState.ResolveBinding(conversationId),
-                effectiveConnectionInstanceId))
-        {
-            phase = ConversationRuntimePhase.Warm;
         }
 
         var runtimeState = new ConversationRuntimeSlice(

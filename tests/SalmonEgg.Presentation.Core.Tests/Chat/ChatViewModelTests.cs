@@ -2304,7 +2304,7 @@ public class ChatViewModelTests
         var syncContext = new ImmediateSynchronizationContext();
         await using var fixture = CreateViewModel(syncContext);
         var chatService = CreateConnectedChatService();
-        fixture.ViewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -2347,7 +2347,7 @@ public class ChatViewModelTests
         var syncContext = new ImmediateSynchronizationContext();
         await using var fixture = CreateViewModel(syncContext);
         var chatService = CreateConnectedChatService();
-        fixture.ViewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -2378,7 +2378,7 @@ public class ChatViewModelTests
         chatService
             .Setup(x => x.SetSessionModeAsync(It.IsAny<SessionSetModeParams>()))
             .ReturnsAsync(new SessionSetModeResponse("plan"));
-        fixture.ViewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -2410,7 +2410,7 @@ public class ChatViewModelTests
         chatService
             .Setup(x => x.CancelSessionAsync(It.IsAny<SessionCancelParams>()))
             .ReturnsAsync(new SessionCancelResponse(true));
-        fixture.ViewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -4081,7 +4081,7 @@ public class ChatViewModelTests
         var viewModel = fixture.ViewModel;
 
         var chatService = CreateConnectedChatService();
-        viewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(chatService.Object));
 
         await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "conv-1", Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty });
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
@@ -4161,7 +4161,7 @@ public class ChatViewModelTests
 
         await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
         var viewModel = fixture.ViewModel;
-        viewModel.ReplaceChatService(CreateConnectedChatService().Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(CreateConnectedChatService().Object));
         fixture.Profiles.Profiles.Add(new ServerConfiguration { Id = "profile-1", Name = "Profile 1", Transport = TransportType.Stdio });
 
         await fixture.UpdateStateAsync(state => state with
@@ -4230,7 +4230,7 @@ public class ChatViewModelTests
 
         await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
         var viewModel = fixture.ViewModel;
-        viewModel.ReplaceChatService(CreateConnectedChatService().Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(CreateConnectedChatService().Object));
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -4281,7 +4281,7 @@ public class ChatViewModelTests
 
         await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
         var viewModel = fixture.ViewModel;
-        viewModel.ReplaceChatService(CreateConnectedChatService().Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(CreateConnectedChatService().Object));
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -4337,7 +4337,7 @@ public class ChatViewModelTests
         await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
         var viewModel = fixture.ViewModel;
         var chatService = CreateConnectedChatService();
-        viewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(chatService.Object));
         fixture.Profiles.Profiles.Add(new ServerConfiguration { Id = "profile-1", Name = "Profile 1", Transport = TransportType.Stdio });
 
         await fixture.UpdateStateAsync(state => state with
@@ -4428,7 +4428,7 @@ public class ChatViewModelTests
         await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
         var viewModel = fixture.ViewModel;
         var chatService = CreateConnectedChatService();
-        viewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(chatService.Object));
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -4668,7 +4668,7 @@ public class ChatViewModelTests
 
         await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
         var viewModel = fixture.ViewModel;
-        viewModel.ReplaceChatService(CreateConnectedChatService().Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(CreateConnectedChatService().Object));
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -4737,7 +4737,7 @@ public class ChatViewModelTests
 
         await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
         var viewModel = fixture.ViewModel;
-        viewModel.ReplaceChatService(CreateConnectedChatService().Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(CreateConnectedChatService().Object));
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -4782,7 +4782,7 @@ public class ChatViewModelTests
 
         await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
         var viewModel = fixture.ViewModel;
-        viewModel.ReplaceChatService(CreateConnectedChatService().Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(CreateConnectedChatService().Object));
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -4825,7 +4825,7 @@ public class ChatViewModelTests
 
         await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
         var viewModel = fixture.ViewModel;
-        viewModel.ReplaceChatService(CreateConnectedChatService().Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(CreateConnectedChatService().Object));
 
         var turnStartedAt = new DateTime(2026, 3, 24, 3, 0, 0, DateTimeKind.Utc);
         await fixture.UpdateStateAsync(state => state with
@@ -4913,7 +4913,7 @@ public class ChatViewModelTests
         var chatService = CreateConnectedChatService();
         chatService.Setup(service => service.RespondToPermissionRequestAsync("permission-1", "cancelled", null))
             .ReturnsAsync(true);
-        viewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(chatService.Object));
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -4952,7 +4952,7 @@ public class ChatViewModelTests
             .ReturnsAsync(new SessionCancelResponse(true));
         chatService.Setup(service => service.RespondToPermissionRequestAsync("permission-2", "cancelled", null))
             .ReturnsAsync(true);
-        fixture.ViewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -5013,7 +5013,7 @@ public class ChatViewModelTests
 
         await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
         var viewModel = fixture.ViewModel;
-        viewModel.ReplaceChatService(CreateConnectedChatService().Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(CreateConnectedChatService().Object));
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -5071,7 +5071,7 @@ public class ChatViewModelTests
         await using var fixture = CreateViewModel(syncContext);
         var viewModel = fixture.ViewModel;
         var chatService = CreateConnectedChatService();
-        viewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(chatService.Object));
 
         var initialState = (await fixture.GetStateAsync()) with
         {
@@ -5143,7 +5143,7 @@ public class ChatViewModelTests
 
         await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
         var viewModel = fixture.ViewModel;
-        viewModel.ReplaceChatService(CreateConnectedChatService().Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(CreateConnectedChatService().Object));
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -5176,7 +5176,7 @@ public class ChatViewModelTests
         await using var fixture = CreateViewModel(syncContext);
         var viewModel = fixture.ViewModel;
         var chatService = CreateConnectedChatService();
-        viewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(chatService.Object));
 
         var initialState = (await fixture.GetStateAsync()) with
         {
@@ -5210,7 +5210,7 @@ public class ChatViewModelTests
         await using var fixture = CreateViewModel(syncContext);
         var viewModel = fixture.ViewModel;
         var chatService = CreateConnectedChatService();
-        viewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(chatService.Object));
 
         var initialState = (await fixture.GetStateAsync()) with
         {
@@ -5268,7 +5268,7 @@ public class ChatViewModelTests
         await using var fixture = CreateViewModel(syncContext);
         var viewModel = fixture.ViewModel;
         var chatService = CreateConnectedChatService();
-        viewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(chatService.Object));
 
         var initialState = (await fixture.GetStateAsync()) with
         {
@@ -5305,7 +5305,7 @@ public class ChatViewModelTests
         await using var fixture = CreateViewModel(syncContext);
         var viewModel = fixture.ViewModel;
         var chatService = CreateConnectedChatService();
-        viewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(chatService.Object));
 
         var initialState = (await fixture.GetStateAsync()) with
         {
@@ -5338,7 +5338,7 @@ public class ChatViewModelTests
         await using var fixture = CreateViewModel(syncContext);
         var viewModel = fixture.ViewModel;
         var chatService = CreateConnectedChatService();
-        viewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(chatService.Object));
         syncContext.RunAll();
 
         var initialState = (await fixture.GetStateAsync()) with
@@ -5398,7 +5398,7 @@ public class ChatViewModelTests
         await using var fixture = CreateViewModel(syncContext);
         var viewModel = fixture.ViewModel;
         var chatService = CreateConnectedChatService();
-        viewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(chatService.Object));
 
         var inputJson = JsonDocument.Parse("""{ "targetMode": "plan" }""").RootElement.Clone();
         var outputJson = JsonDocument.Parse("""{ "applied": true }""").RootElement.Clone();
@@ -6063,7 +6063,7 @@ public class ChatViewModelTests
         await using var fixture = CreateViewModel(syncContext);
         var viewModel = fixture.ViewModel;
         var chatService = CreateConnectedChatService();
-        viewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(chatService.Object));
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -6130,7 +6130,7 @@ public class ChatViewModelTests
         await using var fixture = CreateViewModel(syncContext);
         var viewModel = fixture.ViewModel;
         var chatService = CreateConnectedChatService();
-        viewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(chatService.Object));
 
         var initialState = (await fixture.GetStateAsync()) with
         {
@@ -6233,7 +6233,7 @@ public class ChatViewModelTests
             {
                 var activeFixture = fixture ?? throw new InvalidOperationException("Fixture must be initialized before connect callback runs.");
                 await sink.SelectProfileAsync(profile, cancellationToken);
-                sink.ReplaceChatService(chatService.Object);
+                await sink.ReplaceChatServiceAsync(chatService.Object, cancellationToken);
                 await activeFixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
                 await WaitForConditionAsync(async () =>
                 {
@@ -6301,7 +6301,7 @@ public class ChatViewModelTests
             chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
                 .Callback<SessionLoadParams, CancellationToken>((value, _) => capturedParams = value)
                 .ReturnsAsync(SessionLoadResponse.Completed);
-            fixture.ViewModel.ReplaceChatService(chatService.Object);
+            await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
 
             await fixture.UpdateStateAsync(state => state with
             {
@@ -6396,7 +6396,7 @@ public class ChatViewModelTests
             {
                 var activeFixture = fixture ?? throw new InvalidOperationException("Fixture must be initialized before connect callback runs.");
                 await sink.SelectProfileAsync(profile, cancellationToken);
-                sink.ReplaceChatService(chatService.Object);
+                await sink.ReplaceChatServiceAsync(chatService.Object, cancellationToken);
                 await activeFixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
                 await WaitForConditionAsync(async () =>
                 {
@@ -6459,7 +6459,7 @@ public class ChatViewModelTests
         await using (fixture)
         {
             fixture.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
-            fixture.ViewModel.ReplaceChatService(chatService.Object);
+            await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
 
             await fixture.UpdateStateAsync(state => state with
             {
@@ -6564,7 +6564,7 @@ public class ChatViewModelTests
             .ReturnsAsync(SessionLoadResponse.Completed);
 
         await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
-        fixture.ViewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -6912,7 +6912,7 @@ public class ChatViewModelTests
             {
                 var activeFixture = fixture ?? throw new InvalidOperationException("Fixture must be initialized before connect callback runs.");
                 await sink.SelectProfileAsync(profile, cancellationToken);
-                sink.ReplaceChatService(chatService.Object);
+                await sink.ReplaceChatServiceAsync(chatService.Object, cancellationToken);
                 await activeFixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
                 return new AcpTransportApplyResult(chatService.Object, new InitializeResponse());
             });
@@ -6968,7 +6968,7 @@ public class ChatViewModelTests
         await using (fixture)
         {
             fixture.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
-            fixture.ViewModel.ReplaceChatService(chatService.Object);
+            await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
             fixture.Workspace.UpdateRemoteBinding("conv-1", "remote-1", "profile-1");
 
             await fixture.UpdateStateAsync(state => state with
@@ -7181,7 +7181,7 @@ public class ChatViewModelTests
         var syncContext = new ImmediateSynchronizationContext();
         await using var fixture = CreateViewModel(syncContext);
         var chatService = CreateConnectedChatService();
-        fixture.ViewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -7677,7 +7677,7 @@ public class ChatViewModelTests
             .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, AcpConnectionContext, CancellationToken>(async (profile, _, sink, _, cancellationToken) =>
             {
                 await sink.SelectProfileAsync(profile, cancellationToken);
-                sink.ReplaceChatService(reboundService.Object);
+                await sink.ReplaceChatServiceAsync(reboundService.Object, cancellationToken);
                 await DispatchConnectedAsync(fixture!, profile.Id);
                 return new AcpTransportApplyResult(reboundService.Object, new InitializeResponse());
             });
@@ -7698,7 +7698,7 @@ public class ChatViewModelTests
                 CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                 LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
 
-            fixture.ViewModel.ReplaceChatService(staleService.Object);
+            await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(staleService.Object));
             await fixture.UpdateStateAsync(state => state with
             {
                 HydratedConversationId = "conv-1",
@@ -9179,6 +9179,46 @@ public class ChatViewModelTests
     }
 
     [Fact]
+    public async Task ShellOverlayProjection_WhenChatViewModelRaisesOverlayPropertyOffUiThread_MarshalsProjectionNotificationsToUiDispatcher()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var runtimeState = new ShellNavigationRuntimeStateStore
+        {
+            CurrentShellContent = ShellNavigationContent.Chat
+        };
+        await using var fixture = CreateViewModel(syncContext, shellNavigationRuntimeState: runtimeState);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync());
+
+        var shellOverlay = new ShellSessionActivationOverlayViewModel(fixture.ViewModel, runtimeState);
+        var notificationCompleted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var observedOnUiThread = true;
+
+        shellOverlay.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName != nameof(ShellSessionActivationOverlayViewModel.StatusText))
+            {
+                return;
+            }
+
+            observedOnUiThread = syncContext.HasThreadAccess;
+            notificationCompleted.TrySetResult(null);
+        };
+
+        var raisePropertyChanged = typeof(CommunityToolkit.Mvvm.ComponentModel.ObservableObject)
+            .GetMethod("OnPropertyChanged", BindingFlags.Instance | BindingFlags.NonPublic, null, [typeof(string)], null);
+        Assert.NotNull(raisePropertyChanged);
+
+        await Task.Run(() => raisePropertyChanged!.Invoke(fixture.ViewModel, [nameof(ChatViewModel.OverlayStatusText)]));
+
+        Assert.False(notificationCompleted.Task.IsCompleted);
+
+        syncContext.RunAll();
+        await notificationCompleted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.True(observedOnUiThread);
+    }
+
+    [Fact]
     public async Task Overlay_WhenCurrentSessionChangesBeforeTranscriptReplacement_KeepsBlockingMaskForStaleVisibleTranscript()
     {
         var syncContext = new ImmediateSynchronizationContext();
@@ -9412,7 +9452,7 @@ public class ChatViewModelTests
         var chatService = new Mock<IChatService>();
         chatService.SetupGet(service => service.IsConnected).Returns(true);
         chatService.SetupGet(service => service.IsInitialized).Returns(true);
-        fixture.ViewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
         fixture.ViewModel.IsSessionActive = true;
         fixture.ViewModel.IsConnected = true;
         fixture.ViewModel.CurrentPrompt = "hello";
@@ -9526,7 +9566,7 @@ public class ChatViewModelTests
                 await allowLoadCompletion.Task;
                 return SessionLoadResponse.Completed;
             });
-        fixture.ViewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -9787,7 +9827,7 @@ public class ChatViewModelTests
                 await allowLoadCompletion.Task;
                 return SessionLoadResponse.Completed;
             });
-        fixture.ViewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -10376,7 +10416,7 @@ public class ChatViewModelTests
 
                 throw new InvalidOperationException($"Unexpected session load: {parameters.SessionId}");
             });
-        fixture.ViewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -10516,7 +10556,7 @@ public class ChatViewModelTests
 
                 throw new InvalidOperationException($"Unexpected session load: {parameters.SessionId}");
             });
-        fixture.ViewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -10634,7 +10674,7 @@ public class ChatViewModelTests
 
                 throw new InvalidOperationException($"Unexpected session load: {parameters.SessionId}");
             });
-        fixture.ViewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -11006,7 +11046,7 @@ public class ChatViewModelTests
             .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, CancellationToken>(async (profile, _, sink, cancellationToken) =>
             {
                 await sink.SelectProfileAsync(profile, cancellationToken);
-                sink.ReplaceChatService(chatService.Object);
+                await sink.ReplaceChatServiceAsync(chatService.Object, cancellationToken);
                 await DispatchConnectedAsync(fixture!, profile.Id);
                 return new AcpTransportApplyResult(chatService.Object, new InitializeResponse());
             });
@@ -11036,7 +11076,7 @@ public class ChatViewModelTests
             fixture.Workspace.UpdateRemoteBinding("conv-1", null, "profile-1");
             fixture.Workspace.UpdateRemoteBinding("conv-2", "remote-2", "profile-1");
 
-            fixture.ViewModel.ReplaceChatService(chatService.Object);
+            await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
 
             await fixture.UpdateStateAsync(state => state with
             {
@@ -11119,7 +11159,7 @@ public class ChatViewModelTests
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
 
-        fixture.ViewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
         await DispatchConnectedAsync(fixture, "profile-1");
         await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
         await fixture.UpdateStateAsync(state => state with
@@ -11134,7 +11174,7 @@ public class ChatViewModelTests
                     "conn-1",
                     "remote-1",
                     "profile-1",
-                    null,
+                    "SessionLoadCompleted",
                     DateTime.UtcNow))
         });
         await WaitForConditionAsync(() =>
@@ -11923,7 +11963,7 @@ public class ChatViewModelTests
     [Fact]
     public async Task SwitchConversationAsync_RemoteBoundConversation_WhenActivationSyncsProfileSelection_ReconnectsBeforeHydrating()
     {
-        var syncContext = new ImmediateSynchronizationContext();
+        var syncContext = new QueueingSynchronizationContext();
         var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
         var sessionManager = new Mock<ISessionManager>();
         sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
@@ -11980,7 +12020,7 @@ public class ChatViewModelTests
             .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, AcpConnectionContext, CancellationToken>(async (profile, _, sink, _, cancellationToken) =>
             {
                 await sink.SelectProfileAsync(profile, cancellationToken);
-                sink.ReplaceChatService(reboundService.Object);
+                await sink.ReplaceChatServiceAsync(reboundService.Object, cancellationToken);
                 await DispatchConnectedAsync(fixture!, profile.Id);
                 return new AcpTransportApplyResult(reboundService.Object, new InitializeResponse());
             });
@@ -12019,7 +12059,7 @@ public class ChatViewModelTests
                 CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
                 LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
-            fixture.ViewModel.ReplaceChatService(staleService.Object);
+            await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(staleService.Object));
             await fixture.UpdateStateAsync(state => state with
             {
                 HydratedConversationId = "conv-local",
@@ -12028,7 +12068,9 @@ public class ChatViewModelTests
             });
             await DispatchConnectedAsync(fixture, "profile-2");
 
-            var switched = await fixture.ViewModel.SwitchConversationAsync("conv-remote");
+            var switchTask = fixture.ViewModel.SwitchConversationAsync("conv-remote");
+            await AwaitWithSynchronizationContextAsync(syncContext, switchTask);
+            var switched = await switchTask;
 
             Assert.True(switched, fixture.ViewModel.ErrorMessage);
             commands.Verify(x => x.ConnectToProfileAsync(
@@ -12318,7 +12360,7 @@ public class ChatViewModelTests
             CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
-        fixture.ViewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
         await fixture.UpdateStateAsync(state => state with
         {
             HydratedConversationId = "conv-1",
@@ -12421,7 +12463,7 @@ public class ChatViewModelTests
             CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
-        fixture.ViewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
         await fixture.UpdateStateAsync(state => state with
         {
             HydratedConversationId = "conv-1",
@@ -12544,7 +12586,7 @@ public class ChatViewModelTests
             CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
-        fixture.ViewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
         await fixture.UpdateStateAsync(state => state with
         {
             HydratedConversationId = "conv-1",
@@ -12682,6 +12724,7 @@ public class ChatViewModelTests
     }
 
     [Fact]
+    [Trait("Suite", "Smoke")]
     public async Task ActivateConversationAsync_SwitchingBackToPreviouslyHydratedRemoteConversation_OnSameConnectionInstance_SkipsRemoteSessionReload()
     {
         var syncContext = new ImmediateSynchronizationContext();
@@ -12723,7 +12766,17 @@ public class ChatViewModelTests
 
         fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "conv-1",
-            Transcript: [],
+            Transcript:
+            [
+                new ConversationMessageSnapshot
+                {
+                    Id = "local-1",
+                    Timestamp = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                    IsOutgoing = true,
+                    ContentType = "text",
+                    TextContent = "local one"
+                }
+            ],
             Plan: [],
             ShowPlanPanel: false,
             PlanTitle: null,
@@ -12731,7 +12784,17 @@ public class ChatViewModelTests
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
         fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "conv-2",
-            Transcript: [],
+            Transcript:
+            [
+                new ConversationMessageSnapshot
+                {
+                    Id = "local-2",
+                    Timestamp = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+                    IsOutgoing = true,
+                    ContentType = "text",
+                    TextContent = "local two"
+                }
+            ],
             Plan: [],
             ShowPlanPanel: false,
             PlanTitle: null,
@@ -12777,14 +12840,41 @@ public class ChatViewModelTests
                     },
                     configOptions: CreateModeConfigOptions("debug")));
             });
-        fixture.ViewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
 
         await fixture.UpdateStateAsync(state => state with
         {
             HydratedConversationId = "conv-1",
             Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
                 .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
-                .Add("conv-2", new ConversationBindingSlice("conv-2", "remote-2", "profile-1"))
+                .Add("conv-2", new ConversationBindingSlice("conv-2", "remote-2", "profile-1")),
+            ConversationContents = ImmutableDictionary<string, ConversationContentSlice>.Empty
+                .Add("conv-1", new ConversationContentSlice(
+                    ImmutableList.Create(
+                        new ConversationMessageSnapshot
+                        {
+                            Id = "local-1",
+                            Timestamp = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                            IsOutgoing = true,
+                            ContentType = "text",
+                            TextContent = "local one"
+                        }),
+                    ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                    false,
+                    null))
+                .Add("conv-2", new ConversationContentSlice(
+                    ImmutableList.Create(
+                        new ConversationMessageSnapshot
+                        {
+                            Id = "local-2",
+                            Timestamp = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+                            IsOutgoing = true,
+                            ContentType = "text",
+                            TextContent = "local two"
+                        }),
+                    ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                    false,
+                    null))
         });
         await DispatchConnectedAsync(fixture, "profile-1");
         await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
@@ -12806,12 +12896,17 @@ public class ChatViewModelTests
             fixture.ViewModel.ConnectionInstanceId));
         Assert.Equal("agent", fixture.ViewModel.SelectedMode?.ModeId);
         Assert.Equal("agent", fixture.ViewModel.ConfigOptions[0].Value);
+        Assert.Collection(
+            fixture.ViewModel.MessageHistory,
+            message => Assert.Equal("local one", message.TextContent));
 
         await fixture.ViewModel.SwitchConversationAsync("conv-2");
-        await fixture.ViewModel.SwitchConversationAsync("conv-1");
+        Assert.Collection(
+            fixture.ViewModel.MessageHistory,
+            message => Assert.Equal("local two", message.TextContent));
 
-        await WaitForConditionAsync(() =>
-            Task.FromResult(string.Equals(fixture.ViewModel.CurrentSessionId, "conv-1", StringComparison.Ordinal)));
+        await fixture.ViewModel.SwitchConversationAsync("conv-1");
+        Assert.Equal("conv-1", fixture.ViewModel.CurrentSessionId);
 
         var roundTripState = await fixture.GetStateAsync();
         var roundTripRuntime = roundTripState.ResolveRuntimeState("conv-1");
@@ -12824,6 +12919,183 @@ public class ChatViewModelTests
             fixture.ViewModel.ConnectionInstanceId));
         Assert.Equal(1, loadCounts.GetValueOrDefault("remote-1"));
         Assert.Equal(1, loadCounts.GetValueOrDefault("remote-2"));
+        Assert.Collection(
+            fixture.ViewModel.MessageHistory,
+            message => Assert.Equal("local one", message.TextContent));
+    }
+
+    [Fact]
+    [Trait("Suite", "Smoke")]
+    public async Task ActivateConversationAsync_WarmRuntimeWithoutProjectedContent_StillReloadsRemoteSessionAndKeepsOverlayVisible()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
+        var sessionManager = new Mock<ISessionManager>();
+        sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.TryGetValue(id, out var session) ? session : null);
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .Returns<string, string?>((id, cwd) =>
+            {
+                var session = new Session(id, cwd);
+                sessions[id] = session;
+                return Task.FromResult(session);
+            });
+        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
+            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
+            {
+                if (!sessions.TryGetValue(id, out var session))
+                {
+                    return false;
+                }
+
+                update(session);
+                if (updateActivity)
+                {
+                    session.UpdateActivity();
+                }
+
+                return true;
+            });
+        sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.Remove(id));
+
+        await sessionManager.Object.CreateSessionAsync("conv-1", @"C:\repo\one");
+        await sessionManager.Object.CreateSessionAsync("conv-2", @"C:\repo\two");
+
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
+        var restoreTask = fixture.ViewModel.RestoreAsync();
+        await syncContext.RunUntilCompletedAsync(restoreTask);
+
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-2",
+            Transcript:
+            [
+                new ConversationMessageSnapshot
+                {
+                    Id = "local-2",
+                    Timestamp = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+                    IsOutgoing = true,
+                    ContentType = "text",
+                    TextContent = "local two"
+                }
+            ],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+
+        var loadStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowLoadCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var chatService = CreateConnectedChatService();
+        chatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
+        chatService.Setup(service => service.LoadSessionAsync(
+                It.Is<SessionLoadParams>(parameters =>
+                    string.Equals(parameters.SessionId, "remote-1", StringComparison.Ordinal)
+                    && string.Equals(parameters.Cwd, @"C:\repo\one", StringComparison.Ordinal)),
+                It.IsAny<CancellationToken>()))
+            .Returns<SessionLoadParams, CancellationToken>(async (_, _) =>
+            {
+                loadStarted.TrySetResult(null);
+                await allowLoadCompletion.Task;
+                return SessionLoadResponse.Completed;
+            });
+        chatService.Setup(service => service.LoadSessionAsync(
+                It.Is<SessionLoadParams>(parameters => string.Equals(parameters.SessionId, "remote-2", StringComparison.Ordinal)),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(SessionLoadResponse.Completed);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-2",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+                .Add("conv-2", new ConversationBindingSlice("conv-2", "remote-2", "profile-1")),
+            ConversationContents = ImmutableDictionary<string, ConversationContentSlice>.Empty
+                .Add("conv-1", new ConversationContentSlice(
+                    ImmutableList<ConversationMessageSnapshot>.Empty,
+                    ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                    false,
+                    null))
+                .Add("conv-2", new ConversationContentSlice(
+                    ImmutableList.Create(
+                        new ConversationMessageSnapshot
+                        {
+                            Id = "local-2",
+                            Timestamp = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+                            IsOutgoing = true,
+                            ContentType = "text",
+                            TextContent = "local two"
+                        }),
+                    ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                    false,
+                    null)),
+            RuntimeStates = ImmutableDictionary<string, ConversationRuntimeSlice>.Empty
+                .Add("conv-1", new ConversationRuntimeSlice(
+                    ConversationId: "conv-1",
+                    Phase: ConversationRuntimePhase.Warm,
+                    ConnectionInstanceId: "conn-1",
+                    RemoteSessionId: "remote-1",
+                    ProfileId: "profile-1",
+                    Reason: "SeedWarm",
+                    UpdatedAtUtc: new DateTime(2026, 3, 1, 1, 0, 0, DateTimeKind.Utc)))
+                .Add("conv-2", new ConversationRuntimeSlice(
+                    ConversationId: "conv-2",
+                    Phase: ConversationRuntimePhase.Warm,
+                    ConnectionInstanceId: "conn-1",
+                    RemoteSessionId: "remote-2",
+                    ProfileId: "profile-1",
+                    Reason: "ActiveWarm",
+                    UpdatedAtUtc: new DateTime(2026, 3, 2, 1, 0, 0, DateTimeKind.Utc)))
+        });
+        await DispatchConnectedAsync(fixture, "profile-1");
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(string.Equals(fixture.ViewModel.ConnectionInstanceId, "conn-1", StringComparison.Ordinal));
+        });
+
+        var activationTask = fixture.ViewModel.SwitchConversationAsync("conv-1");
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(loadStarted.Task.IsCompleted);
+        }, timeoutMilliseconds: 2000);
+
+        Assert.False(activationTask.IsCompleted, "Foreground switch should keep awaiting remote hydration until session/load completes.");
+        Assert.Equal("conv-1", fixture.ViewModel.CurrentSessionId);
+        Assert.True(fixture.ViewModel.IsOverlayVisible);
+        Assert.Empty(fixture.ViewModel.MessageHistory);
+
+        allowLoadCompletion.TrySetResult(null);
+        await syncContext.RunUntilCompletedAsync(activationTask);
+        Assert.True(await activationTask);
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(!fixture.ViewModel.IsOverlayVisible);
+        }, timeoutMilliseconds: 7000);
+
+        chatService.Verify(service => service.LoadSessionAsync(
+                It.Is<SessionLoadParams>(parameters =>
+                    string.Equals(parameters.SessionId, "remote-1", StringComparison.Ordinal)
+                    && string.Equals(parameters.Cwd, @"C:\repo\one", StringComparison.Ordinal)),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        chatService.Verify(service => service.LoadSessionAsync(
+                It.Is<SessionLoadParams>(parameters => string.Equals(parameters.SessionId, "remote-2", StringComparison.Ordinal)),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]
@@ -12927,7 +13199,7 @@ public class ChatViewModelTests
                 loadCounts[parameters.SessionId] = loadCounts.TryGetValue(parameters.SessionId, out var count) ? count + 1 : 1;
                 return Task.FromResult(SessionLoadResponse.Completed);
             });
-        fixture.ViewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -13024,7 +13296,7 @@ public class ChatViewModelTests
                 loadCounts[parameters.SessionId] = loadCounts.TryGetValue(parameters.SessionId, out var count) ? count + 1 : 1;
                 return Task.FromResult(SessionLoadResponse.Completed);
             });
-        fixture.ViewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -13433,7 +13705,7 @@ public class ChatViewModelTests
                 loadCounts[parameters.SessionId] = loadCounts.TryGetValue(parameters.SessionId, out var count) ? count + 1 : 1;
                 return Task.FromResult(SessionLoadResponse.Completed);
             });
-        fixture.ViewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -13486,7 +13758,7 @@ public class ChatViewModelTests
             .Callback<SessionSetConfigOptionParams>(value => capturedParams = value)
             .ReturnsAsync(new SessionSetConfigOptionResponse(CreateModeConfigOptions("plan")));
 
-        viewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(chatService.Object));
         syncContext.RunAll();
 
         var initialState = (await fixture.GetStateAsync()) with
@@ -13563,7 +13835,7 @@ public class ChatViewModelTests
         var viewModel = fixture.ViewModel;
         var chatService = CreateConnectedChatService();
 
-        viewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(chatService.Object));
         syncContext.RunAll();
 
         var initialState = (await fixture.GetStateAsync()) with
@@ -13620,7 +13892,7 @@ public class ChatViewModelTests
         var viewModel = fixture.ViewModel;
         var chatService = CreateConnectedChatService();
 
-        viewModel.ReplaceChatService(chatService.Object);
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(chatService.Object));
         syncContext.RunAll();
 
         var initialState = (await fixture.GetStateAsync()) with

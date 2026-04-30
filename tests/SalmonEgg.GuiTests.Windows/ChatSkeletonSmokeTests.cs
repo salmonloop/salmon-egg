@@ -2484,11 +2484,27 @@ public sealed class ChatSkeletonSmokeTests
 
     private static void NavigateToAcpSettings(WindowsGuiAppSession session)
     {
+        EnsureMainWindowWideForTitleBarCommands(session);
+
         var settingsItem = session.FindByAutomationId("SettingsItem", TimeSpan.FromSeconds(10));
         session.ActivateElement(settingsItem);
 
-        var acpSettingsItem = session.TryFindVisibleElementByNameAnywhere("Agent (ACP)", TimeSpan.FromSeconds(10));
-        Assert.True(acpSettingsItem is not null, "Agent (ACP) settings entry did not become visible after opening the main settings item.");
+        var acpSettingsItem = session.TryFindByAutomationId("SettingsNav.AgentAcp", TimeSpan.FromSeconds(10))
+            ?? session.TryFindVisibleElementByNameAnywhere("Agent (ACP)", TimeSpan.FromSeconds(10));
+        if (acpSettingsItem is null)
+        {
+            var captureRoot = Path.Combine(Path.GetTempPath(), "SalmonEgg.GuiTests");
+            Directory.CreateDirectory(captureRoot);
+            var capturePath = Path.Combine(
+                captureRoot,
+                $"settings-acp-entry-missing-{DateTime.UtcNow:yyyyMMddHHmmssfff}.png");
+            session.CaptureMainWindowToFile(capturePath);
+            var visibleTexts = string.Join(", ", session.GetVisibleTexts());
+            throw new Xunit.Sdk.XunitException(
+                $"Agent (ACP) settings entry did not become visible after opening the main settings item.{Environment.NewLine}" +
+                $"Screenshot: {capturePath}{Environment.NewLine}" +
+                $"Visible texts: [{visibleTexts}]");
+        }
 
         session.ActivateElement(acpSettingsItem!);
 
