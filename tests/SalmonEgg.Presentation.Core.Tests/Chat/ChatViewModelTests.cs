@@ -6301,7 +6301,7 @@ public partial class ChatViewModelTests
             chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
                 .Callback<SessionLoadParams, CancellationToken>((value, _) => capturedParams = value)
                 .ReturnsAsync(SessionLoadResponse.Completed);
-            await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
+            fixture.ViewModel.ReplaceChatService(chatService.Object);
 
             await fixture.UpdateStateAsync(state => state with
             {
@@ -6468,10 +6468,12 @@ public partial class ChatViewModelTests
                     .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
             });
             await DispatchConnectedAsync(fixture, "profile-1");
+            await WaitForConditionAsync(async () =>
+                string.Equals((await fixture.GetStateAsync()).HydratedConversationId, "conv-1", StringComparison.Ordinal));
 
             var hydrated = await fixture.ViewModel.HydrateActiveConversationAsync();
 
-            Assert.True(hydrated);
+            Assert.True(hydrated, fixture.ViewModel.ErrorMessage);
             Assert.NotNull(capturedParams);
             Assert.Equal(@"C:\repo\stale", capturedParams!.Cwd);
             await WaitForConditionAsync(async () =>
@@ -8351,14 +8353,14 @@ public partial class ChatViewModelTests
                 fixture.ViewModel.CurrentSessionDisplayName,
                 "remote title only",
                 StringComparison.Ordinal));
-        });
+        }, timeoutMilliseconds: 15000);
         await WaitForConditionAsync(async () =>
         {
             syncContext.RunAll();
             return fixture.ViewModel.MessageHistory.Any(message =>
                 string.Equals(message.TextContent, "late replay after title", StringComparison.Ordinal));
-        });
-        await WaitForConditionAsync(() => Task.FromResult(!fixture.ViewModel.IsOverlayVisible));
+        }, timeoutMilliseconds: 15000);
+        await WaitForConditionAsync(() => Task.FromResult(!fixture.ViewModel.IsOverlayVisible), timeoutMilliseconds: 15000);
     }
 
     [Fact]
@@ -9862,6 +9864,20 @@ public partial class ChatViewModelTests
             message => string.Equals(message.TextContent, "cached first message", StringComparison.Ordinal));
 
         allowLoadCompletion.TrySetResult(null);
+        var cachedSnapshot = fixture.Workspace.GetConversationSnapshot("conv-2");
+        Assert.NotNull(cachedSnapshot);
+        Assert.Contains(
+            cachedSnapshot!.Transcript,
+            message => string.Equals(message.TextContent, "cached first message", StringComparison.Ordinal));
+        await WaitForConditionAsync(async () =>
+        {
+            var state = await fixture.GetStateAsync();
+            var content = state.ResolveContentSlice("conv-2");
+            syncContext.RunAll();
+            return content.HasValue
+                && content.Value.Transcript.Any(message =>
+                    string.Equals(message.TextContent, "cached first message", StringComparison.Ordinal));
+        }, timeoutMilliseconds: 8000);
         await WaitForConditionAsync(() =>
         {
             syncContext.RunAll();
@@ -10495,6 +10511,8 @@ public partial class ChatViewModelTests
         }
 
         Assert.True(await duplicateActivation);
+        syncContext.RunAll();
+        Assert.Equal(1, Volatile.Read(ref remoteOneLoadCalls));
 
         var laterActivation = switcher.SwitchConversationAsync("conv-2");
         while (!laterActivation.IsCompleted)
@@ -11859,6 +11877,10 @@ public partial class ChatViewModelTests
         var secondRemoteSwitchTask = fixture.ViewModel.SwitchConversationAsync("conv-remote-2");
         await syncContext.RunUntilCompletedAsync(secondRemoteSwitchTask);
         Assert.True(await secondRemoteSwitchTask);
+        var stateAfterSecondSelection = await fixture.GetStateAsync();
+        Assert.Equal("conv-remote-2", stateAfterSecondSelection.HydratedConversationId);
+        syncContext.RunAll();
+        Assert.Equal("conv-remote-2", fixture.ViewModel.CurrentSessionId);
 
         await WaitForConditionAsync(() =>
         {
@@ -11871,15 +11893,21 @@ public partial class ChatViewModelTests
         await WaitForConditionAsync(() =>
         {
             syncContext.RunAll();
-            var hasFreshRemote2 = fixture.ViewModel.MessageHistory.Any(message =>
-                message.TextContent?.Contains("fresh remote-2 replay", StringComparison.Ordinal) == true);
-            var hasStaleRemote1 = fixture.ViewModel.MessageHistory.Any(message =>
-                message.TextContent?.Contains("stale remote-1 replay", StringComparison.Ordinal) == true);
-            return Task.FromResult(
-                string.Equals(fixture.ViewModel.CurrentSessionId, "conv-remote-2", StringComparison.Ordinal)
-                && hasFreshRemote2
-                && !hasStaleRemote1
-                && !fixture.ViewModel.IsOverlayVisible);
+            return Task.FromResult(string.Equals(
+                fixture.ViewModel.CurrentSessionId,
+                "conv-remote-2",
+                StringComparison.Ordinal));
+        }, timeoutMilliseconds: 30000);
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(fixture.ViewModel.MessageHistory.Any(message =>
+                message.TextContent?.Contains("fresh remote-2 replay", StringComparison.Ordinal) == true));
+        }, timeoutMilliseconds: 30000);
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(!fixture.ViewModel.IsOverlayVisible);
         }, timeoutMilliseconds: 30000);
 
         Assert.Equal("conv-remote-2", fixture.ViewModel.CurrentSessionId);

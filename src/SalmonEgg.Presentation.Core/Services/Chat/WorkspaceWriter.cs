@@ -160,15 +160,35 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
         var sessionStateSlice = state.ResolveSessionStateSlice(conversationId);
         var isHydratedConversation = string.Equals(state.HydratedConversationId, conversationId, StringComparison.Ordinal);
         var existingSnapshot = _workspace.GetConversationSnapshot(conversationId);
+        var hasProjectedHydratedRootContent =
+            isHydratedConversation
+            && HasProjectedConversationContent(state.Transcript, state.PlanEntries, state.ShowPlanPanel, state.PlanTitle);
+        var hasProjectedHydratedRootSessionState =
+            isHydratedConversation
+            && HasProjectedPrimarySessionState(
+                state.AvailableModes ?? ImmutableList<ConversationModeOptionSnapshot>.Empty,
+                state.SelectedModeId,
+                state.ConfigOptions ?? ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+                state.ShowConfigOptionsPanel)
+            || (isHydratedConversation && (state.AvailableCommands?.Count ?? 0) > 0)
+            || (isHydratedConversation && state.SessionInfo is not null)
+            || (isHydratedConversation && state.Usage is not null);
         if (contentSlice is null
             && sessionStateSlice is null
-            && (!isHydratedConversation || (state.Transcript is null && state.PlanEntries is null)))
+            && (!isHydratedConversation || (!hasProjectedHydratedRootContent && !hasProjectedHydratedRootSessionState)))
         {
             return null;
         }
 
-        var hasProjectedContent = contentSlice is not null
-            || (isHydratedConversation && HasProjectedConversationContent(state.Transcript, state.PlanEntries, state.ShowPlanPanel, state.PlanTitle));
+        var hasProjectedSliceContent =
+            contentSlice.HasValue
+            && HasProjectedConversationContent(
+                contentSlice.Value.Transcript,
+                contentSlice.Value.PlanEntries,
+                contentSlice.Value.ShowPlanPanel,
+                contentSlice.Value.PlanTitle);
+        var hasProjectedContent = hasProjectedSliceContent || hasProjectedHydratedRootContent;
+        var runtimeState = state.ResolveRuntimeState(conversationId);
         var transcriptSource = hasProjectedContent
             ? contentSlice?.Transcript ?? (isHydratedConversation ? state.Transcript : null)
             : existingSnapshot?.Transcript;
@@ -206,7 +226,33 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
         bool showConfigOptionsPanel = sessionStateSlice?.ShowConfigOptionsPanel ?? (isHydratedConversation && state.ShowConfigOptionsPanel);
         ConversationSessionInfoSnapshot? sessionInfo = ConversationSessionInfoSnapshots.Clone(sessionStateSlice?.SessionInfo ?? (isHydratedConversation ? state.SessionInfo : null));
         ConversationUsageSnapshot? usage = CloneUsageSnapshot(sessionStateSlice?.Usage ?? (isHydratedConversation ? state.Usage : null));
-        if (!isHydratedConversation
+        var shouldPreserveExistingSnapshotDuringHydrationReset =
+            isHydratedConversation
+            && runtimeState?.Phase == ConversationRuntimePhase.RemoteHydrating
+            && existingSnapshot is not null
+            && !hasProjectedContent
+            && !hasProjectedPrimarySessionState;
+
+        if (shouldPreserveExistingSnapshotDuringHydrationReset)
+        {
+            availableModes = (existingSnapshot!.AvailableModes ?? Array.Empty<ConversationModeOptionSnapshot>())
+                .Select(CloneModeOptionSnapshot)
+                .ToArray();
+            configOptions = (existingSnapshot.ConfigOptions ?? Array.Empty<ConversationConfigOptionSnapshot>())
+                .Select(CloneConfigOptionSnapshot)
+                .ToArray();
+            if (availableCommands.Length == 0)
+            {
+                availableCommands = (existingSnapshot.AvailableCommands ?? Array.Empty<ConversationAvailableCommandSnapshot>())
+                    .Select(CloneAvailableCommandSnapshot)
+                    .ToArray();
+            }
+            selectedModeId = existingSnapshot.SelectedModeId;
+            showConfigOptionsPanel = existingSnapshot.ShowConfigOptionsPanel;
+            sessionInfo ??= ConversationSessionInfoSnapshots.Clone(existingSnapshot.SessionInfo);
+            usage ??= CloneUsageSnapshot(existingSnapshot.Usage);
+        }
+        else if (!isHydratedConversation
             && existingSnapshot is not null
             && (sessionStateSlice is null || !hasProjectedPrimarySessionState))
         {
@@ -218,14 +264,15 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
                 .ToArray();
             selectedModeId = existingSnapshot.SelectedModeId;
             showConfigOptionsPanel = existingSnapshot.ShowConfigOptionsPanel;
-            if (sessionStateSlice is null)
+            if (availableCommands.Length == 0)
             {
                 availableCommands = (existingSnapshot.AvailableCommands ?? Array.Empty<ConversationAvailableCommandSnapshot>())
                     .Select(CloneAvailableCommandSnapshot)
                     .ToArray();
-                sessionInfo = ConversationSessionInfoSnapshots.Clone(existingSnapshot.SessionInfo);
-                usage = CloneUsageSnapshot(existingSnapshot.Usage);
             }
+
+            sessionInfo ??= ConversationSessionInfoSnapshots.Clone(existingSnapshot.SessionInfo);
+            usage ??= CloneUsageSnapshot(existingSnapshot.Usage);
         }
         var showPlanPanel = hasProjectedContent
             ? contentSlice?.ShowPlanPanel ?? (isHydratedConversation && state.ShowPlanPanel)
@@ -233,7 +280,6 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
         var planTitle = hasProjectedContent
             ? contentSlice?.PlanTitle ?? (isHydratedConversation ? state.PlanTitle : null)
             : existingSnapshot?.PlanTitle;
-        var runtimeState = state.ResolveRuntimeState(conversationId);
         var hasProjectedData = HasProjectedData(
             transcript,
             planEntries,

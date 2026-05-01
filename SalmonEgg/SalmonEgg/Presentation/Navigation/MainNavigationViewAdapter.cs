@@ -35,58 +35,16 @@ public sealed class MainNavigationViewAdapter
             return _navigationCoordinator.ActivateSettingsAsync("General");
         }
 
-        var selectedItem = args.SelectedItem ?? sender.SelectedItem;
-
-        if (selectedItem is SessionNavItemViewModel sessionVm && !string.IsNullOrWhiteSpace(sessionVm.SessionId))
-        {
-            var sessionProjectId = string.IsNullOrWhiteSpace(sessionVm.ProjectId)
-                ? _viewModel.TryGetProjectIdForSession(sessionVm.SessionId)
-                : sessionVm.ProjectId;
-
-            // Never await remote session activation on the NavigationView UI event pipeline.
-            _ = _navigationCoordinator.ActivateSessionAsync(sessionVm.SessionId, sessionProjectId);
-            return Task.CompletedTask;
-        }
-
-        if (selectedItem is StartNavItemViewModel)
-        {
-            return _navigationCoordinator.ActivateStartAsync();
-        }
-
-        if (selectedItem is DiscoverSessionsNavItemViewModel)
-        {
-            return _navigationCoordinator.ActivateDiscoverSessionsAsync();
-        }
-
-        if (selectedItem is not NavigationViewItem navItem || navItem.Tag is not string tag)
-        {
-            return Task.CompletedTask;
-        }
-
-        if (string.Equals(tag, NavItemTag.Start, StringComparison.Ordinal))
-        {
-            return _navigationCoordinator.ActivateStartAsync();
-        }
-
-        if (string.Equals(tag, NavItemTag.DiscoverSessions, StringComparison.Ordinal))
-        {
-            return _navigationCoordinator.ActivateDiscoverSessionsAsync();
-        }
-
-        if (NavItemTag.TryParseSession(tag, out var sessionId))
-        {
-            var sessionProjectId = (navItem.DataContext as SessionNavItemViewModel)?.ProjectId
-                ?? _viewModel.TryGetProjectIdForSession(sessionId);
-
-            // Never await remote session activation on the NavigationView UI event pipeline.
-            _ = _navigationCoordinator.ActivateSessionAsync(sessionId, sessionProjectId);
-        }
-
         return Task.CompletedTask;
     }
 
     private Task<bool> HandleItemInvokedCoreAsync(NavigationViewItemInvokedEventArgs args)
     {
+        if (args.IsSettingsInvoked)
+        {
+            return _navigationCoordinator.ActivateSettingsAsync("General").ContinueWith(_ => true);
+        }
+
         if (args.InvokedItemContainer is not NavigationViewItem navItem || navItem.Tag is not string tag)
         {
             return Task.FromResult(false);
@@ -109,6 +67,25 @@ public sealed class MainNavigationViewAdapter
         if (NavItemTag.TryParseMore(tag, out var moreProjectId))
         {
             _ = _viewModel.ShowAllSessionsForProjectAsync(moreProjectId);
+            return Task.FromResult(true);
+        }
+
+        if (string.Equals(tag, NavItemTag.Start, StringComparison.Ordinal))
+        {
+            return _navigationCoordinator.ActivateStartAsync().ContinueWith(_ => true);
+        }
+
+        if (string.Equals(tag, NavItemTag.DiscoverSessions, StringComparison.Ordinal))
+        {
+            return _navigationCoordinator.ActivateDiscoverSessionsAsync().ContinueWith(_ => true);
+        }
+
+        if (NavItemTag.TryParseSession(tag, out var sessionId))
+        {
+            var sessionProjectId = (navItem.DataContext as SessionNavItemViewModel)?.ProjectId
+                ?? _viewModel.TryGetProjectIdForSession(sessionId);
+
+            _ = _navigationCoordinator.ActivateSessionAsync(sessionId, sessionProjectId);
             return Task.FromResult(true);
         }
 

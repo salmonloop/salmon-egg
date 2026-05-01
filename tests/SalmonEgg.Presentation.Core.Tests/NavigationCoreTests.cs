@@ -248,19 +248,19 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
-    public void MainNavigationViewAdapter_ItemInvoked_DoesNotActivateNavigationDestinations()
+    public void MainNavigationViewAdapter_ItemInvoked_OwnsDestinationActivationPath()
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Navigation\MainNavigationViewAdapter.cs");
         var section = ExtractSection(code, "private Task<bool> HandleItemInvokedCoreAsync");
 
-        Assert.DoesNotContain("ActivateSettingsAsync", section, StringComparison.Ordinal);
-        Assert.DoesNotContain("ActivateStartAsync", section, StringComparison.Ordinal);
-        Assert.DoesNotContain("ActivateDiscoverSessionsAsync", section, StringComparison.Ordinal);
-        Assert.DoesNotContain("ActivateSessionAsync", section, StringComparison.Ordinal);
+        Assert.Contains("ActivateSettingsAsync", section, StringComparison.Ordinal);
+        Assert.Contains("ActivateStartAsync", section, StringComparison.Ordinal);
+        Assert.Contains("ActivateDiscoverSessionsAsync", section, StringComparison.Ordinal);
+        Assert.Contains("ActivateSessionAsync", section, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void MainNavigationViewAdapter_SelectionChanged_OwnsDestinationActivationPath()
+    public void MainNavigationViewAdapter_SelectionChanged_DoesNotActivateNavigationDestinations()
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Navigation\MainNavigationViewAdapter.cs");
         var section = ExtractSection(
@@ -268,13 +268,23 @@ public sealed class NavigationCoreTests
             "public Task HandleSelectionChangedAsync",
             "private Task<bool> HandleItemInvokedCoreAsync");
 
-        Assert.Contains("ActivateSettingsAsync", section, StringComparison.Ordinal);
-        Assert.Contains("ActivateStartAsync", section, StringComparison.Ordinal);
-        Assert.Contains("ActivateDiscoverSessionsAsync", section, StringComparison.Ordinal);
-        Assert.Contains("ActivateSessionAsync", section, StringComparison.Ordinal);
-        Assert.Contains("args.SelectedItem ?? sender.SelectedItem", section, StringComparison.Ordinal);
-        Assert.Contains("selectedItem is SessionNavItemViewModel", section, StringComparison.Ordinal);
-        Assert.DoesNotContain("sender.SelectedItem is not NavigationViewItem", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("ActivateStartAsync", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("ActivateDiscoverSessionsAsync", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("ActivateSessionAsync", section, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MainNavigationViewAdapter_SelectionChanged_DoesNotDependOnProjectedSelectionEcho()
+    {
+        var code = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Navigation\MainNavigationViewAdapter.cs");
+        var section = ExtractSection(
+            code,
+            "public Task HandleSelectionChangedAsync",
+            "private Task<bool> HandleItemInvokedCoreAsync");
+
+        Assert.DoesNotContain("IsProjectedSelectionEcho", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("ProjectedControlSelectedItem", section, StringComparison.Ordinal);
+        Assert.Contains("return Task.CompletedTask;", section, StringComparison.Ordinal);
     }
 
     [Fact]

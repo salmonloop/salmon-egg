@@ -1184,74 +1184,51 @@ public sealed class NavigationCoordinatorTests
         SynchronizationContext.SetSynchronizationContext(syncContext);
         try
         {
-            var navState = new FakeNavigationPaneState();
-            var sessionManager = CreateSessionManager(
-                new Session("session-1", @"C:\repo\one") { DisplayName = "Imported Session 1" },
-                new Session("session-2", @"C:\repo\two") { DisplayName = "Imported Session 2" });
             var preferences = CreatePreferencesWithProject();
             var shellNavigation = CreateShellNavigationService();
-
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
-            await chat.ViewModel.RestoreAsync();
-
-            var bindFirst = await chat.ViewModel.ConversationBindingCommands.UpdateBindingAsync("session-1", "remote-1", null);
-            var bindSecond = await chat.ViewModel.ConversationBindingCommands.UpdateBindingAsync("session-2", "remote-2", null);
-            Assert.Equal(BindingUpdateStatus.Success, bindFirst.Status);
-            Assert.Equal(BindingUpdateStatus.Success, bindSecond.Status);
-
-            var firstLoadStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var secondLoadStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var allowFirstLoadCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var allowSecondLoadCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
-
-            var chatService = new Mock<IChatService>();
-            chatService.SetupGet(service => service.IsConnected).Returns(true);
-            chatService.SetupGet(service => service.IsInitialized).Returns(true);
-            chatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
-            chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
-                .Returns<SessionLoadParams, CancellationToken>(async (parameters, _) =>
-                {
-                    if (string.Equals(parameters.SessionId, "remote-1", StringComparison.Ordinal))
-                    {
-                        firstLoadStarted.TrySetResult(null);
-                        await allowFirstLoadCompletion.Task;
-                        return SessionLoadResponse.Completed;
-                    }
-
-                    if (string.Equals(parameters.SessionId, "remote-2", StringComparison.Ordinal))
-                    {
-                        secondLoadStarted.TrySetResult(null);
-                        await allowSecondLoadCompletion.Task;
-                        return SessionLoadResponse.Completed;
-                    }
-
-                    throw new InvalidOperationException($"Unexpected session load: {parameters.SessionId}");
-                });
-            chat.ViewModel.ReplaceChatService(chatService.Object);
-
             var selectionStore = new ShellSelectionStateStore();
-            var coordinator = CreateCoordinator(selectionStore, (IConversationSessionSwitcher)chat.ViewModel, preferences, shellNavigation.Object);
-            using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState, selectionStore, coordinator);
+            var runtimeState = new ShellNavigationRuntimeStateStore();
+            var firstSwitchStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var allowFirstSwitchCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var secondSwitchStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var activationCoordinator = new RecordingConversationSessionSwitcher(async (sessionId, cancellationToken) =>
+            {
+                if (string.Equals(sessionId, "session-1", StringComparison.Ordinal))
+                {
+                    firstSwitchStarted.TrySetResult(null);
+                    await allowFirstSwitchCompletion.Task.WaitAsync(cancellationToken);
+                    return true;
+                }
 
-            navVm.RebuildTree();
+                if (string.Equals(sessionId, "session-2", StringComparison.Ordinal))
+                {
+                    secondSwitchStarted.TrySetResult(null);
+                    return true;
+                }
+
+                throw new InvalidOperationException($"Unexpected session selection: {sessionId}");
+            });
+            var coordinator = CreateCoordinator(selectionStore, activationCoordinator, preferences, shellNavigation.Object, runtimeState);
 
             var firstActivation = coordinator.ActivateSessionAsync("session-1", "project-1");
-            await firstLoadStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
-            Assert.True(await firstActivation);
+            await firstSwitchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
             var secondActivation = coordinator.ActivateSessionAsync("session-2", "project-1");
             var completedBeforeFirstLoadFinished = await Task.WhenAny(secondActivation, Task.Delay(250)) == secondActivation;
 
             Assert.True(completedBeforeFirstLoadFinished);
             Assert.True(await secondActivation);
-            var selection = Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
-            Assert.Equal("session-2", selection.SessionId);
-            Assert.True(chat.ViewModel.IsOverlayVisible);
+            await secondSwitchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
-            allowFirstLoadCompletion.TrySetResult(null);
-            await secondLoadStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
-            allowSecondLoadCompletion.TrySetResult(null);
-            await WaitForConditionAsync(() => !chat.ViewModel.IsOverlayVisible);
+            var selection = Assert.IsType<NavigationSelectionState.Session>(selectionStore.CurrentSelection);
+            Assert.Equal("session-2", selection.SessionId);
+            Assert.Equal("session-2", runtimeState.CommittedSessionId);
+            Assert.Equal("session-2", runtimeState.ActiveSessionActivation?.SessionId);
+            Assert.Equal(SessionActivationPhase.Selected, runtimeState.ActiveSessionActivation?.Phase);
+            Assert.Equal(new[] { "session-1", "session-2" }, activationCoordinator.ActivatedSessionIds);
+
+            allowFirstSwitchCompletion.TrySetResult(null);
+            Assert.False(await firstActivation);
         }
         finally
         {
@@ -1401,6 +1378,16 @@ public sealed class NavigationCoordinatorTests
         return sessionManager;
     }
 
+    private static ServerConfiguration CreateConnectableStdioProfile(string id, string name)
+        => new()
+        {
+            Id = id,
+            Name = name,
+            Transport = TransportType.Stdio,
+            StdioCommand = "agent.exe",
+            StdioArgs = "--serve"
+        };
+
     private sealed class FakeNavigationPaneState : INavigationPaneState
     {
         public bool IsPaneOpen { get; private set; }
@@ -1526,6 +1513,7 @@ public sealed class NavigationCoordinatorTests
                 shellNavigationRuntimeState: runtimeState);
             return new ChatViewModelHarness(
                 viewModel,
+                profiles,
                 state,
                 connectionState,
                 conversationCatalogPresenter,
@@ -1547,6 +1535,7 @@ public sealed class NavigationCoordinatorTests
 
         public ChatViewModelHarness(
             ChatViewModel viewModel,
+            AcpProfilesViewModel profiles,
             IState<ChatState> state,
             IState<ChatConnectionState> connectionState,
             ConversationCatalogPresenter presenter,
@@ -1555,6 +1544,7 @@ public sealed class NavigationCoordinatorTests
             IChatConnectionStore connectionStore)
         {
             ViewModel = viewModel;
+            Profiles = profiles;
             _state = state;
             _connectionState = connectionState;
             Presenter = presenter;
@@ -1564,6 +1554,8 @@ public sealed class NavigationCoordinatorTests
         }
 
         public ChatViewModel ViewModel { get; }
+
+        public AcpProfilesViewModel Profiles { get; }
 
         public ChatConversationWorkspace Workspace { get; }
 
