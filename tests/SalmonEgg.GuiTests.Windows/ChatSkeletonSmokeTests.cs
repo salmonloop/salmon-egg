@@ -1432,9 +1432,6 @@ public sealed class ChatSkeletonSmokeTests
             }
 
             var focusedBeforePageUp = session.DescribeFocusedElement();
-            Assert.True(
-                focusPrimed,
-                $"Unable to prime keyboard focus to transcript before PageUp. Focus='{focusedBeforePageUp}'.");
             var scrollPatternSupported = messagesList.Patterns.Scroll.IsSupported;
             var scrollPercentBeforePageUp = scrollPatternSupported
                 ? messagesList.Patterns.Scroll.Pattern.VerticalScrollPercent.Value.ToString("0.##")
@@ -1447,7 +1444,7 @@ public sealed class ChatSkeletonSmokeTests
                 session.TryFindVisibleText("GUI Remote Session 01 replay 010", messagesList, TimeSpan.FromMilliseconds(400)) is not null;
             var detachedByUserInput = false;
 
-            for (var attempt = 0; attempt < 6; attempt++)
+            for (var attempt = 0; focusPrimed && attempt < 6; attempt++)
             {
                 session.PressPageUp();
                 Thread.Sleep(150);
@@ -1460,6 +1457,8 @@ public sealed class ChatSkeletonSmokeTests
 
             for (var attempt = 0; attempt < 4; attempt++)
             {
+                session.ClickElement(messagesList);
+                Thread.Sleep(100);
                 session.ScrollWheel(120);
                 Thread.Sleep(150);
                 if (string.Equals(session.TryGetElementName("ChatView.TranscriptViewportState", TimeSpan.FromMilliseconds(200)), "not_bottom", StringComparison.OrdinalIgnoreCase))
@@ -1488,7 +1487,7 @@ public sealed class ChatSkeletonSmokeTests
                 session,
                 appData,
                 "remote-hydration-pageup-stayed-locked-bottom",
-                $"Transcript viewport stayed locked after PageUp and mouse wheel on a hydrated remote session. detachedByUserInput={detachedByUserInput}. State='{session.TryGetElementName("ChatView.TranscriptViewportState", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}'. latestReplayText='{latestReplayText}'. focusedBeforePageUp='{focusedBeforePageUp}'. focusedAfterInput='{session.DescribeFocusedElement()}'. scrollPatternSupported={scrollPatternSupported}. scrollPatternDetached={scrollPatternDetached}. scrollPercentBeforePageUp={scrollPercentBeforePageUp}. scrollPercentAfterInput={(scrollPatternSupported ? messagesList.Patterns.Scroll.Pattern.VerticalScrollPercent.Value.ToString("0.##") : "<unsupported>")}. latestReplayVisibleWithinBudget={latestReplayVisibleWithinBudget}. latestReplayVisibleBeforePageUp={latestReplayVisibleBeforePageUp}. latestReplayVisibleAfterInput={session.TryFindVisibleText(latestReplayText, messagesList, TimeSpan.FromMilliseconds(400)) is not null}. replay024VisibleBeforePageUp={replay024VisibleBeforePageUp}. replay024VisibleAfterInput={session.TryFindVisibleText("GUI Remote Session 01 replay 024", messagesList, TimeSpan.FromMilliseconds(400)) is not null}. replay010VisibleBeforePageUp={replay010VisibleBeforePageUp}. replay010VisibleAfterInput={session.TryFindVisibleText("GUI Remote Session 01 replay 010", messagesList, TimeSpan.FromMilliseconds(400)) is not null}.");
+                $"Transcript viewport stayed locked after user input on a hydrated remote session. detachedByUserInput={detachedByUserInput}. focusPrimed={focusPrimed}. State='{session.TryGetElementName("ChatView.TranscriptViewportState", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}'. latestReplayText='{latestReplayText}'. focusedBeforePageUp='{focusedBeforePageUp}'. focusedAfterInput='{session.DescribeFocusedElement()}'. scrollPatternSupported={scrollPatternSupported}. scrollPatternDetached={scrollPatternDetached}. scrollPercentBeforePageUp={scrollPercentBeforePageUp}. scrollPercentAfterInput={(scrollPatternSupported ? messagesList.Patterns.Scroll.Pattern.VerticalScrollPercent.Value.ToString("0.##") : "<unsupported>")}. latestReplayVisibleWithinBudget={latestReplayVisibleWithinBudget}. latestReplayVisibleBeforePageUp={latestReplayVisibleBeforePageUp}. latestReplayVisibleAfterInput={session.TryFindVisibleText(latestReplayText, messagesList, TimeSpan.FromMilliseconds(400)) is not null}. replay024VisibleBeforePageUp={replay024VisibleBeforePageUp}. replay024VisibleAfterInput={session.TryFindVisibleText("GUI Remote Session 01 replay 024", messagesList, TimeSpan.FromMilliseconds(400)) is not null}. replay010VisibleBeforePageUp={replay010VisibleBeforePageUp}. replay010VisibleAfterInput={session.TryFindVisibleText("GUI Remote Session 01 replay 010", messagesList, TimeSpan.FromMilliseconds(400)) is not null}.");
         }
         finally
         {

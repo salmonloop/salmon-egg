@@ -6,7 +6,6 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
 using SalmonEgg.Presentation.Behaviors;
 using SalmonEgg.Presentation.Models;
 using SalmonEgg.Presentation.Utilities;
@@ -300,40 +299,10 @@ namespace SalmonEgg.Presentation.Views.Chat
 
         private void FocusTranscriptScroller()
         {
-            if (MessagesList is null)
+            if (MessagesList is not null)
             {
-                return;
+                _ = MessagesList.Focus(FocusState.Programmatic);
             }
-
-            var scroller = FindDescendantScrollViewer(MessagesList);
-            if (scroller is not null)
-            {
-                _ = scroller.Focus(FocusState.Programmatic);
-                return;
-            }
-
-            _ = MessagesList.Focus(FocusState.Programmatic);
-        }
-
-        private static ScrollViewer? FindDescendantScrollViewer(DependencyObject root)
-        {
-            if (root is ScrollViewer scrollViewer)
-            {
-                return scrollViewer;
-            }
-
-            var childCount = VisualTreeHelper.GetChildrenCount(root);
-            for (var index = 0; index < childCount; index++)
-            {
-                var child = VisualTreeHelper.GetChild(root, index);
-                var result = FindDescendantScrollViewer(child);
-                if (result is not null)
-                {
-                    return result;
-                }
-            }
-
-            return null;
         }
 
         private void RequestScrollToBottom()

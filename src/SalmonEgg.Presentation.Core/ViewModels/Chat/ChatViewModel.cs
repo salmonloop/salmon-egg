@@ -35,6 +35,7 @@ using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Core.Services.Input;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.ViewModels.Chat.Hydration;
+using SalmonEgg.Presentation.Core.ViewModels.Chat.Overlay;
 using SalmonEgg.Presentation.ViewModels.Chat.Transcript;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Services;
@@ -70,14 +71,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         SettlingReplay = 5,
         FinalizingProjection = 6
     }
-
-    private readonly record struct ActivationOverlayVisualState(
-        bool IsActivationOverlayVisible,
-        bool ShowsBlockingMask,
-        bool ShowsStatusPill,
-        bool ShowsPresenter,
-        LoadingOverlayStage Stage,
-        string StatusText);
 
     private static readonly TimeSpan RemoteReplayStartTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan RemoteReplaySettleQuietPeriod = TimeSpan.FromSeconds(2);
@@ -252,48 +245,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     [NotifyPropertyChangedFor(nameof(OverlayStatusText))]
     private bool _isSessionSwitching;
 
-    private bool IsOverlayOwnedByCurrentSession(string? ownerConversationId)
-        => !string.IsNullOrWhiteSpace(ownerConversationId)
-            && string.Equals(ownerConversationId, CurrentSessionId, StringComparison.Ordinal);
-
     private bool IsChatShellVisibleForRemoteUi
         => _shellNavigationRuntimeState is null
             || _shellNavigationRuntimeState.CurrentShellContent == ShellNavigationContent.Chat;
-
-    private bool IsSessionSwitchOverlayVisible
-        => IsSessionSwitching && !string.IsNullOrWhiteSpace(_sessionSwitchOverlayConversationId);
-
-    private bool IsSessionSwitchPreviewVisible
-        => !string.IsNullOrWhiteSpace(_sessionSwitchPreviewConversationId);
-
-    private bool ShouldShowConnectionLifecycleOverlay
-        => IsChatShellVisibleForRemoteUi
-            && IsOverlayOwnedByCurrentSession(_connectionLifecycleOverlayConversationId)
-            && (IsConnecting || IsInitializing);
-
-    private bool ShouldShowHistoryOverlay
-        => IsChatShellVisibleForRemoteUi
-            && IsOverlayOwnedByCurrentSession(_historyOverlayConversationId);
-
-    private bool ShouldShowProjectedHydrationOverlay
-        => IsChatShellVisibleForRemoteUi
-            && !ShouldShowHistoryOverlay
-            && IsHydrating
-            && !string.IsNullOrWhiteSpace(CurrentSessionId);
-
-    private bool ShouldShowLayoutLoading
-        => IsLayoutLoading && IsChatShellVisibleForRemoteUi;
-
-    private bool IsSessionSwitchOverlayBlockingVisibleTranscript
-        => (IsSessionSwitchPreviewVisible
-                && !IsOverlayOwnedByCurrentSession(_sessionSwitchPreviewConversationId))
-            || (IsSessionSwitchOverlayVisible
-                && !IsOverlayOwnedByCurrentSession(_sessionSwitchOverlayConversationId));
-
-    private bool IsVisibleTranscriptStaleForCurrentSession
-        => HasVisibleTranscriptContent
-            && !string.IsNullOrWhiteSpace(_visibleTranscriptConversationId)
-            && !string.Equals(_visibleTranscriptConversationId, CurrentSessionId, StringComparison.Ordinal);
 
     private string? PendingShellActivationConversationId
         => _shellNavigationRuntimeState?.IsSessionActivationInProgress == true
@@ -301,161 +255,62 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 ?? _shellNavigationRuntimeState.DesiredSessionId
             : null;
 
-    private bool IsCurrentVisibleConversationSupersededByShellIntent
-        => IsSessionActive
-            && !string.IsNullOrWhiteSpace(PendingShellActivationConversationId)
-            && !string.Equals(PendingShellActivationConversationId, CurrentSessionId, StringComparison.Ordinal);
-
-    private bool IsBlockingStaleVisibleConversationContent
-        => ShouldShowBlockingLoadingMask && IsVisibleTranscriptStaleForCurrentSession;
-
     public bool IsActivationOverlayVisible
-        => ResolveActivationOverlayVisualState().IsActivationOverlayVisible;
+        => ResolveConversationSurfaceState().IsActivationOverlayVisible;
 
     public bool IsOverlayVisible
-        => IsActivationOverlayVisible
-            || ShouldShowLayoutLoading;
+        => ResolveConversationSurfaceState().IsOverlayVisible;
 
     public bool HasVisibleTranscriptContent => MessageHistory.Count > 0;
 
     public bool ShouldShowActiveConversationRoot
-        => IsSessionActive
-            && !IsBlockingStaleVisibleConversationContent
-            && !IsCurrentVisibleConversationSupersededByShellIntent;
+        => ResolveConversationSurfaceState().ShouldShowActiveConversationRoot;
 
     public bool ShouldLoadActiveConversationRoot => ShouldShowActiveConversationRoot;
 
     public bool ShouldShowSessionHeader
-        => ShouldShowActiveConversationRoot;
+        => ResolveConversationSurfaceState().ShouldShowSessionHeader;
 
     public bool ShouldShowTranscriptSurface
-        => ShouldShowActiveConversationRoot
-            && HasVisibleTranscriptContent
-            && !IsVisibleTranscriptStaleForCurrentSession;
+        => ResolveConversationSurfaceState().ShouldShowTranscriptSurface;
 
     public bool ShouldLoadTranscriptSurface => ShouldShowTranscriptSurface;
 
     public bool ShouldShowConversationInputSurface
-        => ShouldShowActiveConversationRoot;
-
-    private bool ShouldPromoteLayoutLoadingToBlockingPresenter
-        => IsLayoutLoading
-            && (IsVisibleTranscriptStaleForCurrentSession
-                || IsCurrentVisibleConversationSupersededByShellIntent);
+        => ResolveConversationSurfaceState().ShouldShowConversationInputSurface;
 
     public bool ShouldShowBlockingLoadingMask
-        => ResolveActivationOverlayVisualState().ShowsBlockingMask
-            || ShouldPromoteLayoutLoadingToBlockingPresenter;
+        => ResolveConversationSurfaceState().ShouldShowBlockingLoadingMask;
 
     public bool ShouldShowLoadingOverlayStatusPill
-        => ResolveActivationOverlayVisualState().ShowsStatusPill;
+        => ResolveConversationSurfaceState().ShouldShowLoadingOverlayStatusPill;
 
     public bool ShouldShowLoadingOverlayPresenter
-        => ResolveActivationOverlayVisualState().ShowsPresenter
-            || ShouldPromoteLayoutLoadingToBlockingPresenter;
+        => ResolveConversationSurfaceState().ShouldShowLoadingOverlayPresenter;
 
     public LoadingOverlayStage OverlayLoadingStage =>
-        ResolveActivationOverlayVisualState().Stage;
+        ResolveConversationSurfaceState().OverlayLoadingStage;
 
-    public string OverlayStatusText => ResolveActivationOverlayVisualState().StatusText;
+    public string OverlayStatusText => ResolveConversationSurfaceState().OverlayStatusText;
 
-    private ActivationOverlayVisualState ResolveActivationOverlayVisualState()
-    {
-        var connectionLifecycleOverlayVisible = ShouldShowConnectionLifecycleOverlay;
-        var historyOverlayVisible = ShouldShowHistoryOverlay;
-        var projectedHydrationOverlayVisible = ShouldShowProjectedHydrationOverlay;
-        var sessionSwitchOverlayVisible = IsSessionSwitchOverlayVisible;
-        var sessionSwitchPreviewVisible = IsSessionSwitchPreviewVisible;
-        var activationOverlayVisible =
-            connectionLifecycleOverlayVisible
-            || historyOverlayVisible
-            || projectedHydrationOverlayVisible
-            || sessionSwitchOverlayVisible
-            || sessionSwitchPreviewVisible;
-
-        var stage = ResolveOverlayLoadingStage(
-            connectionLifecycleOverlayVisible,
-            historyOverlayVisible,
-            projectedHydrationOverlayVisible,
-            sessionSwitchOverlayVisible,
-            sessionSwitchPreviewVisible);
-        var statusText = ResolveOverlayStatusText(stage);
-        var showsBlockingMask =
-            activationOverlayVisible
-            && (!HasVisibleTranscriptContent
-                || IsSessionSwitchOverlayBlockingVisibleTranscript
-                || IsVisibleTranscriptStaleForCurrentSession);
-        var showsStatusPill = activationOverlayVisible && !string.IsNullOrWhiteSpace(statusText);
-
-        return new ActivationOverlayVisualState(
-            activationOverlayVisible,
-            showsBlockingMask,
-            showsStatusPill,
-            showsBlockingMask || showsStatusPill,
-            stage,
-            statusText);
-    }
-
-    private string ResolveOverlayStatusText(LoadingOverlayStage stage)
-        => stage switch
-        {
-            LoadingOverlayStage.Connecting => "正在连接助手...",
-            LoadingOverlayStage.InitializingProtocol => "正在准备聊天环境...",
-            LoadingOverlayStage.HydratingHistory => BuildHydrationStatusText(),
-            LoadingOverlayStage.PreparingSession => "正在切换聊天...",
-            _ => string.Empty
-        };
-
-    private LoadingOverlayStage ResolveOverlayLoadingStage(
-        bool connectionLifecycleOverlayVisible,
-        bool historyOverlayVisible,
-        bool projectedHydrationOverlayVisible,
-        bool sessionSwitchOverlayVisible,
-        bool sessionSwitchPreviewVisible)
-    {
-        // ACP lifecycle precedence: transport connect -> protocol initialize -> session replay hydration.
-        if (IsConnecting && connectionLifecycleOverlayVisible)
-        {
-            return LoadingOverlayStage.Connecting;
-        }
-
-        if (IsInitializing && connectionLifecycleOverlayVisible)
-        {
-            return LoadingOverlayStage.InitializingProtocol;
-        }
-
-        if (historyOverlayVisible || projectedHydrationOverlayVisible)
-        {
-            return LoadingOverlayStage.HydratingHistory;
-        }
-
-        if (sessionSwitchOverlayVisible || sessionSwitchPreviewVisible)
-        {
-            return LoadingOverlayStage.PreparingSession;
-        }
-
-        return LoadingOverlayStage.None;
-    }
-
-    private string BuildHydrationStatusText()
-    {
-        var loadedCount = ResolveHydrationLoadedMessageCount();
-        return _hydrationOverlayPhase switch
-        {
-            HydrationOverlayPhase.RequestingSessionLoad => FormatHydrationStatus("正在打开聊天记录", loadedCount),
-            HydrationOverlayPhase.AwaitingReplayStart => FormatHydrationStatus("正在获取聊天记录", loadedCount),
-            HydrationOverlayPhase.ReplayingSessionUpdates => FormatHydrationStatus("正在同步聊天记录", loadedCount),
-            HydrationOverlayPhase.ProjectingTranscript => FormatHydrationStatus("正在整理聊天内容", loadedCount),
-            HydrationOverlayPhase.SettlingReplay => FormatHydrationStatus("正在完成聊天加载", loadedCount),
-            HydrationOverlayPhase.FinalizingProjection => FormatHydrationStatus("即将完成聊天加载", loadedCount),
-            _ => FormatHydrationStatus("正在加载聊天记录", loadedCount)
-        };
-    }
-
-    private static string FormatHydrationStatus(string baseText, long loadedCount)
-        => loadedCount > 0
-            ? $"{baseText}（已加载 {loadedCount} 条消息）"
-            : $"{baseText}...";
+    private ChatConversationSurfaceState ResolveConversationSurfaceState()
+        => ChatConversationSurfaceStatePresenter.Resolve(new ChatConversationSurfaceStateInput(
+            IsSessionActive,
+            CurrentSessionId,
+            MessageHistory.Count,
+            _visibleTranscriptConversationId,
+            IsChatShellVisibleForRemoteUi,
+            IsConnecting,
+            IsInitializing,
+            IsHydrating,
+            IsLayoutLoading,
+            IsSessionSwitching,
+            _sessionSwitchOverlayConversationId,
+            _sessionSwitchPreviewConversationId,
+            _connectionLifecycleOverlayConversationId,
+            _historyOverlayConversationId,
+            PendingShellActivationConversationId,
+            ResolveHydrationLoadedMessageCount()));
 
     private long ResolveHydrationLoadedMessageCount()
     {
@@ -3975,6 +3830,16 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 (warmRuntimeSnapshot ?? state.ResolveRuntimeState(sessionId))?.ConnectionInstanceId,
                 ConnectionInstanceId,
                 denialReason);
+        }
+
+        await EnsureSelectedProfileConnectionForConversationAsync(
+                sessionId,
+                activationVersion,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (IsActivationContextStale(activationVersion, cancellationToken))
+        {
+            return false;
         }
 
         var remotePhaseStopwatch = Stopwatch.StartNew();
@@ -7781,6 +7646,44 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 }).ConfigureAwait(false);
             }
         }
+    }
+
+    private async Task EnsureSelectedProfileConnectionForConversationAsync(
+        string conversationId,
+        long? activationVersion,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_disposed || string.IsNullOrWhiteSpace(conversationId))
+        {
+            return;
+        }
+
+        var binding = await ResolveConversationBindingAsync(conversationId, cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(binding?.RemoteSessionId)
+            || string.IsNullOrWhiteSpace(binding.ProfileId))
+        {
+            return;
+        }
+
+        if (await IsRemoteConnectionReadyAsync(binding.ProfileId, cancellationToken).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        var profile = await ResolveProfileConfigurationAsync(binding.ProfileId, cancellationToken).ConfigureAwait(false);
+        if (profile is null)
+        {
+            return;
+        }
+
+        var connectionContext = CreateConversationConnectionContext(
+            conversationId,
+            binding,
+            profile.Id,
+            preserveConversation: true,
+            activationVersion);
+        await ConnectToAcpProfileCoreAsync(profile, connectionContext, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<bool> EnsureActiveConversationRemoteHydratedAsync(
