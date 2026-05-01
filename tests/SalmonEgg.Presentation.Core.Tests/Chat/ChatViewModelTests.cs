@@ -10031,6 +10031,45 @@ public class ChatViewModelTests
     }
 
     [Fact]
+    public async Task ApplyStoreProjection_WhenOnlyConnectionStateChanges_DoesNotResaveUnchangedTranscriptPreview()
+    {
+        var previewStore = new Mock<IConversationPreviewStore>();
+        previewStore.Setup(store => store.LoadAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ConversationPreviewSnapshot?)null);
+        previewStore.Setup(store => store.SaveAsync(It.IsAny<ConversationPreviewSnapshot>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        previewStore.Setup(store => store.DeleteAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        await using var fixture = CreateViewModel(previewStore: previewStore.Object);
+        await fixture.ViewModel.RestoreAsync();
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Transcript =
+            [
+                new ConversationMessageSnapshot
+                {
+                    Id = "message-1",
+                    Timestamp = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+                    IsOutgoing = false,
+                    ContentType = "text",
+                    TextContent = "hello"
+                }
+            ]
+        });
+
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+
+        previewStore.Verify(
+            store => store.SaveAsync(
+                It.Is<ConversationPreviewSnapshot>(snapshot => string.Equals(snapshot.ConversationId, "conv-1", StringComparison.Ordinal)),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
     public async Task SwitchConversationAsync_WhenShellRuntimeStatePresent_DoesNotMutateShellActivationOwner()
     {
         var syncContext = new QueueingSynchronizationContext();

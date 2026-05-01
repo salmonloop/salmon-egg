@@ -132,6 +132,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private string? _selectedProfileIdFromStore;
     private string? _settingsSelectedProfileId;
     private int _storeProjectionSequence;
+    private string? _lastSavedPreviewConversationId;
+    private IImmutableList<ConversationMessageSnapshot>? _lastSavedPreviewTranscript;
     private readonly object _restoreSync = new();
     private Task? _restoreTask;
     private readonly object _conversationActivationSync = new();
@@ -1313,21 +1315,30 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 var conversationId = projection.HydratedConversationId;
                 if (!string.IsNullOrWhiteSpace(conversationId))
                 {
-                    // Materialize the transcript data on the UI thread to avoid
-                    // cross-thread access to the projection's immutable list.
-                    var previewEntries = projection.Transcript
-                        .Select(m => new SalmonEgg.Domain.Models.ConversationPreview.PreviewEntry(
-                            m.IsOutgoing ? "user" : "assistant",
-                            m.TextContent ?? "",
-                            m.Timestamp))
-                        .ToArray(); // ToArray() forces eager evaluation on UI thread
+                    var previewTranscriptChanged =
+                        !string.Equals(_lastSavedPreviewConversationId, conversationId, StringComparison.Ordinal)
+                        || !ReferenceEquals(_lastSavedPreviewTranscript, projection.Transcript);
 
-                    var snapshotToSave = new SalmonEgg.Domain.Models.ConversationPreview.ConversationPreviewSnapshot(
-                        conversationId,
-                        previewEntries,
-                        DateTimeOffset.Now);
+                    if (previewTranscriptChanged)
+                    {
+                        // Avoid re-materializing the same immutable transcript when
+                        // only connection/profile state changed; this work runs on the UI thread.
+                        var previewEntries = projection.Transcript
+                            .Select(m => new SalmonEgg.Domain.Models.ConversationPreview.PreviewEntry(
+                                m.IsOutgoing ? "user" : "assistant",
+                                m.TextContent ?? "",
+                                m.Timestamp))
+                            .ToArray();
 
-                    _ = _previewStore.SaveAsync(snapshotToSave);
+                        var snapshotToSave = new SalmonEgg.Domain.Models.ConversationPreview.ConversationPreviewSnapshot(
+                            conversationId,
+                            previewEntries,
+                            DateTimeOffset.Now);
+
+                        _lastSavedPreviewConversationId = conversationId;
+                        _lastSavedPreviewTranscript = projection.Transcript;
+                        _ = _previewStore.SaveAsync(snapshotToSave);
+                    }
                 }
             }
         }
