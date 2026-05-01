@@ -34,6 +34,7 @@ using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Core.Services.Input;
 using SalmonEgg.Presentation.Core.Services;
+using SalmonEgg.Presentation.ViewModels.Chat.Transcript;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Settings;
@@ -106,6 +107,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private IChatService? _chatService;
     private readonly IUiDispatcher _uiDispatcher;
     private readonly IConversationPreviewStore _previewStore;
+    private readonly ChatTranscriptProjectionCoordinator _transcriptProjectionCoordinator;
+    private readonly ChatTranscriptProjectionContext _transcriptProjectionContext;
     private readonly IVoiceInputService _voiceInputService;
     private readonly IShellNavigationRuntimeState? _shellNavigationRuntimeState;
     private long _activationVersion;
@@ -132,8 +135,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private string? _selectedProfileIdFromStore;
     private string? _settingsSelectedProfileId;
     private int _storeProjectionSequence;
-    private string? _lastSavedPreviewConversationId;
-    private IImmutableList<ConversationMessageSnapshot>? _lastSavedPreviewTranscript;
     private readonly object _restoreSync = new();
     private Task? _restoreTask;
     private readonly object _conversationActivationSync = new();
@@ -961,6 +962,16 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         _projectAffinityResolver = projectAffinityResolver ?? new ProjectAffinityResolver();
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
         _previewStore = previewStore ?? throw new ArgumentNullException(nameof(previewStore));
+        _transcriptProjectionCoordinator = new ChatTranscriptProjectionCoordinator(_previewStore);
+        _transcriptProjectionContext = new ChatTranscriptProjectionContext
+        {
+            GetMessageHistory = () => MessageHistory,
+            SetMessageHistory = history => MessageHistory = history,
+            FromSnapshot = FromSnapshot,
+            MatchesSnapshot = MatchesSnapshot,
+            UpdateVisibleTranscriptConversationId = UpdateVisibleTranscriptConversationId,
+            RaiseTranscriptStateChanged = RaiseTranscriptProjectionStateChanged
+        };
         _voiceInputService = voiceInputService ?? NoOpVoiceInputService.Instance;
         _shellNavigationRuntimeState = shellNavigationRuntimeState;
         _localTerminalPanelCoordinator = localTerminalPanelCoordinator;
@@ -1231,14 +1242,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 // WANT consistent behavior. By moving session clearing before other updates,
                 // we ensure the "empty" state is correctly identified as "loading" if hydrating.
                 CurrentSessionId = projection.HydratedConversationId;
-                if (preparedTranscript is { Count: > 0 })
-                {
-                    ReplaceMessageHistory(projection.HydratedConversationId, preparedTranscript);
-                }
-                else
-                {
-                    ReplaceMessageHistory(projection.HydratedConversationId, projection.Transcript);
-                }
+                _transcriptProjectionCoordinator.ApplyProjection(
+                    _transcriptProjectionContext,
+                    projection.HydratedConversationId,
+                    projection.Transcript,
+                    preparedTranscript,
+                    sessionChanged: true);
                 ReplacePlanEntries(projection.PlanEntries);
             }
 
@@ -1259,7 +1268,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             // MessageHistory already reflects the projected state.
             if (!sessionChanged)
             {
-                SyncMessageHistory(projection.HydratedConversationId, projection.Transcript);
+                _transcriptProjectionCoordinator.ApplyProjection(
+                    _transcriptProjectionContext,
+                    projection.HydratedConversationId,
+                    projection.Transcript,
+                    preparedTranscript: null,
+                    sessionChanged: false);
             }
 
             // Update hydration state BEFORE session active so the UI thread's IsOverlayVisible
@@ -1312,34 +1326,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             // to read on the UI thread), then write to disk on a background thread.
             if (projection.Transcript.Count > 0 && !projection.IsHydrating)
             {
-                var conversationId = projection.HydratedConversationId;
-                if (!string.IsNullOrWhiteSpace(conversationId))
-                {
-                    var previewTranscriptChanged =
-                        !string.Equals(_lastSavedPreviewConversationId, conversationId, StringComparison.Ordinal)
-                        || !ReferenceEquals(_lastSavedPreviewTranscript, projection.Transcript);
-
-                    if (previewTranscriptChanged)
-                    {
-                        // Avoid re-materializing the same immutable transcript when
-                        // only connection/profile state changed; this work runs on the UI thread.
-                        var previewEntries = projection.Transcript
-                            .Select(m => new SalmonEgg.Domain.Models.ConversationPreview.PreviewEntry(
-                                m.IsOutgoing ? "user" : "assistant",
-                                m.TextContent ?? "",
-                                m.Timestamp))
-                            .ToArray();
-
-                        var snapshotToSave = new SalmonEgg.Domain.Models.ConversationPreview.ConversationPreviewSnapshot(
-                            conversationId,
-                            previewEntries,
-                            DateTimeOffset.Now);
-
-                        _lastSavedPreviewConversationId = conversationId;
-                        _lastSavedPreviewTranscript = projection.Transcript;
-                        _ = _previewStore.SaveAsync(snapshotToSave);
-                    }
-                }
+                _transcriptProjectionCoordinator.UpdatePreviewSnapshot(
+                    projection.HydratedConversationId,
+                    projection.Transcript,
+                    projection.IsHydrating);
             }
         }
         finally
@@ -2082,6 +2072,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             OnPropertyChanged(nameof(ShouldShowBlockingLoadingMask));
             OnPropertyChanged(nameof(ShouldShowLoadingOverlayPresenter));
         }
+    }
+
+    private void RaiseTranscriptProjectionStateChanged()
+    {
+        OnPropertyChanged(nameof(HasVisibleTranscriptContent));
+        OnPropertyChanged(nameof(OverlayStatusText));
+        OnPropertyChanged(nameof(ShouldShowBlockingLoadingMask));
+        OnPropertyChanged(nameof(ShouldShowLoadingOverlayPresenter));
     }
 
     private static ConversationMessageSnapshot ToSnapshot(ChatMessageViewModel vm)
