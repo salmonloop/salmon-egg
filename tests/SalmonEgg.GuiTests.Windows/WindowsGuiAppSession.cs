@@ -453,6 +453,16 @@ internal sealed class WindowsGuiAppSession : IDisposable
         PressKey(VirtualKeyShort.RIGHT);
     }
 
+    public void PressPageUp()
+    {
+        PressKey(VirtualKeyShort.PRIOR);
+    }
+
+    public void PressPageDown()
+    {
+        PressKey(VirtualKeyShort.NEXT);
+    }
+
     public bool? TryGetIsSelected(string automationId)
     {
         var element = TryFindByAutomationId(automationId, TimeSpan.FromSeconds(2));

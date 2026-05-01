@@ -26,14 +26,29 @@ public sealed class TranscriptAutoFollowController
 
     public bool ResolveManualViewportState(bool isViewportAtBottom)
     {
-        if (!HasPendingManualViewportEvaluation)
+        if (HasPendingManualViewportEvaluation)
         {
-            return false;
+            if (isViewportAtBottom)
+            {
+                // The first layout tick after pointer/wheel input can still be sitting
+                // at bottom before the user's manual scroll has actually moved the viewport.
+                // Keep auto-follow detached until we observe a real viewport change.
+                IsAutoFollowEnabled = false;
+                return false;
+            }
+
+            HasPendingManualViewportEvaluation = false;
+            IsAutoFollowEnabled = false;
+            return true;
         }
 
-        IsAutoFollowEnabled = isViewportAtBottom;
-        HasPendingManualViewportEvaluation = false;
-        return true;
+        if (!IsAutoFollowEnabled && isViewportAtBottom)
+        {
+            IsAutoFollowEnabled = true;
+            return true;
+        }
+
+        return false;
     }
 
     public bool ShouldRecoverBottom(

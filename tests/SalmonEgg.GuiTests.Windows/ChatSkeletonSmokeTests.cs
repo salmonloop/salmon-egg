@@ -122,6 +122,42 @@ public sealed class ChatSkeletonSmokeTests
     }
 
     [SkippableFact]
+    public void LocalSession_WithLongTranscript_PageUpDetachesViewportFromBottom()
+    {
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData(
+            sessionCount: 1,
+            withContent: true,
+            messageCountPerSession: 80);
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-session-01", TimeSpan.FromSeconds(15));
+        session.ActivateElement(sessionItem);
+
+        var messagesList = session.FindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(10));
+        var settledToBottom = WaitForViewportState(session, "bottom", TimeSpan.FromSeconds(10));
+        Assert.True(
+            settledToBottom,
+            $"Transcript viewport did not settle to bottom before the manual scroll detach scenario. State='{session.TryGetElementName("ChatView.TranscriptViewportState", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}'.");
+
+        session.FocusElement(messagesList);
+        Thread.Sleep(150);
+
+        for (var attempt = 0; attempt < 6; attempt++)
+        {
+            session.PressPageUp();
+            Thread.Sleep(150);
+            if (string.Equals(session.TryGetElementName("ChatView.TranscriptViewportState", TimeSpan.FromMilliseconds(200)), "not_bottom", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+        }
+
+        Assert.True(
+            WaitForViewportState(session, "not_bottom", TimeSpan.FromSeconds(2)),
+            $"Transcript viewport stayed locked to bottom after PageUp input. State='{session.TryGetElementName("ChatView.TranscriptViewportState", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}'.");
+    }
+
+    [SkippableFact]
     public void MarkdownSession_AfterDiscoverRoundTrip_RetainsRenderedCodeAndDoesNotCrash()
     {
         using var appData = GuiAppDataScope.CreateDeterministicMarkdownRenderData();
@@ -3147,6 +3183,31 @@ public sealed class ChatSkeletonSmokeTests
             }
 
             Thread.Sleep(120);
+        }
+
+        return false;
+    }
+
+    private static bool WaitForViewportState(
+        WindowsGuiAppSession session,
+        string expectedState,
+        TimeSpan timeout)
+    {
+        if (string.IsNullOrWhiteSpace(expectedState))
+        {
+            return false;
+        }
+
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            var actual = session.TryGetElementName("ChatView.TranscriptViewportState", TimeSpan.FromMilliseconds(200));
+            if (string.Equals(actual, expectedState, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            Thread.Sleep(150);
         }
 
         return false;

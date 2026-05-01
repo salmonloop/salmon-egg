@@ -17,16 +17,16 @@ public sealed class TranscriptAutoFollowControllerTests
     }
 
     [Fact]
-    public void ResolveManualViewportState_ReEnablesAutoFollow_WhenUserReturnsToBottom()
+    public void ResolveManualViewportState_DoesNotPrematurelyReEnableAutoFollow_WhileViewportIsStillAtBottom()
     {
         var controller = new TranscriptAutoFollowController();
         controller.RegisterManualViewportIntent(hasMessages: true);
 
         var resolved = controller.ResolveManualViewportState(isViewportAtBottom: true);
 
-        Assert.True(resolved);
-        Assert.True(controller.IsAutoFollowEnabled);
-        Assert.False(controller.HasPendingManualViewportEvaluation);
+        Assert.False(resolved);
+        Assert.False(controller.IsAutoFollowEnabled);
+        Assert.True(controller.HasPendingManualViewportEvaluation);
     }
 
     [Fact]
@@ -39,6 +39,20 @@ public sealed class TranscriptAutoFollowControllerTests
 
         Assert.True(resolved);
         Assert.False(controller.IsAutoFollowEnabled);
+        Assert.False(controller.HasPendingManualViewportEvaluation);
+    }
+
+    [Fact]
+    public void ResolveManualViewportState_ReEnablesAutoFollow_WhenUserReturnsToBottomAfterDetaching()
+    {
+        var controller = new TranscriptAutoFollowController();
+        controller.RegisterManualViewportIntent(hasMessages: true);
+        controller.ResolveManualViewportState(isViewportAtBottom: false);
+
+        var resolved = controller.ResolveManualViewportState(isViewportAtBottom: true);
+
+        Assert.True(resolved);
+        Assert.True(controller.IsAutoFollowEnabled);
         Assert.False(controller.HasPendingManualViewportEvaluation);
     }
 

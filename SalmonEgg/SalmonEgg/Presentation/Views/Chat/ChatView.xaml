@@ -144,6 +144,7 @@
                     <controls:ResponsiveContentHost.Child>
                         <ListView x:Name="MessagesList"
                                   AutomationProperties.AutomationId="ChatView.MessagesList"
+                                  behaviors:ScrollViewerViewportMonitor.IsEnabled="True"
                                   ItemsSource="{x:Bind ViewModel.MessageHistory, Mode=OneWay}"
                                   ItemTemplate="{StaticResource MessageTemplate}"
                                   Padding="20"

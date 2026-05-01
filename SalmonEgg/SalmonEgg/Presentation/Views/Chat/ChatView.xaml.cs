@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using SalmonEgg.Presentation.Behaviors;
 using SalmonEgg.Presentation.Models;
 using SalmonEgg.Presentation.Utilities;
 using SalmonEgg.Presentation.ViewModels.Chat;
@@ -35,6 +36,8 @@ namespace SalmonEgg.Presentation.Views.Chat
         private int _activeTranscriptScrollGeneration = -1;
         private string _transcriptViewportAutomationState = "inactive";
         private ObservableCollection<ChatMessageViewModel>? _trackedMessageHistory;
+        private long _messagesListViewportTokenCallback;
+        private bool? _lastObservedViewportAtBottom;
 
         public ChatView()
         {
@@ -74,6 +77,7 @@ namespace SalmonEgg.Presentation.Views.Chat
             unchecked { _scrollScheduleGeneration++; }
             _scrollToBottomScheduled = false;
             _activeTranscriptScrollGeneration = -1;
+            _lastObservedViewportAtBottom = null;
             UpdateTranscriptViewportAutomationState();
             if (_isTrackingMessages)
             {
@@ -148,6 +152,7 @@ namespace SalmonEgg.Presentation.Views.Chat
 
         private void OnMessagesListLoaded(object sender, RoutedEventArgs e)
         {
+            RegisterViewportMonitor();
             BeginLayoutLoadingIfPendingMessages();
             TryIssueTranscriptScrollRequest();
             UpdateTranscriptViewportAutomationState();
@@ -155,6 +160,7 @@ namespace SalmonEgg.Presentation.Views.Chat
 
         private void OnMessagesListUnloaded(object sender, RoutedEventArgs e)
         {
+            UnregisterViewportMonitor();
             UpdateTranscriptViewportAutomationState();
         }
 
@@ -163,10 +169,10 @@ namespace SalmonEgg.Presentation.Views.Chat
             var lastItemContainerGenerated = HasLastItemContainerGenerated(ViewModel.MessageHistory.Count);
             RefreshLayoutLoadingState(lastItemContainerGenerated);
 
-            if (_manualScrollIntentPending && !_suspendAutoScrollTracking)
+            if ((_manualScrollIntentPending || !_transcriptAutoFollow.IsAutoFollowEnabled) && !_suspendAutoScrollTracking)
             {
                 _transcriptAutoFollow.ResolveManualViewportState(IsListViewportAtBottom());
-                _manualScrollIntentPending = false;
+                _manualScrollIntentPending = _transcriptAutoFollow.HasPendingManualViewportEvaluation;
             }
 
             if (_transcriptScrollSettler.HasPendingWork && !_transcriptAutoFollow.IsAutoFollowEnabled)
@@ -187,6 +193,76 @@ namespace SalmonEgg.Presentation.Views.Chat
                 ScheduleScrollToBottom();
             }
 
+            UpdateTranscriptViewportAutomationState();
+        }
+
+        private void RegisterViewportMonitor()
+        {
+            if (MessagesList is null || _messagesListViewportTokenCallback != 0)
+            {
+                return;
+            }
+
+            _messagesListViewportTokenCallback = MessagesList.RegisterPropertyChangedCallback(
+                ScrollViewerViewportMonitor.ViewportChangeTokenProperty,
+                OnMessagesListViewportChanged);
+        }
+
+        private void UnregisterViewportMonitor()
+        {
+            if (MessagesList is null || _messagesListViewportTokenCallback == 0)
+            {
+                return;
+            }
+
+            MessagesList.UnregisterPropertyChangedCallback(
+                ScrollViewerViewportMonitor.ViewportChangeTokenProperty,
+                _messagesListViewportTokenCallback);
+            _messagesListViewportTokenCallback = 0;
+        }
+
+        private void OnMessagesListViewportChanged(DependencyObject sender, DependencyProperty dp)
+        {
+            if (!_isViewLoaded
+                || MessagesList is null
+                || ViewModel.MessageHistory.Count <= 0)
+            {
+                return;
+            }
+
+            var isViewportAtBottom = IsListViewportAtBottom();
+            if (_suspendAutoScrollTracking || _scrollToBottomScheduled)
+            {
+                _lastObservedViewportAtBottom = isViewportAtBottom;
+                UpdateTranscriptViewportAutomationState();
+                return;
+            }
+
+            if (!isViewportAtBottom)
+            {
+                var shouldDetachAutoFollow =
+                    _manualScrollIntentPending
+                    || !_transcriptAutoFollow.IsAutoFollowEnabled
+                    || (_lastObservedViewportAtBottom is true && !_transcriptScrollSettler.HasPendingWork);
+
+                if (shouldDetachAutoFollow)
+                {
+                    StopInitialScrollForManualInteraction();
+                    _transcriptAutoFollow.ResolveManualViewportState(isViewportAtBottom: false);
+                    _manualScrollIntentPending = false;
+                }
+
+                _lastObservedViewportAtBottom = false;
+                UpdateTranscriptViewportAutomationState();
+                return;
+            }
+
+            if (!_transcriptAutoFollow.IsAutoFollowEnabled)
+            {
+                _transcriptAutoFollow.ResolveManualViewportState(isViewportAtBottom: true);
+            }
+
+            _lastObservedViewportAtBottom = true;
             UpdateTranscriptViewportAutomationState();
         }
 
@@ -381,6 +457,13 @@ namespace SalmonEgg.Presentation.Views.Chat
                 return true;
             }
 
+            var monitoredScrollableHeight = ScrollViewerViewportMonitor.GetScrollableHeight(MessagesList);
+            if (monitoredScrollableHeight >= 0)
+            {
+                var monitoredVerticalOffset = ScrollViewerViewportMonitor.GetVerticalOffset(MessagesList);
+                return monitoredScrollableHeight - monitoredVerticalOffset <= GetBottomViewportTolerance();
+            }
+
             if (!HasLastItemContainerGenerated(itemCount))
             {
                 return false;
@@ -396,6 +479,11 @@ namespace SalmonEgg.Presentation.Views.Chat
             var lastItemBottom = relativeOrigin.Y + anchor.ActualHeight;
             var viewportBottom = MessagesList.ActualHeight - BottomThreshold;
             return lastItemBottom <= viewportBottom + BottomGeometryTolerance;
+        }
+
+        private double GetBottomViewportTolerance()
+        {
+            return BottomThreshold + BottomGeometryTolerance + (MessagesList?.Padding.Bottom ?? 0);
         }
 
         private bool TryAdvanceTranscriptSettleFromLayout(bool? lastItemContainerGenerated = null)
@@ -496,6 +584,7 @@ namespace SalmonEgg.Presentation.Views.Chat
             _activeTranscriptScrollGeneration = -1;
             _suspendAutoScrollTracking = false;
             _manualScrollIntentPending = false;
+            _lastObservedViewportAtBottom = null;
             UpdateTranscriptViewportAutomationState();
         }
 
@@ -616,7 +705,11 @@ namespace SalmonEgg.Presentation.Views.Chat
                 return "pending";
             }
 
-            if (!HasLastItemContainerGenerated(ViewModel.MessageHistory.Count))
+            var monitoredScrollableHeight = MessagesList is null
+                ? -1
+                : ScrollViewerViewportMonitor.GetScrollableHeight(MessagesList);
+
+            if (monitoredScrollableHeight < 0 && !HasLastItemContainerGenerated(ViewModel.MessageHistory.Count))
             {
                 return "untracked";
             }
