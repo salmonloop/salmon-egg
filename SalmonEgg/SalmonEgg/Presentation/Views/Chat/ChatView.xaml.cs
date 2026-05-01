@@ -23,7 +23,7 @@ namespace SalmonEgg.Presentation.Views.Chat
         private bool _isViewLoaded;
         private bool _isTrackingMessages;
         private readonly TranscriptScrollSettler _transcriptScrollSettler = new(maxReadyButNotBottomFailures: MaxInitialScrollAttempts);
-        private bool _userScrolledUp;
+        private readonly TranscriptAutoFollowController _transcriptAutoFollow = new();
         private const double BottomThreshold = 10;
         private const double BottomGeometryTolerance = 2;
         private const int MaxInitialScrollAttempts = 8;
@@ -51,7 +51,7 @@ namespace SalmonEgg.Presentation.Views.Chat
         {
             _isViewLoaded = true;
             unchecked { _scrollScheduleGeneration++; }
-            _userScrolledUp = false;
+            _transcriptAutoFollow.Reset();
             _wasOverlayVisible = ViewModel.IsActivationOverlayVisible;
             BeginTranscriptSettleRound();
             EnsureMessageTracking();
@@ -126,7 +126,7 @@ namespace SalmonEgg.Presentation.Views.Chat
 
             BeginLayoutLoadingIfPendingMessages();
 
-            if (_transcriptScrollSettler.HasPendingWork && _userScrolledUp)
+            if (_transcriptScrollSettler.HasPendingWork && !_transcriptAutoFollow.IsAutoFollowEnabled)
             {
                 AbortTranscriptSettleRound();
                 RefreshLayoutLoadingState();
@@ -138,7 +138,7 @@ namespace SalmonEgg.Presentation.Views.Chat
                 return;
             }
 
-            if (!_userScrolledUp)
+            if (_transcriptAutoFollow.IsAutoFollowEnabled)
             {
                 ScheduleScrollToBottom();
             }
@@ -163,20 +163,29 @@ namespace SalmonEgg.Presentation.Views.Chat
             var lastItemContainerGenerated = HasLastItemContainerGenerated(ViewModel.MessageHistory.Count);
             RefreshLayoutLoadingState(lastItemContainerGenerated);
 
-            if (_manualScrollIntentPending && !_transcriptScrollSettler.HasPendingWork && !_suspendAutoScrollTracking)
+            if (_manualScrollIntentPending && !_suspendAutoScrollTracking)
             {
-                _userScrolledUp = !IsListViewportAtBottom();
+                _transcriptAutoFollow.ResolveManualViewportState(IsListViewportAtBottom());
                 _manualScrollIntentPending = false;
             }
 
-            if (!_transcriptScrollSettler.HasPendingWork || _userScrolledUp)
+            if (_transcriptScrollSettler.HasPendingWork && !_transcriptAutoFollow.IsAutoFollowEnabled)
             {
+                AbortTranscriptSettleRound();
+                RefreshLayoutLoadingState(lastItemContainerGenerated);
                 UpdateTranscriptViewportAutomationState();
                 return;
             }
 
-            TryAdvanceTranscriptSettleFromLayout(lastItemContainerGenerated);
-            TryIssueTranscriptScrollRequest();
+            if (_transcriptScrollSettler.HasPendingWork)
+            {
+                TryAdvanceTranscriptSettleFromLayout(lastItemContainerGenerated);
+                TryIssueTranscriptScrollRequest();
+            }
+            else if (ShouldRecoverBottomFromLayout(lastItemContainerGenerated))
+            {
+                ScheduleScrollToBottom();
+            }
 
             UpdateTranscriptViewportAutomationState();
         }
@@ -230,7 +239,7 @@ namespace SalmonEgg.Presentation.Views.Chat
                     _scrollToBottomScheduled = false;
                     if (!_isViewLoaded
                         || scheduleGeneration != _scrollScheduleGeneration
-                        || _userScrolledUp
+                        || !_transcriptAutoFollow.IsAutoFollowEnabled
                         || !ViewModel.IsSessionActive
                         || ViewModel.MessageHistory.Count <= 0
                         || !string.Equals(ViewModel.CurrentSessionId, scheduledConversationId, StringComparison.Ordinal))
@@ -457,12 +466,16 @@ namespace SalmonEgg.Presentation.Views.Chat
 
         private void StopInitialScrollForManualInteraction()
         {
+            _transcriptAutoFollow.RegisterManualViewportIntent(ViewModel.MessageHistory.Count > 0);
+            _suspendAutoScrollTracking = false;
+            _scrollToBottomScheduled = false;
+
             if (!_transcriptScrollSettler.HasPendingWork)
             {
+                UpdateTranscriptViewportAutomationState();
                 return;
             }
 
-            _suspendAutoScrollTracking = false;
             _activeTranscriptScrollGeneration = -1;
             ApplyTranscriptSettleDecision(
                 _transcriptScrollSettler.AbortForUserInteraction(),
@@ -479,7 +492,7 @@ namespace SalmonEgg.Presentation.Views.Chat
         private void ResetAutoScrollStateForConversationChange()
         {
             unchecked { _scrollScheduleGeneration++; }
-            _userScrolledUp = false;
+            _transcriptAutoFollow.Reset();
             _activeTranscriptScrollGeneration = -1;
             _suspendAutoScrollTracking = false;
             _manualScrollIntentPending = false;
@@ -493,7 +506,7 @@ namespace SalmonEgg.Presentation.Views.Chat
             _wasOverlayVisible = isOverlayVisible;
 
             if (!overlayJustDismissed
-                || _userScrolledUp
+                || !_transcriptAutoFollow.IsAutoFollowEnabled
                 || !_isViewLoaded
                 || MessagesList is null
                 || ViewModel.MessageHistory.Count <= 0)
@@ -527,7 +540,7 @@ namespace SalmonEgg.Presentation.Views.Chat
                     return;
                 }
 
-                _userScrolledUp = false;
+                _transcriptAutoFollow.Reset();
                 BeginTranscriptSettleRound();
                 TryIssueTranscriptScrollRequest();
                 UpdateTranscriptViewportAutomationState();
@@ -546,6 +559,21 @@ namespace SalmonEgg.Presentation.Views.Chat
             ApplyTranscriptSettleDecision(
                 _transcriptScrollSettler.AbortForUserInteraction(),
                 HasLastItemContainerGenerated(ViewModel.MessageHistory.Count));
+        }
+
+        private bool ShouldRecoverBottomFromLayout(bool lastItemContainerGenerated)
+        {
+            if (!lastItemContainerGenerated)
+            {
+                return false;
+            }
+
+            return _transcriptAutoFollow.ShouldRecoverBottom(
+                isSessionActive: ViewModel.IsSessionActive,
+                hasMessages: ViewModel.MessageHistory.Count > 0,
+                hasPendingInitialScroll: _transcriptScrollSettler.HasPendingWork,
+                isProgrammaticScrollInFlight: _suspendAutoScrollTracking || _scrollToBottomScheduled,
+                isViewportAtBottom: lastItemContainerGenerated && IsListViewportAtBottom());
         }
 
         private void UpdateTranscriptViewportAutomationState()
