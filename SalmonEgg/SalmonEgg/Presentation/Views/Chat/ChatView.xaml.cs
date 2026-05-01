@@ -431,7 +431,26 @@ namespace SalmonEgg.Presentation.Views.Chat
                 return;
             }
 
-            MessagesList.ScrollIntoView(ViewModel.MessageHistory[^1]);
+            var requestGeneration = _activeTranscriptScrollGeneration;
+            var requestConversationId = ViewModel.CurrentSessionId;
+            MessagesList.UpdateLayout();
+            RequestScrollToBottom();
+
+            _ = DispatcherQueue.TryEnqueue(() =>
+            {
+                if (!_isViewLoaded
+                    || MessagesList is null
+                    || ViewModel.MessageHistory.Count <= 0
+                    || requestGeneration < 0
+                    || _activeTranscriptScrollGeneration != requestGeneration
+                    || !string.Equals(ViewModel.CurrentSessionId, requestConversationId, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                MessagesList.UpdateLayout();
+                RequestScrollToBottom();
+            });
         }
 
         private bool HasLastItemContainerGenerated(int itemCount)
@@ -518,9 +537,28 @@ namespace SalmonEgg.Presentation.Views.Chat
                 return TranscriptScrollSettleObservation.NotReadyYet;
             }
 
-            return IsListViewportAtBottom()
+            return IsLastItemVisiblyAtBottom(itemCount)
                 ? TranscriptScrollSettleObservation.AtBottom
                 : TranscriptScrollSettleObservation.ReadyButNotAtBottom;
+        }
+
+        private bool IsLastItemVisiblyAtBottom(int itemCount)
+        {
+            if (MessagesList is null || itemCount <= 0)
+            {
+                return false;
+            }
+
+            if (MessagesList.ContainerFromIndex(itemCount - 1) is not ListViewItem lastItemContainer)
+            {
+                return false;
+            }
+
+            var anchor = lastItemContainer.ContentTemplateRoot as FrameworkElement ?? lastItemContainer;
+            Point relativeOrigin = anchor.TransformToVisual(MessagesList).TransformPoint(default);
+            var lastItemBottom = relativeOrigin.Y + anchor.ActualHeight;
+            var viewportBottom = MessagesList.ActualHeight - BottomThreshold;
+            return lastItemBottom <= viewportBottom + BottomGeometryTolerance;
         }
 
         private TranscriptScrollDecision ReportTranscriptSettleObservation(TranscriptScrollSettleObservation observation)

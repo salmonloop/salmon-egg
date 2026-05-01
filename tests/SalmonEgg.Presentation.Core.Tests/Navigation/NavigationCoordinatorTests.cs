@@ -575,8 +575,7 @@ public sealed class NavigationCoordinatorTests
             var sessionActivation = coordinator.ActivateSessionAsync("session-1", "project-1");
             await switchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
-            var projectedSession = Assert.IsType<SessionNavItemViewModel>(navVm.ProjectedControlSelectedItem);
-            Assert.Equal("session-1", projectedSession.SessionId);
+            Assert.IsType<StartNavItemViewModel>(navVm.ProjectedControlSelectedItem);
             Assert.True(runtimeState.IsSessionActivationInProgress);
             Assert.Equal("session-1", runtimeState.DesiredSessionId);
 

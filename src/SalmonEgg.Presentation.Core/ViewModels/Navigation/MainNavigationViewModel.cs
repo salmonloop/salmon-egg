@@ -773,13 +773,6 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     private NavigationSelectionState GetProjectedSelectionState()
     {
-        if (_shellRuntimeState.ActiveSessionActivation is { } activeActivation
-            && ShouldProjectActivation(activeActivation)
-            && _sessionIndex.ContainsKey(activeActivation.SessionId))
-        {
-            return new NavigationSelectionState.Session(activeActivation.SessionId);
-        }
-
         if (CurrentSelection is NavigationSelectionState.Session currentSession
             && (string.IsNullOrWhiteSpace(currentSession.SessionId)
                 || !_sessionIndex.ContainsKey(currentSession.SessionId)))
@@ -789,15 +782,6 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
         return CurrentSelection;
     }
-
-    private static bool ShouldProjectActivation(SessionActivationSnapshot activation)
-        => activation.Phase is SessionActivationPhase.NavigatingToChatShell
-            or SessionActivationPhase.SelectingConversation
-            or SessionActivationPhase.Selected
-            or SessionActivationPhase.RemoteConnectionReady
-            or SessionActivationPhase.RemoteHydrationPending
-            or SessionActivationPhase.Hydrated;
-
     private void ApplyVisualSelectionState(NavigationViewProjection projection)
     {
         // Visual selection state is now handled by NavigationView's native projection behavior

@@ -830,8 +830,7 @@ public sealed class MainNavigationViewModelSelectionTests
                 Version: 1,
                 SessionActivationPhase.NavigatingToChatShell);
 
-            var previewSession = Assert.IsType<SessionNavItemViewModel>(navVm.ProjectedControlSelectedItem);
-            Assert.Equal("session-1", previewSession.SessionId);
+            Assert.IsType<StartNavItemViewModel>(navVm.ProjectedControlSelectedItem);
             Assert.Equal(NavigationSelectionState.StartSelection, navVm.CurrentSelection);
 
             runtimeState.ActiveSessionActivation = null;
@@ -1115,8 +1114,7 @@ public sealed class MainNavigationViewModelSelectionTests
             navVm.RefreshSelectionProjection();
 
             Assert.False(navVm.StartItem.IsLogicallySelected);
-            var projectedSession = Assert.IsType<SessionNavItemViewModel>(navVm.ProjectedControlSelectedItem);
-            Assert.Equal("session-1", projectedSession.SessionId);
+            Assert.IsType<StartNavItemViewModel>(navVm.ProjectedControlSelectedItem);
         }
         finally
         {
@@ -1224,9 +1222,8 @@ public sealed class MainNavigationViewModelSelectionTests
                 Version: 1,
                 SessionActivationPhase.NavigatingToChatShell);
 
-            var previewSession = Assert.IsType<SessionNavItemViewModel>(navVm.ProjectedControlSelectedItem);
-            Assert.Equal("session-1", previewSession.SessionId);
-            Assert.Equal(1, projectedSelectionChanged);
+            Assert.IsType<StartNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+            Assert.Equal(0, projectedSelectionChanged);
         }
         finally
         {

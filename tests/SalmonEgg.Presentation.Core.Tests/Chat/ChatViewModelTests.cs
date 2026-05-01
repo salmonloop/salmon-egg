@@ -239,6 +239,13 @@ public partial class ChatViewModelTests
         return Assert.IsType<ConversationCatalogPresenter>(field!.GetValue(viewModel));
     }
 
+    private static T? GetPrivateFieldValue<T>(ChatViewModel viewModel, string fieldName)
+    {
+        var field = typeof(ChatViewModel).GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        return (T?)field!.GetValue(viewModel);
+    }
+
     private static Mock<ISessionManager> CreateSessionManagerWithStore()
     {
         var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
@@ -10325,24 +10332,50 @@ public partial class ChatViewModelTests
 
         Assert.True(activationTask.IsCompletedSuccessfully);
         Assert.True(await activationTask);
-        await WaitForConditionAsync(async () =>
+        var overlayVisible = false;
+        var overlayWaitDeadlineUtc = DateTime.UtcNow + TimeSpan.FromSeconds(8);
+        while (DateTime.UtcNow < overlayWaitDeadlineUtc)
         {
             syncContext.RunAll();
-            return string.Equals(fixture.ViewModel.CurrentSessionId, "conv-2", StringComparison.Ordinal)
+            overlayVisible =
+                string.Equals(fixture.ViewModel.CurrentSessionId, "conv-2", StringComparison.Ordinal)
                 && fixture.ViewModel.IsOverlayVisible
                 && IsUserFriendlyHydrationOverlayStatus(fixture.ViewModel.OverlayStatusText);
-        });
+            if (overlayVisible)
+            {
+                break;
+            }
+
+            await Task.Delay(20);
+        }
+
+        Assert.True(
+            overlayVisible,
+            $"Expected remote switch overlay to remain visible until replay starts. CurrentSessionId={fixture.ViewModel.CurrentSessionId ?? "<null>"} IsOverlayVisible={fixture.ViewModel.IsOverlayVisible} OverlayStatusText='{fixture.ViewModel.OverlayStatusText}' IsHydrating={fixture.ViewModel.IsHydrating} IsRemoteHydrationPending={fixture.ViewModel.IsRemoteHydrationPending} IsSessionSwitching={fixture.ViewModel.IsSessionSwitching} SessionSwitchOwner={GetPrivateFieldValue<string>(fixture.ViewModel, "_sessionSwitchOverlayConversationId") ?? "<null>"} HistoryOwner={GetPrivateFieldValue<string>(fixture.ViewModel, "_historyOverlayConversationId") ?? "<null>"} PendingHistoryDismiss={GetPrivateFieldValue<string>(fixture.ViewModel, "_pendingHistoryOverlayDismissConversationId") ?? "<null>"} HydrationPhase={GetPrivateFieldValue<object>(fixture.ViewModel, "_hydrationOverlayPhase")?.ToString() ?? "<null>"}.");
 
         innerChatService.RaiseSessionUpdate(new SessionUpdateEventArgs(
             "remote-2",
             new AgentMessageUpdate(new TextContentBlock("late replay"))));
 
-        await WaitForConditionAsync(async () =>
+        var lateReplayProjected = false;
+        var lateReplayDeadlineUtc = DateTime.UtcNow + TimeSpan.FromSeconds(8);
+        while (DateTime.UtcNow < lateReplayDeadlineUtc)
         {
             syncContext.RunAll();
-            return fixture.ViewModel.MessageHistory.Any(message =>
+            lateReplayProjected = fixture.ViewModel.MessageHistory.Any(message =>
                 string.Equals(message.TextContent, "late replay", StringComparison.Ordinal));
-        });
+            if (lateReplayProjected)
+            {
+                break;
+            }
+
+            await Task.Delay(20);
+        }
+
+        var lateReplayState = await fixture.GetStateAsync();
+        Assert.True(
+            lateReplayProjected,
+            $"Expected late replay to project into the switched conversation. CurrentSessionId={fixture.ViewModel.CurrentSessionId ?? "<null>"} HydratedConversationId={lateReplayState.HydratedConversationId ?? "<null>"} TranscriptCount={fixture.ViewModel.MessageHistory.Count} IsOverlayVisible={fixture.ViewModel.IsOverlayVisible} OverlayStatusText='{fixture.ViewModel.OverlayStatusText}' RuntimePhase={lateReplayState.ResolveRuntimeState("conv-2")?.Phase.ToString() ?? "<null>"} BoundRemoteSessionId={lateReplayState.ResolveBinding("conv-2")?.RemoteSessionId ?? "<null>"} PendingHistoryDismiss={GetPrivateFieldValue<string>(fixture.ViewModel, "_pendingHistoryOverlayDismissConversationId") ?? "<null>"}.");
 
         await WaitForConditionAsync(async () =>
         {

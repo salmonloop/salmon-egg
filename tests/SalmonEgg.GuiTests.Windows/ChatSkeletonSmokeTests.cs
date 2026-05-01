@@ -527,7 +527,7 @@ public sealed class ChatSkeletonSmokeTests
         {
             using var appData = GuiAppDataScope.CreateDeterministicSlowRemoteReplayData(
                 cachedMessageCount: 1,
-                replayMessageCount: 24);
+                replayMessageCount: 60);
             using var session = WindowsGuiAppSession.LaunchFresh();
 
             var sessionItem = session.FindByAutomationId("MainNav.Session.gui-remote-conversation-01", TimeSpan.FromSeconds(15));
@@ -1363,6 +1363,74 @@ public sealed class ChatSkeletonSmokeTests
                     "remote-hydration-viewport-state-not-bottom",
                     $"Transcript viewport state did not settle to bottom after hydration. State='{viewportState ?? "<missing>"}'.");
             }
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", previousSlowLoadDelay);
+        }
+    }
+
+    [SkippableFact]
+    public void SelectRemoteSessionWithSlowReplay_PageUpDetachesViewportAfterHydration()
+    {
+        var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
+        Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", "1500");
+
+        try
+        {
+            using var appData = GuiAppDataScope.CreateDeterministicSlowRemoteReplayData(
+                cachedMessageCount: 1,
+                replayMessageCount: 24);
+            using var session = WindowsGuiAppSession.LaunchFresh();
+
+            var sessionItem = session.FindByAutomationId("MainNav.Session.gui-remote-conversation-01", TimeSpan.FromSeconds(15));
+            session.ActivateElement(sessionItem);
+
+            var overlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(30));
+            Assert.True(overlayHidden, "Remote session loading overlay did not disappear after hydration should have completed.");
+
+            var messagesList = session.FindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(10));
+            Assert.True(
+                WaitForViewportState(session, "bottom", TimeSpan.FromSeconds(10)),
+                $"Transcript viewport did not settle to bottom before the remote manual scroll detach scenario. State='{session.TryGetElementName("ChatView.TranscriptViewportState", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}'.");
+
+            var latestReplayVisibleWithinBudget = false;
+            var latestReplayVisibilityDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(8);
+            while (DateTime.UtcNow < latestReplayVisibilityDeadline)
+            {
+                if (session.TryFindVisibleText("GUI Remote Session 01 replay 060", messagesList, TimeSpan.FromMilliseconds(250)) is not null)
+                {
+                    latestReplayVisibleWithinBudget = true;
+                    break;
+                }
+
+                Thread.Sleep(150);
+            }
+
+            session.FocusElement(messagesList);
+            Thread.Sleep(150);
+            var latestReplayVisibleBeforePageUp =
+                session.TryFindVisibleText("GUI Remote Session 01 replay 060", messagesList, TimeSpan.FromMilliseconds(400)) is not null;
+            var replay024VisibleBeforePageUp =
+                session.TryFindVisibleText("GUI Remote Session 01 replay 024", messagesList, TimeSpan.FromMilliseconds(400)) is not null;
+            var replay010VisibleBeforePageUp =
+                session.TryFindVisibleText("GUI Remote Session 01 replay 010", messagesList, TimeSpan.FromMilliseconds(400)) is not null;
+
+            for (var attempt = 0; attempt < 6; attempt++)
+            {
+                session.PressPageUp();
+                Thread.Sleep(150);
+                if (string.Equals(session.TryGetElementName("ChatView.TranscriptViewportState", TimeSpan.FromMilliseconds(200)), "not_bottom", StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+            }
+
+            ThrowWithScreenshot(
+                session,
+                appData,
+                "remote-hydration-pageup-stayed-locked-bottom",
+                $"Transcript viewport stayed locked after PageUp on a hydrated remote session. State='{session.TryGetElementName("ChatView.TranscriptViewportState", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}'. latestReplayVisibleWithinBudget={latestReplayVisibleWithinBudget}. latestReplayVisibleBeforePageUp={latestReplayVisibleBeforePageUp}. latestReplayVisibleAfterPageUp={session.TryFindVisibleText("GUI Remote Session 01 replay 060", messagesList, TimeSpan.FromMilliseconds(400)) is not null}. replay024VisibleBeforePageUp={replay024VisibleBeforePageUp}. replay024VisibleAfterPageUp={session.TryFindVisibleText("GUI Remote Session 01 replay 024", messagesList, TimeSpan.FromMilliseconds(400)) is not null}. replay010VisibleBeforePageUp={replay010VisibleBeforePageUp}. replay010VisibleAfterPageUp={session.TryFindVisibleText("GUI Remote Session 01 replay 010", messagesList, TimeSpan.FromMilliseconds(400)) is not null}.");
         }
         finally
         {

@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using System;
 
 namespace SalmonEgg.Presentation.Behaviors;
 
@@ -87,6 +88,7 @@ public static class ScrollViewerViewportMonitor
 
         listView.Loaded += OnListViewLoaded;
         listView.Unloaded += OnListViewUnloaded;
+        listView.LayoutUpdated += OnListViewLayoutUpdated;
         SetIsHooked(listView, true);
 
         if (listView.IsLoaded)
@@ -99,7 +101,12 @@ public static class ScrollViewerViewportMonitor
     {
         if (sender is ListView listView)
         {
-            AttachScrollViewer(listView);
+            if (GetAttachedScrollViewer(listView) is null)
+            {
+                AttachScrollViewer(listView);
+            }
+
+            UpdateViewportState(listView);
         }
     }
 
@@ -109,6 +116,21 @@ public static class ScrollViewerViewportMonitor
         {
             DetachScrollViewer(listView);
         }
+    }
+
+    private static void OnListViewLayoutUpdated(object sender, object e)
+    {
+        if (sender is not ListView listView)
+        {
+            return;
+        }
+
+        if (GetAttachedScrollViewer(listView) is null)
+        {
+            AttachScrollViewer(listView);
+        }
+
+        UpdateViewportState(listView);
     }
 
     private static void AttachScrollViewer(ListView listView)
@@ -126,6 +148,7 @@ public static class ScrollViewerViewportMonitor
         }
 
         scrollViewer.ViewChanged += OnScrollViewerViewChanged;
+        scrollViewer.SizeChanged += OnScrollViewerSizeChanged;
         SetAttachedScrollViewer(listView, scrollViewer);
         UpdateViewportState(listView);
     }
@@ -137,6 +160,7 @@ public static class ScrollViewerViewportMonitor
         {
             listView.Loaded -= OnListViewLoaded;
             listView.Unloaded -= OnListViewUnloaded;
+            listView.LayoutUpdated -= OnListViewLayoutUpdated;
             SetIsHooked(listView, false);
         }
     }
@@ -146,11 +170,25 @@ public static class ScrollViewerViewportMonitor
         if (GetAttachedScrollViewer(listView) is ScrollViewer scrollViewer)
         {
             scrollViewer.ViewChanged -= OnScrollViewerViewChanged;
+            scrollViewer.SizeChanged -= OnScrollViewerSizeChanged;
             SetAttachedScrollViewer(listView, null);
         }
     }
 
     private static void OnScrollViewerViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
+    {
+        if (sender is not ScrollViewer scrollViewer)
+        {
+            return;
+        }
+
+        if (FindOwningListView(scrollViewer) is ListView listView)
+        {
+            UpdateViewportState(listView);
+        }
+    }
+
+    private static void OnScrollViewerSizeChanged(object sender, SizeChangedEventArgs e)
     {
         if (sender is not ScrollViewer scrollViewer)
         {
@@ -170,9 +208,25 @@ public static class ScrollViewerViewportMonitor
             return;
         }
 
-        listView.SetValue(VerticalOffsetProperty, scrollViewer.VerticalOffset);
-        listView.SetValue(ScrollableHeightProperty, scrollViewer.ScrollableHeight);
+        var verticalOffset = scrollViewer.VerticalOffset;
+        var scrollableHeight = scrollViewer.ScrollableHeight;
+        var previousVerticalOffset = GetVerticalOffset(listView);
+        var previousScrollableHeight = GetScrollableHeight(listView);
+
+        if (AreClose(previousVerticalOffset, verticalOffset)
+            && AreClose(previousScrollableHeight, scrollableHeight))
+        {
+            return;
+        }
+
+        listView.SetValue(VerticalOffsetProperty, verticalOffset);
+        listView.SetValue(ScrollableHeightProperty, scrollableHeight);
         listView.SetValue(ViewportChangeTokenProperty, GetViewportChangeToken(listView) + 1);
+    }
+
+    private static bool AreClose(double left, double right)
+    {
+        return Math.Abs(left - right) <= 0.5d;
     }
 
     private static ScrollViewer? FindScrollViewer(DependencyObject root)

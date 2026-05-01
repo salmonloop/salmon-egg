@@ -116,7 +116,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private readonly IShellNavigationRuntimeState? _shellNavigationRuntimeState;
     private long _activationVersion;
     private bool _disposed;
-    private string? _latestObservedHydratedConversationId;
     private bool _autoConnectAttempted;
     private bool _suppressAcpProfileConnect;
     private bool _suppressAutoConnectFromPreferenceChange;
@@ -1173,7 +1172,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                 var latestState = await _chatStore.State ?? ChatState.Empty;
                 var latestConnectionState = await _chatConnectionStore.State ?? ChatConnectionState.Empty;
                 var projection = CreateProjection(latestState, latestConnectionState);
-                _latestObservedHydratedConversationId = latestState.HydratedConversationId;
                 ApplyStoreProjection(projection);
             }).ConfigureAwait(false);
         }
@@ -1269,16 +1267,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         IReadOnlyList<ChatMessageViewModel>? preparedTranscript = null)
     {
         var projectionApplyStopwatch = Stopwatch.StartNew();
-        if (!string.IsNullOrWhiteSpace(_latestObservedHydratedConversationId)
-            && !string.IsNullOrWhiteSpace(projection.HydratedConversationId)
-            && !string.Equals(
-                projection.HydratedConversationId,
-                _latestObservedHydratedConversationId,
-                StringComparison.Ordinal))
-        {
-            return;
-        }
-
         var sessionChanged = false;
         _suppressStoreProfileProjection = true;
         _suppressStorePromptProjection = true;
@@ -1941,7 +1929,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             var latestState = await _chatStore.State ?? ChatState.Empty;
             var latestConnectionState = await _chatConnectionStore.State ?? ChatConnectionState.Empty;
             var latestProjection = CreateProjection(latestState, latestConnectionState);
-            _latestObservedHydratedConversationId = latestState.HydratedConversationId;
             var canReusePreparedTranscript =
                 string.Equals(latestProjection.HydratedConversationId, projection.HydratedConversationId, StringComparison.Ordinal)
                 && latestProjection.Transcript.Count == projection.Transcript.Count;
@@ -8406,7 +8393,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             || projection.IsHydrating
             || IsRemoteHydrationPending
             || (!hasVisibleTranscript && HasPendingSessionUpdates())
-            || (!hasVisibleTranscript && !HasSatisfiedKnownTranscriptGrowthRequirement(projection)))
+            || !HasSatisfiedKnownTranscriptGrowthRequirement(projection))
         {
             return;
         }
