@@ -463,6 +463,11 @@ internal sealed class WindowsGuiAppSession : IDisposable
         PressKey(VirtualKeyShort.NEXT);
     }
 
+    public void ScrollWheel(double delta)
+    {
+        Mouse.Scroll(delta);
+    }
+
     public bool? TryGetIsSelected(string automationId)
     {
         var element = TryFindByAutomationId(automationId, TimeSpan.FromSeconds(2));
