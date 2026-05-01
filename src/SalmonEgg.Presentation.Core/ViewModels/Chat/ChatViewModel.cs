@@ -34,9 +34,11 @@ using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Core.Services.Input;
 using SalmonEgg.Presentation.Core.Services;
+using SalmonEgg.Presentation.Core.ViewModels.Chat.AskUser;
 using SalmonEgg.Presentation.ViewModels.Chat.Hydration;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.Input;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.Overlay;
+using SalmonEgg.Presentation.Core.ViewModels.Chat.PlanPanel;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.ProjectAffinity;
 using SalmonEgg.Presentation.ViewModels.Chat.Transcript;
 using SalmonEgg.Presentation.Models.Navigation;
@@ -91,6 +93,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private readonly IProjectAffinityResolver _projectAffinityResolver;
     private readonly ChatProjectAffinityCorrectionPresenter _projectAffinityCorrectionPresenter;
     private readonly ChatInputStatePresenter _inputStatePresenter;
+    private readonly ChatAskUserStatePresenter _askUserStatePresenter;
+    private readonly ChatPlanPanelStatePresenter _planPanelStatePresenter;
     private readonly IConfigurationService _configurationService;
     private readonly AppPreferencesViewModel _preferences;
     private readonly AcpProfilesViewModel _acpProfiles;
@@ -519,17 +523,17 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     public bool IsInputEnabled => ResolveInputState().IsInputEnabled;
 
-    public bool HasPendingAskUserRequest => PendingAskUserRequest is not null;
+    public bool HasPendingAskUserRequest => ResolveAskUserState().HasPendingRequest;
 
-    public string AskUserPrompt => PendingAskUserRequest?.Prompt ?? string.Empty;
+    public string AskUserPrompt => ResolveAskUserState().Prompt;
 
-    public ObservableCollection<AskUserQuestionViewModel> AskUserQuestions => PendingAskUserRequest?.Questions ?? _emptyAskUserQuestions;
+    public ObservableCollection<AskUserQuestionViewModel> AskUserQuestions => ResolveAskUserState().Questions;
 
-    public bool AskUserHasError => PendingAskUserRequest?.HasError ?? false;
+    public bool AskUserHasError => ResolveAskUserState().HasError;
 
-    public string AskUserErrorMessage => PendingAskUserRequest?.ErrorMessage ?? string.Empty;
+    public string AskUserErrorMessage => ResolveAskUserState().ErrorMessage;
 
-    public IAsyncRelayCommand? AskUserSubmitCommand => PendingAskUserRequest?.SubmitCommand;
+    public IAsyncRelayCommand? AskUserSubmitCommand => ResolveAskUserState().SubmitCommand;
 
     // UI-BOUND PROPERTIES: Handlers for WinUI/Uno property change notifications.
     // These ensure the View reflects internal state changes that might not trigger automatically.
@@ -543,11 +547,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     public bool ShowVoiceInputStopButton => ResolveInputState().ShowVoiceInputStopButton;
 
-    public bool HasPlanEntries => PlanEntries.Count > 0;
+    public bool HasPlanEntries => ResolvePlanPanelState().HasPlanEntries;
 
-    public bool ShouldShowPlanList => ShowPlanPanel && HasPlanEntries;
+    public bool ShouldShowPlanList => ResolvePlanPanelState().ShouldShowPlanList;
 
-    public bool ShouldShowPlanEmpty => !ShowPlanPanel || !HasPlanEntries;
+    public bool ShouldShowPlanEmpty => ResolvePlanPanelState().ShouldShowPlanEmpty;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanSendPromptUi))]
@@ -825,6 +829,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         _projectAffinityResolver = projectAffinityResolver ?? new ProjectAffinityResolver();
         _projectAffinityCorrectionPresenter = new ChatProjectAffinityCorrectionPresenter(_projectAffinityResolver);
         _inputStatePresenter = new ChatInputStatePresenter();
+        _askUserStatePresenter = new ChatAskUserStatePresenter();
+        _planPanelStatePresenter = new ChatPlanPanelStatePresenter();
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
         _previewStore = previewStore ?? throw new ArgumentNullException(nameof(previewStore));
         _transcriptProjectionCoordinator = new ChatTranscriptProjectionCoordinator(_previewStore);
@@ -5803,6 +5809,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             HasCurrentSessionId: !string.IsNullOrWhiteSpace(CurrentSessionId),
             HasPromptText: !string.IsNullOrWhiteSpace(CurrentPrompt),
             IsVoiceInputSupported: IsVoiceInputSupported));
+
+    private ChatAskUserState ResolveAskUserState()
+        => _askUserStatePresenter.Present(PendingAskUserRequest, _emptyAskUserQuestions);
+
+    private ChatPlanPanelState ResolvePlanPanelState()
+        => _planPanelStatePresenter.Present(ShowPlanPanel, PlanEntries.Count);
 
     private bool CanSendPrompt() => ResolveInputState().CanSendPrompt;
 

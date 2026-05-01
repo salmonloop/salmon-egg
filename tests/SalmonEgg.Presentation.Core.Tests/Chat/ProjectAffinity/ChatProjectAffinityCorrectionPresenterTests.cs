@@ -8,6 +8,7 @@ using Xunit;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat.ProjectAffinity;
 
+[Collection("NonParallel")]
 public sealed class ChatProjectAffinityCorrectionPresenterTests
 {
     private readonly ChatProjectAffinityCorrectionPresenter _sut = new(new ProjectAffinityResolver());

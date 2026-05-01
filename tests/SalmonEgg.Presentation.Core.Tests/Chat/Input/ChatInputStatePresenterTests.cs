@@ -3,6 +3,7 @@ using Xunit;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat.Input;
 
+[Collection("NonParallel")]
 public sealed class ChatInputStatePresenterTests
 {
     private readonly ChatInputStatePresenter _sut = new();
