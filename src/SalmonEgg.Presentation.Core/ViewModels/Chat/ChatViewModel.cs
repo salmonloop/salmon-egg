@@ -35,7 +35,9 @@ using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Core.Services.Input;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.ViewModels.Chat.Hydration;
+using SalmonEgg.Presentation.Core.ViewModels.Chat.Input;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.Overlay;
+using SalmonEgg.Presentation.Core.ViewModels.Chat.ProjectAffinity;
 using SalmonEgg.Presentation.ViewModels.Chat.Transcript;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Services;
@@ -87,6 +89,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private readonly IAcpConnectionCommands _acpConnectionCommands;
     private readonly IAcpConnectionCoordinator _acpConnectionCoordinator;
     private readonly IProjectAffinityResolver _projectAffinityResolver;
+    private readonly ChatProjectAffinityCorrectionPresenter _projectAffinityCorrectionPresenter;
+    private readonly ChatInputStatePresenter _inputStatePresenter;
     private readonly IConfigurationService _configurationService;
     private readonly AppPreferencesViewModel _preferences;
     private readonly AcpProfilesViewModel _acpProfiles;
@@ -513,13 +517,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     public bool HasConnectionError => !string.IsNullOrWhiteSpace(ConnectionErrorMessage);
 
-    public bool IsInputEnabled
-        => !IsBusy
-            && !IsPromptInFlight
-            && !IsVoiceInputListening
-            && !IsVoiceInputBusy
-            && PendingAskUserRequest is null
-            && !ShouldShowLoadingOverlayPresenter;
+    public bool IsInputEnabled => ResolveInputState().IsInputEnabled;
 
     public bool HasPendingAskUserRequest => PendingAskUserRequest is not null;
 
@@ -535,24 +533,15 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     // UI-BOUND PROPERTIES: Handlers for WinUI/Uno property change notifications.
     // These ensure the View reflects internal state changes that might not trigger automatically.
-    public bool CanSendPromptUi => CanSendPrompt();
+    public bool CanSendPromptUi => ResolveInputState().CanSendPrompt;
 
-    public bool CanStartVoiceInput
-        => IsVoiceInputSupported
-            && !IsVoiceInputListening
-            && !IsVoiceInputBusy
-            && IsInputEnabled;
+    public bool CanStartVoiceInput => ResolveInputState().CanStartVoiceInput;
 
-    public bool CanStopVoiceInput
-        => IsVoiceInputSupported
-            && IsVoiceInputListening
-            && !IsVoiceInputBusy;
+    public bool CanStopVoiceInput => ResolveInputState().CanStopVoiceInput;
 
-    public bool ShowVoiceInputStartButton
-        => IsVoiceInputSupported && !IsVoiceInputListening;
+    public bool ShowVoiceInputStartButton => ResolveInputState().ShowVoiceInputStartButton;
 
-    public bool ShowVoiceInputStopButton
-        => IsVoiceInputSupported && IsVoiceInputListening;
+    public bool ShowVoiceInputStopButton => ResolveInputState().ShowVoiceInputStopButton;
 
     public bool HasPlanEntries => PlanEntries.Count > 0;
 
@@ -834,6 +823,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         _chatConnectionStore = chatConnectionStore ?? throw new ArgumentNullException(nameof(chatConnectionStore));
         _conversationAttentionStore = conversationAttentionStore;
         _projectAffinityResolver = projectAffinityResolver ?? new ProjectAffinityResolver();
+        _projectAffinityCorrectionPresenter = new ChatProjectAffinityCorrectionPresenter(_projectAffinityResolver);
+        _inputStatePresenter = new ChatInputStatePresenter();
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
         _previewStore = previewStore ?? throw new ArgumentNullException(nameof(previewStore));
         _transcriptProjectionCoordinator = new ChatTranscriptProjectionCoordinator(_previewStore);
@@ -2257,93 +2248,44 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         var activeConversationId = string.IsNullOrWhiteSpace(conversationId)
             ? CurrentSessionId
             : conversationId;
-        var options = BuildProjectAffinityOverrideOptions();
-        ProjectAffinityOverrideOptions = new ObservableCollection<ProjectAffinityOverrideOptionViewModel>(options);
-
-        if (string.IsNullOrWhiteSpace(activeConversationId))
-        {
-            IsProjectAffinityCorrectionVisible = false;
-            HasProjectAffinityOverride = false;
-            EffectiveProjectAffinityProjectId = null;
-            EffectiveProjectAffinitySource = ProjectAffinitySource.Unclassified;
-            ProjectAffinityCorrectionMessage = string.Empty;
-            SelectedProjectAffinityOverrideProjectId = null;
-            OnPropertyChanged(nameof(CanApplyProjectAffinityOverride));
-            OnPropertyChanged(nameof(CanClearProjectAffinityOverride));
-            return;
-        }
-
-        var binding = _conversationWorkspace.GetRemoteBinding(activeConversationId);
+        var binding = string.IsNullOrWhiteSpace(activeConversationId)
+            ? null
+            : _conversationWorkspace.GetRemoteBinding(activeConversationId);
         var remoteSessionId = binding?.RemoteSessionId;
         var boundProfileId = binding?.BoundProfileId;
-        if (string.Equals(activeConversationId, CurrentSessionId, StringComparison.Ordinal))
+        if (!string.IsNullOrWhiteSpace(activeConversationId)
+            && string.Equals(activeConversationId, CurrentSessionId, StringComparison.Ordinal))
         {
             remoteSessionId ??= _currentRemoteSessionId;
             boundProfileId ??= SelectedAcpProfile?.Id;
         }
 
-        var overrideProjectId = _conversationWorkspace.GetProjectAffinityOverride(activeConversationId)?.ProjectId;
-        var remoteCwd = _sessionManager.GetSession(activeConversationId)?.Cwd;
-        var projects = _preferences.Projects.ToArray();
-        var mappings = _preferences.ProjectPathMappings.ToArray();
-        var resolution = _projectAffinityResolver.Resolve(new ProjectAffinityRequest(
-            RemoteCwd: remoteCwd,
-            BoundProfileId: boundProfileId,
+        var overrideProjectId = string.IsNullOrWhiteSpace(activeConversationId)
+            ? null
+            : _conversationWorkspace.GetProjectAffinityOverride(activeConversationId)?.ProjectId;
+        var remoteCwd = string.IsNullOrWhiteSpace(activeConversationId)
+            ? null
+            : _sessionManager.GetSession(activeConversationId)?.Cwd;
+        var presentedState = _projectAffinityCorrectionPresenter.Present(new ChatProjectAffinityCorrectionInput(
+            ConversationId: activeConversationId,
             RemoteSessionId: remoteSessionId,
+            BoundProfileId: boundProfileId,
+            RemoteCwd: remoteCwd,
             OverrideProjectId: overrideProjectId,
-            Projects: projects,
-            PathMappings: mappings,
-            UnclassifiedProjectId: NavigationProjectIds.Unclassified));
+            SelectedOverrideProjectId: SelectedProjectAffinityOverrideProjectId,
+            Projects: _preferences.Projects.ToArray(),
+            PathMappings: _preferences.ProjectPathMappings.ToArray()));
 
-        var isRemoteBound = !string.IsNullOrWhiteSpace(remoteSessionId)
-            || !string.IsNullOrWhiteSpace(boundProfileId);
-        IsProjectAffinityCorrectionVisible = isRemoteBound && resolution.Source is
-            ProjectAffinitySource.NeedsMapping or
-            ProjectAffinitySource.Unclassified or
-            ProjectAffinitySource.Override;
-        HasProjectAffinityOverride = !string.IsNullOrWhiteSpace(overrideProjectId);
-        EffectiveProjectAffinityProjectId = resolution.EffectiveProjectId;
-        EffectiveProjectAffinitySource = resolution.Source;
-        ProjectAffinityCorrectionMessage = resolution.Source switch
-        {
-            ProjectAffinitySource.Override => "已应用本地项目覆盖，可随时清除。",
-            ProjectAffinitySource.NeedsMapping => "远程会话未匹配到本地项目，请手动更正。",
-            _ => "当前会话归类为“未归类”，可手动更正。"
-        };
-
-        if (HasProjectAffinityOverride)
-        {
-            SelectedProjectAffinityOverrideProjectId = overrideProjectId;
-        }
-        else if (!string.IsNullOrWhiteSpace(SelectedProjectAffinityOverrideProjectId)
-            && !options.Any(option => string.Equals(option.ProjectId, SelectedProjectAffinityOverrideProjectId, StringComparison.Ordinal)))
-        {
-            SelectedProjectAffinityOverrideProjectId = null;
-        }
+        ProjectAffinityOverrideOptions = new ObservableCollection<ProjectAffinityOverrideOptionViewModel>(presentedState.Options);
+        IsProjectAffinityCorrectionVisible = presentedState.IsVisible;
+        HasProjectAffinityOverride = presentedState.HasOverride;
+        EffectiveProjectAffinityProjectId = presentedState.EffectiveProjectId;
+        EffectiveProjectAffinitySource = presentedState.EffectiveSource;
+        ProjectAffinityCorrectionMessage = presentedState.Message;
+        SelectedProjectAffinityOverrideProjectId = presentedState.SelectedOverrideProjectId;
 
         OnPropertyChanged(nameof(CanApplyProjectAffinityOverride));
         OnPropertyChanged(nameof(CanClearProjectAffinityOverride));
-    }
-
-    private IReadOnlyList<ProjectAffinityOverrideOptionViewModel> BuildProjectAffinityOverrideOptions()
-    {
-        var options = new List<ProjectAffinityOverrideOptionViewModel>();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var project in _preferences.Projects)
-        {
-            if (project is null
-                || string.IsNullOrWhiteSpace(project.ProjectId)
-                || string.IsNullOrWhiteSpace(project.Name)
-                || !seen.Add(project.ProjectId))
-            {
-                continue;
-            }
-
-            options.Add(new ProjectAffinityOverrideOptionViewModel(project.ProjectId, project.Name));
-        }
-
-        options.Sort((left, right) => string.Compare(left.DisplayName, right.DisplayName, StringComparison.Ordinal));
-        return options;
     }
 
     private void ApplyProjectAffinityOverride()
@@ -2501,7 +2443,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             new(NavigationProjectIds.Unclassified, "未归类")
         };
 
-        foreach (var option in BuildProjectAffinityOverrideOptions())
+        foreach (var option in ProjectAffinityOverrideOptions)
         {
             targets.Add(new ConversationProjectTargetOption(option.ProjectId, option.DisplayName));
         }
@@ -5847,13 +5789,22 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         }
     }
 
-    private bool CanSendPrompt() =>
-        IsInputEnabled
-        && IsSessionActive
-        && _chatService is not null
-        && IsInitialized
-        && !string.IsNullOrWhiteSpace(CurrentSessionId)
-        && !string.IsNullOrWhiteSpace(CurrentPrompt);
+    private ChatInputState ResolveInputState()
+        => _inputStatePresenter.Present(new ChatInputStateInput(
+            IsBusy: IsBusy,
+            IsPromptInFlight: IsPromptInFlight,
+            IsVoiceInputListening: IsVoiceInputListening,
+            IsVoiceInputBusy: IsVoiceInputBusy,
+            HasPendingAskUserRequest: PendingAskUserRequest is not null,
+            ShouldShowLoadingOverlayPresenter: ShouldShowLoadingOverlayPresenter,
+            IsSessionActive: IsSessionActive,
+            HasChatService: _chatService is not null,
+            IsInitialized: IsInitialized,
+            HasCurrentSessionId: !string.IsNullOrWhiteSpace(CurrentSessionId),
+            HasPromptText: !string.IsNullOrWhiteSpace(CurrentPrompt),
+            IsVoiceInputSupported: IsVoiceInputSupported));
+
+    private bool CanSendPrompt() => ResolveInputState().CanSendPrompt;
 
     [RelayCommand]
     private async Task StartVoiceInputAsync()
