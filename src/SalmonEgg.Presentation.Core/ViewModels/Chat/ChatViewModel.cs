@@ -37,6 +37,7 @@ using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.AskUser;
 using SalmonEgg.Presentation.ViewModels.Chat.Hydration;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.Input;
+using SalmonEgg.Presentation.ViewModels.Chat.Interactions;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.Overlay;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.PlanPanel;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.ProjectAffinity;
@@ -97,6 +98,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private readonly ChatAskUserStatePresenter _askUserStatePresenter;
     private readonly ChatPlanPanelStatePresenter _planPanelStatePresenter;
     private readonly ChatConversationPanelStateCoordinator _panelStateCoordinator;
+    private readonly ChatTerminalProjectionCoordinator _terminalProjectionCoordinator;
     private readonly IConfigurationService _configurationService;
     private readonly AppPreferencesViewModel _preferences;
     private readonly AcpProfilesViewModel _acpProfiles;
@@ -830,6 +832,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         _askUserStatePresenter = new ChatAskUserStatePresenter();
         _planPanelStatePresenter = new ChatPlanPanelStatePresenter();
         _panelStateCoordinator = new ChatConversationPanelStateCoordinator();
+        _terminalProjectionCoordinator = new ChatTerminalProjectionCoordinator();
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
         _previewStore = previewStore ?? throw new ArgumentNullException(nameof(previewStore));
         _transcriptProjectionCoordinator = new ChatTranscriptProjectionCoordinator(_previewStore);
@@ -4460,32 +4463,22 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         _uiDispatcher.Enqueue(() => {
             try
             {
-                var viewModel = new PermissionRequestViewModel
-                {
-                    MessageId = e.MessageId,
-                    SessionId = e.SessionId,
-                    ToolCallJson = e.ToolCall?.ToString() ?? string.Empty,
-                    Options = new ObservableCollection<PermissionOptionViewModel>(
-                        e.Options.Select(opt => new PermissionOptionViewModel
-                        {
-                            OptionId = opt.OptionId,
-                            Name = opt.Name,
-                            Kind = opt.Kind
-                        }))
-                };
-
-                // Set response callback
-                viewModel.OnRespond = async (outcome, optionId) =>
-                {
-                    if (_chatService != null)
+                PendingPermissionRequest = ChatInteractionDialogFactory.CreatePermissionRequestViewModel(
+                    e,
+                    async (messageId, outcome, optionId) =>
                     {
-                        await _chatService.RespondToPermissionRequestAsync(e.MessageId, outcome, optionId);
-                    }
-                    ShowPermissionDialog = false;
-                    PendingPermissionRequest = null;
-                };
+                        if (_chatService == null)
+                        {
+                            return false;
+                        }
 
-                PendingPermissionRequest = viewModel;
+                        return await _chatService.RespondToPermissionRequestAsync(messageId, outcome, optionId).ConfigureAwait(true);
+                    },
+                    () =>
+                    {
+                        ShowPermissionDialog = false;
+                        PendingPermissionRequest = null;
+                    });
                 ShowPermissionDialog = true;
             }
             catch (Exception ex)
@@ -4500,28 +4493,20 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         _uiDispatcher.Enqueue(() => {
             try
             {
-                var viewModel = new FileSystemRequestViewModel
-                {
-                    MessageId = e.MessageId,
-                    SessionId = e.SessionId,
-                    Operation = e.Operation,
-                    Path = e.Path,
-                    Encoding = e.Encoding,
-                    Content = e.Content
-                };
-
-                // Set response callback
-                viewModel.OnRespond = async (success, content, message) =>
-                {
-                    if (_chatService != null)
+                PendingFileSystemRequest = ChatInteractionDialogFactory.CreateFileSystemRequestViewModel(
+                    e,
+                    async (messageId, success, content, message) =>
                     {
-                        await _chatService.RespondToFileSystemRequestAsync(e.MessageId, success, content, message);
-                    }
-                    ShowFileSystemDialog = false;
-                    PendingFileSystemRequest = null;
-                };
-
-                PendingFileSystemRequest = viewModel;
+                        if (_chatService != null)
+                        {
+                            await _chatService.RespondToFileSystemRequestAsync(messageId, success, content, message).ConfigureAwait(true);
+                        }
+                    },
+                    () =>
+                    {
+                        ShowFileSystemDialog = false;
+                        PendingFileSystemRequest = null;
+                    });
                 ShowFileSystemDialog = true;
             }
             catch (Exception ex)
@@ -4600,66 +4585,28 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     private void ApplyTerminalRequestProjection(string conversationId, TerminalRequestEventArgs request)
     {
-        if (string.IsNullOrWhiteSpace(conversationId))
+        if (_terminalProjectionCoordinator.TryApplyRequest(
+            _panelStateCoordinator,
+            conversationId,
+            request,
+            string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal),
+            out var selection)
+            && string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
         {
-            return;
+            TerminalSessions = selection.TerminalSessions;
+            SelectedTerminalSession = selection.SelectedTerminal;
         }
-
-        var terminalId = string.IsNullOrWhiteSpace(request.TerminalId)
-            ? TryReadTerminalId(request.RawParams)
-            : request.TerminalId;
-        if (string.IsNullOrWhiteSpace(terminalId))
-        {
-            return;
-        }
-
-        var terminal = _panelStateCoordinator.GetOrCreateTerminalSession(conversationId, terminalId);
-
-        terminal.LastMethod = request.Method ?? string.Empty;
-        ApplyTerminalPayload(terminal, request.RawParams);
-        SelectTerminalForConversation(conversationId, terminal);
     }
 
     private void ApplyTerminalStateProjection(string conversationId, TerminalStateChangedEventArgs update)
     {
-        if (string.IsNullOrWhiteSpace(conversationId) || string.IsNullOrWhiteSpace(update.TerminalId))
-        {
-            return;
-        }
-
-        var terminal = _panelStateCoordinator.GetOrCreateTerminalSession(conversationId, update.TerminalId);
-        terminal.LastMethod = update.Method ?? string.Empty;
-
-        if (update.Output != null)
-        {
-            terminal.Output = update.Output;
-        }
-
-        if (update.Truncated.HasValue)
-        {
-            terminal.IsTruncated = update.Truncated.Value;
-        }
-
-        if (update.ExitStatus != null)
-        {
-            terminal.ExitCode = update.ExitStatus.ExitCode;
-        }
-
-        if (update.IsReleased)
-        {
-            terminal.IsReleased = true;
-        }
-
-        SelectTerminalForConversation(conversationId, terminal);
-    }
-
-    private void SelectTerminalForConversation(string conversationId, TerminalPanelSessionViewModel terminal)
-    {
-        var selection = _panelStateCoordinator.SelectTerminal(
+        if (_terminalProjectionCoordinator.TryApplyState(
+            _panelStateCoordinator,
             conversationId,
-            terminal,
-            string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal));
-        if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
+            update,
+            string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal),
+            out var selection)
+            && string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
         {
             TerminalSessions = selection.TerminalSessions;
             SelectedTerminalSession = selection.SelectedTerminal;
@@ -4672,65 +4619,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             string.Equals(tab.Id, tabId, StringComparison.Ordinal)) is { } tab)
         {
             SelectedBottomPanelTab = tab;
-        }
-    }
-
-    private static string? TryReadTerminalId(object? rawParams)
-    {
-        return TryGetRawParamsElement(rawParams, out var element)
-            && element.ValueKind == JsonValueKind.Object
-            && element.TryGetProperty("terminalId", out var terminalId)
-            && terminalId.ValueKind == JsonValueKind.String
-                ? terminalId.GetString()
-                : null;
-    }
-
-    private static void ApplyTerminalPayload(TerminalPanelSessionViewModel terminal, object? rawParams)
-    {
-        if (!TryGetRawParamsElement(rawParams, out var rawElement) || rawElement.ValueKind != JsonValueKind.Object)
-        {
-            return;
-        }
-
-        if (rawElement.TryGetProperty("output", out var output) && output.ValueKind == JsonValueKind.String)
-        {
-            terminal.Output = output.GetString() ?? string.Empty;
-        }
-
-        if (rawElement.TryGetProperty("truncated", out var truncated)
-            && truncated.ValueKind is JsonValueKind.True or JsonValueKind.False)
-        {
-            terminal.IsTruncated = truncated.GetBoolean();
-        }
-
-        if (rawElement.TryGetProperty("exitStatus", out var exitStatus)
-            && exitStatus.ValueKind == JsonValueKind.Object
-            && exitStatus.TryGetProperty("exitCode", out var exitCode)
-            && exitCode.ValueKind == JsonValueKind.Number
-            && exitCode.TryGetInt32(out var value))
-        {
-            terminal.ExitCode = value;
-        }
-
-        if (string.Equals(terminal.LastMethod, "terminal/release", StringComparison.Ordinal))
-        {
-            terminal.IsReleased = true;
-        }
-    }
-
-    private static bool TryGetRawParamsElement(object? rawParams, out JsonElement element)
-    {
-        switch (rawParams)
-        {
-            case JsonElement jsonElement:
-                element = jsonElement;
-                return true;
-            case JsonDocument jsonDocument:
-                element = jsonDocument.RootElement;
-                return true;
-            default:
-                element = default;
-                return false;
         }
     }
 
@@ -8614,76 +8502,4 @@ public partial class SessionModeViewModel : ObservableObject
     private string _description = string.Empty;
 }
 
-/// <summary>
-/// Permission request ViewModel
-/// </summary>
-public partial class PermissionRequestViewModel : ObservableObject
-{
-    public object MessageId { get; set; } = string.Empty;
-    public string SessionId { get; set; } = string.Empty;
-    public string ToolCallJson { get; set; } = string.Empty;
-
-    [ObservableProperty]
-    private ObservableCollection<PermissionOptionViewModel> _options = new();
-
-    public Func<string, string?, Task>? OnRespond { get; set; }
-
-    [RelayCommand]
-    private async Task RespondAsync(PermissionOptionViewModel? option)
-    {
-        if (OnRespond == null)
-            return;
-
-        if (option != null)
-        {
-            await OnRespond("selected", option.OptionId);
-        }
-        else
-        {
-            await OnRespond("cancelled", null);
-        }
-    }
-}
-
-/// <summary>
-/// Permission option ViewModel
-/// </summary>
-public partial class PermissionOptionViewModel : ObservableObject
-{
-    [ObservableProperty]
-    private string _optionId = string.Empty;
-
-    [ObservableProperty]
-    private string _name = string.Empty;
-
-    [ObservableProperty]
-    private string _kind = string.Empty;
-}
-
-/// <summary>
-/// File system request ViewModel
-/// </summary>
-public partial class FileSystemRequestViewModel : ObservableObject
-{
-    public object MessageId { get; set; } = string.Empty;
-    public string SessionId { get; set; } = string.Empty;
-    public string Operation { get; set; } = string.Empty;
-    public string Path { get; set; } = string.Empty;
-    public string? Encoding { get; set; }
-    public string? Content { get; set; }
-
-    public Func<bool, string?, string?, Task>? OnRespond { get; set; }
-
-    [ObservableProperty]
-    private string _responseContent = string.Empty;
-
-    [RelayCommand]
-    private async Task RespondAsync(bool success)
-    {
-        if (OnRespond == null)
-            return;
-
-        await OnRespond(success, success ? ResponseContent : null, success ? null : "Operation failed");
-    }
-}
 
