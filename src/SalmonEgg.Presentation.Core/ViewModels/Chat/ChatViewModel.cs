@@ -92,8 +92,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private readonly IConversationBindingCommands _bindingCommands;
     private readonly IAcpConnectionCommands _acpConnectionCommands;
     private readonly IAcpConnectionCoordinator _acpConnectionCoordinator;
-    private readonly IProjectAffinityResolver _projectAffinityResolver;
-    private readonly ChatProjectAffinityCorrectionPresenter _projectAffinityCorrectionPresenter;
+    private readonly ChatProjectAffinityCorrectionCoordinator _projectAffinityCorrectionCoordinator;
     private readonly ChatInputStatePresenter _inputStatePresenter;
     private readonly ChatAskUserStatePresenter _askUserStatePresenter;
     private readonly ChatPlanPanelStatePresenter _planPanelStatePresenter;
@@ -829,8 +828,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         _acpSessionUpdateProjector = acpSessionUpdateProjector ?? new AcpSessionUpdateProjector();
         _chatConnectionStore = chatConnectionStore ?? throw new ArgumentNullException(nameof(chatConnectionStore));
         _conversationAttentionStore = conversationAttentionStore;
-        _projectAffinityResolver = projectAffinityResolver ?? new ProjectAffinityResolver();
-        _projectAffinityCorrectionPresenter = new ChatProjectAffinityCorrectionPresenter(_projectAffinityResolver);
+        _projectAffinityCorrectionCoordinator = new ChatProjectAffinityCorrectionCoordinator(projectAffinityResolver ?? new ProjectAffinityResolver());
         _inputStatePresenter = new ChatInputStatePresenter();
         _askUserStatePresenter = new ChatAskUserStatePresenter();
         _planPanelStatePresenter = new ChatPlanPanelStatePresenter();
@@ -2219,36 +2217,16 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     private void RefreshProjectAffinityCorrectionState(string? conversationId = null)
     {
-        var activeConversationId = string.IsNullOrWhiteSpace(conversationId)
-            ? CurrentSessionId
-            : conversationId;
-        var binding = string.IsNullOrWhiteSpace(activeConversationId)
-            ? null
-            : _conversationWorkspace.GetRemoteBinding(activeConversationId);
-        var remoteSessionId = binding?.RemoteSessionId;
-        var boundProfileId = binding?.BoundProfileId;
-        if (!string.IsNullOrWhiteSpace(activeConversationId)
-            && string.Equals(activeConversationId, CurrentSessionId, StringComparison.Ordinal))
-        {
-            remoteSessionId ??= _currentRemoteSessionId;
-            boundProfileId ??= SelectedAcpProfile?.Id;
-        }
-
-        var overrideProjectId = string.IsNullOrWhiteSpace(activeConversationId)
-            ? null
-            : _conversationWorkspace.GetProjectAffinityOverride(activeConversationId)?.ProjectId;
-        var remoteCwd = string.IsNullOrWhiteSpace(activeConversationId)
-            ? null
-            : _sessionManager.GetSession(activeConversationId)?.Cwd;
-        var presentedState = _projectAffinityCorrectionPresenter.Present(new ChatProjectAffinityCorrectionInput(
-            ConversationId: activeConversationId,
-            RemoteSessionId: remoteSessionId,
-            BoundProfileId: boundProfileId,
-            RemoteCwd: remoteCwd,
-            OverrideProjectId: overrideProjectId,
-            SelectedOverrideProjectId: SelectedProjectAffinityOverrideProjectId,
-            Projects: _preferences.Projects.ToArray(),
-            PathMappings: _preferences.ProjectPathMappings.ToArray()));
+        var presentedState = _projectAffinityCorrectionCoordinator.Present(
+            _conversationWorkspace,
+            _sessionManager,
+            conversationId,
+            CurrentSessionId,
+            _currentRemoteSessionId,
+            SelectedAcpProfile?.Id,
+            SelectedProjectAffinityOverrideProjectId,
+            _preferences.Projects.ToArray(),
+            _preferences.ProjectPathMappings.ToArray());
 
         ProjectAffinityOverrideOptions = new ObservableCollection<ProjectAffinityOverrideOptionViewModel>(presentedState.Options);
         IsProjectAffinityCorrectionVisible = presentedState.IsVisible;
