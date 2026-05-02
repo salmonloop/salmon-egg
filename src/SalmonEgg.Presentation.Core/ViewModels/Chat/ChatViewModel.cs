@@ -97,8 +97,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private readonly ChatInputStatePresenter _inputStatePresenter;
     private readonly ChatAskUserStatePresenter _askUserStatePresenter;
     private readonly ChatPlanPanelStatePresenter _planPanelStatePresenter;
+    private readonly ChatPlanEntriesProjectionCoordinator _planEntriesProjectionCoordinator;
     private readonly ChatConversationPanelStateCoordinator _panelStateCoordinator;
     private readonly ChatTerminalProjectionCoordinator _terminalProjectionCoordinator;
+    private readonly ChatSessionHeaderActionCoordinator _sessionHeaderActionCoordinator;
     private readonly IConfigurationService _configurationService;
     private readonly AppPreferencesViewModel _preferences;
     private readonly AcpProfilesViewModel _acpProfiles;
@@ -167,7 +169,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private HydrationOverlayPhase _hydrationOverlayPhase = HydrationOverlayPhase.None;
     private string? _hydrationOverlayPhaseConversationId;
     private int _pendingSessionUpdateCount;
-    private ObservableCollection<PlanEntryViewModel>? _observedPlanEntries;
     private AskUserRequestViewModel? _observedPendingAskUserRequest;
     private string? _sessionSwitchOverlayConversationId;
     private string? _connectionLifecycleOverlayConversationId;
@@ -831,8 +832,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         _inputStatePresenter = new ChatInputStatePresenter();
         _askUserStatePresenter = new ChatAskUserStatePresenter();
         _planPanelStatePresenter = new ChatPlanPanelStatePresenter();
+        _planEntriesProjectionCoordinator = new ChatPlanEntriesProjectionCoordinator();
         _panelStateCoordinator = new ChatConversationPanelStateCoordinator();
         _terminalProjectionCoordinator = new ChatTerminalProjectionCoordinator();
+        _sessionHeaderActionCoordinator = new ChatSessionHeaderActionCoordinator();
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
         _previewStore = previewStore ?? throw new ArgumentNullException(nameof(previewStore));
         _transcriptProjectionCoordinator = new ChatTranscriptProjectionCoordinator(_previewStore);
@@ -891,7 +894,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         {
             _shellNavigationRuntimeState.PropertyChanged += OnShellNavigationRuntimeStatePropertyChanged;
         }
-        AttachPlanEntriesCollectionChanged(PlanEntries);
+        _planEntriesProjectionCoordinator.Observe(PlanEntries, RaisePlanEntryDerivedPropertyNotifications);
 
         IsConversationListLoading = _conversationWorkspace.IsConversationListLoading;
         ConversationListVersion = _conversationWorkspace.ConversationListVersion;
@@ -1246,45 +1249,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     }
 
     private void SyncPlanEntries(IReadOnlyList<ConversationPlanEntrySnapshot> planEntries)
-    {
-        var entries = planEntries ?? Array.Empty<ConversationPlanEntrySnapshot>();
-        for (int i = 0; i < entries.Count; i++)
-        {
-            var entry = entries[i];
-            if (i < PlanEntries.Count)
-            {
-                if (PlanEntries[i].Content != (entry.Content ?? string.Empty))
-                {
-                    while (PlanEntries.Count > i) PlanEntries.RemoveAt(i);
-                    PlanEntries.Add(new PlanEntryViewModel
-                    {
-                        Content = entry.Content ?? string.Empty,
-                        Status = entry.Status,
-                        Priority = entry.Priority
-                    });
-                }
-                else
-                {
-                    PlanEntries[i].Status = entry.Status;
-                    PlanEntries[i].Priority = entry.Priority;
-                }
-            }
-            else
-            {
-                PlanEntries.Add(new PlanEntryViewModel
-                {
-                    Content = entry.Content ?? string.Empty,
-                    Status = entry.Status,
-                    Priority = entry.Priority
-                });
-            }
-        }
-
-        while (PlanEntries.Count > entries.Count)
-        {
-            PlanEntries.RemoveAt(PlanEntries.Count - 1);
-        }
-    }
+        => _planEntriesProjectionCoordinator.Sync(PlanEntries, planEntries);
 
     private void ApplySelectedProfileFromStore(string? profileId)
     {
@@ -1630,7 +1595,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     partial void OnPlanEntriesChanged(ObservableCollection<PlanEntryViewModel> value)
     {
-        AttachPlanEntriesCollectionChanged(value);
+        _planEntriesProjectionCoordinator.Observe(value, RaisePlanEntryDerivedPropertyNotifications);
         RaisePlanEntryDerivedPropertyNotifications();
     }
 
@@ -2294,15 +2259,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     private void ApplyProjectAffinityOverride()
     {
-        if (string.IsNullOrWhiteSpace(CurrentSessionId)
-            || string.IsNullOrWhiteSpace(SelectedProjectAffinityOverrideProjectId))
+        if (!_sessionHeaderActionCoordinator.TryApplyProjectAffinityOverride(
+            _conversationWorkspace,
+            CurrentSessionId,
+            SelectedProjectAffinityOverrideProjectId))
         {
             return;
         }
 
-        _conversationWorkspace.UpdateProjectAffinityOverride(
-            CurrentSessionId,
-            SelectedProjectAffinityOverrideProjectId);
         RefreshProjectAffinityCorrectionState(CurrentSessionId);
         ApplyProjectAffinityOverrideCommand.NotifyCanExecuteChanged();
         ClearProjectAffinityOverrideCommand.NotifyCanExecuteChanged();
@@ -2310,12 +2274,13 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     private void ClearProjectAffinityOverride()
     {
-        if (string.IsNullOrWhiteSpace(CurrentSessionId))
+        if (!_sessionHeaderActionCoordinator.TryClearProjectAffinityOverride(
+            _conversationWorkspace,
+            CurrentSessionId))
         {
             return;
         }
 
-        _conversationWorkspace.UpdateProjectAffinityOverride(CurrentSessionId, null);
         SelectedProjectAffinityOverrideProjectId = null;
         RefreshProjectAffinityCorrectionState(CurrentSessionId);
         ApplyProjectAffinityOverrideCommand.NotifyCanExecuteChanged();
@@ -2325,12 +2290,16 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     [RelayCommand]
     private void BeginEditSessionName()
     {
-        if (!IsSessionActive || string.IsNullOrWhiteSpace(CurrentSessionId))
+        if (!_sessionHeaderActionCoordinator.TryBeginEditSessionName(
+            IsSessionActive,
+            CurrentSessionId,
+            CurrentSessionDisplayName,
+            out var editingSessionName))
         {
             return;
         }
 
-        EditingSessionName = CurrentSessionDisplayName;
+        EditingSessionName = editingSessionName;
         IsEditingSessionName = true;
     }
 
@@ -2351,10 +2320,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         }
 
         var sessionId = CurrentSessionId;
-        var sanitized = SessionNamePolicy.Sanitize(EditingSessionName);
-        var finalName = string.IsNullOrEmpty(sanitized)
-            ? SessionNamePolicy.CreateDefault(sessionId)
-            : sanitized;
+        var finalName = _sessionHeaderActionCoordinator.CommitSessionName(sessionId, EditingSessionName);
 
         RenameConversation(sessionId, finalName);
 
@@ -6776,16 +6742,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     }
 
     private void ReplacePlanEntries(IReadOnlyList<ConversationPlanEntrySnapshot> planEntries)
-    {
-        var entries = planEntries ?? Array.Empty<ConversationPlanEntrySnapshot>();
-        PlanEntries = new ObservableCollection<PlanEntryViewModel>(
-            entries.Select(entry => new PlanEntryViewModel
-            {
-                Content = entry.Content ?? string.Empty,
-                Status = entry.Status,
-                Priority = entry.Priority
-            }));
-    }
+        => PlanEntries = _planEntriesProjectionCoordinator.Replace(planEntries);
 
     private async Task<bool> CanReuseWarmCurrentConversationAsync(
         string sessionId,
@@ -8418,7 +8375,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
            {
                _shellNavigationRuntimeState.PropertyChanged -= OnShellNavigationRuntimeStatePropertyChanged;
            }
-           AttachPlanEntriesCollectionChanged(null);
+           _planEntriesProjectionCoordinator.Observe(null, null);
            if (_observedPendingAskUserRequest != null)
            {
                _observedPendingAskUserRequest.PropertyChanged -= OnPendingAskUserRequestPropertyChanged;
@@ -8448,58 +8405,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
        _conversationActivationCts = null;
        }
 
-    private void AttachPlanEntriesCollectionChanged(ObservableCollection<PlanEntryViewModel>? planEntries)
-    {
-        if (_observedPlanEntries != null)
-        {
-            _observedPlanEntries.CollectionChanged -= OnPlanEntriesCollectionChanged;
-        }
-
-        _observedPlanEntries = planEntries;
-
-        if (_observedPlanEntries != null)
-        {
-            _observedPlanEntries.CollectionChanged += OnPlanEntriesCollectionChanged;
-        }
-    }
-
-    private void OnPlanEntriesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
-        => RaisePlanEntryDerivedPropertyNotifications();
-
     private void RaisePlanEntryDerivedPropertyNotifications()
     {
         OnPropertyChanged(nameof(HasPlanEntries));
         OnPropertyChanged(nameof(ShouldShowPlanList));
         OnPropertyChanged(nameof(ShouldShowPlanEmpty));
     }
-}
-
-public sealed class ProjectAffinityOverrideOptionViewModel
-{
-    public ProjectAffinityOverrideOptionViewModel(string projectId, string displayName)
-    {
-        ProjectId = projectId ?? string.Empty;
-        DisplayName = displayName ?? string.Empty;
-    }
-
-    public string ProjectId { get; }
-
-    public string DisplayName { get; }
-}
-
-/// <summary>
-/// Session mode ViewModel
-/// </summary>
-public partial class SessionModeViewModel : ObservableObject
-{
-    [ObservableProperty]
-    private string _modeId = string.Empty;
-
-    [ObservableProperty]
-    private string _modeName = string.Empty;
-
-    [ObservableProperty]
-    private string _description = string.Empty;
 }
 
 
