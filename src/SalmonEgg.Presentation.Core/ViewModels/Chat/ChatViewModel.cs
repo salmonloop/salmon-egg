@@ -41,6 +41,7 @@ using SalmonEgg.Presentation.Core.ViewModels.Chat.Overlay;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.PlanPanel;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.ProjectAffinity;
 using SalmonEgg.Presentation.ViewModels.Chat.Transcript;
+using SalmonEgg.Presentation.ViewModels.Chat.Panels;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Settings;
@@ -95,6 +96,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private readonly ChatInputStatePresenter _inputStatePresenter;
     private readonly ChatAskUserStatePresenter _askUserStatePresenter;
     private readonly ChatPlanPanelStatePresenter _planPanelStatePresenter;
+    private readonly ChatConversationPanelStateCoordinator _panelStateCoordinator;
     private readonly IConfigurationService _configurationService;
     private readonly AppPreferencesViewModel _preferences;
     private readonly AcpProfilesViewModel _acpProfiles;
@@ -150,10 +152,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private CancellationTokenSource? _ambientConnectionRequestCts;
     private long _connectionGeneration;
     private string? _connectionInstanceId;
-    private readonly Dictionary<string, BottomPanelState> _bottomPanelStateByConversation = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, ObservableCollection<TerminalPanelSessionViewModel>> _terminalSessionsByConversation = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, string> _selectedTerminalIdByConversation = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, AskUserRequestViewModel> _pendingAskUserRequestsByConversation = new(StringComparer.Ordinal);
     private readonly ObservableCollection<AskUserQuestionViewModel> _emptyAskUserQuestions = new();
     private readonly object _sessionUpdateTrackingSync = new();
     private TaskCompletionSource<object?>? _sessionUpdatesDrainedTcs;
@@ -831,6 +829,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         _inputStatePresenter = new ChatInputStatePresenter();
         _askUserStatePresenter = new ChatAskUserStatePresenter();
         _planPanelStatePresenter = new ChatPlanPanelStatePresenter();
+        _panelStateCoordinator = new ChatConversationPanelStateCoordinator();
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
         _previewStore = previewStore ?? throw new ArgumentNullException(nameof(previewStore));
         _transcriptProjectionCoordinator = new ChatTranscriptProjectionCoordinator(_previewStore);
@@ -1665,9 +1664,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             EditingSessionName = string.Empty;
         }
 
-        SyncBottomPanelState(value);
+        SyncConversationPanelState(value);
         _ = ActivateLocalTerminalPanelAsync(value);
-        SyncPendingAskUserRequestState(value);
         RefreshProjectAffinityCorrectionState(value);
         ApplyProjectAffinityOverrideCommand.NotifyCanExecuteChanged();
         ClearProjectAffinityOverrideCommand.NotifyCanExecuteChanged();
@@ -1681,10 +1679,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             return;
         }
 
-        if (_bottomPanelStateByConversation.TryGetValue(conversationId, out var state))
-        {
-            state.Selected = value;
-        }
+        _panelStateCoordinator.UpdateSelectedTab(conversationId, value);
     }
 
     private async Task SelectAndHydrateConversationAsync(string? conversationId)
@@ -4223,63 +4218,18 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         return true;
     }
 
-    private void SyncBottomPanelState(string? conversationId)
+    private void SyncConversationPanelState(string? conversationId)
     {
+        var selection = _panelStateCoordinator.SyncConversation(conversationId);
+        BottomPanelTabs = selection.Tabs;
+        SelectedBottomPanelTab = selection.SelectedTab;
+        TerminalSessions = selection.TerminalSessions;
+        SelectedTerminalSession = selection.SelectedTerminal;
+        PendingAskUserRequest = selection.PendingAskUserRequest;
         if (string.IsNullOrWhiteSpace(conversationId))
         {
-            BottomPanelTabs = new ObservableCollection<BottomPanelTabViewModel>();
-            SelectedBottomPanelTab = null;
-            SyncTerminalPanelState(conversationId);
-            return;
-        }
-
-        if (!_bottomPanelStateByConversation.TryGetValue(conversationId, out var state))
-        {
-            state = new BottomPanelState(CreateDefaultBottomPanelTabs());
-            _bottomPanelStateByConversation[conversationId] = state;
-        }
-
-        EnsureSelectedBottomPanelTab(state);
-        BottomPanelTabs = state.Tabs;
-        SelectedBottomPanelTab = state.Selected;
-        SyncTerminalPanelState(conversationId);
-    }
-
-    private static ObservableCollection<BottomPanelTabViewModel> CreateDefaultBottomPanelTabs()
-        => new()
-        {
-            new BottomPanelTabViewModel("terminal", "BottomPanelTerminalTab.Text"),
-            new BottomPanelTabViewModel("output", "BottomPanelOutputTab.Text")
-        };
-
-    private static void EnsureSelectedBottomPanelTab(BottomPanelState state)
-    {
-        if (state.Selected != null && state.Tabs.Contains(state.Selected))
-        {
-            return;
-        }
-
-        state.Selected = state.Tabs.FirstOrDefault();
-    }
-
-    private void SyncTerminalPanelState(string? conversationId)
-    {
-        if (string.IsNullOrWhiteSpace(conversationId))
-        {
-            TerminalSessions = new ObservableCollection<TerminalPanelSessionViewModel>();
-            SelectedTerminalSession = null;
             ActiveLocalTerminalSession = null;
-            return;
         }
-
-        if (!_terminalSessionsByConversation.TryGetValue(conversationId, out var sessions))
-        {
-            sessions = new ObservableCollection<TerminalPanelSessionViewModel>();
-            _terminalSessionsByConversation[conversationId] = sessions;
-        }
-
-        TerminalSessions = sessions;
-        SelectedTerminalSession = ResolveSelectedTerminalSession(conversationId, sessions);
     }
 
     private async Task ActivateLocalTerminalPanelAsync(string? conversationId)
@@ -4347,23 +4297,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         }
     }
 
-    private TerminalPanelSessionViewModel? ResolveSelectedTerminalSession(
-        string conversationId,
-        ObservableCollection<TerminalPanelSessionViewModel> sessions)
-    {
-        if (_selectedTerminalIdByConversation.TryGetValue(conversationId, out var selectedId))
-        {
-            var selected = sessions.FirstOrDefault(session =>
-                string.Equals(session.TerminalId, selectedId, StringComparison.Ordinal));
-            if (selected != null)
-            {
-                return selected;
-            }
-        }
-
-        return sessions.LastOrDefault();
-    }
-
     private void RemoveBottomPanelState(string conversationId)
     {
         if (string.IsNullOrWhiteSpace(conversationId))
@@ -4371,20 +4304,20 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             return;
         }
 
-        _bottomPanelStateByConversation.Remove(conversationId);
-        _terminalSessionsByConversation.Remove(conversationId);
-        _selectedTerminalIdByConversation.Remove(conversationId);
-        RemovePendingAskUserRequestState(conversationId);
+        var selection = _panelStateCoordinator.RemoveConversation(
+            conversationId,
+            string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal));
         _ = _chatStore.Dispatch(new ClearConversationRuntimeStateAction(conversationId));
         _ = RemoveLocalTerminalSessionAsync(conversationId);
 
         if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
         {
-            BottomPanelTabs = new ObservableCollection<BottomPanelTabViewModel>();
-            SelectedBottomPanelTab = null;
-            TerminalSessions = new ObservableCollection<TerminalPanelSessionViewModel>();
-            SelectedTerminalSession = null;
+            BottomPanelTabs = selection.Tabs;
+            SelectedBottomPanelTab = selection.SelectedTab;
+            TerminalSessions = selection.TerminalSessions;
+            SelectedTerminalSession = selection.SelectedTerminal;
             ActiveLocalTerminalSession = null;
+            PendingAskUserRequest = selection.PendingAskUserRequest;
         }
     }
 
@@ -4498,27 +4431,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
             await PostToUiAsync(() =>
             {
-                _pendingAskUserRequestsByConversation[conversationId!] = requestViewModel;
-                SyncPendingAskUserRequestState(CurrentSessionId);
+                _panelStateCoordinator.StoreAskUserRequest(conversationId!, requestViewModel);
+                PendingAskUserRequest = _panelStateCoordinator.GetPendingAskUserRequest(CurrentSessionId);
             }).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error processing ask-user request");
         }
-    }
-
-    private void SyncPendingAskUserRequestState(string? conversationId)
-    {
-        if (string.IsNullOrWhiteSpace(conversationId))
-        {
-            PendingAskUserRequest = null;
-            return;
-        }
-
-        PendingAskUserRequest = _pendingAskUserRequestsByConversation.TryGetValue(conversationId, out var request)
-            ? request
-            : null;
     }
 
     private void RemovePendingAskUserRequestState(string conversationId)
@@ -4528,10 +4448,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             return;
         }
 
-        _pendingAskUserRequestsByConversation.Remove(conversationId);
+        _panelStateCoordinator.RemoveAskUserRequest(conversationId);
         if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
         {
-            PendingAskUserRequest = null;
+            PendingAskUserRequest = _panelStateCoordinator.GetPendingAskUserRequest(conversationId);
         }
     }
 
@@ -4693,7 +4613,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             return;
         }
 
-        var terminal = GetOrCreateTerminalSession(conversationId, terminalId);
+        var terminal = _panelStateCoordinator.GetOrCreateTerminalSession(conversationId, terminalId);
 
         terminal.LastMethod = request.Method ?? string.Empty;
         ApplyTerminalPayload(terminal, request.RawParams);
@@ -4707,7 +4627,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             return;
         }
 
-        var terminal = GetOrCreateTerminalSession(conversationId, update.TerminalId);
+        var terminal = _panelStateCoordinator.GetOrCreateTerminalSession(conversationId, update.TerminalId);
         terminal.LastMethod = update.Method ?? string.Empty;
 
         if (update.Output != null)
@@ -4733,36 +4653,16 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         SelectTerminalForConversation(conversationId, terminal);
     }
 
-    private TerminalPanelSessionViewModel GetOrCreateTerminalSession(string conversationId, string terminalId)
-    {
-        if (!_terminalSessionsByConversation.TryGetValue(conversationId, out var sessions))
-        {
-            sessions = new ObservableCollection<TerminalPanelSessionViewModel>();
-            _terminalSessionsByConversation[conversationId] = sessions;
-        }
-
-        var terminal = sessions.FirstOrDefault(session =>
-            string.Equals(session.TerminalId, terminalId, StringComparison.Ordinal));
-        if (terminal != null)
-        {
-            return terminal;
-        }
-
-        terminal = new TerminalPanelSessionViewModel(terminalId)
-        {
-            DisplayName = terminalId
-        };
-        sessions.Add(terminal);
-        return terminal;
-    }
-
     private void SelectTerminalForConversation(string conversationId, TerminalPanelSessionViewModel terminal)
     {
-        _selectedTerminalIdByConversation[conversationId] = terminal.TerminalId;
+        var selection = _panelStateCoordinator.SelectTerminal(
+            conversationId,
+            terminal,
+            string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal));
         if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
         {
-            TerminalSessions = _terminalSessionsByConversation[conversationId];
-            SelectedTerminalSession = terminal;
+            TerminalSessions = selection.TerminalSessions;
+            SelectedTerminalSession = selection.SelectedTerminal;
         }
     }
 
@@ -6324,7 +6224,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             ClearError();
             await _acpConnectionCommands.DisconnectAsync(this);
             await _chatStore.Dispatch(new ResetConversationRuntimeStatesAction()).ConfigureAwait(false);
-            _pendingAskUserRequestsByConversation.Clear();
+            _panelStateCoordinator.ClearAskUserRequests();
             PendingAskUserRequest = null;
         }
         catch (Exception ex)
@@ -7235,7 +7135,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             _remoteHydrationKnownTranscriptGrowthGraceDeadlineUtc.Clear();
             _hydrationOverlayPhase = HydrationOverlayPhase.None;
             _hydrationOverlayPhaseConversationId = null;
-            _pendingAskUserRequestsByConversation.Clear();
+            _panelStateCoordinator.ClearAskUserRequests();
             PendingAskUserRequest = null;
         }
         _chatService = chatService;
@@ -7283,7 +7183,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             _remoteHydrationKnownTranscriptGrowthGraceDeadlineUtc.Clear();
             _hydrationOverlayPhase = HydrationOverlayPhase.None;
             _hydrationOverlayPhaseConversationId = null;
-            _pendingAskUserRequestsByConversation.Clear();
+            _panelStateCoordinator.ClearAskUserRequests();
             PendingAskUserRequest = null;
         }
 
@@ -8573,18 +8473,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         public Task ClearAuthenticationRequiredAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task ResetAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task ResyncAsync(IAcpChatCoordinatorSink sink, CancellationToken cancellationToken = default) => Task.CompletedTask;
-    }
-
-    private sealed class BottomPanelState
-    {
-        public ObservableCollection<BottomPanelTabViewModel> Tabs { get; }
-        public BottomPanelTabViewModel? Selected { get; set; }
-
-        public BottomPanelState(ObservableCollection<BottomPanelTabViewModel> tabs)
-        {
-            Tabs = tabs;
-            Selected = tabs.FirstOrDefault();
-        }
     }
 
     private sealed class ConversationActivationLease
