@@ -1633,6 +1633,98 @@ public sealed class ChatSkeletonSmokeTests
     }
 
     [SkippableFact]
+    public void HydratedCrossProfileRemoteSession_SwitchToOtherRemoteSessionAndBack_ReturnsHotWithoutRemoteReload()
+    {
+        var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
+        Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", "1500");
+
+        try
+        {
+            using var appData = GuiAppDataScope.CreateDeterministicCrossProfileRemoteReplayData(
+                cachedMessageCount: 1,
+                replayMessageCount: 24,
+                localMessageCount: 4);
+            using var session = WindowsGuiAppSession.LaunchFresh();
+
+            ActivateNavItem(
+                session,
+                appData,
+                "MainNav.Session.gui-remote-conversation-01",
+                "cross-profile-remote-a-b-a-hot-return-open-a");
+            var initialOverlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(30));
+            Assert.True(initialOverlayHidden, "Initial cross-profile remote session A hydration did not complete before switching to session B.");
+
+            var initialHeader = WaitForSessionHeader(
+                session,
+                expectedTitle: "GUI Remote Session 01",
+                scenario: "cross-profile-remote-a-b-a-hot-return-initial-a",
+                appData);
+            Assert.Contains("GUI Remote Session 01", initialHeader.Name, StringComparison.Ordinal);
+
+            ActivateNavItem(
+                session,
+                appData,
+                "MainNav.Session.gui-remote-conversation-02",
+                "cross-profile-remote-a-b-a-hot-return-open-b");
+            var secondOverlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(30));
+            Assert.True(secondOverlayHidden, "Cross-profile remote session B hydration did not complete before returning to session A.");
+
+            var secondHeader = WaitForSessionHeader(
+                session,
+                expectedTitle: "GUI Remote Session 02",
+                scenario: "cross-profile-remote-a-b-a-hot-return-session-b",
+                appData);
+            Assert.Contains("GUI Remote Session 02", secondHeader.Name, StringComparison.Ordinal);
+
+            ActivateNavItem(
+                session,
+                appData,
+                "MainNav.Session.gui-remote-conversation-01",
+                "cross-profile-remote-a-b-a-hot-return-back-a");
+
+            var hotHeaderVisible = session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(4));
+            Assert.True(hotHeaderVisible, "Returning to cross-profile remote session A did not restore the chat header quickly.");
+
+            var hotHeader = session.FindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(1));
+            Assert.Contains("GUI Remote Session 01", hotHeader.Name, StringComparison.Ordinal);
+
+            var hotOverlayTimeline = new List<string>();
+            var hotOverlayDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+            while (DateTime.UtcNow < hotOverlayDeadline)
+            {
+                var hotOverlayMaskVisible = session.TryFindByAutomationId("ChatView.LoadingOverlayMask", TimeSpan.FromMilliseconds(100)) is not null;
+                var hotOverlayStatusVisible = session.TryFindByAutomationId("ChatView.LoadingOverlayStatus", TimeSpan.FromMilliseconds(100)) is not null;
+
+                hotOverlayTimeline.Add(
+                    $"{DateTime.UtcNow:HH:mm:ss.fff} mask={hotOverlayMaskVisible} status={hotOverlayStatusVisible}");
+
+                if (hotOverlayMaskVisible || hotOverlayStatusVisible)
+                {
+                    ThrowWithScreenshot(
+                        session,
+                        appData,
+                        "cross-profile-remote-a-b-a-hot-return-overlay-visible",
+                        $"Returning to cross-profile remote session A surfaced the loading overlay instead of staying hot.{Environment.NewLine}{string.Join(Environment.NewLine, hotOverlayTimeline)}");
+                }
+
+                Thread.Sleep(100);
+            }
+
+            var appDataRoot = Environment.GetEnvironmentVariable("SALMONEGG_APPDATA_ROOT")
+                ?? throw new Xunit.Sdk.XunitException("SALMONEGG_APPDATA_ROOT was not set for deterministic GUI smoke data.");
+            var logsRoot = Path.Combine(
+                appDataRoot,
+                "logs");
+            var sessionALoadCount = CountSessionLoadEvents(logsRoot, "gui-remote-session-01");
+            Assert.Equal(1, sessionALoadCount);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", previousSlowLoadDelay);
+        }
+    }
+
+    [SkippableFact]
     public void BackgroundRemoteSession_LiveAgentUpdate_ShowsUnreadAndClearsWhenActivated()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");

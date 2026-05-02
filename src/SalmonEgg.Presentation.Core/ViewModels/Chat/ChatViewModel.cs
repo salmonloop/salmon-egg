@@ -3790,6 +3790,30 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             return false;
         }
 
+        state = await _chatStore.State ?? ChatState.Empty;
+        binding = await ResolveConversationBindingAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        var currentConnectionInstanceId = await GetAuthoritativeConnectionInstanceIdAsync().ConfigureAwait(false);
+        var warmRuntimeAfterProfileReconnect = warmRuntimeSnapshot ?? state.ResolveRuntimeState(sessionId);
+        if (ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
+            warmRuntimeAfterProfileReconnect,
+            binding,
+            currentConnectionInstanceId))
+        {
+            Logger.LogInformation(
+                "Skipping remote hydration because the selected conversation became warm after restoring the reusable profile connection. ConversationId={ConversationId}",
+                sessionId);
+            await SetConversationRuntimeStateAsync(
+                    sessionId,
+                    ConversationRuntimePhase.Warm,
+                    binding,
+                    reason: "WarmReuseAfterProfileReconnect",
+                    cancellationToken,
+                    connectionInstanceId: currentConnectionInstanceId)
+                .ConfigureAwait(false);
+            await ClearConversationUnreadAttentionAsync(sessionId).ConfigureAwait(false);
+            return true;
+        }
+
         var remotePhaseStopwatch = Stopwatch.StartNew();
         await _remoteConversationActivationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -7678,29 +7702,30 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         }
 
         var state = await _chatStore.State ?? ChatState.Empty;
+        var currentConnectionInstanceId = await GetAuthoritativeConnectionInstanceIdAsync().ConfigureAwait(false);
         if (ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
             state.ResolveRuntimeState(conversationId),
             binding,
-            ConnectionInstanceId))
+            currentConnectionInstanceId))
         {
             Logger.LogInformation(
                 "Skipping remote hydration for conversation because runtime state is warm. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId} ConnectionInstanceId={ConnectionInstanceId}",
                 conversationId,
                 binding.RemoteSessionId,
-                ConnectionInstanceId);
+                currentConnectionInstanceId);
             return true;
         }
 
         {
             var runtimeState = state.ResolveRuntimeState(conversationId);
             var denialReason = ConversationWarmReusePolicy.GetWarmReuseDenialReason(
-                runtimeState, binding, ConnectionInstanceId);
+                runtimeState, binding, currentConnectionInstanceId);
             Logger.LogInformation(
                 "Warm reuse denied in HydrateConversationAsync, falling back to slow hydration. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId} ExpectedConnectionInstanceId={ExpectedConnectionInstanceId} ActualConnectionInstanceId={ActualConnectionInstanceId} Reason={Reason}",
                 conversationId,
                 binding.RemoteSessionId,
                 runtimeState?.ConnectionInstanceId,
-                ConnectionInstanceId,
+                currentConnectionInstanceId,
                 denialReason);
         }
 
@@ -7851,6 +7876,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         }
 
         return string.Equals(requiredProfileId, connectionState.ForegroundTransportProfileId, StringComparison.Ordinal);
+    }
+
+    private async Task<string?> GetAuthoritativeConnectionInstanceIdAsync()
+    {
+        var connectionState = await _chatConnectionStore.State ?? ChatConnectionState.Empty;
+        return string.IsNullOrWhiteSpace(connectionState.ConnectionInstanceId)
+            ? ConnectionInstanceId
+            : connectionState.ConnectionInstanceId;
     }
 
     private async Task<bool> WaitForRemoteConnectionReadyAsync(

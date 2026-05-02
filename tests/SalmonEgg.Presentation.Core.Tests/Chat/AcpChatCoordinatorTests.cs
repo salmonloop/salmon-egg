@@ -277,6 +277,39 @@ public sealed class AcpChatCoordinatorTests
     }
 
     [Fact]
+    public async Task ConnectToProfileAsync_WhenConversationIsPreserved_UsesPoolOnlyServiceReplaceIntent()
+    {
+        var transport = new FakeTransportConfiguration();
+        var sink = new FakeSink();
+        var service = CreateChatService();
+        var factory = new Mock<IAcpChatServiceFactory>();
+        var logger = new Mock<ILogger<AcpChatCoordinator>>();
+
+        factory
+            .Setup(x => x.CreateChatService(TransportType.Stdio, "agent.exe", "--serve", null))
+            .Returns(service.Object);
+
+        var sut = new AcpChatCoordinator(factory.Object, logger.Object);
+        var profile = new ServerConfiguration
+        {
+            Id = "profile-1",
+            Name = "Agent",
+            Transport = TransportType.Stdio,
+            StdioCommand = "agent.exe",
+            StdioArgs = "--serve"
+        };
+
+        await sut.ConnectToProfileAsync(
+            profile,
+            transport,
+            sink,
+            new AcpConnectionContext("conv-1", PreserveConversation: true, ActivationVersion: 1));
+
+        Assert.Contains(ServiceReplaceIntent.PoolOnly, sink.ReplaceChatServiceIntents);
+        Assert.DoesNotContain(ServiceReplaceIntent.ForegroundOwner, sink.ReplaceChatServiceIntents);
+    }
+
+    [Fact]
     public async Task ConnectToProfileAsync_WhenProfileConfigChangesOnlyByWhitespaceAndArgSpacing_ReusesSession()
     {
         var transport = new FakeTransportConfiguration();
@@ -1795,6 +1828,7 @@ public sealed class AcpChatCoordinatorTests
         public int ClearedRemoteSessionBindings { get; private set; }
         public List<(string RemoteSessionId, string? ProfileId, bool PreserveConversation)> BoundRemoteSessions { get; } = new();
         public List<IChatService?> ReplaceChatServiceCalls { get; } = new();
+        public List<ServiceReplaceIntent> ReplaceChatServiceIntents { get; } = new();
         public FakeBindingCommands BindingCommands { get; }
         public int ResetHydratedConversationForResyncCalls { get; private set; }
 
@@ -1813,6 +1847,14 @@ public sealed class AcpChatCoordinatorTests
         {
             ReplaceChatServiceCalls.Add(chatService);
             CurrentChatService = chatService;
+        }
+
+        public Task ReplaceChatServiceAsync(IChatService? chatService, ServiceReplaceIntent intent, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ReplaceChatServiceIntents.Add(intent);
+            ReplaceChatService(chatService);
+            return Task.CompletedTask;
         }
 
         public void UpdateConnectionState(bool isConnecting, bool isConnected, bool isInitialized, string? errorMessage)

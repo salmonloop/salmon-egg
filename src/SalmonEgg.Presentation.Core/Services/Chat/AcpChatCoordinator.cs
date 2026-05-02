@@ -163,6 +163,9 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
 
         var previousConnectionState = CaptureConnectionState(sink);
         await _connectionCoordinator.SetConnectingAsync(sink.SelectedProfileId, applyToken).ConfigureAwait(false);
+        var replaceIntent = connectionContext.PreserveConversation
+            ? ServiceReplaceIntent.PoolOnly
+            : ServiceReplaceIntent.ForegroundOwner;
 
         if (_connectionPoolManager.TryGetReusableSession(
                 selectedProfileId,
@@ -172,7 +175,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             applyToken.ThrowIfCancellationRequested();
 
             var currentService = sink.CurrentChatService;
-            await sink.ReplaceChatServiceAsync(cachedSession.Service, applyToken).ConfigureAwait(false);
+            await sink.ReplaceChatServiceAsync(cachedSession.Service, replaceIntent, applyToken).ConfigureAwait(false);
             _activeChatServiceAdapter = cachedSession.Service;
             sink.UpdateAgentIdentity(
                 ResolveDisplayAgentName(cachedSession.InitializeResponse.AgentInfo),
@@ -234,7 +237,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
                 connectionContext.ConversationId);
             applyToken.ThrowIfCancellationRequested();
 
-            await sink.ReplaceChatServiceAsync(wrappedService, applyToken).ConfigureAwait(false);
+            await sink.ReplaceChatServiceAsync(wrappedService, replaceIntent, applyToken).ConfigureAwait(false);
             _activeChatServiceAdapter = wrappedService;
             committed = true;
             if (!ShouldKeepServiceAlive(previousService, selectedProfileId))
