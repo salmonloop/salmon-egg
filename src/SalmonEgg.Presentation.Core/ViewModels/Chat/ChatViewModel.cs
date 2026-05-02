@@ -100,6 +100,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private readonly ChatPlanEntriesProjectionCoordinator _planEntriesProjectionCoordinator;
     private readonly ChatConversationPanelStateCoordinator _panelStateCoordinator;
     private readonly ChatTerminalProjectionCoordinator _terminalProjectionCoordinator;
+    private readonly ChatInteractionEventBridge _interactionEventBridge;
     private readonly ChatSessionHeaderActionCoordinator _sessionHeaderActionCoordinator;
     private readonly IConfigurationService _configurationService;
     private readonly AppPreferencesViewModel _preferences;
@@ -835,6 +836,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         _planEntriesProjectionCoordinator = new ChatPlanEntriesProjectionCoordinator();
         _panelStateCoordinator = new ChatConversationPanelStateCoordinator();
         _terminalProjectionCoordinator = new ChatTerminalProjectionCoordinator();
+        _interactionEventBridge = new ChatInteractionEventBridge(_authoritativeRemoteSessionRouter, _terminalProjectionCoordinator);
         _sessionHeaderActionCoordinator = new ChatSessionHeaderActionCoordinator();
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
         _previewStore = previewStore ?? throw new ArgumentNullException(nameof(previewStore));
@@ -4375,32 +4377,18 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     {
         try
         {
-            var conversationId = await _authoritativeRemoteSessionRouter.ResolveConversationIdAsync(e.SessionId).ConfigureAwait(false);
-            if (string.IsNullOrWhiteSpace(conversationId))
+            var projection = await _interactionEventBridge.BuildAskUserRequestAsync(
+                e,
+                conversationId => PostToUiAsync(() => RemovePendingAskUserRequestState(conversationId)),
+                Logger).ConfigureAwait(false);
+            if (projection is null)
             {
-                Logger.LogWarning("Ask-user request ignored because no bound conversation matched remote session {RemoteSessionId}", e.SessionId);
                 return;
             }
 
-            AskUserRequestViewModel? requestViewModel = null;
-            requestViewModel = AskUserInteractionViewModelFactory.Create(
-                e.Request,
-                e.MessageId,
-                async answers =>
-                {
-                    var succeeded = await e.Respond(answers).ConfigureAwait(true);
-                    if (!succeeded)
-                    {
-                        return false;
-                    }
-
-                    await PostToUiAsync(() => RemovePendingAskUserRequestState(conversationId!)).ConfigureAwait(true);
-                    return true;
-                });
-
             await PostToUiAsync(() =>
             {
-                _panelStateCoordinator.StoreAskUserRequest(conversationId!, requestViewModel);
+                _panelStateCoordinator.StoreAskUserRequest(projection.Value.ConversationId, projection.Value.ViewModel);
                 PendingAskUserRequest = _panelStateCoordinator.GetPendingAskUserRequest(CurrentSessionId);
             }).ConfigureAwait(true);
         }
@@ -4429,7 +4417,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         _uiDispatcher.Enqueue(() => {
             try
             {
-                PendingPermissionRequest = ChatInteractionDialogFactory.CreatePermissionRequestViewModel(
+                PendingPermissionRequest = _interactionEventBridge.CreatePermissionRequestViewModel(
                     e,
                     async (messageId, outcome, optionId) =>
                     {
@@ -4459,7 +4447,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         _uiDispatcher.Enqueue(() => {
             try
             {
-                PendingFileSystemRequest = ChatInteractionDialogFactory.CreateFileSystemRequestViewModel(
+                PendingFileSystemRequest = _interactionEventBridge.CreateFileSystemRequestViewModel(
                     e,
                     async (messageId, success, content, message) =>
                     {
@@ -4515,14 +4503,17 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     {
         try
         {
-            var conversationId = await _authoritativeRemoteSessionRouter.ResolveConversationIdAsync(request.SessionId).ConfigureAwait(false);
-            if (string.IsNullOrWhiteSpace(conversationId))
+            var projection = await _interactionEventBridge.BuildTerminalRequestSelectionAsync(
+                request,
+                _panelStateCoordinator,
+                CurrentSessionId,
+                Logger).ConfigureAwait(false);
+            if (projection is null)
             {
-                Logger.LogWarning("Terminal request ignored because no bound conversation matched remote session {RemoteSessionId}", request.SessionId);
                 return;
             }
 
-            await PostToUiAsync(() => ApplyTerminalRequestProjection(conversationId, request)).ConfigureAwait(false);
+            await PostToUiAsync(() => ApplyTerminalSelection(projection.Value.ConversationId, projection.Value.Selection)).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -4534,14 +4525,17 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     {
         try
         {
-            var conversationId = await _authoritativeRemoteSessionRouter.ResolveConversationIdAsync(update.SessionId).ConfigureAwait(false);
-            if (string.IsNullOrWhiteSpace(conversationId))
+            var projection = await _interactionEventBridge.BuildTerminalStateSelectionAsync(
+                update,
+                _panelStateCoordinator,
+                CurrentSessionId,
+                Logger).ConfigureAwait(false);
+            if (projection is null)
             {
-                Logger.LogWarning("Terminal state ignored because no bound conversation matched remote session {RemoteSessionId}", update.SessionId);
                 return;
             }
 
-            await PostToUiAsync(() => ApplyTerminalStateProjection(conversationId, update)).ConfigureAwait(false);
+            await PostToUiAsync(() => ApplyTerminalSelection(projection.Value.ConversationId, projection.Value.Selection)).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -4549,30 +4543,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         }
     }
 
-    private void ApplyTerminalRequestProjection(string conversationId, TerminalRequestEventArgs request)
+    private void ApplyTerminalSelection(string conversationId, ChatConversationPanelSelection selection)
     {
-        if (_terminalProjectionCoordinator.TryApplyRequest(
-            _panelStateCoordinator,
-            conversationId,
-            request,
-            string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal),
-            out var selection)
-            && string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
-        {
-            TerminalSessions = selection.TerminalSessions;
-            SelectedTerminalSession = selection.SelectedTerminal;
-        }
-    }
-
-    private void ApplyTerminalStateProjection(string conversationId, TerminalStateChangedEventArgs update)
-    {
-        if (_terminalProjectionCoordinator.TryApplyState(
-            _panelStateCoordinator,
-            conversationId,
-            update,
-            string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal),
-            out var selection)
-            && string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
+        if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
         {
             TerminalSessions = selection.TerminalSessions;
             SelectedTerminalSession = selection.SelectedTerminal;
