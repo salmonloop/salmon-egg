@@ -99,8 +99,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private readonly ChatPlanPanelStatePresenter _planPanelStatePresenter;
     private readonly ChatPlanEntriesProjectionCoordinator _planEntriesProjectionCoordinator;
     private readonly ChatConversationPanelStateCoordinator _panelStateCoordinator;
+    private readonly ChatConversationPanelRuntimeCoordinator _panelRuntimeCoordinator;
     private readonly ChatTerminalProjectionCoordinator _terminalProjectionCoordinator;
     private readonly ChatInteractionEventBridge _interactionEventBridge;
+    private readonly ChatAuthenticationCoordinator _authenticationCoordinator;
     private readonly ChatSessionHeaderActionCoordinator _sessionHeaderActionCoordinator;
     private readonly IConfigurationService _configurationService;
     private readonly AppPreferencesViewModel _preferences;
@@ -138,7 +140,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
     private IDisposable? _storeStateSubscription;
     private IDisposable? _connectionStateSubscription;
     private string? _currentRemoteSessionId;
-    private IReadOnlyList<AuthMethodDefinition>? _advertisedAuthMethods;
     private bool _suppressStoreProfileProjection;
     private bool _suppressStorePromptProjection;
     private bool _suppressProfileSyncFromStore;
@@ -835,8 +836,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         _planPanelStatePresenter = new ChatPlanPanelStatePresenter();
         _planEntriesProjectionCoordinator = new ChatPlanEntriesProjectionCoordinator();
         _panelStateCoordinator = new ChatConversationPanelStateCoordinator();
+        _panelRuntimeCoordinator = new ChatConversationPanelRuntimeCoordinator();
         _terminalProjectionCoordinator = new ChatTerminalProjectionCoordinator();
         _interactionEventBridge = new ChatInteractionEventBridge(_authoritativeRemoteSessionRouter, _terminalProjectionCoordinator);
+        _authenticationCoordinator = new ChatAuthenticationCoordinator();
         _sessionHeaderActionCoordinator = new ChatSessionHeaderActionCoordinator();
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
         _previewStore = previewStore ?? throw new ArgumentNullException(nameof(previewStore));
@@ -2621,9 +2624,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
             await PostToUiAsync(() =>
             {
-                CacheAuthMethods(result.InitializeResponse);
-                ClearAuthenticationRequirement();
-                UpdateAgentInfo();
+                _authenticationCoordinator.CacheAuthMethods(result.InitializeResponse);
+                _authenticationCoordinator.ClearAuthenticationRequirement(_acpConnectionCoordinator);
+                _ = _authenticationCoordinator.UpdateAgentInfoAsync(_chatService, _chatStore, SelectedProfileId);
                 ShowTransportConfigPanel = false;
             }).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
@@ -2677,9 +2680,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
                         .ApplyTransportConfigurationAsync(TransportConfig, this, preserveConversation)
                         .ConfigureAwait(false);
 
-            CacheAuthMethods(result.InitializeResponse);
-            ClearAuthenticationRequirement();
-            UpdateAgentInfo();
+            _authenticationCoordinator.CacheAuthMethods(result.InitializeResponse);
+            _authenticationCoordinator.ClearAuthenticationRequirement(_acpConnectionCoordinator);
+            _ = _authenticationCoordinator.UpdateAgentInfoAsync(_chatService, _chatStore, SelectedProfileId);
 
                 if (string.IsNullOrWhiteSpace(CurrentSessionId))
                 {
@@ -2741,7 +2744,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             chatService.AskUserRequestReceived += OnAskUserRequestReceived;
             chatService.ErrorOccurred += OnErrorOccurred;
 
-           UpdateAgentInfo();
+           _ = _authenticationCoordinator.UpdateAgentInfoAsync(_chatService, _chatStore, SelectedProfileId);
        }
 
        private void UnsubscribeFromChatService(IChatService chatService)
@@ -2763,7 +2766,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
           {
               SubscribeToChatService(_chatService);
 
-              UpdateAgentInfo();
+              _ = _authenticationCoordinator.UpdateAgentInfoAsync(_chatService, _chatStore, SelectedProfileId);
 
           }
       }
@@ -4191,7 +4194,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
     private void SyncConversationPanelState(string? conversationId)
     {
-        var selection = _panelStateCoordinator.SyncConversation(conversationId);
+        var selection = _panelRuntimeCoordinator.SyncConversation(_panelStateCoordinator, conversationId);
         BottomPanelTabs = selection.Tabs;
         SelectedBottomPanelTab = selection.SelectedTab;
         TerminalSessions = selection.TerminalSessions;
@@ -4214,12 +4217,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
 
         try
         {
-            var state = await _chatStore.State ?? ChatState.Empty;
-            var binding = state.ResolveBinding(conversationId);
-            var isLocalSession = binding is null || string.IsNullOrWhiteSpace(binding.RemoteSessionId);
-            var sessionInfoCwd = ResolveLocalTerminalSessionInfoCwd(conversationId, state);
-            var terminalSession = await _localTerminalPanelCoordinator
-                .ActivateAsync(conversationId, isLocalSession, sessionInfoCwd)
+            var terminalSession = await _panelRuntimeCoordinator
+                .ActivateLocalTerminalSessionAsync(_localTerminalPanelCoordinator, _chatStore, _sessionManager, conversationId)
                 .ConfigureAwait(true);
 
             if (version == Interlocked.Read(ref _localTerminalActivationVersion)
@@ -4239,17 +4238,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         {
             Logger.LogWarning(ex, "Unexpected error while activating local terminal panel. ConversationId={ConversationId}", conversationId);
         }
-    }
-
-    private string? ResolveLocalTerminalSessionInfoCwd(string conversationId, ChatState state)
-    {
-        var sessionCwd = _sessionManager.GetSession(conversationId)?.Cwd?.Trim();
-        if (!string.IsNullOrWhiteSpace(sessionCwd))
-        {
-            return sessionCwd;
-        }
-
-        return state.ResolveSessionStateSlice(conversationId)?.SessionInfo?.Cwd?.Trim();
     }
 
     private async Task RemoveLocalTerminalSessionAsync(string conversationId)
@@ -4275,7 +4263,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             return;
         }
 
-        var selection = _panelStateCoordinator.RemoveConversation(
+        var selection = _panelRuntimeCoordinator.RemoveConversation(
+            _panelStateCoordinator,
             conversationId,
             string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal));
         _ = _chatStore.Dispatch(new ClearConversationRuntimeStateAction(conversationId));
@@ -4569,115 +4558,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
         });
     }
 
-    private void UpdateAgentInfo()
-    {
-        if (_chatService?.AgentInfo != null)
-        {
-            _ = _chatStore.Dispatch(new SetAgentIdentityAction(
-                SelectedProfileId,
-                ResolveDisplayedAgentName(_chatService.AgentInfo),
-                _chatService.AgentInfo.Version));
-        }
-    }
-
-    private static string? ResolveDisplayedAgentName(AgentInfo? agentInfo)
-    {
-        if (agentInfo is null)
-        {
-            return null;
-        }
-
-        return string.IsNullOrWhiteSpace(agentInfo.Title)
-            ? agentInfo.Name
-            : agentInfo.Title;
-    }
-
-    private void CacheAuthMethods(InitializeResponse initResponse)
-    {
-        _advertisedAuthMethods = initResponse.AuthMethods;
-    }
-
-    private AuthMethodDefinition? GetPrimaryAuthMethod() =>
-        _advertisedAuthMethods?.FirstOrDefault(m => !string.IsNullOrWhiteSpace(m.Id));
-
-    private void ClearAuthenticationRequirement()
-    {
-        _ = _acpConnectionCoordinator.ClearAuthenticationRequiredAsync();
-    }
-
-    private void MarkAuthenticationRequired(AuthMethodDefinition? method, string? messageOverride = null)
-    {
-        var message =
-            messageOverride
-            ?? method?.Description
-            ?? "The agent requires authentication before it can respond.";
-
-        _ = _acpConnectionCoordinator.SetAuthenticationRequiredAsync(message);
-
-        if (method != null)
-        {
-            Logger.LogInformation(
-                "Agent requires authentication. id={MethodId}, name={Name}, hint={Hint}",
-                method.Id,
-                method.Name,
-                message);
-        }
-        else
-        {
-            Logger.LogInformation("Agent requires authentication but did not advertise a usable methodId. hint={Hint}", message);
-        }
-
-        ShowTransientNotificationToast(message);
-    }
-
-    private async Task<bool> TryAuthenticateAsync(CancellationToken cancellationToken)
-    {
-        if (_chatService is null || !IsInitialized)
-        {
-            return false;
-        }
-
-        var method = GetPrimaryAuthMethod();
-        if (method == null || string.IsNullOrWhiteSpace(method.Id))
-        {
-            MarkAuthenticationRequired(method);
-            return false;
-        }
-
-        // Mark as required (blocks prompt sending) until authenticate succeeds.
-        MarkAuthenticationRequired(method);
-
-        try
-        {
-            var response = await _chatService
-                .AuthenticateAsync(new AuthenticateParams(method.Id), cancellationToken)
-                .ConfigureAwait(false);
-
-            if (response.Authenticated)
-            {
-                ClearAuthenticationRequirement();
-                return true;
-            }
-
-            MarkAuthenticationRequired(method, response.Message);
-            return false;
-        }
-        catch (AcpException ex) when (ex.ErrorCode == JsonRpcErrorCode.MethodNotFound)
-        {
-            // Agent advertised authMethods but does not implement `authenticate`. Fall back to informational hint.
-            MarkAuthenticationRequired(method);
-            return false;
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Authenticate failed");
-            MarkAuthenticationRequired(method, $"Authentication failed: {ex.Message}");
-            return false;
-        }
-    }
-
-    private static bool IsAuthenticationRequiredError(Exception ex) =>
-        ex is AcpException acp && acp.ErrorCode == JsonRpcErrorCode.AuthenticationRequired;
+    private Task<bool> TryAuthenticateAsync(CancellationToken cancellationToken)
+        => _authenticationCoordinator.TryAuthenticateAsync(
+            _chatService,
+            IsInitialized,
+            _acpConnectionCoordinator,
+            Logger,
+            message => ShowTransientNotificationToast(message),
+            cancellationToken);
 
     private Task AddMessageToHistoryAsync(string? conversationId, ContentBlock content, bool isOutgoing)
     {
@@ -5380,7 +5268,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IConversationCa
             {
                 response = await _chatService.CreateSessionAsync(sessionParams);
             }
-            catch (Exception ex) when (IsAuthenticationRequiredError(ex))
+            catch (Exception ex) when (ChatAuthenticationCoordinator.IsAuthenticationRequiredError(ex))
             {
                 var authenticated = await TryAuthenticateAsync(CancellationToken.None).ConfigureAwait(false);
                 if (!authenticated)
