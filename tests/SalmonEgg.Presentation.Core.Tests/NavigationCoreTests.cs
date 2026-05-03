@@ -408,6 +408,15 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
+    public void ChatViewModel_MainPartial_StaysBelowFourThousandLines()
+    {
+        var code = LoadFile(@"src\SalmonEgg.Presentation.Core\ViewModels\Chat\ChatViewModel.cs");
+        var lineCount = code.Split(["\r\n", "\n"], StringSplitOptions.None).Length;
+
+        Assert.True(lineCount < 4000, $"ChatViewModel.cs should stay below 4000 lines, actual: {lineCount}.");
+    }
+
+    [Fact]
     public void MainNavigationXaml_UsesNativeNavigationViewItemHeaderForSessionsLabel()
     {
         var xaml = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml");

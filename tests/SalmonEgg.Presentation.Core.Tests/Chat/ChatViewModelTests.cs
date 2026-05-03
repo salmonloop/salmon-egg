@@ -8150,6 +8150,111 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task HydrateActiveConversationAsync_WhenHydrationAttemptBecomesStale_RestoresCachedProjectionInsteadOfLeavingBlankTranscript()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-1",
+            Transcript:
+            [
+                new ConversationMessageSnapshot
+                {
+                    Id = "cached-1",
+                    Timestamp = new DateTime(2026, 3, 1, 0, 0, 1, DateTimeKind.Utc),
+                    IsOutgoing = false,
+                    ContentType = "text",
+                    TextContent = "cached local transcript"
+                }
+            ],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 1, DateTimeKind.Utc)));
+
+        var loadStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowLoadCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        ReplayLoadChatService? innerChatService = null;
+        AcpChatServiceAdapter? adapter = null;
+        innerChatService = new ReplayLoadChatService
+        {
+            AgentCapabilities = new AgentCapabilities(loadSession: true),
+            OnLoadSessionAsync = async (_, _) =>
+            {
+                loadStarted.TrySetResult(null);
+                await allowLoadCompletion.Task;
+                adapter!.BeginHydrationBufferingScope("remote-1");
+                return SessionLoadResponse.Completed;
+            }
+        };
+
+        var eventAdapter = new AcpEventAdapter(
+            update => adapter!.PublishBufferedUpdate(update),
+            syncContext);
+        adapter = new AcpChatServiceAdapter(innerChatService, eventAdapter);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(adapter));
+
+        var cachedTranscript = ImmutableList.Create(
+            new ConversationMessageSnapshot
+            {
+                Id = "cached-1",
+                Timestamp = new DateTime(2026, 3, 1, 0, 0, 1, DateTimeKind.Utc),
+                IsOutgoing = false,
+                ContentType = "text",
+                TextContent = "cached local transcript"
+            });
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1")),
+            ConversationContents = ImmutableDictionary<string, ConversationContentSlice>.Empty
+                .Add("conv-1", new ConversationContentSlice(cachedTranscript, ImmutableList<ConversationPlanEntrySnapshot>.Empty, false, null)),
+            Transcript = cachedTranscript
+        });
+        await DispatchConnectedAsync(fixture, "profile-1");
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(
+                fixture.ViewModel.MessageHistory.Any(message =>
+                    string.Equals(message.TextContent, "cached local transcript", StringComparison.Ordinal))
+                && string.Equals(fixture.ViewModel.CurrentSessionId, "conv-1", StringComparison.Ordinal)
+                && string.Equals(fixture.ViewModel.CurrentRemoteSessionId, "remote-1", StringComparison.Ordinal));
+        });
+
+        var hydrationTask = fixture.ViewModel.HydrateActiveConversationAsync();
+        while (!loadStarted.Task.IsCompleted)
+        {
+            if (!syncContext.RunNext())
+            {
+                await Task.Delay(10);
+            }
+        }
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(fixture.ViewModel.MessageHistory.Count == 0);
+        });
+
+        allowLoadCompletion.TrySetResult(null);
+        await syncContext.RunUntilCompletedAsync(hydrationTask);
+        var hydrated = await hydrationTask;
+
+        Assert.False(hydrated);
+        Assert.Contains(
+            fixture.ViewModel.MessageHistory,
+            message => string.Equals(message.TextContent, "cached local transcript", StringComparison.Ordinal));
+        Assert.Equal("conv-1", fixture.ViewModel.CurrentSessionId);
+        Assert.Equal("remote-1", fixture.ViewModel.CurrentRemoteSessionId);
+    }
+
+    [Fact]
     public async Task HydrateActiveConversationAsync_WhenSessionLoadReturnsBeforeReplayStarts_KeepsOverlayVisibleUntilLateReplayProjects()
     {
         var syncContext = new QueueingSynchronizationContext();

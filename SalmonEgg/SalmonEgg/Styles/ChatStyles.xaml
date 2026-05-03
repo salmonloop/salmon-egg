@@ -36,7 +36,8 @@
                                Visibility="{x:Bind HasTitle, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                Margin="0,0,0,4"/>
 
-                    <Grid Visibility="{x:Bind HasTextContent, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <Grid x:Name="IncomingTextContentHost"
+                          Visibility="{x:Bind HasTextContent, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                         <TextBlock x:Name="IncomingPlainTextBlock"
                                    x:Load="{x:Bind ShouldRenderPlainText, Mode=OneWay}"
                                    Text="{x:Bind TextContent, Mode=OneWay}"
@@ -90,7 +91,7 @@
                                         IsEnabled="{x:Bind HasTextContent, Mode=OneWay}" />
                     </MenuFlyout>
                 </Border.ContextFlyout>
-                <StackPanel>
+                <StackPanel x:Name="OutgoingMessageContentRoot">
                     <TextBlock Text="{x:Bind Title, Mode=OneWay}"
                                FontWeight="Bold"
                                FontSize="12"
