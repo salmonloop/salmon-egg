@@ -772,9 +772,19 @@ if ($isAdmin) {
     }
 }
 
+# Kill running app instances before install to avoid AppX deployment service
+# getting stuck in "app is running" state (0x80073D02). Using -ForceApplicationShutdown
+# with Add-AppxPackage can leave the deployment service in a dirty state permanently.
+$runningApp = Get-Process -Name "SalmonEgg" -ErrorAction SilentlyContinue
+if ($runningApp) {
+    Write-Host "Stopping running SalmonEgg process(es)..."
+    $runningApp | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 1
+}
+
 Write-Host "Installing: $($msix.FullName)"
 try {
-    Add-AppxPackage -Path $msix.FullName -ForceApplicationShutdown
+    Add-AppxPackage -Path $msix.FullName
 } catch {
     $msg = $_.Exception.Message
     if ($msg -match '0x800B0109|0x800B010A|0x80073CF0') {

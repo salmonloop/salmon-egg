@@ -192,11 +192,6 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
                 ImmutableList<ConversationPlanEntrySnapshot>.Empty,
                 false,
                 null);
-        var runtimeState = state.ResolveRuntimeState(sessionId);
-        if (ConversationWarmReusePolicy.HasAuthoritativeWarmRuntime(runtimeState))
-        {
-            return false;
-        }
 
         return !HasProjectedConversationContent(content);
     }
@@ -213,12 +208,6 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
                 ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
                 null,
                 null);
-
-        var runtimeState = state.ResolveRuntimeState(sessionId);
-        if (ConversationWarmReusePolicy.HasAuthoritativeWarmRuntime(runtimeState))
-        {
-            return false;
-        }
 
         return !HasProjectedPrimarySessionState(sessionState);
     }

@@ -259,6 +259,110 @@ public sealed class ChatTranscriptProjectionCoordinatorUnitTests
             Times.Once);
     }
 
+    [Fact]
+    public async Task BuildPreviewSnapshot_WhenTranscriptContainsMessages_CreatesExpectedEntriesWithoutStoreSideEffects()
+    {
+        var coordinator = new ChatTranscriptProjectionCoordinator(Mock.Of<IConversationPreviewStore>());
+        var transcript = ImmutableList.Create(
+            new ConversationMessageSnapshot
+            {
+                Id = "message-1",
+                Timestamp = new DateTime(2026, 5, 3, 0, 0, 0, DateTimeKind.Utc),
+                IsOutgoing = true,
+                ContentType = "text",
+                TextContent = "hello"
+            },
+            new ConversationMessageSnapshot
+            {
+                Id = "message-2",
+                Timestamp = new DateTime(2026, 5, 3, 0, 0, 1, DateTimeKind.Utc),
+                IsOutgoing = false,
+                ContentType = "text",
+                TextContent = "world"
+            });
+
+        var snapshot = coordinator.BuildPreviewSnapshot("conv-1", transcript, isHydrating: false);
+
+        Assert.NotNull(snapshot);
+        Assert.Equal("conv-1", snapshot!.ConversationId);
+        Assert.Collection(
+            snapshot.Entries,
+            entry =>
+            {
+                Assert.Equal("user", entry.Sender);
+                Assert.Equal("hello", entry.Text);
+            },
+            entry =>
+            {
+                Assert.Equal("assistant", entry.Sender);
+                Assert.Equal("world", entry.Text);
+            });
+    }
+
+    [Fact]
+    public void BuildPreviewSnapshot_WhenHydratingOrInvalidInput_ReturnsNull()
+    {
+        var coordinator = new ChatTranscriptProjectionCoordinator(Mock.Of<IConversationPreviewStore>());
+        var transcript = ImmutableList.Create(
+            new ConversationMessageSnapshot
+            {
+                Id = "message-1",
+                Timestamp = new DateTime(2026, 5, 3, 0, 0, 0, DateTimeKind.Utc),
+                IsOutgoing = false,
+                ContentType = "text",
+                TextContent = "hello"
+            });
+
+        Assert.Null(coordinator.BuildPreviewSnapshot(null, transcript, isHydrating: false));
+        Assert.Null(coordinator.BuildPreviewSnapshot("conv-1", transcript, isHydrating: true));
+        Assert.Null(coordinator.BuildPreviewSnapshot("conv-1", ImmutableList<ConversationMessageSnapshot>.Empty, isHydrating: false));
+    }
+
+    [Fact]
+    public void ApplyProjection_WhenSameSessionReceivesLargeTranscriptGrowth_ReplacesCollection()
+    {
+        var previewStore = new Mock<IConversationPreviewStore>();
+        var coordinator = new ChatTranscriptProjectionCoordinator(previewStore.Object);
+        var originalHistory = new ObservableCollection<ChatMessageViewModel>
+        {
+            new()
+            {
+                Id = "message-0",
+                Timestamp = new DateTime(2026, 5, 3, 0, 0, 0, DateTimeKind.Utc),
+                ContentType = "text",
+                TextContent = "seed"
+            }
+        };
+        var history = originalHistory;
+        var context = CreateContext(
+            () => history,
+            value => history = value,
+            static (_, _) => false);
+
+        var transcript = ImmutableList.CreateRange(
+            Enumerable.Range(0, 96)
+                .Select(index => new ConversationMessageSnapshot
+                {
+                    Id = $"message-{index}",
+                    Timestamp = new DateTime(2026, 5, 3, 0, 0, 0, DateTimeKind.Utc).AddSeconds(index),
+                    IsOutgoing = false,
+                    ContentType = "text",
+                    TextContent = index == 0 ? "seed" : $"payload-{index}"
+                }));
+
+        coordinator.ApplyProjection(
+            context,
+            "conv-1",
+            transcript,
+            preparedTranscript: null,
+            sessionChanged: false);
+
+        Assert.NotSame(originalHistory, history);
+        Assert.Equal(96, history.Count);
+        Assert.Equal("message-0", history[0].Id);
+        Assert.Equal("message-95", history[^1].Id);
+    }
+
     private static ChatTranscriptProjectionContext CreateContext(
         Func<ObservableCollection<ChatMessageViewModel>> getHistory,
         Action<ObservableCollection<ChatMessageViewModel>> setHistory,

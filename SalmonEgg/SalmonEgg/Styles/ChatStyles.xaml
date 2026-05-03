@@ -12,14 +12,10 @@
     <converters:TimeFormatConverter x:Key="TimeFormatConverter"/>
     <converters:MessageDirectionToAlignmentConverter x:Key="HorizontalAlignmentConverter"/>
 
-    <!-- 全局统一聊天气泡模板 -->
-    <DataTemplate x:Key="MessageTemplate" x:DataType="vm:ChatMessageViewModel">
+    <DataTemplate x:Key="IncomingMessageTemplate" x:DataType="vm:ChatMessageViewModel">
         <Grid Margin="0,8"
               HorizontalAlignment="{x:Bind IsOutgoing, Mode=OneWay, Converter={StaticResource HorizontalAlignmentConverter}}">
-            
-            <!-- AI 接收的消息 (Assistant / Incoming) -->
-            <Border Visibility="{x:Bind IsOutgoing, Mode=OneWay, Converter={StaticResource InverseBoolToVisibilityConverter}}"
-                    CornerRadius="12,12,12,0"
+            <Border CornerRadius="12,12,12,0"
                     Padding="16,10"
                     Background="{ThemeResource ControlFillColorSecondaryBrush}"
                     BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
@@ -33,7 +29,6 @@
                     </MenuFlyout>
                 </Border.ContextFlyout>
                 <StackPanel>
-                    <!-- 消息标题 (如有) -->
                     <TextBlock Text="{x:Bind Title, Mode=OneWay}"
                                FontWeight="Bold"
                                FontSize="12"
@@ -41,37 +36,34 @@
                                Visibility="{x:Bind HasTitle, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                Margin="0,0,0,4"/>
 
-
-                    <!-- 正文 -->
                     <Grid Visibility="{x:Bind HasTextContent, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                        <TextBlock Text="{x:Bind TextContent, Mode=OneWay}"
+                        <TextBlock x:Name="IncomingPlainTextBlock"
+                                   x:Load="{x:Bind ShouldRenderPlainText, Mode=OneWay}"
+                                   Text="{x:Bind TextContent, Mode=OneWay}"
                                    TextWrapping="Wrap"
                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                   IsTextSelectionEnabled="True"
-                                   Visibility="{x:Bind ShouldRenderPlainText, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                   IsTextSelectionEnabled="True"/>
 
-                        <controls:MarkdownTextPresenter Text="{x:Bind TextContent, Mode=OneWay}"
+                        <controls:MarkdownTextPresenter x:Name="IncomingMarkdownPresenter"
+                                                        x:Load="{x:Bind ShouldRenderMarkdown, Mode=OneWay}"
+                                                        Text="{x:Bind TextContent, Mode=OneWay}"
                                                         MessageViewModel="{x:Bind}"
                                                         Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                                        IsTextSelectionEnabled="True"
-                                                        Visibility="{x:Bind ShouldRenderMarkdown, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                        IsTextSelectionEnabled="True"/>
                     </Grid>
 
-                    <!-- 渐进式揭示的 ToolCall 胶囊 -->
-                    <controls:ToolCallPill 
-                        Visibility="{x:Bind ShouldShowToolCallPill, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                        Margin="0,4,0,0"
-                        ToolTitle="{x:Bind Title, Mode=OneWay}"
-                        ToolKind="{x:Bind ToolCallKind, Mode=OneWay}"
-                        Status="{x:Bind ToolCallStatus, Mode=OneWay}"
-                        IsInProgress="{x:Bind IsToolCallInProgress, Mode=OneWay}"
-                        IsCompleted="{x:Bind IsToolCallCompleted, Mode=OneWay}"
-                        IsFailed="{x:Bind IsToolCallFailed, Mode=OneWay}"
-                        IsCancelled="{x:Bind IsToolCallCancelled, Mode=OneWay}"
-                        RawPayload="{x:Bind ToolCallJson, Mode=OneWay}">
-                    </controls:ToolCallPill>
+                    <controls:ToolCallPill x:Name="IncomingToolCallPill"
+                                           x:Load="{x:Bind ShouldShowToolCallPill, Mode=OneWay}"
+                                           Margin="0,4,0,0"
+                                           ToolTitle="{x:Bind Title, Mode=OneWay}"
+                                           ToolKind="{x:Bind ToolCallKind, Mode=OneWay}"
+                                           Status="{x:Bind ToolCallStatus, Mode=OneWay}"
+                                           IsInProgress="{x:Bind IsToolCallInProgress, Mode=OneWay}"
+                                           IsCompleted="{x:Bind IsToolCallCompleted, Mode=OneWay}"
+                                           IsFailed="{x:Bind IsToolCallFailed, Mode=OneWay}"
+                                           IsCancelled="{x:Bind IsToolCallCancelled, Mode=OneWay}"
+                                           RawPayload="{x:Bind ToolCallJson, Mode=OneWay}" />
 
-                    <!-- 时间戳 -->
                     <TextBlock Text="{x:Bind Timestamp, Mode=OneWay, Converter={StaticResource TimeFormatConverter}}"
                                FontSize="10"
                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
@@ -80,10 +72,13 @@
                                Margin="0,4,0,0"/>
                 </StackPanel>
             </Border>
+        </Grid>
+    </DataTemplate>
 
-            <!-- 用户发出的消息 (User / Outgoing) -->
-            <Border Visibility="{x:Bind IsOutgoing, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                    CornerRadius="12,12,0,12"
+    <DataTemplate x:Key="OutgoingMessageTemplate" x:DataType="vm:ChatMessageViewModel">
+        <Grid Margin="0,8"
+              HorizontalAlignment="{x:Bind IsOutgoing, Mode=OneWay, Converter={StaticResource HorizontalAlignmentConverter}}">
+            <Border CornerRadius="12,12,0,12"
                     Padding="16,10"
                     Background="{ThemeResource AccentFillColorDefaultBrush}"
                     BorderThickness="0">
@@ -96,7 +91,6 @@
                     </MenuFlyout>
                 </Border.ContextFlyout>
                 <StackPanel>
-                    <!-- 消息标题 (如有) -->
                     <TextBlock Text="{x:Bind Title, Mode=OneWay}"
                                FontWeight="Bold"
                                FontSize="12"
@@ -104,14 +98,13 @@
                                Visibility="{x:Bind HasTitle, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                Margin="0,0,0,4"/>
 
-                    <!-- 正文 -->
-                    <TextBlock Text="{x:Bind TextContent, Mode=OneWay}"
+                    <TextBlock x:Name="OutgoingPlainTextBlock"
+                               x:Load="{x:Bind HasTextContent, Mode=OneWay}"
+                               Text="{x:Bind TextContent, Mode=OneWay}"
                                TextWrapping="Wrap"
                                Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
-                               IsTextSelectionEnabled="True"
-                               Visibility="{x:Bind HasTextContent, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                               IsTextSelectionEnabled="True"/>
 
-                    <!-- 时间戳 -->
                     <TextBlock Text="{x:Bind Timestamp, Mode=OneWay, Converter={StaticResource TimeFormatConverter}}"
                                FontSize="10"
                                Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
@@ -122,4 +115,8 @@
             </Border>
         </Grid>
     </DataTemplate>
+
+    <converters:MessageTemplateSelector x:Key="MessageTemplateSelector"
+                                        IncomingTemplate="{StaticResource IncomingMessageTemplate}"
+                                        OutgoingTemplate="{StaticResource OutgoingMessageTemplate}" />
 </ResourceDictionary>

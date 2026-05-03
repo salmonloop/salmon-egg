@@ -146,7 +146,7 @@
                                   AutomationProperties.AutomationId="ChatView.MessagesList"
                                   behaviors:ScrollViewerViewportMonitor.IsEnabled="True"
                                   ItemsSource="{x:Bind ViewModel.MessageHistory, Mode=OneWay}"
-                                  ItemTemplate="{StaticResource MessageTemplate}"
+                                  ItemTemplateSelector="{StaticResource MessageTemplateSelector}"
                                   Padding="20"
                                   SelectionMode="None"
                                   HorizontalAlignment="Stretch"

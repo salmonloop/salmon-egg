@@ -446,7 +446,6 @@ namespace SalmonEgg.Presentation.Views.Chat
 
             var requestGeneration = _activeTranscriptScrollGeneration;
             var requestConversationId = ViewModel.CurrentSessionId;
-            MessagesList.UpdateLayout();
             RequestScrollToBottom();
 
             _ = DispatcherQueue.TryEnqueue(() =>
@@ -461,7 +460,6 @@ namespace SalmonEgg.Presentation.Views.Chat
                     return;
                 }
 
-                MessagesList.UpdateLayout();
                 RequestScrollToBottom();
             });
         }

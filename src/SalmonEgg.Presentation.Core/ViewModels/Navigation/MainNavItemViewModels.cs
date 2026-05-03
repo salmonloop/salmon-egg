@@ -6,7 +6,6 @@ using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Services;
-using SalmonEgg.Presentation.ViewModels.Chat;
 
 namespace SalmonEgg.Presentation.ViewModels.Navigation;
 
@@ -121,29 +120,6 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
     public IAsyncRelayCommand MoveCommand { get; }
     public IAsyncRelayCommand RenameCommand { get; }
     public IAsyncRelayCommand ArchiveCommand { get; }
-
-    public SessionNavItemViewModel(
-        string sessionId,
-        string projectId,
-        string title,
-        string relativeTimeText,
-        IUiInteractionService ui,
-        ChatViewModel chatViewModel,
-        INavigationPaneState navigationState,
-        IUiDispatcher uiDispatcher,
-        bool isPlaceholder = false)
-        : this(
-            sessionId,
-            projectId,
-            title,
-            relativeTimeText,
-            ui,
-            new ChatViewModelSessionCatalogAdapter(chatViewModel ?? throw new ArgumentNullException(nameof(chatViewModel))),
-            navigationState,
-            uiDispatcher,
-            isPlaceholder)
-    {
-    }
 
     public SessionNavItemViewModel(
         string sessionId,

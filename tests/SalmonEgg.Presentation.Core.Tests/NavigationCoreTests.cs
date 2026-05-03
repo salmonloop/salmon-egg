@@ -391,6 +391,23 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
+    public void ChatViewCodeBehind_DoesNotForceSynchronousListLayoutDuringTranscriptSettle()
+    {
+        var code = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
+
+        Assert.DoesNotContain("MessagesList.UpdateLayout()", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatViewModel_DoesNotEnforceArtificialSessionSwitchDelay()
+    {
+        var code = LoadFile(@"src\SalmonEgg.Presentation.Core\ViewModels\Chat\ChatViewModel.cs");
+
+        Assert.DoesNotContain("TimeSpan.FromMilliseconds(600)", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("premium", code, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void MainNavigationXaml_UsesNativeNavigationViewItemHeaderForSessionsLabel()
     {
         var xaml = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml");

@@ -162,7 +162,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         var currentConnectionReuseKey = BuildConnectionReuseKey(transportConfiguration);
 
         var previousConnectionState = CaptureConnectionState(sink);
-        await _connectionCoordinator.SetConnectingAsync(sink.SelectedProfileId, applyToken).ConfigureAwait(false);
+        await _connectionCoordinator.SetConnectingAsync(selectedProfileId, applyToken).ConfigureAwait(false);
         var replaceIntent = connectionContext.PreserveConversation
             ? ServiceReplaceIntent.PoolOnly
             : ServiceReplaceIntent.ForegroundOwner;
@@ -226,7 +226,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             applyToken.ThrowIfCancellationRequested();
 
             wrappedService = WrapChatService(candidateService, sink, applyToken);
-            await _connectionCoordinator.SetInitializingAsync(sink.SelectedProfileId, applyToken).ConfigureAwait(false);
+            await _connectionCoordinator.SetInitializingAsync(selectedProfileId, applyToken).ConfigureAwait(false);
 
             var initializeResponse = await wrappedService
                 .InitializeAsync(CreateDefaultInitializeParams())
@@ -260,7 +260,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
                     currentConnectionReuseKey,
                     connectionInstanceId);
             }
-            await _connectionCoordinator.SetConnectedAsync(sink.SelectedProfileId, applyToken).ConfigureAwait(false);
+            await _connectionCoordinator.SetConnectedAsync(selectedProfileId, applyToken).ConfigureAwait(false);
             await _connectionCoordinator.ClearAuthenticationRequiredAsync(applyToken).ConfigureAwait(false);
 
             await TryMarkHydratedForConnectionContextAsync(
@@ -510,7 +510,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         ArgumentNullException.ThrowIfNull(chatService);
 
         AcpChatServiceAdapter? wrappedService = null;
-        var dispatcher = sink?.Dispatcher ?? InlineDispatcher.Instance;
+        var dispatcher = InlineDispatcher.Instance;
         Action<string?>? resyncCallback = sink != null
             ? sourceSessionId => _ = HandleResyncRequiredAsync(
                 sink,

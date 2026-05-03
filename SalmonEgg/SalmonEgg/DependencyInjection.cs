@@ -292,20 +292,35 @@ public static class DependencyInjection
             return new ErrorRecoveryService(chatService, pathValidator, errorLogger);
         });
 
+        services.AddSingleton(sp =>
+        {
+            var lazyNav = new Lazy<INavigationCoordinator>(() => sp.GetRequiredService<INavigationCoordinator>());
+            return new ConversationCatalogFacade(
+                sp.GetRequiredService<ChatConversationWorkspace>(),
+                sp.GetRequiredService<INavigationProjectPreferences>(),
+                sp.GetRequiredService<IConversationActivationCoordinator>(),
+                sp.GetRequiredService<IShellSelectionReadModel>(),
+                lazyNav,
+                sp.GetRequiredService<ConversationCatalogPresenter>(),
+                sp.GetRequiredService<ILogger<ConversationCatalogFacade>>(),
+                sp.GetService<IConversationAttentionStore>(),
+                sp.GetService<IConversationPanelCleanup>());
+        });
+        services.AddSingleton<IConversationCatalog>(sp => sp.GetRequiredService<ConversationCatalogFacade>());
         services.AddSingleton<ChatViewModel>(sp =>
         {
             var dispatcher = sp.GetRequiredService<IUiDispatcher>();
-            return ActivatorUtilities.CreateInstance<ChatViewModel>(
+            var vm = ActivatorUtilities.CreateInstance<ChatViewModel>(
                 sp,
                 dispatcher,
                 sp.GetRequiredService<IShellNavigationRuntimeState>());
+            sp.GetRequiredService<ConversationCatalogFacade>().SetPanelCleanup(vm);
+            return vm;
         });
         services.AddSingleton<IConversationSessionSwitcher>(sp => sp.GetRequiredService<ChatViewModel>());
 
         services.AddSingleton<ChatShellViewModel>();
         services.AddSingleton<ShellSessionActivationOverlayViewModel>();
-        services.AddSingleton<ConversationCatalogFacade>();
-        services.AddSingleton<IConversationCatalog>(sp => sp.GetRequiredService<ConversationCatalogFacade>());
         services.AddSingleton<IDiscoverSessionsConnectionFacade>(sp =>
             new DiscoverSessionsConnectionFacade(
                 sp.GetRequiredService<IAcpChatServiceFactory>(),
@@ -336,6 +351,7 @@ public static class DependencyInjection
                 sp.GetRequiredService<IChatStore>()));
         services.AddSingleton<IConversationBindingCommands>(sp => sp.GetRequiredService<BindingCoordinator>());
         services.AddSingleton<IConversationMutationPipeline, ConversationMutationPipeline>();
+        services.AddSingleton<SerialAsyncWorkQueue>();
         services.AddSingleton<IWorkspaceWriter>(sp =>
             new WorkspaceWriter(sp.GetRequiredService<ChatConversationWorkspace>(), sp.GetRequiredService<IUiDispatcher>()));
         services.AddSingleton<Func<Action<SessionUpdateEventArgs>, IUiDispatcher, Action<string?>?, AcpEventAdapter>>(sp =>

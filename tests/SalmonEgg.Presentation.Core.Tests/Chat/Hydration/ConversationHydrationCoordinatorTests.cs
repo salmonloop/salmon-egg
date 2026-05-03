@@ -21,7 +21,6 @@ public sealed class ConversationHydrationCoordinatorTests
                 ReplayStartTimeout: TimeSpan.FromMilliseconds(300),
                 ReplaySettleQuietPeriod: TimeSpan.FromMilliseconds(20),
                 PollDelay: TimeSpan.FromMilliseconds(5),
-                MinimumVisibleDuration: TimeSpan.FromMilliseconds(30),
                 ReplayDrainTimeout: TimeSpan.FromMilliseconds(200)));
 
         var context = new ConversationHydrationContext
@@ -79,7 +78,6 @@ public sealed class ConversationHydrationCoordinatorTests
                 ReplayStartTimeout: TimeSpan.FromMilliseconds(300),
                 ReplaySettleQuietPeriod: TimeSpan.FromMilliseconds(20),
                 PollDelay: TimeSpan.FromMilliseconds(5),
-                MinimumVisibleDuration: TimeSpan.FromMilliseconds(30),
                 ReplayDrainTimeout: TimeSpan.FromMilliseconds(200)));
 
         var context = new ConversationHydrationContext
@@ -117,23 +115,6 @@ public sealed class ConversationHydrationCoordinatorTests
     }
 
     [Fact]
-    public async Task EnsureMinimumHydrationVisibleDurationAsync_WhenElapsedBelowMinimum_DelaysRemainingDuration()
-    {
-        var coordinator = new ConversationHydrationCoordinator(
-            new ConversationHydrationCoordinatorOptions(
-                ReplayStartTimeout: TimeSpan.FromMilliseconds(300),
-                ReplaySettleQuietPeriod: TimeSpan.FromMilliseconds(20),
-                PollDelay: TimeSpan.FromMilliseconds(5),
-                MinimumVisibleDuration: TimeSpan.FromMilliseconds(40),
-                ReplayDrainTimeout: TimeSpan.FromMilliseconds(200)));
-        var stopwatch = Stopwatch.StartNew();
-
-        await coordinator.EnsureMinimumHydrationVisibleDurationAsync(stopwatch, CancellationToken.None);
-
-        Assert.True(stopwatch.Elapsed >= TimeSpan.FromMilliseconds(30));
-    }
-
-    [Fact]
     public async Task AwaitRemoteReplaySettleQuietPeriodAsync_WhenReplayAlreadyQuiet_CompletesImmediately()
     {
         var coordinator = new ConversationHydrationCoordinator(
@@ -141,7 +122,6 @@ public sealed class ConversationHydrationCoordinatorTests
                 ReplayStartTimeout: TimeSpan.FromMilliseconds(300),
                 ReplaySettleQuietPeriod: TimeSpan.FromMilliseconds(40),
                 PollDelay: TimeSpan.FromMilliseconds(5),
-                MinimumVisibleDuration: TimeSpan.FromMilliseconds(30),
                 ReplayDrainTimeout: TimeSpan.FromMilliseconds(200)));
         var context = new ConversationHydrationContext
         {
@@ -175,7 +155,6 @@ public sealed class ConversationHydrationCoordinatorTests
                 ReplayStartTimeout: TimeSpan.FromMilliseconds(300),
                 ReplaySettleQuietPeriod: TimeSpan.FromMilliseconds(50),
                 PollDelay: TimeSpan.FromMilliseconds(5),
-                MinimumVisibleDuration: TimeSpan.FromMilliseconds(30),
                 ReplayDrainTimeout: TimeSpan.FromMilliseconds(200)));
         var context = new ConversationHydrationContext
         {
@@ -208,7 +187,6 @@ public sealed class ConversationHydrationCoordinatorTests
                 ReplayStartTimeout: TimeSpan.FromSeconds(1),
                 ReplaySettleQuietPeriod: TimeSpan.FromMilliseconds(20),
                 PollDelay: TimeSpan.FromMilliseconds(10),
-                MinimumVisibleDuration: TimeSpan.FromMilliseconds(30),
                 ReplayDrainTimeout: TimeSpan.FromMilliseconds(200)));
         var context = new ConversationHydrationContext
         {
@@ -246,7 +224,6 @@ public sealed class ConversationHydrationCoordinatorTests
                 ReplayStartTimeout: TimeSpan.FromMilliseconds(300),
                 ReplaySettleQuietPeriod: TimeSpan.FromMilliseconds(20),
                 PollDelay: TimeSpan.FromMilliseconds(5),
-                MinimumVisibleDuration: TimeSpan.FromMilliseconds(30),
                 ReplayDrainTimeout: TimeSpan.FromMilliseconds(200)));
         var context = new ConversationHydrationContext
         {
@@ -296,7 +273,6 @@ public sealed class ConversationHydrationCoordinatorTests
                 ReplayStartTimeout: TimeSpan.FromMilliseconds(300),
                 ReplaySettleQuietPeriod: TimeSpan.FromMilliseconds(20),
                 PollDelay: TimeSpan.FromMilliseconds(5),
-                MinimumVisibleDuration: TimeSpan.FromMilliseconds(30),
                 ReplayDrainTimeout: TimeSpan.FromMilliseconds(200)));
         var context = new ConversationHydrationContext
         {

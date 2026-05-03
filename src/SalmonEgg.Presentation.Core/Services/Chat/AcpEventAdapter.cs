@@ -7,7 +7,7 @@ using SalmonEgg.Domain.Services;
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 
 /// <summary>
-/// Serializes ACP session updates onto a target UI dispatcher.
+/// Serializes ACP session updates onto a target dispatcher.
 /// Provides buffering, backpressure, and resync gating until hydration completes.
 /// </summary>
 public sealed class AcpEventAdapter

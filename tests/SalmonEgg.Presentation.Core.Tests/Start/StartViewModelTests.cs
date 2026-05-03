@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Interfaces;
@@ -598,6 +599,14 @@ public sealed class StartViewModelTests
             Mock.Of<ILogger<ChatConversationWorkspace>>(),
             new ImmediateUiDispatcher());
         var conversationCatalogPresenter = new ConversationCatalogPresenter();
+        var conversationCatalogFacade = new ConversationCatalogFacade(
+            workspace,
+            new NavigationProjectPreferencesAdapter(preferences),
+            Mock.Of<IConversationActivationCoordinator>(),
+            Mock.Of<IShellSelectionReadModel>(),
+            new Lazy<INavigationCoordinator>(() => Mock.Of<INavigationCoordinator>()),
+            conversationCatalogPresenter,
+            NullLogger<ConversationCatalogFacade>.Instance);
         var vmLogger = new Mock<ILogger<ChatViewModel>>();
 
         var originalContext = SynchronizationContext.Current;
@@ -620,8 +629,10 @@ public sealed class StartViewModelTests
                 connectionStore,
                 new ImmediateUiDispatcher(),
                 Mock.Of<IConversationPreviewStore>(),
-                vmLogger.Object);
-            return new ChatViewModelHarness(viewModel, state, connectionState, conversationCatalogPresenter);
+                vmLogger.Object,
+                conversationCatalogFacade: conversationCatalogFacade);
+            conversationCatalogFacade.SetPanelCleanup(viewModel);
+            return new ChatViewModelHarness(viewModel, state, connectionState, conversationCatalogPresenter, workspace);
         }
         finally
         {
@@ -661,8 +672,17 @@ public sealed class StartViewModelTests
         var metricsSink = new Mock<IShellLayoutMetricsSink>();
         var navigationCoordinator = Mock.Of<INavigationCoordinator>();
 
+        var conversationCatalog = new ConversationCatalogFacade(
+            chat.Workspace,
+            new NavigationProjectPreferencesAdapter(preferences),
+            Mock.Of<IConversationActivationCoordinator>(),
+            Mock.Of<IShellSelectionReadModel>(),
+            new Lazy<INavigationCoordinator>(() => Mock.Of<INavigationCoordinator>()),
+            chat.Presenter,
+            NullLogger<ConversationCatalogFacade>.Instance);
+
         return new MainNavigationViewModel(
-            chat.ViewModel,
+            conversationCatalog,
             new NavigationProjectPreferencesAdapter(preferences),
             ui.Object,
             navigationCoordinator,
@@ -724,17 +744,20 @@ public sealed class StartViewModelTests
         private readonly IState<ChatConnectionState> _connectionState;
         public ConversationCatalogPresenter Presenter { get; }
         public ChatViewModel ViewModel { get; }
+        public ChatConversationWorkspace Workspace { get; }
 
         public ChatViewModelHarness(
             ChatViewModel viewModel,
             IState<ChatState> state,
             IState<ChatConnectionState> connectionState,
-            ConversationCatalogPresenter presenter)
+            ConversationCatalogPresenter presenter,
+            ChatConversationWorkspace workspace)
         {
             ViewModel = viewModel;
             _state = state;
             _connectionState = connectionState;
             Presenter = presenter;
+            Workspace = workspace;
         }
 
         public void Dispose()

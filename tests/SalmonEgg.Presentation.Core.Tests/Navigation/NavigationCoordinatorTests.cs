@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Interfaces;
@@ -1334,8 +1335,17 @@ public sealed class NavigationCoordinatorTests
         navigationCoordinator ??= new StubNavigationCoordinator();
         var uiDispatcher = SynchronizationContext.Current as IUiDispatcher ?? new ImmediateUiDispatcher();
 
+        var conversationCatalog = new ConversationCatalogFacade(
+            chat.Workspace,
+            new NavigationProjectPreferencesAdapter(preferences),
+            Mock.Of<IConversationActivationCoordinator>(),
+            Mock.Of<IShellSelectionReadModel>(),
+            new Lazy<INavigationCoordinator>(() => Mock.Of<INavigationCoordinator>()),
+            chat.Presenter,
+            NullLogger<ConversationCatalogFacade>.Instance);
+
         return new MainNavigationViewModel(
-            chat.ViewModel,
+            conversationCatalog,
             new NavigationProjectPreferencesAdapter(preferences),
             ui ?? Mock.Of<IUiInteractionService>(),
             navigationCoordinator,
@@ -1487,6 +1497,14 @@ public sealed class NavigationCoordinatorTests
                 session.LastActivityAt == default ? session.CreatedAt : session.LastActivityAt));
         }
         var conversationCatalogPresenter = new ConversationCatalogPresenter();
+        var conversationCatalogFacade = new ConversationCatalogFacade(
+            workspace,
+            new NavigationProjectPreferencesAdapter(preferences),
+            Mock.Of<IConversationActivationCoordinator>(),
+            Mock.Of<IShellSelectionReadModel>(),
+            new Lazy<INavigationCoordinator>(() => Mock.Of<INavigationCoordinator>()),
+            conversationCatalogPresenter,
+            NullLogger<ConversationCatalogFacade>.Instance);
         var vmLogger = new Mock<ILogger<ChatViewModel>>();
 
         var originalContext = SynchronizationContext.Current;
@@ -1509,7 +1527,9 @@ public sealed class NavigationCoordinatorTests
                 uiDispatcher,
                 Mock.Of<IConversationPreviewStore>(),
                 vmLogger.Object,
-                shellNavigationRuntimeState: runtimeState);
+                shellNavigationRuntimeState: runtimeState,
+                conversationCatalogFacade: conversationCatalogFacade);
+            conversationCatalogFacade.SetPanelCleanup(viewModel);
             return new ChatViewModelHarness(
                 viewModel,
                 profiles,

@@ -10,6 +10,8 @@ namespace SalmonEgg.Presentation.Converters;
 /// </summary>
 public class MessageTemplateSelector : DataTemplateSelector
 {
+    public DataTemplate? IncomingTemplate { get; set; }
+    public DataTemplate? OutgoingTemplate { get; set; }
     public DataTemplate? TextMessageTemplate { get; set; }
     public DataTemplate? ImageMessageTemplate { get; set; }
     public DataTemplate? AudioMessageTemplate { get; set; }
@@ -27,17 +29,32 @@ public class MessageTemplateSelector : DataTemplateSelector
             return DefaultTemplate ?? new DataTemplate();
         }
 
-        return viewModel.ContentType switch
+        return ResolveContentTemplate(viewModel.ContentType)
+            ?? ResolveDirectionalTemplate(viewModel)
+            ?? DefaultTemplate
+            ?? new DataTemplate();
+    }
+
+    private DataTemplate? ResolveDirectionalTemplate(ChatMessageViewModel viewModel)
+    {
+        return viewModel.IsOutgoing
+            ? OutgoingTemplate
+            : IncomingTemplate;
+    }
+
+    private DataTemplate? ResolveContentTemplate(string? contentType)
+    {
+        return contentType switch
         {
-            "text" => TextMessageTemplate ?? DefaultTemplate ?? new DataTemplate(),
-            "image" => ImageMessageTemplate ?? DefaultTemplate ?? new DataTemplate(),
-            "audio" => AudioMessageTemplate ?? DefaultTemplate ?? new DataTemplate(),
-            "tool_call" => ToolCallTemplate ?? DefaultTemplate ?? new DataTemplate(),
-            "plan_entry" => PlanEntryTemplate ?? DefaultTemplate ?? new DataTemplate(),
-            "mode_change" => ModeChangeTemplate ?? DefaultTemplate ?? new DataTemplate(),
-            "resource_content" => ResourceContentTemplate ?? DefaultTemplate ?? new DataTemplate(),
-            "resource_link" => ResourceLinkTemplate ?? DefaultTemplate ?? new DataTemplate(),
-            _ => DefaultTemplate ?? new DataTemplate()
+            "text" => TextMessageTemplate,
+            "image" => ImageMessageTemplate,
+            "audio" => AudioMessageTemplate,
+            "tool_call" => ToolCallTemplate,
+            "plan_entry" => PlanEntryTemplate,
+            "mode_change" => ModeChangeTemplate,
+            "resource_content" => ResourceContentTemplate,
+            "resource_link" => ResourceLinkTemplate,
+            _ => null
         };
     }
 }

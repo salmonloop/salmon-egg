@@ -54,10 +54,6 @@ public sealed class MarkdownTextPresenter : Grid
         _selectableMarkdown = CreateMarkdownBlock(isTextSelectionEnabled: true);
         _nonSelectableMarkdown = CreateMarkdownBlock(isTextSelectionEnabled: false);
         _activeMarkdown = _nonSelectableMarkdown;
-        _selectableMarkdown.Visibility = Visibility.Collapsed;
-        _nonSelectableMarkdown.Visibility = Visibility.Visible;
-        Children.Add(_nonSelectableMarkdown);
-        Children.Add(_selectableMarkdown);
 #else
         _markdown = CreateMarkdownBlock();
         Children.Add(_markdown);
@@ -202,9 +198,13 @@ public sealed class MarkdownTextPresenter : Grid
 
         if (!ReferenceEquals(_activeMarkdown, target))
         {
-            _activeMarkdown.Visibility = Visibility.Collapsed;
-            target.Visibility = Visibility.Visible;
+            DetachMarkdown(_activeMarkdown);
+            AttachMarkdown(target);
             _activeMarkdown = target;
+        }
+        else if (Children.Count == 0)
+        {
+            AttachMarkdown(target);
         }
 
         return target;
@@ -216,8 +216,8 @@ public sealed class MarkdownTextPresenter : Grid
             ? _nonSelectableMarkdown
             : _selectableMarkdown;
         inactive.Text = string.Empty;
-        inactive.Visibility = Visibility.Collapsed;
-        active.Visibility = Visibility.Visible;
+        DetachMarkdown(inactive);
+        AttachMarkdown(active);
     }
 
     private bool ShouldUseSelectableMarkdown(string? text)
@@ -225,6 +225,22 @@ public sealed class MarkdownTextPresenter : Grid
         // Keep native selection available for ordinary markdown, but avoid mutating
         // RichTextBlock selection mode on a live control after chat re-entry.
         return _requestedIsTextSelectionEnabled && !ContainsClosedCodeFence(text);
+    }
+
+    private void AttachMarkdown(MarkdownTextBlockControl markdown)
+    {
+        if (!Children.Contains(markdown))
+        {
+            Children.Add(markdown);
+        }
+
+        markdown.Visibility = Visibility.Visible;
+    }
+
+    private void DetachMarkdown(MarkdownTextBlockControl markdown)
+    {
+        markdown.Visibility = Visibility.Collapsed;
+        _ = Children.Remove(markdown);
     }
 #else
     private MarkdownTextBlockControl CreateMarkdownBlock()

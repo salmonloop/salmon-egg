@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SalmonEgg.Domain.Models.Content;
 using SalmonEgg.Domain.Models;
@@ -1689,8 +1690,9 @@ public sealed class ChatConversationWorkspaceTests
             new NavigationProjectPreferencesAdapter(preferences),
             activationCoordinator.Object,
             selection.Object,
-            Mock.Of<INavigationCoordinator>(),
-            Mock.Of<ILogger<ConversationCatalogFacade>>());
+            new Lazy<INavigationCoordinator>(() => Mock.Of<INavigationCoordinator>()),
+            new ConversationCatalogPresenter(),
+            NullLogger<ConversationCatalogFacade>.Instance);
 
         var deleteTask = facade.DeleteConversationAsync("session-1");
         var completed = await Task.WhenAny(deleteTask, Task.Delay(100));
@@ -1733,8 +1735,9 @@ public sealed class ChatConversationWorkspaceTests
             new NavigationProjectPreferencesAdapter(preferences),
             activationCoordinator.Object,
             selection.Object,
-            navigation.Object,
-            Mock.Of<ILogger<ConversationCatalogFacade>>());
+            new Lazy<INavigationCoordinator>(() => navigation.Object),
+            new ConversationCatalogPresenter(),
+            NullLogger<ConversationCatalogFacade>.Instance);
 
         var mutationTask = facade.ArchiveConversationAsync("session-1");
 

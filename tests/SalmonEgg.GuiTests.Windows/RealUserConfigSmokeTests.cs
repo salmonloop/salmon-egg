@@ -519,6 +519,123 @@ public sealed partial class RealUserConfigSmokeTests
     }
 
     [SkippableFact]
+    public void SelectVisibleCrossProfileRemoteSessions_AfterHydratingBoth_ReturnsHotWithoutLoadingOverlay()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var slowLoad = new EnvironmentVariableScope("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", "2000");
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var remoteCandidates = RealUserConfigProbe.LoadReplayBackedCandidates(includeAllProfiles: true);
+        var visibleRemoteCandidates = remoteCandidates
+            .Where(item => item.LocalMessageCount > 0)
+            .Where(item => session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null)
+            .ToArray();
+        var profileGroups = visibleRemoteCandidates
+            .Where(item => !string.IsNullOrWhiteSpace(item.BoundProfileId))
+            .GroupBy(item => item.BoundProfileId!, StringComparer.Ordinal)
+            .OrderByDescending(group => group.Count())
+            .ToArray();
+        Skip.If(profileGroups.Length < 2, "Need two visible replay-backed remote conversations bound to different profiles for real-config cross-profile hot-return validation.");
+
+        var remoteA = profileGroups[0]
+            .OrderByDescending(item => item.LocalMessageCount)
+            .ThenByDescending(item => item.LastUpdatedAtUtc)
+            .First();
+        var remoteB = profileGroups[1]
+            .OrderByDescending(item => item.LocalMessageCount)
+            .ThenByDescending(item => item.LastUpdatedAtUtc)
+            .First();
+        Skip.If(string.Equals(remoteA.ConversationId, remoteB.ConversationId, StringComparison.Ordinal), "Cross-profile hot-return validation requires two distinct remote conversations.");
+
+        var startItem = session.FindByAutomationId("MainNav.Start", TimeSpan.FromSeconds(10));
+        session.ActivateElement(startItem);
+        Thread.Sleep(500);
+
+        var remoteAId = SessionAutomationId(remoteA.ConversationId);
+        var remoteAItem = session.FindByAutomationId(remoteAId, TimeSpan.FromSeconds(10));
+        session.ActivateElement(remoteAItem);
+
+        Assert.True(
+            session.WaitUntilVisible("ChatView.LoadingOverlayStatus", TimeSpan.FromSeconds(15)),
+            $"Initial cross-profile remote session A did not expose ChatView.LoadingOverlayStatus. Conversation={remoteA.ConversationId}");
+        Assert.True(
+            session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(30)),
+            $"Conversation header did not appear while loading cross-profile remote session A. Conversation={remoteA.ConversationId}");
+        Assert.True(
+            WaitUntil(
+                () => CountVisibleTranscriptText(session.TryFindByAutomationId("ChatView.MessagesList", TimeSpan.FromMilliseconds(150))) > 0,
+                TimeSpan.FromSeconds(120),
+                TimeSpan.FromMilliseconds(250)),
+            $"Cross-profile remote session A never projected any visible transcript content. Conversation={remoteA.ConversationId}");
+        Assert.True(
+            session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(120)),
+            $"Cross-profile remote session A remained stuck behind the loading overlay. Conversation={remoteA.ConversationId}");
+
+        var remoteBId = SessionAutomationId(remoteB.ConversationId);
+        var remoteBItem = session.FindByAutomationId(remoteBId, TimeSpan.FromSeconds(10));
+        session.ActivateElement(remoteBItem);
+
+        Assert.True(
+            session.WaitUntilVisible("ChatView.LoadingOverlayStatus", TimeSpan.FromSeconds(15)),
+            $"Initial cross-profile remote session B did not expose ChatView.LoadingOverlayStatus. Conversation={remoteB.ConversationId}");
+        Assert.True(
+            session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(30)),
+            $"Conversation header did not appear while loading cross-profile remote session B. Conversation={remoteB.ConversationId}");
+        Assert.True(
+            WaitUntil(
+                () => CountVisibleTranscriptText(session.TryFindByAutomationId("ChatView.MessagesList", TimeSpan.FromMilliseconds(150))) > 0,
+                TimeSpan.FromSeconds(120),
+                TimeSpan.FromMilliseconds(250)),
+            $"Cross-profile remote session B never projected any visible transcript content. Conversation={remoteB.ConversationId}");
+        Assert.True(
+            session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(120)),
+            $"Cross-profile remote session B remained stuck behind the loading overlay. Conversation={remoteB.ConversationId}");
+
+        remoteAItem = session.FindByAutomationId(remoteAId, TimeSpan.FromSeconds(10));
+        var returnStopwatch = Stopwatch.StartNew();
+        session.ActivateElement(remoteAItem);
+        var headerVisible = session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(4));
+        returnStopwatch.Stop();
+
+        Assert.True(
+            headerVisible,
+            $"Cross-profile hot-return to remote session A did not restore the chat header quickly. Conversation={remoteA.ConversationId} elapsedMs={returnStopwatch.ElapsedMilliseconds}");
+        Assert.True(
+            returnStopwatch.ElapsedMilliseconds <= 1500,
+            $"Cross-profile hot-return to remote session A exceeded the responsiveness budget. Conversation={remoteA.ConversationId} elapsedMs={returnStopwatch.ElapsedMilliseconds} budgetMs=1500");
+
+        var returnedHeader = session.FindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(1));
+        Assert.Contains(remoteA.DisplayName, returnedHeader.Name, StringComparison.Ordinal);
+
+        var hotOverlayTimeline = new List<string>();
+        var hotOverlayDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+        while (DateTime.UtcNow < hotOverlayDeadline)
+        {
+            var hotOverlayMaskVisible = session.TryFindByAutomationId("ChatView.LoadingOverlayMask", TimeSpan.FromMilliseconds(100)) is not null;
+            var hotOverlayStatusVisible = session.TryFindByAutomationId("ChatView.LoadingOverlayStatus", TimeSpan.FromMilliseconds(100)) is not null;
+            var hotHeaderName = session.TryGetElementName("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(100)) ?? "<missing>";
+            var remoteASelected = session.TryGetIsSelected(remoteAId) == true;
+
+            hotOverlayTimeline.Add(
+                $"{DateTime.UtcNow:HH:mm:ss.fff} mask={hotOverlayMaskVisible} status={hotOverlayStatusVisible} header={hotHeaderName} remoteASelected={remoteASelected}");
+
+            Assert.False(
+                hotOverlayMaskVisible || hotOverlayStatusVisible,
+                $"Returning to cross-profile remote session A surfaced the loading overlay instead of staying hot. Conversation={remoteA.ConversationId}{Environment.NewLine}{string.Join(Environment.NewLine, hotOverlayTimeline)}");
+
+            Thread.Sleep(100);
+        }
+
+        Assert.True(
+            WaitUntil(
+                () => CountVisibleTranscriptText(session.TryFindByAutomationId("ChatView.MessagesList", TimeSpan.FromMilliseconds(150))) > 0,
+                TimeSpan.FromSeconds(4),
+                TimeSpan.FromMilliseconds(150)),
+            $"Cross-profile hot-return to remote session A did not restore visible transcript content promptly. Conversation={remoteA.ConversationId}");
+    }
+
+    [SkippableFact]
     public void RealData_ExpandedToCompactResize_DoesNotLoseNavigationSelectionContext()
     {
         GuiTestGate.RequireEnabled();
@@ -1356,6 +1473,146 @@ public sealed partial class RealUserConfigSmokeTests
         }
     }
 
+    [SkippableFact]
+    public void SelectReplayBackedRemoteSessions_AcrossProfiles_HotReturn_RecoversWithoutReloadUi()
+    {
+        GuiTestGate.RequireEnabled();
+
+        var remoteCandidates = RealUserConfigProbe.LoadReplayBackedCandidates(includeAllProfiles: true);
+        Skip.If(remoteCandidates.Count == 0, "No replay-backed remote conversation candidates were found in the current SalmonEgg app data.");
+
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var startItem = session.FindByAutomationId("MainNav.Start", TimeSpan.FromSeconds(10));
+        session.ActivateElement(startItem);
+        Thread.Sleep(500);
+
+        var visibleRemoteCandidates = remoteCandidates
+            .Where(item => session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null)
+            .ToArray();
+        var profileGroups = visibleRemoteCandidates
+            .Where(item => !string.IsNullOrWhiteSpace(item.BoundProfileId))
+            .GroupBy(item => item.BoundProfileId!, StringComparer.Ordinal)
+            .OrderByDescending(group => group.Count())
+            .ToArray();
+        Skip.If(profileGroups.Length < 2, "Need at least two visible replay-backed remote conversations bound to different profiles for cross-profile hot return validation.");
+
+        var remoteA = profileGroups[0]
+            .OrderByDescending(item => item.LocalMessageCount)
+            .ThenByDescending(item => item.LastUpdatedAtUtc)
+            .First();
+        var remoteB = profileGroups[1]
+            .OrderByDescending(item => item.LocalMessageCount)
+            .ThenByDescending(item => item.LastUpdatedAtUtc)
+            .First();
+        Skip.If(string.Equals(remoteA.ConversationId, remoteB.ConversationId, StringComparison.Ordinal), "Cross-profile hot return requires two distinct remote conversations.");
+
+        var remoteAId = SessionAutomationId(remoteA.ConversationId);
+        var remoteBId = SessionAutomationId(remoteB.ConversationId);
+
+        var remoteAItem = session.FindByAutomationId(remoteAId, TimeSpan.FromSeconds(10));
+        var remoteAExpectedHeader = FirstUsableVisibleLabel(remoteA.DisplayName, remoteAItem.Name, remoteA.ConversationId);
+        session.ActivateElement(remoteAItem);
+
+        var remoteAOverlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(60));
+        Assert.True(remoteAOverlayHidden, $"Initial remote hydration did not finish for conversation {remoteA.ConversationId}.");
+
+        var remoteAHeaderVisible = session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(10));
+        Assert.True(remoteAHeaderVisible, $"Conversation header did not appear after selecting remote conversation {remoteA.ConversationId}.");
+
+        var remoteAHeader = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(2));
+        Assert.True(
+            remoteAHeader is not null && remoteAHeader.Name.Contains(remoteAExpectedHeader, StringComparison.Ordinal),
+            $"Remote conversation {remoteA.ConversationId} did not project the expected header title before cross-profile switch. Expected='{remoteAExpectedHeader}' Actual='{remoteAHeader?.Name ?? "<missing>"}'");
+
+        var remoteBItem = session.FindByAutomationId(remoteBId, TimeSpan.FromSeconds(10));
+        var remoteBExpectedHeader = FirstUsableVisibleLabel(remoteB.DisplayName, remoteBItem.Name, remoteB.ConversationId);
+        session.ActivateElement(remoteBItem);
+
+        var remoteBOverlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(60));
+        Assert.True(remoteBOverlayHidden, $"Initial remote hydration did not finish for conversation {remoteB.ConversationId}.");
+
+        var remoteBHeaderVisible = session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(10));
+        Assert.True(remoteBHeaderVisible, $"Conversation header did not appear after selecting remote conversation {remoteB.ConversationId}.");
+
+        var remoteBHeader = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(2));
+        Assert.True(
+            remoteBHeader is not null && remoteBHeader.Name.Contains(remoteBExpectedHeader, StringComparison.Ordinal),
+            $"Remote conversation {remoteB.ConversationId} did not project the expected header title before hot return. Expected='{remoteBExpectedHeader}' Actual='{remoteBHeader?.Name ?? "<missing>"}'");
+
+        remoteAItem = session.FindByAutomationId(remoteAId, TimeSpan.FromSeconds(10));
+
+        const int hotReturnProbeWindowMs = 1200;
+        var timeline = new List<string>();
+        var hotReturnStopwatch = Stopwatch.StartNew();
+        session.ActivateElement(remoteAItem);
+
+        long? remoteAHeaderRecoveredAtMs = null;
+        var sawBlockingMask = false;
+        var sawOverlayStatus = false;
+        while (hotReturnStopwatch.ElapsedMilliseconds <= hotReturnProbeWindowMs)
+        {
+            var remoteASelected = session.TryGetIsSelected(remoteAId) == true;
+            var remoteBSelected = session.TryGetIsSelected(remoteBId) == true;
+            var blockingMaskVisible = session.TryFindByAutomationId("ChatView.LoadingOverlayMask", TimeSpan.FromMilliseconds(100)) is not null;
+            var overlayStatusVisible = session.TryFindByAutomationId("ChatView.LoadingOverlayStatus", TimeSpan.FromMilliseconds(100)) is not null;
+            var header = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(100));
+            var headerName = header?.Name ?? "<missing>";
+
+            if (remoteAHeaderRecoveredAtMs is null
+                && remoteASelected
+                && header is not null
+                && headerName.Contains(remoteAExpectedHeader, StringComparison.Ordinal))
+            {
+                remoteAHeaderRecoveredAtMs = hotReturnStopwatch.ElapsedMilliseconds;
+            }
+
+            timeline.Add(
+                $"{hotReturnStopwatch.ElapsedMilliseconds,5}ms remoteASelected={remoteASelected} remoteBSelected={remoteBSelected} mask={blockingMaskVisible} status={overlayStatusVisible} header={headerName}");
+
+            if (blockingMaskVisible)
+            {
+                sawBlockingMask = true;
+                break;
+            }
+
+            if (overlayStatusVisible)
+            {
+                sawOverlayStatus = true;
+                break;
+            }
+
+            Thread.Sleep(80);
+        }
+
+        var finalHeader = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(200));
+        var finalHeaderName = finalHeader?.Name ?? "<missing>";
+        if (remoteAHeaderRecoveredAtMs is null
+            || sawBlockingMask
+            || sawOverlayStatus
+            || finalHeader is null
+            || !finalHeaderName.Contains(remoteAExpectedHeader, StringComparison.Ordinal))
+        {
+            var captureRoot = Path.Combine(Path.GetTempPath(), "SalmonEgg.GuiTests");
+            Directory.CreateDirectory(captureRoot);
+            var capturePath = Path.Combine(
+                captureRoot,
+                $"cross-profile-hot-return-{remoteA.ConversationId}-{DateTime.UtcNow:yyyyMMddHHmmssfff}.png");
+            capturePath = TryCaptureMainWindow(session, capturePath);
+
+            var appDataRoot = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "SalmonEgg");
+            var bootLogPath = Path.Combine(appDataRoot, "boot.log");
+            var bootTail = File.Exists(bootLogPath)
+                ? string.Join(Environment.NewLine, File.ReadLines(bootLogPath).TakeLast(30))
+                : "<boot.log missing>";
+
+            throw new Xunit.Sdk.XunitException(
+                $"Cross-profile hot return did not recover conversation {remoteA.ConversationId} without reload UI. ExpectedHeader='{remoteAExpectedHeader}' FinalHeader='{finalHeaderName}' HeaderRecoveredAtMs={remoteAHeaderRecoveredAtMs?.ToString() ?? "<missing>"} sawMask={sawBlockingMask} sawStatus={sawOverlayStatus}{Environment.NewLine}Screenshot: {capturePath}{Environment.NewLine}{string.Join(Environment.NewLine, timeline)}{Environment.NewLine}boot.log:{Environment.NewLine}{bootTail}");
+        }
+    }
+
     private static int CountVisibleTranscriptText(AutomationElement? messagesList)
     {
         if (messagesList is null)
@@ -1365,7 +1622,17 @@ public sealed partial class RealUserConfigSmokeTests
 
         return messagesList
             .FindAllDescendants(cf => cf.ByControlType(ControlType.Text))
-            .Count(element => !TryGetIsOffscreen(element) && !string.IsNullOrWhiteSpace(element.Name));
+            .Count(element =>
+            {
+                try
+                {
+                    return !TryGetIsOffscreen(element) && !string.IsNullOrWhiteSpace(element.Name);
+                }
+                catch
+                {
+                    return false;
+                }
+            });
     }
 
     private static bool WaitUntil(Func<bool> condition, TimeSpan timeout, TimeSpan pollInterval)

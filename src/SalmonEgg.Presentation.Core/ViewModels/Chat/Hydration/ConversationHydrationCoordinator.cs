@@ -116,19 +116,6 @@ internal sealed class ConversationHydrationCoordinator
         }
     }
 
-    public Task EnsureMinimumHydrationVisibleDurationAsync(Stopwatch hydrationStopwatch, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(hydrationStopwatch);
-
-        var remaining = _options.MinimumVisibleDuration - hydrationStopwatch.Elapsed;
-        if (remaining <= TimeSpan.Zero)
-        {
-            return Task.CompletedTask;
-        }
-
-        return Task.Delay(remaining, cancellationToken);
-    }
-
     public async Task AwaitBufferedReplayProjectionAsync(
         ConversationHydrationContext context,
         long? hydrationAttemptId,

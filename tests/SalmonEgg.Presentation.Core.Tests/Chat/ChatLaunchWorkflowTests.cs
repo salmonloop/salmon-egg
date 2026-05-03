@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Conversation;
@@ -186,8 +187,9 @@ public sealed class ChatLaunchWorkflowTests
             new NavigationProjectPreferencesAdapter(preferences),
             Mock.Of<IConversationActivationCoordinator>(),
             Mock.Of<IShellSelectionReadModel>(),
-            Mock.Of<INavigationCoordinator>(),
-            Mock.Of<ILogger<ConversationCatalogFacade>>());
+            new Lazy<INavigationCoordinator>(() => Mock.Of<INavigationCoordinator>()),
+            new ConversationCatalogPresenter(),
+            NullLogger<ConversationCatalogFacade>.Instance);
 
         var chat = new FakeChatLaunchWorkflowChatFacade
         {
@@ -234,8 +236,9 @@ public sealed class ChatLaunchWorkflowTests
             new NavigationProjectPreferencesAdapter(preferences),
             Mock.Of<IConversationActivationCoordinator>(),
             Mock.Of<IShellSelectionReadModel>(),
-            Mock.Of<INavigationCoordinator>(),
-            Mock.Of<ILogger<ConversationCatalogFacade>>());
+            new Lazy<INavigationCoordinator>(() => Mock.Of<INavigationCoordinator>()),
+            new ConversationCatalogPresenter(),
+            NullLogger<ConversationCatalogFacade>.Instance);
 
         var chat = new FakeChatLaunchWorkflowChatFacade
         {

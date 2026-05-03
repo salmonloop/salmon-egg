@@ -11,7 +11,10 @@ namespace SalmonEgg.Presentation.ViewModels.Chat.Transcript;
 
 internal sealed class ChatTranscriptProjectionCoordinator
 {
+    private const int LargeTranscriptReplacementThreshold = 64;
+
     private readonly IConversationPreviewStore _previewStore;
+    private readonly object _previewSnapshotSync = new();
     private string? _lastSavedPreviewConversationId;
     private IImmutableList<ConversationMessageSnapshot>? _lastSavedPreviewTranscript;
 
@@ -43,26 +46,23 @@ internal sealed class ChatTranscriptProjectionCoordinator
             return;
         }
 
+        if (ShouldReplaceMessageHistory(context, transcript))
+        {
+            ReplaceMessageHistory(context, conversationId, transcript);
+            return;
+        }
+
         SyncMessageHistory(context, conversationId, transcript);
     }
 
-    public void UpdatePreviewSnapshot(
+    public ConversationPreviewSnapshot? BuildPreviewSnapshot(
         string? conversationId,
         IImmutableList<ConversationMessageSnapshot> transcript,
         bool isHydrating)
     {
         if (isHydrating || transcript.Count == 0 || string.IsNullOrWhiteSpace(conversationId))
         {
-            return;
-        }
-
-        var previewTranscriptChanged =
-            !string.Equals(_lastSavedPreviewConversationId, conversationId, StringComparison.Ordinal)
-            || !ReferenceEquals(_lastSavedPreviewTranscript, transcript);
-
-        if (!previewTranscriptChanged)
-        {
-            return;
+            return null;
         }
 
         var previewEntries = transcript
@@ -72,14 +72,58 @@ internal sealed class ChatTranscriptProjectionCoordinator
                 m.Timestamp))
             .ToArray();
 
-        var snapshotToSave = new ConversationPreviewSnapshot(
+        return new ConversationPreviewSnapshot(
             conversationId,
             previewEntries,
             DateTimeOffset.Now);
+    }
 
-        _lastSavedPreviewConversationId = conversationId;
-        _lastSavedPreviewTranscript = transcript;
-        _ = _previewStore.SaveAsync(snapshotToSave);
+    public ConversationPreviewSnapshot? PreparePreviewSnapshotSave(
+        string? conversationId,
+        IImmutableList<ConversationMessageSnapshot> transcript,
+        bool isHydrating)
+    {
+        var snapshot = BuildPreviewSnapshot(conversationId, transcript, isHydrating);
+        if (snapshot is null)
+        {
+            return null;
+        }
+
+        lock (_previewSnapshotSync)
+        {
+            var previewTranscriptChanged =
+                !string.Equals(_lastSavedPreviewConversationId, conversationId, StringComparison.Ordinal)
+                || !ReferenceEquals(_lastSavedPreviewTranscript, transcript);
+            if (!previewTranscriptChanged)
+            {
+                return null;
+            }
+
+            _lastSavedPreviewConversationId = conversationId;
+            _lastSavedPreviewTranscript = transcript;
+        }
+
+        return snapshot;
+    }
+
+    public void SavePreviewSnapshot(ConversationPreviewSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        _ = _previewStore.SaveAsync(snapshot);
+    }
+
+    public void UpdatePreviewSnapshot(
+        string? conversationId,
+        IImmutableList<ConversationMessageSnapshot> transcript,
+        bool isHydrating)
+    {
+        var snapshot = PreparePreviewSnapshotSave(conversationId, transcript, isHydrating);
+        if (snapshot is null)
+        {
+            return;
+        }
+
+        SavePreviewSnapshot(snapshot);
     }
 
     private static void SyncMessageHistory(
@@ -149,5 +193,38 @@ internal sealed class ChatTranscriptProjectionCoordinator
         context.SetMessageHistory(history);
         context.UpdateVisibleTranscriptConversationId(conversationId, history.Count > 0);
         context.RaiseTranscriptStateChanged();
+    }
+
+    private static bool ShouldReplaceMessageHistory(
+        ChatTranscriptProjectionContext context,
+        IImmutableList<ConversationMessageSnapshot> transcript)
+    {
+        var history = context.GetMessageHistory();
+        var messages = transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+        if (history.Count == 0 || messages.Count == 0)
+        {
+            return false;
+        }
+
+        var appendedMessageCount = messages.Count - history.Count;
+        if (appendedMessageCount < LargeTranscriptReplacementThreshold)
+        {
+            return false;
+        }
+
+        if (history.Count > messages.Count)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < history.Count; i++)
+        {
+            if (!context.MatchesSnapshot(history[i], messages[i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

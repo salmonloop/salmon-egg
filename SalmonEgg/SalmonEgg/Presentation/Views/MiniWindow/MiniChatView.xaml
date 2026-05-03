@@ -104,7 +104,7 @@
         <ListView x:Name="MessagesList"
                   Grid.Row="1"
                   ItemsSource="{x:Bind ViewModel.MessageHistory, Mode=OneWay}"
-                  ItemTemplate="{StaticResource MessageTemplate}"
+                  ItemTemplateSelector="{StaticResource MessageTemplateSelector}"
                   Padding="12"
                   SelectionMode="None"
                   HorizontalAlignment="Stretch"

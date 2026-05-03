@@ -1132,6 +1132,81 @@ public sealed class AcpChatCoordinatorTests
     }
 
     [Fact]
+    public async Task ApplyTransportConfigurationAsync_WhenSelectedProfileChangesDuringInitialize_UsesOriginalProfileForConnectionState()
+    {
+        var transport = new FakeTransportConfiguration
+        {
+            SelectedTransportType = TransportType.WebSocket,
+            RemoteUrl = "wss://agent.test"
+        };
+        var candidateService = CreateChatService();
+        var initializeStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowInitializeCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sink = new FakeSink
+        {
+            CurrentSessionId = "local-session-1",
+            SelectedProfileId = "profile-1"
+        };
+        var factory = new Mock<IAcpChatServiceFactory>();
+        var logger = new Mock<ILogger<AcpChatCoordinator>>();
+        var connectionCoordinator = new Mock<IAcpConnectionCoordinator>();
+        var sequence = new MockSequence();
+
+        connectionCoordinator.InSequence(sequence)
+            .Setup(x => x.SetConnectingAsync("profile-1", It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        connectionCoordinator.InSequence(sequence)
+            .Setup(x => x.SetInitializingAsync("profile-1", It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        connectionCoordinator.InSequence(sequence)
+            .Setup(x => x.SetConnectionInstanceIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        connectionCoordinator.InSequence(sequence)
+            .Setup(x => x.SetConnectedAsync("profile-1", It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        connectionCoordinator
+            .Setup(x => x.ClearAuthenticationRequiredAsync(It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        candidateService
+            .Setup(x => x.InitializeAsync(It.IsAny<InitializeParams>()))
+            .Returns(async () =>
+            {
+                initializeStarted.TrySetResult(null);
+                await allowInitializeCompletion.Task;
+                return new InitializeResponse(1, new AgentInfo("agent", "1.0.0"), new AgentCapabilities());
+            });
+
+        factory
+            .Setup(x => x.CreateChatService(TransportType.WebSocket, null, null, "wss://agent.test"))
+            .Returns(candidateService.Object);
+
+        var sut = new AcpChatCoordinator(
+            factory.Object,
+            logger.Object,
+            connectionCoordinator: connectionCoordinator.Object);
+
+        var applyTask = sut.ApplyTransportConfigurationAsync(
+            transport,
+            sink,
+            new AcpConnectionContext("local-session-1", PreserveConversation: false),
+            CancellationToken.None);
+        await initializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        sink.SelectedProfileId = "profile-2";
+        allowInitializeCompletion.TrySetResult(null);
+
+        await applyTask;
+
+        connectionCoordinator.Verify(
+            x => x.SetConnectedAsync("profile-1", It.IsAny<CancellationToken>()),
+            Times.Once);
+        connectionCoordinator.Verify(
+            x => x.SetConnectedAsync("profile-2", It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task DispatchPromptToRemoteSessionAsync_UsesProvidedRemoteSessionId()
     {
         var service = CreateChatService();
