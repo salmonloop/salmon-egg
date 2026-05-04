@@ -32,7 +32,8 @@
 ## 5. 测试与验证
 1. 所有 Core 逻辑必须有单元测试。
 2. 测试工程必须跨平台可运行。
-3. 如果无法运行测试，必须在输出中明确说明原因。
+3. 若变更涉及代码、可执行资源、XAML、构建脚本或运行行为，必须运行与影响面相符的构建/测试验证。
+4. 纯文档改动（仅 `*.md`、不影响编译产物或运行行为）不需要把测试作为门禁，但必须在输出中明确说明“本次为文档-only 变更，未运行测试”。
 
 ## 6. 日志与诊断
 1. 仅保留可长期存在的业务日志。
@@ -48,7 +49,7 @@
 1. 变更完成后，明确列出修改的文件与原因。
 2. 如有风险或未验证项，必须显式说明。
 3. 不得引入无关格式化或无意义改动。
-4. 每次交付时，必须明确保证编译、测试可通过。
+4. 非文档-only 交付时，必须明确保证编译、测试可通过；纯文档交付必须明确说明未运行测试且原因是“文档-only”。
 
 ## 9. Uno / WinUI 跨平台目标（强约束）
 1. Windows 平台必须使用 WinUI 3。
@@ -68,14 +69,11 @@
 3. 每条经验规则至少包含：触发条件、原生期望行为、禁止做法、验证方式；规则表述必须可执行、可验证，禁止写抽象口号。
 4. 若后续需要展开长文分析，可在 `docs/audit/` 建立专题文档，并在本节保留一条通用规则加链接，不在本节堆叠事故叙事。
 5. 当前沉淀的通用经验规则：
-   - 自适应布局从宽屏进入 `Compact` 时，选中态必须继续由 `NavigationView` 原生选择机制投影；禁止在 ViewModel 或代码后置手动回写祖先高亮。
-   - 导航点击引发的 `SelectedItem`、内容区跳转和导航高亮必须同源于一次导航状态变更；禁止用 `Frame.Navigated` 反写 selection、`CurrentShellContent` 启发式或补丁事件二次纠偏。
-   - `Project` 这类纯分组项必须保持不可选语义；禁止通过样式、事件或视觉伪装把分组容器变成导航目标。
-   - 高频异步回调修改 UI 绑定属性时，必须在 ViewModel 显式封送回 UI 线程；禁止在 `ConfigureAwait(false)` 后的后台线程直接触发 `PropertyChanged`。相关分析见 [线程崩溃分析案例](file:///C:/Users/shang/Project/salmon-acp/docs/audit/2026-04-17-acp-threading-crash-post-mortem.md)。
-   - 左侧导航从会话点击到 Chat shell 跳转、远端 hydration、replay drain 完成，必须由同一条 latest-intent 状态机统一拥有；禁止 shell 与 chat 各自维护一套互不知情的激活链路。相关分析见 [左侧导航 SSOT 复盘](file:///C:/Users/shang/Project/salmon-acp/docs/audit/2026-04-18-left-nav-session-activation-ssot-post-mortem.md) 与 [Left Nav Session Lifecycle Race Review](file:///C:/Users/shang/Project/salmon-acp/docs/audit/2026-04-19-left-nav-session-lifecycle-race-review.md)。
-   - 远端会话是否可热切回，必须由 `conversation binding + ConnectionInstanceId` 判断真实连接实例是否未变；禁止把普通状态投影变化误当成连接实例变化，从而再次触发 `session/load` 或阻塞式 loading overlay。相关分析见 [ACP 多 session 热切回案例](file:///C:/Users/shang/Project/salmon-acp/docs/audit/2026-04-21-acp-multi-session-warm-return-case-study.md)。
-   - 后台 unread 是客户端派生的 UI attention 状态，必须按 `remoteSessionId -> conversation binding` 投影，并在会话重新成为已激活且已完成前台投影后清除；禁止通过重跑 `session/load`、延迟计时器或协议补丁制造提醒。相关分析见 [后台 session attention 案例](file:///C:/Users/shang/Project/salmon-acp/docs/audit/2026-04-22-background-session-attention-case-study.md)。
-   - ACP 连接池按 `profileId` 缓存可复用连接，只代表复用能力，不代表 UI 已同时订阅多个 profile 的 `session/update` 流；若产品需要跨 profile 实时提醒，必须新增显式多连接事件汇聚层，禁止假设池中保活连接会自然驱动 unread。相关分析见 [跨 profile background attention 边界案例](file:///C:/Users/shang/Project/salmon-acp/docs/audit/2026-04-23-cross-profile-background-attention-boundary.md)。
-   - 用户消息 optimistic bubble、`session/prompt.messageId`、`session/prompt.userMessageId`、`session/update.messageId` 与本地持久化 transcript 必须遵守 ACP acknowledgment 语义：客户端 request id 只代表 in-flight 发送，不代表 agent 已记录；只有 `userMessageId` 或后续 authoritative `session/update.messageId` 才能成为持久化 dedup key。禁止把缺失 `userMessageId` 的 request id 当成已确认消息、禁止在有协议 id 时退回纯文本比对、也禁止在存储层丢失 authoritative id。相关分析见 [ACP user message dedup closure case study](file:///C:/Users/shang/Project/salmon-acp/docs/audit/2026-04-22-acp-user-message-deduplication-closure-case-study.md)。
-   - ACP `session/list` 属于 discovery-only 元数据接口；触发条件：warm hydration 后或后台目录刷新；原生期望行为：只更新 title、updatedAt、meta 等发现性字段，`cwd` 必须继续以 `session/new`/`session/load` 已建立的会话上下文为准；禁止做法：用 `session/list.cwd` 回写已激活 conversation 的工作目录、project affinity 或 warm-return 路由依据；验证方式：`session/list` 后 active conversation 的 `cwd` 不漂移，首条 prompt 不触发 `session/new` recovery，项目归类不从已知 project 漂到 `__unclassified__`。
-   - WinUI3 GUI smoke 的有效验证对象必须是当前 repo 最近一次 `.tools/run-winui3-msix.ps1 -Configuration Debug` 成功安装并写入 provenance marker 的 MSIX；触发条件：需要验证安装后的 GUI 行为、启动路径或协议结论时；原生期望行为：只验证这一次 Debug 安装产生的 MSIX 实例及其对应 binary；禁止做法：用旧安装包、其他目录/其他构建产物、未写入 provenance marker 的安装结果或手工残留安装替代；验证方式：先确认 provenance marker 与目标包路径/hash 匹配，再从该安装实例启动 GUI smoke，并在 [ACP MSIX GUI verification boundary](file:///C:/Users/shang/Project/salmon-acp/docs/audit/2026-04-24-acp-msix-gui-verification-boundary.md) 中记录完整序列。
+   - 原生控件的选择态、焦点态和容器语义必须继续由控件自身投影；禁止在 ViewModel、样式补丁或代码后置中反向回写这些原生状态。
+   - 一次用户导航意图只能有一条 authoritative 状态变更链路；选中态、内容区切换和加载阶段必须同源，禁止用第二套事件回写或事后纠偏。
+   - 高频异步结果进入 UI 绑定前必须先完成线程封送与最新意图判定；禁止后台线程直接触发可视状态变更，也禁止让 stale 回调覆盖最新状态。
+   - 远程会话切换、热切回、后台提醒和前台清理必须以“连接身份 + 会话身份 + 当前意图”统一判定；禁止把普通投影变化误当成连接变化，也禁止用额外 reload 制造提醒或恢复。
+   - 发现性接口只负责元数据，交互性接口才负责正文与运行上下文；禁止用目录/列表结果回写已建立的执行上下文，或把发现性数据冒充正文真源。
+   - 客户端缓存只能作为运行期优化，不能升级为远程事实来源；去重、确认和恢复必须依赖协议中的 authoritative 标识，禁止拿本地请求 id、文本比对或历史缓存替代。
+   - 已连接的后台热会话与当前前台会话在运行期语义上属于同一层级；未连接的远程会话只能保留最小元数据，禁止在 hydrate 前泄露旧正文或伪预览。
+   - GUI 验证必须针对本次被验证构建实际产出的安装物与二进制，禁止用旧安装、旁路产物或来源不明的运行实例替代。

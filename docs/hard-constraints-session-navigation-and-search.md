@@ -34,19 +34,32 @@
 3. 对可选字段必须做“存在即解析，不存在不伪造”。
 4. 协议相关改动必须在 PR/交付说明中标注“依据的协议条目”。
 
-## 7. 测试与验收门禁（必须）
+## 7. 远程 Session 缓存与切换契约（必须）
+1. 远程 ACP Server 是远程 session transcript、tool payload 与消息顺序的唯一 SSOT；客户端不得把远程 transcript 持久化为跨进程恢复真源。
+2. 必须区分两类远程会话：
+   - `Background Warm`：同一进程内仍持有可复用连接实例与热运行态的远程会话。
+   - `Cold / Discover-Only Remote`：当前仅有 discovery 元数据、没有可复用连接实例或热运行态的远程会话。
+3. `Background Warm` 切回前台时必须复用当前运行期的 authoritative runtime；若 `conversation binding` 与 `ConnectionInstanceId` 仍匹配，则禁止再次触发 `session/load`、禁止重新进入阻塞式慢加载。
+4. `Cold / Discover-Only Remote` 只能保留 `remoteSessionId`、`title`、`updatedAt`、`meta`、profile binding 等发现性元数据；消息内容缓存数量必须为 `0`。
+5. `session/list` / discover 属于 metadata-only 输入；它们可以刷新 title、updatedAt、meta 等发现性字段，但不得生成 transcript preview、不得回写 warm transcript、不得作为 warm/cold 分流之外的正文来源。
+6. skeleton / loading overlay 出现之前，禁止泄露任何 stale transcript、cached transcript 或旧 header；若当前会话不是 `Background Warm` 可直接复用态，则正文必须等待 authoritative hydration。
+7. UI 虚拟化、增量投影和按需加载属于渲染层优化，不得反向定义 session 事实；是否 warm、是否需要 `session/load`、是否可显示正文，必须由 authoritative session state 决定。
+8. 若历史设计文档或旧实现把“本地持久化 transcript”或“discover transcript preview”当作远程真源，该约束自本文件起一律作废，以本节为准。
+
+## 8. 测试与验收门禁（必须）
 1. 必须覆盖结果导向测试，不测试实现细节字符串。
 2. 至少包含：
    - latest-intent 不回滚回归测试；
    - stale success/error 不覆盖最新查询的搜索测试；
    - 会话切换 UI 响应性 smoke（远程首进 + 快速切换）。
-3. 合并前必须通过：
+3. 若变更涉及代码、可执行资源、XAML、构建脚本或运行行为，合并前必须通过：
    - `dotnet build`（Core / Desktop / Wasm 验证）；
    - Windows 原生包使用 `build.bat msix` 或等价的 `.tools/run-winui3-msix.ps1 -SkipInstall`，禁止把 `dotnet build -f net10.0-windows10.0.26100.0` 当作唯一门禁；
    - 目标测试集；
    - GUI smoke。
+4. 纯文档改动（仅 `*.md`、不影响编译产物或运行行为）不要求执行上述构建/测试/GUI smoke，但交付说明必须显式标注“文档-only”。
 
-## 8. 禁止事项（必须）
+## 9. 禁止事项（必须）
 1. 禁止在 View code-behind 写业务状态机。
 2. 禁止同步阻塞（`.Result/.Wait`）进入切换/搜索主链路。
 3. 禁止“失败即强制回滚到旧会话”的默认策略。
