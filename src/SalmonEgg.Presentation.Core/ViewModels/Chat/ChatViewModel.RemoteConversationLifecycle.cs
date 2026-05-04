@@ -646,10 +646,13 @@ public partial class ChatViewModel
             return true;
         }
 
+        var hasReusableProjection = HasReusableWarmProjection(state, sessionId);
+        var currentConnectionInstanceId = await GetAuthoritativeConnectionInstanceIdAsync().ConfigureAwait(false);
         return ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
             state.ResolveRuntimeState(sessionId),
             binding,
-            ConnectionInstanceId,
+            currentConnectionInstanceId,
+            hasReusableProjection,
             BuildWarmReuseConnectionLivenessCheck(binding));
     }
 
@@ -1374,11 +1377,13 @@ public partial class ChatViewModel
         var state = await _chatStore.State ?? ChatState.Empty;
         var currentConnectionInstanceId = resolvedConnection.ConnectionInstanceId;
         var hydratedLivenessCheck = BuildWarmReuseConnectionLivenessCheck(binding);
+        var hasReusableProjection = HasReusableWarmProjection(state, conversationId);
         if (allowWarmReuseShortCircuit
             && ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
                 state.ResolveRuntimeState(conversationId),
                 binding,
                 currentConnectionInstanceId,
+                hasReusableProjection,
                 hydratedLivenessCheck))
         {
             Logger.LogInformation(
@@ -1393,7 +1398,7 @@ public partial class ChatViewModel
             var runtimeState = state.ResolveRuntimeState(conversationId);
             var denialReason = allowWarmReuseShortCircuit
                 ? ConversationWarmReusePolicy.GetWarmReuseDenialReason(
-                    runtimeState, binding, currentConnectionInstanceId, hydratedLivenessCheck)
+                    runtimeState, binding, currentConnectionInstanceId, hasReusableProjection, hydratedLivenessCheck)
                 : "SupersededInFlightActivationRequiresAuthoritativeHydration";
             Logger.LogInformation(
                 "Warm reuse denied in HydrateConversationAsync, falling back to slow hydration. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId} ExpectedConnectionInstanceId={ExpectedConnectionInstanceId} ActualConnectionInstanceId={ActualConnectionInstanceId} Reason={Reason}",
@@ -1457,6 +1462,12 @@ public partial class ChatViewModel
                 workspaceBinding.RemoteSessionId,
                 workspaceBinding.BoundProfileId);
     }
+
+    private bool HasReusableWarmProjection(ChatState state, string conversationId)
+        => ConversationProjectionReadinessPolicy.HasReusableWarmProjection(
+            state,
+            conversationId,
+            _conversationWorkspace.GetConversationSnapshot(conversationId));
 
     /// <summary>
     /// Builds a connection-liveness check for warm reuse policy.

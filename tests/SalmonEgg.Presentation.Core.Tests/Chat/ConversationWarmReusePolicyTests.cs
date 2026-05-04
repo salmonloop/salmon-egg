@@ -20,7 +20,11 @@ public class ConversationWarmReusePolicyTests
             "SessionLoadCompleted",
             new DateTime(2026, 4, 21, 0, 0, 0, DateTimeKind.Utc));
 
-        var result = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(runtime, binding, "conn-1");
+        var result = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
+            runtime,
+            binding,
+            "conn-1",
+            hasReusableProjection: true);
 
         Assert.True(result);
     }
@@ -38,7 +42,11 @@ public class ConversationWarmReusePolicyTests
             null,
             DateTime.UtcNow);
 
-        var result = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(runtime, binding, "conn-2");
+        var result = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
+            runtime,
+            binding,
+            "conn-2",
+            hasReusableProjection: true);
 
         Assert.False(result);
     }
@@ -56,7 +64,11 @@ public class ConversationWarmReusePolicyTests
             "SeedWarm",
             DateTime.UtcNow);
 
-        var result = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(runtime, binding, "conn-1");
+        var result = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
+            runtime,
+            binding,
+            "conn-1",
+            hasReusableProjection: true);
 
         Assert.False(result);
     }
@@ -74,7 +86,11 @@ public class ConversationWarmReusePolicyTests
             null,
             DateTime.UtcNow);
 
-        var result = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(runtime, binding, "conn-1");
+        var result = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
+            runtime,
+            binding,
+            "conn-1",
+            hasReusableProjection: true);
 
         Assert.False(result);
     }
@@ -92,7 +108,11 @@ public class ConversationWarmReusePolicyTests
             null,
             DateTime.UtcNow);
 
-        var result = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(runtime, binding, "conn-1");
+        var result = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
+            runtime,
+            binding,
+            "conn-1",
+            hasReusableProjection: true);
 
         Assert.False(result);
     }
@@ -102,7 +122,11 @@ public class ConversationWarmReusePolicyTests
     {
         var binding = new ConversationBindingSlice("conv-1", "remote-1", "profile-1");
 
-        var result = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(null, binding, "conn-1");
+        var result = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
+            null,
+            binding,
+            "conn-1",
+            hasReusableProjection: true);
 
         Assert.False(result);
     }
@@ -119,7 +143,11 @@ public class ConversationWarmReusePolicyTests
             null,
             DateTime.UtcNow);
 
-        var result = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(runtime, null, "conn-1");
+        var result = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
+            runtime,
+            null,
+            "conn-1",
+            hasReusableProjection: true);
 
         Assert.False(result);
     }
@@ -137,7 +165,11 @@ public class ConversationWarmReusePolicyTests
             null,
             DateTime.UtcNow);
 
-        var result = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(runtime, binding, "conn-1");
+        var result = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
+            runtime,
+            binding,
+            "conn-1",
+            hasReusableProjection: true);
 
         Assert.False(result);
     }
@@ -155,7 +187,11 @@ public class ConversationWarmReusePolicyTests
             null,
             DateTime.UtcNow);
 
-        var result = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(runtime, binding, string.Empty);
+        var result = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
+            runtime,
+            binding,
+            string.Empty,
+            hasReusableProjection: true);
 
         Assert.False(result);
     }
@@ -175,7 +211,7 @@ public class ConversationWarmReusePolicyTests
 
         // Simulates cross-profile scenario: current global ID is "conn-2" but conn-1 is still alive in pool
         var result = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
-            runtime, binding, "conn-2", isConnectionAlive: id => id == "conn-1");
+            runtime, binding, "conn-2", hasReusableProjection: true, isConnectionAlive: id => id == "conn-1");
 
         Assert.True(result);
     }
@@ -194,7 +230,7 @@ public class ConversationWarmReusePolicyTests
             DateTime.UtcNow);
 
         var result = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
-            runtime, binding, "conn-2", isConnectionAlive: _ => false);
+            runtime, binding, "conn-2", hasReusableProjection: true, isConnectionAlive: _ => false);
 
         Assert.False(result);
     }
@@ -214,7 +250,7 @@ public class ConversationWarmReusePolicyTests
 
         // Without liveness check, strict equality applies
         var result = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
-            runtime, binding, "conn-2", isConnectionAlive: null);
+            runtime, binding, "conn-2", hasReusableProjection: true, isConnectionAlive: null);
 
         Assert.False(result);
     }
@@ -233,7 +269,7 @@ public class ConversationWarmReusePolicyTests
             DateTime.UtcNow);
 
         var reason = ConversationWarmReusePolicy.GetWarmReuseDenialReason(
-            runtime, binding, "conn-2", isConnectionAlive: _ => false);
+            runtime, binding, "conn-2", hasReusableProjection: true, isConnectionAlive: _ => false);
 
         Assert.Equal("ConnectionNotAlive", reason);
     }
@@ -252,8 +288,52 @@ public class ConversationWarmReusePolicyTests
             DateTime.UtcNow);
 
         var reason = ConversationWarmReusePolicy.GetWarmReuseDenialReason(
-            runtime, binding, "conn-2", isConnectionAlive: null);
+            runtime, binding, "conn-2", hasReusableProjection: true, isConnectionAlive: null);
 
         Assert.Equal("ConnectionInstanceIdMismatch", reason);
+    }
+
+    [Fact]
+    public void CanReuseRemoteWarmConversation_WhenReusableProjectionIsMissing_ReturnsFalse()
+    {
+        var binding = new ConversationBindingSlice("conv-1", "remote-1", "profile-1");
+        var runtime = new ConversationRuntimeSlice(
+            "conv-1",
+            ConversationRuntimePhase.Warm,
+            "conn-1",
+            "remote-1",
+            "profile-1",
+            "SessionLoadCompleted",
+            DateTime.UtcNow);
+
+        var result = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
+            runtime,
+            binding,
+            "conn-1",
+            hasReusableProjection: false);
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void GetWarmReuseDenialReason_WhenReusableProjectionIsMissing_ReturnsProjectionNotReady()
+    {
+        var binding = new ConversationBindingSlice("conv-1", "remote-1", "profile-1");
+        var runtime = new ConversationRuntimeSlice(
+            "conv-1",
+            ConversationRuntimePhase.Warm,
+            "conn-1",
+            "remote-1",
+            "profile-1",
+            "SessionLoadCompleted",
+            DateTime.UtcNow);
+
+        var reason = ConversationWarmReusePolicy.GetWarmReuseDenialReason(
+            runtime,
+            binding,
+            "conn-1",
+            hasReusableProjection: false);
+
+        Assert.Equal("ProjectionNotReady", reason);
     }
 }

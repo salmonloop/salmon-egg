@@ -29,6 +29,7 @@ public static class ConversationWarmReusePolicy
         ConversationRuntimeSlice? runtimeState,
         ConversationBindingSlice? binding,
         string? currentConnectionInstanceId,
+        bool hasReusableProjection,
         Func<string, bool>? isConnectionAlive = null)
     {
         if (!HasAuthoritativeWarmRuntime(runtimeState))
@@ -39,6 +40,11 @@ public static class ConversationWarmReusePolicy
         var hydratedRuntime = runtimeState!.Value;
 
         if (binding is null || string.IsNullOrWhiteSpace(binding.RemoteSessionId))
+        {
+            return false;
+        }
+
+        if (!hasReusableProjection)
         {
             return false;
         }
@@ -65,8 +71,14 @@ public static class ConversationWarmReusePolicy
     public static bool CanReuseRemoteWarmConversation(
         ConversationRuntimeSlice? runtimeState,
         ConversationBindingSlice? binding,
-        string? currentConnectionInstanceId)
-        => CanReuseRemoteWarmConversation(runtimeState, binding, currentConnectionInstanceId, isConnectionAlive: null);
+        string? currentConnectionInstanceId,
+        bool hasReusableProjection)
+        => CanReuseRemoteWarmConversation(
+            runtimeState,
+            binding,
+            currentConnectionInstanceId,
+            hasReusableProjection,
+            isConnectionAlive: null);
 
     /// <summary>
     /// Returns a human-readable reason why warm reuse was denied, or null if reuse is allowed.
@@ -76,6 +88,7 @@ public static class ConversationWarmReusePolicy
         ConversationRuntimeSlice? runtimeState,
         ConversationBindingSlice? binding,
         string? currentConnectionInstanceId,
+        bool hasReusableProjection,
         Func<string, bool>? isConnectionAlive = null)
     {
         if (runtimeState is not { Phase: ConversationRuntimePhase.Warm } hydratedRuntime)
@@ -91,6 +104,11 @@ public static class ConversationWarmReusePolicy
         if (binding is null || string.IsNullOrWhiteSpace(binding.RemoteSessionId))
         {
             return "MissingBinding";
+        }
+
+        if (!hasReusableProjection)
+        {
+            return "ProjectionNotReady";
         }
 
         if (isConnectionAlive is not null)
@@ -126,6 +144,12 @@ public static class ConversationWarmReusePolicy
     public static string? GetWarmReuseDenialReason(
         ConversationRuntimeSlice? runtimeState,
         ConversationBindingSlice? binding,
-        string? currentConnectionInstanceId)
-        => GetWarmReuseDenialReason(runtimeState, binding, currentConnectionInstanceId, isConnectionAlive: null);
+        string? currentConnectionInstanceId,
+        bool hasReusableProjection)
+        => GetWarmReuseDenialReason(
+            runtimeState,
+            binding,
+            currentConnectionInstanceId,
+            hasReusableProjection,
+            isConnectionAlive: null);
 }
