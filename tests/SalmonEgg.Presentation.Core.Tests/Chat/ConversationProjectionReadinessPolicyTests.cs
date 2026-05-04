@@ -66,4 +66,84 @@ public sealed class ConversationProjectionReadinessPolicyTests
 
         Assert.False(result);
     }
+
+    [Fact]
+    public void HasReusableWarmProjection_WhenSlicesExistButContainNoProjectedState_ReturnsFalse()
+    {
+        var state = ChatState.Empty with
+        {
+            RuntimeStates = ImmutableDictionary<string, ConversationRuntimeSlice>.Empty.Add(
+                "conv-1",
+                new ConversationRuntimeSlice(
+                    "conv-1",
+                    ConversationRuntimePhase.Warm,
+                    "conn-1",
+                    "remote-1",
+                    "profile-1",
+                    "SessionLoadCompleted",
+                    DateTime.UtcNow)),
+            ConversationContents = ImmutableDictionary<string, ConversationContentSlice>.Empty.Add(
+                "conv-1",
+                new ConversationContentSlice(
+                    ImmutableList<ConversationMessageSnapshot>.Empty,
+                    ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                    false,
+                    null)),
+            ConversationSessionStates = ImmutableDictionary<string, ConversationSessionStateSlice>.Empty.Add(
+                "conv-1",
+                new ConversationSessionStateSlice(
+                    ImmutableList<ConversationModeOptionSnapshot>.Empty,
+                    null,
+                    ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+                    false,
+                    ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+                    null,
+                    null))
+        };
+
+        var result = ConversationProjectionReadinessPolicy.HasReusableWarmProjection(
+            state,
+            "conv-1",
+            snapshot: null);
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void HasReusableWarmProjection_WhenSessionStateSliceHasAuxiliaryProjection_ReturnsTrue()
+    {
+        var state = ChatState.Empty with
+        {
+            RuntimeStates = ImmutableDictionary<string, ConversationRuntimeSlice>.Empty.Add(
+                "conv-1",
+                new ConversationRuntimeSlice(
+                    "conv-1",
+                    ConversationRuntimePhase.Warm,
+                    "conn-1",
+                    "remote-1",
+                    "profile-1",
+                    "SessionLoadCompleted",
+                    DateTime.UtcNow)),
+            ConversationSessionStates = ImmutableDictionary<string, ConversationSessionStateSlice>.Empty.Add(
+                "conv-1",
+                new ConversationSessionStateSlice(
+                    ImmutableList<ConversationModeOptionSnapshot>.Empty,
+                    null,
+                    ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+                    false,
+                    ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+                    new ConversationSessionInfoSnapshot
+                    {
+                        Title = "Warm conversation"
+                    },
+                    null))
+        };
+
+        var result = ConversationProjectionReadinessPolicy.HasReusableWarmProjection(
+            state,
+            "conv-1",
+            snapshot: null);
+
+        Assert.True(result);
+    }
 }

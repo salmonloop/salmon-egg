@@ -48,6 +48,11 @@ public static class ConversationProjectionReadinessPolicy
             || sessionState.ShowConfigOptionsPanel
             || !string.IsNullOrWhiteSpace(sessionState.SelectedModeId);
 
+    public static bool HasProjectedAuxiliarySessionState(ConversationSessionStateSlice sessionState)
+        => sessionState.AvailableCommands.Count > 0
+            || sessionState.SessionInfo is not null
+            || sessionState.Usage is not null;
+
     public static bool ShouldHydrateAuxiliarySessionState(
         ConversationSessionStateSlice? sessionState,
         ConversationWorkspaceSnapshot? snapshot)
@@ -89,8 +94,17 @@ public static class ConversationProjectionReadinessPolicy
             return true;
         }
 
-        if (state.ResolveContentSlice(conversationId).HasValue
-            || state.ResolveSessionStateSlice(conversationId).HasValue)
+        var contentSlice = state.ResolveContentSlice(conversationId);
+        if (contentSlice is { } projectedContent
+            && HasProjectedConversationContent(projectedContent))
+        {
+            return true;
+        }
+
+        var sessionStateSlice = state.ResolveSessionStateSlice(conversationId);
+        if (sessionStateSlice is { } projectedSessionState
+            && (HasProjectedPrimarySessionState(projectedSessionState)
+                || HasProjectedAuxiliarySessionState(projectedSessionState)))
         {
             return true;
         }
@@ -119,8 +133,6 @@ public static class ConversationProjectionReadinessPolicy
             state.SessionInfo,
             state.Usage);
         return HasProjectedPrimarySessionState(rootSessionState)
-            || rootSessionState.AvailableCommands.Count > 0
-            || rootSessionState.SessionInfo is not null
-            || rootSessionState.Usage is not null;
+            || HasProjectedAuxiliarySessionState(rootSessionState);
     }
 }

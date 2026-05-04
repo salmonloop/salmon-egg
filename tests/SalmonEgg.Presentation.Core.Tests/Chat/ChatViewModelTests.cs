@@ -3435,6 +3435,38 @@ public partial class ChatViewModelTests
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
     }
 
+    private static async Task WaitForQueueingConversationReadyAsync(
+        QueueingSynchronizationContext syncContext,
+        ChatViewModel viewModel,
+        string conversationId)
+    {
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(
+                string.Equals(viewModel.CurrentSessionId, conversationId, StringComparison.Ordinal)
+                && viewModel.IsSessionActive
+                && viewModel.IsInitialized);
+        }, timeoutMilliseconds: 5000);
+    }
+
+    private static async Task WaitForQueueingPromptReadyAsync(
+        QueueingSynchronizationContext syncContext,
+        ChatViewModel viewModel,
+        string conversationId,
+        string prompt)
+    {
+        await WaitForQueueingConversationReadyAsync(syncContext, viewModel, conversationId);
+        viewModel.CurrentPrompt = prompt;
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(
+                string.Equals(viewModel.CurrentPrompt, prompt, StringComparison.Ordinal)
+                && viewModel.CanSendPromptUi);
+        }, timeoutMilliseconds: 5000);
+    }
+
     private static Task AwaitWithSynchronizationContextAsync(SynchronizationContext syncContext, Task task)
         => syncContext is QueueingSynchronizationContext queueingContext
             ? queueingContext.RunUntilCompletedAsync(task)
@@ -4171,17 +4203,7 @@ public partial class ChatViewModelTests
 
         await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "conv-1", Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty });
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
-        syncContext.RunAll();
-        // Wait for projection
-        await Task.Delay(50);
-        syncContext.RunAll();
-
-        Assert.True(viewModel.IsSessionActive);
-        viewModel.CurrentPrompt = "hi";
-        syncContext.RunAll();
-        await Task.Delay(50);
-        syncContext.RunAll();
-        Assert.True(viewModel.CanSendPromptUi);
+        await WaitForQueueingPromptReadyAsync(syncContext, viewModel, "conv-1", "hi");
 
         var sendTask = viewModel.SendPromptCommand.ExecuteAsync(null);
 
@@ -4256,14 +4278,7 @@ public partial class ChatViewModelTests
             Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
         });
         await DispatchConnectedAsync(fixture, "profile-1");
-        syncContext.RunAll();
-        await Task.Delay(50);
-        syncContext.RunAll();
-
-        viewModel.CurrentPrompt = "/plan";
-        syncContext.RunAll();
-        await Task.Delay(50);
-        syncContext.RunAll();
+        await WaitForQueueingPromptReadyAsync(syncContext, viewModel, "conv-1", "/plan");
 
         var sendTask = Task.Run(() => viewModel.SendPromptCommand.ExecuteAsync(null));
 
@@ -4324,14 +4339,7 @@ public partial class ChatViewModelTests
             Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
         });
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
-        syncContext.RunAll();
-        await Task.Delay(50);
-        syncContext.RunAll();
-
-        viewModel.CurrentPrompt = "hello";
-        syncContext.RunAll();
-        await Task.Delay(50);
-        syncContext.RunAll();
+        await WaitForQueueingPromptReadyAsync(syncContext, viewModel, "conv-1", "hello");
 
         await AwaitWithSynchronizationContextAsync(
             syncContext,
@@ -4375,14 +4383,7 @@ public partial class ChatViewModelTests
             Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
         });
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
-        syncContext.RunAll();
-        await Task.Delay(50);
-        syncContext.RunAll();
-
-        viewModel.CurrentPrompt = "hello";
-        syncContext.RunAll();
-        await Task.Delay(50);
-        syncContext.RunAll();
+        await WaitForQueueingPromptReadyAsync(syncContext, viewModel, "conv-1", "hello");
 
         await AwaitWithSynchronizationContextAsync(
             syncContext,
@@ -4525,14 +4526,7 @@ public partial class ChatViewModelTests
             Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
         });
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
-        syncContext.RunAll();
-        await Task.Delay(50);
-        syncContext.RunAll();
-
-        viewModel.CurrentPrompt = "hello";
-        syncContext.RunAll();
-        await Task.Delay(50);
-        syncContext.RunAll();
+        await WaitForQueueingPromptReadyAsync(syncContext, viewModel, "conv-1", "hello");
 
         var sendTask = viewModel.SendPromptCommand.ExecuteAsync(null);
 
@@ -4607,14 +4601,7 @@ public partial class ChatViewModelTests
             Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
         });
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
-        syncContext.RunAll();
-        await Task.Delay(50);
-        syncContext.RunAll();
-
-        viewModel.CurrentPrompt = "hello";
-        syncContext.RunAll();
-        await Task.Delay(50);
-        syncContext.RunAll();
+        await WaitForQueueingPromptReadyAsync(syncContext, viewModel, "conv-1", "hello");
 
         var sendTask = viewModel.SendPromptCommand.ExecuteAsync(null);
 
@@ -4848,14 +4835,7 @@ public partial class ChatViewModelTests
             Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
         });
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
-        syncContext.RunAll();
-        await Task.Delay(50);
-        syncContext.RunAll();
-
-        viewModel.CurrentPrompt = "show modes";
-        syncContext.RunAll();
-        await Task.Delay(50);
-        syncContext.RunAll();
+        await WaitForQueueingPromptReadyAsync(syncContext, viewModel, "conv-1", "show modes");
 
         await viewModel.SendPromptCommand.ExecuteAsync(null);
 
@@ -5126,19 +5106,7 @@ public partial class ChatViewModelTests
             Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
         });
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
-        syncContext.RunAll();
-        await Task.Delay(50);
-        syncContext.RunAll();
-
-        viewModel.CurrentPrompt = "hello";
-        syncContext.RunAll();
-        await Task.Delay(50);
-        syncContext.RunAll();
-        await WaitForConditionAsync(() =>
-        {
-            syncContext.RunAll();
-            return Task.FromResult(viewModel.CanSendPromptUi);
-        }, timeoutMilliseconds: 5000);
+        await WaitForQueueingPromptReadyAsync(syncContext, viewModel, "conv-1", "hello");
 
         await viewModel.SendPromptCommand.ExecuteAsync(null);
 
@@ -5256,15 +5224,7 @@ public partial class ChatViewModelTests
             Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
         });
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
-        syncContext.RunAll();
-        await Task.Delay(50);
-        syncContext.RunAll();
-
-        viewModel.CurrentPrompt = "refuse me";
-        syncContext.RunAll();
-        await Task.Delay(50);
-        syncContext.RunAll();
-        Assert.True(viewModel.CanSendPromptUi);
+        await WaitForQueueingPromptReadyAsync(syncContext, viewModel, "conv-1", "refuse me");
 
         await viewModel.SendPromptCommand.ExecuteAsync(null);
         syncContext.RunAll();
