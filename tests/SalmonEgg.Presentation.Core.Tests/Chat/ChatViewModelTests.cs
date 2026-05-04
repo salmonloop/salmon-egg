@@ -783,16 +783,18 @@ public partial class ChatViewModelTests
 
         await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync());
         syncContext.RunAll();
-        await WaitForConditionAsync(() =>
+        await WaitForConditionAsync(async () =>
         {
             syncContext.RunAll();
-            return Task.FromResult(
-                string.Equals(fixture.ViewModel.CurrentSessionId, "session-1", StringComparison.Ordinal)
-                && fixture.ViewModel.MessageHistory.Count == 1
-                && fixture.ViewModel.AvailableModes.Count == 0
-                && fixture.ViewModel.SelectedMode is null
-                && fixture.ViewModel.ConfigOptions.Count == 0);
+            var state = await fixture.GetStateAsync();
+            return string.Equals(state.HydratedConversationId, "session-1", StringComparison.Ordinal)
+                && string.Equals(state.ResolveBinding("session-1")?.RemoteSessionId, "remote-1", StringComparison.Ordinal)
+                && state.ResolveContentSlice("session-1")?.Transcript.Count == 1
+                && state.AvailableModes?.Count == 0
+                && state.SelectedModeId is null
+                && state.ConfigOptions?.Count == 0;
         });
+        syncContext.RunAll();
 
         conversationStore.Verify(s => s.LoadAsync(It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(new[] { "session-1" }, fixture.Workspace.GetKnownConversationIds());
@@ -4877,14 +4879,16 @@ public partial class ChatViewModelTests
             Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
         });
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
-        syncContext.RunAll();
-        await Task.Delay(50);
-        syncContext.RunAll();
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(
+                string.Equals(viewModel.CurrentSessionId, "conv-1", StringComparison.Ordinal)
+                && viewModel.IsSessionActive
+                && viewModel.IsInitialized);
+        });
 
         viewModel.CurrentPrompt = "cancel me";
-        syncContext.RunAll();
-        await Task.Delay(50);
-        syncContext.RunAll();
         await WaitForConditionAsync(() =>
         {
             syncContext.RunAll();
@@ -13997,8 +14001,17 @@ public partial class ChatViewModelTests
         await WaitForConditionAsync(() =>
             Task.FromResult(string.Equals(fixture.ViewModel.ConnectionInstanceId, "conn-1", StringComparison.Ordinal)));
 
-        await fixture.ViewModel.HydrateActiveConversationAsync();
-        await fixture.ViewModel.SwitchConversationAsync("conv-2");
+        var initialHydrated = await fixture.ViewModel.HydrateActiveConversationAsync();
+        Assert.True(initialHydrated, fixture.ViewModel.ErrorMessage);
+        var switchedAway = await fixture.ViewModel.SwitchConversationAsync("conv-2");
+        Assert.True(switchedAway, fixture.ViewModel.ErrorMessage);
+        await WaitForConditionAsync(async () =>
+        {
+            var state = await fixture.GetStateAsync();
+            return string.Equals(state.HydratedConversationId, "conv-2", StringComparison.Ordinal)
+                && string.Equals(fixture.ViewModel.CurrentSessionId, "conv-2", StringComparison.Ordinal)
+                && !fixture.ViewModel.IsOverlayVisible;
+        });
 
         blockReturnActivation = true;
         var switchBackTask = fixture.ViewModel.SwitchConversationAsync("conv-1");
