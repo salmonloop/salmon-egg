@@ -139,6 +139,9 @@ public static class ChatReducer
                         ConversationSessionInfoSnapshots.Clone(setSessionState.SessionInfo),
                         CloneUsageSnapshot(setSessionState.Usage)))
             }),
+            ScrubConversationDerivedStateAction scrub when string.IsNullOrWhiteSpace(scrub.ConversationId)
+                => current,
+            ScrubConversationDerivedStateAction scrub => Mutate(current, ScrubConversationDerivedState(current, scrub)),
             MergeConversationSessionStateAction mergeSessionState => Mutate(current, current with
             {
                 ConversationSessionStates = UpdateConversationSessionStates(
@@ -202,6 +205,60 @@ public static class ChatReducer
         return projected with
         {
             Generation = checked(current.Generation + 1)
+        };
+    }
+
+    private static ChatState ScrubConversationDerivedState(
+        ChatState current,
+        ScrubConversationDerivedStateAction scrub)
+    {
+        var preservedSessionInfo = ConversationSessionInfoSnapshots.Clone(scrub.PreservedSessionInfo);
+        var next = current with
+        {
+            ConversationContents = UpdateConversationContents(
+                current.ConversationContents,
+                scrub.ConversationId,
+                new ConversationContentSlice(
+                    ImmutableList<ConversationMessageSnapshot>.Empty,
+                    ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                    false,
+                    null)),
+            ConversationSessionStates = UpdateConversationSessionStates(
+                current.ConversationSessionStates,
+                scrub.ConversationId,
+                new ConversationSessionStateSlice(
+                    ImmutableList<ConversationModeOptionSnapshot>.Empty,
+                    null,
+                    ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+                    false,
+                    ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+                    preservedSessionInfo,
+                    null)),
+            RuntimeStates = (current.RuntimeStates ?? ImmutableDictionary<string, ConversationRuntimeSlice>.Empty)
+                .Remove(scrub.ConversationId),
+            ActiveTurn = current.ActiveTurn?.ConversationId == scrub.ConversationId
+                ? null
+                : current.ActiveTurn
+        };
+
+        if (!string.Equals(current.HydratedConversationId, scrub.ConversationId, StringComparison.Ordinal))
+        {
+            return next;
+        }
+
+        return next with
+        {
+            Transcript = ImmutableList<ConversationMessageSnapshot>.Empty,
+            PlanEntries = ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+            AvailableModes = ImmutableList<ConversationModeOptionSnapshot>.Empty,
+            SelectedModeId = null,
+            ConfigOptions = ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+            ShowConfigOptionsPanel = false,
+            AvailableCommands = ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+            SessionInfo = preservedSessionInfo,
+            Usage = null,
+            ShowPlanPanel = false,
+            PlanTitle = null
         };
     }
 

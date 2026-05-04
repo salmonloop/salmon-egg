@@ -106,6 +106,10 @@ public sealed record SetConversationSessionStateAction(
     ConversationSessionInfoSnapshot? SessionInfo = null,
     ConversationUsageSnapshot? Usage = null) : ChatAction;
 
+public sealed record ScrubConversationDerivedStateAction(
+    string ConversationId,
+    ConversationSessionInfoSnapshot? PreservedSessionInfo = null) : ChatAction;
+
 public sealed record MergeConversationSessionStateAction(
     string? ConversationId,
     IImmutableList<ConversationModeOptionSnapshot>? AvailableModes = null,

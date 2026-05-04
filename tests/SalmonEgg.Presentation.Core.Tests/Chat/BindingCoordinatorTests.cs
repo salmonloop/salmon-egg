@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Conversation;
+using SalmonEgg.Domain.Models.Plan;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
@@ -72,12 +73,44 @@ public sealed class BindingCoordinatorTests
         using var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
-            Transcript: [],
-            Plan: [],
-            ShowPlanPanel: false,
-            PlanTitle: null,
+            Transcript:
+            [
+                new ConversationMessageSnapshot
+                {
+                    Id = "remote-1",
+                    ContentType = "text",
+                    TextContent = "remote transcript"
+                }
+            ],
+            Plan:
+            [
+                new ConversationPlanEntrySnapshot
+                {
+                    Content = "Plan",
+                    Status = PlanEntryStatus.Pending,
+                    Priority = PlanEntryPriority.Medium
+                }
+            ],
+            ShowPlanPanel: true,
+            PlanTitle: "Remote plan",
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
-            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+            AvailableModes:
+            [
+                new ConversationModeOptionSnapshot { ModeId = "mode-1", ModeName = "Mode 1" }
+            ],
+            SelectedModeId: "mode-1",
+            ConfigOptions:
+            [
+                new ConversationConfigOptionSnapshot { Id = "cfg-1", Name = "Config 1", SelectedValue = "value" }
+            ],
+            ShowConfigOptionsPanel: true,
+            AvailableCommands:
+            [
+                new ConversationAvailableCommandSnapshot("cmd-1", "Command 1", "desc")
+            ],
+            SessionInfo: new ConversationSessionInfoSnapshot { Title = "Remote title", Cwd = @"C:\repo\one" },
+            Usage: new ConversationUsageSnapshot { Used = 1, Size = 2 }));
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-2",
             Transcript: [],
@@ -91,9 +124,68 @@ public sealed class BindingCoordinatorTests
 
         var state = State.Value(this, () => ChatState.Empty with
         {
+            HydratedConversationId = "session-1",
             Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
                 .Add("session-1", new ConversationBindingSlice("session-1", "remote-shared", "profile-1"))
-                .Add("session-2", new ConversationBindingSlice("session-2", "remote-old", "profile-2"))
+                .Add("session-2", new ConversationBindingSlice("session-2", "remote-old", "profile-2")),
+            ConversationContents = ImmutableDictionary<string, ConversationContentSlice>.Empty.Add(
+                "session-1",
+                new ConversationContentSlice(
+                    ImmutableList.Create(new ConversationMessageSnapshot
+                    {
+                        Id = "remote-1",
+                        ContentType = "text",
+                        TextContent = "remote transcript"
+                    }),
+                    ImmutableList.Create(new ConversationPlanEntrySnapshot
+                    {
+                        Content = "Plan",
+                        Status = PlanEntryStatus.Pending,
+                        Priority = PlanEntryPriority.Medium
+                    }),
+                    true,
+                    "Remote plan")),
+            ConversationSessionStates = ImmutableDictionary<string, ConversationSessionStateSlice>.Empty.Add(
+                "session-1",
+                new ConversationSessionStateSlice(
+                    ImmutableList.Create(new ConversationModeOptionSnapshot { ModeId = "mode-1", ModeName = "Mode 1" }),
+                    "mode-1",
+                    ImmutableList.Create(new ConversationConfigOptionSnapshot { Id = "cfg-1", Name = "Config 1", SelectedValue = "value" }),
+                    true,
+                    ImmutableList.Create(new ConversationAvailableCommandSnapshot("cmd-1", "Command 1", "desc")),
+                    new ConversationSessionInfoSnapshot { Title = "Remote title", Cwd = @"C:\repo\one" },
+                    new ConversationUsageSnapshot { Used = 1, Size = 2 })),
+            RuntimeStates = ImmutableDictionary<string, ConversationRuntimeSlice>.Empty.Add(
+                "session-1",
+                new ConversationRuntimeSlice(
+                    "session-1",
+                    ConversationRuntimePhase.Warm,
+                    "conn-1",
+                    "remote-shared",
+                    "profile-1",
+                    "SessionLoadCompleted",
+                    DateTime.UtcNow)),
+            Transcript = ImmutableList.Create(new ConversationMessageSnapshot
+            {
+                Id = "remote-1",
+                ContentType = "text",
+                TextContent = "remote transcript"
+            }),
+            PlanEntries = ImmutableList.Create(new ConversationPlanEntrySnapshot
+            {
+                Content = "Plan",
+                Status = PlanEntryStatus.Pending,
+                Priority = PlanEntryPriority.Medium
+            }),
+            AvailableModes = ImmutableList.Create(new ConversationModeOptionSnapshot { ModeId = "mode-1", ModeName = "Mode 1" }),
+            SelectedModeId = "mode-1",
+            ConfigOptions = ImmutableList.Create(new ConversationConfigOptionSnapshot { Id = "cfg-1", Name = "Config 1", SelectedValue = "value" }),
+            ShowConfigOptionsPanel = true,
+            AvailableCommands = ImmutableList.Create(new ConversationAvailableCommandSnapshot("cmd-1", "Command 1", "desc")),
+            SessionInfo = new ConversationSessionInfoSnapshot { Title = "Remote title", Cwd = @"C:\repo\one" },
+            Usage = new ConversationUsageSnapshot { Used = 1, Size = 2 },
+            ShowPlanPanel = true,
+            PlanTitle = "Remote plan"
         });
         var chatStore = CreateChatStore(state);
         var coordinator = new BindingCoordinator(workspace, chatStore.Object);
@@ -106,11 +198,39 @@ public sealed class BindingCoordinatorTests
         Assert.Equal(
             new ConversationBindingSlice("session-2", "remote-shared", "profile-2"),
             currentState.ResolveBinding("session-2"));
+        Assert.Empty(currentState.ResolveContentSlice("session-1")?.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty);
+        Assert.Empty(currentState.ResolveContentSlice("session-1")?.PlanEntries ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty);
+        Assert.Empty(currentState.ResolveSessionStateSlice("session-1")?.AvailableModes ?? ImmutableList<ConversationModeOptionSnapshot>.Empty);
+        Assert.Empty(currentState.ResolveSessionStateSlice("session-1")?.ConfigOptions ?? ImmutableList<ConversationConfigOptionSnapshot>.Empty);
+        Assert.Empty(currentState.ResolveSessionStateSlice("session-1")?.AvailableCommands ?? ImmutableList<ConversationAvailableCommandSnapshot>.Empty);
+        Assert.Null(currentState.ResolveRuntimeState("session-1"));
+        Assert.Equal("Remote title", currentState.ResolveSessionStateSlice("session-1")?.SessionInfo?.Title);
+        Assert.Empty(currentState.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty);
+        Assert.Empty(currentState.PlanEntries ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty);
+        Assert.Empty(currentState.AvailableModes ?? ImmutableList<ConversationModeOptionSnapshot>.Empty);
+        Assert.Null(currentState.SelectedModeId);
+        Assert.Empty(currentState.ConfigOptions ?? ImmutableList<ConversationConfigOptionSnapshot>.Empty);
+        Assert.Empty(currentState.AvailableCommands ?? ImmutableList<ConversationAvailableCommandSnapshot>.Empty);
+        Assert.Null(currentState.Usage);
+        Assert.False(currentState.ShowPlanPanel);
+        Assert.Null(currentState.PlanTitle);
 
         var workspaceBinding1 = workspace.GetRemoteBinding("session-1");
         Assert.NotNull(workspaceBinding1);
         Assert.Null(workspaceBinding1!.RemoteSessionId);
         Assert.Null(workspaceBinding1.BoundProfileId);
+        var workspaceSnapshot1 = workspace.GetConversationSnapshot("session-1");
+        Assert.NotNull(workspaceSnapshot1);
+        Assert.Empty(workspaceSnapshot1!.Transcript);
+        Assert.Empty(workspaceSnapshot1.Plan);
+        Assert.Empty(workspaceSnapshot1.AvailableModes ?? Array.Empty<ConversationModeOptionSnapshot>());
+        Assert.Null(workspaceSnapshot1.SelectedModeId);
+        Assert.Empty(workspaceSnapshot1.ConfigOptions ?? Array.Empty<ConversationConfigOptionSnapshot>());
+        Assert.Empty(workspaceSnapshot1.AvailableCommands ?? Array.Empty<ConversationAvailableCommandSnapshot>());
+        Assert.NotNull(workspaceSnapshot1.SessionInfo);
+        Assert.Null(workspaceSnapshot1.Usage);
+        Assert.False(workspaceSnapshot1.ShowPlanPanel);
+        Assert.Null(workspaceSnapshot1.PlanTitle);
 
         var workspaceBinding2 = workspace.GetRemoteBinding("session-2");
         Assert.NotNull(workspaceBinding2);

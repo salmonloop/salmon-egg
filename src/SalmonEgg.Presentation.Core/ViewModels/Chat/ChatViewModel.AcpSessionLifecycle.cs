@@ -1239,7 +1239,7 @@ public partial class ChatViewModel
         var activationStopwatch = Stopwatch.StartNew();
         var initialWarmReuseBinding = await ResolveConversationBindingAsync(sessionId, context.CancellationToken).ConfigureAwait(false);
         var initialWarmReuseConnectionInstanceId = await GetAuthoritativeConnectionInstanceIdAsync().ConfigureAwait(false);
-        var initialHasReusableProjection = HasReusableWarmProjection(activationStartState, sessionId);
+        var initialHasReusableProjection = HasReusableWarmSelectionProjection(activationStartState, sessionId);
         var canOptimisticallyReuseWarmRemoteConversation =
             !forceRemoteHydrationAfterSupersedingInFlightActivation
             && ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
@@ -1299,7 +1299,7 @@ public partial class ChatViewModel
         var warmReuseBinding = await ResolveConversationBindingAsync(sessionId, context.CancellationToken).ConfigureAwait(false);
         var warmReuseConnectionInstanceId = await GetAuthoritativeConnectionInstanceIdAsync().ConfigureAwait(false);
         var warmReuseState = await _chatStore.State ?? ChatState.Empty;
-        var hasReusableWarmProjection = HasReusableWarmProjection(warmReuseState, sessionId);
+        var hasReusableWarmProjection = HasReusableWarmSelectionProjection(warmReuseState, sessionId);
         var canReuseWarmConversationAfterSelection =
             !forceRemoteHydrationAfterSupersedingInFlightActivation
             && ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(

@@ -1094,8 +1094,7 @@ public partial class ChatViewModel
         var binding = await ResolveConversationBindingAsync(conversationId, CancellationToken.None).ConfigureAwait(false);
         if (RemoteConversationPersistencePolicy.IsRemoteBacked(
                 binding?.RemoteSessionId,
-                binding?.ProfileId)
-            && transcriptBaselineCount == 0)
+                binding?.ProfileId))
         {
             return;
         }
@@ -1491,6 +1490,34 @@ public partial class ChatViewModel
             state,
             conversationId,
             _conversationWorkspace.GetConversationSnapshot(conversationId));
+
+    private bool HasReusableWarmSelectionProjection(ChatState state, string conversationId)
+    {
+        var binding = state.ResolveBinding(conversationId);
+        if (binding is null)
+        {
+            var workspaceBinding = _conversationWorkspace.GetRemoteBinding(conversationId);
+            if (workspaceBinding is not null)
+            {
+                binding = new ConversationBindingSlice(
+                    workspaceBinding.ConversationId,
+                    workspaceBinding.RemoteSessionId,
+                    workspaceBinding.BoundProfileId);
+            }
+        }
+
+        var snapshot = _conversationWorkspace.GetConversationSnapshot(conversationId);
+        if (RemoteConversationPersistencePolicy.IsRemoteBacked(binding?.RemoteSessionId, binding?.ProfileId)
+            && _conversationWorkspace.GetConversationSnapshotOrigin(conversationId) is not ConversationWorkspaceSnapshotOrigin.RuntimeProjection)
+        {
+            snapshot = null;
+        }
+
+        return ConversationProjectionReadinessPolicy.HasReusableWarmProjection(
+            state,
+            conversationId,
+            snapshot);
+    }
 
     private async Task<int> GetProjectedTranscriptCountAsync(string conversationId)
     {

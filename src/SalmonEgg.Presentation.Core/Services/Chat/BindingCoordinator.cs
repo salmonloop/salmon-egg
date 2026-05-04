@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
@@ -30,11 +31,18 @@ public sealed class BindingCoordinator : IConversationBindingCommands
                 .GetKnownConversationIds()
                 .Contains(conversationId, StringComparer.Ordinal);
             var duplicateOwners = await FindDuplicateRemoteSessionOwnersAsync(conversationId, remoteSessionId).ConfigureAwait(false);
+            var state = await _chatStore.State ?? ChatState.Empty;
 
             foreach (var duplicateOwner in duplicateOwners)
             {
+                var preservedSessionInfo = ResolvePreservedSessionInfo(state, duplicateOwner)
+                    ?? _workspace.GetConversationSnapshot(duplicateOwner)?.SessionInfo;
+                await _chatStore.Dispatch(new ScrubConversationDerivedStateAction(
+                    duplicateOwner,
+                    preservedSessionInfo)).ConfigureAwait(false);
                 var clearedBinding = new ConversationBindingSlice(duplicateOwner, null, null);
                 await _chatStore.Dispatch(new SetBindingSliceAction(clearedBinding)).ConfigureAwait(false);
+                _workspace.ClearConversationRuntimeContent(duplicateOwner);
                 _workspace.UpdateRemoteBinding(duplicateOwner, remoteSessionId: null, boundProfileId: null);
             }
 
@@ -134,5 +142,23 @@ public sealed class BindingCoordinator : IConversationBindingCommands
         }
 
         return duplicates.Count == 0 ? Array.Empty<string>() : duplicates.ToArray();
+    }
+
+    private static ConversationSessionInfoSnapshot? ResolvePreservedSessionInfo(
+        ChatState state,
+        string conversationId)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return null;
+        }
+
+        if (string.Equals(state.HydratedConversationId, conversationId, StringComparison.Ordinal))
+        {
+            return ConversationSessionInfoSnapshots.Clone(state.SessionInfo);
+        }
+
+        return ConversationSessionInfoSnapshots.Clone(
+            state.ResolveSessionStateSlice(conversationId)?.SessionInfo);
     }
 }

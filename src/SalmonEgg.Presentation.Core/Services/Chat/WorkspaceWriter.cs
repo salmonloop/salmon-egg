@@ -90,7 +90,7 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
         {
             foreach (var snapshot in pending.Snapshots)
             {
-                _workspace.UpsertConversationSnapshot(snapshot);
+                _workspace.UpsertConversationSnapshot(snapshot, ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
             }
 
             if (pending.ScheduleSave)
@@ -160,6 +160,26 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
         var sessionStateSlice = state.ResolveSessionStateSlice(conversationId);
         var isHydratedConversation = string.Equals(state.HydratedConversationId, conversationId, StringComparison.Ordinal);
         var existingSnapshot = _workspace.GetConversationSnapshot(conversationId);
+        var existingSnapshotOrigin = _workspace.GetConversationSnapshotOrigin(conversationId);
+        var binding = state.ResolveBinding(conversationId);
+        if (binding is null)
+        {
+            var workspaceBinding = _workspace.GetRemoteBinding(conversationId);
+            if (workspaceBinding is not null)
+            {
+                binding = new ConversationBindingSlice(
+                    workspaceBinding.ConversationId,
+                    workspaceBinding.RemoteSessionId,
+                    workspaceBinding.BoundProfileId);
+            }
+        }
+
+        var isRemoteBacked = RemoteConversationPersistencePolicy.IsRemoteBacked(
+            binding?.RemoteSessionId,
+            binding?.ProfileId);
+        var canReuseExistingSnapshotRuntimeContent =
+            existingSnapshot is not null
+            && (!isRemoteBacked || existingSnapshotOrigin is ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
         var hasProjectedHydratedRootContent =
             isHydratedConversation
             && HasProjectedConversationContent(state.Transcript, state.PlanEntries, state.ShowPlanPanel, state.PlanTitle);
@@ -191,10 +211,10 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
         var runtimeState = state.ResolveRuntimeState(conversationId);
         var transcriptSource = hasProjectedContent
             ? contentSlice?.Transcript ?? (isHydratedConversation ? state.Transcript : null)
-            : existingSnapshot?.Transcript;
+            : canReuseExistingSnapshotRuntimeContent ? existingSnapshot?.Transcript : null;
         var planEntriesSource = hasProjectedContent
             ? contentSlice?.PlanEntries ?? (isHydratedConversation ? state.PlanEntries : null)
-            : existingSnapshot?.Plan;
+            : canReuseExistingSnapshotRuntimeContent ? existingSnapshot?.Plan : null;
         var transcript = (transcriptSource ?? ImmutableList<ConversationMessageSnapshot>.Empty)
             .Where(static message => !IsThinkingPlaceholder(message))
             .Select(CloneMessageSnapshot)
@@ -229,7 +249,7 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
         var shouldPreserveExistingSnapshotDuringHydrationReset =
             isHydratedConversation
             && runtimeState?.Phase == ConversationRuntimePhase.RemoteHydrating
-            && existingSnapshot is not null
+            && canReuseExistingSnapshotRuntimeContent
             && !hasProjectedContent
             && !hasProjectedPrimarySessionState;
 
@@ -256,30 +276,34 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             && existingSnapshot is not null
             && (sessionStateSlice is null || !hasProjectedPrimarySessionState))
         {
-            availableModes = (existingSnapshot.AvailableModes ?? Array.Empty<ConversationModeOptionSnapshot>())
-                .Select(CloneModeOptionSnapshot)
-                .ToArray();
-            configOptions = (existingSnapshot.ConfigOptions ?? Array.Empty<ConversationConfigOptionSnapshot>())
-                .Select(CloneConfigOptionSnapshot)
-                .ToArray();
-            selectedModeId = existingSnapshot.SelectedModeId;
-            showConfigOptionsPanel = existingSnapshot.ShowConfigOptionsPanel;
-            if (availableCommands.Length == 0)
+            if (canReuseExistingSnapshotRuntimeContent)
             {
-                availableCommands = (existingSnapshot.AvailableCommands ?? Array.Empty<ConversationAvailableCommandSnapshot>())
-                    .Select(CloneAvailableCommandSnapshot)
+                availableModes = (existingSnapshot.AvailableModes ?? Array.Empty<ConversationModeOptionSnapshot>())
+                    .Select(CloneModeOptionSnapshot)
                     .ToArray();
+                configOptions = (existingSnapshot.ConfigOptions ?? Array.Empty<ConversationConfigOptionSnapshot>())
+                    .Select(CloneConfigOptionSnapshot)
+                    .ToArray();
+                selectedModeId = existingSnapshot.SelectedModeId;
+                showConfigOptionsPanel = existingSnapshot.ShowConfigOptionsPanel;
+                if (availableCommands.Length == 0)
+                {
+                    availableCommands = (existingSnapshot.AvailableCommands ?? Array.Empty<ConversationAvailableCommandSnapshot>())
+                        .Select(CloneAvailableCommandSnapshot)
+                        .ToArray();
+                }
+
+                usage ??= CloneUsageSnapshot(existingSnapshot.Usage);
             }
 
             sessionInfo ??= ConversationSessionInfoSnapshots.Clone(existingSnapshot.SessionInfo);
-            usage ??= CloneUsageSnapshot(existingSnapshot.Usage);
         }
         var showPlanPanel = hasProjectedContent
             ? contentSlice?.ShowPlanPanel ?? (isHydratedConversation && state.ShowPlanPanel)
-            : existingSnapshot?.ShowPlanPanel ?? false;
+            : canReuseExistingSnapshotRuntimeContent ? existingSnapshot?.ShowPlanPanel ?? false : false;
         var planTitle = hasProjectedContent
             ? contentSlice?.PlanTitle ?? (isHydratedConversation ? state.PlanTitle : null)
-            : existingSnapshot?.PlanTitle;
+            : canReuseExistingSnapshotRuntimeContent ? existingSnapshot?.PlanTitle : null;
         var hasProjectedData = HasProjectedData(
             transcript,
             planEntries,

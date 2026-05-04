@@ -10254,6 +10254,145 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task HydrateActiveConversationAsync_RemoteBoundConversation_WithProjectedTranscriptBaseline_DoesNotRestoreWorkspaceTranscriptAfterSessionLoad()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
+        var sessionManager = new Mock<ISessionManager>();
+        sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.TryGetValue(id, out var session) ? session : null);
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .Returns<string, string?>((id, cwd) =>
+            {
+                var session = new Session(id, cwd);
+                sessions[id] = session;
+                return Task.FromResult(session);
+            });
+        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
+            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
+            {
+                if (!sessions.TryGetValue(id, out var session))
+                {
+                    return false;
+                }
+
+                update(session);
+                if (updateActivity)
+                {
+                    session.UpdateActivity();
+                }
+
+                return true;
+            });
+        sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.Remove(id));
+
+        await sessionManager.Object.CreateSessionAsync("conv-2", @"C:\repo\two");
+
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
+        await syncContext.RunUntilCompletedAsync(fixture.ViewModel.RestoreAsync());
+
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-2",
+            Transcript:
+            [
+                new ConversationMessageSnapshot
+                {
+                    Id = "cached-1",
+                    Timestamp = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+                    IsOutgoing = false,
+                    ContentType = "text",
+                    TextContent = "cached first message"
+                }
+            ],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+
+        var loadStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowLoadCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var chatService = CreateConnectedChatService();
+        chatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
+        chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
+            .Returns<SessionLoadParams, CancellationToken>(async (_, _) =>
+            {
+                loadStarted.TrySetResult(null);
+                await allowLoadCompletion.Task;
+                return SessionLoadResponse.Completed;
+            });
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-2",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-2", new ConversationBindingSlice("conv-2", "remote-2", "profile-1")),
+            ConversationContents = ImmutableDictionary<string, ConversationContentSlice>.Empty
+                .Add("conv-2", new ConversationContentSlice(
+                    ImmutableList.Create(
+                        new ConversationMessageSnapshot
+                        {
+                            Id = "cached-1",
+                            Timestamp = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+                            IsOutgoing = false,
+                            ContentType = "text",
+                            TextContent = "cached first message"
+                        }),
+                    ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                    false,
+                    null)),
+            RuntimeStates = ImmutableDictionary<string, ConversationRuntimeSlice>.Empty
+                .Add("conv-2", new ConversationRuntimeSlice(
+                    ConversationId: "conv-2",
+                    Phase: ConversationRuntimePhase.Warm,
+                    ConnectionInstanceId: "conn-1",
+                    RemoteSessionId: "remote-2",
+                    ProfileId: "profile-1",
+                    Reason: "SessionLoadCompleted",
+                    UpdatedAtUtc: new DateTime(2026, 3, 2, 1, 0, 0, DateTimeKind.Utc)))
+        });
+        await DispatchConnectedAsync(fixture, "profile-1");
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-2"));
+        syncContext.RunAll();
+
+        var hydrationTask = fixture.ViewModel.HydrateActiveConversationAsync();
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(loadStarted.Task.IsCompleted);
+        });
+
+        allowLoadCompletion.TrySetResult(null);
+        while (!hydrationTask.IsCompleted)
+        {
+            if (!syncContext.RunNext())
+            {
+                await Task.Delay(10);
+            }
+        }
+
+        Assert.True(hydrationTask.IsCompletedSuccessfully);
+        Assert.True(await hydrationTask, fixture.ViewModel.ErrorMessage);
+        await WaitForConditionAsync(async () =>
+        {
+            syncContext.RunAll();
+            var state = await fixture.GetStateAsync();
+            return string.Equals(state.HydratedConversationId, "conv-2", StringComparison.Ordinal)
+                && state.ResolveRuntimeState("conv-2") is { Phase: ConversationRuntimePhase.Warm };
+        }, timeoutMilliseconds: 8000);
+
+        var finalState = await fixture.GetStateAsync();
+        Assert.True(loadStarted.Task.IsCompleted);
+        Assert.Empty(finalState.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty);
+        Assert.Empty(fixture.ViewModel.MessageHistory);
+        Assert.DoesNotContain(
+            fixture.ViewModel.MessageHistory,
+            message => string.Equals(message.TextContent, "cached first message", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task SwitchConversationAsync_RemoteBoundConversation_DoesNotReadPreviewStoreOrFlashPreviewTranscript()
     {
         var syncContext = new QueueingSynchronizationContext();

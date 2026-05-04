@@ -330,6 +330,19 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         }
     }
 
+    public ConversationWorkspaceSnapshotOrigin? GetConversationSnapshotOrigin(string? conversationId)
+    {
+        lock (_stateGate)
+        {
+            if (string.IsNullOrWhiteSpace(conversationId) || !_conversationBindings.TryGetValue(conversationId, out var binding))
+            {
+                return null;
+            }
+
+            return binding.SnapshotOrigin;
+        }
+    }
+
     public ProjectAffinityOverride? GetProjectAffinityOverride(string? conversationId)
     {
         lock (_stateGate)
@@ -391,7 +404,9 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         }
     }
 
-    public void UpsertConversationSnapshot(ConversationWorkspaceSnapshot snapshot)
+    public void UpsertConversationSnapshot(
+        ConversationWorkspaceSnapshot snapshot,
+        ConversationWorkspaceSnapshotOrigin origin = ConversationWorkspaceSnapshotOrigin.Restored)
     {
         ThrowIfDisposed();
         if (snapshot is null)
@@ -445,6 +460,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             binding.Usage = CloneUsage(snapshot.Usage);
             binding.ShowPlanPanel = snapshot.ShowPlanPanel;
             binding.PlanTitle = snapshot.PlanTitle;
+            binding.SnapshotOrigin = origin;
         }
 
         if (conversationListChanged)
@@ -492,6 +508,40 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         if (conversationListChanged)
         {
             NotifyConversationListChanged();
+        }
+    }
+
+    public void ClearConversationRuntimeContent(string conversationId, bool preserveSessionInfo = true)
+    {
+        ThrowIfDisposed();
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return;
+        }
+
+        lock (_stateGate)
+        {
+            if (!_conversationBindings.TryGetValue(conversationId, out var binding))
+            {
+                return;
+            }
+
+            binding.Transcript.Clear();
+            binding.Plan.Clear();
+            binding.AvailableModes.Clear();
+            binding.SelectedModeId = null;
+            binding.ConfigOptions.Clear();
+            binding.ShowConfigOptionsPanel = false;
+            binding.AvailableCommands.Clear();
+            if (!preserveSessionInfo)
+            {
+                binding.SessionInfo = null;
+            }
+
+            binding.Usage = null;
+            binding.ShowPlanPanel = false;
+            binding.PlanTitle = null;
+            binding.SnapshotOrigin = ConversationWorkspaceSnapshotOrigin.Restored;
         }
     }
 
@@ -903,6 +953,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 binding.Usage = shouldRestoreRuntimeContent ? CloneUsage(conversation.Usage) : null;
                 binding.ShowPlanPanel = shouldRestoreRuntimeContent && conversation.ShowPlanPanel;
                 binding.PlanTitle = shouldRestoreRuntimeContent ? conversation.PlanTitle : null;
+                binding.SnapshotOrigin = ConversationWorkspaceSnapshotOrigin.Restored;
                 binding.RemoteSessionId = conversation.RemoteSessionId;
                 binding.BoundProfileId = conversation.BoundProfileId;
                 binding.ProjectAffinityOverride = string.IsNullOrWhiteSpace(conversation.ProjectAffinityOverrideProjectId)
@@ -1345,7 +1396,15 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         public string? PlanTitle { get; set; }
 
         public ProjectAffinityOverride? ProjectAffinityOverride { get; set; }
+
+        public ConversationWorkspaceSnapshotOrigin SnapshotOrigin { get; set; }
     }
+}
+
+public enum ConversationWorkspaceSnapshotOrigin
+{
+    Restored = 0,
+    RuntimeProjection = 1
 }
 
 public sealed record ConversationWorkspaceSnapshot(
