@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">text/microsoft-resx</resheader>
+  <resheader name="version">2.0</resheader>
+  <resheader name="reader">System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</resheader>
+  <resheader name="writer">System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</resheader>
+
+  <!-- Navigation -->
+  <data name="Nav_Sessions" xml:space="preserve">
+    <value>会话</value>
+  </data>
+  <data name="Nav_Unclassified" xml:space="preserve">
+    <value>未归类</value>
+  </data>
+
+  <!-- Search section titles -->
+  <data name="Search_Sessions" xml:space="preserve">
+    <value>会话</value>
+  </data>
+  <data name="Search_Projects" xml:space="preserve">
+    <value>项目</value>
+  </data>
+  <data name="Search_Settings" xml:space="preserve">
+    <value>设置</value>
+  </data>
+  <data name="Search_Commands" xml:space="preserve">
+    <value>命令</value>
+  </data>
+
+  <!-- Search status messages -->
+  <data name="Search_Loading" xml:space="preserve">
+    <value>搜索中...</value>
+  </data>
+  <data name="Search_LoadingSubtitle" xml:space="preserve">
+    <value>正在更新结果</value>
+  </data>
+  <data name="Search_Empty" xml:space="preserve">
+    <value>未找到结果</value>
+  </data>
+  <data name="Search_EmptySubtitle" xml:space="preserve">
+    <value>尝试更换关键词</value>
+  </data>
+  <data name="Search_Error" xml:space="preserve">
+    <value>搜索失败</value>
+  </data>
+  <data name="Search_ErrorSubtitle" xml:space="preserve">
+    <value>稍后重试</value>
+  </data>
+  <data name="Search_History" xml:space="preserve">
+    <value>最近搜索</value>
+  </data>
+</root>

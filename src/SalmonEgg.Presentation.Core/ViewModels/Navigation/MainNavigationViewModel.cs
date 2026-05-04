@@ -8,11 +8,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using Uno.Extensions.Reactive;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.Core.Services;
@@ -106,7 +108,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         IShellNavigationRuntimeState shellRuntimeState,
         IConversationCatalogReadModel conversationCatalogPresenter,
         IProjectAffinityResolver projectAffinityResolver,
-        IUiDispatcher uiDispatcher)
+        IUiDispatcher uiDispatcher,
+        IStringLocalizer<CoreStrings> localizer)
         : this(
             conversationCatalog,
             projectPreferences,
@@ -123,7 +126,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 NoOpConversationAttentionStore.Instance,
                 uiDispatcher),
             projectAffinityResolver,
-            uiDispatcher)
+            uiDispatcher,
+            localizer)
     {
     }
 
@@ -140,7 +144,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         IShellNavigationRuntimeState shellRuntimeState,
         IConversationCatalogDisplayReadModel conversationCatalogPresenter,
         IProjectAffinityResolver projectAffinityResolver,
-        IUiDispatcher uiDispatcher)
+        IUiDispatcher uiDispatcher,
+        IStringLocalizer<CoreStrings> localizer)
     {
         _chatSessionCatalogActions = conversationCatalog as IChatSessionCatalog ?? new ChatViewModelSessionCatalogAdapter(conversationCatalog);
         _projectPreferences = projectPreferences ?? throw new ArgumentNullException(nameof(projectPreferences));
@@ -159,7 +164,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
         StartItem = new StartNavItemViewModel(_navigationState, _uiDispatcher);
         DiscoverSessionsItem = new DiscoverSessionsNavItemViewModel(_navigationState, _uiDispatcher);
-        SessionsLabelItem = new SessionsLabelNavItemViewModel(_navigationState, _uiDispatcher);
+        SessionsLabelItem = new SessionsLabelNavItemViewModel(_navigationState, _uiDispatcher, localizer["Nav_Sessions"]);
         AddProjectItem = new AddProjectNavItemViewModel(AddProjectCommand, _navigationState, _uiDispatcher);
 
         FooterItems.Add(DiscoverSessionsItem);

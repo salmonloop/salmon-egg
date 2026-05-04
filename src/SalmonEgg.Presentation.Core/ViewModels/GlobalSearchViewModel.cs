@@ -7,9 +7,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Session;
+using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
@@ -33,6 +35,7 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
     private readonly IConversationCatalogReadModel _conversationCatalog;
     private readonly IProjectAffinityResolver _projectAffinityResolver;
     private readonly IGlobalSearchPipeline _searchPipeline;
+    private readonly IStringLocalizer<CoreStrings> _localizer;
     private readonly ILogger<GlobalSearchViewModel> _logger;
 
     private readonly List<SearchHistoryItem> _searchHistory = new();
@@ -77,6 +80,7 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
         IConversationCatalogReadModel conversationCatalog,
         IProjectAffinityResolver projectAffinityResolver,
         IGlobalSearchPipeline searchPipeline,
+        IStringLocalizer<CoreStrings> localizer,
         ILogger<GlobalSearchViewModel> logger)
     {
         _navViewModel = navViewModel ?? throw new ArgumentNullException(nameof(navViewModel));
@@ -85,6 +89,7 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
         _conversationCatalog = conversationCatalog ?? throw new ArgumentNullException(nameof(conversationCatalog));
         _projectAffinityResolver = projectAffinityResolver ?? throw new ArgumentNullException(nameof(projectAffinityResolver));
         _searchPipeline = searchPipeline ?? throw new ArgumentNullException(nameof(searchPipeline));
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _resultGroups.CollectionChanged += OnResultGroupsCollectionChanged;
     }
@@ -428,8 +433,8 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
                 new SearchSuggestionEntry
                 {
                     AutomationId = "SearchSuggestion.Status.Loading",
-                    Title = "搜索中...",
-                    Subtitle = "正在更新结果",
+                    Title = _localizer["Search_Loading"],
+                    Subtitle = _localizer["Search_LoadingSubtitle"],
                     IconGlyph = "\uE895",
                     Kind = SearchSuggestionEntryKind.Status
                 }
@@ -463,7 +468,7 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
                     {
                         AutomationId = $"SearchSuggestion.History.{SanitizeAutomationSegment(item.Query)}",
                         Title = item.Query,
-                        Subtitle = "最近搜索",
+                        Subtitle = _localizer["Search_History"],
                         IconGlyph = "\uE81C",
                         Kind = SearchSuggestionEntryKind.History,
                         HistoryQuery = item.Query
@@ -478,8 +483,8 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
                 new SearchSuggestionEntry
                 {
                     AutomationId = "SearchSuggestion.Status.Empty",
-                    Title = "未找到结果",
-                    Subtitle = "尝试更换关键词",
+                    Title = _localizer["Search_Empty"],
+                    Subtitle = _localizer["Search_EmptySubtitle"],
                     IconGlyph = "\uE783",
                     Kind = SearchSuggestionEntryKind.Status
                 }
@@ -493,8 +498,8 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
                 new SearchSuggestionEntry
                 {
                     AutomationId = "SearchSuggestion.Status.Error",
-                    Title = "搜索失败",
-                    Subtitle = "稍后重试",
+                    Title = _localizer["Search_Error"],
+                    Subtitle = _localizer["Search_ErrorSubtitle"],
                     IconGlyph = "\uEA39",
                     Kind = SearchSuggestionEntryKind.Status
                 }

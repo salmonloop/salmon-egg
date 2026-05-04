@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using SalmonEgg.Application.Services;
@@ -38,6 +39,7 @@ using SalmonEgg.Presentation.Core.ViewModels.ShellLayout;
 using Uno.Extensions.Reactive;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Services.Input;
+using SalmonEgg.Presentation.Core.Resources;
 #if WINDOWS
 #endif
 
@@ -57,6 +59,7 @@ public static class DependencyInjection
     /// </summary>
     public static IServiceCollection AddSalmonEgg(this IServiceCollection services)
     {
+        services.AddLocalization();
         ConfigureLogging(services);
         RegisterDomainServices(services);
         RegisterInfrastructureServices(services);
@@ -390,7 +393,8 @@ public static class DependencyInjection
                 sp.GetRequiredService<IShellNavigationRuntimeState>(),
                 sp.GetRequiredService<IConversationCatalogDisplayReadModel>(),
                 sp.GetRequiredService<IProjectAffinityResolver>(),
-                sp.GetRequiredService<IUiDispatcher>()));
+                sp.GetRequiredService<IUiDispatcher>(),
+                sp.GetRequiredService<IStringLocalizer<CoreStrings>>()));
         services.AddSingleton<INavigationCoordinator>(sp =>
             new NavigationCoordinator(
                 sp.GetRequiredService<IShellSelectionMutationSink>(),
@@ -401,7 +405,16 @@ public static class DependencyInjection
 
         // Global search
         services.AddSingleton<IGlobalSearchPipeline, DefaultGlobalSearchPipeline>();
-        services.AddSingleton<GlobalSearchViewModel>();
+        services.AddSingleton<GlobalSearchViewModel>(sp =>
+            new GlobalSearchViewModel(
+                sp.GetRequiredService<MainNavigationViewModel>(),
+                sp.GetRequiredService<AppPreferencesViewModel>(),
+                sp.GetRequiredService<INavigationCoordinator>(),
+                sp.GetRequiredService<IConversationCatalogReadModel>(),
+                sp.GetRequiredService<IProjectAffinityResolver>(),
+                sp.GetRequiredService<IGlobalSearchPipeline>(),
+                sp.GetRequiredService<IStringLocalizer<CoreStrings>>(),
+                sp.GetRequiredService<ILogger<GlobalSearchViewModel>>()));
 
         // Discover sessions
         services.AddTransient<SalmonEgg.Presentation.ViewModels.Discover.DiscoverSessionsViewModel>();

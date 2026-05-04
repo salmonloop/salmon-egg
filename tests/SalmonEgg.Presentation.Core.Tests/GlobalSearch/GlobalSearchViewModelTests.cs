@@ -2,6 +2,7 @@ using System;
 using System.Collections.Immutable;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Localization;
 using Moq;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.ProjectAffinity;
@@ -12,6 +13,7 @@ using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Core.Services.Search;
 using SalmonEgg.Presentation.Core.Tests.Threading;
 using SalmonEgg.Presentation.Models.Search;
+using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels;
 using SalmonEgg.Presentation.ViewModels.Navigation;
@@ -58,8 +60,9 @@ public sealed class GlobalSearchViewModelTests
             navigationCoordinator.Object,
             presenter,
             new ProjectAffinityResolver(),
-            new DefaultGlobalSearchPipeline(),
-            Mock.Of<ILogger<GlobalSearchViewModel>>());
+            new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
+            Mock.Of<IStringLocalizer<CoreStrings>>(),
+                Mock.Of<ILogger<GlobalSearchViewModel>>());
 
         await viewModel.SelectResultCommand.ExecuteAsync(new SearchResultItem
         {
@@ -87,7 +90,8 @@ public sealed class GlobalSearchViewModelTests
             presenter,
             new ProjectAffinityResolver(),
             pipeline,
-            Mock.Of<ILogger<GlobalSearchViewModel>>());
+            Mock.Of<IStringLocalizer<CoreStrings>>(),
+                Mock.Of<ILogger<GlobalSearchViewModel>>());
 
         viewModel.Query = "abc";
 
@@ -112,8 +116,9 @@ public sealed class GlobalSearchViewModelTests
             navigationCoordinator.Object,
             presenter,
             new ProjectAffinityResolver(),
-            new DefaultGlobalSearchPipeline(),
-            Mock.Of<ILogger<GlobalSearchViewModel>>());
+            new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
+            Mock.Of<IStringLocalizer<CoreStrings>>(),
+                Mock.Of<ILogger<GlobalSearchViewModel>>());
 
         viewModel.Query = "acp";
         await Task.Delay(350);
@@ -140,8 +145,9 @@ public sealed class GlobalSearchViewModelTests
             navigationCoordinator.Object,
             presenter,
             new ProjectAffinityResolver(),
-            new DefaultGlobalSearchPipeline(),
-            Mock.Of<ILogger<GlobalSearchViewModel>>());
+            new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
+            Mock.Of<IStringLocalizer<CoreStrings>>(),
+                Mock.Of<ILogger<GlobalSearchViewModel>>());
 
         viewModel.Query = string.Empty;
 
@@ -167,8 +173,9 @@ public sealed class GlobalSearchViewModelTests
             navigationCoordinator.Object,
             presenter,
             new ProjectAffinityResolver(),
-            new DefaultGlobalSearchPipeline(),
-            Mock.Of<ILogger<GlobalSearchViewModel>>());
+            new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
+            Mock.Of<IStringLocalizer<CoreStrings>>(),
+                Mock.Of<ILogger<GlobalSearchViewModel>>());
 
         viewModel.Query = "acp";
         await Task.Delay(350);
@@ -197,8 +204,9 @@ public sealed class GlobalSearchViewModelTests
             navigationCoordinator.Object,
             presenter,
             new ProjectAffinityResolver(),
-            new DefaultGlobalSearchPipeline(),
-            Mock.Of<ILogger<GlobalSearchViewModel>>());
+            new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
+            Mock.Of<IStringLocalizer<CoreStrings>>(),
+                Mock.Of<ILogger<GlobalSearchViewModel>>());
 
         viewModel.Query = "acp";
         await Task.Delay(350);
@@ -256,7 +264,8 @@ public sealed class GlobalSearchViewModelTests
             presenter,
             new ProjectAffinityResolver(),
             pipeline,
-            Mock.Of<ILogger<GlobalSearchViewModel>>());
+            Mock.Of<IStringLocalizer<CoreStrings>>(),
+                Mock.Of<ILogger<GlobalSearchViewModel>>());
 
         viewModel.Query = "alpha";
         await Task.Delay(40);
@@ -281,8 +290,9 @@ public sealed class GlobalSearchViewModelTests
             navigationCoordinator.Object,
             presenter,
             new ProjectAffinityResolver(),
-            new DefaultGlobalSearchPipeline(),
-            Mock.Of<ILogger<GlobalSearchViewModel>>());
+            new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
+            Mock.Of<IStringLocalizer<CoreStrings>>(),
+                Mock.Of<ILogger<GlobalSearchViewModel>>());
 
         await viewModel.SelectResultCommand.ExecuteAsync(new SearchResultItem
         {
@@ -332,7 +342,8 @@ public sealed class GlobalSearchViewModelTests
             presenter,
             new ProjectAffinityResolver(),
             pipeline,
-            Mock.Of<ILogger<GlobalSearchViewModel>>());
+            Mock.Of<IStringLocalizer<CoreStrings>>(),
+                Mock.Of<ILogger<GlobalSearchViewModel>>());
 
         viewModel.Query = "boom";
         await Task.Delay(400);
@@ -363,7 +374,8 @@ public sealed class GlobalSearchViewModelTests
             new ShellNavigationRuntimeStateStore(),
             presenter,
             new ProjectAffinityResolver(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            Mock.Of<IStringLocalizer<CoreStrings>>());
     }
 
     private static AppPreferencesViewModel CreatePreferencesWithProject()

@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SalmonEgg.Application.Services.Chat;
@@ -38,6 +39,7 @@ using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.Core.Tests.Threading;
+using SalmonEgg.Presentation.Core.Resources;
 using SerilogLogger = Serilog.ILogger;
 using Uno.Extensions.Reactive;
 using Xunit;
@@ -6945,7 +6947,8 @@ public partial class ChatViewModelTests
             runtimeState,
             GetConversationCatalogPresenter(fixture.ViewModel),
             new ProjectAffinityResolver(),
-            syncContext);
+            syncContext,
+            Mock.Of<IStringLocalizer<CoreStrings>>());
 
         navVm.RebuildTree();
         Assert.Equal("project-1", navVm.TryGetProjectIdForSession("conv-1"));

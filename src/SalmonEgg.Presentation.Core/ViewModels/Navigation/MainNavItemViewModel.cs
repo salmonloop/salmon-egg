@@ -66,11 +66,12 @@ public abstract partial class MainNavItemViewModel : ObservableObject, IDisposab
 /// </summary>
 public sealed partial class SessionsLabelNavItemViewModel : MainNavItemViewModel
 {
-    public string Title { get; } = "会话";
+    public string Title { get; }
 
-    public SessionsLabelNavItemViewModel(INavigationPaneState navigationState, IUiDispatcher uiDispatcher)
+    public SessionsLabelNavItemViewModel(INavigationPaneState navigationState, IUiDispatcher uiDispatcher, string title = "会话")
         : base(navigationState, uiDispatcher)
     {
+        Title = title;
     }
 }
 

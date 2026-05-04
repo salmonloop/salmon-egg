@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SalmonEgg.Application.Services.Chat;
@@ -16,6 +17,7 @@ using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Chat;
+using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Start;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
@@ -694,7 +696,8 @@ public sealed class StartViewModelTests
             new ShellNavigationRuntimeStateStore(),
             chat.Presenter,
             new ProjectAffinityResolver(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            Mock.Of<IStringLocalizer<CoreStrings>>());
     }
 
     private static StartViewModel CreateStartViewModel(

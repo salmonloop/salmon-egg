@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Localization;
 using Moq;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
@@ -10,6 +11,7 @@ using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Core.Tests.Threading;
 using SalmonEgg.Presentation.Models.Navigation;
+using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Settings;
@@ -108,7 +110,8 @@ public sealed class MainNavigationViewModelPaneTests
             new ShellNavigationRuntimeStateStore(),
             presenter,
             new ProjectAffinityResolver(),
-            uiDispatcher);
+            uiDispatcher,
+            Mock.Of<IStringLocalizer<CoreStrings>>());
     }
 
     private static FakeChatSessionCatalog CreateChatSessionCatalog(params string[] conversationIds)

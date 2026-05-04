@@ -4,6 +4,8 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Localization;
+using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Models.Search;
 
@@ -11,6 +13,13 @@ namespace SalmonEgg.Presentation.Core.Services.Search;
 
 public sealed class DefaultGlobalSearchPipeline : IGlobalSearchPipeline
 {
+    private readonly IStringLocalizer<CoreStrings> _localizer;
+
+    public DefaultGlobalSearchPipeline(IStringLocalizer<CoreStrings> localizer)
+    {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
+    }
+
     public Task<GlobalSearchSnapshot> SearchAsync(
         string query,
         GlobalSearchSourceSnapshot source,
@@ -61,7 +70,7 @@ public sealed class DefaultGlobalSearchPipeline : IGlobalSearchPipeline
         return Task.FromResult(snapshot);
     }
 
-    private static GlobalSearchGroupSnapshot SearchSessions(string normalizedQuery, ImmutableArray<GlobalSearchSessionSource> sessions)
+    private GlobalSearchGroupSnapshot SearchSessions(string normalizedQuery, ImmutableArray<GlobalSearchSessionSource> sessions)
     {
         var matches = sessions
             .Select(session => new
@@ -85,19 +94,19 @@ public sealed class DefaultGlobalSearchPipeline : IGlobalSearchPipeline
 
         return new GlobalSearchGroupSnapshot(
             Name: "sessions",
-            Title: "会话",
+            Title: _localizer["Search_Sessions"],
             Priority: 100,
             Items: matches);
     }
 
-    private static GlobalSearchGroupSnapshot SearchProjects(string normalizedQuery, ImmutableArray<GlobalSearchProjectSource> projects)
+    private GlobalSearchGroupSnapshot SearchProjects(string normalizedQuery, ImmutableArray<GlobalSearchProjectSource> projects)
     {
         var items = new List<GlobalSearchItemSnapshot>();
-        if (MatchScore("未归类", normalizedQuery) > 0)
+        if (MatchScore(_localizer["Nav_Unclassified"], normalizedQuery) > 0)
         {
             items.Add(new GlobalSearchItemSnapshot(
                 NavigationProjectIds.Unclassified,
-                "未归类",
+                _localizer["Nav_Unclassified"],
                 Subtitle: null,
                 SearchResultKind.Project,
                 "\uE8F1",
@@ -123,12 +132,12 @@ public sealed class DefaultGlobalSearchPipeline : IGlobalSearchPipeline
 
         return new GlobalSearchGroupSnapshot(
             Name: "projects",
-            Title: "项目",
+            Title: _localizer["Search_Projects"],
             Priority: 90,
             Items: items.ToImmutableArray());
     }
 
-    private static GlobalSearchGroupSnapshot SearchSettings(string normalizedQuery)
+    private GlobalSearchGroupSnapshot SearchSettings(string normalizedQuery)
     {
         var settingsItems = new (string Id, string Title, string Subtitle)[]
         {
@@ -157,12 +166,12 @@ public sealed class DefaultGlobalSearchPipeline : IGlobalSearchPipeline
 
         return new GlobalSearchGroupSnapshot(
             Name: "settings",
-            Title: "设置",
+            Title: _localizer["Search_Settings"],
             Priority: 80,
             Items: items);
     }
 
-    private static GlobalSearchGroupSnapshot SearchCommands(string normalizedQuery)
+    private GlobalSearchGroupSnapshot SearchCommands(string normalizedQuery)
     {
         var commands = new (string Id, string Title, string Subtitle, string Tag)[]
         {
@@ -188,7 +197,7 @@ public sealed class DefaultGlobalSearchPipeline : IGlobalSearchPipeline
 
         return new GlobalSearchGroupSnapshot(
             Name: "commands",
-            Title: "命令",
+            Title: _localizer["Search_Commands"],
             Priority: 70,
             Items: items);
     }

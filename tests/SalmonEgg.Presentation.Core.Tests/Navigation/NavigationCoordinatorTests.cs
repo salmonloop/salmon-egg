@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SalmonEgg.Application.Services.Chat;
@@ -18,6 +19,7 @@ using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
+using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Chat;
@@ -1364,7 +1366,8 @@ public sealed class NavigationCoordinatorTests
             runtimeState,
             chat.Presenter,
             new ProjectAffinityResolver(),
-            uiDispatcher);
+            uiDispatcher,
+            Mock.Of<IStringLocalizer<CoreStrings>>());
     }
 
     private static NavigationCoordinator CreateCoordinator(
