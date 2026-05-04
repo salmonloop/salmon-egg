@@ -4783,6 +4783,13 @@ public partial class ChatViewModelTests
 
         await viewModel.SendPromptCommand.ExecuteAsync(null);
 
+        var storeState = await fixture.GetStateAsync();
+        var projectedSessionState = storeState.ResolveSessionStateSlice("conv-1");
+        Assert.NotNull(projectedSessionState);
+        Assert.Equal(2, projectedSessionState!.Value.AvailableModes.Count);
+        Assert.Single(projectedSessionState.Value.ConfigOptions);
+        Assert.Equal("agent", projectedSessionState.Value.SelectedModeId);
+
         await WaitForConditionAsync(() =>
         {
             syncContext.RunAll();
@@ -5451,6 +5458,16 @@ public partial class ChatViewModelTests
         chatService.Raise(
             service => service.SessionUpdateReceived += null,
             new SessionUpdateEventArgs("remote-1", new AgentMessageUpdate(new TextContentBlock("hello from remote"))));
+
+        await WaitForConditionAsync(async () =>
+        {
+            var state = await fixture.GetStateAsync();
+            var transcript = state.ResolveContentSlice("conv-1")?.Transcript
+                ?? state.Transcript
+                ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+            return state.ActiveTurn?.Phase == ChatTurnPhase.Responding
+                && transcript.Any(message => string.Equals(message.TextContent, "hello from remote", StringComparison.Ordinal));
+        });
 
         var stateBeforeUiPump = await fixture.GetStateAsync();
         Assert.Equal(ChatTurnPhase.Responding, stateBeforeUiPump.ActiveTurn?.Phase);
@@ -11578,6 +11595,8 @@ public partial class ChatViewModelTests
         await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
         await DispatchConnectedAsync(fixture, "profile-1");
         await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+        await WaitForConditionAsync(() =>
+            Task.FromResult(string.Equals(fixture.ViewModel.ConnectionInstanceId, "conn-1", StringComparison.Ordinal)));
         await fixture.UpdateStateAsync(state => state with
         {
             HydratedConversationId = "conv-1",
