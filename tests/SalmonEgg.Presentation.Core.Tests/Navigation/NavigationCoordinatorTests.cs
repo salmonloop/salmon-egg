@@ -1114,6 +1114,7 @@ public sealed class NavigationCoordinatorTests
             Assert.Equal(BindingUpdateStatus.Success, bindResult.Status);
 
             var loadAttempts = 0;
+            var secondLoadStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
             var chatService = new Mock<IChatService>();
             chatService.SetupGet(service => service.IsConnected).Returns(true);
             chatService.SetupGet(service => service.IsInitialized).Returns(true);
@@ -1122,6 +1123,11 @@ public sealed class NavigationCoordinatorTests
                 .Returns<SessionLoadParams, CancellationToken>((_, _) =>
                 {
                     var attempt = Interlocked.Increment(ref loadAttempts);
+                    if (attempt == 2)
+                    {
+                        secondLoadStarted.TrySetResult(null);
+                    }
+
                     return attempt == 1
                         ? Task.FromException<SessionLoadResponse>(new InvalidOperationException("remote load failed"))
                         : Task.FromResult(SessionLoadResponse.Completed);
@@ -1159,7 +1165,8 @@ public sealed class NavigationCoordinatorTests
             var retryActivation = coordinator.ActivateSessionAsync("session-2", "project-1");
 
             Assert.True(await retryActivation);
-            await WaitForConditionAsync(() => Volatile.Read(ref loadAttempts) == 2, maxAttempts: 100, delayMilliseconds: 20);
+            await secondLoadStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            Assert.Equal(2, Volatile.Read(ref loadAttempts));
             await WaitForConditionAsync(() =>
                 runtimeState.ActiveSessionActivation?.Phase == SessionActivationPhase.Hydrated
                 && !runtimeState.IsSessionActivationInProgress,

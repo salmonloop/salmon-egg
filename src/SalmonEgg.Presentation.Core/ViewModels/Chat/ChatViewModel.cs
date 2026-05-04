@@ -1507,6 +1507,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     private void QueuePreviewSnapshotPersistence(ChatUiProjection projection)
     {
+        if (RemoteConversationPersistencePolicy.IsRemoteBacked(projection.RemoteSessionId))
+        {
+            return;
+        }
+
         var snapshot = _transcriptProjectionCoordinator.PreparePreviewSnapshotSave(
             projection.HydratedConversationId,
             projection.Transcript,

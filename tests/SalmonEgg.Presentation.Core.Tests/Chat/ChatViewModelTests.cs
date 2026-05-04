@@ -796,7 +796,7 @@ public partial class ChatViewModelTests
             var state = await fixture.GetStateAsync();
             return string.Equals(state.HydratedConversationId, "session-1", StringComparison.Ordinal)
                 && string.Equals(state.ResolveBinding("session-1")?.RemoteSessionId, "remote-1", StringComparison.Ordinal)
-                && state.ResolveContentSlice("session-1")?.Transcript.Count == 1
+                && state.ResolveContentSlice("session-1")?.Transcript.Count == 0
                 && state.AvailableModes?.Count == 0
                 && state.SelectedModeId is null
                 && state.ConfigOptions?.Count == 0;
@@ -820,8 +820,7 @@ public partial class ChatViewModelTests
         var state = await fixture.GetStateAsync();
         Assert.Equal(new ConversationBindingSlice("session-1", "remote-1", "profile-a"), state.ResolveBinding("session-1"));
         Assert.NotNull(state.Transcript);
-        Assert.Single(state.Transcript!);
-        Assert.Equal("hello from restore", state.Transcript[0].TextContent);
+        Assert.Empty(state.Transcript!);
         Assert.NotNull(state.AvailableModes);
         Assert.Empty(state.AvailableModes!);
         Assert.Null(state.SelectedModeId);
@@ -830,8 +829,7 @@ public partial class ChatViewModelTests
         Assert.False(state.ShowConfigOptionsPanel);
         Assert.Equal("session-1", fixture.ViewModel.CurrentSessionId);
         Assert.Equal("remote-1", fixture.ViewModel.CurrentRemoteSessionId);
-        Assert.Single(fixture.ViewModel.MessageHistory);
-        Assert.Equal("hello from restore", fixture.ViewModel.MessageHistory[0].TextContent);
+        Assert.Empty(fixture.ViewModel.MessageHistory);
         Assert.Empty(fixture.ViewModel.AvailableModes);
         Assert.Null(fixture.ViewModel.SelectedMode);
         Assert.Empty(fixture.ViewModel.ConfigOptions);
@@ -5046,7 +5044,13 @@ public partial class ChatViewModelTests
                 "session-1",
                 new ConversationBindingSlice("session-1", "remote-fresh", "profile-a"))
         });
-        syncContext.RunAll();
+        await WaitForConditionAsync(async () =>
+        {
+            syncContext.RunAll();
+            var state = await fixture.GetStateAsync();
+            return string.Equals(state.HydratedConversationId, "session-1", StringComparison.Ordinal)
+                && string.Equals(state.ResolveBinding("session-1")?.RemoteSessionId, "remote-fresh", StringComparison.Ordinal);
+        }, timeoutMilliseconds: 5000);
 
         chatService.Raise(service => service.PermissionRequestReceived += null, new PermissionRequestEventArgs
         {
@@ -5060,6 +5064,7 @@ public partial class ChatViewModelTests
             syncContext.RunAll();
             return Task.FromResult(fixture.ViewModel.ShowPermissionDialog);
         }, timeoutMilliseconds: 5000);
+        Assert.Equal("permission-2", fixture.ViewModel.PendingPermissionRequest?.MessageId);
 
         await fixture.ViewModel.CancelSessionCommand.ExecuteAsync(null);
 
@@ -10062,7 +10067,7 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
-    public async Task ConversationSessionSwitcherContract_RemoteBoundConversation_DoesNotFlashWorkspaceCachedTranscriptBeforeRemoteReplay()
+    public async Task ConversationSessionSwitcherContract_RemoteBoundConversation_DoesNotProjectWorkspaceCachedTranscriptDuringOrAfterColdRemoteHydration()
     {
         var syncContext = new QueueingSynchronizationContext();
         var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
@@ -10181,23 +10186,19 @@ public partial class ChatViewModelTests
             message => string.Equals(message.TextContent, "cached first message", StringComparison.Ordinal));
         await WaitForConditionAsync(async () =>
         {
+            syncContext.RunAll();
             var state = await fixture.GetStateAsync();
-            var content = state.ResolveContentSlice("conv-2");
-            syncContext.RunAll();
-            return content.HasValue
-                && content.Value.Transcript.Any(message =>
-                    string.Equals(message.TextContent, "cached first message", StringComparison.Ordinal));
+            return string.Equals(state.HydratedConversationId, "conv-2", StringComparison.Ordinal)
+                && state.ResolveRuntimeState("conv-2") is { Phase: ConversationRuntimePhase.Warm }
+                && !fixture.ViewModel.IsOverlayVisible;
         }, timeoutMilliseconds: 8000);
-        await WaitForConditionAsync(() =>
-        {
-            syncContext.RunAll();
-            return Task.FromResult(
-                loadStarted.Task.IsCompleted
-                && !fixture.ViewModel.IsOverlayVisible
-                && fixture.ViewModel.MessageHistory.Any(message =>
-                    string.Equals(message.TextContent, "cached first message", StringComparison.Ordinal)));
-        }, timeoutMilliseconds: 8000);
-        Assert.Contains(
+        var finalState = await fixture.GetStateAsync();
+        var finalContent = finalState.ResolveContentSlice("conv-2");
+        Assert.True(loadStarted.Task.IsCompleted);
+        Assert.True(finalContent.HasValue);
+        Assert.Empty(finalContent.Value.Transcript);
+        Assert.Empty(fixture.ViewModel.MessageHistory);
+        Assert.DoesNotContain(
             fixture.ViewModel.MessageHistory,
             message => string.Equals(message.TextContent, "cached first message", StringComparison.Ordinal));
     }
@@ -10393,6 +10394,45 @@ public partial class ChatViewModelTests
                 It.Is<ConversationPreviewSnapshot>(snapshot => string.Equals(snapshot.ConversationId, "conv-1", StringComparison.Ordinal)),
                 It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task ApplyStoreProjection_RemoteBoundConversation_DoesNotPersistTranscriptPreview()
+    {
+        var previewStore = new Mock<IConversationPreviewStore>();
+        previewStore.Setup(store => store.LoadAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ConversationPreviewSnapshot?)null);
+        previewStore.Setup(store => store.SaveAsync(It.IsAny<ConversationPreviewSnapshot>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        previewStore.Setup(store => store.DeleteAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        await using var fixture = CreateViewModel(previewStore: previewStore.Object);
+        await fixture.ViewModel.RestoreAsync();
+
+        fixture.Workspace.UpdateRemoteBinding("conv-1", "remote-1", "profile-1");
+        await fixture.ChatStore.Dispatch(new SetBindingSliceAction(
+            new ConversationBindingSlice("conv-1", "remote-1", "profile-1")));
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Transcript =
+            [
+                new ConversationMessageSnapshot
+                {
+                    Id = "message-1",
+                    Timestamp = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+                    IsOutgoing = false,
+                    ContentType = "text",
+                    TextContent = "remote text"
+                }
+            ]
+        });
+
+        previewStore.Verify(
+            store => store.SaveAsync(It.IsAny<ConversationPreviewSnapshot>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]
@@ -13849,7 +13889,8 @@ public partial class ChatViewModelTests
             await firstLoadStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
             var secondActivation = fixture.ViewModel.SwitchConversationAsync("conv-2");
-            Assert.True(await secondActivation.WaitAsync(TimeSpan.FromSeconds(5)));
+            await AwaitWithSynchronizationContextAsync(syncContext, secondActivation);
+            Assert.True(await secondActivation);
 
             await secondLoadStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
             await firstLoadCanceled.Task.WaitAsync(TimeSpan.FromSeconds(2));
@@ -14560,26 +14601,28 @@ public partial class ChatViewModelTests
         });
         await DispatchConnectedAsync(fixture, "profile-1");
         await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
-        await WaitForConditionAsync(() =>
-            Task.FromResult(string.Equals(fixture.ViewModel.ConnectionInstanceId, "conn-1", StringComparison.Ordinal)));
+        await WaitForConditionAsync(async () =>
+            string.Equals((await fixture.GetConnectionStateAsync()).ConnectionInstanceId, "conn-1", StringComparison.Ordinal));
 
         await fixture.ViewModel.HydrateActiveConversationAsync();
         await fixture.ViewModel.SwitchConversationAsync("conv-2");
         var roundTripState = await fixture.GetStateAsync();
+        var currentConnectionState = await fixture.GetConnectionStateAsync();
         var roundTripRuntime = roundTripState.ResolveRuntimeState("conv-1");
         Assert.NotNull(roundTripRuntime);
         Assert.Equal(ConversationRuntimePhase.Warm, roundTripRuntime!.Value.Phase);
         Assert.Equal("conn-1", roundTripRuntime.Value.ConnectionInstanceId);
-        Assert.Equal("conn-1", fixture.ViewModel.ConnectionInstanceId);
+        Assert.Equal("conn-1", currentConnectionState.ConnectionInstanceId);
         Assert.True(ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
             roundTripRuntime,
             roundTripState.ResolveBinding("conv-1"),
-            fixture.ViewModel.ConnectionInstanceId,
+            currentConnectionState.ConnectionInstanceId,
             hasReusableProjection: true));
         await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-2"));
-        await WaitForConditionAsync(() =>
-            Task.FromResult(string.Equals(fixture.ViewModel.ConnectionInstanceId, "conn-2", StringComparison.Ordinal)));
+        await WaitForConditionAsync(async () =>
+            string.Equals((await fixture.GetConnectionStateAsync()).ConnectionInstanceId, "conn-2", StringComparison.Ordinal));
         var reboundState = await fixture.GetStateAsync();
+        currentConnectionState = await fixture.GetConnectionStateAsync();
         var reboundRuntime = reboundState.ResolveRuntimeState("conv-1");
         Assert.NotNull(reboundRuntime);
         Assert.Equal(ConversationRuntimePhase.Warm, reboundRuntime!.Value.Phase);
@@ -14587,7 +14630,7 @@ public partial class ChatViewModelTests
         Assert.False(ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
             reboundRuntime,
             reboundState.ResolveBinding("conv-1"),
-            fixture.ViewModel.ConnectionInstanceId,
+            currentConnectionState.ConnectionInstanceId,
             hasReusableProjection: true));
         await fixture.ViewModel.SwitchConversationAsync("conv-1");
 

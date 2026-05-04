@@ -743,25 +743,29 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
 
             conversationStates = _conversationBindings.Values
                 .OrderByDescending(item => item.LastUpdatedAt)
-                .Select(binding => new PersistedConversationState(
-                    binding.ConversationId,
-                    binding.CreatedAt,
-                    binding.LastUpdatedAt,
-                    binding.LastAccessedAt,
-                    binding.RemoteSessionId,
-                    binding.BoundProfileId,
-                    binding.ProjectAffinityOverride?.ProjectId,
-                    binding.SelectedModeId,
-                    binding.ShowConfigOptionsPanel,
-                    binding.ShowPlanPanel,
-                    binding.PlanTitle,
-                    CloneMessages(binding.Transcript).ToArray(),
-                    binding.AvailableModes.Select(CloneModeOption).ToArray(),
-                    binding.ConfigOptions.Select(CloneConfigOption).ToArray(),
-                    binding.Plan.Select(ClonePlanEntry).ToArray(),
-                    binding.AvailableCommands.Select(CloneAvailableCommand).ToArray(),
-                    ConversationSessionInfoSnapshots.Clone(binding.SessionInfo),
-                    CloneUsage(binding.Usage)))
+                .Select(binding =>
+                {
+                    var shouldPersistRuntimeContent = RemoteConversationPersistencePolicy.ShouldPersistRuntimeContent(binding.RemoteSessionId);
+                    return new PersistedConversationState(
+                        binding.ConversationId,
+                        binding.CreatedAt,
+                        binding.LastUpdatedAt,
+                        binding.LastAccessedAt,
+                        binding.RemoteSessionId,
+                        binding.BoundProfileId,
+                        binding.ProjectAffinityOverride?.ProjectId,
+                        shouldPersistRuntimeContent ? binding.SelectedModeId : null,
+                        shouldPersistRuntimeContent && binding.ShowConfigOptionsPanel,
+                        shouldPersistRuntimeContent && binding.ShowPlanPanel,
+                        shouldPersistRuntimeContent ? binding.PlanTitle : null,
+                        shouldPersistRuntimeContent ? CloneMessages(binding.Transcript).ToArray() : [],
+                        shouldPersistRuntimeContent ? binding.AvailableModes.Select(CloneModeOption).ToArray() : [],
+                        shouldPersistRuntimeContent ? binding.ConfigOptions.Select(CloneConfigOption).ToArray() : [],
+                        shouldPersistRuntimeContent ? binding.Plan.Select(ClonePlanEntry).ToArray() : [],
+                        shouldPersistRuntimeContent ? binding.AvailableCommands.Select(CloneAvailableCommand).ToArray() : [],
+                        ConversationSessionInfoSnapshots.Clone(binding.SessionInfo),
+                        shouldPersistRuntimeContent ? CloneUsage(binding.Usage) : null);
+                })
                 .ToArray();
         }
 
@@ -856,25 +860,45 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 binding.LastAccessedAt = conversation.LastAccessedAt == default
                     ? binding.LastUpdatedAt
                     : conversation.LastAccessedAt;
+                var shouldRestoreRuntimeContent = RemoteConversationPersistencePolicy.ShouldRestoreRuntimeContent(conversation.RemoteSessionId);
                 binding.Transcript.Clear();
-                binding.Transcript.AddRange(CloneMessages(conversation.Messages));
+                if (shouldRestoreRuntimeContent)
+                {
+                    binding.Transcript.AddRange(CloneMessages(conversation.Messages));
+                }
+
                 binding.Plan.Clear();
+                if (shouldRestoreRuntimeContent)
+                {
+                    binding.Plan.AddRange((conversation.Plan ?? []).Select(ClonePlanEntry));
+                }
+
                 binding.AvailableModes.Clear();
-                binding.AvailableModes.AddRange((conversation.AvailableModes ?? []).Select(CloneModeOption));
-                binding.SelectedModeId = conversation.SelectedModeId;
+                if (shouldRestoreRuntimeContent)
+                {
+                    binding.AvailableModes.AddRange((conversation.AvailableModes ?? []).Select(CloneModeOption));
+                }
+
+                binding.SelectedModeId = shouldRestoreRuntimeContent ? conversation.SelectedModeId : null;
                 binding.ConfigOptions.Clear();
-                binding.ConfigOptions.AddRange((conversation.ConfigOptions ?? []).Select(CloneConfigOption));
-                binding.ShowConfigOptionsPanel = conversation.ShowConfigOptionsPanel;
+                if (shouldRestoreRuntimeContent)
+                {
+                    binding.ConfigOptions.AddRange((conversation.ConfigOptions ?? []).Select(CloneConfigOption));
+                }
+
+                binding.ShowConfigOptionsPanel = shouldRestoreRuntimeContent && conversation.ShowConfigOptionsPanel;
                 binding.AvailableCommands.Clear();
-                binding.AvailableCommands.AddRange((conversation.AvailableCommands ?? []).Select(CloneAvailableCommand));
+                if (shouldRestoreRuntimeContent)
+                {
+                    binding.AvailableCommands.AddRange((conversation.AvailableCommands ?? []).Select(CloneAvailableCommand));
+                }
+
                 binding.SessionInfo = EnsureSessionInfoCarriesEstablishedCwd(
                     ConversationSessionInfoSnapshots.Clone(conversation.SessionInfo),
                     conversation.Cwd);
-                binding.Usage = CloneUsage(conversation.Usage);
-                binding.Plan.Clear();
-                binding.Plan.AddRange((conversation.Plan ?? []).Select(ClonePlanEntry));
-                binding.ShowPlanPanel = conversation.ShowPlanPanel;
-                binding.PlanTitle = conversation.PlanTitle;
+                binding.Usage = shouldRestoreRuntimeContent ? CloneUsage(conversation.Usage) : null;
+                binding.ShowPlanPanel = shouldRestoreRuntimeContent && conversation.ShowPlanPanel;
+                binding.PlanTitle = shouldRestoreRuntimeContent ? conversation.PlanTitle : null;
                 binding.RemoteSessionId = conversation.RemoteSessionId;
                 binding.BoundProfileId = conversation.BoundProfileId;
                 binding.ProjectAffinityOverride = string.IsNullOrWhiteSpace(conversation.ProjectAffinityOverrideProjectId)

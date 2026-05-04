@@ -89,7 +89,8 @@ public static class ConversationProjectionReadinessPolicy
             return false;
         }
 
-        if (snapshot is not null)
+        if (snapshot is not null
+            && HasProjectedSnapshotState(snapshot))
         {
             return true;
         }
@@ -135,4 +136,30 @@ public static class ConversationProjectionReadinessPolicy
         return HasProjectedPrimarySessionState(rootSessionState)
             || HasProjectedAuxiliarySessionState(rootSessionState);
     }
+
+    private static bool HasProjectedSnapshotState(ConversationWorkspaceSnapshot snapshot)
+        => HasProjectedConversationContent(
+               new ConversationContentSlice(
+                   snapshot.Transcript.ToImmutableList(),
+                   snapshot.Plan.ToImmutableList(),
+                   snapshot.ShowPlanPanel,
+                   snapshot.PlanTitle))
+           || HasProjectedPrimarySessionState(
+               new ConversationSessionStateSlice(
+                   (snapshot.AvailableModes ?? Array.Empty<ConversationModeOptionSnapshot>()).ToImmutableList(),
+                   snapshot.SelectedModeId,
+                   (snapshot.ConfigOptions ?? Array.Empty<ConversationConfigOptionSnapshot>()).ToImmutableList(),
+                   snapshot.ShowConfigOptionsPanel,
+                   (snapshot.AvailableCommands ?? Array.Empty<ConversationAvailableCommandSnapshot>()).ToImmutableList(),
+                   snapshot.SessionInfo,
+                   snapshot.Usage))
+           || HasProjectedAuxiliarySessionState(
+               new ConversationSessionStateSlice(
+                   ImmutableList<ConversationModeOptionSnapshot>.Empty,
+                   null,
+                   ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+                   false,
+                   (snapshot.AvailableCommands ?? Array.Empty<ConversationAvailableCommandSnapshot>()).ToImmutableList(),
+                   snapshot.SessionInfo,
+                   snapshot.Usage));
 }

@@ -375,6 +375,7 @@ public partial class ChatViewModel
                             conversationId,
                             activationVersion,
                             binding,
+                            transcriptBaselineCount,
                             ConversationRuntimePhase.RemoteConnectionReady,
                             cancellationToken)
                         .ConfigureAwait(false);
@@ -416,6 +417,7 @@ public partial class ChatViewModel
                         conversationId,
                         activationVersion,
                         binding,
+                        transcriptBaselineCount,
                         ConversationRuntimePhase.RemoteConnectionReady,
                         cancellationToken)
                     .ConfigureAwait(false);
@@ -434,7 +436,10 @@ public partial class ChatViewModel
                     .ConfigureAwait(false);
             }
 
-            await RestoreCachedConversationProjectionIfReplayIsEmptyAsync(conversationId).ConfigureAwait(false);
+            await RestoreCachedConversationProjectionIfReplayIsEmptyAsync(
+                    conversationId,
+                    transcriptBaselineCount)
+                .ConfigureAwait(false);
             await ApplyCurrentStoreProjectionAsync(activationVersion).ConfigureAwait(false);
             await SetConversationRuntimeStateAsync(
                     conversationId,
@@ -1072,9 +1077,18 @@ public partial class ChatViewModel
         return false;
     }
 
-    private async Task RestoreCachedConversationProjectionIfReplayIsEmptyAsync(string conversationId)
+    private async Task RestoreCachedConversationProjectionIfReplayIsEmptyAsync(
+        string conversationId,
+        int transcriptBaselineCount)
     {
         if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return;
+        }
+
+        var binding = await ResolveConversationBindingAsync(conversationId, CancellationToken.None).ConfigureAwait(false);
+        if (RemoteConversationPersistencePolicy.IsRemoteBacked(binding?.RemoteSessionId)
+            && transcriptBaselineCount == 0)
         {
             return;
         }
@@ -1108,10 +1122,14 @@ public partial class ChatViewModel
         string conversationId,
         long? activationVersion,
         ConversationBindingSlice binding,
+        int transcriptBaselineCount,
         ConversationRuntimePhase fallbackPhase,
         CancellationToken cancellationToken)
     {
-        await RestoreCachedConversationProjectionIfReplayIsEmptyAsync(conversationId).ConfigureAwait(false);
+        await RestoreCachedConversationProjectionIfReplayIsEmptyAsync(
+                conversationId,
+                transcriptBaselineCount)
+            .ConfigureAwait(false);
         await ApplyCurrentStoreProjectionAsync(activationVersion).ConfigureAwait(false);
         await SetConversationRuntimeStateAsync(
                 conversationId,

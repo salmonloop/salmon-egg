@@ -29,7 +29,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
 public sealed class ChatConversationWorkspaceTests
 {
     [Fact]
-    public async Task RestoreAsync_RestoresLastActiveConversationAndTranscript()
+    public async Task RestoreAsync_RemoteConversationRestoresMetadataOnlyWhileLocalConversationRestoresTranscript()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var store = new CapturingConversationStore
@@ -80,18 +80,22 @@ public sealed class ChatConversationWorkspaceTests
         Assert.Equal("session-1", workspace.LastActiveConversationId);
         Assert.Equal(new[] { "session-2", "session-1" }, workspace.GetKnownConversationIds());
 
-        var snapshot = workspace.GetConversationSnapshot("session-1");
-        Assert.NotNull(snapshot);
-        Assert.Single(snapshot!.Transcript);
-        Assert.Equal("hello", snapshot.Transcript[0].TextContent);
-        Assert.Empty(snapshot.AvailableModes ?? Array.Empty<ConversationModeOptionSnapshot>());
-        Assert.Null(snapshot.SelectedModeId);
-        Assert.Empty(snapshot.ConfigOptions ?? Array.Empty<ConversationConfigOptionSnapshot>());
-        Assert.False(snapshot.ShowConfigOptionsPanel);
+        var remoteSnapshot = workspace.GetConversationSnapshot("session-1");
+        Assert.NotNull(remoteSnapshot);
+        Assert.Empty(remoteSnapshot!.Transcript);
+        Assert.Empty(remoteSnapshot.AvailableModes ?? Array.Empty<ConversationModeOptionSnapshot>());
+        Assert.Null(remoteSnapshot.SelectedModeId);
+        Assert.Empty(remoteSnapshot.ConfigOptions ?? Array.Empty<ConversationConfigOptionSnapshot>());
+        Assert.False(remoteSnapshot.ShowConfigOptionsPanel);
         var remoteBinding = workspace.GetRemoteBinding("session-1");
         Assert.NotNull(remoteBinding);
         Assert.Equal("remote-1", remoteBinding!.RemoteSessionId);
         Assert.Equal("profile-a", remoteBinding.BoundProfileId);
+
+        var localSnapshot = workspace.GetConversationSnapshot("session-2");
+        Assert.NotNull(localSnapshot);
+        Assert.Single(localSnapshot!.Transcript);
+        Assert.Equal("world", localSnapshot.Transcript[0].TextContent);
 
         var session = sessionManager.GetSession("session-1");
         Assert.NotNull(session);
@@ -554,7 +558,7 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
-    public async Task SaveAsync_PersistsDisplayNameCwdAndTranscriptInMostRecentOrder()
+    public async Task SaveAsync_RemoteBoundConversation_PersistsMetadataWithoutTranscriptInMostRecentOrder()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var store = new CapturingConversationStore();
@@ -601,14 +605,98 @@ public sealed class ChatConversationWorkspaceTests
         Assert.Equal(@"C:\repo\two", saved.Conversations[0].Cwd);
         Assert.Equal("remote-newer", saved.Conversations[0].RemoteSessionId);
         Assert.Equal("profile-newer", saved.Conversations[0].BoundProfileId);
-        Assert.Single(saved.Conversations[0].Messages);
-        Assert.Equal("newer", saved.Conversations[0].Messages[0].TextContent);
+        Assert.Empty(saved.Conversations[0].Messages);
         Assert.Equal("Older", saved.Conversations[1].DisplayName);
         Assert.Equal(@"C:\repo\one", saved.Conversations[1].Cwd);
         Assert.Equal("remote-older", saved.Conversations[1].RemoteSessionId);
         Assert.Equal("profile-older", saved.Conversations[1].BoundProfileId);
-        Assert.Single(saved.Conversations[1].Messages);
-        Assert.Equal("older", saved.Conversations[1].Messages[0].TextContent);
+        Assert.Empty(saved.Conversations[1].Messages);
+    }
+
+    [Fact]
+    public async Task SaveAsync_RemoteBoundConversation_DropsRuntimeSessionStateButKeepsMetadata()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var session = await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
+        session.DisplayName = "Remote session";
+
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript:
+            [
+                CreateTextMessage("m-1", "should not persist")
+            ],
+            Plan:
+            [
+                new ConversationPlanEntrySnapshot
+                {
+                    Content = "step-1",
+                    Status = PlanEntryStatus.InProgress,
+                    Priority = PlanEntryPriority.High
+                }
+            ],
+            ShowPlanPanel: true,
+            PlanTitle: "Active plan",
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+            AvailableModes:
+            [
+                new ConversationModeOptionSnapshot
+                {
+                    ModeId = "agent",
+                    ModeName = "Agent",
+                    Description = "Agent mode"
+                }
+            ],
+            SelectedModeId: "agent",
+            ConfigOptions:
+            [
+                new ConversationConfigOptionSnapshot
+                {
+                    Id = "mode",
+                    Name = "Mode",
+                    SelectedValue = "agent"
+                }
+            ],
+            ShowConfigOptionsPanel: true,
+            AvailableCommands:
+            [
+                new ConversationAvailableCommandSnapshot("plan", "Planning command", "target")
+            ],
+            SessionInfo: new ConversationSessionInfoSnapshot
+            {
+                Title = "Remote title",
+                Cwd = @"C:\repo\one",
+                UpdatedAtUtc = new DateTime(2026, 3, 2, 1, 0, 0, DateTimeKind.Utc)
+            },
+            Usage: new ConversationUsageSnapshot(
+                3,
+                99,
+                new ConversationUsageCostSnapshot(1.25m, "USD"))));
+        workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-1");
+
+        await workspace.SaveAsync();
+
+        var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
+        var conversation = Assert.Single(saved.Conversations);
+        Assert.Equal("remote-1", conversation.RemoteSessionId);
+        Assert.Equal("profile-1", conversation.BoundProfileId);
+        Assert.NotNull(conversation.SessionInfo);
+        Assert.Equal("Remote title", conversation.SessionInfo!.Title);
+        Assert.Empty(conversation.Messages);
+        Assert.Empty(conversation.Plan);
+        Assert.Empty(conversation.AvailableModes);
+        Assert.Null(conversation.SelectedModeId);
+        Assert.Empty(conversation.ConfigOptions);
+        Assert.False(conversation.ShowConfigOptionsPanel);
+        Assert.Empty(conversation.AvailableCommands);
+        Assert.Null(conversation.Usage);
+        Assert.False(conversation.ShowPlanPanel);
+        Assert.Null(conversation.PlanTitle);
     }
 
     [Fact]
