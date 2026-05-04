@@ -180,8 +180,10 @@ public sealed class ChatSessionOptionsPresenter
             return (null, null);
         }
 
+        var projectedModesFromConfig = false;
         if (projectedModes.Count == 0)
         {
+            projectedModesFromConfig = true;
             foreach (var option in modeOption.Options)
             {
                 projectedModes.Add(new SessionModeViewModel
@@ -193,7 +195,9 @@ public sealed class ChatSessionOptionsPresenter
             }
         }
 
-        var selectedModeId = modeOption.SelectedOption?.Value ?? modeOption.TextValue;
+        var selectedModeId = projectedModesFromConfig
+            ? null
+            : modeOption.SelectedOption?.Value ?? modeOption.TextValue;
         return (modeOption.Id, selectedModeId);
     }
 

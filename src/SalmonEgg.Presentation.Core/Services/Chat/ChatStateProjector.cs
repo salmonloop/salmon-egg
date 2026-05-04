@@ -16,6 +16,18 @@ public interface IChatStateProjector
 
 public sealed class ChatStateProjector : IChatStateProjector
 {
+    private readonly ChatSessionToolingProjector _sessionToolingProjector;
+
+    public ChatStateProjector()
+        : this(new ChatSessionToolingProjector())
+    {
+    }
+
+    public ChatStateProjector(ChatSessionToolingProjector sessionToolingProjector)
+    {
+        _sessionToolingProjector = sessionToolingProjector ?? throw new ArgumentNullException(nameof(sessionToolingProjector));
+    }
+
     public ChatUiProjection Apply(
         ChatState storeState,
         ChatConnectionState connectionState,
@@ -54,21 +66,13 @@ public sealed class ChatStateProjector : IChatStateProjector
             && activeTurn.Phase is not ChatTurnPhase.Cancelled;
         var contentSlice = storeState.ResolveContentSlice(hydratedConversationId);
         var sessionStateSlice = storeState.ResolveSessionStateSlice(hydratedConversationId);
+        var toolingProjection = _sessionToolingProjector.Project(storeState, hydratedConversationId);
         var transcript = contentSlice?.Transcript
             ?? storeState.Transcript
             ?? ImmutableList<ConversationMessageSnapshot>.Empty;
         var planEntries = contentSlice?.PlanEntries
             ?? storeState.PlanEntries
             ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty;
-        var availableModes = sessionStateSlice?.AvailableModes
-            ?? storeState.AvailableModes
-            ?? ImmutableList<ConversationModeOptionSnapshot>.Empty;
-        var configOptions = sessionStateSlice?.ConfigOptions
-            ?? storeState.ConfigOptions
-            ?? ImmutableList<ConversationConfigOptionSnapshot>.Empty;
-        var availableCommands = sessionStateSlice?.AvailableCommands
-            ?? storeState.AvailableCommands
-            ?? ImmutableList<ConversationAvailableCommandSnapshot>.Empty;
 
         return new ChatUiProjection(
             HydratedConversationId: hydratedConversationId,
@@ -96,11 +100,11 @@ public sealed class ChatStateProjector : IChatStateProjector
             ShowPlanPanel: contentSlice?.ShowPlanPanel ?? storeState.ShowPlanPanel,
             PlanTitle: contentSlice?.PlanTitle ?? storeState.PlanTitle,
             PlanEntries: planEntries,
-            AvailableModes: availableModes,
-            SelectedModeId: sessionStateSlice?.SelectedModeId ?? storeState.SelectedModeId,
-            ConfigOptions: configOptions,
-            ShowConfigOptionsPanel: sessionStateSlice?.ShowConfigOptionsPanel ?? storeState.ShowConfigOptionsPanel,
-            AvailableCommands: availableCommands,
+            AvailableModes: toolingProjection.AvailableModes,
+            SelectedModeId: toolingProjection.SelectedModeId,
+            ConfigOptions: toolingProjection.ConfigOptions,
+            ShowConfigOptionsPanel: toolingProjection.ShowConfigOptionsPanel,
+            AvailableCommands: toolingProjection.AvailableCommands,
             IsHydrating: storeState.IsHydrating,
             IsTurnStatusVisible: isTurnStatusVisible,
             TurnStatusText: turnStatusText,

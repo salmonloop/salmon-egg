@@ -104,6 +104,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly ChatPlanPanelStatePresenter _planPanelStatePresenter;
     private readonly ChatPlanEntriesProjectionCoordinator _planEntriesProjectionCoordinator;
     private readonly ChatAcpProfileSelectionResolver _profileSelectionResolver;
+    private readonly ChatConversationProfileConnectionGateway _conversationProfileConnectionGateway;
     private readonly ChatConversationPanelStateCoordinator _panelStateCoordinator;
     private readonly ChatConversationPanelRuntimeCoordinator _panelRuntimeCoordinator;
     private readonly ChatSessionOptionsPresenter _sessionOptionsPresenter;
@@ -121,6 +122,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly IChatStateProjector _chatStateProjector;
     private readonly IChatUiProjectionApplicationCoordinator _chatUiProjectionApplicationCoordinator;
     private readonly IAcpSessionUpdateProjector _acpSessionUpdateProjector;
+    private readonly ChatSessionUpdateRouter _sessionUpdateRouter;
+    private readonly OutgoingUserMessageProjector _outgoingUserMessageProjector;
     private readonly IChatConnectionStore _chatConnectionStore;
     private readonly IConversationAttentionStore? _conversationAttentionStore;
     private readonly SerialAsyncWorkQueue _sessionUpdateWorkQueue;
@@ -865,6 +868,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _chatStateProjector = chatStateProjector ?? throw new ArgumentNullException(nameof(chatStateProjector));
         _chatUiProjectionApplicationCoordinator = chatUiProjectionApplicationCoordinator ?? new ChatUiProjectionApplicationCoordinator();
         _acpSessionUpdateProjector = acpSessionUpdateProjector ?? new AcpSessionUpdateProjector();
+        _sessionUpdateRouter = new ChatSessionUpdateRouter(_acpSessionUpdateProjector);
+        _outgoingUserMessageProjector = new OutgoingUserMessageProjector();
         _chatConnectionStore = chatConnectionStore ?? throw new ArgumentNullException(nameof(chatConnectionStore));
         _conversationAttentionStore = conversationAttentionStore;
         _connectionSessionRegistry = connectionSessionRegistry;
@@ -878,6 +883,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _planPanelStatePresenter = new ChatPlanPanelStatePresenter();
         _planEntriesProjectionCoordinator = new ChatPlanEntriesProjectionCoordinator();
         _profileSelectionResolver = new ChatAcpProfileSelectionResolver();
+        _conversationProfileConnectionGateway = new ChatConversationProfileConnectionGateway();
         _panelStateCoordinator = new ChatConversationPanelStateCoordinator();
         _panelRuntimeCoordinator = new ChatConversationPanelRuntimeCoordinator();
         _sessionOptionsPresenter = new ChatSessionOptionsPresenter();
@@ -2161,13 +2167,15 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
                 _acpProfiles.SelectedProfile = ResolveLoadedProfileSelection(profile);
             }).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
-            var result = connectionContext.Equals(AcpConnectionContext.None)
-                ? await _acpConnectionCommands
-                    .ConnectToProfileAsync(profile, TransportConfig, scopedSink, cancellationToken)
-                    .ConfigureAwait(false)
-                : await _acpConnectionCommands
-                    .ConnectToProfileAsync(profile, TransportConfig, scopedSink, connectionContext, cancellationToken)
-                    .ConfigureAwait(false);
+            var result = await _conversationProfileConnectionGateway
+                .ConnectAsync(
+                    _acpConnectionCommands,
+                    profile,
+                    TransportConfig,
+                    scopedSink,
+                    connectionContext,
+                    cancellationToken)
+                .ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             if (!IsCurrentConnectionContext(connectionContext))
             {

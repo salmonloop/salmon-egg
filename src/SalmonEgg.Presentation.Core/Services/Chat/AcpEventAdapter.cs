@@ -14,11 +14,11 @@ public sealed class AcpEventAdapter
 {
     private const int DefaultBufferLimit = 256;
     private const int DefaultDrainBatchSize = 8;
-    private const int DefaultHydrationReplayBufferLimit = 8192;
+    internal const int DefaultHydrationReplayBufferLimit = 8192;
 
     private readonly Action<SessionUpdateEventArgs> _handler;
     private readonly IUiDispatcher _uiDispatcher;
-    private readonly Action<string?>? _resyncRequired;
+    private readonly Func<string?, System.Threading.Tasks.Task>? _resyncRequired;
     private readonly ILogger<AcpEventAdapter>? _logger;
     private readonly Queue<SessionUpdateEventArgs> _buffer = new();
     private readonly object _gate = new();
@@ -33,13 +33,13 @@ public sealed class AcpEventAdapter
     private bool _drainScheduled;
     private bool _lowTrustReleaseLogged;
 
-    public AcpEventAdapter(
+    private AcpEventAdapter(
         Action<SessionUpdateEventArgs> handler,
         IUiDispatcher uiDispatcher,
-        int bufferLimit = DefaultBufferLimit,
-        int hydrationReplayBufferLimit = DefaultHydrationReplayBufferLimit,
-        Action<string?>? resyncRequired = null,
-        ILogger<AcpEventAdapter>? logger = null)
+        int bufferLimit,
+        int hydrationReplayBufferLimit,
+        Func<string?, System.Threading.Tasks.Task>? resyncRequiredAsync,
+        ILogger<AcpEventAdapter>? logger)
     {
         _handler = handler ?? throw new ArgumentNullException(nameof(handler));
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
@@ -57,8 +57,48 @@ public sealed class AcpEventAdapter
 
         _bufferLimit = bufferLimit;
         _hydrationReplayBufferLimit = hydrationReplayBufferLimit;
-        _resyncRequired = resyncRequired;
+        _resyncRequired = resyncRequiredAsync;
         _logger = logger;
+    }
+
+    public AcpEventAdapter(
+        Action<SessionUpdateEventArgs> handler,
+        IUiDispatcher uiDispatcher,
+        int bufferLimit = DefaultBufferLimit,
+        int hydrationReplayBufferLimit = DefaultHydrationReplayBufferLimit,
+        Action<string?>? resyncRequired = null,
+        ILogger<AcpEventAdapter>? logger = null)
+        : this(
+            handler,
+            uiDispatcher,
+            bufferLimit,
+            hydrationReplayBufferLimit,
+            resyncRequired is null
+                ? null
+                : sessionId =>
+                {
+                    resyncRequired(sessionId);
+                    return System.Threading.Tasks.Task.CompletedTask;
+                },
+            logger)
+    {
+    }
+
+    public AcpEventAdapter(
+        Action<SessionUpdateEventArgs> handler,
+        IUiDispatcher uiDispatcher,
+        int bufferLimit,
+        int hydrationReplayBufferLimit,
+        ILogger<AcpEventAdapter>? logger,
+        Func<string?, System.Threading.Tasks.Task>? resyncRequiredAsync)
+        : this(
+            handler,
+            uiDispatcher,
+            bufferLimit,
+            hydrationReplayBufferLimit,
+            resyncRequiredAsync,
+            logger)
+    {
     }
 
     public AcpEventAdapter(
@@ -87,7 +127,7 @@ public sealed class AcpEventAdapter
         ArgumentNullException.ThrowIfNull(update);
 
         var scheduleDrain = false;
-        Action<string?>? resync = null;
+        Func<string?, System.Threading.Tasks.Task>? resync = null;
         string? resyncSessionId = null;
 
         lock (_gate)
@@ -287,7 +327,7 @@ public sealed class AcpEventAdapter
         drainIdle?.TrySetResult(null);
     }
 
-    private (Action<string?>? Callback, string? SessionId) TriggerResyncLocked(SessionUpdateEventArgs update)
+    private (Func<string?, System.Threading.Tasks.Task>? Callback, string? SessionId) TriggerResyncLocked(SessionUpdateEventArgs update)
     {
         var bufferedCount = _buffer.Count;
         _buffer.Clear();
@@ -317,9 +357,9 @@ public sealed class AcpEventAdapter
         _uiDispatcher.Enqueue(Drain);
     }
 
-    private void PostResyncRequired(Action<string?> resyncRequired, string? sessionId)
+    private void PostResyncRequired(Func<string?, System.Threading.Tasks.Task> resyncRequired, string? sessionId)
     {
-        _uiDispatcher.Enqueue(() => resyncRequired(sessionId));
+        _ = _uiDispatcher.EnqueueAsync(() => resyncRequired(sessionId));
     }
 
     private void Drain()

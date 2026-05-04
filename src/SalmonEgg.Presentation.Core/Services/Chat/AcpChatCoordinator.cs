@@ -510,9 +510,9 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         ArgumentNullException.ThrowIfNull(chatService);
 
         AcpChatServiceAdapter? wrappedService = null;
-        var dispatcher = InlineDispatcher.Instance;
-        Action<string?>? resyncCallback = sink != null
-            ? sourceSessionId => _ = HandleResyncRequiredAsync(
+        var dispatcher = sink?.Dispatcher ?? InlineDispatcher.Instance;
+        Func<string?, Task>? resyncCallback = sink != null
+            ? sourceSessionId => HandleResyncRequiredAsync(
                 sink,
                 wrappedService!,
                 sourceSessionId,
@@ -522,7 +522,9 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             update => wrappedService!.PublishBufferedUpdate(update),
             dispatcher,
             _sessionUpdateBufferLimit,
-            resyncRequired: resyncCallback);
+            AcpEventAdapter.DefaultHydrationReplayBufferLimit,
+            logger: null,
+            resyncRequiredAsync: resyncCallback);
         wrappedService = new AcpChatServiceAdapter(chatService, eventAdapter);
         return wrappedService;
     }

@@ -135,72 +135,41 @@ public partial class ChatViewModel
                 await UpdateToolCallStatusAsync(targetConversationId, toolCallStatusUpdate).ConfigureAwait(true);
                 RecordTranscriptProjectionObservation(e.SessionId);
             }
-            else if (e.Update is PlanUpdate planUpdate)
+            else if (e.Update != null)
             {
-                await ApplySessionUpdateDeltaAsync(
-                    targetConversationId,
-                    _acpSessionUpdateProjector.Project(new SessionUpdateEventArgs(e.SessionId, planUpdate))).ConfigureAwait(true);
-            }
-            else if (e.Update is CurrentModeUpdate modeChange)
-            {
-                if (IsConversationConfigAuthoritative(targetConversationId))
+                var route = _sessionUpdateRouter.Route(
+                    e,
+                    IsConversationConfigAuthoritative(targetConversationId));
+                if (!route.Handled)
                 {
-                    Logger.LogDebug(
-                        "Ignoring legacy current mode update because config options are authoritative. conversationId={ConversationId} remoteSessionId={RemoteSessionId} modeId={ModeId}",
-                        targetConversationId,
-                        e.SessionId,
-                        modeChange.NormalizedModeId);
+                    // FUTURE-PROOFING: Log unknown protocol extensions to detect agent version mismatches.
+                    Logger.LogInformation("Unhandled session update type: {UpdateType}", e.Update.GetType().Name);
                     return;
                 }
 
-                await ApplySessionUpdateDeltaAsync(
-                    targetConversationId,
-                    _acpSessionUpdateProjector.Project(new SessionUpdateEventArgs(e.SessionId, modeChange))).ConfigureAwait(true);
-            }
-            else if (e.Update is ConfigUpdateUpdate configUpdate)
-            {
-                if (configUpdate.ConfigOptions != null)
+                if (route.Ignored)
+                {
+                    if (e.Update is CurrentModeUpdate modeChange)
+                    {
+                        Logger.LogDebug(
+                            "Ignoring legacy current mode update because config options are authoritative. conversationId={ConversationId} remoteSessionId={RemoteSessionId} modeId={ModeId}",
+                            targetConversationId,
+                            e.SessionId,
+                            modeChange.NormalizedModeId);
+                    }
+
+                    return;
+                }
+
+                if (route.ShouldSetConfigAuthoritative)
                 {
                     SetConversationConfigAuthority(targetConversationId, true);
                 }
 
-                await ApplySessionUpdateDeltaAsync(
-                    targetConversationId,
-                    _acpSessionUpdateProjector.Project(new SessionUpdateEventArgs(e.SessionId, configUpdate))).ConfigureAwait(true);
-            }
-            else if (e.Update is ConfigOptionUpdate optionUpdate)
-            {
-                if (optionUpdate.ConfigOptions != null)
+                if (route.Delta is not null)
                 {
-                    SetConversationConfigAuthority(targetConversationId, true);
+                    await ApplySessionUpdateDeltaAsync(targetConversationId, route.Delta).ConfigureAwait(true);
                 }
-
-                await ApplySessionUpdateDeltaAsync(
-                    targetConversationId,
-                    _acpSessionUpdateProjector.Project(new SessionUpdateEventArgs(e.SessionId, optionUpdate))).ConfigureAwait(true);
-            }
-            else if (e.Update is SessionInfoUpdate sessionInfoUpdate)
-            {
-                await ApplySessionUpdateDeltaAsync(
-                    targetConversationId,
-                    _acpSessionUpdateProjector.Project(new SessionUpdateEventArgs(e.SessionId, sessionInfoUpdate))).ConfigureAwait(true);
-            }
-            else if (e.Update is UsageUpdate usageUpdate)
-            {
-                await ApplySessionUpdateDeltaAsync(
-                    targetConversationId,
-                    _acpSessionUpdateProjector.Project(new SessionUpdateEventArgs(e.SessionId, usageUpdate))).ConfigureAwait(true);
-            }
-            else if (e.Update is AvailableCommandsUpdate commandsUpdate)
-            {
-                await ApplySessionUpdateDeltaAsync(
-                    targetConversationId,
-                    _acpSessionUpdateProjector.Project(new SessionUpdateEventArgs(e.SessionId, commandsUpdate))).ConfigureAwait(true);
-            }
-            else if (e.Update != null)
-            {
-                // FUTURE-PROOFING: Log unknown protocol extensions to detect agent version mismatches.
-                Logger.LogInformation("Unhandled session update type: {UpdateType}", e.Update.GetType().Name);
             }
         }
         catch (Exception ex)
@@ -604,22 +573,17 @@ public partial class ChatViewModel
             return;
         }
 
-        var resolvedProtocolMessageId = responseUserMessageId;
-
         var currentState = await _chatStore.State ?? ChatState.Empty;
         var transcript = currentState.ResolveContentSlice(conversationId)?.Transcript
             ?? ImmutableList<ConversationMessageSnapshot>.Empty;
-        var existing = transcript.LastOrDefault(message =>
-            message.IsOutgoing
-            && string.Equals(message.Id, pendingUserMessageLocalId, StringComparison.Ordinal));
-        if (existing is null
-            || string.Equals(existing.ProtocolMessageId, resolvedProtocolMessageId, StringComparison.Ordinal))
+        var reconciled = _outgoingUserMessageProjector.TryReconcilePromptAcknowledgement(
+            transcript,
+            pendingUserMessageLocalId,
+            responseUserMessageId);
+        if (reconciled is null)
         {
             return;
         }
-
-        var reconciled = CloneSnapshot(existing);
-        reconciled.ProtocolMessageId = resolvedProtocolMessageId;
         await UpsertTranscriptSnapshotAsync(conversationId, reconciled).ConfigureAwait(false);
     }
 
@@ -1758,14 +1722,12 @@ public partial class ChatViewModel
         var currentState = await _chatStore.State ?? ChatState.Empty;
         var transcript = currentState.ResolveContentSlice(conversationId)?.Transcript
             ?? ImmutableList<ConversationMessageSnapshot>.Empty;
-        var existing = ResolveExistingOutgoingUserMessageSnapshot(
+        var projection = _outgoingUserMessageProjector.ResolveAuthoritativeProjection(
             transcript,
-            userMessageUpdate.MessageId,
-            content,
+            userMessageUpdate,
             activeTurn);
-        var resolvedProtocolMessageId = existing is null
-            ? userMessageUpdate.MessageId
-            : userMessageUpdate.MessageId ?? existing.ProtocolMessageId;
+        var existing = projection.ExistingSnapshot;
+        var resolvedProtocolMessageId = projection.ProtocolMessageId;
 
         var snapshot = existing is null
             ? CreateContentSnapshot(content, isOutgoing: true, protocolMessageId: resolvedProtocolMessageId)
@@ -1778,81 +1740,6 @@ public partial class ChatViewModel
 
         await UpsertTranscriptSnapshotAsync(conversationId, snapshot).ConfigureAwait(true);
     }
-
-    private static ConversationMessageSnapshot? ResolveExistingOutgoingUserMessageSnapshot(
-        IImmutableList<ConversationMessageSnapshot> transcript,
-        string? protocolMessageId,
-        ContentBlock content,
-        ActiveTurnState? activeTurn)
-    {
-        if (!string.IsNullOrWhiteSpace(protocolMessageId))
-        {
-            var byProtocolMessageId = transcript.LastOrDefault(message =>
-                message.IsOutgoing
-                && string.Equals(message.ProtocolMessageId, protocolMessageId, StringComparison.Ordinal));
-            if (byProtocolMessageId is not null)
-            {
-                return byProtocolMessageId;
-            }
-
-            var pendingOptimisticOutgoingMessage = ResolvePendingOptimisticOutgoingMessage(transcript, activeTurn);
-            if (pendingOptimisticOutgoingMessage is not null)
-            {
-                return pendingOptimisticOutgoingMessage;
-            }
-        }
-
-        if (!CanReusePendingLocalUserMessage(activeTurn, content))
-        {
-            return null;
-        }
-
-        return transcript.LastOrDefault(message =>
-            message.IsOutgoing
-            && string.Equals(message.Id, activeTurn!.PendingUserMessageLocalId, StringComparison.Ordinal));
-    }
-
-    private static ConversationMessageSnapshot? ResolvePendingOptimisticOutgoingMessage(
-        IImmutableList<ConversationMessageSnapshot> transcript,
-        ActiveTurnState? activeTurn)
-    {
-        if (activeTurn is null || string.IsNullOrWhiteSpace(activeTurn.PendingUserMessageLocalId))
-        {
-            return null;
-        }
-
-        return transcript.LastOrDefault(message =>
-            message.IsOutgoing
-            && string.Equals(message.Id, activeTurn.PendingUserMessageLocalId, StringComparison.Ordinal)
-            && string.IsNullOrWhiteSpace(message.ProtocolMessageId));
-    }
-
-    private static bool CanReusePendingLocalUserMessage(ActiveTurnState? activeTurn, ContentBlock content)
-    {
-        if (activeTurn is null
-            || string.IsNullOrWhiteSpace(activeTurn.PendingUserMessageLocalId))
-        {
-            return false;
-        }
-
-        if (IsTerminalTurnPhase(activeTurn.Phase))
-        {
-            return false;
-        }
-
-        if (content is not TextContentBlock textContent)
-        {
-            return false;
-        }
-
-        return string.Equals(
-            textContent.Text ?? string.Empty,
-            activeTurn.PendingUserMessageText ?? string.Empty,
-            StringComparison.Ordinal);
-    }
-
-    private static bool IsTerminalTurnPhase(ChatTurnPhase phase)
-        => phase is ChatTurnPhase.Completed or ChatTurnPhase.Failed or ChatTurnPhase.Cancelled;
 
     private ConversationMessageSnapshot CreateContentSnapshot(
         ContentBlock content,

@@ -1247,7 +1247,7 @@ public partial class ChatViewModel
                 return false;
             }
 
-            var connectionContext = CreateConversationConnectionContext(
+            var connectionContext = _conversationProfileConnectionGateway.CreateConnectionContext(
                 conversationId,
                 binding,
                 profile.Id,
@@ -1328,7 +1328,7 @@ public partial class ChatViewModel
             return;
         }
 
-        var connectionContext = CreateConversationConnectionContext(
+        var connectionContext = _conversationProfileConnectionGateway.CreateConnectionContext(
             conversationId,
             binding,
             profile.Id,
@@ -1456,26 +1456,6 @@ public partial class ChatViewModel
                 workspaceBinding.ConversationId,
                 workspaceBinding.RemoteSessionId,
                 workspaceBinding.BoundProfileId);
-    }
-
-    private static AcpConnectionContext CreateConversationConnectionContext(
-        string? conversationId,
-        ConversationBindingSlice? binding,
-        string? profileId,
-        bool preserveConversation,
-        long? activationVersion = null)
-    {
-        if (!preserveConversation || string.IsNullOrWhiteSpace(conversationId))
-        {
-            return new AcpConnectionContext(conversationId, PreserveConversation: false, ActivationVersion: activationVersion);
-        }
-
-        var hasMatchingRemoteBinding =
-            !string.IsNullOrWhiteSpace(binding?.RemoteSessionId)
-            && !string.IsNullOrWhiteSpace(binding?.ProfileId)
-            && string.Equals(binding?.ProfileId, profileId, StringComparison.Ordinal);
-
-        return new AcpConnectionContext(conversationId, hasMatchingRemoteBinding, ActivationVersion: activationVersion);
     }
 
     /// <summary>

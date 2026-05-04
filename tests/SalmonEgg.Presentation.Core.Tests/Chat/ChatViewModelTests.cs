@@ -1261,9 +1261,13 @@ public partial class ChatViewModelTests
                 return HasUnreadAttention(attentionState, "conv-background");
             });
 
-            await fixture.ViewModel.SwitchConversationAsync("conv-background");
-            await WaitForConditionAsync(() =>
-                Task.FromResult(string.Equals(fixture.ViewModel.CurrentSessionId, "conv-background", StringComparison.Ordinal)));
+            var switched = await fixture.ViewModel.SwitchConversationAsync("conv-background");
+            Assert.True(switched, fixture.ViewModel.ErrorMessage);
+            await WaitForConditionAsync(async () =>
+            {
+                var state = await fixture.GetStateAsync();
+                return string.Equals(state.HydratedConversationId, "conv-background", StringComparison.Ordinal);
+            });
 
             await WaitForConditionAsync(async () =>
             {
@@ -3367,6 +3371,7 @@ public partial class ChatViewModelTests
             }
 
             await task;
+            RunAll();
         }
     }
 
@@ -4418,14 +4423,17 @@ public partial class ChatViewModelTests
             Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
         });
         await DispatchConnectedAsync(fixture, "profile-1");
-        syncContext.RunAll();
-        await Task.Delay(50);
-        syncContext.RunAll();
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(
+                string.Equals(viewModel.CurrentSessionId, "conv-1", StringComparison.Ordinal)
+                && viewModel.IsSessionActive
+                && string.Equals(viewModel.SelectedProfileId, "profile-1", StringComparison.Ordinal)
+                && viewModel.IsInitialized);
+        }, timeoutMilliseconds: 5000);
 
         viewModel.CurrentPrompt = "hello";
-        syncContext.RunAll();
-        await Task.Delay(50);
-        syncContext.RunAll();
         await WaitForConditionAsync(() =>
         {
             syncContext.RunAll();
@@ -4748,14 +4756,21 @@ public partial class ChatViewModelTests
             Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
         });
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
-        syncContext.RunAll();
-        await Task.Delay(50);
-        syncContext.RunAll();
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(
+                string.Equals(viewModel.CurrentSessionId, "conv-1", StringComparison.Ordinal)
+                && viewModel.IsSessionActive
+                && viewModel.IsInitialized);
+        });
 
         viewModel.CurrentPrompt = "show modes";
-        syncContext.RunAll();
-        await Task.Delay(50);
-        syncContext.RunAll();
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(viewModel.CanSendPromptUi);
+        });
 
         await viewModel.SendPromptCommand.ExecuteAsync(null);
 
@@ -6243,8 +6258,11 @@ public partial class ChatViewModelTests
         });
 
         await fixture.DispatchAsync(new SelectConversationAction("conv-2"));
-        syncContext.RunAll();
-        Assert.Empty(viewModel.AvailableSlashCommands);
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(viewModel.AvailableSlashCommands.Count == 0);
+        });
 
         await fixture.DispatchAsync(new SelectConversationAction("conv-1"));
         await WaitForConditionAsync(() =>
@@ -9058,8 +9076,12 @@ public partial class ChatViewModelTests
                 It.Is<ServerConfiguration>(profile => string.Equals(profile.Id, "profile-1", StringComparison.Ordinal)),
                 It.IsAny<IAcpTransportConfiguration>(),
                 It.IsAny<IAcpChatCoordinatorSink>(),
+                It.Is<AcpConnectionContext>(context =>
+                    string.Equals(context.ConversationId, "conv-2", StringComparison.Ordinal)
+                    && context.PreserveConversation
+                    && context.ActivationVersion.HasValue),
                 It.IsAny<CancellationToken>()))
-            .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, CancellationToken>(async (_, _, _, cancellationToken) =>
+            .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, AcpConnectionContext, CancellationToken>(async (_, _, _, _, cancellationToken) =>
             {
                 await allowConnectCompletion.Task.WaitAsync(cancellationToken);
                 return new AcpTransportApplyResult(Mock.Of<IChatService>(), new InitializeResponse());
@@ -13825,11 +13847,7 @@ public partial class ChatViewModelTests
         });
         await DispatchConnectedAsync(fixture, "profile-1");
         await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
-        await WaitForConditionAsync(() =>
-        {
-            syncContext.RunAll();
-            return Task.FromResult(string.Equals(fixture.ViewModel.ConnectionInstanceId, "conn-1", StringComparison.Ordinal));
-        });
+        syncContext.RunAll();
 
         var activationTask = fixture.ViewModel.SwitchConversationAsync("conv-1");
         await WaitForConditionAsync(() =>
@@ -14339,13 +14357,15 @@ public partial class ChatViewModelTests
         await AwaitWithSynchronizationContextAsync(
             syncContext,
             fixture.ViewModel.ConnectToAcpProfileCommand.ExecuteAsync(profile));
-        await AwaitWithSynchronizationContextAsync(
-            syncContext,
-            fixture.ViewModel.SwitchConversationAsync("conv-1"));
-        await WaitForConditionAsync(() => Task.FromResult(
-            fixture.ViewModel.IsSessionActive
-            && string.Equals(fixture.ViewModel.CurrentSessionId, "conv-1", StringComparison.Ordinal)
-            && string.Equals(fixture.ViewModel.CurrentRemoteSessionId, "remote-1", StringComparison.Ordinal)));
+        var switched = await fixture.ViewModel.SwitchConversationAsync("conv-1");
+        Assert.True(switched, fixture.ViewModel.ErrorMessage);
+        await WaitForConditionAsync(async () =>
+        {
+            var state = await fixture.GetStateAsync();
+            return string.Equals(state.HydratedConversationId, "conv-1", StringComparison.Ordinal)
+                && string.Equals(state.ResolveBinding("conv-1")?.RemoteSessionId, "remote-1", StringComparison.Ordinal)
+                && fixture.ViewModel.IsSessionActive;
+        });
 
         Assert.Equal(1, chatService.LoadSessionCallCount);
         Assert.Equal("remote-1", Assert.Single(chatService.LoadedSessionIds));

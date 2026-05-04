@@ -55,6 +55,7 @@
 
                     <controls:ToolCallPill x:Name="IncomingToolCallPill"
                                            x:Load="{x:Bind ShouldShowToolCallPill, Mode=OneWay}"
+                                           Visibility="{x:Bind ShouldShowToolCallPill, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                            Margin="0,4,0,0"
                                            ToolTitle="{x:Bind Title, Mode=OneWay}"
                                            ToolKind="{x:Bind ToolCallKind, Mode=OneWay}"
