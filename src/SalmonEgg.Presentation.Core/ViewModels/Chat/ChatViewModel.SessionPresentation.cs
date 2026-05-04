@@ -40,7 +40,9 @@ using SalmonEgg.Presentation.Core.ViewModels.Chat.Input;
 using SalmonEgg.Presentation.ViewModels.Chat.Interactions;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.Overlay;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.PlanPanel;
+using SalmonEgg.Presentation.Core.ViewModels.Chat.ProfileSelection;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.ProjectAffinity;
+using SalmonEgg.Presentation.Core.ViewModels.Chat.SessionOptions;
 using SalmonEgg.Presentation.ViewModels.Chat.Activation;
 using SalmonEgg.Presentation.ViewModels.Chat.Transcript;
 using SalmonEgg.Presentation.ViewModels.Chat.Panels;
@@ -55,71 +57,69 @@ public partial class ChatViewModel
     private void SyncPlanEntries(IReadOnlyList<ConversationPlanEntrySnapshot> planEntries)
         => _planEntriesProjectionCoordinator.Sync(PlanEntries, planEntries);
 
+    private void ApplyResolvedProfileSelection(
+        ServerConfiguration? selectedProfile,
+        bool suppressStoreProjection,
+        bool suppressProfileSyncFromStore)
+    {
+        if (ReferenceEquals(SelectedAcpProfile, selectedProfile)
+            && ReferenceEquals(_acpProfiles.SelectedProfile, selectedProfile))
+        {
+            return;
+        }
+
+        var previousSuppressAcpProfileConnect = _suppressAcpProfileConnect;
+        var previousSuppressStoreProfileProjection = _suppressStoreProfileProjection;
+        var previousSuppressProfileSyncFromStore = _suppressProfileSyncFromStore;
+
+        _suppressAcpProfileConnect = true;
+        if (suppressStoreProjection)
+        {
+            _suppressStoreProfileProjection = true;
+        }
+
+        if (suppressProfileSyncFromStore)
+        {
+            _suppressProfileSyncFromStore = true;
+        }
+
+        try
+        {
+            SelectedAcpProfile = selectedProfile;
+            _acpProfiles.SelectedProfile = selectedProfile;
+        }
+        finally
+        {
+            _suppressProfileSyncFromStore = previousSuppressProfileSyncFromStore;
+            _suppressStoreProfileProjection = previousSuppressStoreProfileProjection;
+            _suppressAcpProfileConnect = previousSuppressAcpProfileConnect;
+        }
+    }
+
     private void ApplySelectedProfileFromStore(string? profileId)
     {
         _selectedProfileIdFromStore = profileId;
 
-        var match = string.IsNullOrWhiteSpace(profileId)
-            ? null
-            : _acpProfiles.Profiles.FirstOrDefault(p => string.Equals(p.Id, profileId, StringComparison.Ordinal));
-
-        if (!ReferenceEquals(SelectedAcpProfile, match))
-        {
-            _suppressAcpProfileConnect = true;
-            _suppressProfileSyncFromStore = true;
-            try
-            {
-                SelectedAcpProfile = match;
-                _acpProfiles.SelectedProfile = match;
-            }
-            finally
-            {
-                _suppressProfileSyncFromStore = false;
-                _suppressAcpProfileConnect = false;
-            }
-        }
+        var match = _profileSelectionResolver.ResolveById(_acpProfiles.Profiles, profileId);
+        ApplyResolvedProfileSelection(
+            match,
+            suppressStoreProjection: false,
+            suppressProfileSyncFromStore: true);
     }
 
     private void ApplySettingsSelectedProfileFromStore(string? profileId)
     {
         _settingsSelectedProfileId = profileId;
 
-        var match = string.IsNullOrWhiteSpace(profileId)
-            ? null
-            : _acpProfiles.Profiles.FirstOrDefault(p => string.Equals(p.Id, profileId, StringComparison.Ordinal));
-
-        if (!ReferenceEquals(SelectedAcpProfile, match))
-        {
-            _suppressAcpProfileConnect = true;
-            _suppressProfileSyncFromStore = true;
-            try
-            {
-                SelectedAcpProfile = match;
-                _acpProfiles.SelectedProfile = match;
-            }
-            finally
-            {
-                _suppressProfileSyncFromStore = false;
-                _suppressAcpProfileConnect = false;
-            }
-        }
+        var match = _profileSelectionResolver.ResolveById(_acpProfiles.Profiles, profileId);
+        ApplyResolvedProfileSelection(
+            match,
+            suppressStoreProjection: false,
+            suppressProfileSyncFromStore: true);
     }
 
     private ServerConfiguration? ResolveLoadedProfileSelection(ServerConfiguration? profile)
-    {
-        if (profile is null)
-        {
-            return null;
-        }
-
-        if (!string.IsNullOrWhiteSpace(profile.Id))
-        {
-            return _acpProfiles.Profiles.FirstOrDefault(candidate =>
-                string.Equals(candidate.Id, profile.Id, StringComparison.Ordinal));
-        }
-
-        return _acpProfiles.Profiles.FirstOrDefault(candidate => ReferenceEquals(candidate, profile));
-    }
+        => _profileSelectionResolver.ResolveLoadedProfileSelection(_acpProfiles.Profiles, profile);
 
     private void ApplySessionStateProjection(
         IReadOnlyList<ConversationModeOptionSnapshot> availableModes,
@@ -127,114 +127,33 @@ public partial class ChatViewModel
         IReadOnlyList<ConversationConfigOptionSnapshot> configOptions,
         bool showConfigOptionsPanel)
     {
-        if (!ModeCollectionMatches(AvailableModes, availableModes))
+        var projection = _sessionOptionsPresenter.Present(
+            availableModes,
+            selectedModeId,
+            configOptions,
+            showConfigOptionsPanel);
+
+        if (!_sessionOptionsPresenter.ModeCollectionMatches(AvailableModes, projection.AvailableModes))
         {
             AvailableModes.Clear();
-            foreach (var mode in availableModes)
+            foreach (var mode in projection.AvailableModes)
             {
-                AvailableModes.Add(new SessionModeViewModel
-                {
-                    ModeId = mode.ModeId,
-                    ModeName = mode.ModeName,
-                    Description = mode.Description
-                });
+                AvailableModes.Add(mode);
             }
         }
 
-        if (!ConfigOptionCollectionMatches(ConfigOptions, configOptions))
+        if (!_sessionOptionsPresenter.ConfigOptionCollectionMatches(ConfigOptions, projection.ConfigOptions))
         {
             ConfigOptions.Clear();
-            foreach (var option in configOptions)
+            foreach (var option in projection.ConfigOptions)
             {
-                ConfigOptions.Add(MapConfigOption(option));
+                ConfigOptions.Add(option);
             }
         }
 
-        ShowConfigOptionsPanel = showConfigOptionsPanel;
-
-        if (ConfigOptions.Count == 0)
-        {
-            _modeConfigId = null;
-        }
-        else
-        {
-            SyncModesFromConfigOptions();
-        }
-
-        if (!string.IsNullOrWhiteSpace(selectedModeId) && AvailableModes.Count > 0)
-        {
-            SetSelectedModeWithoutDispatch(
-                AvailableModes.FirstOrDefault(m => m.ModeId == selectedModeId) ?? AvailableModes[0]);
-            return;
-        }
-
-        SetSelectedModeWithoutDispatch(AvailableModes.FirstOrDefault());
-    }
-
-    private static bool ModeCollectionMatches(
-        IReadOnlyList<SessionModeViewModel> current,
-        IReadOnlyList<ConversationModeOptionSnapshot> projected)
-    {
-        if (current.Count != projected.Count)
-        {
-            return false;
-        }
-
-        for (var i = 0; i < current.Count; i++)
-        {
-            if (!string.Equals(current[i].ModeId, projected[i].ModeId, StringComparison.Ordinal)
-                || !string.Equals(current[i].ModeName, projected[i].ModeName, StringComparison.Ordinal)
-                || !string.Equals(current[i].Description, projected[i].Description, StringComparison.Ordinal))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static bool ConfigOptionCollectionMatches(
-        IReadOnlyList<ConfigOptionViewModel> current,
-        IReadOnlyList<ConversationConfigOptionSnapshot> projected)
-    {
-        if (current.Count != projected.Count)
-        {
-            return false;
-        }
-
-        for (var i = 0; i < current.Count; i++)
-        {
-            var left = current[i];
-            var right = projected[i];
-            if (!string.Equals(left.Id, right.Id, StringComparison.Ordinal)
-                || !string.Equals(left.Name, right.Name, StringComparison.Ordinal)
-                || !string.Equals(left.Description, right.Description, StringComparison.Ordinal)
-                || !string.Equals(left.Category, right.Category, StringComparison.Ordinal)
-                || !string.Equals(left.ValueType, right.ValueType ?? "string", StringComparison.Ordinal)
-                || !string.Equals(left.Value?.ToString(), right.SelectedValue ?? string.Empty, StringComparison.Ordinal))
-            {
-                return false;
-            }
-
-            if (left.Options.Count != right.Options.Count)
-            {
-                return false;
-            }
-
-            for (var optionIndex = 0; optionIndex < left.Options.Count; optionIndex++)
-            {
-                var leftOption = left.Options[optionIndex];
-                var rightOption = right.Options[optionIndex];
-                if (!string.Equals(leftOption.Value, rightOption.Value, StringComparison.Ordinal)
-                    || !string.Equals(leftOption.Name, rightOption.Name, StringComparison.Ordinal)
-                    || !string.Equals(leftOption.Description, rightOption.Description, StringComparison.Ordinal))
-                {
-                    return false;
-                }
-            }
-        }
-
-        return true;
+        ShowConfigOptionsPanel = projection.ShowConfigOptionsPanel;
+        _modeConfigId = projection.ModeConfigId;
+        SetSelectedModeWithoutDispatch(_sessionOptionsPresenter.ResolveSelectedMode(AvailableModes, projection.SelectedModeId));
     }
 
     private void OnAcpProfilesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -245,6 +164,119 @@ public partial class ChatViewModel
         }
 
         ApplySelectedProfileFromStore(_selectedProfileIdFromStore);
+    }
+
+    private void ApplySessionIdentityProjection(
+        ChatUiProjection projection,
+        IReadOnlyList<ChatMessageViewModel>? preparedTranscript,
+        out bool sessionChanged)
+    {
+        sessionChanged = !string.Equals(CurrentSessionId, projection.HydratedConversationId, StringComparison.Ordinal);
+        if (!sessionChanged)
+        {
+            return;
+        }
+
+        // Set the session ID before subsequent projection so loading state is derived
+        // from the active conversation that the UI is about to display.
+        CurrentSessionId = projection.HydratedConversationId;
+        _transcriptProjectionCoordinator.ApplyProjection(
+            _transcriptProjectionContext,
+            projection.HydratedConversationId,
+            projection.Transcript,
+            preparedTranscript,
+            sessionChanged: true);
+        ReplacePlanEntries(projection.PlanEntries);
+    }
+
+    private void ApplyPromptAndProfileProjection(ChatUiProjection projection)
+    {
+        var draft = projection.CurrentPrompt;
+        if (!string.Equals(CurrentPrompt, draft, StringComparison.Ordinal))
+        {
+            CurrentPrompt = draft;
+        }
+
+        ApplySettingsSelectedProfileFromStore(projection.SettingsSelectedProfileId);
+        _selectedProfileIdFromStore = !string.IsNullOrWhiteSpace(projection.ChatOwnerProfileId)
+            ? projection.ChatOwnerProfileId
+            : projection.SettingsSelectedProfileId;
+        _currentRemoteSessionId = projection.RemoteSessionId;
+    }
+
+    private void ApplyTranscriptAndPlanProjection(
+        ChatUiProjection projection,
+        bool sessionChanged)
+    {
+        // Transcript must be synchronized before activation/loading properties change
+        // so the rendered surface never observes a newer active conversation with stale rows.
+        if (!sessionChanged)
+        {
+            _transcriptProjectionCoordinator.ApplyProjection(
+                _transcriptProjectionContext,
+                projection.HydratedConversationId,
+                projection.Transcript,
+                preparedTranscript: null,
+                sessionChanged: false);
+        }
+
+        ShowPlanPanel = projection.ShowPlanPanel;
+        CurrentPlanTitle = projection.PlanTitle;
+        if (!sessionChanged)
+        {
+            SyncPlanEntries(projection.PlanEntries);
+        }
+    }
+
+    private void ApplyConversationStatusProjection(ChatUiProjection projection)
+    {
+        IsHydrating = projection.IsHydrating;
+        IsSessionActive = projection.IsSessionActive;
+        IsPromptInFlight = projection.IsPromptInFlight;
+        IsTurnStatusVisible = projection.IsTurnStatusVisible;
+        TurnStatusText = projection.TurnStatusText;
+        IsTurnStatusRunning = projection.IsTurnStatusRunning;
+        TurnPhase = projection.TurnPhase;
+        IsConnecting = projection.IsConnecting;
+        IsConnected = projection.IsConnected;
+        IsInitializing = projection.IsInitializing;
+    }
+
+    private void ApplyConnectionAndAgentProjection(ChatUiProjection projection)
+    {
+        RaiseOverlayStateChanged();
+        Interlocked.Exchange(ref _connectionGeneration, projection.ConnectionGeneration);
+        if (!string.Equals(_connectionInstanceId, projection.ConnectionInstanceId, StringComparison.Ordinal))
+        {
+            _connectionInstanceId = projection.ConnectionInstanceId;
+            OnPropertyChanged(nameof(ConnectionInstanceId));
+        }
+
+        CurrentConnectionStatus = projection.ConnectionStatus;
+        ConnectionErrorMessage = projection.ConnectionError;
+        IsAuthenticationRequired = projection.IsAuthenticationRequired;
+        AuthenticationHintMessage = projection.AuthenticationHintMessage;
+        AgentName = projection.AgentName;
+        AgentVersion = projection.AgentVersion;
+    }
+
+    private void ApplySessionToolingProjection(ChatUiProjection projection)
+    {
+        ApplySessionStateProjection(
+            projection.AvailableModes,
+            projection.SelectedModeId,
+            projection.ConfigOptions,
+            projection.ShowConfigOptionsPanel);
+        ApplySlashCommandProjection(projection.AvailableCommands);
+    }
+
+    private void ApplyConversationChromeProjection(ChatUiProjection projection)
+    {
+        TryCompletePendingHistoryOverlayDismissal(projection);
+        RefreshProjectAffinityCorrectionState(projection.HydratedConversationId);
+        ApplyProjectAffinityOverrideCommand.NotifyCanExecuteChanged();
+        ClearProjectAffinityOverrideCommand.NotifyCanExecuteChanged();
+        QueuePreviewSnapshotPersistence(projection);
     }
 
     partial void OnSelectedAcpProfileChanged(ServerConfiguration? value)

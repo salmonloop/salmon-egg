@@ -814,19 +814,10 @@ public partial class ChatViewModel
 
         var selectedProfile = ResolveLoadedProfileSelection(profile);
         _selectedProfileIdFromStore = profile.Id;
-        _suppressAcpProfileConnect = true;
-        _suppressStoreProfileProjection = true;
-        try
-        {
-            SelectedAcpProfile = selectedProfile;
-            _acpProfiles.SelectedProfile = selectedProfile;
-        }
-        finally
-        {
-            _suppressStoreProfileProjection = false;
-            _suppressAcpProfileConnect = false;
-        }
-
+        ApplyResolvedProfileSelection(
+            selectedProfile,
+            suppressStoreProjection: true,
+            suppressProfileSyncFromStore: false);
     }
 
     private bool IsCurrentConnectionContext(AcpConnectionContext connectionContext)
@@ -2065,4 +2056,3 @@ public partial class ChatViewModel
         _remoteHydrationKnownTranscriptGrowthGraceDeadlineUtc.Remove(conversationId);
     }
 }
-

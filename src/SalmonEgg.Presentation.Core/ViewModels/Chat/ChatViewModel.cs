@@ -40,7 +40,9 @@ using SalmonEgg.Presentation.Core.ViewModels.Chat.Input;
 using SalmonEgg.Presentation.ViewModels.Chat.Interactions;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.Overlay;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.PlanPanel;
+using SalmonEgg.Presentation.Core.ViewModels.Chat.ProfileSelection;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.ProjectAffinity;
+using SalmonEgg.Presentation.Core.ViewModels.Chat.SessionOptions;
 using SalmonEgg.Presentation.ViewModels.Chat.Activation;
 using SalmonEgg.Presentation.ViewModels.Chat.Transcript;
 using SalmonEgg.Presentation.ViewModels.Chat.Panels;
@@ -101,8 +103,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly ChatAskUserStatePresenter _askUserStatePresenter;
     private readonly ChatPlanPanelStatePresenter _planPanelStatePresenter;
     private readonly ChatPlanEntriesProjectionCoordinator _planEntriesProjectionCoordinator;
+    private readonly ChatAcpProfileSelectionResolver _profileSelectionResolver;
     private readonly ChatConversationPanelStateCoordinator _panelStateCoordinator;
     private readonly ChatConversationPanelRuntimeCoordinator _panelRuntimeCoordinator;
+    private readonly ChatSessionOptionsPresenter _sessionOptionsPresenter;
     private readonly ChatTerminalProjectionCoordinator _terminalProjectionCoordinator;
     private readonly ChatInteractionEventBridge _interactionEventBridge;
     private readonly ChatAuthenticationCoordinator _authenticationCoordinator;
@@ -873,8 +877,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _askUserStatePresenter = new ChatAskUserStatePresenter();
         _planPanelStatePresenter = new ChatPlanPanelStatePresenter();
         _planEntriesProjectionCoordinator = new ChatPlanEntriesProjectionCoordinator();
+        _profileSelectionResolver = new ChatAcpProfileSelectionResolver();
         _panelStateCoordinator = new ChatConversationPanelStateCoordinator();
         _panelRuntimeCoordinator = new ChatConversationPanelRuntimeCoordinator();
+        _sessionOptionsPresenter = new ChatSessionOptionsPresenter();
         _terminalProjectionCoordinator = new ChatTerminalProjectionCoordinator();
         _interactionEventBridge = new ChatInteractionEventBridge(_authoritativeRemoteSessionRouter, _terminalProjectionCoordinator);
         _authenticationCoordinator = new ChatAuthenticationCoordinator();
@@ -1161,16 +1167,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
                 return;
             }
 
-            // Sync UI selection without triggering another connect attempt.
-            _suppressAcpProfileConnect = true;
-            try
-            {
-                SelectedAcpProfile = _acpProfiles.SelectedProfile;
-            }
-            finally
-            {
-                _suppressAcpProfileConnect = false;
-            }
+            ApplyResolvedProfileSelection(
+                _acpProfiles.SelectedProfile,
+                suppressStoreProjection: false,
+                suppressProfileSyncFromStore: false);
         }
     }
 
@@ -1184,95 +1184,13 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _suppressStorePromptProjection = true;
         try
         {
-            sessionChanged = !string.Equals(CurrentSessionId, projection.HydratedConversationId, StringComparison.Ordinal);
-            if (sessionChanged)
-            {
-                // Set the session ID without triggering OnCurrentSessionIdChanged immediately
-                // if we want to avoid multiple overlay state changes, but here we actually
-                // WANT consistent behavior. By moving session clearing before other updates,
-                // we ensure the "empty" state is correctly identified as "loading" if hydrating.
-                CurrentSessionId = projection.HydratedConversationId;
-                _transcriptProjectionCoordinator.ApplyProjection(
-                    _transcriptProjectionContext,
-                    projection.HydratedConversationId,
-                    projection.Transcript,
-                    preparedTranscript,
-                    sessionChanged: true);
-                ReplacePlanEntries(projection.PlanEntries);
-            }
-
-            var draft = projection.CurrentPrompt;
-            if (!string.Equals(CurrentPrompt, draft, StringComparison.Ordinal))
-            {
-                CurrentPrompt = draft;
-            }
-
-            ApplySettingsSelectedProfileFromStore(projection.SettingsSelectedProfileId);
-            _selectedProfileIdFromStore = !string.IsNullOrWhiteSpace(projection.ChatOwnerProfileId)
-                ? projection.ChatOwnerProfileId
-                : projection.SettingsSelectedProfileId;
-            _currentRemoteSessionId = projection.RemoteSessionId;
-
-            // CRITICAL: Sync transcript BEFORE notifying IsSessionActive/IsHydrating.
-            // This ensures that when the UI thread reacts to the active session,
-            // MessageHistory already reflects the projected state.
-            if (!sessionChanged)
-            {
-                _transcriptProjectionCoordinator.ApplyProjection(
-                    _transcriptProjectionContext,
-                    projection.HydratedConversationId,
-                    projection.Transcript,
-                    preparedTranscript: null,
-                    sessionChanged: false);
-            }
-
-            // Update hydration state BEFORE session active so the UI thread's IsOverlayVisible
-            // logic (which depends on IsHydrating) sees the hydration state as soon as
-            // the session becomes active. This prevents the "flash of empty chat interface".
-            IsHydrating = projection.IsHydrating;
-            IsSessionActive = projection.IsSessionActive;
-            IsPromptInFlight = projection.IsPromptInFlight;
-            IsTurnStatusVisible = projection.IsTurnStatusVisible;
-            TurnStatusText = projection.TurnStatusText;
-            IsTurnStatusRunning = projection.IsTurnStatusRunning;
-            TurnPhase = projection.TurnPhase;
-            IsConnecting = projection.IsConnecting;
-            IsConnected = projection.IsConnected;
-            IsInitializing = projection.IsInitializing;
-
-            ShowPlanPanel = projection.ShowPlanPanel;
-            CurrentPlanTitle = projection.PlanTitle;
-            if (!sessionChanged)
-            {
-                SyncPlanEntries(projection.PlanEntries);
-            }
-
-            RaiseOverlayStateChanged();
-            Interlocked.Exchange(ref _connectionGeneration, projection.ConnectionGeneration);
-            if (!string.Equals(_connectionInstanceId, projection.ConnectionInstanceId, StringComparison.Ordinal))
-            {
-                _connectionInstanceId = projection.ConnectionInstanceId;
-                OnPropertyChanged(nameof(ConnectionInstanceId));
-            }
-            CurrentConnectionStatus = projection.ConnectionStatus;
-            ConnectionErrorMessage = projection.ConnectionError;
-            IsAuthenticationRequired = projection.IsAuthenticationRequired;
-            AuthenticationHintMessage = projection.AuthenticationHintMessage;
-            AgentName = projection.AgentName;
-            AgentVersion = projection.AgentVersion;
-            ApplySessionStateProjection(
-                projection.AvailableModes,
-                projection.SelectedModeId,
-                projection.ConfigOptions,
-                projection.ShowConfigOptionsPanel);
-            ApplySlashCommandProjection(projection.AvailableCommands);
-            TryCompletePendingHistoryOverlayDismissal(projection);
-            RefreshProjectAffinityCorrectionState(projection.HydratedConversationId);
-            ApplyProjectAffinityOverrideCommand.NotifyCanExecuteChanged();
-            ClearProjectAffinityOverrideCommand.NotifyCanExecuteChanged();
-
-            QueuePreviewSnapshotPersistence(projection);
-
+            ApplySessionIdentityProjection(projection, preparedTranscript, out sessionChanged);
+            ApplyPromptAndProfileProjection(projection);
+            ApplyTranscriptAndPlanProjection(projection, sessionChanged);
+            ApplyConversationStatusProjection(projection);
+            ApplyConnectionAndAgentProjection(projection);
+            ApplySessionToolingProjection(projection);
+            ApplyConversationChromeProjection(projection);
         }
         finally
         {
@@ -2701,6 +2619,3 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         OnPropertyChanged(nameof(ShouldShowPlanEmpty));
     }
 }
-
-
-

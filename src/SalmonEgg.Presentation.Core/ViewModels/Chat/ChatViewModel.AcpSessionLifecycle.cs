@@ -2191,35 +2191,6 @@ public partial class ChatViewModel
         }
     }
 
-    private static ConfigOptionViewModel MapConfigOption(ConversationConfigOptionSnapshot option)
-    {
-        var viewModel = new ConfigOptionViewModel
-        {
-            Id = option.Id,
-            Name = option.Name,
-            Description = option.Description,
-            Category = option.Category,
-            ValueType = option.ValueType ?? "string",
-            IsRequired = true,
-            Value = option.SelectedValue ?? string.Empty,
-            TextValue = option.SelectedValue ?? string.Empty
-        };
-
-        if (option.Options.Count > 0)
-        {
-            viewModel.Options = new ObservableCollection<OptionValueViewModel>(
-                option.Options.Select(static item => new OptionValueViewModel
-                {
-                    Value = item.Value,
-                    Name = item.Name,
-                    Description = item.Description
-                }));
-            viewModel.SelectedOption = viewModel.Options.FirstOrDefault(item => item.Value == option.SelectedValue);
-        }
-
-        return viewModel;
-    }
-
     private static ConversationModeOptionSnapshot ToConversationModeOptionSnapshot(AcpModeOption option)
         => new()
         {
@@ -2298,41 +2269,6 @@ public partial class ChatViewModel
                 : new ConversationUsageCostSnapshot(usage.Cost.Amount, usage.Cost.Currency));
     }
 
-    private void SyncModesFromConfigOptions()
-    {
-        var modeOption = ConfigOptions.FirstOrDefault(o =>
-            string.Equals(o.Category, "mode", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(o.Id, "mode", StringComparison.OrdinalIgnoreCase));
-
-        if (modeOption == null || modeOption.Options.Count == 0)
-        {
-            _modeConfigId = null;
-            return;
-        }
-
-        _modeConfigId = modeOption.Id;
-
-        if (AvailableModes.Count == 0)
-        {
-            foreach (var opt in modeOption.Options)
-            {
-                AvailableModes.Add(new SessionModeViewModel
-                {
-                    ModeId = opt.Value,
-                    ModeName = opt.Name,
-                    Description = opt.Description ?? string.Empty
-                });
-            }
-        }
-
-        var current = modeOption.SelectedOption?.Value ?? modeOption.TextValue;
-        if (!string.IsNullOrWhiteSpace(current) && AvailableModes.Count > 0)
-        {
-            SetSelectedModeWithoutDispatch(
-                AvailableModes.FirstOrDefault(m => m.ModeId == current) ?? AvailableModes[0]);
-        }
-    }
-
     private void SetSelectedModeWithoutDispatch(SessionModeViewModel? mode)
     {
         _suppressModeSelectionDispatch = true;
@@ -2409,4 +2345,3 @@ public partial class ChatViewModel
         _configAuthoritativeConversationIds.Remove(conversationId);
     }
 }
-

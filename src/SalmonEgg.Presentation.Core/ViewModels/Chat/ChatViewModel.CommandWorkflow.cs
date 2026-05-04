@@ -52,6 +52,13 @@ namespace SalmonEgg.Presentation.ViewModels.Chat;
 
 public partial class ChatViewModel
 {
+    private sealed record PromptSendContext(
+        string ConversationId,
+        string TurnId,
+        string PromptText,
+        string PromptMessageId,
+        ConversationMessageSnapshot UserSnapshot);
+
     private async Task PublishDisconnectedConnectionStateAsync(string? errorMessage)
     {
         await _acpConnectionCoordinator.SetConnectionInstanceIdAsync(null).ConfigureAwait(false);
@@ -60,65 +67,20 @@ public partial class ChatViewModel
 
     [RelayCommand]
     private async Task CreateNewSessionAsync()
-     {
+    {
         if (IsConnecting)
+        {
             return;
+        }
 
         try
         {
             ClearError();
-
-            var sessionParams = new SessionNewParams
-            {
-                Cwd = GetActiveSessionCwdOrDefault(),
-                McpServers = new List<McpServer>() // Can add MCP servers based on configuration.
-            };
-
-            if (_chatService == null)
-            {
-                throw new InvalidOperationException("Chat service is not initialized");
-            }
-
-            SessionNewResponse response;
-            try
-            {
-                response = await _chatService.CreateSessionAsync(sessionParams);
-            }
-            catch (Exception ex) when (ChatAuthenticationCoordinator.IsAuthenticationRequiredError(ex))
-            {
-                var authenticated = await TryAuthenticateAsync(CancellationToken.None).ConfigureAwait(false);
-                if (!authenticated)
-                {
-                    return;
-                }
-
-                response = await _chatService.CreateSessionAsync(sessionParams);
-            }
-
-            var localConversationId = Guid.NewGuid().ToString("N");
-            await _sessionManager.CreateSessionAsync(localConversationId, sessionParams.Cwd).ConfigureAwait(false);
-            await _conversationWorkspace.RegisterConversationAsync(
-                localConversationId,
-                createdAt: DateTime.UtcNow,
-                lastUpdatedAt: DateTime.UtcNow).ConfigureAwait(false);
-
-            var switched = await ActivateConversationAsync(localConversationId).ConfigureAwait(false);
-            if (!switched)
-            {
-                throw new InvalidOperationException("Failed to activate local conversation before applying session response.");
-            }
-
-            var bindingResult = await _bindingCommands
-                .UpdateBindingAsync(localConversationId, response.SessionId, SelectedProfileId)
-                .ConfigureAwait(false);
-            if (bindingResult.Status is not BindingUpdateStatus.Success)
-            {
-                throw new InvalidOperationException(
-                    $"Failed to bind new conversation ({bindingResult.Status}): {bindingResult.ErrorMessage ?? "UnknownError"}");
-            }
-
-            await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
-            await ApplySessionNewResponseAsync(localConversationId, response).ConfigureAwait(true);
+            var sessionParams = CreateSessionNewParams();
+            var response = await CreateRemoteSessionAsync(sessionParams, CancellationToken.None).ConfigureAwait(false);
+            var localConversationId = await CreateAndActivateLocalConversationAsync(sessionParams.Cwd).ConfigureAwait(false);
+            await BindLocalConversationToRemoteSessionAsync(localConversationId, response.SessionId).ConfigureAwait(false);
+            await ApplyCreatedSessionProjectionAsync(localConversationId, response).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -134,11 +96,16 @@ public partial class ChatViewModel
     [RelayCommand(CanExecute = nameof(CanSendPrompt))]
     private async Task SendPromptAsync()
     {
-        if (string.IsNullOrWhiteSpace(CurrentPrompt) || !IsSessionActive)
+        var promptContext = TryCreatePromptSendContext();
+        if (promptContext is null)
+        {
             return;
+        }
 
         if (IsPromptInFlight)
+        {
             return;
+        }
 
         if (IsAuthenticationRequired)
         {
@@ -150,83 +117,24 @@ public partial class ChatViewModel
             }
         }
 
-        var promptText = CurrentPrompt;
-        var conversationId = CurrentSessionId!;
-        var turnId = Guid.NewGuid().ToString();
-        var promptMessageId = Guid.NewGuid().ToString("D");
-        var userContent = new TextContentBlock { Text = promptText };
-        var userSnapshot = CreateContentSnapshot(userContent, isOutgoing: true);
-
         try
         {
-            ClearError();
-            await _chatStore.Dispatch(new SetPromptInFlightAction(true));
-            await _chatStore.Dispatch(new BeginTurnAction(
-                conversationId,
-                turnId,
-                ChatTurnPhase.CreatingRemoteSession,
-                PendingUserMessageLocalId: userSnapshot.Id,
-                PendingUserProtocolMessageId: promptMessageId,
-                PendingUserMessageText: promptText));
-
-            // Clear input immediately for better UX
-            ClearCurrentPromptOnUiThread();
-
-            // Add user message to history
-            await UpsertTranscriptSnapshotAsync(conversationId, userSnapshot).ConfigureAwait(true);
-
-            if (_chatService != null)
-            {
-                _sendPromptCts?.Cancel();
-                _sendPromptCts = new CancellationTokenSource();
-                var token = _sendPromptCts.Token;
-
-                // Step 1: Ensure remote session exists before dispatching (if not already bound)
-                var sessionResult = await _acpConnectionCommands
-                    .EnsureRemoteSessionAsync(this, TryAuthenticateAsync, token)
-                    .ConfigureAwait(false);
-
-                if (!sessionResult.UsedExistingBinding)
-                {
-                    await ApplySessionNewResponseAsync(conversationId, sessionResult.Session).ConfigureAwait(true);
-                }
-
-                // Step 2: Advance phase to waiting for agent response
-                await _chatStore.Dispatch(new AdvanceTurnPhaseAction(conversationId, turnId, ChatTurnPhase.WaitingForAgent));
-
-                // Step 3: Dispatch the prompt to the identified remote session
-                var promptDispatchResult = await _acpConnectionCommands
-                    .DispatchPromptToRemoteSessionAsync(
-                        sessionResult.RemoteSessionId,
-                        promptText,
-                        promptMessageId,
-                        this,
-                        TryAuthenticateAsync,
-                        token)
-                    .ConfigureAwait(false);
-
-                await ReconcilePromptUserMessageIdAsync(
-                    conversationId,
-                    userSnapshot.Id,
-                    promptMessageId,
-                    promptDispatchResult.Response.UserMessageId).ConfigureAwait(false);
-
-                await ApplyPromptDispatchResultAsync(conversationId, turnId, promptDispatchResult.Response).ConfigureAwait(false);
-            }
+            await BeginPromptSendAsync(promptContext).ConfigureAwait(true);
+            await EnsurePromptDispatchAsync(promptContext).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
             // User-cancelled; keep input cleared.
-            await PreemptivelyCancelTurnAsync(conversationId, turnId).ConfigureAwait(true);
+            await PreemptivelyCancelTurnAsync(promptContext.ConversationId, promptContext.TurnId).ConfigureAwait(true);
         }
         catch (TimeoutException ex)
         {
             Logger.LogError(ex, "SendPrompt timed out");
             SetError("Send timed out: Agent did not respond for a long time.");
 
-            await _chatStore.Dispatch(new FailTurnAction(conversationId, turnId, "Timed out"));
+            await FailPromptSendAsync(promptContext, "Timed out").ConfigureAwait(true);
 
-            RestoreCurrentPromptOnUiThread(promptText);
+            RestoreCurrentPromptOnUiThread(promptContext.PromptText);
 
             ShowTransientNotificationToast("Agent no response (timeout). Please check if the agent needs login/initialization or try again later.");
         }
@@ -235,10 +143,10 @@ public partial class ChatViewModel
             Logger.LogError(ex, "SendPrompt failed");
             SetError($"Send failed: {ex.Message}");
 
-            await _chatStore.Dispatch(new FailTurnAction(conversationId, turnId, ex.Message));
+            await FailPromptSendAsync(promptContext, ex.Message).ConfigureAwait(true);
 
             // Restore text so the user can retry quickly.
-            RestoreCurrentPromptOnUiThread(promptText);
+            RestoreCurrentPromptOnUiThread(promptContext.PromptText);
 
             ShowTransientNotificationToast("Send failed, please try again later.");
         }
@@ -249,6 +157,164 @@ public partial class ChatViewModel
             await _chatStore.Dispatch(new SetPromptInFlightAction(false));
         }
     }
+
+    private SessionNewParams CreateSessionNewParams()
+        => new()
+        {
+            Cwd = GetActiveSessionCwdOrDefault(),
+            McpServers = new List<McpServer>()
+        };
+
+    private async Task<SessionNewResponse> CreateRemoteSessionAsync(
+        SessionNewParams sessionParams,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(sessionParams);
+
+        if (_chatService == null)
+        {
+            throw new InvalidOperationException("Chat service is not initialized");
+        }
+
+        try
+        {
+            return await _chatService.CreateSessionAsync(sessionParams).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ChatAuthenticationCoordinator.IsAuthenticationRequiredError(ex))
+        {
+            var authenticated = await TryAuthenticateAsync(cancellationToken).ConfigureAwait(false);
+            if (!authenticated)
+            {
+                throw new OperationCanceledException("Authentication was not completed.", cancellationToken);
+            }
+
+            return await _chatService.CreateSessionAsync(sessionParams).ConfigureAwait(false);
+        }
+    }
+
+    private async Task<string> CreateAndActivateLocalConversationAsync(string? cwd)
+    {
+        var localConversationId = Guid.NewGuid().ToString("N");
+        await _sessionManager.CreateSessionAsync(localConversationId, cwd).ConfigureAwait(false);
+        await _conversationWorkspace.RegisterConversationAsync(
+            localConversationId,
+            createdAt: DateTime.UtcNow,
+            lastUpdatedAt: DateTime.UtcNow).ConfigureAwait(false);
+
+        var switched = await ActivateConversationAsync(localConversationId).ConfigureAwait(false);
+        if (!switched)
+        {
+            throw new InvalidOperationException("Failed to activate local conversation before applying session response.");
+        }
+
+        return localConversationId;
+    }
+
+    private async Task BindLocalConversationToRemoteSessionAsync(
+        string localConversationId,
+        string remoteSessionId)
+    {
+        var bindingResult = await _bindingCommands
+            .UpdateBindingAsync(localConversationId, remoteSessionId, SelectedProfileId)
+            .ConfigureAwait(false);
+        if (bindingResult.Status is not BindingUpdateStatus.Success)
+        {
+            throw new InvalidOperationException(
+                $"Failed to bind new conversation ({bindingResult.Status}): {bindingResult.ErrorMessage ?? "UnknownError"}");
+        }
+    }
+
+    private async Task ApplyCreatedSessionProjectionAsync(
+        string localConversationId,
+        SessionNewResponse response)
+    {
+        await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
+        await ApplySessionNewResponseAsync(localConversationId, response).ConfigureAwait(true);
+    }
+
+    private PromptSendContext? TryCreatePromptSendContext()
+    {
+        if (string.IsNullOrWhiteSpace(CurrentPrompt)
+            || !IsSessionActive
+            || string.IsNullOrWhiteSpace(CurrentSessionId))
+        {
+            return null;
+        }
+
+        var promptText = CurrentPrompt;
+        var userSnapshot = CreateContentSnapshot(new TextContentBlock { Text = promptText }, isOutgoing: true);
+        return new PromptSendContext(
+            CurrentSessionId,
+            Guid.NewGuid().ToString(),
+            promptText,
+            Guid.NewGuid().ToString("D"),
+            userSnapshot);
+    }
+
+    private async Task BeginPromptSendAsync(PromptSendContext context)
+    {
+        ClearError();
+        await _chatStore.Dispatch(new SetPromptInFlightAction(true));
+        await _chatStore.Dispatch(new BeginTurnAction(
+            context.ConversationId,
+            context.TurnId,
+            ChatTurnPhase.CreatingRemoteSession,
+            PendingUserMessageLocalId: context.UserSnapshot.Id,
+            PendingUserProtocolMessageId: context.PromptMessageId,
+            PendingUserMessageText: context.PromptText));
+        ClearCurrentPromptOnUiThread();
+        await UpsertTranscriptSnapshotAsync(context.ConversationId, context.UserSnapshot).ConfigureAwait(true);
+    }
+
+    private async Task EnsurePromptDispatchAsync(PromptSendContext context)
+    {
+        if (_chatService is null)
+        {
+            return;
+        }
+
+        _sendPromptCts?.Cancel();
+        _sendPromptCts = new CancellationTokenSource();
+        var token = _sendPromptCts.Token;
+
+        var sessionResult = await _acpConnectionCommands
+            .EnsureRemoteSessionAsync(this, TryAuthenticateAsync, token)
+            .ConfigureAwait(false);
+
+        if (!sessionResult.UsedExistingBinding)
+        {
+            await ApplySessionNewResponseAsync(context.ConversationId, sessionResult.Session).ConfigureAwait(true);
+        }
+
+        await _chatStore.Dispatch(new AdvanceTurnPhaseAction(
+            context.ConversationId,
+            context.TurnId,
+            ChatTurnPhase.WaitingForAgent));
+
+        var promptDispatchResult = await _acpConnectionCommands
+            .DispatchPromptToRemoteSessionAsync(
+                sessionResult.RemoteSessionId,
+                context.PromptText,
+                context.PromptMessageId,
+                this,
+                TryAuthenticateAsync,
+                token)
+            .ConfigureAwait(false);
+
+        await ReconcilePromptUserMessageIdAsync(
+            context.ConversationId,
+            context.UserSnapshot.Id,
+            context.PromptMessageId,
+            promptDispatchResult.Response.UserMessageId).ConfigureAwait(false);
+
+        await ApplyPromptDispatchResultAsync(
+            context.ConversationId,
+            context.TurnId,
+            promptDispatchResult.Response).ConfigureAwait(false);
+    }
+
+    private Task FailPromptSendAsync(PromptSendContext context, string reason)
+        => _chatStore.Dispatch(new FailTurnAction(context.ConversationId, context.TurnId, reason)).AsTask();
 
     private ChatInputState ResolveInputState()
         => _inputStatePresenter.Present(new ChatInputStateInput(
@@ -873,4 +939,3 @@ public partial class ChatViewModel
         OnPropertyChanged(nameof(ShouldShowConversationInputSurface));
     }
 }
-
