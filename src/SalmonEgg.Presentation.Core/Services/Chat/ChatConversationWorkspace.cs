@@ -745,7 +745,9 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 .OrderByDescending(item => item.LastUpdatedAt)
                 .Select(binding =>
                 {
-                    var shouldPersistRuntimeContent = RemoteConversationPersistencePolicy.ShouldPersistRuntimeContent(binding.RemoteSessionId);
+                    var shouldPersistRuntimeContent = RemoteConversationPersistencePolicy.ShouldPersistRuntimeContent(
+                        binding.RemoteSessionId,
+                        binding.BoundProfileId);
                     return new PersistedConversationState(
                         binding.ConversationId,
                         binding.CreatedAt,
@@ -860,7 +862,9 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 binding.LastAccessedAt = conversation.LastAccessedAt == default
                     ? binding.LastUpdatedAt
                     : conversation.LastAccessedAt;
-                var shouldRestoreRuntimeContent = RemoteConversationPersistencePolicy.ShouldRestoreRuntimeContent(conversation.RemoteSessionId);
+                var shouldRestoreRuntimeContent = RemoteConversationPersistencePolicy.ShouldRestoreRuntimeContent(
+                    conversation.RemoteSessionId,
+                    conversation.BoundProfileId);
                 binding.Transcript.Clear();
                 if (shouldRestoreRuntimeContent)
                 {

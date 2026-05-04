@@ -1148,6 +1148,51 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task ProcessSessionUpdateAsync_ForegroundConversationIsNotMarkedUnread_WhenBackgroundActiveTurnExists()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        await RunWithSynchronizationContextAsync(syncContext, async () =>
+        {
+            await using var fixture = CreateViewModel(syncContext);
+            var chatService = CreateConnectedChatService();
+            await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+
+            await fixture.UpdateStateAsync(state => state with
+            {
+                HydratedConversationId = "conv-foreground",
+                Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                    .Add("conv-foreground", new ConversationBindingSlice("conv-foreground", "remote-foreground", "profile-1"))
+                    .Add("conv-background", new ConversationBindingSlice("conv-background", "remote-background", "profile-1")),
+                ActiveTurn = new ActiveTurnState(
+                    "conv-background",
+                    "turn-background",
+                    ChatTurnPhase.Responding,
+                    DateTime.UtcNow,
+                    DateTime.UtcNow)
+            });
+            await WaitForConditionAsync(() =>
+                Task.FromResult(string.Equals(fixture.ViewModel.CurrentSessionId, "conv-foreground", StringComparison.Ordinal)));
+
+            chatService.Raise(
+                service => service.SessionUpdateReceived += null,
+                new SessionUpdateEventArgs("remote-foreground", new AgentMessageUpdate(new TextContentBlock("foreground update"))));
+
+            await WaitForConditionAsync(async () =>
+            {
+                var state = await fixture.GetStateAsync();
+                var content = state.ResolveContentSlice("conv-foreground");
+                return content.HasValue
+                    && content.Value.Transcript.Any(message =>
+                        string.Equals(message.TextContent, "foreground update", StringComparison.Ordinal));
+            });
+
+            var finalAttentionState = await fixture.GetAttentionStateAsync();
+            Assert.False(HasUnreadAttention(finalAttentionState, "conv-foreground"));
+            Assert.False(HasUnreadAttention(finalAttentionState, "conv-background"));
+        });
+    }
+
+    [Fact]
     public async Task ProcessSessionUpdateAsync_AgentMessage_DoesNotRouteFromStaleCurrentRemoteSessionState()
     {
         var syncContext = new ImmediateSynchronizationContext();
@@ -4837,13 +4882,18 @@ public partial class ChatViewModelTests
 
         await viewModel.SendPromptCommand.ExecuteAsync(null);
 
-        await WaitForConditionAsync(() =>
+        await WaitForConditionAsync(async () =>
         {
             syncContext.RunAll();
-            return Task.FromResult(
-                viewModel.AvailableModes.Count == 0
+            var state = await fixture.GetStateAsync();
+            var sessionState = state.ResolveSessionStateSlice("conv-1");
+            return sessionState.HasValue
+                && sessionState.Value.AvailableModes.Count == 0
+                && string.IsNullOrWhiteSpace(sessionState.Value.SelectedModeId)
+                && sessionState.Value.ConfigOptions.Count == 2
+                && viewModel.AvailableModes.Count == 0
                 && viewModel.SelectedMode is null
-                && viewModel.ConfigOptions.Count == 2);
+                && viewModel.ConfigOptions.Count == 2;
         });
 
         Assert.Empty(viewModel.AvailableModes);
@@ -10436,6 +10486,45 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task ApplyStoreProjection_ProfileBoundRemoteConversationWithoutRemoteSessionId_DoesNotPersistTranscriptPreview()
+    {
+        var previewStore = new Mock<IConversationPreviewStore>();
+        previewStore.Setup(store => store.LoadAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ConversationPreviewSnapshot?)null);
+        previewStore.Setup(store => store.SaveAsync(It.IsAny<ConversationPreviewSnapshot>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        previewStore.Setup(store => store.DeleteAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        await using var fixture = CreateViewModel(previewStore: previewStore.Object);
+        await fixture.ViewModel.RestoreAsync();
+
+        fixture.Workspace.UpdateRemoteBinding("conv-1", remoteSessionId: null, boundProfileId: "profile-1");
+        await fixture.ChatStore.Dispatch(new SetBindingSliceAction(
+            new ConversationBindingSlice("conv-1", null, "profile-1")));
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Transcript =
+            [
+                new ConversationMessageSnapshot
+                {
+                    Id = "message-1",
+                    Timestamp = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+                    IsOutgoing = false,
+                    ContentType = "text",
+                    TextContent = "remote text"
+                }
+            ]
+        });
+
+        previewStore.Verify(
+            store => store.SaveAsync(It.IsAny<ConversationPreviewSnapshot>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task SwitchConversationAsync_WhenShellRuntimeStatePresent_DoesNotMutateShellActivationOwner()
     {
         var syncContext = new QueueingSynchronizationContext();
@@ -12827,7 +12916,7 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
-    public async Task SwitchConversationAsync_RemoteBoundConversation_WhenRemoteSessionMissing_ClearsStaleBinding()
+    public async Task SwitchConversationAsync_RemoteBoundConversation_WhenRemoteSessionMissing_ClearsStaleBindingWithoutReplayingWorkspaceTranscript()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
@@ -12926,8 +13015,7 @@ public partial class ChatViewModelTests
             var workspaceBinding = fixture.Workspace.GetRemoteBinding("conv-2");
             var state = await fixture.GetStateAsync();
             return (fixture.ViewModel.ErrorMessage?.Contains("Resource not found", StringComparison.Ordinal) ?? false)
-                && fixture.ViewModel.MessageHistory.Any(message =>
-                    string.Equals(message.TextContent, "cached local transcript", StringComparison.Ordinal))
+                && fixture.ViewModel.MessageHistory.Count == 0
                 && workspaceBinding is { RemoteSessionId: null, BoundProfileId: "profile-1" }
                 && state.ResolveBinding("conv-2") == new ConversationBindingSlice("conv-2", null, "profile-1");
         });
@@ -12937,9 +13025,7 @@ public partial class ChatViewModelTests
                 It.Is<SessionLoadParams>(parameters => string.Equals(parameters.SessionId, "remote-2", StringComparison.Ordinal)),
                 It.IsAny<CancellationToken>()),
             Times.Once);
-        Assert.Contains(
-            fixture.ViewModel.MessageHistory,
-            message => string.Equals(message.TextContent, "cached local transcript", StringComparison.Ordinal));
+        Assert.Empty(fixture.ViewModel.MessageHistory);
 
         var workspaceBinding = fixture.Workspace.GetRemoteBinding("conv-2");
         Assert.NotNull(workspaceBinding);
@@ -13359,6 +13445,7 @@ public partial class ChatViewModelTests
         Assert.NotNull(roundTripRuntime);
         Assert.Equal(ConversationRuntimePhase.Warm, roundTripRuntime!.Value.Phase);
         Assert.Equal("conn-1", roundTripRuntime.Value.ConnectionInstanceId);
+        Assert.Equal("WarmReuseAfterProfileReconnect", roundTripRuntime.Value.Reason);
         Assert.True(ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
             roundTripRuntime,
             roundTripState.ResolveBinding("conv-1"),

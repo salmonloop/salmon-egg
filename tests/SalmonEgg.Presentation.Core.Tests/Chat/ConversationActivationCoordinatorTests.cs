@@ -550,6 +550,102 @@ public sealed class ConversationActivationCoordinatorTests
     }
 
     [Fact]
+    public async Task ActivateSessionAsync_MetadataOnly_RestoresSessionInfoWithoutHydratingWorkspaceTranscript()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var preferences = CreatePreferences(syncContext);
+        var workspaceStore = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
+        using var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript:
+            [
+                CreateTextMessage("m-1", "hello")
+            ],
+            Plan:
+            [
+                new ConversationPlanEntrySnapshot
+                {
+                    Content = "step-1",
+                    Status = PlanEntryStatus.InProgress,
+                    Priority = PlanEntryPriority.Medium
+                }
+            ],
+            ShowPlanPanel: true,
+            PlanTitle: "plan",
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+            AvailableModes:
+            [
+                new ConversationModeOptionSnapshot
+                {
+                    ModeId = "agent",
+                    ModeName = "Agent",
+                    Description = "Agent mode"
+                }
+            ],
+            SelectedModeId: "agent",
+            ConfigOptions:
+            [
+                new ConversationConfigOptionSnapshot
+                {
+                    Id = "mode",
+                    Name = "Mode",
+                    SelectedValue = "agent"
+                }
+            ],
+            ShowConfigOptionsPanel: true,
+            AvailableCommands:
+            [
+                new ConversationAvailableCommandSnapshot("plan", "Planning command", "target")
+            ],
+            SessionInfo: new ConversationSessionInfoSnapshot
+            {
+                Title = "Remote title",
+                Cwd = @"C:\repo\one"
+            },
+            Usage: new ConversationUsageSnapshot(
+                3,
+                99,
+                new ConversationUsageCostSnapshot(1.25m, "USD"))));
+
+        var state = State.Value(new object(), () => ChatState.Empty);
+        var chatStore = CreateChatStore(state);
+        var connectionStore = CreateConnectionStore();
+        var bindingCommands = new BindingCoordinator(workspace, chatStore);
+        var coordinator = new ConversationActivationCoordinator(
+            workspace,
+            bindingCommands,
+            chatStore,
+            connectionStore,
+            Mock.Of<ILogger<ConversationActivationCoordinator>>());
+
+        var result = await coordinator.ActivateSessionAsync(
+            "session-1",
+            ConversationActivationHydrationMode.MetadataOnly);
+
+        Assert.True(result.Succeeded);
+        var currentState = await WaitForStateAsync(
+            state,
+            current => string.Equals(current?.HydratedConversationId, "session-1", StringComparison.Ordinal));
+        Assert.Equal("session-1", currentState.HydratedConversationId);
+        Assert.Null(currentState.Transcript);
+        Assert.Null(currentState.PlanEntries);
+        Assert.False(currentState.ShowPlanPanel);
+        Assert.Null(currentState.PlanTitle);
+        Assert.NotNull(currentState.SessionInfo);
+        Assert.Equal("Remote title", currentState.SessionInfo!.Title);
+        Assert.Equal(@"C:\repo\one", currentState.SessionInfo.Cwd);
+        Assert.True(currentState.AvailableModes is null || currentState.AvailableModes.Count == 0);
+        Assert.Null(currentState.SelectedModeId);
+        Assert.True(currentState.ConfigOptions is null || currentState.ConfigOptions.Count == 0);
+        Assert.True(currentState.AvailableCommands is null || currentState.AvailableCommands.Count == 0);
+        Assert.Null(currentState.Usage);
+    }
+
+    [Fact]
     public async Task ActivateSessionAsync_CommitsVisibleShellSelection_OnlyAfterActivationSucceeds()
     {
         var activationGate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);

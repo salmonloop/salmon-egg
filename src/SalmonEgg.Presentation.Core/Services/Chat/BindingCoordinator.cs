@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
@@ -28,6 +29,14 @@ public sealed class BindingCoordinator : IConversationBindingCommands
             var conversationExists = _workspace
                 .GetKnownConversationIds()
                 .Contains(conversationId, StringComparer.Ordinal);
+            var duplicateOwners = await FindDuplicateRemoteSessionOwnersAsync(conversationId, remoteSessionId).ConfigureAwait(false);
+
+            foreach (var duplicateOwner in duplicateOwners)
+            {
+                var clearedBinding = new ConversationBindingSlice(duplicateOwner, null, null);
+                await _chatStore.Dispatch(new SetBindingSliceAction(clearedBinding)).ConfigureAwait(false);
+                _workspace.UpdateRemoteBinding(duplicateOwner, remoteSessionId: null, boundProfileId: null);
+            }
 
             var binding = new ConversationBindingSlice(conversationId, remoteSessionId, boundProfileId);
             await _chatStore.Dispatch(new SetBindingSliceAction(binding)).ConfigureAwait(false);
@@ -40,6 +49,9 @@ public sealed class BindingCoordinator : IConversationBindingCommands
             if (conversationExists)
             {
                 _workspace.UpdateRemoteBinding(conversationId, remoteSessionId, boundProfileId);
+            }
+            if (duplicateOwners.Count > 0 || conversationExists)
+            {
                 _workspace.ScheduleSave();
             }
             return BindingUpdateResult.Success();
@@ -78,5 +90,49 @@ public sealed class BindingCoordinator : IConversationBindingCommands
         var finalState = finalStateValue ?? ChatState.Empty;
         var finalBinding = finalState.ResolveBinding(expectedBinding.ConversationId);
         return (expectsClearedBinding && finalBinding is null) || finalBinding == expectedBinding;
+    }
+
+    private async Task<IReadOnlyList<string>> FindDuplicateRemoteSessionOwnersAsync(
+        string conversationId,
+        string? remoteSessionId)
+    {
+        if (string.IsNullOrWhiteSpace(remoteSessionId))
+        {
+            return Array.Empty<string>();
+        }
+
+        var duplicates = new HashSet<string>(StringComparer.Ordinal);
+        var state = await _chatStore.State ?? ChatState.Empty;
+        if (state.Bindings is not null)
+        {
+            foreach (var binding in state.Bindings)
+            {
+                if (string.Equals(binding.Key, conversationId, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (string.Equals(binding.Value.RemoteSessionId, remoteSessionId, StringComparison.Ordinal))
+                {
+                    duplicates.Add(binding.Key);
+                }
+            }
+        }
+
+        foreach (var knownConversationId in _workspace.GetKnownConversationIds())
+        {
+            if (string.Equals(knownConversationId, conversationId, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var workspaceBinding = _workspace.GetRemoteBinding(knownConversationId);
+            if (string.Equals(workspaceBinding?.RemoteSessionId, remoteSessionId, StringComparison.Ordinal))
+            {
+                duplicates.Add(knownConversationId);
+            }
+        }
+
+        return duplicates.Count == 0 ? Array.Empty<string>() : duplicates.ToArray();
     }
 }

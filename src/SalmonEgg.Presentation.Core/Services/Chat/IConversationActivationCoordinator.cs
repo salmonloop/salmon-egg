@@ -6,7 +6,8 @@ namespace SalmonEgg.Presentation.Core.Services.Chat;
 public enum ConversationActivationHydrationMode
 {
     WorkspaceSnapshot = 0,
-    SelectionOnly = 1
+    SelectionOnly = 1,
+    MetadataOnly = 2
 }
 
 public interface IConversationActivationCoordinator

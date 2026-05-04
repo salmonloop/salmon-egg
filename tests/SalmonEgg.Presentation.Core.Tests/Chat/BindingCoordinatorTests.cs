@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -57,6 +58,64 @@ public sealed class BindingCoordinatorTests
         Assert.NotNull(workspaceBinding);
         Assert.Equal("remote-new", workspaceBinding!.RemoteSessionId);
         Assert.Equal("profile-new", workspaceBinding.BoundProfileId);
+    }
+
+    [Fact]
+    public async Task UpdateBinding_WhenRemoteSessionIdIsRebound_ClearsPreviousOwner()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var preferences = CreatePreferences(syncContext);
+        var workspaceStore = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
+        await sessionManager.CreateSessionAsync("session-2", @"C:\repo\two");
+        using var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-2",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 3, 0, 0, 0, DateTimeKind.Utc)));
+        workspace.UpdateRemoteBinding("session-1", "remote-shared", "profile-1");
+        workspace.UpdateRemoteBinding("session-2", "remote-old", "profile-2");
+
+        var state = State.Value(this, () => ChatState.Empty with
+        {
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("session-1", new ConversationBindingSlice("session-1", "remote-shared", "profile-1"))
+                .Add("session-2", new ConversationBindingSlice("session-2", "remote-old", "profile-2"))
+        });
+        var chatStore = CreateChatStore(state);
+        var coordinator = new BindingCoordinator(workspace, chatStore.Object);
+
+        var result = await coordinator.UpdateBindingAsync("session-2", "remote-shared", "profile-2");
+
+        Assert.Equal(BindingUpdateStatus.Success, result.Status);
+        var currentState = Assert.IsType<ChatState>(await state);
+        Assert.Null(currentState.ResolveBinding("session-1"));
+        Assert.Equal(
+            new ConversationBindingSlice("session-2", "remote-shared", "profile-2"),
+            currentState.ResolveBinding("session-2"));
+
+        var workspaceBinding1 = workspace.GetRemoteBinding("session-1");
+        Assert.NotNull(workspaceBinding1);
+        Assert.Null(workspaceBinding1!.RemoteSessionId);
+        Assert.Null(workspaceBinding1.BoundProfileId);
+
+        var workspaceBinding2 = workspace.GetRemoteBinding("session-2");
+        Assert.NotNull(workspaceBinding2);
+        Assert.Equal("remote-shared", workspaceBinding2!.RemoteSessionId);
+        Assert.Equal("profile-2", workspaceBinding2.BoundProfileId);
     }
 
     [Fact]

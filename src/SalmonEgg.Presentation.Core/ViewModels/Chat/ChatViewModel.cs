@@ -95,7 +95,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly IConversationBindingCommands _bindingCommands;
     private readonly IAcpConnectionCommands _acpConnectionCommands;
     private readonly IAcpConnectionCoordinator _acpConnectionCoordinator;
-    private readonly IAcpConnectionSessionRegistry? _connectionSessionRegistry;
     private readonly AcpAuthoritativeConnectionResolver _authoritativeConnectionResolver;
     private readonly ChatProjectAffinityCorrectionCoordinator _projectAffinityCorrectionCoordinator;
     private readonly ChatConversationSurfaceProjectionCoordinator _conversationSurfaceProjectionCoordinator;
@@ -872,7 +871,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _outgoingUserMessageProjector = new OutgoingUserMessageProjector();
         _chatConnectionStore = chatConnectionStore ?? throw new ArgumentNullException(nameof(chatConnectionStore));
         _conversationAttentionStore = conversationAttentionStore;
-        _connectionSessionRegistry = connectionSessionRegistry;
         _authoritativeConnectionResolver = new AcpAuthoritativeConnectionResolver(connectionSessionRegistry);
         _sessionUpdateWorkQueue = sessionUpdateWorkQueue ?? new SerialAsyncWorkQueue();
         _previewSnapshotWorkQueue = new SerialAsyncWorkQueue();
@@ -1507,7 +1505,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     private void QueuePreviewSnapshotPersistence(ChatUiProjection projection)
     {
-        if (RemoteConversationPersistencePolicy.IsRemoteBacked(projection.RemoteSessionId))
+        if (RemoteConversationPersistencePolicy.IsRemoteBacked(
+            projection.RemoteSessionId,
+            projection.ChatOwnerProfileId))
         {
             return;
         }

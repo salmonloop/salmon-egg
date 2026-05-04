@@ -700,6 +700,188 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
+    public async Task SaveAsync_ProfileBoundRemoteConversationWithoutRemoteSessionId_DropsRuntimeSessionStateButKeepsMetadata()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
+
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript:
+            [
+                CreateTextMessage("m-1", "hello")
+            ],
+            Plan:
+            [
+                new ConversationPlanEntrySnapshot
+                {
+                    Content = "step-1",
+                    Status = PlanEntryStatus.InProgress,
+                    Priority = PlanEntryPriority.High
+                }
+            ],
+            ShowPlanPanel: true,
+            PlanTitle: "Active plan",
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+            AvailableModes:
+            [
+                new ConversationModeOptionSnapshot
+                {
+                    ModeId = "agent",
+                    ModeName = "Agent",
+                    Description = "Agent mode"
+                }
+            ],
+            SelectedModeId: "agent",
+            ConfigOptions:
+            [
+                new ConversationConfigOptionSnapshot
+                {
+                    Id = "mode",
+                    Name = "Mode",
+                    SelectedValue = "agent"
+                }
+            ],
+            ShowConfigOptionsPanel: true,
+            AvailableCommands:
+            [
+                new ConversationAvailableCommandSnapshot("plan", "Planning command", "target")
+            ],
+            SessionInfo: new ConversationSessionInfoSnapshot
+            {
+                Title = "Remote title",
+                Cwd = @"C:\repo\one",
+                UpdatedAtUtc = new DateTime(2026, 3, 2, 1, 0, 0, DateTimeKind.Utc)
+            },
+            Usage: new ConversationUsageSnapshot(
+                3,
+                99,
+                new ConversationUsageCostSnapshot(1.25m, "USD"))));
+        workspace.UpdateRemoteBinding("session-1", remoteSessionId: null, boundProfileId: "profile-1");
+
+        await workspace.SaveAsync();
+
+        var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
+        var conversation = Assert.Single(saved.Conversations);
+        Assert.Null(conversation.RemoteSessionId);
+        Assert.Equal("profile-1", conversation.BoundProfileId);
+        Assert.NotNull(conversation.SessionInfo);
+        Assert.Equal("Remote title", conversation.SessionInfo!.Title);
+        Assert.Empty(conversation.Messages);
+        Assert.Empty(conversation.Plan);
+        Assert.Empty(conversation.AvailableModes);
+        Assert.Null(conversation.SelectedModeId);
+        Assert.Empty(conversation.ConfigOptions);
+        Assert.False(conversation.ShowConfigOptionsPanel);
+        Assert.Empty(conversation.AvailableCommands);
+        Assert.Null(conversation.Usage);
+        Assert.False(conversation.ShowPlanPanel);
+        Assert.Null(conversation.PlanTitle);
+    }
+
+    [Fact]
+    public async Task RestoreAsync_ProfileBoundRemoteConversationWithoutRemoteSessionId_RestoresMetadataOnly()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore
+        {
+            LoadResult = new ConversationDocument
+            {
+                Conversations =
+                {
+                    new ConversationRecord
+                    {
+                        ConversationId = "session-1",
+                        RemoteSessionId = null,
+                        BoundProfileId = "profile-1",
+                        Messages =
+                        {
+                            CreateTextMessage("m-1", "remote text")
+                        },
+                        Plan =
+                        {
+                            new ConversationPlanEntrySnapshot
+                            {
+                                Content = "step-1",
+                                Status = PlanEntryStatus.InProgress,
+                                Priority = PlanEntryPriority.High
+                            }
+                        },
+                        AvailableModes =
+                        {
+                            new ConversationModeOptionSnapshot
+                            {
+                                ModeId = "agent",
+                                ModeName = "Agent"
+                            }
+                        },
+                        SelectedModeId = "agent",
+                        ConfigOptions =
+                        {
+                            new ConversationConfigOptionSnapshot
+                            {
+                                Id = "mode",
+                                Name = "Mode",
+                                SelectedValue = "agent"
+                            }
+                        },
+                        ShowConfigOptionsPanel = true,
+                        AvailableCommands =
+                        {
+                            new ConversationAvailableCommandSnapshot("plan", "Planning command", "target")
+                        },
+                        SessionInfo = new ConversationSessionInfoSnapshot
+                        {
+                            Title = "Remote title",
+                            Cwd = @"C:\repo\one"
+                        },
+                        Usage = new ConversationUsageSnapshot(
+                            3,
+                            99,
+                            new ConversationUsageCostSnapshot(1.25m, "USD")),
+                        ShowPlanPanel = true,
+                        PlanTitle = "Active plan",
+                        CreatedAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                        LastUpdatedAt = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+                    }
+                }
+            }
+        };
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+
+        await workspace.RestoreAsync();
+
+        var snapshot = workspace.GetConversationSnapshot("session-1");
+        Assert.NotNull(snapshot);
+        Assert.Empty(snapshot!.Transcript);
+        Assert.Empty(snapshot.Plan);
+        Assert.NotNull(snapshot.AvailableModes);
+        Assert.Empty(snapshot.AvailableModes!);
+        Assert.Null(snapshot.SelectedModeId);
+        Assert.NotNull(snapshot.ConfigOptions);
+        Assert.Empty(snapshot.ConfigOptions!);
+        Assert.False(snapshot.ShowConfigOptionsPanel);
+        Assert.NotNull(snapshot.AvailableCommands);
+        Assert.Empty(snapshot.AvailableCommands!);
+        Assert.Null(snapshot.Usage);
+        Assert.False(snapshot.ShowPlanPanel);
+        Assert.Null(snapshot.PlanTitle);
+
+        var binding = workspace.GetRemoteBinding("session-1");
+        Assert.NotNull(binding);
+        Assert.Null(binding!.RemoteSessionId);
+        Assert.Equal("profile-1", binding.BoundProfileId);
+        Assert.Equal("Remote title", snapshot.SessionInfo?.Title);
+    }
+
+    [Fact]
     public async Task SaveAsync_RoundTripsProjectAffinityOverride()
     {
         var syncContext = new ImmediateSynchronizationContext();

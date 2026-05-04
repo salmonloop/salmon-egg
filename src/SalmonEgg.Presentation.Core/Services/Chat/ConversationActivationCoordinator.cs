@@ -57,7 +57,8 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
             }
 
             var currentState = await _chatStore.State ?? ChatState.Empty;
-            var snapshot = hydrationMode == ConversationActivationHydrationMode.WorkspaceSnapshot
+            var snapshot = hydrationMode is ConversationActivationHydrationMode.WorkspaceSnapshot
+                or ConversationActivationHydrationMode.MetadataOnly
                 ? _conversationWorkspace.GetConversationSnapshot(sessionId)
                 : null;
             var shouldHydrateContent = hydrationMode == ConversationActivationHydrationMode.WorkspaceSnapshot
@@ -67,12 +68,17 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
                 && ConversationProjectionReadinessPolicy.ShouldHydratePrimarySessionState(currentState, sessionId);
             var shouldHydrateAuxiliarySessionState = hydrationMode == ConversationActivationHydrationMode.WorkspaceSnapshot
                 && ConversationProjectionReadinessPolicy.ShouldHydrateAuxiliarySessionState(sessionState, snapshot);
+            var shouldHydrateMetadataSessionInfo = hydrationMode == ConversationActivationHydrationMode.MetadataOnly
+                && ConversationProjectionReadinessPolicy.ShouldHydrateSessionInfo(sessionState, snapshot);
             if (!string.Equals(currentState.HydratedConversationId, sessionId, StringComparison.Ordinal))
             {
                 await _chatStore.Dispatch(new SelectConversationAction(sessionId));
             }
 
-            if (shouldHydrateContent || shouldHydrateSessionState || shouldHydrateAuxiliarySessionState)
+            if (shouldHydrateContent
+                || shouldHydrateSessionState
+                || shouldHydrateAuxiliarySessionState
+                || shouldHydrateMetadataSessionInfo)
             {
                 if (shouldHydrateContent)
                 {
@@ -115,6 +121,12 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
                         Usage: ConversationProjectionReadinessPolicy.ShouldHydrateUsage(sessionState, snapshot)
                             ? snapshot?.Usage
                             : null)).ConfigureAwait(false);
+                }
+                else if (shouldHydrateMetadataSessionInfo)
+                {
+                    await _chatStore.Dispatch(new MergeConversationSessionStateAction(
+                        sessionId,
+                        SessionInfo: snapshot?.SessionInfo)).ConfigureAwait(false);
                 }
 
                 await _chatStore.Dispatch(new SetIsHydratingAction(false)).ConfigureAwait(false);

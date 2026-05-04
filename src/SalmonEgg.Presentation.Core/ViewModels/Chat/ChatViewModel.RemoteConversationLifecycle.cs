@@ -657,8 +657,7 @@ public partial class ChatViewModel
             state.ResolveRuntimeState(sessionId),
             binding,
             currentConnectionInstanceId,
-            hasReusableProjection,
-            BuildWarmReuseConnectionLivenessCheck(binding));
+            hasReusableProjection);
     }
 
     private async Task<bool> CanReusePendingRemoteHydrationCurrentConversationAsync(
@@ -1059,10 +1058,16 @@ public partial class ChatViewModel
             return false;
         }
 
+        var binding = await ResolveConversationBindingAsync(conversationId, CancellationToken.None).ConfigureAwait(false);
+        var hydrationMode = RemoteConversationPersistencePolicy.IsRemoteBacked(
+            binding?.RemoteSessionId,
+            binding?.ProfileId)
+            ? ConversationActivationHydrationMode.MetadataOnly
+            : ConversationActivationHydrationMode.WorkspaceSnapshot;
         var fallback = await _conversationActivationCoordinator
             .ActivateSessionAsync(
                 conversationId,
-                ConversationActivationHydrationMode.WorkspaceSnapshot,
+                hydrationMode,
                 CancellationToken.None)
             .ConfigureAwait(false);
         if (fallback.Succeeded)
@@ -1087,7 +1092,9 @@ public partial class ChatViewModel
         }
 
         var binding = await ResolveConversationBindingAsync(conversationId, CancellationToken.None).ConfigureAwait(false);
-        if (RemoteConversationPersistencePolicy.IsRemoteBacked(binding?.RemoteSessionId)
+        if (RemoteConversationPersistencePolicy.IsRemoteBacked(
+                binding?.RemoteSessionId,
+                binding?.ProfileId)
             && transcriptBaselineCount == 0)
         {
             return;
@@ -1394,15 +1401,13 @@ public partial class ChatViewModel
 
         var state = await _chatStore.State ?? ChatState.Empty;
         var currentConnectionInstanceId = resolvedConnection.ConnectionInstanceId;
-        var hydratedLivenessCheck = BuildWarmReuseConnectionLivenessCheck(binding);
         var hasReusableProjection = HasReusableWarmProjection(state, conversationId);
         if (allowWarmReuseShortCircuit
             && ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
                 state.ResolveRuntimeState(conversationId),
                 binding,
                 currentConnectionInstanceId,
-                hasReusableProjection,
-                hydratedLivenessCheck))
+                hasReusableProjection))
         {
             Logger.LogInformation(
                 "Skipping remote hydration for conversation because runtime state is warm. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId} ConnectionInstanceId={ConnectionInstanceId}",
@@ -1416,7 +1421,7 @@ public partial class ChatViewModel
             var runtimeState = state.ResolveRuntimeState(conversationId);
             var denialReason = allowWarmReuseShortCircuit
                 ? ConversationWarmReusePolicy.GetWarmReuseDenialReason(
-                    runtimeState, binding, currentConnectionInstanceId, hasReusableProjection, hydratedLivenessCheck)
+                    runtimeState, binding, currentConnectionInstanceId, hasReusableProjection)
                 : "SupersededInFlightActivationRequiresAuthoritativeHydration";
             Logger.LogInformation(
                 "Warm reuse denied in HydrateConversationAsync, falling back to slow hydration. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId} ExpectedConnectionInstanceId={ExpectedConnectionInstanceId} ActualConnectionInstanceId={ActualConnectionInstanceId} Reason={Reason}",
@@ -1486,27 +1491,6 @@ public partial class ChatViewModel
             state,
             conversationId,
             _conversationWorkspace.GetConversationSnapshot(conversationId));
-
-    /// <summary>
-    /// Builds a connection-liveness check for warm reuse policy.
-    /// Returns true if <paramref name="connectionInstanceId"/> corresponds to the live pool
-    /// session for <paramref name="profileId"/>.
-    /// </summary>
-    private bool IsConnectionAliveForProfile(string profileId, string connectionInstanceId)
-        => _connectionSessionRegistry is not null
-            && _connectionSessionRegistry.TryGetByProfile(profileId, out var session)
-            && string.Equals(session.ConnectionInstanceId, connectionInstanceId, StringComparison.Ordinal);
-
-    private Func<string, bool>? BuildWarmReuseConnectionLivenessCheck(ConversationBindingSlice? binding)
-    {
-        if (binding is null || string.IsNullOrWhiteSpace(binding.ProfileId) || _connectionSessionRegistry is null)
-        {
-            return null;
-        }
-
-        var profileId = binding.ProfileId;
-        return connectionInstanceId => IsConnectionAliveForProfile(profileId, connectionInstanceId);
-    }
 
     private async Task<int> GetProjectedTranscriptCountAsync(string conversationId)
     {

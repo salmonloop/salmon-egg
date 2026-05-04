@@ -18,19 +18,14 @@ public static class ConversationWarmReusePolicy
     }
 
     /// <summary>
-    /// Canonical warm reuse check with connection-liveness awareness.
-    /// When <paramref name="isConnectionAlive"/> is provided, the policy verifies that the
-    /// conversation's stored connection is still alive in the pool rather than requiring
-    /// strict equality with <paramref name="currentConnectionInstanceId"/>.
-    /// This correctly handles cross-profile scenarios where the global connection ID may
-    /// differ from the conversation's bound connection.
+    /// Canonical warm reuse check. Warm reuse is only valid when the authoritative foreground
+    /// connection identity still matches the conversation's warm runtime identity.
     /// </summary>
     public static bool CanReuseRemoteWarmConversation(
         ConversationRuntimeSlice? runtimeState,
         ConversationBindingSlice? binding,
         string? currentConnectionInstanceId,
-        bool hasReusableProjection,
-        Func<string, bool>? isConnectionAlive = null)
+        bool hasReusableProjection)
     {
         if (!HasAuthoritativeWarmRuntime(runtimeState))
         {
@@ -49,13 +44,8 @@ public static class ConversationWarmReusePolicy
             return false;
         }
 
-        var connectionAlive = isConnectionAlive is not null
-            ? !string.IsNullOrWhiteSpace(hydratedRuntime.ConnectionInstanceId)
-              && isConnectionAlive(hydratedRuntime.ConnectionInstanceId!)
-            : !string.IsNullOrWhiteSpace(currentConnectionInstanceId)
-              && string.Equals(hydratedRuntime.ConnectionInstanceId, currentConnectionInstanceId, StringComparison.Ordinal);
-
-        if (!connectionAlive)
+        if (string.IsNullOrWhiteSpace(currentConnectionInstanceId)
+            || !string.Equals(hydratedRuntime.ConnectionInstanceId, currentConnectionInstanceId, StringComparison.Ordinal))
         {
             return false;
         }
@@ -65,31 +55,14 @@ public static class ConversationWarmReusePolicy
     }
 
     /// <summary>
-    /// Backward-compatible overload that uses strict <see cref="ConversationRuntimeSlice.ConnectionInstanceId"/>
-    /// equality against <paramref name="currentConnectionInstanceId"/>.
-    /// </summary>
-    public static bool CanReuseRemoteWarmConversation(
-        ConversationRuntimeSlice? runtimeState,
-        ConversationBindingSlice? binding,
-        string? currentConnectionInstanceId,
-        bool hasReusableProjection)
-        => CanReuseRemoteWarmConversation(
-            runtimeState,
-            binding,
-            currentConnectionInstanceId,
-            hasReusableProjection,
-            isConnectionAlive: null);
-
-    /// <summary>
-    /// Returns a human-readable reason why warm reuse was denied, or null if reuse is allowed.
-    /// Useful for diagnostic logging when falling back from hot return to slow hydration.
+     /// Returns a human-readable reason why warm reuse was denied, or null if reuse is allowed.
+     /// Useful for diagnostic logging when falling back from hot return to slow hydration.
     /// </summary>
     public static string? GetWarmReuseDenialReason(
         ConversationRuntimeSlice? runtimeState,
         ConversationBindingSlice? binding,
         string? currentConnectionInstanceId,
-        bool hasReusableProjection,
-        Func<string, bool>? isConnectionAlive = null)
+        bool hasReusableProjection)
     {
         if (runtimeState is not { Phase: ConversationRuntimePhase.Warm } hydratedRuntime)
         {
@@ -111,15 +84,7 @@ public static class ConversationWarmReusePolicy
             return "ProjectionNotReady";
         }
 
-        if (isConnectionAlive is not null)
-        {
-            if (string.IsNullOrWhiteSpace(hydratedRuntime.ConnectionInstanceId)
-                || !isConnectionAlive(hydratedRuntime.ConnectionInstanceId!))
-            {
-                return "ConnectionNotAlive";
-            }
-        }
-        else if (string.IsNullOrWhiteSpace(currentConnectionInstanceId)
+        if (string.IsNullOrWhiteSpace(currentConnectionInstanceId)
             || !string.Equals(hydratedRuntime.ConnectionInstanceId, currentConnectionInstanceId, StringComparison.Ordinal))
         {
             return "ConnectionInstanceIdMismatch";
@@ -137,19 +102,4 @@ public static class ConversationWarmReusePolicy
 
         return null;
     }
-
-    /// <summary>
-    /// Backward-compatible overload using strict connection ID equality.
-    /// </summary>
-    public static string? GetWarmReuseDenialReason(
-        ConversationRuntimeSlice? runtimeState,
-        ConversationBindingSlice? binding,
-        string? currentConnectionInstanceId,
-        bool hasReusableProjection)
-        => GetWarmReuseDenialReason(
-            runtimeState,
-            binding,
-            currentConnectionInstanceId,
-            hasReusableProjection,
-            isConnectionAlive: null);
 }

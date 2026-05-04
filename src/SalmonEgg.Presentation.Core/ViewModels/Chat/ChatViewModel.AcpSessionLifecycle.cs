@@ -63,7 +63,9 @@ public partial class ChatViewModel
         {
             RecordSessionUpdateObservation(e.SessionId);
             var storeState = await _chatStore.State ?? ChatState.Empty;
-            var activeConversationId = storeState.ActiveTurn?.ConversationId ?? storeState.HydratedConversationId;
+            var activeConversationId = !string.IsNullOrWhiteSpace(storeState.HydratedConversationId)
+                ? storeState.HydratedConversationId
+                : storeState.ActiveTurn?.ConversationId;
             var activeBinding = storeState.ResolveBinding(activeConversationId);
             var boundConversationId =
                 !string.IsNullOrWhiteSpace(activeConversationId)
@@ -748,15 +750,13 @@ public partial class ChatViewModel
         binding = await ResolveConversationBindingAsync(sessionId, cancellationToken).ConfigureAwait(false);
         currentConnectionInstanceId = await GetAuthoritativeConnectionInstanceIdAsync().ConfigureAwait(false);
         var warmRuntimeAfterProfileReconnect = warmRuntimeSnapshot ?? state.ResolveRuntimeState(sessionId);
-        var warmReuseAfterReconnectLivenessCheck = BuildWarmReuseConnectionLivenessCheck(binding);
         hasReusableProjection = HasReusableWarmProjection(state, sessionId);
         if (allowWarmReuseShortCircuit
             && ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
                 warmRuntimeAfterProfileReconnect,
                 binding,
                 currentConnectionInstanceId,
-                hasReusableProjection,
-                warmReuseAfterReconnectLivenessCheck))
+                hasReusableProjection))
         {
             Logger.LogInformation(
                 "Skipping remote hydration because the selected conversation became warm after restoring the reusable profile connection. ConversationId={ConversationId}",
@@ -1238,7 +1238,6 @@ public partial class ChatViewModel
             .ConfigureAwait(false);
         var activationStopwatch = Stopwatch.StartNew();
         var initialWarmReuseBinding = await ResolveConversationBindingAsync(sessionId, context.CancellationToken).ConfigureAwait(false);
-        var initialWarmReuseLivenessCheck = BuildWarmReuseConnectionLivenessCheck(initialWarmReuseBinding);
         var initialWarmReuseConnectionInstanceId = await GetAuthoritativeConnectionInstanceIdAsync().ConfigureAwait(false);
         var initialHasReusableProjection = HasReusableWarmProjection(activationStartState, sessionId);
         var canOptimisticallyReuseWarmRemoteConversation =
@@ -1247,8 +1246,7 @@ public partial class ChatViewModel
                 warmRuntimeSnapshot,
                 initialWarmReuseBinding,
                 initialWarmReuseConnectionInstanceId,
-                initialHasReusableProjection,
-                initialWarmReuseLivenessCheck);
+                initialHasReusableProjection);
 
         ((IConversationActivationPreview)this).ClearSessionSwitchPreview(sessionId);
         await PostToUiAsync(() =>
@@ -1279,13 +1277,9 @@ public partial class ChatViewModel
         _chatUiProjectionApplicationCoordinator.ArmActivationSelectionProjection(
             sessionId,
             context.ActivationVersion);
-        var activationResult = activationHydrationMode == ConversationActivationHydrationMode.SelectionOnly
-            ? await _conversationActivationCoordinator
-                .ActivateSessionAsync(sessionId, activationHydrationMode, context.CancellationToken)
-                .ConfigureAwait(false)
-            : await _conversationActivationCoordinator
-                .ActivateSessionAsync(sessionId, context.CancellationToken)
-                .ConfigureAwait(false);
+        var activationResult = await _conversationActivationCoordinator
+            .ActivateSessionAsync(sessionId, activationHydrationMode, context.CancellationToken)
+            .ConfigureAwait(false);
         if (!activationResult.Succeeded)
         {
             await SetConversationRuntimeStateAsync(
@@ -1304,7 +1298,6 @@ public partial class ChatViewModel
 
         var warmReuseBinding = await ResolveConversationBindingAsync(sessionId, context.CancellationToken).ConfigureAwait(false);
         var warmReuseConnectionInstanceId = await GetAuthoritativeConnectionInstanceIdAsync().ConfigureAwait(false);
-        var warmReuseAfterSelectionLivenessCheck = BuildWarmReuseConnectionLivenessCheck(warmReuseBinding);
         var warmReuseState = await _chatStore.State ?? ChatState.Empty;
         var hasReusableWarmProjection = HasReusableWarmProjection(warmReuseState, sessionId);
         var canReuseWarmConversationAfterSelection =
@@ -1313,8 +1306,7 @@ public partial class ChatViewModel
                 warmRuntimeSnapshot,
                 warmReuseBinding,
                 warmReuseConnectionInstanceId,
-                hasReusableWarmProjection,
-                warmReuseAfterSelectionLivenessCheck);
+                hasReusableWarmProjection);
 
         await SetConversationRuntimeStateAsync(
                 sessionId,

@@ -197,66 +197,7 @@ public class ConversationWarmReusePolicyTests
     }
 
     [Fact]
-    public void CanReuseRemoteWarmConversation_WithLivenessCheck_WhenConnectionAlive_ReturnsTrue()
-    {
-        var binding = new ConversationBindingSlice("conv-1", "remote-1", "profile-1");
-        var runtime = new ConversationRuntimeSlice(
-            "conv-1",
-            ConversationRuntimePhase.Warm,
-            "conn-1",
-            "remote-1",
-            "profile-1",
-            "SessionLoadCompleted",
-            DateTime.UtcNow);
-
-        // Simulates cross-profile scenario: current global ID is "conn-2" but conn-1 is still alive in pool
-        var result = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
-            runtime, binding, "conn-2", hasReusableProjection: true, isConnectionAlive: id => id == "conn-1");
-
-        Assert.True(result);
-    }
-
-    [Fact]
-    public void CanReuseRemoteWarmConversation_WithLivenessCheck_WhenConnectionNotAlive_ReturnsFalse()
-    {
-        var binding = new ConversationBindingSlice("conv-1", "remote-1", "profile-1");
-        var runtime = new ConversationRuntimeSlice(
-            "conv-1",
-            ConversationRuntimePhase.Warm,
-            "conn-1",
-            "remote-1",
-            "profile-1",
-            "SessionLoadCompleted",
-            DateTime.UtcNow);
-
-        var result = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
-            runtime, binding, "conn-2", hasReusableProjection: true, isConnectionAlive: _ => false);
-
-        Assert.False(result);
-    }
-
-    [Fact]
-    public void CanReuseRemoteWarmConversation_WithoutLivenessCheck_WhenConnectionInstanceIdDiffers_ReturnsFalse()
-    {
-        var binding = new ConversationBindingSlice("conv-1", "remote-1", "profile-1");
-        var runtime = new ConversationRuntimeSlice(
-            "conv-1",
-            ConversationRuntimePhase.Warm,
-            "conn-1",
-            "remote-1",
-            "profile-1",
-            "SessionLoadCompleted",
-            DateTime.UtcNow);
-
-        // Without liveness check, strict equality applies
-        var result = ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
-            runtime, binding, "conn-2", hasReusableProjection: true, isConnectionAlive: null);
-
-        Assert.False(result);
-    }
-
-    [Fact]
-    public void GetWarmReuseDenialReason_WithLivenessCheck_WhenConnectionNotAlive_ReturnsConnectionNotAlive()
+    public void GetWarmReuseDenialReason_WhenConnectionInstanceIdDiffers_ReturnsConnectionInstanceIdMismatch()
     {
         var binding = new ConversationBindingSlice("conv-1", "remote-1", "profile-1");
         var runtime = new ConversationRuntimeSlice(
@@ -269,26 +210,7 @@ public class ConversationWarmReusePolicyTests
             DateTime.UtcNow);
 
         var reason = ConversationWarmReusePolicy.GetWarmReuseDenialReason(
-            runtime, binding, "conn-2", hasReusableProjection: true, isConnectionAlive: _ => false);
-
-        Assert.Equal("ConnectionNotAlive", reason);
-    }
-
-    [Fact]
-    public void GetWarmReuseDenialReason_WithoutLivenessCheck_WhenConnectionInstanceIdDiffers_ReturnsConnectionInstanceIdMismatch()
-    {
-        var binding = new ConversationBindingSlice("conv-1", "remote-1", "profile-1");
-        var runtime = new ConversationRuntimeSlice(
-            "conv-1",
-            ConversationRuntimePhase.Warm,
-            "conn-1",
-            "remote-1",
-            "profile-1",
-            "SessionLoadCompleted",
-            DateTime.UtcNow);
-
-        var reason = ConversationWarmReusePolicy.GetWarmReuseDenialReason(
-            runtime, binding, "conn-2", hasReusableProjection: true, isConnectionAlive: null);
+            runtime, binding, "conn-2", hasReusableProjection: true);
 
         Assert.Equal("ConnectionInstanceIdMismatch", reason);
     }
