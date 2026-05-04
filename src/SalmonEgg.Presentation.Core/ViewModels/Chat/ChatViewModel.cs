@@ -2608,14 +2608,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
            _sendPromptCts?.Cancel();
            _voiceInputCts?.Cancel();
            _transientNotificationCts?.Cancel();
-           try { _voiceInputService.StopAsync().GetAwaiter().GetResult(); } catch { }
+           try { _ = _voiceInputService.StopAsync(); } catch { }
            StopStoreProjection();
 
             try { _sendPromptCts?.Dispose(); } catch { }
             try { _voiceInputCts?.Dispose(); } catch { }
             try { _transientNotificationCts?.Dispose(); } catch { }
             try { _conversationActivationOrchestrator.Dispose(); } catch { }
-            try { _localTerminalPanelCoordinator?.DisposeAsync().AsTask().GetAwaiter().GetResult(); } catch { }
+            try { _ = _localTerminalPanelCoordinator?.DisposeAsync().AsTask(); } catch { }
             try { _remoteConversationActivationGate.Dispose(); } catch { }
 
             _selectedProfileConnectTask = null;

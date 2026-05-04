@@ -1,6 +1,8 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Domain.Models.Conversation;
@@ -13,7 +15,10 @@ public sealed class ConversationStore : IConversationStore
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = false,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            ConversationJsonContext.Default,
+            new DefaultJsonTypeInfoResolver())
     };
 
     private readonly IAppDataService _appData;

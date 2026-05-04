@@ -21,6 +21,7 @@ public static class AcpConnectionEvictionOptionsLoader
         AppSettings? settings = null;
         try
         {
+            // TODO: Make this method async and await LoadAsync once callers are async-capable.
             settings = appSettingsService.LoadAsync().ConfigureAwait(false).GetAwaiter().GetResult();
         }
         catch (Exception ex)

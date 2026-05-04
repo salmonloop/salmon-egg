@@ -63,20 +63,16 @@ namespace SalmonEgg.Application.Services.Chat
             return _sessionManager.GetSession(sessionId);
         }
 
-        private Session GetOrCreateSession(string sessionId, string? cwd = null)
+        private async Task<Session> GetOrCreateSessionAsync(string sessionId, string? cwd = null)
         {
             var existing = _sessionManager.GetSession(sessionId);
             if (existing != null)
                 return existing;
 
-            // CRITICAL: Event handlers are synchronous, but session creation is asynchronous. 
-            // We use GetAwaiter().GetResult() here because the ACP client events (like updates) 
-            // can arrive before the session is fully tracked in our local state. 
-            // This ensures state consistency during fast session initialization.
-            return _sessionManager.CreateSessionAsync(sessionId, cwd).GetAwaiter().GetResult();
+            return await _sessionManager.CreateSessionAsync(sessionId, cwd).ConfigureAwait(false);
         }
 
-        private void OnSessionUpdateReceived(object? sender, SessionUpdateEventArgs e)
+        private async void OnSessionUpdateReceived(object? sender, SessionUpdateEventArgs e)
         {
             if (e.Update != null)
             {
@@ -85,7 +81,8 @@ namespace SalmonEgg.Application.Services.Chat
                 {
                     try
                     {
-                        GetOrCreateSession(e.SessionId).AddHistoryEntry(entry);
+                        var session = await GetOrCreateSessionAsync(e.SessionId).ConfigureAwait(false);
+                        session.AddHistoryEntry(entry);
                     }
                     catch
                     {
@@ -251,7 +248,7 @@ namespace SalmonEgg.Application.Services.Chat
 
                 if (!string.IsNullOrWhiteSpace(response.SessionId))
                 {
-                    var session = GetOrCreateSession(response.SessionId, @params.Cwd);
+                    var session = await GetOrCreateSessionAsync(response.SessionId, @params.Cwd).ConfigureAwait(false);
                     session.History.Clear();
                     session.State = SessionState.Active;
                 }
@@ -290,7 +287,7 @@ namespace SalmonEgg.Application.Services.Chat
                 _currentPlan = null;
                 _currentMode = null;
 
-                var session = GetOrCreateSession(@params.SessionId, @params.Cwd);
+                var session = await GetOrCreateSessionAsync(@params.SessionId, @params.Cwd).ConfigureAwait(false);
                 session.Cwd = @params.Cwd;
 
                 if (session.History.Count > 0)

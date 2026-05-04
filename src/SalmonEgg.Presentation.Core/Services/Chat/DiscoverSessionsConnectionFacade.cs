@@ -178,7 +178,8 @@ public sealed class DiscoverSessionsConnectionFacade : IDiscoverSessionsConnecti
         {
             try
             {
-                DisposeServiceAsync(currentService).AsTask().GetAwaiter().GetResult();
+                // Dispose is synchronous by IDisposable contract; fire-and-forget is acceptable here.
+                _ = DisposeServiceAsync(currentService).AsTask();
             }
             catch (Exception ex)
             {
