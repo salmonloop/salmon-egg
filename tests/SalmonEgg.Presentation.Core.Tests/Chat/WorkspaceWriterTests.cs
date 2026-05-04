@@ -213,7 +213,9 @@ public sealed class WorkspaceWriterTests
             {
                 Title = "Persisted title",
                 Cwd = @"C:\repo\one"
-            }));
+            },
+            ConnectionInstanceId: "conn-1"),
+            ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
 
         writer.Enqueue(new ChatState(
             HydratedConversationId: "session-1",
@@ -253,6 +255,7 @@ public sealed class WorkspaceWriterTests
         Assert.Single(snapshot.ConfigOptions ?? Array.Empty<ConversationConfigOptionSnapshot>());
         Assert.Equal(2, snapshot.AvailableModes?.Count);
         Assert.True(snapshot.ShowConfigOptionsPanel);
+        Assert.Equal("conn-1", snapshot.ConnectionInstanceId);
     }
 
     [Fact]
@@ -282,7 +285,9 @@ public sealed class WorkspaceWriterTests
             ],
             SelectedModeId: "agent",
             ConfigOptions: Array.Empty<ConversationConfigOptionSnapshot>(),
-            ShowConfigOptionsPanel: false));
+            ShowConfigOptionsPanel: false,
+            ConnectionInstanceId: "conn-1"),
+            ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
 
         writer.Enqueue(new ChatState(
             HydratedConversationId: "session-1",
@@ -304,6 +309,7 @@ public sealed class WorkspaceWriterTests
         Assert.Single(snapshot!.Transcript);
         Assert.Equal("persisted transcript", snapshot.Transcript[0].TextContent);
         Assert.Equal("agent", snapshot.SelectedModeId);
+        Assert.Equal("conn-1", snapshot.ConnectionInstanceId);
     }
 
     [Fact]

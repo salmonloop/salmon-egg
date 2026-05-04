@@ -46,6 +46,32 @@ public sealed class BindingCoordinator : IConversationBindingCommands
                 _workspace.UpdateRemoteBinding(duplicateOwner, remoteSessionId: null, boundProfileId: null);
             }
 
+            var existingBinding = state.ResolveBinding(conversationId);
+            if (existingBinding is null)
+            {
+                var workspaceBinding = _workspace.GetRemoteBinding(conversationId);
+                if (workspaceBinding is not null)
+                {
+                    existingBinding = new ConversationBindingSlice(
+                        workspaceBinding.ConversationId,
+                        workspaceBinding.RemoteSessionId,
+                        workspaceBinding.BoundProfileId);
+                }
+            }
+
+            var replacesRemoteAuthority =
+                !string.IsNullOrWhiteSpace(existingBinding?.RemoteSessionId)
+                && !string.Equals(existingBinding.RemoteSessionId, remoteSessionId, StringComparison.Ordinal);
+            if (replacesRemoteAuthority)
+            {
+                var preservedSessionInfo = ResolvePreservedSessionInfo(state, conversationId)
+                    ?? _workspace.GetConversationSnapshot(conversationId)?.SessionInfo;
+                await _chatStore.Dispatch(new ScrubConversationDerivedStateAction(
+                    conversationId,
+                    preservedSessionInfo)).ConfigureAwait(false);
+                _workspace.ClearConversationRuntimeContent(conversationId);
+            }
+
             var binding = new ConversationBindingSlice(conversationId, remoteSessionId, boundProfileId);
             await _chatStore.Dispatch(new SetBindingSliceAction(binding)).ConfigureAwait(false);
             var projectionVisible = await WaitForProjectedBindingAsync(binding).ConfigureAwait(false);

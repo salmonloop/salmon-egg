@@ -313,7 +313,8 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 binding.ShowConfigOptionsPanel,
                 binding.AvailableCommands.Select(CloneAvailableCommand).ToArray(),
                 ConversationSessionInfoSnapshots.Clone(binding.SessionInfo),
-                CloneUsage(binding.Usage));
+                CloneUsage(binding.Usage),
+                binding.SnapshotConnectionInstanceId);
         }
     }
 
@@ -461,6 +462,9 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             binding.ShowPlanPanel = snapshot.ShowPlanPanel;
             binding.PlanTitle = snapshot.PlanTitle;
             binding.SnapshotOrigin = origin;
+            binding.SnapshotConnectionInstanceId = origin is ConversationWorkspaceSnapshotOrigin.RuntimeProjection
+                ? snapshot.ConnectionInstanceId
+                : null;
         }
 
         if (conversationListChanged)
@@ -526,23 +530,29 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 return;
             }
 
-            binding.Transcript.Clear();
-            binding.Plan.Clear();
-            binding.AvailableModes.Clear();
-            binding.SelectedModeId = null;
-            binding.ConfigOptions.Clear();
-            binding.ShowConfigOptionsPanel = false;
-            binding.AvailableCommands.Clear();
-            if (!preserveSessionInfo)
-            {
-                binding.SessionInfo = null;
-            }
-
-            binding.Usage = null;
-            binding.ShowPlanPanel = false;
-            binding.PlanTitle = null;
-            binding.SnapshotOrigin = ConversationWorkspaceSnapshotOrigin.Restored;
+            ClearRuntimeContentCore(binding, preserveSessionInfo);
         }
+    }
+
+    private static void ClearRuntimeContentCore(ConversationBinding binding, bool preserveSessionInfo)
+    {
+        binding.Transcript.Clear();
+        binding.Plan.Clear();
+        binding.AvailableModes.Clear();
+        binding.SelectedModeId = null;
+        binding.ConfigOptions.Clear();
+        binding.ShowConfigOptionsPanel = false;
+        binding.AvailableCommands.Clear();
+        if (!preserveSessionInfo)
+        {
+            binding.SessionInfo = null;
+        }
+
+        binding.Usage = null;
+        binding.ShowPlanPanel = false;
+        binding.PlanTitle = null;
+        binding.SnapshotOrigin = ConversationWorkspaceSnapshotOrigin.Restored;
+        binding.SnapshotConnectionInstanceId = null;
     }
 
     public async Task ApplySessionInfoUpdateAsync(
@@ -1398,6 +1408,8 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         public ProjectAffinityOverride? ProjectAffinityOverride { get; set; }
 
         public ConversationWorkspaceSnapshotOrigin SnapshotOrigin { get; set; }
+
+        public string? SnapshotConnectionInstanceId { get; set; }
     }
 }
 
@@ -1421,7 +1433,8 @@ public sealed record ConversationWorkspaceSnapshot(
     bool ShowConfigOptionsPanel = false,
     IReadOnlyList<ConversationAvailableCommandSnapshot>? AvailableCommands = null,
     ConversationSessionInfoSnapshot? SessionInfo = null,
-    ConversationUsageSnapshot? Usage = null);
+    ConversationUsageSnapshot? Usage = null,
+    string? ConnectionInstanceId = null);
 
 public sealed record ConversationRemoteBindingState(
     string ConversationId,

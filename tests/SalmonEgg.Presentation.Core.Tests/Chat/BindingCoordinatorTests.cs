@@ -239,6 +239,107 @@ public sealed class BindingCoordinatorTests
     }
 
     [Fact]
+    public async Task ClearBindingAsync_WhenConversationWasRemoteBacked_ScrubsRemoteDerivedState()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var preferences = CreatePreferences(syncContext);
+        var workspaceStore = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
+        using var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
+        workspace.UpsertConversationSnapshot(
+            new ConversationWorkspaceSnapshot(
+                ConversationId: "session-1",
+                Transcript:
+                [
+                    new ConversationMessageSnapshot
+                    {
+                        Id = "remote-1",
+                        ContentType = "text",
+                        TextContent = "remote transcript"
+                    }
+                ],
+                Plan: [],
+                ShowPlanPanel: false,
+                PlanTitle: null,
+                CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+                SessionInfo: new ConversationSessionInfoSnapshot { Title = "Remote title", Cwd = @"C:\repo\one" }),
+            ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
+        workspace.UpdateRemoteBinding("session-1", "remote-old", "profile-old");
+
+        var state = State.Value(this, () => ChatState.Empty with
+        {
+            HydratedConversationId = "session-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("session-1", new ConversationBindingSlice("session-1", "remote-old", "profile-old")),
+            ConversationContents = ImmutableDictionary<string, ConversationContentSlice>.Empty.Add(
+                "session-1",
+                new ConversationContentSlice(
+                    ImmutableList.Create(new ConversationMessageSnapshot
+                    {
+                        Id = "remote-1",
+                        ContentType = "text",
+                        TextContent = "remote transcript"
+                    }),
+                    ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                    false,
+                    null)),
+            ConversationSessionStates = ImmutableDictionary<string, ConversationSessionStateSlice>.Empty.Add(
+                "session-1",
+                new ConversationSessionStateSlice(
+                    ImmutableList<ConversationModeOptionSnapshot>.Empty,
+                    null,
+                    ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+                    false,
+                    ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+                    new ConversationSessionInfoSnapshot { Title = "Remote title", Cwd = @"C:\repo\one" },
+                    new ConversationUsageSnapshot { Used = 1, Size = 2 })),
+            RuntimeStates = ImmutableDictionary<string, ConversationRuntimeSlice>.Empty.Add(
+                "session-1",
+                new ConversationRuntimeSlice(
+                    "session-1",
+                    ConversationRuntimePhase.Warm,
+                    "conn-1",
+                    "remote-old",
+                    "profile-old",
+                    "SessionLoadCompleted",
+                    DateTime.UtcNow)),
+            Transcript = ImmutableList.Create(new ConversationMessageSnapshot
+            {
+                Id = "remote-1",
+                ContentType = "text",
+                TextContent = "remote transcript"
+            }),
+            SessionInfo = new ConversationSessionInfoSnapshot { Title = "Remote title", Cwd = @"C:\repo\one" },
+            Usage = new ConversationUsageSnapshot { Used = 1, Size = 2 }
+        });
+        var chatStore = CreateChatStore(state);
+        var coordinator = new BindingCoordinator(workspace, chatStore.Object);
+
+        var result = await coordinator.ClearBindingAsync("session-1");
+
+        Assert.Equal(BindingUpdateStatus.Success, result.Status);
+        var currentState = Assert.IsType<ChatState>(await state);
+        Assert.Null(currentState.ResolveBinding("session-1"));
+        Assert.Empty(currentState.ResolveContentSlice("session-1")?.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty);
+        Assert.Null(currentState.ResolveRuntimeState("session-1"));
+        Assert.Equal("Remote title", currentState.ResolveSessionStateSlice("session-1")?.SessionInfo?.Title);
+        Assert.Empty(currentState.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty);
+        Assert.Null(currentState.Usage);
+
+        var workspaceBinding = workspace.GetRemoteBinding("session-1");
+        Assert.NotNull(workspaceBinding);
+        Assert.Null(workspaceBinding!.RemoteSessionId);
+        Assert.Null(workspaceBinding.BoundProfileId);
+        var workspaceSnapshot = workspace.GetConversationSnapshot("session-1");
+        Assert.NotNull(workspaceSnapshot);
+        Assert.Empty(workspaceSnapshot!.Transcript);
+        Assert.NotNull(workspaceSnapshot.SessionInfo);
+        Assert.Null(workspaceSnapshot.Usage);
+    }
+
+    [Fact]
     public async Task UpdateBinding_DoesNotPersistWorkspaceBinding_WhenStoreDispatchFails()
     {
         var syncContext = new ImmediateSynchronizationContext();

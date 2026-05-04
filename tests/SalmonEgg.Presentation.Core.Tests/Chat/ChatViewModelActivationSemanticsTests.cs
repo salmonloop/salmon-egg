@@ -112,7 +112,9 @@ public partial class ChatViewModelTests
             ShowPlanPanel: false,
             PlanTitle: null,
             CreatedAt: new DateTime(2026, 5, 2, 0, 0, 0, DateTimeKind.Utc),
-            LastUpdatedAt: new DateTime(2026, 5, 2, 0, 0, 1, DateTimeKind.Utc)));
+            LastUpdatedAt: new DateTime(2026, 5, 2, 0, 0, 1, DateTimeKind.Utc),
+            ConnectionInstanceId: "conn-1"),
+            ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
 
         await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
         await fixture.UpdateStateAsync(state => state with

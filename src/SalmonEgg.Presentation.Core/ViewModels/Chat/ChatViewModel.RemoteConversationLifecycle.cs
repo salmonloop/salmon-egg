@@ -375,7 +375,6 @@ public partial class ChatViewModel
                             conversationId,
                             activationVersion,
                             binding,
-                            transcriptBaselineCount,
                             ConversationRuntimePhase.RemoteConnectionReady,
                             cancellationToken)
                         .ConfigureAwait(false);
@@ -417,7 +416,6 @@ public partial class ChatViewModel
                         conversationId,
                         activationVersion,
                         binding,
-                        transcriptBaselineCount,
                         ConversationRuntimePhase.RemoteConnectionReady,
                         cancellationToken)
                     .ConfigureAwait(false);
@@ -437,8 +435,7 @@ public partial class ChatViewModel
             }
 
             await RestoreCachedConversationProjectionIfReplayIsEmptyAsync(
-                    conversationId,
-                    transcriptBaselineCount)
+                    conversationId)
                 .ConfigureAwait(false);
             await ApplyCurrentStoreProjectionAsync(activationVersion).ConfigureAwait(false);
             await SetConversationRuntimeStateAsync(
@@ -801,8 +798,17 @@ public partial class ChatViewModel
     {
         try
         {
+            var state = await _chatStore.State ?? ChatState.Empty;
+            var preservedSessionInfo = string.Equals(state.HydratedConversationId, conversationId, StringComparison.Ordinal)
+                ? ConversationSessionInfoSnapshots.Clone(state.SessionInfo)
+                : ConversationSessionInfoSnapshots.Clone(state.ResolveSessionStateSlice(conversationId)?.SessionInfo);
+            await _chatStore.Dispatch(new ScrubConversationDerivedStateAction(
+                    conversationId,
+                    preservedSessionInfo))
+                .ConfigureAwait(false);
             var clearedBinding = new ConversationBindingSlice(conversationId, null, boundProfileId);
             await _chatStore.Dispatch(new SetBindingSliceAction(clearedBinding)).ConfigureAwait(false);
+            _conversationWorkspace.ClearConversationRuntimeContent(conversationId);
             _conversationWorkspace.UpdateRemoteBinding(conversationId, remoteSessionId: null, boundProfileId);
             _conversationWorkspace.ScheduleSave();
         }
@@ -1083,23 +1089,26 @@ public partial class ChatViewModel
     }
 
     private async Task RestoreCachedConversationProjectionIfReplayIsEmptyAsync(
-        string conversationId,
-        int transcriptBaselineCount)
+        string conversationId)
     {
         if (string.IsNullOrWhiteSpace(conversationId))
         {
             return;
         }
 
+        var snapshot = _conversationWorkspace.GetConversationSnapshot(conversationId);
         var binding = await ResolveConversationBindingAsync(conversationId, CancellationToken.None).ConfigureAwait(false);
-        if (RemoteConversationPersistencePolicy.IsRemoteBacked(
-                binding?.RemoteSessionId,
-                binding?.ProfileId))
+        var snapshotOrigin = _conversationWorkspace.GetConversationSnapshotOrigin(conversationId);
+        var currentConnectionInstanceId = await GetAuthoritativeConnectionInstanceIdAsync().ConfigureAwait(false);
+        if (!RemoteConversationWorkspaceSnapshotPolicy.CanRestoreCachedTranscriptAfterAuthoritativeHydration(
+                binding,
+                snapshot,
+                snapshotOrigin,
+                currentConnectionInstanceId))
         {
             return;
         }
 
-        var snapshot = _conversationWorkspace.GetConversationSnapshot(conversationId);
         if (snapshot is null || snapshot.Transcript.Count == 0)
         {
             return;
@@ -1128,13 +1137,12 @@ public partial class ChatViewModel
         string conversationId,
         long? activationVersion,
         ConversationBindingSlice binding,
-        int transcriptBaselineCount,
         ConversationRuntimePhase fallbackPhase,
         CancellationToken cancellationToken)
     {
-        await RestoreCachedConversationProjectionIfReplayIsEmptyAsync(
+        await RestoreCachedConversationProjectionAfterInterruptedHydrationIfReplayIsEmptyAsync(
                 conversationId,
-                transcriptBaselineCount)
+                binding)
             .ConfigureAwait(false);
         await ApplyCurrentStoreProjectionAsync(activationVersion).ConfigureAwait(false);
         await SetConversationRuntimeStateAsync(
@@ -1144,6 +1152,52 @@ public partial class ChatViewModel
                 reason: "HydrationAttemptSuperseded",
                 cancellationToken: CancellationToken.None)
             .ConfigureAwait(false);
+    }
+
+    private async Task RestoreCachedConversationProjectionAfterInterruptedHydrationIfReplayIsEmptyAsync(
+        string conversationId,
+        ConversationBindingSlice binding)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return;
+        }
+
+        var snapshot = _conversationWorkspace.GetConversationSnapshot(conversationId);
+        var state = await _chatStore.State ?? ChatState.Empty;
+        var snapshotOrigin = _conversationWorkspace.GetConversationSnapshotOrigin(conversationId);
+        var currentConnectionInstanceId = await GetAuthoritativeConnectionInstanceIdAsync().ConfigureAwait(false);
+        if (!RemoteConversationWorkspaceSnapshotPolicy.CanRestoreCachedTranscriptAfterInterruptedHydration(
+                binding,
+                snapshot,
+                snapshotOrigin,
+                currentConnectionInstanceId))
+        {
+            return;
+        }
+
+        if (snapshot is null || snapshot.Transcript.Count == 0)
+        {
+            return;
+        }
+
+        var projectedTranscriptCount = await GetProjectedTranscriptCountAsync(conversationId).ConfigureAwait(false);
+        if (projectedTranscriptCount >= snapshot.Transcript.Count)
+        {
+            return;
+        }
+
+        Logger.LogInformation(
+            "Interrupted hydration is restoring cached workspace snapshot. ConversationId={ConversationId} ProjectedCount={ProjectedCount} CachedCount={CachedCount}",
+            conversationId,
+            projectedTranscriptCount,
+            snapshot.Transcript.Count);
+        await _chatStore.Dispatch(new HydrateConversationAction(
+            conversationId,
+            snapshot.Transcript.ToImmutableList(),
+            snapshot.Plan.ToImmutableList(),
+            snapshot.ShowPlanPanel,
+            snapshot.PlanTitle)).ConfigureAwait(false);
     }
 
     private async Task<bool> EnsureActiveConversationRemoteConnectionReadyAsync(
@@ -1486,37 +1540,54 @@ public partial class ChatViewModel
     }
 
     private bool HasReusableWarmProjection(ChatState state, string conversationId)
-        => ConversationProjectionReadinessPolicy.HasReusableWarmProjection(
-            state,
-            conversationId,
-            _conversationWorkspace.GetConversationSnapshot(conversationId));
-
-    private bool HasReusableWarmSelectionProjection(ChatState state, string conversationId)
     {
-        var binding = state.ResolveBinding(conversationId);
-        if (binding is null)
+        var binding = ResolveReusableWarmProjectionBinding(state, conversationId);
+        var snapshot = ResolveReusableWarmProjectionSnapshot(state, conversationId);
+        var snapshotOrigin = _conversationWorkspace.GetConversationSnapshotOrigin(conversationId);
+        if (RemoteConversationWorkspaceSnapshotPolicy.HasAuthoritativeRemoteRuntimeProjection(
+                binding,
+                snapshot,
+                snapshotOrigin))
         {
-            var workspaceBinding = _conversationWorkspace.GetRemoteBinding(conversationId);
-            if (workspaceBinding is not null)
-            {
-                binding = new ConversationBindingSlice(
-                    workspaceBinding.ConversationId,
-                    workspaceBinding.RemoteSessionId,
-                    workspaceBinding.BoundProfileId);
-            }
-        }
-
-        var snapshot = _conversationWorkspace.GetConversationSnapshot(conversationId);
-        if (RemoteConversationPersistencePolicy.IsRemoteBacked(binding?.RemoteSessionId, binding?.ProfileId)
-            && _conversationWorkspace.GetConversationSnapshotOrigin(conversationId) is not ConversationWorkspaceSnapshotOrigin.RuntimeProjection)
-        {
-            snapshot = null;
+            return true;
         }
 
         return ConversationProjectionReadinessPolicy.HasReusableWarmProjection(
             state,
             conversationId,
             snapshot);
+    }
+
+    private bool HasReusableWarmSelectionProjection(ChatState state, string conversationId)
+        => HasReusableWarmProjection(state, conversationId);
+
+    private ConversationWorkspaceSnapshot? ResolveReusableWarmProjectionSnapshot(ChatState state, string conversationId)
+    {
+        var snapshot = _conversationWorkspace.GetConversationSnapshot(conversationId);
+        var binding = ResolveReusableWarmProjectionBinding(state, conversationId);
+        return RemoteConversationWorkspaceSnapshotPolicy.CanReuseWarmProjectionSnapshot(
+            binding,
+            snapshot,
+            _conversationWorkspace.GetConversationSnapshotOrigin(conversationId))
+            ? snapshot
+            : null;
+    }
+
+    private ConversationBindingSlice? ResolveReusableWarmProjectionBinding(ChatState state, string conversationId)
+    {
+        var binding = state.ResolveBinding(conversationId);
+        if (binding is not null)
+        {
+            return binding;
+        }
+
+        var workspaceBinding = _conversationWorkspace.GetRemoteBinding(conversationId);
+        return workspaceBinding is null
+            ? null
+            : new ConversationBindingSlice(
+                workspaceBinding.ConversationId,
+                workspaceBinding.RemoteSessionId,
+                workspaceBinding.BoundProfileId);
     }
 
     private async Task<int> GetProjectedTranscriptCountAsync(string conversationId)

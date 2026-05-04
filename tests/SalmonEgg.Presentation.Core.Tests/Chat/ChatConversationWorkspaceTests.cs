@@ -1899,6 +1899,89 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
+    public void UpdateRemoteBinding_WhenRemoteAuthorityChanges_OnlyUpdatesBindingMetadata()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript:
+            [
+                CreateTextMessage("m-1", "alpha")
+            ],
+            Plan:
+            [
+                new ConversationPlanEntrySnapshot
+                {
+                    Content = "Plan step"
+                }
+            ],
+            ShowPlanPanel: true,
+            PlanTitle: "Plan",
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
+            AvailableModes:
+            [
+                new ConversationModeOptionSnapshot
+                {
+                    ModeId = "agent",
+                    ModeName = "Agent"
+                }
+            ],
+            SelectedModeId: "agent",
+            ConfigOptions:
+            [
+                new ConversationConfigOptionSnapshot
+                {
+                    Id = "mode",
+                    Name = "Mode",
+                    SelectedValue = "agent"
+                }
+            ],
+            ShowConfigOptionsPanel: true,
+            AvailableCommands:
+            [
+                new ConversationAvailableCommandSnapshot("plan", "Plan", null)
+            ],
+            SessionInfo: new ConversationSessionInfoSnapshot
+            {
+                Title = "Warm title",
+                Cwd = @"C:\repo\one"
+            },
+            Usage: new ConversationUsageSnapshot(1, 2, null)),
+            ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
+        workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-1");
+
+        workspace.UpdateRemoteBinding("session-1", remoteSessionId: null, boundProfileId: "profile-1");
+
+        var snapshot = workspace.GetConversationSnapshot("session-1");
+        Assert.NotNull(snapshot);
+        Assert.Single(snapshot!.Transcript);
+        Assert.Single(snapshot.Plan);
+        Assert.Single(snapshot.AvailableModes ?? Array.Empty<ConversationModeOptionSnapshot>());
+        Assert.Single(snapshot.ConfigOptions ?? Array.Empty<ConversationConfigOptionSnapshot>());
+        Assert.Single(snapshot.AvailableCommands ?? Array.Empty<ConversationAvailableCommandSnapshot>());
+        Assert.True(snapshot.ShowPlanPanel);
+        Assert.Equal("Plan", snapshot.PlanTitle);
+        Assert.True(snapshot.ShowConfigOptionsPanel);
+        Assert.Equal("agent", snapshot.SelectedModeId);
+        Assert.NotNull(snapshot.Usage);
+        Assert.NotNull(snapshot.SessionInfo);
+        Assert.Equal("Warm title", snapshot.SessionInfo!.Title);
+        Assert.Equal(@"C:\repo\one", snapshot.SessionInfo.Cwd);
+        Assert.Equal(ConversationWorkspaceSnapshotOrigin.RuntimeProjection, workspace.GetConversationSnapshotOrigin("session-1"));
+
+        var binding = workspace.GetRemoteBinding("session-1");
+        Assert.NotNull(binding);
+        Assert.Null(binding!.RemoteSessionId);
+        Assert.Equal("profile-1", binding.BoundProfileId);
+    }
+
+    [Fact]
     public async Task DeletedConversation_TombstonePersistsAcrossSaveAndRestore()
     {
         var syncContext = new ImmediateSynchronizationContext();

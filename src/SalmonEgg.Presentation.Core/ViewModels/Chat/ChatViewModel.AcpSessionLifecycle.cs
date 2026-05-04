@@ -1239,7 +1239,7 @@ public partial class ChatViewModel
         var activationStopwatch = Stopwatch.StartNew();
         var initialWarmReuseBinding = await ResolveConversationBindingAsync(sessionId, context.CancellationToken).ConfigureAwait(false);
         var initialWarmReuseConnectionInstanceId = await GetAuthoritativeConnectionInstanceIdAsync().ConfigureAwait(false);
-        var initialHasReusableProjection = HasReusableWarmSelectionProjection(activationStartState, sessionId);
+        var initialHasReusableProjection = HasReusableWarmProjection(activationStartState, sessionId);
         var canOptimisticallyReuseWarmRemoteConversation =
             !forceRemoteHydrationAfterSupersedingInFlightActivation
             && ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
@@ -1277,9 +1277,13 @@ public partial class ChatViewModel
         _chatUiProjectionApplicationCoordinator.ArmActivationSelectionProjection(
             sessionId,
             context.ActivationVersion);
-        var activationResult = await _conversationActivationCoordinator
-            .ActivateSessionAsync(sessionId, activationHydrationMode, context.CancellationToken)
-            .ConfigureAwait(false);
+        var activationResult = activationHydrationMode == ConversationActivationHydrationMode.WorkspaceSnapshot
+            ? await _conversationActivationCoordinator
+                .ActivateSessionAsync(sessionId, context.CancellationToken)
+                .ConfigureAwait(false)
+            : await _conversationActivationCoordinator
+                .ActivateSessionAsync(sessionId, activationHydrationMode, context.CancellationToken)
+                .ConfigureAwait(false);
         if (!activationResult.Succeeded)
         {
             await SetConversationRuntimeStateAsync(
@@ -1299,7 +1303,7 @@ public partial class ChatViewModel
         var warmReuseBinding = await ResolveConversationBindingAsync(sessionId, context.CancellationToken).ConfigureAwait(false);
         var warmReuseConnectionInstanceId = await GetAuthoritativeConnectionInstanceIdAsync().ConfigureAwait(false);
         var warmReuseState = await _chatStore.State ?? ChatState.Empty;
-        var hasReusableWarmProjection = HasReusableWarmSelectionProjection(warmReuseState, sessionId);
+        var hasReusableWarmProjection = HasReusableWarmProjection(warmReuseState, sessionId);
         var canReuseWarmConversationAfterSelection =
             !forceRemoteHydrationAfterSupersedingInFlightActivation
             && ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(

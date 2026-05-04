@@ -340,6 +340,14 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
                 planTitle)
             ? existingSnapshot.LastUpdatedAt
             : DateTime.UtcNow;
+        var runtimeConnectionInstanceId = runtimeState is { } projectedRuntime
+            ? projectedRuntime.ConnectionInstanceId
+            : null;
+        var snapshotConnectionInstanceId = !string.IsNullOrWhiteSpace(runtimeConnectionInstanceId)
+            ? runtimeConnectionInstanceId
+            : canReuseExistingSnapshotRuntimeContent
+                ? existingSnapshot?.ConnectionInstanceId
+                : null;
 
         return new ConversationWorkspaceSnapshot(
             conversationId,
@@ -355,7 +363,8 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             showConfigOptionsPanel,
             availableCommands,
             sessionInfo,
-            usage);
+            usage,
+            snapshotConnectionInstanceId);
     }
 
     private static bool HasSnapshotData(ConversationWorkspaceSnapshot snapshot)
