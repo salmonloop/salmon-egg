@@ -4206,7 +4206,7 @@ public partial class ChatViewModelTests
 
         public IState<ChatState> State { get; }
         public ChatState LatestState { get; private set; }
-        public Action<ChatAction>? AfterDispatch { get; set; }
+        public Func<ChatAction, ValueTask>? AfterDispatch { get; set; }
 
         public IReadOnlyCollection<ChatAction> Actions => _actions.ToArray();
 
@@ -4220,7 +4220,10 @@ public partial class ChatViewModelTests
                 var updatedState = ChatReducer.Reduce(currentState, action);
                 LatestState = updatedState;
                 await State.Update(_ => updatedState, CancellationToken.None);
-                AfterDispatch?.Invoke(action);
+                if (AfterDispatch is { } afterDispatch)
+                {
+                    await afterDispatch(action);
+                }
             }
             finally
             {

@@ -680,7 +680,9 @@ public partial class ChatViewModel
 
         var state = await _chatStore.State ?? ChatState.Empty;
         var binding = await ResolveConversationBindingAsync(sessionId, cancellationToken).ConfigureAwait(false);
-        var runtimeState = warmRuntimeSnapshot ?? state.ResolveRuntimeState(sessionId);
+        var runtimeState = ResolveWarmReuseRuntimeState(
+            warmRuntimeSnapshot,
+            state.ResolveRuntimeState(sessionId));
         var hasReusableProjection = HasReusableWarmProjection(state, sessionId);
         if (string.IsNullOrWhiteSpace(binding?.RemoteSessionId))
         {
@@ -702,7 +704,10 @@ public partial class ChatViewModel
         }
 
         var currentConnectionInstanceId = await GetAuthoritativeConnectionInstanceIdAsync().ConfigureAwait(false);
-        if (allowWarmReuseShortCircuit
+        var canAttemptWarmReuseShortCircuit = CanAttemptWarmReuseShortCircuit(
+            allowWarmReuseShortCircuit,
+            runtimeState);
+        if (canAttemptWarmReuseShortCircuit
             && ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
                 runtimeState,
                 binding,
@@ -723,7 +728,7 @@ public partial class ChatViewModel
         }
 
         {
-            var denialReason = allowWarmReuseShortCircuit
+            var denialReason = canAttemptWarmReuseShortCircuit
                 ? ConversationWarmReusePolicy.GetWarmReuseDenialReason(
                     runtimeState, binding, currentConnectionInstanceId, hasReusableProjection)
                 : "SupersededInFlightActivationRequiresAuthoritativeHydration";
@@ -749,9 +754,14 @@ public partial class ChatViewModel
         state = await _chatStore.State ?? ChatState.Empty;
         binding = await ResolveConversationBindingAsync(sessionId, cancellationToken).ConfigureAwait(false);
         currentConnectionInstanceId = await GetAuthoritativeConnectionInstanceIdAsync().ConfigureAwait(false);
-        var warmRuntimeAfterProfileReconnect = warmRuntimeSnapshot ?? state.ResolveRuntimeState(sessionId);
+        var warmRuntimeAfterProfileReconnect = ResolveWarmReuseRuntimeState(
+            warmRuntimeSnapshot,
+            state.ResolveRuntimeState(sessionId));
         hasReusableProjection = HasReusableWarmProjection(state, sessionId);
-        if (allowWarmReuseShortCircuit
+        canAttemptWarmReuseShortCircuit = CanAttemptWarmReuseShortCircuit(
+            allowWarmReuseShortCircuit,
+            warmRuntimeAfterProfileReconnect);
+        if (canAttemptWarmReuseShortCircuit
             && ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
                 warmRuntimeAfterProfileReconnect,
                 binding,
@@ -1304,10 +1314,9 @@ public partial class ChatViewModel
         var warmReuseConnectionInstanceId = await GetAuthoritativeConnectionInstanceIdAsync().ConfigureAwait(false);
         var warmReuseState = await _chatStore.State ?? ChatState.Empty;
         var hasReusableWarmProjection = HasReusableWarmProjection(warmReuseState, sessionId);
-        // Prefer the pre-selection snapshot captured before the phase was overwritten
-        // to Selecting at line ~1233, falling back to a fresh read for the first
-        // activation path where the snapshot is null (no prior runtime state exists).
-        var warmRuntimeAfterSelection = warmRuntimeSnapshot ?? warmReuseState.ResolveRuntimeState(sessionId);
+        var warmRuntimeAfterSelection = ResolveWarmReuseRuntimeState(
+            warmRuntimeSnapshot,
+            warmReuseState.ResolveRuntimeState(sessionId));
         var canReuseWarmConversationAfterSelection =
             ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
                 warmRuntimeAfterSelection,
@@ -1425,6 +1434,24 @@ public partial class ChatViewModel
                 CancellationToken.None)
             .ConfigureAwait(false);
     }
+
+    private static ConversationRuntimeSlice? ResolveWarmReuseRuntimeState(
+        ConversationRuntimeSlice? preSelectionSnapshot,
+        ConversationRuntimeSlice? currentRuntimeState)
+    {
+        if (ConversationWarmReusePolicy.HasAuthoritativeWarmRuntime(currentRuntimeState))
+        {
+            return currentRuntimeState;
+        }
+
+        return preSelectionSnapshot ?? currentRuntimeState;
+    }
+
+    private static bool CanAttemptWarmReuseShortCircuit(
+        bool allowWarmReuseShortCircuit,
+        ConversationRuntimeSlice? runtimeState)
+        => allowWarmReuseShortCircuit
+            || ConversationWarmReusePolicy.HasAuthoritativeWarmRuntime(runtimeState);
 
     public async Task OnActivationCompletedAsync(
         ConversationActivationOrchestratorRequest request,
