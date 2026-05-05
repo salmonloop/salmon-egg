@@ -1226,7 +1226,7 @@ public partial class ChatViewModel
     {
         var sessionId = request.ConversationId;
         var activationStartState = await _chatStore.State ?? ChatState.Empty;
-        var forceRemoteHydrationAfterSupersedingInFlightActivation =
+        var hasCompetingNonWarmActivation =
             HasCompetingInFlightConversationActivation(activationStartState, sessionId);
         var warmRuntimeSnapshot = activationStartState.ResolveRuntimeState(sessionId);
 
@@ -1241,7 +1241,7 @@ public partial class ChatViewModel
         var initialWarmReuseConnectionInstanceId = await GetAuthoritativeConnectionInstanceIdAsync().ConfigureAwait(false);
         var initialHasReusableProjection = HasReusableWarmProjection(activationStartState, sessionId);
         var canOptimisticallyReuseWarmRemoteConversation =
-            !forceRemoteHydrationAfterSupersedingInFlightActivation
+            !hasCompetingNonWarmActivation
             && ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
                 warmRuntimeSnapshot,
                 initialWarmReuseBinding,
@@ -1365,7 +1365,7 @@ public partial class ChatViewModel
                 request,
                 context,
                 warmRuntimeSnapshot,
-                allowWarmReuseShortCircuit: !forceRemoteHydrationAfterSupersedingInFlightActivation);
+                allowWarmReuseShortCircuit: !hasCompetingNonWarmActivation);
             return ConversationActivationOrchestratorResult.BackgroundOwnedSuccess();
         }
 
@@ -1374,7 +1374,7 @@ public partial class ChatViewModel
                 context.ActivationVersion,
                 context.CancellationToken,
                 warmRuntimeSnapshot,
-                allowWarmReuseShortCircuit: !forceRemoteHydrationAfterSupersedingInFlightActivation)
+                allowWarmReuseShortCircuit: !hasCompetingNonWarmActivation)
             .ConfigureAwait(false);
         return remoteActivationSucceeded
             ? ConversationActivationOrchestratorResult.Success()
