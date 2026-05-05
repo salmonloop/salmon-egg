@@ -60,7 +60,7 @@ namespace SalmonEgg.Domain.Models.Content
         public string? LastModified { get; set; }
     }
 
-    internal sealed class ContentBlockJsonConverter : JsonConverter<ContentBlock>
+    public sealed class ContentBlockJsonConverter : JsonConverter<ContentBlock>
     {
         public override ContentBlock? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {

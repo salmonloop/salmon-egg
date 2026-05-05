@@ -113,15 +113,15 @@ namespace SalmonEgg.Domain.Models.Tool
         Other
     }
 
-    internal sealed class ToolCallStatusJsonConverter : JsonPropertyNameEnumJsonConverter<ToolCallStatus>
+    public sealed class ToolCallStatusJsonConverter : JsonPropertyNameEnumJsonConverter<ToolCallStatus>
     {
     }
 
-    internal sealed class ToolCallKindJsonConverter : JsonPropertyNameEnumJsonConverter<ToolCallKind>
+    public sealed class ToolCallKindJsonConverter : JsonPropertyNameEnumJsonConverter<ToolCallKind>
     {
     }
 
-    internal abstract class JsonPropertyNameEnumJsonConverter<TEnum> : JsonConverter<TEnum>
+    public abstract class JsonPropertyNameEnumJsonConverter<TEnum> : JsonConverter<TEnum>
         where TEnum : struct, Enum
     {
         private static readonly Dictionary<string, TEnum> ReadMap = BuildReadMap();

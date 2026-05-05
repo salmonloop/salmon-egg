@@ -14002,7 +14002,7 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
-    public async Task ActivateConversationAsync_WhenCrossProfileSelectionSupersedesInFlightRemoteActivation_DoesNotSkipSessionLoad()
+    public async Task ActivateConversationAsync_WhenCrossProfileSelectionSupersedesInFlightRemoteActivation_WarmTargetSkipsSessionLoad()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
@@ -14040,7 +14040,6 @@ public partial class ChatViewModelTests
 
         var firstLoadStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
         var firstLoadCanceled = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var secondLoadStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
         var loadCounts = new Dictionary<string, int>(StringComparer.Ordinal);
 
         var serviceA = CreateConnectedChatService();
@@ -14077,7 +14076,6 @@ public partial class ChatViewModelTests
             .Returns<SessionLoadParams, CancellationToken>((parameters, _) =>
             {
                 loadCounts[parameters.SessionId] = loadCounts.TryGetValue(parameters.SessionId, out var count) ? count + 1 : 1;
-                secondLoadStarted.TrySetResult(null);
                 return Task.FromResult(SessionLoadResponse.Completed);
             });
 
@@ -14177,16 +14175,14 @@ public partial class ChatViewModelTests
             await AwaitWithSynchronizationContextAsync(syncContext, secondActivation);
             Assert.True(await secondActivation);
 
-            await secondLoadStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
             await firstLoadCanceled.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
             var finalState = await fixture.GetStateAsync();
             var finalRuntime = finalState.ResolveRuntimeState("conv-2");
             Assert.NotNull(finalRuntime);
             Assert.Equal("conn-2", fixture.ViewModel.ConnectionInstanceId);
-            Assert.Equal(1, loadCounts.GetValueOrDefault("remote-2"));
-            Assert.Equal("SessionLoadCompleted", finalRuntime!.Value.Reason);
-            Assert.NotEqual("WarmReuseAfterProfileReconnect", finalRuntime.Value.Reason);
+            Assert.Equal(0, loadCounts.GetValueOrDefault("remote-2"));
+            Assert.Equal("WarmReuseAfterProfileReconnect", finalRuntime!.Value.Reason);
             Assert.False(await firstActivation);
         }
     }

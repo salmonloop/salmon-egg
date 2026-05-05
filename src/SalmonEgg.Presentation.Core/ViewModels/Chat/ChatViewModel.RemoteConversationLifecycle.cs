@@ -699,6 +699,8 @@ public partial class ChatViewModel
             .Where(static conversationId => !string.IsNullOrWhiteSpace(conversationId))
             .Distinct(StringComparer.Ordinal);
 
+        var targetRuntime = state.ResolveRuntimeState(targetConversationId);
+
         foreach (var candidateConversationId in candidateConversationIds)
         {
             if (string.Equals(candidateConversationId, targetConversationId, StringComparison.Ordinal))
@@ -717,6 +719,15 @@ public partial class ChatViewModel
                 or ConversationRuntimePhase.RemoteConnectionReady
                 or ConversationRuntimePhase.RemoteHydrating)
             {
+                // A competing conversation's in-flight activation should not block warm
+                // reuse for the target conversation when the target is already warm.
+                // The target's runtime state and projection are independent of other
+                // conversations' activation lifecycle.
+                if (targetRuntime is { Phase: ConversationRuntimePhase.Warm })
+                {
+                    continue;
+                }
+
                 return true;
             }
         }

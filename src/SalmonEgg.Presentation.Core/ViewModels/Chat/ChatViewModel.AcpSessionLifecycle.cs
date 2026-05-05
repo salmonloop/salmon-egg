@@ -1304,10 +1304,13 @@ public partial class ChatViewModel
         var warmReuseConnectionInstanceId = await GetAuthoritativeConnectionInstanceIdAsync().ConfigureAwait(false);
         var warmReuseState = await _chatStore.State ?? ChatState.Empty;
         var hasReusableWarmProjection = HasReusableWarmProjection(warmReuseState, sessionId);
+        // Prefer the pre-selection snapshot captured before the phase was overwritten
+        // to Selecting at line ~1233, falling back to a fresh read for the first
+        // activation path where the snapshot is null (no prior runtime state exists).
+        var warmRuntimeAfterSelection = warmRuntimeSnapshot ?? warmReuseState.ResolveRuntimeState(sessionId);
         var canReuseWarmConversationAfterSelection =
-            !forceRemoteHydrationAfterSupersedingInFlightActivation
-            && ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
-                warmRuntimeSnapshot,
+            ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
+                warmRuntimeAfterSelection,
                 warmReuseBinding,
                 warmReuseConnectionInstanceId,
                 hasReusableWarmProjection);
