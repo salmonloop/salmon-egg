@@ -77,3 +77,4 @@
    - 客户端缓存只能作为运行期优化，不能升级为远程事实来源；去重、确认和恢复必须依赖协议中的 authoritative 标识，禁止拿本地请求 id、文本比对或历史缓存替代。
    - 已连接的后台热会话与当前前台会话在运行期语义上属于同一层级；未连接的远程会话只能保留最小元数据，禁止在 hydrate 前泄露旧正文或伪预览。
    - GUI 验证必须针对本次被验证构建实际产出的安装物与二进制，禁止用旧安装、旁路产物或来源不明的运行实例替代。
+   - 触发条件：远程会话 warm reuse、跨 profile 切换、前台短暂停留后热切回、或后台连接恢复；原生期望行为：严格按 `docs/hard-constraints-session-navigation-and-search.md` 的 `7.1 Warm Reuse 判定逻辑` 判断，只有同一 `profileId + remoteSessionId + authoritative connectionInstanceId` 且存在可复用 runtime projection 时才允许零往返 warm reuse，同 profile 但新连接只能走协议恢复；禁止做法：只用 profile、裸 connection id、runtime reason 字符串散落判断、把 discover/cache 当正文真源、或把 warm 身份解析失败的 `null` 传入 snapshot restore policy；验证方式：覆盖 policy denial reason、profile mismatch、connection instance mismatch、profile reconnect warm reason、snapshot restore 连接比较，以及同连接热切回不触发 `session/load`、连接变化必须 reload 的单元测试和真实用户配置 GUI smoke。

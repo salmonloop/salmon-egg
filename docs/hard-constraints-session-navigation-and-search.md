@@ -46,6 +46,32 @@
 7. UI 虚拟化、增量投影和按需加载属于渲染层优化，不得反向定义 session 事实；是否 warm、是否需要 `session/load`、是否可显示正文，必须由 authoritative session state 决定。
 8. 若历史设计文档或旧实现把“本地持久化 transcript”或“discover transcript preview”当作远程真源，该约束自本文件起一律作废，以本节为准。
 
+### 7.1 Warm Reuse 判定逻辑（必须）
+1. `warm reuse` 的唯一含义是：远程会话切回时不调用 `session/load`，直接复用同一进程内仍有效的运行态与投影。它不是“同一个 profile 就可复用”，也不是“本地有缓存就可复用”。
+2. 允许 `warm reuse` 必须同时满足全部条件：
+   - `conversation binding` 存在且 `remoteSessionId` 非空；
+   - runtime state 属于同一 conversation，`Phase == Warm`；
+   - runtime reason 必须来自集中定义的 authoritative warm reason：`SessionLoadCompleted`、`WarmReuse`、`WarmReuseAfterProfileReconnect`、`MarkedHydrated`；
+   - runtime 的 `RemoteSessionId` 与 `ProfileId` 必须分别等于当前 binding 的 `remoteSessionId` 与 `profileId`；
+   - 当前连接身份必须来自目标 profile 的 authoritative foreground connection，且 `current.ProfileId == binding.ProfileId`；
+   - `current.ConnectionInstanceId` 必须非空，且等于 runtime 的 `ConnectionInstanceId`；
+   - 必须存在可复用 projection：authoritative `RuntimeProjection`，或当前 store 中同一 conversation 的已投影正文 / session state；discover/list 元数据、restored cache、旧 header 不能单独构成可复用 projection。
+3. 任一条件不满足都必须拒绝 `warm reuse`，进入协议恢复 / authoritative hydration 路径；不得因为“用户刚刚看过这个会话”“同 profile 已连接”“本地 snapshot 有内容”而绕过 `session/load` 能力门控。
+4. 拒绝原因是行为契约，新增或修改条件必须同步维护测试。当前拒绝原因必须覆盖：`RuntimeStateNotWarm`、`WarmRuntimeNotAuthoritative`、`MissingBinding`、`ProjectionNotReady`、`ConnectionProfileMismatch`、`ConnectionInstanceIdMismatch`、`RemoteSessionIdMismatch`、`ProfileIdMismatch`。
+5. `ConnectionInstanceId` 是运行期连接实例身份，不是 profile 身份。ACP session 运行在具体活连接上；同 profile 重新连接后，旧 remote session 只能走协议恢复，不能零往返 warm reuse，除非新的 authoritative runtime 明确重新标记为 warm。
+6. `warm reuse` 的连接身份解析与“缓存投影恢复”的连接比较必须分离：
+   - warm 判定必须使用 profile-aware authoritative identity，防止非目标 profile 的前台连接参与目标会话判断；
+   - 缓存投影恢复只能用当前 raw connection id 与 snapshot 的 `ConnectionInstanceId` 比较，不能把 warm 身份解析失败折叠成 `null` 传入 snapshot policy；`null` 在 snapshot policy 中表示“未知当前连接”，不能表示“profile mismatch”。
+7. 快速切换和 gate 排队场景必须多点重查同一判定：入口 current-session 快路径、selection 完成后、hydration/gate 内部短路都必须调用同一套 canonical warm decision。不得用 in-flight activation 的存在直接否定目标已经 `Warm` 且满足上述条件的会话。
+8. 相关测试必须至少覆盖：
+   - 同连接热切回不触发 `session/load`；
+   - connection instance 变化后必须 reload；
+   - profile mismatch 拒绝 warm reuse；
+   - projection missing 拒绝 warm reuse；
+   - profile reconnect warm reason 可复用；
+   - snapshot restore 连接比较不被 profile-aware warm resolver 的 `null` 结果污染；
+   - 真实用户配置 GUI smoke 中已 hydrate 的远程会话跨 profile 热切回不显示 blocking loading overlay。
+
 ## 8. 测试与验收门禁（必须）
 1. 必须覆盖结果导向测试，不测试实现细节字符串。
 2. 至少包含：

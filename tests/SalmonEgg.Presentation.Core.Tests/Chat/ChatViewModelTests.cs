@@ -13606,7 +13606,7 @@ public partial class ChatViewModelTests
         Assert.True(ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
             initialRuntime,
             initialState.ResolveBinding("conv-1"),
-            fixture.ViewModel.ConnectionInstanceId,
+            new ConversationWarmReuseConnectionIdentity("profile-1", fixture.ViewModel.ConnectionInstanceId),
             hasReusableProjection: true));
         Assert.Equal("agent", fixture.ViewModel.SelectedMode?.ModeId);
         Assert.Equal("agent", fixture.ViewModel.ConfigOptions[0].Value);
@@ -13631,7 +13631,7 @@ public partial class ChatViewModelTests
         Assert.True(ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
             roundTripRuntime,
             roundTripState.ResolveBinding("conv-1"),
-            fixture.ViewModel.ConnectionInstanceId,
+            new ConversationWarmReuseConnectionIdentity("profile-1", fixture.ViewModel.ConnectionInstanceId),
             hasReusableProjection: true));
         Assert.Equal(1, loadCounts.GetValueOrDefault("remote-1"));
         Assert.Equal(1, loadCounts.GetValueOrDefault("remote-2"));
@@ -14185,7 +14185,7 @@ public partial class ChatViewModelTests
             Assert.NotNull(finalRuntime);
             Assert.Equal("conn-2", fixture.ViewModel.ConnectionInstanceId);
             Assert.Equal(0, loadCounts.GetValueOrDefault("remote-2"));
-            Assert.Equal("WarmReuseAfterProfileReconnect", finalRuntime!.Value.Reason);
+            Assert.Equal(ConversationRuntimeReasons.WarmReuseAfterProfileReconnect, finalRuntime!.Value.Reason);
             Assert.False(await firstActivation);
         }
     }
@@ -14928,7 +14928,7 @@ public partial class ChatViewModelTests
         Assert.True(ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
             roundTripRuntime,
             roundTripState.ResolveBinding("conv-1"),
-            currentConnectionState.ConnectionInstanceId,
+            new ConversationWarmReuseConnectionIdentity("profile-1", currentConnectionState.ConnectionInstanceId),
             hasReusableProjection: true));
         await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-2"));
         await WaitForConditionAsync(async () =>
@@ -14942,7 +14942,7 @@ public partial class ChatViewModelTests
         Assert.False(ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
             reboundRuntime,
             reboundState.ResolveBinding("conv-1"),
-            currentConnectionState.ConnectionInstanceId,
+            new ConversationWarmReuseConnectionIdentity("profile-1", currentConnectionState.ConnectionInstanceId),
             hasReusableProjection: true));
         await fixture.ViewModel.SwitchConversationAsync("conv-1");
 
@@ -15348,7 +15348,7 @@ public partial class ChatViewModelTests
         Assert.False(ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
             inFlightRuntime,
             inFlightState.ResolveBinding("conv-1"),
-            fixture.ViewModel.ConnectionInstanceId,
+            new ConversationWarmReuseConnectionIdentity("profile-1", fixture.ViewModel.ConnectionInstanceId),
             hasReusableProjection: true));
 
         allowActivationCompletion.TrySetResult(null);

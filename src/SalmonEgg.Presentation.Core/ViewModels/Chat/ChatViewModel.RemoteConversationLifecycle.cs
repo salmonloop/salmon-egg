@@ -133,7 +133,7 @@ public partial class ChatViewModel
                 conversationId!,
                 ConversationRuntimePhase.Warm,
                 binding,
-                reason: "MarkedHydrated",
+                reason: ConversationRuntimeReasons.MarkedHydrated,
                 cancellationToken)
             .ConfigureAwait(false);
         await ClearConversationUnreadAttentionAsync(conversationId!).ConfigureAwait(false);
@@ -154,7 +154,7 @@ public partial class ChatViewModel
                 conversationId,
                 ConversationRuntimePhase.Warm,
                 binding,
-                reason: "MarkedHydrated",
+                reason: ConversationRuntimeReasons.MarkedHydrated,
                 cancellationToken)
             .ConfigureAwait(false);
         if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
@@ -442,7 +442,7 @@ public partial class ChatViewModel
                     conversationId,
                     ConversationRuntimePhase.Warm,
                     binding,
-                    reason: "SessionLoadCompleted",
+                    reason: ConversationRuntimeReasons.SessionLoadCompleted,
                     cancellationToken,
                     connectionInstanceId: resolvedConnection.ConnectionInstanceId)
                 .ConfigureAwait(false);
@@ -649,12 +649,12 @@ public partial class ChatViewModel
         }
 
         var hasReusableProjection = HasReusableWarmProjection(state, sessionId);
-        var currentConnectionInstanceId = await GetAuthoritativeConnectionInstanceIdAsync().ConfigureAwait(false);
-        return ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
+        var currentConnection = await ResolveWarmReuseConnectionIdentityAsync(binding, cancellationToken).ConfigureAwait(false);
+        return ConversationWarmReusePolicy.EvaluateRemoteWarmConversation(
             state.ResolveRuntimeState(sessionId),
             binding,
-            currentConnectionInstanceId,
-            hasReusableProjection);
+            currentConnection,
+            hasReusableProjection).CanReuse;
     }
 
     private async Task<bool> CanReusePendingRemoteHydrationCurrentConversationAsync(
@@ -1110,7 +1110,7 @@ public partial class ChatViewModel
         var snapshot = _conversationWorkspace.GetConversationSnapshot(conversationId);
         var binding = await ResolveConversationBindingAsync(conversationId, CancellationToken.None).ConfigureAwait(false);
         var snapshotOrigin = _conversationWorkspace.GetConversationSnapshotOrigin(conversationId);
-        var currentConnectionInstanceId = await GetAuthoritativeConnectionInstanceIdAsync().ConfigureAwait(false);
+        var currentConnectionInstanceId = await ResolveProjectionRestoreConnectionInstanceIdAsync().ConfigureAwait(false);
         if (!RemoteConversationWorkspaceSnapshotPolicy.CanRestoreCachedTranscriptAfterAuthoritativeHydration(
                 binding,
                 snapshot,
@@ -1177,7 +1177,7 @@ public partial class ChatViewModel
         var snapshot = _conversationWorkspace.GetConversationSnapshot(conversationId);
         var state = await _chatStore.State ?? ChatState.Empty;
         var snapshotOrigin = _conversationWorkspace.GetConversationSnapshotOrigin(conversationId);
-        var currentConnectionInstanceId = await GetAuthoritativeConnectionInstanceIdAsync().ConfigureAwait(false);
+        var currentConnectionInstanceId = await ResolveProjectionRestoreConnectionInstanceIdAsync().ConfigureAwait(false);
         if (!RemoteConversationWorkspaceSnapshotPolicy.CanRestoreCachedTranscriptAfterInterruptedHydration(
                 binding,
                 snapshot,
@@ -1464,35 +1464,36 @@ public partial class ChatViewModel
         }
 
         var state = await _chatStore.State ?? ChatState.Empty;
-        var currentConnectionInstanceId = resolvedConnection.ConnectionInstanceId;
+        var currentConnection = new ConversationWarmReuseConnectionIdentity(
+            resolvedConnection.ProfileId,
+            resolvedConnection.ConnectionInstanceId);
         var hasReusableProjection = HasReusableWarmProjection(state, conversationId);
-        if (allowWarmReuseShortCircuit
-            && ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
-                state.ResolveRuntimeState(conversationId),
-                binding,
-                currentConnectionInstanceId,
-                hasReusableProjection))
+        var warmReuseDecision = ConversationWarmReusePolicy.EvaluateRemoteWarmConversation(
+            state.ResolveRuntimeState(conversationId),
+            binding,
+            currentConnection,
+            hasReusableProjection);
+        if (allowWarmReuseShortCircuit && warmReuseDecision.CanReuse)
         {
             Logger.LogInformation(
                 "Skipping remote hydration for conversation because runtime state is warm. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId} ConnectionInstanceId={ConnectionInstanceId}",
                 conversationId,
                 binding.RemoteSessionId,
-                currentConnectionInstanceId);
+                currentConnection.ConnectionInstanceId);
             return true;
         }
 
         {
             var runtimeState = state.ResolveRuntimeState(conversationId);
             var denialReason = allowWarmReuseShortCircuit
-                ? ConversationWarmReusePolicy.GetWarmReuseDenialReason(
-                    runtimeState, binding, currentConnectionInstanceId, hasReusableProjection)
+                ? warmReuseDecision.DenialReason
                 : "SupersededInFlightActivationRequiresAuthoritativeHydration";
             Logger.LogInformation(
                 "Warm reuse denied in HydrateConversationAsync, falling back to slow hydration. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId} ExpectedConnectionInstanceId={ExpectedConnectionInstanceId} ActualConnectionInstanceId={ActualConnectionInstanceId} Reason={Reason}",
                 conversationId,
                 binding.RemoteSessionId,
                 runtimeState?.ConnectionInstanceId,
-                currentConnectionInstanceId,
+                currentConnection.ConnectionInstanceId,
                 denialReason);
         }
 
@@ -1656,12 +1657,28 @@ public partial class ChatViewModel
             .HasValue;
     }
 
-    private async Task<string?> GetAuthoritativeConnectionInstanceIdAsync()
+    private async Task<ConversationWarmReuseConnectionIdentity> ResolveWarmReuseConnectionIdentityAsync(
+        ConversationBindingSlice? binding,
+        CancellationToken cancellationToken)
+    {
+        var authoritativeConnection = await ResolveAuthoritativeForegroundConnectionAsync(
+                binding?.ProfileId,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return authoritativeConnection is { } resolvedConnection
+            ? new ConversationWarmReuseConnectionIdentity(
+                resolvedConnection.ProfileId,
+                resolvedConnection.ConnectionInstanceId)
+            : default;
+    }
+
+    private async Task<string?> ResolveProjectionRestoreConnectionInstanceIdAsync()
     {
         var connectionState = await _chatConnectionStore.State ?? ChatConnectionState.Empty;
-        return string.IsNullOrWhiteSpace(connectionState.ConnectionInstanceId)
-            ? ConnectionInstanceId
-            : connectionState.ConnectionInstanceId;
+        return ConversationProjectionRestoreConnectionPolicy.ResolveCurrentConnectionInstanceId(
+            connectionState,
+            ConnectionInstanceId);
     }
 
     private async Task<bool> WaitForRemoteConnectionReadyAsync(

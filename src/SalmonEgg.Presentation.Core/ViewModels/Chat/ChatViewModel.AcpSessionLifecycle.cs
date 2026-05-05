@@ -703,16 +703,16 @@ public partial class ChatViewModel
             return true;
         }
 
-        var currentConnectionInstanceId = await GetAuthoritativeConnectionInstanceIdAsync().ConfigureAwait(false);
+        var currentConnection = await ResolveWarmReuseConnectionIdentityAsync(binding, cancellationToken).ConfigureAwait(false);
         var canAttemptWarmReuseShortCircuit = CanAttemptWarmReuseShortCircuit(
             allowWarmReuseShortCircuit,
             runtimeState);
-        if (canAttemptWarmReuseShortCircuit
-            && ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
-                runtimeState,
-                binding,
-                currentConnectionInstanceId,
-                hasReusableProjection))
+        var warmReuseDecision = ConversationWarmReusePolicy.EvaluateRemoteWarmConversation(
+            runtimeState,
+            binding,
+            currentConnection,
+            hasReusableProjection);
+        if (canAttemptWarmReuseShortCircuit && warmReuseDecision.CanReuse)
         {
             Logger.LogInformation(
                 "Skipping remote hydration because the selected conversation is already warm. ConversationId={ConversationId}",
@@ -722,22 +722,21 @@ public partial class ChatViewModel
                     sessionId,
                     activationVersion,
                     SessionActivationPhase.Hydrated,
-                    reason: "WarmReuse")
+                    reason: ConversationRuntimeReasons.WarmReuse)
                 .ConfigureAwait(false);
             return true;
         }
 
         {
             var denialReason = canAttemptWarmReuseShortCircuit
-                ? ConversationWarmReusePolicy.GetWarmReuseDenialReason(
-                    runtimeState, binding, currentConnectionInstanceId, hasReusableProjection)
+                ? warmReuseDecision.DenialReason
                 : "SupersededInFlightActivationRequiresAuthoritativeHydration";
             Logger.LogInformation(
                 "Warm reuse denied in HydrateConversationAsync, falling back to slow hydration. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId} ExpectedConnectionInstanceId={ExpectedConnectionInstanceId} ActualConnectionInstanceId={ActualConnectionInstanceId} Reason={Reason}",
                 sessionId,
                 binding?.RemoteSessionId,
                 runtimeState?.ConnectionInstanceId,
-                currentConnectionInstanceId,
+                currentConnection.ConnectionInstanceId,
                 denialReason);
         }
 
@@ -753,7 +752,7 @@ public partial class ChatViewModel
 
         state = await _chatStore.State ?? ChatState.Empty;
         binding = await ResolveConversationBindingAsync(sessionId, cancellationToken).ConfigureAwait(false);
-        currentConnectionInstanceId = await GetAuthoritativeConnectionInstanceIdAsync().ConfigureAwait(false);
+        currentConnection = await ResolveWarmReuseConnectionIdentityAsync(binding, cancellationToken).ConfigureAwait(false);
         var warmRuntimeAfterProfileReconnect = ResolveWarmReuseRuntimeState(
             warmRuntimeSnapshot,
             state.ResolveRuntimeState(sessionId));
@@ -761,12 +760,12 @@ public partial class ChatViewModel
         canAttemptWarmReuseShortCircuit = CanAttemptWarmReuseShortCircuit(
             allowWarmReuseShortCircuit,
             warmRuntimeAfterProfileReconnect);
-        if (canAttemptWarmReuseShortCircuit
-            && ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
-                warmRuntimeAfterProfileReconnect,
-                binding,
-                currentConnectionInstanceId,
-                hasReusableProjection))
+        warmReuseDecision = ConversationWarmReusePolicy.EvaluateRemoteWarmConversation(
+            warmRuntimeAfterProfileReconnect,
+            binding,
+            currentConnection,
+            hasReusableProjection);
+        if (canAttemptWarmReuseShortCircuit && warmReuseDecision.CanReuse)
         {
             Logger.LogInformation(
                 "Skipping remote hydration because the selected conversation became warm after restoring the reusable profile connection. ConversationId={ConversationId}",
@@ -775,9 +774,9 @@ public partial class ChatViewModel
                     sessionId,
                     ConversationRuntimePhase.Warm,
                     binding,
-                    reason: "WarmReuseAfterProfileReconnect",
+                    reason: ConversationRuntimeReasons.WarmReuseAfterProfileReconnect,
                     cancellationToken,
-                    connectionInstanceId: currentConnectionInstanceId)
+                    connectionInstanceId: currentConnection.ConnectionInstanceId)
                 .ConfigureAwait(false);
             await ClearConversationUnreadAttentionAsync(sessionId).ConfigureAwait(false);
             return true;
@@ -1248,15 +1247,16 @@ public partial class ChatViewModel
             .ConfigureAwait(false);
         var activationStopwatch = Stopwatch.StartNew();
         var initialWarmReuseBinding = await ResolveConversationBindingAsync(sessionId, context.CancellationToken).ConfigureAwait(false);
-        var initialWarmReuseConnectionInstanceId = await GetAuthoritativeConnectionInstanceIdAsync().ConfigureAwait(false);
+        var initialWarmReuseConnection = await ResolveWarmReuseConnectionIdentityAsync(initialWarmReuseBinding, context.CancellationToken).ConfigureAwait(false);
         var initialHasReusableProjection = HasReusableWarmProjection(activationStartState, sessionId);
+        var initialWarmReuseDecision = ConversationWarmReusePolicy.EvaluateRemoteWarmConversation(
+            warmRuntimeSnapshot,
+            initialWarmReuseBinding,
+            initialWarmReuseConnection,
+            initialHasReusableProjection);
         var canOptimisticallyReuseWarmRemoteConversation =
             !hasCompetingNonWarmActivation
-            && ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
-                warmRuntimeSnapshot,
-                initialWarmReuseBinding,
-                initialWarmReuseConnectionInstanceId,
-                initialHasReusableProjection);
+            && initialWarmReuseDecision.CanReuse;
 
         ((IConversationActivationPreview)this).ClearSessionSwitchPreview(sessionId);
         await PostToUiAsync(() =>
@@ -1311,18 +1311,18 @@ public partial class ChatViewModel
         }
 
         var warmReuseBinding = await ResolveConversationBindingAsync(sessionId, context.CancellationToken).ConfigureAwait(false);
-        var warmReuseConnectionInstanceId = await GetAuthoritativeConnectionInstanceIdAsync().ConfigureAwait(false);
+        var warmReuseConnection = await ResolveWarmReuseConnectionIdentityAsync(warmReuseBinding, context.CancellationToken).ConfigureAwait(false);
         var warmReuseState = await _chatStore.State ?? ChatState.Empty;
         var hasReusableWarmProjection = HasReusableWarmProjection(warmReuseState, sessionId);
         var warmRuntimeAfterSelection = ResolveWarmReuseRuntimeState(
             warmRuntimeSnapshot,
             warmReuseState.ResolveRuntimeState(sessionId));
-        var canReuseWarmConversationAfterSelection =
-            ConversationWarmReusePolicy.CanReuseRemoteWarmConversation(
-                warmRuntimeAfterSelection,
-                warmReuseBinding,
-                warmReuseConnectionInstanceId,
-                hasReusableWarmProjection);
+        var warmReuseDecisionAfterSelection = ConversationWarmReusePolicy.EvaluateRemoteWarmConversation(
+            warmRuntimeAfterSelection,
+            warmReuseBinding,
+            warmReuseConnection,
+            hasReusableWarmProjection);
+        var canReuseWarmConversationAfterSelection = warmReuseDecisionAfterSelection.CanReuse;
 
         await SetConversationRuntimeStateAsync(
                 sessionId,
@@ -1354,9 +1354,9 @@ public partial class ChatViewModel
                     sessionId,
                     ConversationRuntimePhase.Warm,
                     warmReuseBinding,
-                    reason: "WarmReuse",
+                    reason: ConversationRuntimeReasons.WarmReuse,
                     context.CancellationToken,
-                    connectionInstanceId: warmReuseConnectionInstanceId)
+                    connectionInstanceId: warmReuseConnection.ConnectionInstanceId)
                 .ConfigureAwait(false);
             await ClearConversationUnreadAttentionAsync(sessionId).ConfigureAwait(false);
             return ConversationActivationOrchestratorResult.Success(usedWarmReuse: true);

@@ -144,6 +144,38 @@ public sealed class RemoteConversationWorkspaceSnapshotPolicyTests
         Assert.False(result);
     }
 
+    [Fact]
+    public void ResolveCurrentConnectionInstanceId_WhenStoreHasForegroundConnection_ReturnsStoreIdentity()
+    {
+        var connectionState = ChatConnectionState.Empty with
+        {
+            ConnectionInstanceId = "conn-foreground",
+            ForegroundTransportProfileId = "profile-other"
+        };
+
+        var result = ConversationProjectionRestoreConnectionPolicy.ResolveCurrentConnectionInstanceId(
+            connectionState,
+            fallbackConnectionInstanceId: "conn-viewmodel");
+
+        Assert.Equal("conn-foreground", result);
+    }
+
+    [Fact]
+    public void ResolveCurrentConnectionInstanceId_WhenStoreIdentityIsMissing_ReturnsFallbackIdentity()
+    {
+        var connectionState = ChatConnectionState.Empty with
+        {
+            ConnectionInstanceId = null,
+            ForegroundTransportProfileId = "profile-other"
+        };
+
+        var result = ConversationProjectionRestoreConnectionPolicy.ResolveCurrentConnectionInstanceId(
+            connectionState,
+            fallbackConnectionInstanceId: "conn-viewmodel");
+
+        Assert.Equal("conn-viewmodel", result);
+    }
+
     private static ConversationWorkspaceSnapshot CreateSnapshot()
         => new(
             ConversationId: "conv-1",

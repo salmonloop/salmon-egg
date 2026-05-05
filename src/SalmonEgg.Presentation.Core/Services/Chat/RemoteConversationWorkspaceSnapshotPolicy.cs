@@ -70,3 +70,13 @@ internal static class RemoteConversationWorkspaceSnapshotPolicy
             && (string.IsNullOrWhiteSpace(currentConnectionInstanceId)
                 || string.Equals(snapshot.ConnectionInstanceId, currentConnectionInstanceId, StringComparison.Ordinal));
 }
+
+internal static class ConversationProjectionRestoreConnectionPolicy
+{
+    public static string? ResolveCurrentConnectionInstanceId(
+        ChatConnectionState? connectionState,
+        string? fallbackConnectionInstanceId)
+        => !string.IsNullOrWhiteSpace(connectionState?.ConnectionInstanceId)
+            ? connectionState.ConnectionInstanceId
+            : fallbackConnectionInstanceId;
+}
