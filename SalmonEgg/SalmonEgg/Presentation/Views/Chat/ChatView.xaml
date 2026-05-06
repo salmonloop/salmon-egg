@@ -168,10 +168,7 @@
                                   MinWidth="0"
                                   Loaded="OnMessagesListLoaded"
                                   Unloaded="OnMessagesListUnloaded"
-                                  PointerPressed="OnMessagesListPointerPressed"
                                   PointerReleased="OnMessagesListPointerReleased"
-                                  PointerWheelChanged="OnMessagesListPointerWheelChanged"
-                                  KeyDown="OnMessagesListKeyDown"
                                   LayoutUpdated="OnMessagesListLayoutUpdated">
                             <ListView.ItemContainerStyle>
                                 <Style TargetType="ListViewItem">

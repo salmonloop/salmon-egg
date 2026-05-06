@@ -39,23 +39,29 @@ namespace SalmonEgg.Presentation.Views.Chat
         private bool _resumeViewportCoordinatorAfterOverlayPending;
         private bool _scrollToBottomScheduled;
         private int _scrollScheduleGeneration;
+        private int _scheduledScrollRequestVersion;
         private int _activeTranscriptScrollGeneration = -1;
         private TranscriptProjectionRestoreToken? _pendingRestoreToken;
         private string? _pendingRestoreConversationId;
         private int _pendingRestoreGeneration = -1;
         private int _pendingRestoreAttemptCount;
+        private int _pendingRestoreResolvedIndex = -1;
         private int _pendingRestoreRequestedMaterializationIndex = -1;
         private double _pendingRestoreRequestedVerticalOffset = double.NaN;
         private string _transcriptViewportAutomationState = "inactive";
         private ObservableCollection<ChatMessageViewModel>? _trackedMessageHistory;
         private long _messagesListViewportTokenCallback;
         private readonly Microsoft.UI.Xaml.Input.KeyEventHandler _messagesListHandledKeyDownHandler;
+        private readonly PointerEventHandler _messagesListHandledPointerPressedHandler;
+        private readonly PointerEventHandler _messagesListHandledPointerWheelChangedHandler;
 
         public ChatView()
         {
             ShellViewModel = App.ServiceProvider.GetRequiredService<ChatShellViewModel>();
             NavigationCacheMode = NavigationCacheMode.Required;
             _messagesListHandledKeyDownHandler = OnMessagesListKeyDown;
+            _messagesListHandledPointerPressedHandler = OnMessagesListPointerPressed;
+            _messagesListHandledPointerWheelChangedHandler = OnMessagesListPointerWheelChanged;
 
             this.InitializeComponent();
 
@@ -194,6 +200,8 @@ namespace SalmonEgg.Presentation.Views.Chat
         private void OnMessagesListLoaded(object sender, RoutedEventArgs e)
         {
             MessagesList?.AddHandler(UIElement.KeyDownEvent, _messagesListHandledKeyDownHandler, true);
+            MessagesList?.AddHandler(UIElement.PointerPressedEvent, _messagesListHandledPointerPressedHandler, true);
+            MessagesList?.AddHandler(UIElement.PointerWheelChangedEvent, _messagesListHandledPointerWheelChangedHandler, true);
             RegisterViewportMonitor();
             ResumeViewportCoordinatorAfterOverlayIfNeeded();
             BeginLayoutLoadingIfPendingMessages();
@@ -206,6 +214,8 @@ namespace SalmonEgg.Presentation.Views.Chat
         private void OnMessagesListUnloaded(object sender, RoutedEventArgs e)
         {
             MessagesList?.RemoveHandler(UIElement.KeyDownEvent, _messagesListHandledKeyDownHandler);
+            MessagesList?.RemoveHandler(UIElement.PointerPressedEvent, _messagesListHandledPointerPressedHandler);
+            MessagesList?.RemoveHandler(UIElement.PointerWheelChangedEvent, _messagesListHandledPointerWheelChangedHandler);
             UnregisterViewportMonitor();
             UpdateTranscriptViewportAutomationState();
         }
@@ -276,6 +286,11 @@ namespace SalmonEgg.Presentation.Views.Chat
                 _pointerScrollReleasePending = false;
                 FocusTranscriptScroller();
                 return;
+            }
+
+            if (_pendingRestoreToken is not null)
+            {
+                AbandonPendingProjectionRestore("UserInterrupted");
             }
 
             _pointerScrollIntentPending = true;
@@ -545,15 +560,22 @@ namespace SalmonEgg.Presentation.Views.Chat
                 }
             }
 
-            if (_pointerScrollIntentPending && !fact.IsProgrammaticScrollInFlight)
+            if (_pointerScrollIntentPending)
             {
                 if (!fact.IsAtBottom)
                 {
+                    if (fact.IsProgrammaticScrollInFlight)
+                    {
+                        StopInitialScrollForManualInteraction();
+                    }
+
                     _pointerScrollIntentPending = false;
                     _pointerScrollReleasePending = false;
                     RegisterUserViewportDetachment();
+                    return;
                 }
-                else if (_pointerScrollReleasePending)
+                else if (!fact.IsProgrammaticScrollInFlight
+                    && _pointerScrollReleasePending)
                 {
                     _pointerScrollIntentPending = false;
                     _pointerScrollReleasePending = false;
@@ -642,6 +664,7 @@ namespace SalmonEgg.Presentation.Views.Chat
             _pendingRestoreConversationId = token.ConversationId;
             _pendingRestoreGeneration = generation;
             _pendingRestoreAttemptCount = 0;
+            _pendingRestoreResolvedIndex = -1;
             _suspendAutoScrollTracking = true;
             _scrollToBottomScheduled = false;
             TryApplyPendingProjectionRestore();
@@ -663,7 +686,7 @@ namespace SalmonEgg.Presentation.Views.Chat
                 return;
             }
 
-            var index = ResolveProjectionRestoreIndex(token);
+            var index = ResolvePendingProjectionRestoreIndex(token);
             if (index < 0 || index >= ViewModel.MessageHistory.Count)
             {
                 ReportPendingProjectionRestoreUnavailable("ProjectionItemMissing");
@@ -735,6 +758,22 @@ namespace SalmonEgg.Presentation.Views.Chat
             scrollViewer.ChangeView(null, targetVerticalOffset, null, true);
         }
 
+        private int ResolvePendingProjectionRestoreIndex(TranscriptProjectionRestoreToken token)
+        {
+            if (_pendingRestoreResolvedIndex >= 0
+                && _pendingRestoreResolvedIndex < ViewModel.MessageHistory.Count
+                && string.Equals(
+                    ViewModel.MessageHistory[_pendingRestoreResolvedIndex].ProjectionItemKey,
+                    token.ProjectionItemKey,
+                    StringComparison.Ordinal))
+            {
+                return _pendingRestoreResolvedIndex;
+            }
+
+            _pendingRestoreResolvedIndex = ResolveProjectionRestoreIndex(token);
+            return _pendingRestoreResolvedIndex;
+        }
+
         private void ConfirmPendingProjectionRestore(TranscriptProjectionRestoreToken token)
         {
             var generation = _pendingRestoreGeneration;
@@ -782,6 +821,7 @@ namespace SalmonEgg.Presentation.Views.Chat
             _pendingRestoreConversationId = null;
             _pendingRestoreGeneration = -1;
             _pendingRestoreAttemptCount = 0;
+            _pendingRestoreResolvedIndex = -1;
             _pendingRestoreRequestedMaterializationIndex = -1;
             _pendingRestoreRequestedVerticalOffset = double.NaN;
         }
@@ -802,6 +842,7 @@ namespace SalmonEgg.Presentation.Views.Chat
             }
 
             var scheduleGeneration = _scrollScheduleGeneration;
+            var scheduledRequestVersion = _scheduledScrollRequestVersion;
             var scheduledConversationId = ViewModel.CurrentSessionId;
             _scrollToBottomScheduled = true;
             if (!DispatcherQueue.TryEnqueue(() =>
@@ -809,6 +850,7 @@ namespace SalmonEgg.Presentation.Views.Chat
                     _scrollToBottomScheduled = false;
                     if (!_isViewLoaded
                         || scheduleGeneration != _scrollScheduleGeneration
+                        || scheduledRequestVersion != _scheduledScrollRequestVersion
                         || !_viewportCoordinator.IsAutoFollowAttached
                         || !ViewModel.IsSessionActive
                         || ViewModel.MessageHistory.Count <= 0
@@ -1128,6 +1170,7 @@ namespace SalmonEgg.Presentation.Views.Chat
         {
             _suspendAutoScrollTracking = false;
             _scrollToBottomScheduled = false;
+            unchecked { _scheduledScrollRequestVersion++; }
 
             if (!_transcriptScrollSettler.HasPendingWork)
             {
@@ -1156,6 +1199,7 @@ namespace SalmonEgg.Presentation.Views.Chat
             _activeTranscriptScrollGeneration = -1;
             _suspendAutoScrollTracking = false;
             _scrollToBottomScheduled = false;
+            unchecked { _scheduledScrollRequestVersion++; }
             _attachToBottomIntentPending = false;
             _pointerScrollIntentPending = false;
             _pointerScrollReleasePending = false;

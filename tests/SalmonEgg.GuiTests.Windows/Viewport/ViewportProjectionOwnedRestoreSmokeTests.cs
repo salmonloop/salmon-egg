@@ -8,6 +8,61 @@ namespace SalmonEgg.GuiTests.Windows;
 public sealed class ViewportProjectionOwnedRestoreSmokeTests
 {
     [SkippableFact]
+    public void RemoteSession_WheelOnVisibleMessageContent_DetachesViewportFromBottom()
+    {
+        var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
+        Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", "1500");
+
+        try
+        {
+            using var appData = GuiAppDataScope.CreateDeterministicSlowRemoteReplayData(
+                cachedMessageCount: 1,
+                replayMessageCount: 24,
+                remoteConversationCount: 2);
+            using var session = WindowsGuiAppSession.LaunchFresh();
+
+            var firstSession = session.FindByAutomationId("MainNav.Session.gui-remote-conversation-01", TimeSpan.FromSeconds(15));
+            session.ActivateElement(firstSession);
+
+            Assert.True(
+                session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(30)),
+                "Remote session loading overlay did not disappear after hydration should have completed.");
+            Assert.True(
+                WaitForViewportState(session, "bottom", TimeSpan.FromSeconds(10)),
+                $"Transcript viewport did not settle to bottom before wheel detach. State='{session.TryGetElementName("ChatView.TranscriptViewportState", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}'.");
+
+            var messagesList = session.FindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(5));
+            var visibleContent = session.TryFindVisibleText("GUI Remote Session 01 replay 024", messagesList, TimeSpan.FromMilliseconds(400))
+                ?? session.TryFindVisibleText("GUI Remote Session 01 replay 022", messagesList, TimeSpan.FromMilliseconds(400))
+                ?? session.TryFindVisibleText("GUI Remote Session 01 replay 020", messagesList, TimeSpan.FromMilliseconds(400));
+
+            Assert.NotNull(visibleContent);
+
+            session.BringMainWindowToFront();
+            session.ClickElement(visibleContent!);
+
+            for (var attempt = 0; attempt < 6; attempt++)
+            {
+                Thread.Sleep(100);
+                session.ScrollWheel(120);
+                Thread.Sleep(180);
+                if (string.Equals(session.TryGetElementName("ChatView.TranscriptViewportState", TimeSpan.FromMilliseconds(200)), "not_bottom", StringComparison.OrdinalIgnoreCase))
+                {
+                    break;
+                }
+            }
+
+            Assert.True(
+                WaitForViewportState(session, "not_bottom", TimeSpan.FromSeconds(3)),
+                $"Transcript viewport stayed locked to bottom after wheel input on visible message content. State='{session.TryGetElementName("ChatView.TranscriptViewportState", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}'. Debug='{session.TryGetElementName("ChatView.TranscriptViewportDebug", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}'.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", previousSlowLoadDelay);
+        }
+    }
+
+    [SkippableFact]
     public void RemoteSession_DetachedWarmReturn_RestoresFirstVisibleReplayAnchorWithoutBottomReclaim()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");

@@ -208,6 +208,27 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void MiniChatViewCodeBehind_RegistersPointerViewportInputThroughHandledEventsPath()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs");
+        var loadSection = ExtractSection(
+            code,
+            "private void OnMessagesListLoaded",
+            "private void OnMessagesListUnloaded");
+        var unloadSection = ExtractSection(
+            code,
+            "private void OnMessagesListUnloaded",
+            "private void OnMessagesListLayoutUpdated");
+
+        Assert.Contains("MessagesList?.AddHandler(UIElement.KeyDownEvent, _messagesListHandledKeyDownHandler, true);", loadSection, StringComparison.Ordinal);
+        Assert.Contains("MessagesList?.AddHandler(UIElement.PointerPressedEvent, _messagesListHandledPointerPressedHandler, true);", loadSection, StringComparison.Ordinal);
+        Assert.Contains("MessagesList?.AddHandler(UIElement.PointerWheelChangedEvent, _messagesListHandledPointerWheelChangedHandler, true);", loadSection, StringComparison.Ordinal);
+        Assert.Contains("MessagesList?.RemoveHandler(UIElement.KeyDownEvent, _messagesListHandledKeyDownHandler);", unloadSection, StringComparison.Ordinal);
+        Assert.Contains("MessagesList?.RemoveHandler(UIElement.PointerPressedEvent, _messagesListHandledPointerPressedHandler);", unloadSection, StringComparison.Ordinal);
+        Assert.Contains("MessagesList?.RemoveHandler(UIElement.PointerWheelChangedEvent, _messagesListHandledPointerWheelChangedHandler);", unloadSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MiniChatView_UsesProjectionOwnedRestoreCommandForDetachedWarmReturn()
     {
         var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs");
@@ -610,9 +631,9 @@ public sealed class XamlComplianceTests
         Assert.Contains("x:Load=\"{x:Bind ViewModel.ShouldLoadTranscriptSurface, Mode=OneWay}\"", xaml);
         Assert.Contains("Unloaded=\"OnMessagesListUnloaded\"", xaml);
         Assert.Contains("private void OnMessagesListUnloaded", codeBehind);
-        Assert.Contains("PointerPressed=\"OnMessagesListPointerPressed\"", xaml);
-        Assert.Contains("PointerWheelChanged=\"OnMessagesListPointerWheelChanged\"", xaml);
-        Assert.Contains("KeyDown=\"OnMessagesListKeyDown\"", xaml);
+        Assert.DoesNotContain("PointerPressed=\"OnMessagesListPointerPressed\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("PointerWheelChanged=\"OnMessagesListPointerWheelChanged\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("KeyDown=\"OnMessagesListKeyDown\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("FindScrollViewer(", codeBehind, StringComparison.Ordinal);
         Assert.DoesNotContain("VisualTreeHelper.", codeBehind, StringComparison.Ordinal);
     }
@@ -625,9 +646,9 @@ public sealed class XamlComplianceTests
 
         Assert.Contains("Unloaded=\"OnMessagesListUnloaded\"", xaml);
         Assert.Contains("private void OnMessagesListUnloaded", codeBehind);
-        Assert.Contains("PointerPressed=\"OnMessagesListPointerPressed\"", xaml);
-        Assert.Contains("PointerWheelChanged=\"OnMessagesListPointerWheelChanged\"", xaml);
-        Assert.Contains("KeyDown=\"OnMessagesListKeyDown\"", xaml);
+        Assert.DoesNotContain("PointerPressed=\"OnMessagesListPointerPressed\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("PointerWheelChanged=\"OnMessagesListPointerWheelChanged\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("KeyDown=\"OnMessagesListKeyDown\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("FindScrollViewer(", codeBehind, StringComparison.Ordinal);
         Assert.DoesNotContain("VisualTreeHelper.", codeBehind, StringComparison.Ordinal);
     }

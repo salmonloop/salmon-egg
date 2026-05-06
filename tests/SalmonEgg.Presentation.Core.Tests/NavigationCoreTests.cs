@@ -214,6 +214,27 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
+    public void ChatViewCodeBehind_RegistersPointerViewportInputThroughHandledEventsPath()
+    {
+        var code = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
+        var loadSection = ExtractSection(
+            code,
+            "private void OnMessagesListLoaded",
+            "private void OnMessagesListUnloaded");
+        var unloadSection = ExtractSection(
+            code,
+            "private void OnMessagesListUnloaded",
+            "private void OnMessagesListLayoutUpdated");
+
+        Assert.Contains("MessagesList?.AddHandler(UIElement.KeyDownEvent, _messagesListHandledKeyDownHandler, true);", loadSection, StringComparison.Ordinal);
+        Assert.Contains("MessagesList?.AddHandler(UIElement.PointerPressedEvent, _messagesListHandledPointerPressedHandler, true);", loadSection, StringComparison.Ordinal);
+        Assert.Contains("MessagesList?.AddHandler(UIElement.PointerWheelChangedEvent, _messagesListHandledPointerWheelChangedHandler, true);", loadSection, StringComparison.Ordinal);
+        Assert.Contains("MessagesList?.RemoveHandler(UIElement.KeyDownEvent, _messagesListHandledKeyDownHandler);", unloadSection, StringComparison.Ordinal);
+        Assert.Contains("MessagesList?.RemoveHandler(UIElement.PointerPressedEvent, _messagesListHandledPointerPressedHandler);", unloadSection, StringComparison.Ordinal);
+        Assert.Contains("MessagesList?.RemoveHandler(UIElement.PointerWheelChangedEvent, _messagesListHandledPointerWheelChangedHandler);", unloadSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void NavigationSelectionProjector_DoesNotSwapLeafSelectionForAncestorOnClosedPane()
     {
         var code = LoadFile(@"src\SalmonEgg.Presentation.Core\Services\NavigationSelectionProjector.cs");
@@ -463,10 +484,11 @@ public sealed class NavigationCoreTests
         var code = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
         var pointerPendingSection = ExtractSection(
             code,
-            "if (_pointerScrollIntentPending && !fact.IsProgrammaticScrollInFlight)",
+            "if (_pointerScrollIntentPending)",
             "ApplyViewportCommand(_viewportCoordinator.Handle(new TranscriptViewportEvent.ViewportFactChanged(");
 
         Assert.Contains("RegisterUserViewportDetachment();", pointerPendingSection, StringComparison.Ordinal);
+        Assert.Contains("StopInitialScrollForManualInteraction();", pointerPendingSection, StringComparison.Ordinal);
         Assert.DoesNotContain("new TranscriptViewportEvent.UserIntentScroll(", pointerPendingSection, StringComparison.Ordinal);
     }
 
