@@ -1411,6 +1411,9 @@ public sealed class ChatSkeletonSmokeTests
             }
 
             session.BringMainWindowToFront();
+            var focusAnchor = session.TryFindVisibleText(latestReplayText, messagesList, TimeSpan.FromMilliseconds(400))
+                ?? session.TryFindVisibleText("GUI Remote Session 01 replay 022", messagesList, TimeSpan.FromMilliseconds(400))
+                ?? session.TryFindVisibleText("GUI Remote Session 01 replay 020", messagesList, TimeSpan.FromMilliseconds(400));
             var focusPrimed = false;
             for (var attempt = 0; attempt < 6; attempt++)
             {
@@ -1422,7 +1425,7 @@ public sealed class ChatSkeletonSmokeTests
                     break;
                 }
 
-                session.ClickElement(messagesList);
+                session.ClickElement(focusAnchor ?? messagesList);
                 Thread.Sleep(150);
                 if (session.IsFocusWithinAutomationId("ChatView.MessagesList"))
                 {

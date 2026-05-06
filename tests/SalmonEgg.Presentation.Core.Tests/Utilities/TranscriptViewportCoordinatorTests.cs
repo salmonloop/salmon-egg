@@ -5,128 +5,98 @@ namespace SalmonEgg.Presentation.Core.Tests.Utilities;
 public sealed class TranscriptViewportCoordinatorTests
 {
     [Fact]
-    public void NonBottomWithoutUserIntent_DoesNotDetachAutoFollow()
+    public void WarmReturn_DetachedConversationWithPendingToken_WaitsForProjectionReady()
     {
         var sut = new TranscriptViewportCoordinator();
-        sut.Handle(new TranscriptViewportEvent.SessionActivated("conv-1", generation: 1));
-        sut.Handle(new TranscriptViewportEvent.TranscriptAppended("conv-1", generation: 1, addedCount: 20));
+        var token = new TranscriptProjectionRestoreToken(
+            ConversationId: "conv-a",
+            ProjectionEpoch: 7,
+            ProjectionItemKey: "msg:agent-0042",
+            OffsetHint: 18d);
 
-        var command = sut.Handle(new TranscriptViewportEvent.ViewportFactChanged(
-            "conv-1",
-            generation: 1,
-            new TranscriptViewportFact(
-                HasItems: true,
-                IsReady: true,
-                IsAtBottom: false,
-                IsProgrammaticScrollInFlight: false)));
+        sut.Handle(new TranscriptViewportEvent.SessionActivated("conv-a", 1, TranscriptViewportActivationKind.ColdEnter));
+        sut.Handle(new TranscriptViewportEvent.UserDetached("conv-a", 1, token));
 
-        Assert.Equal(TranscriptViewportState.Settling, sut.State);
-        Assert.True(sut.IsAutoFollowAttached);
-        Assert.Equal(TranscriptViewportCommandKind.IssueScrollToBottom, command.Kind);
-    }
+        var command = sut.Handle(new TranscriptViewportEvent.SessionActivated("conv-a", 2, TranscriptViewportActivationKind.WarmReturn));
 
-    [Fact]
-    public void UserIntentScroll_DetachesAutoFollow()
-    {
-        var sut = new TranscriptViewportCoordinator();
-        sut.Handle(new TranscriptViewportEvent.SessionActivated("conv-1", generation: 1));
-
-        var command = sut.Handle(new TranscriptViewportEvent.UserIntentScroll("conv-1", generation: 1));
-
+        Assert.Equal(TranscriptViewportCommandKind.None, command.Kind);
         Assert.Equal(TranscriptViewportState.DetachedByUser, sut.State);
         Assert.False(sut.IsAutoFollowAttached);
-        Assert.Equal(TranscriptViewportCommandKind.MarkAutoFollowDetached, command.Kind);
     }
 
     [Fact]
-    public void SessionActivated_ThenReadyBottom_TransitionsToFollowing_AndIssuesAttach()
+    public void ProjectionReady_DispatchesRequestRestoreForPendingDetachedConversation()
     {
         var sut = new TranscriptViewportCoordinator();
-        sut.Handle(new TranscriptViewportEvent.SessionActivated("conv-1", 1));
+        var token = new TranscriptProjectionRestoreToken("conv-a", 7, "msg:agent-0042", 18d);
 
-        var command = sut.Handle(new TranscriptViewportEvent.ViewportFactChanged(
-            "conv-1",
-            1,
-            new TranscriptViewportFact(
-                HasItems: true,
-                IsReady: true,
-                IsAtBottom: true,
-                IsProgrammaticScrollInFlight: false)));
+        sut.Handle(new TranscriptViewportEvent.SessionActivated("conv-a", 1, TranscriptViewportActivationKind.ColdEnter));
+        sut.Handle(new TranscriptViewportEvent.UserDetached("conv-a", 1, token));
+        sut.Handle(new TranscriptViewportEvent.SessionActivated("conv-a", 2, TranscriptViewportActivationKind.WarmReturn));
 
-        Assert.Equal(TranscriptViewportState.Following, sut.State);
-        Assert.Equal(TranscriptViewportCommandKind.MarkAutoFollowAttached, command.Kind);
+        var command = sut.Handle(new TranscriptViewportEvent.ProjectionReady("conv-a", 2, 7));
+
+        Assert.Equal(TranscriptViewportCommandKind.RequestRestore, command.Kind);
+        Assert.Equal(token, command.RestoreToken);
+        Assert.Equal(TranscriptViewportState.DetachedRestoring, sut.State);
+        Assert.False(sut.IsAutoFollowAttached);
+        Assert.Equal(nameof(TranscriptViewportEvent.ProjectionReady), command.Transition?.EventName);
     }
 
     [Fact]
-    public void DetachedByUser_DoesNotReattachUntilViewportLeavesAndReturnsToBottom()
+    public void RestoreConfirmed_ReturnsConversationToDetachedStateAfterRestore()
     {
         var sut = new TranscriptViewportCoordinator();
-        sut.Handle(new TranscriptViewportEvent.SessionActivated("conv-1", 1));
-        sut.Handle(new TranscriptViewportEvent.UserIntentScroll("conv-1", 1));
+        var token = new TranscriptProjectionRestoreToken("conv-a", 7, "msg:agent-0042", 18d);
 
-        var stillDetached = sut.Handle(new TranscriptViewportEvent.ViewportFactChanged(
-            "conv-1",
-            1,
-            new TranscriptViewportFact(
-                HasItems: true,
-                IsReady: true,
-                IsAtBottom: true,
-                IsProgrammaticScrollInFlight: false)));
+        sut.Handle(new TranscriptViewportEvent.SessionActivated("conv-a", 1, TranscriptViewportActivationKind.ColdEnter));
+        sut.Handle(new TranscriptViewportEvent.UserDetached("conv-a", 1, token));
+        sut.Handle(new TranscriptViewportEvent.SessionActivated("conv-a", 2, TranscriptViewportActivationKind.WarmReturn));
+        sut.Handle(new TranscriptViewportEvent.ProjectionReady("conv-a", 2, 7));
 
-        var awayFromBottom = sut.Handle(new TranscriptViewportEvent.ViewportFactChanged(
-            "conv-1",
-            1,
-            new TranscriptViewportFact(
-                HasItems: true,
-                IsReady: true,
-                IsAtBottom: false,
-                IsProgrammaticScrollInFlight: false)));
-
-        var returnedToBottom = sut.Handle(new TranscriptViewportEvent.ViewportFactChanged(
-            "conv-1",
-            1,
-            new TranscriptViewportFact(
-                HasItems: true,
-                IsReady: true,
-                IsAtBottom: true,
-                IsProgrammaticScrollInFlight: false)));
-
-        Assert.Equal(TranscriptViewportCommandKind.None, stillDetached.Kind);
-        Assert.Equal(TranscriptViewportCommandKind.None, awayFromBottom.Kind);
-        Assert.Equal(TranscriptViewportCommandKind.MarkAutoFollowAttached, returnedToBottom.Kind);
-        Assert.Equal(TranscriptViewportState.Following, sut.State);
-        Assert.True(sut.IsAutoFollowAttached);
-    }
-
-    [Fact]
-    public void StaleGenerationEvent_IsIgnored()
-    {
-        var sut = new TranscriptViewportCoordinator();
-        sut.Handle(new TranscriptViewportEvent.SessionActivated("conv-1", 3));
-
-        var command = sut.Handle(new TranscriptViewportEvent.UserIntentScroll("conv-1", 2));
+        var command = sut.Handle(new TranscriptViewportEvent.RestoreConfirmed("conv-a", 2, token));
 
         Assert.Equal(TranscriptViewportCommandKind.None, command.Kind);
-        Assert.Equal(TranscriptViewportState.Settling, sut.State);
-        Assert.True(sut.IsAutoFollowAttached);
+        Assert.Equal(TranscriptViewportState.DetachedByUser, sut.State);
+        Assert.False(sut.IsAutoFollowAttached);
+        Assert.Equal(nameof(TranscriptViewportEvent.RestoreConfirmed), sut.LastTransition?.EventName);
     }
 
     [Fact]
-    public void DifferentConversationEvent_IsIgnored()
+    public void RestoreUnavailable_LeavesConversationDetachedWithoutBottomRecovery()
     {
         var sut = new TranscriptViewportCoordinator();
-        sut.Handle(new TranscriptViewportEvent.SessionActivated("conv-1", 3));
+        var token = new TranscriptProjectionRestoreToken("conv-a", 7, "msg:agent-0042", 18d);
 
-        var command = sut.Handle(new TranscriptViewportEvent.ViewportFactChanged(
-            "conv-2",
-            3,
-            new TranscriptViewportFact(
-                HasItems: true,
-                IsReady: true,
-                IsAtBottom: false,
-                IsProgrammaticScrollInFlight: false)));
+        sut.Handle(new TranscriptViewportEvent.SessionActivated("conv-a", 1, TranscriptViewportActivationKind.ColdEnter));
+        sut.Handle(new TranscriptViewportEvent.UserDetached("conv-a", 1, token));
+        sut.Handle(new TranscriptViewportEvent.SessionActivated("conv-a", 2, TranscriptViewportActivationKind.WarmReturn));
+        sut.Handle(new TranscriptViewportEvent.ProjectionReady("conv-a", 2, 7));
+
+        var command = sut.Handle(new TranscriptViewportEvent.RestoreUnavailable("conv-a", 2, "ItemNotMaterialized"));
 
         Assert.Equal(TranscriptViewportCommandKind.None, command.Kind);
-        Assert.Equal(TranscriptViewportState.Settling, sut.State);
+        Assert.Equal(TranscriptViewportState.DetachedByUser, sut.State);
+        Assert.False(sut.IsAutoFollowAttached);
+        Assert.Equal(nameof(TranscriptViewportEvent.RestoreUnavailable), sut.LastTransition?.EventName);
+    }
+
+    [Fact]
+    public void RestoreAbandoned_LeavesConversationDetachedWithoutBottomRecovery()
+    {
+        var sut = new TranscriptViewportCoordinator();
+        var token = new TranscriptProjectionRestoreToken("conv-a", 7, "msg:agent-0042", 18d);
+
+        sut.Handle(new TranscriptViewportEvent.SessionActivated("conv-a", 1, TranscriptViewportActivationKind.ColdEnter));
+        sut.Handle(new TranscriptViewportEvent.UserDetached("conv-a", 1, token));
+        sut.Handle(new TranscriptViewportEvent.SessionActivated("conv-a", 2, TranscriptViewportActivationKind.WarmReturn));
+        sut.Handle(new TranscriptViewportEvent.ProjectionReady("conv-a", 2, 7));
+
+        var command = sut.Handle(new TranscriptViewportEvent.RestoreAbandoned("conv-a", 2, "UserInterrupted"));
+
+        Assert.Equal(TranscriptViewportCommandKind.None, command.Kind);
+        Assert.Equal(TranscriptViewportState.DetachedByUser, sut.State);
+        Assert.False(sut.IsAutoFollowAttached);
+        Assert.Equal(nameof(TranscriptViewportEvent.RestoreAbandoned), sut.LastTransition?.EventName);
     }
 }

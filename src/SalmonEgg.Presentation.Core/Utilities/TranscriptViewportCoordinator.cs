@@ -2,11 +2,11 @@ namespace SalmonEgg.Presentation.Utilities;
 
 public sealed class TranscriptViewportCoordinator
 {
-    private string? _conversationId;
-    private int _generation;
-    private bool _hasObservedDetachedViewportExit;
-    private bool _hasPendingAttachedRecovery;
-    private TranscriptViewportFact? _lastFact;
+    private readonly Dictionary<string, TranscriptViewportConversationState> _conversationStates = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, TranscriptViewportObservedFact> _lastFacts = new(StringComparer.Ordinal);
+
+    private string? _activeConversationId;
+    private int _activeGeneration;
 
     public TranscriptViewportState State { get; private set; } = TranscriptViewportState.Idle;
 
@@ -21,34 +21,87 @@ public sealed class TranscriptViewportCoordinator
         return evt switch
         {
             TranscriptViewportEvent.SessionActivated activated => HandleSessionActivated(activated),
-            _ when !MatchesContext(evt.ConversationId, evt.Generation) => None(evt, "StaleOrMismatchedContext"),
+            _ when !MatchesActiveContext(evt.ConversationId, evt.Generation) => None(evt, "StaleOrMismatchedContext"),
             TranscriptViewportEvent.ConversationContextInvalidated invalidated => HandleContextInvalidated(invalidated),
+            TranscriptViewportEvent.UserAttached attached => HandleUserAttached(attached),
+            TranscriptViewportEvent.UserDetached detached => HandleUserDetached(detached),
             TranscriptViewportEvent.UserIntentScroll userIntent => HandleUserIntentScroll(userIntent),
             TranscriptViewportEvent.TranscriptAppended appended => HandleTranscriptAppended(appended),
-            TranscriptViewportEvent.ViewportFactChanged factChanged => HandleViewportFactChanged(factChanged),
+            TranscriptViewportEvent.ViewportObserved observed => HandleViewportObserved(observed),
             _ => None(evt, "UnhandledEvent"),
         };
     }
 
     private TranscriptViewportCommand HandleSessionActivated(TranscriptViewportEvent.SessionActivated evt)
     {
-        _conversationId = evt.ConversationId;
-        _generation = evt.Generation;
-        _hasObservedDetachedViewportExit = false;
-        _hasPendingAttachedRecovery = false;
-        _lastFact = null;
+        _activeConversationId = evt.ConversationId;
+        _activeGeneration = evt.Generation;
 
-        var targetState = string.IsNullOrWhiteSpace(evt.ConversationId)
-            ? TranscriptViewportState.Idle
-            : TranscriptViewportState.Settling;
-        return Transition(evt, targetState, isAutoFollowAttached: true, TranscriptViewportCommandKind.None, "SessionActivated");
+        if (string.IsNullOrWhiteSpace(evt.ConversationId))
+        {
+            return Transition(
+                evt,
+                new TranscriptViewportConversationState(
+                    TranscriptViewportState.Idle,
+                    Anchor: null,
+                    LastKnownBottomState: true,
+                    LastActivationGeneration: evt.Generation,
+                    RestorePending: false),
+                isAutoFollowAttached: true,
+                TranscriptViewportCommandKind.None,
+                "SessionActivatedEmpty");
+        }
+
+        var existing = GetConversationStateOrDefault(evt.ConversationId, evt.Generation);
+
+        if (existing.Mode == TranscriptViewportState.DetachedByUser
+            && evt.ActivationKind is TranscriptViewportActivationKind.WarmReturn or TranscriptViewportActivationKind.OverlayResume)
+        {
+            var detachedState = existing with
+            {
+                LastActivationGeneration = evt.Generation,
+                RestorePending = true,
+            };
+
+            return Transition(
+                evt,
+                detachedState,
+                isAutoFollowAttached: false,
+                existing.Anchor is not null
+                    ? TranscriptViewportCommandKind.RestoreAnchor
+                    : TranscriptViewportCommandKind.None,
+                existing.Anchor is not null
+                    ? "WarmReturnRestoreAnchor"
+                    : "WarmReturnPreserveDetached",
+                existing.Anchor);
+        }
+
+        return Transition(
+            evt,
+            existing with
+            {
+                Mode = TranscriptViewportState.Settling,
+                Anchor = null,
+                LastActivationGeneration = evt.Generation,
+                RestorePending = false,
+            },
+            isAutoFollowAttached: true,
+            TranscriptViewportCommandKind.None,
+            "SessionActivated");
     }
 
     private TranscriptViewportCommand HandleContextInvalidated(TranscriptViewportEvent.ConversationContextInvalidated evt)
     {
-        _hasObservedDetachedViewportExit = false;
-        _hasPendingAttachedRecovery = false;
-        return Transition(
+        var state = GetConversationStateOrDefault(evt.ConversationId, evt.Generation) with
+        {
+            RestorePending = false,
+        };
+        StoreConversationState(evt.ConversationId, state);
+
+        _activeConversationId = null;
+        _activeGeneration = evt.Generation;
+
+        return ProjectTransientState(
             evt,
             TranscriptViewportState.Suspended,
             isAutoFollowAttached: false,
@@ -56,32 +109,86 @@ public sealed class TranscriptViewportCoordinator
             "ContextInvalidated");
     }
 
-    private TranscriptViewportCommand HandleUserIntentScroll(TranscriptViewportEvent.UserIntentScroll evt)
+    private TranscriptViewportCommand HandleUserDetached(TranscriptViewportEvent.UserDetached evt)
     {
-        _hasObservedDetachedViewportExit = false;
-        _hasPendingAttachedRecovery = false;
+        var state = new TranscriptViewportConversationState(
+            TranscriptViewportState.DetachedByUser,
+            evt.Anchor,
+            LastKnownBottomState: false,
+            evt.Generation,
+            RestorePending: false);
+
         return Transition(
             evt,
-            TranscriptViewportState.DetachedByUser,
+            state,
             isAutoFollowAttached: false,
             TranscriptViewportCommandKind.MarkAutoFollowDetached,
-            "ExplicitUserIntent");
+            "ExplicitUserDetach",
+            evt.Anchor);
+    }
+
+    private TranscriptViewportCommand HandleUserAttached(TranscriptViewportEvent.UserAttached evt)
+    {
+        var current = GetConversationStateOrDefault(evt.ConversationId, evt.Generation);
+        if (current.Mode != TranscriptViewportState.DetachedByUser)
+        {
+            return None(evt, "AttachIgnored");
+        }
+
+        return Transition(
+            evt,
+            current with
+            {
+                Mode = TranscriptViewportState.Following,
+                Anchor = null,
+                RestorePending = false,
+            },
+            isAutoFollowAttached: true,
+            TranscriptViewportCommandKind.MarkAutoFollowAttached,
+            "ExplicitUserAttach");
+    }
+
+    private TranscriptViewportCommand HandleUserIntentScroll(TranscriptViewportEvent.UserIntentScroll evt)
+    {
+        var current = GetConversationStateOrDefault(evt.ConversationId, evt.Generation);
+        var state = current with
+        {
+            Mode = TranscriptViewportState.DetachedByUser,
+            Anchor = null,
+            LastActivationGeneration = evt.Generation,
+            RestorePending = false,
+        };
+
+        return Transition(
+            evt,
+            state,
+            isAutoFollowAttached: false,
+            TranscriptViewportCommandKind.MarkAutoFollowDetached,
+            "ExplicitUserIntent",
+            current.Anchor);
     }
 
     private TranscriptViewportCommand HandleTranscriptAppended(TranscriptViewportEvent.TranscriptAppended evt)
     {
-        if (evt.AddedCount <= 0 || !IsAutoFollowAttached || State == TranscriptViewportState.Suspended)
+        var current = GetConversationStateOrDefault(evt.ConversationId, evt.Generation);
+        if (evt.AddedCount <= 0
+            || current.Mode == TranscriptViewportState.Suspended
+            || current.Mode == TranscriptViewportState.DetachedByUser)
         {
             return None(evt, "AppendIgnored");
         }
 
-        _hasPendingAttachedRecovery = true;
-
-        if (_lastFact is { HasItems: true, IsReady: true, IsAtBottom: false, IsProgrammaticScrollInFlight: false })
+        if (_lastFacts.TryGetValue(evt.ConversationId, out var observed)
+            && observed.Generation == evt.Generation
+            && observed.Fact is { HasItems: true, IsReady: true, IsAtBottom: false, IsProgrammaticScrollInFlight: false })
         {
             return Transition(
                 evt,
-                TranscriptViewportState.Settling,
+                current with
+                {
+                    Mode = TranscriptViewportState.Settling,
+                    LastActivationGeneration = evt.Generation,
+                },
                 isAutoFollowAttached: true,
                 TranscriptViewportCommandKind.IssueScrollToBottom,
                 "AttachedAppendNeedsRecovery");
@@ -90,28 +197,45 @@ public sealed class TranscriptViewportCoordinator
         return None(evt, "AppendQueuedForViewportFact");
     }
 
-    private TranscriptViewportCommand HandleViewportFactChanged(TranscriptViewportEvent.ViewportFactChanged evt)
+    private TranscriptViewportCommand HandleViewportObserved(TranscriptViewportEvent.ViewportObserved evt)
     {
-        _lastFact = evt.Fact;
+        _lastFacts[evt.ConversationId] = new TranscriptViewportObservedFact(evt.Generation, evt.Fact);
+
+        var current = GetConversationStateOrDefault(evt.ConversationId, evt.Generation) with
+        {
+            LastKnownBottomState = evt.Fact.IsAtBottom,
+            LastActivationGeneration = evt.Generation,
+        };
 
         if (!evt.Fact.HasItems)
         {
-            _hasObservedDetachedViewportExit = false;
-            _hasPendingAttachedRecovery = false;
-            return Transition(evt, TranscriptViewportState.Idle, isAutoFollowAttached: true, TranscriptViewportCommandKind.None, "NoItems");
+            return Transition(
+                evt,
+                current with
+                {
+                    Mode = TranscriptViewportState.Idle,
+                    Anchor = null,
+                    RestorePending = false,
+                },
+                isAutoFollowAttached: true,
+                TranscriptViewportCommandKind.None,
+                "NoItems");
         }
 
-        if (State == TranscriptViewportState.DetachedByUser)
+        if (current.Mode == TranscriptViewportState.DetachedByUser)
         {
-            return HandleDetachedViewportFactChanged(evt);
+            return HandleDetachedViewportObserved(evt, current);
         }
 
         if (evt.Fact.IsReady && evt.Fact.IsAtBottom)
         {
-            _hasPendingAttachedRecovery = false;
             return Transition(
                 evt,
-                TranscriptViewportState.Following,
+                current with
+                {
+                    Mode = TranscriptViewportState.Following,
+                    RestorePending = false,
+                },
                 isAutoFollowAttached: true,
                 TranscriptViewportCommandKind.MarkAutoFollowAttached,
                 "BottomConfirmed");
@@ -119,63 +243,131 @@ public sealed class TranscriptViewportCoordinator
 
         if (evt.Fact.IsProgrammaticScrollInFlight)
         {
+            StoreConversationState(evt.ConversationId, current);
             return None(evt, "ProgrammaticScrollInFlight");
         }
 
         if (!evt.Fact.IsReady)
         {
-            _hasPendingAttachedRecovery = true;
-            return Transition(evt, TranscriptViewportState.Settling, isAutoFollowAttached: true, TranscriptViewportCommandKind.None, "ViewportNotReady");
+            return Transition(
+                evt,
+                current with
+                {
+                    Mode = TranscriptViewportState.Settling,
+                },
+                isAutoFollowAttached: true,
+                TranscriptViewportCommandKind.None,
+                "ViewportNotReady");
         }
 
-        var reason = _hasPendingAttachedRecovery
-            ? "RecoverPendingAttachedBottom"
-            : "RecoverBottomWithoutUserDetach";
-        _hasPendingAttachedRecovery = true;
         return Transition(
             evt,
-            TranscriptViewportState.Settling,
+            current with
+            {
+                Mode = TranscriptViewportState.Settling,
+            },
             isAutoFollowAttached: true,
             TranscriptViewportCommandKind.IssueScrollToBottom,
-            reason);
+            "RecoverBottomWithoutUserDetach");
     }
 
-    private TranscriptViewportCommand HandleDetachedViewportFactChanged(TranscriptViewportEvent.ViewportFactChanged evt)
+    private TranscriptViewportCommand HandleDetachedViewportObserved(
+        TranscriptViewportEvent.ViewportObserved evt,
+        TranscriptViewportConversationState current)
     {
         if (evt.Fact.IsProgrammaticScrollInFlight)
         {
+            StoreConversationState(evt.ConversationId, current);
             return None(evt, "DetachedProgrammaticScrollIgnored");
+        }
+
+        if (!evt.Fact.IsReady)
+        {
+            StoreConversationState(evt.ConversationId, current);
+            return None(evt, "DetachedViewportNotReady");
+        }
+
+        if (current.RestorePending)
+        {
+            if (!evt.Fact.IsAtBottom)
+            {
+                StoreConversationState(evt.ConversationId, current with { RestorePending = false });
+                return None(evt, "DetachedRestoreStabilized");
+            }
+
+            StoreConversationState(evt.ConversationId, current);
+            return None(evt, "DetachedRestoreStillPending");
         }
 
         if (!evt.Fact.IsAtBottom)
         {
-            _hasObservedDetachedViewportExit = true;
+            StoreConversationState(evt.ConversationId, current with { RestorePending = false });
             return None(evt, "DetachedAwayFromBottom");
         }
 
-        if (!_hasObservedDetachedViewportExit)
-        {
-            return None(evt, "AwaitingDetachedViewportExit");
-        }
-
-        _hasObservedDetachedViewportExit = false;
-        _hasPendingAttachedRecovery = false;
-        return Transition(
-            evt,
-            TranscriptViewportState.Following,
-            isAutoFollowAttached: true,
-            TranscriptViewportCommandKind.MarkAutoFollowAttached,
-            "UserReturnedToBottom");
+        StoreConversationState(evt.ConversationId, current with { RestorePending = false });
+        return None(evt, "DetachedBottomPreserved");
     }
 
-    private bool MatchesContext(string conversationId, int generation)
+    private bool MatchesActiveContext(string conversationId, int generation)
     {
-        return !string.IsNullOrWhiteSpace(_conversationId)
-            && string.Equals(_conversationId, conversationId, StringComparison.Ordinal)
-            && generation == _generation;
+        return !string.IsNullOrWhiteSpace(_activeConversationId)
+            && string.Equals(_activeConversationId, conversationId, StringComparison.Ordinal)
+            && generation == _activeGeneration;
+    }
+
+    private TranscriptViewportConversationState GetConversationStateOrDefault(string conversationId, int generation)
+    {
+        if (_conversationStates.TryGetValue(conversationId, out var state))
+        {
+            return state;
+        }
+
+        return new TranscriptViewportConversationState(
+            TranscriptViewportState.Idle,
+            Anchor: null,
+            LastKnownBottomState: true,
+            LastActivationGeneration: generation,
+            RestorePending: false);
     }
 
     private TranscriptViewportCommand Transition(
+        TranscriptViewportEvent evt,
+        TranscriptViewportConversationState targetState,
+        bool isAutoFollowAttached,
+        TranscriptViewportCommandKind commandKind,
+        string reason,
+        TranscriptViewportAnchor? anchor = null)
+    {
+        var previousState = State;
+        var previousAttached = IsAutoFollowAttached;
+
+        StoreConversationState(evt.ConversationId, targetState);
+        ApplyPublicState(targetState.Mode, isAutoFollowAttached);
+
+        TranscriptViewportTransition? transition = null;
+        if (previousState != State || previousAttached != IsAutoFollowAttached)
+        {
+            transition = new TranscriptViewportTransition(
+                previousState,
+                State,
+                evt.ConversationId,
+                evt.Generation,
+                evt.GetType().Name,
+                reason);
+            LastTransition = transition;
+        }
+
+        if (commandKind is TranscriptViewportCommandKind.MarkAutoFollowAttached or TranscriptViewportCommandKind.MarkAutoFollowDetached
+            && transition is null)
+        {
+            commandKind = TranscriptViewportCommandKind.None;
+        }
+
+        return new TranscriptViewportCommand(commandKind, evt.ConversationId, evt.Generation, reason, transition, anchor);
+    }
+
+    private TranscriptViewportCommand ProjectTransientState(
         TranscriptViewportEvent evt,
         TranscriptViewportState targetState,
         bool isAutoFollowAttached,
@@ -184,15 +376,15 @@ public sealed class TranscriptViewportCoordinator
     {
         var previousState = State;
         var previousAttached = IsAutoFollowAttached;
-        State = targetState;
-        IsAutoFollowAttached = isAutoFollowAttached;
+
+        ApplyPublicState(targetState, isAutoFollowAttached);
 
         TranscriptViewportTransition? transition = null;
-        if (previousState != targetState || previousAttached != isAutoFollowAttached)
+        if (previousState != State || previousAttached != IsAutoFollowAttached)
         {
             transition = new TranscriptViewportTransition(
                 previousState,
-                targetState,
+                State,
                 evt.ConversationId,
                 evt.Generation,
                 evt.GetType().Name,
@@ -209,8 +401,24 @@ public sealed class TranscriptViewportCoordinator
         return new TranscriptViewportCommand(commandKind, evt.ConversationId, evt.Generation, reason, transition);
     }
 
+    private void StoreConversationState(string conversationId, TranscriptViewportConversationState state)
+    {
+        if (!string.IsNullOrWhiteSpace(conversationId))
+        {
+            _conversationStates[conversationId] = state;
+        }
+    }
+
+    private void ApplyPublicState(TranscriptViewportState state, bool isAutoFollowAttached)
+    {
+        State = state;
+        IsAutoFollowAttached = isAutoFollowAttached;
+    }
+
     private static TranscriptViewportCommand None(TranscriptViewportEvent evt, string reason)
     {
         return new TranscriptViewportCommand(TranscriptViewportCommandKind.None, evt.ConversationId, evt.Generation, reason);
     }
+
+    private readonly record struct TranscriptViewportObservedFact(int Generation, TranscriptViewportFact Fact);
 }

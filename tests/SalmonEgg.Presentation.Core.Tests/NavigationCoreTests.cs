@@ -422,11 +422,66 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
-    public void ChatViewCodeBehind_DoesNotForceSynchronousListLayoutDuringTranscriptSettle()
+    public void ChatViewCodeBehind_DoesNotCallMessagesListUpdateLayoutDuringTranscriptSettle()
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
 
         Assert.DoesNotContain("MessagesList.UpdateLayout()", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatViewCodeBehind_UsesRestoreAnchorCommandAndDoesNotFallbackToBottomOnRestoreFailure()
+    {
+        var code = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
+        var restoreAnchorSection = ExtractSection(
+            code,
+            "case TranscriptViewportCommandKind.RestoreAnchor:",
+            "case TranscriptViewportCommandKind.MarkAutoFollowDetached:");
+
+        Assert.Contains("case TranscriptViewportCommandKind.RestoreAnchor:", code, StringComparison.Ordinal);
+        Assert.Contains("TryRestoreViewportAnchor(anchor);", restoreAnchorSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("ScheduleScrollToBottom();", restoreAnchorSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestScrollToBottom();", restoreAnchorSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatViewCodeBehind_UsesUserDetachedEventWhenAnchorCaptureSucceeds()
+    {
+        var code = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
+        var detachSection = ExtractSection(
+            code,
+            "private void RegisterUserViewportDetachment()",
+            "private TranscriptViewportAnchor? TryCaptureViewportAnchor()");
+
+        Assert.Contains("new TranscriptViewportEvent.UserDetached(", detachSection, StringComparison.Ordinal);
+        Assert.Contains("new TranscriptViewportEvent.UserIntentScroll(", detachSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatViewCodeBehind_PointerPendingDetachUsesSharedDetachedRoute()
+    {
+        var code = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
+        var pointerPendingSection = ExtractSection(
+            code,
+            "if (_pointerScrollIntentPending && !fact.IsProgrammaticScrollInFlight)",
+            "ApplyViewportCommand(_viewportCoordinator.Handle(new TranscriptViewportEvent.ViewportFactChanged(");
+
+        Assert.Contains("RegisterUserViewportDetachment();", pointerPendingSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("new TranscriptViewportEvent.UserIntentScroll(", pointerPendingSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatViewCodeBehind_WarmAndOverlayResumeActivateCoordinatorInsteadOfRedetach()
+    {
+        var code = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
+        var overlayResumeSection = ExtractSection(
+            code,
+            "private void ResumeViewportCoordinatorAfterOverlayIfNeeded()",
+            "private void RestoreViewportForWarmResume()");
+
+        Assert.Contains("ActivateViewportCoordinatorForCurrentSession(TranscriptViewportActivationKind.WarmReturn);", code, StringComparison.Ordinal);
+        Assert.Contains("ActivateViewportCoordinatorForCurrentSession(TranscriptViewportActivationKind.OverlayResume);", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("new TranscriptViewportEvent.UserIntentScroll(", overlayResumeSection, StringComparison.Ordinal);
     }
 
     [Fact]

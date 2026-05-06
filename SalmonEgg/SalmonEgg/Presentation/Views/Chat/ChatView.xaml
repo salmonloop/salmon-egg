@@ -59,15 +59,30 @@
     </Page.Resources>
 
     <Grid>
-        <TextBlock x:Name="TranscriptViewportStateProbe"
-                   AutomationProperties.AutomationId="ChatView.TranscriptViewportState"
-                   Width="1"
-                   Height="1"
-                   Opacity="0.01"
-                   IsHitTestVisible="False"
-                   IsTabStop="False"
-                   HorizontalAlignment="Left"
-                   VerticalAlignment="Top"/>
+        <TextBox x:Name="TranscriptViewportStateProbe"
+                 AutomationProperties.AutomationId="ChatView.TranscriptViewportState"
+                 AutomationProperties.Name="inactive"
+                 Text="inactive"
+                 Width="1"
+                 Height="1"
+                 Opacity="0.01"
+                 IsHitTestVisible="False"
+                 IsTabStop="False"
+                 IsReadOnly="True"
+                 HorizontalAlignment="Left"
+                 VerticalAlignment="Top"/>
+        <TextBox x:Name="TranscriptViewportDebugProbe"
+                 AutomationProperties.AutomationId="ChatView.TranscriptViewportDebug"
+                 AutomationProperties.Name="boot"
+                 Text="boot"
+                 Width="1"
+                 Height="1"
+                 Opacity="0.01"
+                 IsHitTestVisible="False"
+                 IsTabStop="False"
+                 IsReadOnly="True"
+                 HorizontalAlignment="Left"
+                 VerticalAlignment="Top"/>
 
         <!-- 已激活会话状态：对话界面 -->
         <Grid x:Name="ActiveConversationRoot"

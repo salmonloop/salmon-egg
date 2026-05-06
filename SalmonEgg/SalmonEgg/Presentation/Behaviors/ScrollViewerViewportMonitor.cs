@@ -63,7 +63,7 @@ public static class ScrollViewerViewportMonitor
 
     private static void SetIsHooked(DependencyObject obj, bool value) => obj.SetValue(IsHookedProperty, value);
 
-    private static ScrollViewer? GetAttachedScrollViewer(DependencyObject obj) => (ScrollViewer?)obj.GetValue(AttachedScrollViewerProperty);
+    public static ScrollViewer? GetAttachedScrollViewer(DependencyObject obj) => (ScrollViewer?)obj.GetValue(AttachedScrollViewerProperty);
 
     private static void SetAttachedScrollViewer(DependencyObject obj, ScrollViewer? value) => obj.SetValue(AttachedScrollViewerProperty, value);
 

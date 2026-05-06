@@ -208,6 +208,48 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void MiniChatView_UsesRestoreAnchorCommandForDetachedWarmReturn()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs");
+        var restoreAnchorSection = ExtractSection(
+            code,
+            "case TranscriptViewportCommandKind.RestoreAnchor:",
+            "case TranscriptViewportCommandKind.MarkAutoFollowDetached:");
+
+        Assert.Contains("case TranscriptViewportCommandKind.RestoreAnchor:", code, StringComparison.Ordinal);
+        Assert.Contains("TryRestoreViewportAnchor(anchor);", restoreAnchorSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("ScheduleScrollToBottom();", restoreAnchorSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestScrollToBottom();", restoreAnchorSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MiniChatView_UsesUserDetachedEventWhenAnchorCaptureSucceeds()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs");
+        var detachSection = ExtractSection(
+            code,
+            "private void RegisterUserViewportDetachment()",
+            "private TranscriptViewportAnchor? TryCaptureViewportAnchor()");
+
+        Assert.Contains("new TranscriptViewportEvent.UserDetached(", detachSection, StringComparison.Ordinal);
+        Assert.Contains("new TranscriptViewportEvent.UserIntentScroll(", detachSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MiniChatView_WarmAndOverlayResumeActivateCoordinatorInsteadOfRedetach()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs");
+        var overlayResumeSection = ExtractSection(
+            code,
+            "private void ResumeViewportCoordinatorAfterOverlayIfNeeded()",
+            "private void OnMessagesListPointerPressed");
+
+        Assert.Contains("ActivateViewportCoordinatorForCurrentSession(TranscriptViewportActivationKind.WarmReturn);", code, StringComparison.Ordinal);
+        Assert.Contains("ActivateViewportCoordinatorForCurrentSession(TranscriptViewportActivationKind.OverlayResume);", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("new TranscriptViewportEvent.UserIntentScroll(", overlayResumeSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MainPage_SearchStringsAreLocalized()
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");
@@ -779,6 +821,22 @@ public sealed class XamlComplianceTests
         var root = FindRepoRoot();
         var fullPath = Path.Combine(root, relativePath);
         return File.ReadAllText(fullPath);
+    }
+
+    private static string ExtractSection(string content, string startMarker, string? endMarker = null)
+    {
+        var start = content.IndexOf(startMarker, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"Unable to locate marker '{startMarker}'.");
+
+        var end = endMarker is null
+            ? content.Length
+            : content.IndexOf(endMarker, start, StringComparison.Ordinal);
+        if (end < 0)
+        {
+            end = content.Length;
+        }
+
+        return content.Substring(start, end - start);
     }
 
     private static string FindRepoRoot()
