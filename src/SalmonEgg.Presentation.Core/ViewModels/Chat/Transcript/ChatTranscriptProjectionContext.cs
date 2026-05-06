@@ -10,7 +10,7 @@ internal sealed class ChatTranscriptProjectionContext
 
     public required Action<ObservableCollection<ChatMessageViewModel>> SetMessageHistory { get; init; }
 
-    public required Func<ConversationMessageSnapshot, ChatMessageViewModel> FromSnapshot { get; init; }
+    public required Func<ConversationMessageSnapshot, int, ChatMessageViewModel> FromSnapshot { get; init; }
 
     public required Func<ChatMessageViewModel, ConversationMessageSnapshot, bool> MatchesSnapshot { get; init; }
 

@@ -371,9 +371,10 @@ public sealed class ChatTranscriptProjectionCoordinatorUnitTests
         {
             GetMessageHistory = getHistory,
             SetMessageHistory = setHistory,
-            FromSnapshot = snapshot => new ChatMessageViewModel
+            FromSnapshot = (snapshot, index) => new ChatMessageViewModel
             {
                 Id = snapshot.Id,
+                ProjectionItemKey = SalmonEgg.Presentation.Core.Services.Chat.TranscriptProjectionRestoreTokenProjector.CreateProjectionItemKey(snapshot, index),
                 Timestamp = snapshot.Timestamp,
                 IsOutgoing = snapshot.IsOutgoing,
                 ContentType = snapshot.ContentType,

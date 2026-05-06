@@ -1676,16 +1676,16 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
                 if (MessageHistory[i].Id != message.Id)
                 {
                     while (MessageHistory.Count > i) MessageHistory.RemoveAt(i);
-                    MessageHistory.Add(FromSnapshot(message));
+                    MessageHistory.Add(FromSnapshot(message, i));
                 }
                 else if (!MatchesSnapshot(MessageHistory[i], message))
                 {
-                    MessageHistory[i] = FromSnapshot(message);
+                    MessageHistory[i] = FromSnapshot(message, i);
                 }
             }
             else
             {
-                MessageHistory.Add(FromSnapshot(message));
+                MessageHistory.Add(FromSnapshot(message, i));
             }
         }
 
@@ -1744,12 +1744,13 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         };
     }
 
-    private static ChatMessageViewModel FromSnapshot(ConversationMessageSnapshot s)
+    private static ChatMessageViewModel FromSnapshot(ConversationMessageSnapshot s, int projectionIndex)
     {
         // Minimal, stable restoration for persisted transcripts.
         var vm = new ChatMessageViewModel
         {
             Id = string.IsNullOrWhiteSpace(s.Id) ? Guid.NewGuid().ToString() : s.Id,
+            ProjectionItemKey = TranscriptProjectionRestoreTokenProjector.CreateProjectionItemKey(s, projectionIndex),
             Timestamp = s.Timestamp.ToLocalTime(),
             IsOutgoing = s.IsOutgoing,
             ContentType = s.ContentType ?? string.Empty,

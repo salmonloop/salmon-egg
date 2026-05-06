@@ -56,6 +56,8 @@ namespace SalmonEgg.Presentation.ViewModels.Chat;
 public partial class ChatViewModel
 {
     private ProjectionRestoreReadyPublicationKey? _lastProjectionRestoreReadyKey;
+    private long _currentRestoreProjectionEpoch = -1;
+    private string? _currentRestoreProjectionConversationId;
 
     public event EventHandler<ProjectionRestoreReadyEventArgs>? ProjectionRestoreReady;
 
@@ -225,6 +227,7 @@ public partial class ChatViewModel
                 sessionChanged: false);
         }
 
+        UpdateRestoreProjectionMetadata(projection);
         PublishProjectionRestoreReady(projection);
         ShowPlanPanel = projection.ShowPlanPanel;
         CurrentPlanTitle = projection.PlanTitle;
@@ -261,6 +264,35 @@ public partial class ChatViewModel
                 projection.HydratedConversationId,
                 projection.RestoreProjection.ProjectionEpoch,
                 token));
+    }
+
+    public TranscriptProjectionRestoreToken? CreateViewportProjectionRestoreToken(
+        ChatMessageViewModel message,
+        double offsetHint)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+
+        if (string.IsNullOrWhiteSpace(CurrentSessionId)
+            || !string.Equals(CurrentSessionId, _currentRestoreProjectionConversationId, StringComparison.Ordinal)
+            || _currentRestoreProjectionEpoch < 0
+            || string.IsNullOrWhiteSpace(message.ProjectionItemKey))
+        {
+            return null;
+        }
+
+        return new TranscriptProjectionRestoreToken(
+            CurrentSessionId,
+            _currentRestoreProjectionEpoch,
+            message.ProjectionItemKey,
+            offsetHint);
+    }
+
+    private void UpdateRestoreProjectionMetadata(ChatUiProjection projection)
+    {
+        _currentRestoreProjectionConversationId = projection.HydratedConversationId;
+        _currentRestoreProjectionEpoch = projection.RestoreProjection.IsReady
+            ? projection.RestoreProjection.ProjectionEpoch
+            : -1;
     }
 
     private void ApplyConversationStatusProjection(ChatUiProjection projection)

@@ -16,6 +16,9 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
         private string _id = string.Empty;
 
         [ObservableProperty]
+        private string _projectionItemKey = string.Empty;
+
+        [ObservableProperty]
         private DateTime _timestamp;
 
         [ObservableProperty]

@@ -430,18 +430,18 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
-    public void ChatViewCodeBehind_UsesRestoreAnchorCommandAndDoesNotFallbackToBottomOnRestoreFailure()
+    public void ChatViewCodeBehind_UsesProjectionOwnedRestoreCommandAndDoesNotFallbackToBottomOnRestoreFailure()
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
-        var restoreAnchorSection = ExtractSection(
+        var restoreSection = ExtractSection(
             code,
-            "case TranscriptViewportCommandKind.RestoreAnchor:",
+            "case TranscriptViewportCommandKind.RequestRestore:",
             "case TranscriptViewportCommandKind.MarkAutoFollowDetached:");
 
-        Assert.Contains("case TranscriptViewportCommandKind.RestoreAnchor:", code, StringComparison.Ordinal);
-        Assert.Contains("TryRestoreViewportAnchor(anchor);", restoreAnchorSection, StringComparison.Ordinal);
-        Assert.DoesNotContain("ScheduleScrollToBottom();", restoreAnchorSection, StringComparison.Ordinal);
-        Assert.DoesNotContain("RequestScrollToBottom();", restoreAnchorSection, StringComparison.Ordinal);
+        Assert.Contains("case TranscriptViewportCommandKind.RequestRestore:", code, StringComparison.Ordinal);
+        Assert.Contains("QueueProjectionOwnedRestore(restoreToken, command.Generation);", restoreSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("ScheduleScrollToBottom();", restoreSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestScrollToBottom();", restoreSection, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -451,7 +451,7 @@ public sealed class NavigationCoreTests
         var detachSection = ExtractSection(
             code,
             "private void RegisterUserViewportDetachment()",
-            "private TranscriptViewportAnchor? TryCaptureViewportAnchor()");
+            "private TranscriptProjectionRestoreToken? TryCaptureProjectionRestoreToken()");
 
         Assert.Contains("new TranscriptViewportEvent.UserDetached(", detachSection, StringComparison.Ordinal);
         Assert.Contains("new TranscriptViewportEvent.UserIntentScroll(", detachSection, StringComparison.Ordinal);

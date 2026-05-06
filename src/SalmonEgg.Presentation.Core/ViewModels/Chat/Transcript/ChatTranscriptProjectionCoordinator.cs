@@ -146,16 +146,16 @@ internal sealed class ChatTranscriptProjectionCoordinator
                         history.RemoveAt(i);
                     }
 
-                    history.Add(context.FromSnapshot(message));
+                    history.Add(context.FromSnapshot(message, i));
                 }
                 else if (!context.MatchesSnapshot(history[i], message))
                 {
-                    history[i] = context.FromSnapshot(message);
+                    history[i] = context.FromSnapshot(message, i);
                 }
             }
             else
             {
-                history.Add(context.FromSnapshot(message));
+                history.Add(context.FromSnapshot(message, i));
             }
         }
 
@@ -177,7 +177,8 @@ internal sealed class ChatTranscriptProjectionCoordinator
         IImmutableList<ConversationMessageSnapshot> transcript)
     {
         var messages = transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty;
-        var history = new ObservableCollection<ChatMessageViewModel>(messages.Select(context.FromSnapshot));
+        var history = new ObservableCollection<ChatMessageViewModel>(
+            messages.Select((message, index) => context.FromSnapshot(message, index)));
         context.SetMessageHistory(history);
         context.UpdateVisibleTranscriptConversationId(conversationId, history.Count > 0);
         context.RaiseTranscriptStateChanged();

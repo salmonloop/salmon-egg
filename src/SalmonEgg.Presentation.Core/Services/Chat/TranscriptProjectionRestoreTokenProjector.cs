@@ -6,6 +6,22 @@ namespace SalmonEgg.Presentation.Core.Services.Chat;
 
 public sealed class TranscriptProjectionRestoreTokenProjector
 {
+    public static string CreateProjectionItemKey(
+        ConversationMessageSnapshot message,
+        int projectionIndex)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+
+        if (!string.IsNullOrWhiteSpace(message.Id))
+        {
+            return $"msg:{message.Id}";
+        }
+
+        var contentType = message.ContentType ?? string.Empty;
+        var textContent = message.TextContent ?? string.Empty;
+        return $"idx:{projectionIndex}:{contentType}:{textContent}";
+    }
+
     public TranscriptProjectionRestoreProjection Project(
         string conversationId,
         IReadOnlyList<ConversationMessageSnapshot> transcript,
@@ -27,9 +43,7 @@ public sealed class TranscriptProjectionRestoreTokenProjector
         }
 
         var anchor = transcript[firstVisibleIndex];
-        var projectionItemKey = !string.IsNullOrWhiteSpace(anchor.Id)
-            ? $"msg:{anchor.Id}"
-            : $"idx:{firstVisibleIndex}:{anchor.ContentType}:{anchor.TextContent}";
+        var projectionItemKey = CreateProjectionItemKey(anchor, firstVisibleIndex);
 
         return new TranscriptProjectionRestoreProjection(
             Token: new TranscriptProjectionRestoreToken(

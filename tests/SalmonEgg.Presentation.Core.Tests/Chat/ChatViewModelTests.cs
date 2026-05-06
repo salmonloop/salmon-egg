@@ -8582,6 +8582,38 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task TryCreateProjectionRestoreToken_UsesProjectedItemIdentityAndEpoch()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        await syncContext.RunUntilCompletedAsync(fixture.ViewModel.RestoreAsync());
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-a",
+            Transcript = ImmutableList.Create(
+                new ConversationMessageSnapshot
+                {
+                    Id = "agent-0042",
+                    Timestamp = new DateTime(2026, 5, 6, 0, 0, 0, DateTimeKind.Utc),
+                    IsOutgoing = false,
+                    ContentType = "text",
+                    TextContent = "ready"
+                })
+        });
+        syncContext.RunAll();
+
+        var message = Assert.Single(fixture.ViewModel.MessageHistory);
+        Assert.Equal("msg:agent-0042", message.ProjectionItemKey);
+        var token = fixture.ViewModel.CreateViewportProjectionRestoreToken(message, 14d);
+        Assert.NotNull(token);
+        Assert.Equal("conv-a", token!.Value.ConversationId);
+        Assert.Equal(1, token.Value.ProjectionEpoch);
+        Assert.Equal("msg:agent-0042", token.Value.ProjectionItemKey);
+        Assert.Equal(14d, token.Value.OffsetHint);
+    }
+
+    [Fact]
     public async Task HydrateActiveConversationAsync_WhenCompletionModeIsLoadResponse_CompletesBeforeReplayStarts()
     {
         var syncContext = new QueueingSynchronizationContext();
