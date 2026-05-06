@@ -2019,6 +2019,39 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
+    public void ClearConversationRuntimeContent_DropsRestoreMetadata()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript:
+            [
+                CreateTextMessage("agent-001", "first")
+            ],
+            Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 5, 6, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 5, 6, 0, 1, 0, DateTimeKind.Utc),
+            ConnectionInstanceId: "conn-1",
+            RestoreProjectionItemKey: "msg:agent-001",
+            RestoreProjectionEpoch: 1),
+            ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
+
+        workspace.ClearConversationRuntimeContent("session-1");
+
+        var snapshot = workspace.GetConversationSnapshot("session-1");
+        Assert.NotNull(snapshot);
+        Assert.Null(snapshot!.RestoreProjectionItemKey);
+        Assert.Null(snapshot.RestoreProjectionEpoch);
+    }
+
+    [Fact]
     public async Task ConversationCatalogFacade_DeleteConversationAsync_WaitsForMutationCompletion()
     {
         var syncContext = new ImmediateSynchronizationContext();

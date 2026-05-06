@@ -8514,6 +8514,74 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task ApplyStoreProjection_WhenRestoreProjectionIsReady_PublishesProjectionRestoreReady()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        await syncContext.RunUntilCompletedAsync(fixture.ViewModel.RestoreAsync());
+
+        ProjectionRestoreReadyEventArgs? published = null;
+        fixture.ViewModel.ProjectionRestoreReady += (_, args) => published = args;
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-a",
+            Transcript = ImmutableList.Create(
+                new ConversationMessageSnapshot
+                {
+                    Id = "agent-0042",
+                    Timestamp = new DateTime(2026, 5, 6, 0, 0, 0, DateTimeKind.Utc),
+                    IsOutgoing = false,
+                    ContentType = "text",
+                    TextContent = "ready"
+                })
+        });
+        syncContext.RunAll();
+
+        Assert.NotNull(published);
+        Assert.Equal("conv-a", published!.ConversationId);
+        Assert.Equal(1, published.ProjectionEpoch);
+        Assert.Equal("conv-a", published.RestoreToken.ConversationId);
+        Assert.Equal(1, published.RestoreToken.ProjectionEpoch);
+        Assert.Equal("msg:agent-0042", published.RestoreToken.ProjectionItemKey);
+    }
+
+    [Fact]
+    public async Task ApplyStoreProjection_WhenReadyProjectionTupleDoesNotChange_DoesNotRepublishProjectionRestoreReady()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        await syncContext.RunUntilCompletedAsync(fixture.ViewModel.RestoreAsync());
+
+        var publishCount = 0;
+        fixture.ViewModel.ProjectionRestoreReady += (_, _) => publishCount++;
+
+        var readyState = (await fixture.GetStateAsync()) with
+        {
+            HydratedConversationId = "conv-a",
+            Transcript = ImmutableList.Create(
+                new ConversationMessageSnapshot
+                {
+                    Id = "agent-0042",
+                    Timestamp = new DateTime(2026, 5, 6, 0, 0, 0, DateTimeKind.Utc),
+                    IsOutgoing = false,
+                    ContentType = "text",
+                    TextContent = "ready"
+                })
+        };
+
+        await fixture.UpdateStateAsync(_ => readyState);
+        syncContext.RunAll();
+        await fixture.UpdateStateAsync(_ => readyState with
+        {
+            IsHydrating = true
+        });
+        syncContext.RunAll();
+
+        Assert.Equal(1, publishCount);
+    }
+
+    [Fact]
     public async Task HydrateActiveConversationAsync_WhenCompletionModeIsLoadResponse_CompletesBeforeReplayStarts()
     {
         var syncContext = new QueueingSynchronizationContext();

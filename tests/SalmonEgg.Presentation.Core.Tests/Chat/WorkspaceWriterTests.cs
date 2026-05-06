@@ -134,6 +134,29 @@ public sealed class WorkspaceWriterTests
     }
 
     [Fact]
+    public async Task FlushAsync_RuntimeProjectionSnapshot_RoundTripsRestoreMetadata()
+    {
+        var dispatcher = new ImmediateUiDispatcher();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(dispatcher);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, dispatcher);
+        using var writer = new WorkspaceWriter(workspace, dispatcher, TimeSpan.Zero);
+
+        writer.Enqueue(new ChatState(
+            HydratedConversationId: "conv-a",
+            Transcript: ImmutableList.Create(CreateTextMessage("agent-001", "first")),
+            Generation: 1), scheduleSave: false);
+        await writer.FlushAsync();
+
+        var restored = workspace.GetConversationSnapshot("conv-a");
+
+        Assert.NotNull(restored);
+        Assert.Equal("msg:agent-001", restored!.RestoreProjectionItemKey);
+        Assert.Equal(1, restored.RestoreProjectionEpoch);
+    }
+
+    [Fact]
     public async Task FlushAsync_HydratedConversationRootState_PersistsTranscriptAndSessionState()
     {
         var dispatcher = new ImmediateUiDispatcher();

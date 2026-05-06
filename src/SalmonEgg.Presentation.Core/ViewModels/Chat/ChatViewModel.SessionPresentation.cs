@@ -48,12 +48,17 @@ using SalmonEgg.Presentation.ViewModels.Chat.Transcript;
 using SalmonEgg.Presentation.ViewModels.Chat.Panels;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Services;
+using SalmonEgg.Presentation.Utilities;
 using SalmonEgg.Presentation.ViewModels.Settings;
 
 namespace SalmonEgg.Presentation.ViewModels.Chat;
 
 public partial class ChatViewModel
 {
+    private ProjectionRestoreReadyPublicationKey? _lastProjectionRestoreReadyKey;
+
+    public event EventHandler<ProjectionRestoreReadyEventArgs>? ProjectionRestoreReady;
+
     private void SyncPlanEntries(IReadOnlyList<ConversationPlanEntrySnapshot> planEntries)
         => _planEntriesProjectionCoordinator.Sync(PlanEntries, planEntries);
 
@@ -220,12 +225,42 @@ public partial class ChatViewModel
                 sessionChanged: false);
         }
 
+        PublishProjectionRestoreReady(projection);
         ShowPlanPanel = projection.ShowPlanPanel;
         CurrentPlanTitle = projection.PlanTitle;
         if (!sessionChanged)
         {
             SyncPlanEntries(projection.PlanEntries);
         }
+    }
+
+    private void PublishProjectionRestoreReady(ChatUiProjection projection)
+    {
+        if (string.IsNullOrWhiteSpace(projection.HydratedConversationId)
+            || !projection.RestoreProjection.IsReady
+            || projection.RestoreProjection.Token is not { } token)
+        {
+            _lastProjectionRestoreReadyKey = null;
+            return;
+        }
+
+        var publicationKey = new ProjectionRestoreReadyPublicationKey(
+            projection.HydratedConversationId,
+            projection.RestoreProjection.ProjectionEpoch,
+            token);
+        if (_lastProjectionRestoreReadyKey == publicationKey)
+        {
+            return;
+        }
+
+        _lastProjectionRestoreReadyKey = publicationKey;
+
+        ProjectionRestoreReady?.Invoke(
+            this,
+            new ProjectionRestoreReadyEventArgs(
+                projection.HydratedConversationId,
+                projection.RestoreProjection.ProjectionEpoch,
+                token));
     }
 
     private void ApplyConversationStatusProjection(ChatUiProjection projection)
@@ -422,3 +457,27 @@ public partial class ChatViewModel
         }
     }
 }
+
+public sealed class ProjectionRestoreReadyEventArgs : EventArgs
+{
+    public ProjectionRestoreReadyEventArgs(
+        string conversationId,
+        long projectionEpoch,
+        TranscriptProjectionRestoreToken restoreToken)
+    {
+        ConversationId = conversationId;
+        ProjectionEpoch = projectionEpoch;
+        RestoreToken = restoreToken;
+    }
+
+    public string ConversationId { get; }
+
+    public long ProjectionEpoch { get; }
+
+    public TranscriptProjectionRestoreToken RestoreToken { get; }
+}
+
+internal readonly record struct ProjectionRestoreReadyPublicationKey(
+    string ConversationId,
+    long ProjectionEpoch,
+    TranscriptProjectionRestoreToken RestoreToken);
