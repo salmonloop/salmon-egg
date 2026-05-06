@@ -183,6 +183,37 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
+    public void ChatViewCodeBehind_DoesNotUseLegacyViewportDriftDetachHeuristic()
+    {
+        var code = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
+
+        Assert.DoesNotContain("_lastObservedViewportAtBottom is true && !_transcriptScrollSettler.HasPendingWork", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("TranscriptAutoFollowController", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatViewCodeBehind_DoesNotForceSynchronousListLayoutDuringTranscriptSettle()
+    {
+        var code = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
+
+        Assert.DoesNotContain(".UpdateLayout()", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("ScrollIntoView(ViewModel.MessageHistory.Last());\r\n            MessagesList.UpdateLayout();", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatViewCodeBehind_DoesNotTreatPointerPressedAsViewportDetachIntent()
+    {
+        var code = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
+        var section = ExtractSection(
+            code,
+            "private void OnMessagesListPointerPressed",
+            "private void OnMessagesListPointerWheelChanged");
+
+        Assert.Contains("FocusTranscriptScroller();", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("RegisterUserViewportIntent();", section, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void NavigationSelectionProjector_DoesNotSwapLeafSelectionForAncestorOnClosedPane()
     {
         var code = LoadFile(@"src\SalmonEgg.Presentation.Core\Services\NavigationSelectionProjector.cs");

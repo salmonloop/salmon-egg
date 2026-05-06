@@ -9,6 +9,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI;
 #endif
 using Windows.Foundation;
+using SalmonEgg.Presentation.Behaviors;
 using SalmonEgg.Presentation.Utilities;
 using SalmonEgg.Presentation.ViewModels.Chat;
 
@@ -22,17 +23,22 @@ public sealed partial class MiniChatView : Page
     private bool _isMessagesListLoaded;
     private bool _isTrackingViewModel;
     private ObservableCollection<ChatMessageViewModel>? _trackedMessageHistory;
-    private bool _userScrolledUp;
     private readonly TranscriptScrollSettler _transcriptScrollSettler = new(maxReadyButNotBottomFailures: MaxInitialScrollAttempts);
+    private readonly TranscriptViewportCoordinator _viewportCoordinator = new();
     private const double BottomThreshold = 10;
     private const double BottomGeometryTolerance = 2;
     private const int MaxInitialScrollAttempts = 8;
+    private bool _pointerScrollIntentPending;
+    private bool _pointerScrollReleasePending;
     private bool _suspendAutoScrollTracking;
-    private bool _manualScrollIntentPending;
     private bool _wasOverlayVisible;
+    private bool _restoreDetachedViewportAfterOverlay;
+    private string? _restoreDetachedViewportConversationId;
+    private bool _resumeViewportCoordinatorAfterOverlayPending;
     private int _activeTranscriptScrollGeneration = -1;
     private bool _scrollToBottomScheduled;
     private int _scrollScheduleGeneration;
+    private long _messagesListViewportTokenCallback;
 #if WINDOWS
     private Microsoft.UI.Xaml.Controls.TitleBar? _nativeTitleBarControl;
 #endif
@@ -84,9 +90,18 @@ public sealed partial class MiniChatView : Page
     {
         _isLoaded = true;
         unchecked { _scrollScheduleGeneration++; }
-        _userScrolledUp = false;
-        _manualScrollIntentPending = false;
+        _restoreDetachedViewportAfterOverlay = false;
+        _restoreDetachedViewportConversationId = null;
+        _resumeViewportCoordinatorAfterOverlayPending = false;
+        _pointerScrollIntentPending = false;
+        _pointerScrollReleasePending = false;
+        ActivateViewportCoordinatorForCurrentSession();
         _wasOverlayVisible = ViewModel.IsActivationOverlayVisible;
+        if (_wasOverlayVisible)
+        {
+            _resumeViewportCoordinatorAfterOverlayPending = true;
+            InvalidateViewportCoordinator();
+        }
         BeginTranscriptSettleRound();
         EnsureViewModelTracking();
         TryIssueTranscriptScrollRequest();
@@ -104,22 +119,34 @@ public sealed partial class MiniChatView : Page
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        InvalidateViewportCoordinator();
         _isLoaded = false;
         _isMessagesListLoaded = false;
         unchecked { _scrollScheduleGeneration++; }
+        _restoreDetachedViewportAfterOverlay = false;
+        _restoreDetachedViewportConversationId = null;
+        _resumeViewportCoordinatorAfterOverlayPending = false;
+        _pointerScrollIntentPending = false;
+        _pointerScrollReleasePending = false;
         _scrollToBottomScheduled = false;
         _activeTranscriptScrollGeneration = -1;
+        UnregisterViewportMonitor();
+        ActivateViewportCoordinatorForCurrentSession();
         DetachViewModelTracking();
     }
 
     private void OnMessagesListLoaded(object sender, RoutedEventArgs e)
     {
         _isMessagesListLoaded = true;
+        RegisterViewportMonitor();
+        ResumeViewportCoordinatorAfterOverlayIfNeeded();
         TryIssueTranscriptScrollRequest();
+        TryRefreshViewportCoordinatorFromView();
     }
 
     private void OnMessagesListUnloaded(object sender, RoutedEventArgs e)
     {
+        UnregisterViewportMonitor();
         _isMessagesListLoaded = false;
     }
 
@@ -127,19 +154,20 @@ public sealed partial class MiniChatView : Page
     {
         var lastItemContainerGenerated = HasLastItemContainerGenerated(ViewModel.MessageHistory.Count);
 
-        if (_manualScrollIntentPending && !_transcriptScrollSettler.HasPendingWork && !_suspendAutoScrollTracking)
+        if (_transcriptScrollSettler.HasPendingWork && IsViewportDetachedByUser())
         {
-            _userScrolledUp = !IsListViewportAtBottom();
-            _manualScrollIntentPending = false;
-        }
-
-        if (!_transcriptScrollSettler.HasPendingWork || _userScrolledUp)
-        {
+            AbortTranscriptSettleRound();
+            TryRefreshViewportCoordinatorFromView(lastItemContainerGenerated);
             return;
         }
 
-        TryAdvanceTranscriptSettleFromLayout(lastItemContainerGenerated);
-        TryIssueTranscriptScrollRequest();
+        if (_transcriptScrollSettler.HasPendingWork)
+        {
+            TryAdvanceTranscriptSettleFromLayout(lastItemContainerGenerated);
+            TryIssueTranscriptScrollRequest();
+        }
+
+        TryRefreshViewportCoordinatorFromView(lastItemContainerGenerated);
     }
 
     private void EnsureViewModelTracking()
@@ -190,12 +218,14 @@ public sealed partial class MiniChatView : Page
             return;
         }
 
+        ResumeViewportCoordinatorAfterOverlayIfNeeded();
+
         if (ViewModel.IsSessionActive && ViewModel.MessageHistory.Count > 0 && !_transcriptScrollSettler.HasPendingWork)
         {
             BeginTranscriptSettleRound();
         }
 
-        if (_transcriptScrollSettler.HasPendingWork && _userScrolledUp)
+        if (_transcriptScrollSettler.HasPendingWork && IsViewportDetachedByUser())
         {
             AbortTranscriptSettleRound();
             return;
@@ -206,10 +236,10 @@ public sealed partial class MiniChatView : Page
             return;
         }
 
-        if (!_userScrolledUp)
-        {
-            ScheduleScrollToBottom();
-        }
+        ApplyViewportCommand(_viewportCoordinator.Handle(new TranscriptViewportEvent.TranscriptAppended(
+            CurrentViewportConversationId,
+            _scrollScheduleGeneration,
+            e.NewItems?.Count ?? 0)));
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -239,9 +269,146 @@ public sealed partial class MiniChatView : Page
         }
     }
 
+    private void RegisterViewportMonitor()
+    {
+        if (MessagesList is null || _messagesListViewportTokenCallback != 0)
+        {
+            return;
+        }
+
+        _messagesListViewportTokenCallback = MessagesList.RegisterPropertyChangedCallback(
+            ScrollViewerViewportMonitor.ViewportChangeTokenProperty,
+            OnMessagesListViewportChanged);
+    }
+
+    private void UnregisterViewportMonitor()
+    {
+        if (MessagesList is null || _messagesListViewportTokenCallback == 0)
+        {
+            return;
+        }
+
+        MessagesList.UnregisterPropertyChangedCallback(
+            ScrollViewerViewportMonitor.ViewportChangeTokenProperty,
+            _messagesListViewportTokenCallback);
+        _messagesListViewportTokenCallback = 0;
+    }
+
+    private void OnMessagesListViewportChanged(DependencyObject sender, DependencyProperty dp)
+    {
+        TryRefreshViewportCoordinatorFromView();
+    }
+
+    private void RegisterUserViewportIntent()
+    {
+        _pointerScrollIntentPending = false;
+        _pointerScrollReleasePending = false;
+        if (MessagesList is not null)
+        {
+            _ = MessagesList.Focus(FocusState.Programmatic);
+        }
+
+        ApplyViewportCommand(_viewportCoordinator.Handle(new TranscriptViewportEvent.UserIntentScroll(
+            CurrentViewportConversationId,
+            _scrollScheduleGeneration)));
+        StopInitialScrollForManualInteraction();
+    }
+
+    private void TryRefreshViewportCoordinatorFromView(bool? lastItemContainerGenerated = null)
+    {
+        if (!_isLoaded
+            || !_isMessagesListLoaded
+            || MessagesList is null
+            || ViewModel.IsActivationOverlayVisible
+            || !ViewModel.IsSessionActive
+            || string.IsNullOrWhiteSpace(ViewModel.CurrentSessionId))
+        {
+            return;
+        }
+
+        var fact = new TranscriptViewportFact(
+            HasItems: ViewModel.MessageHistory.Count > 0,
+            IsReady: lastItemContainerGenerated ?? HasLastItemContainerGenerated(ViewModel.MessageHistory.Count),
+            IsAtBottom: IsListViewportAtBottom(),
+            IsProgrammaticScrollInFlight: _suspendAutoScrollTracking || _scrollToBottomScheduled || _activeTranscriptScrollGeneration >= 0);
+        if (_pointerScrollIntentPending && !fact.IsProgrammaticScrollInFlight)
+        {
+            if (!fact.IsAtBottom)
+            {
+                _pointerScrollIntentPending = false;
+                _pointerScrollReleasePending = false;
+                ApplyViewportCommand(_viewportCoordinator.Handle(new TranscriptViewportEvent.UserIntentScroll(
+                    CurrentViewportConversationId,
+                    _scrollScheduleGeneration)));
+            }
+            else if (_pointerScrollReleasePending)
+            {
+                _pointerScrollIntentPending = false;
+                _pointerScrollReleasePending = false;
+            }
+        }
+
+        ApplyViewportCommand(_viewportCoordinator.Handle(new TranscriptViewportEvent.ViewportFactChanged(
+            CurrentViewportConversationId,
+            _scrollScheduleGeneration,
+            fact)));
+    }
+
+    private void ApplyViewportCommand(TranscriptViewportCommand command)
+    {
+        switch (command.Kind)
+        {
+            case TranscriptViewportCommandKind.IssueScrollToBottom:
+                ScheduleScrollToBottom();
+                break;
+
+            case TranscriptViewportCommandKind.StopProgrammaticScroll:
+                unchecked { _scrollScheduleGeneration++; }
+                _scrollToBottomScheduled = false;
+                _activeTranscriptScrollGeneration = -1;
+                if (_transcriptScrollSettler.HasPendingWork)
+                {
+                    AbortTranscriptSettleRound();
+                }
+                break;
+
+            case TranscriptViewportCommandKind.MarkAutoFollowDetached:
+                _scrollToBottomScheduled = false;
+                break;
+        }
+    }
+
+    private void ActivateViewportCoordinatorForCurrentSession()
+    {
+        _ = _viewportCoordinator.Handle(new TranscriptViewportEvent.SessionActivated(
+            _isLoaded && ViewModel.IsSessionActive
+                ? CurrentViewportConversationId
+                : string.Empty,
+            _scrollScheduleGeneration));
+    }
+
+    private void InvalidateViewportCoordinator()
+    {
+        if (string.IsNullOrWhiteSpace(CurrentViewportConversationId))
+        {
+            return;
+        }
+
+        ApplyViewportCommand(_viewportCoordinator.Handle(new TranscriptViewportEvent.ConversationContextInvalidated(
+            CurrentViewportConversationId,
+            _scrollScheduleGeneration)));
+    }
+
+    private bool IsViewportDetachedByUser()
+    {
+        return _viewportCoordinator.State == TranscriptViewportState.DetachedByUser;
+    }
+
+    private string CurrentViewportConversationId => ViewModel.CurrentSessionId ?? string.Empty;
+
     private bool TryIssueTranscriptScrollRequest()
     {
-        if (_activeTranscriptScrollGeneration >= 0)
+        if (_activeTranscriptScrollGeneration >= 0 || IsViewportDetachedByUser())
         {
             return false;
         }
@@ -257,6 +424,7 @@ public sealed partial class MiniChatView : Page
                 _activeTranscriptScrollGeneration = decision.Generation;
                 _suspendAutoScrollTracking = true;
                 IssueNativeTranscriptScrollRequest();
+                TryRefreshViewportCoordinatorFromView();
                 return true;
 
             case TranscriptScrollAction.Completed:
@@ -264,6 +432,7 @@ public sealed partial class MiniChatView : Page
             case TranscriptScrollAction.Exhausted:
                 _activeTranscriptScrollGeneration = -1;
                 ReleaseAutoScrollTracking();
+                TryRefreshViewportCoordinatorFromView();
                 return false;
 
             default:
@@ -276,6 +445,7 @@ public sealed partial class MiniChatView : Page
         return _isLoaded
             && _isMessagesListLoaded
             && MessagesList is not null
+            && !ViewModel.IsActivationOverlayVisible
             && ViewModel.IsSessionActive
             && ViewModel.MessageHistory.Count > 0
             && !string.IsNullOrWhiteSpace(ViewModel.CurrentSessionId);
@@ -321,7 +491,7 @@ public sealed partial class MiniChatView : Page
                 if (!_isLoaded
                     || !_isMessagesListLoaded
                     || scheduleGeneration != _scrollScheduleGeneration
-                    || _userScrolledUp
+                    || !_viewportCoordinator.IsAutoFollowAttached
                     || !ViewModel.IsSessionActive
                     || ViewModel.MessageHistory.Count <= 0
                     || !string.Equals(ViewModel.CurrentSessionId, scheduledConversationId, StringComparison.Ordinal))
@@ -356,7 +526,14 @@ public sealed partial class MiniChatView : Page
         var itemCount = ViewModel.MessageHistory.Count;
         if (itemCount <= 0)
         {
-            return false;
+            return true;
+        }
+
+        var monitoredScrollableHeight = ScrollViewerViewportMonitor.GetScrollableHeight(MessagesList);
+        if (monitoredScrollableHeight >= 0)
+        {
+            var monitoredVerticalOffset = ScrollViewerViewportMonitor.GetVerticalOffset(MessagesList);
+            return monitoredScrollableHeight - monitoredVerticalOffset <= GetBottomViewportTolerance();
         }
 
         if (MessagesList.ContainerFromIndex(itemCount - 1) is not ListViewItem lastItemContainer)
@@ -369,6 +546,11 @@ public sealed partial class MiniChatView : Page
         var lastItemBottom = relativeOrigin.Y + anchor.ActualHeight;
         var viewportBottom = MessagesList.ActualHeight - BottomThreshold;
         return lastItemBottom <= viewportBottom + BottomGeometryTolerance;
+    }
+
+    private double GetBottomViewportTolerance()
+    {
+        return BottomThreshold + BottomGeometryTolerance + (MessagesList?.Padding.Bottom ?? 0);
     }
 
     private bool TryAdvanceTranscriptSettleFromLayout(bool? lastItemContainerGenerated = null)
@@ -437,12 +619,14 @@ public sealed partial class MiniChatView : Page
 
     private void StopInitialScrollForManualInteraction()
     {
+        _scrollToBottomScheduled = false;
+        _suspendAutoScrollTracking = false;
+
         if (!_transcriptScrollSettler.HasPendingWork)
         {
             return;
         }
 
-        _suspendAutoScrollTracking = false;
         _activeTranscriptScrollGeneration = -1;
         ApplyTranscriptSettleDecision(
             _transcriptScrollSettler.AbortForUserInteraction(),
@@ -456,11 +640,30 @@ public sealed partial class MiniChatView : Page
 
     private void ResetAutoScrollStateForConversationChange()
     {
+        InvalidateViewportCoordinator();
         unchecked { _scrollScheduleGeneration++; }
-        _userScrolledUp = false;
         _activeTranscriptScrollGeneration = -1;
         _suspendAutoScrollTracking = false;
-        _manualScrollIntentPending = false;
+        _scrollToBottomScheduled = false;
+        _pointerScrollIntentPending = false;
+        _pointerScrollReleasePending = false;
+        if (ViewModel.IsActivationOverlayVisible)
+        {
+            _resumeViewportCoordinatorAfterOverlayPending = true;
+            return;
+        }
+
+        if (_resumeViewportCoordinatorAfterOverlayPending)
+        {
+            ResumeViewportCoordinatorAfterOverlayIfNeeded();
+            return;
+        }
+
+        _restoreDetachedViewportAfterOverlay = false;
+        _restoreDetachedViewportConversationId = null;
+        _resumeViewportCoordinatorAfterOverlayPending = false;
+        _pointerScrollIntentPending = false;
+        ActivateViewportCoordinatorForCurrentSession();
     }
 
     private void HandleOverlayVisibilityChanged()
@@ -469,29 +672,101 @@ public sealed partial class MiniChatView : Page
         var overlayJustDismissed = _wasOverlayVisible && !isOverlayVisible;
         _wasOverlayVisible = isOverlayVisible;
 
-        if (!overlayJustDismissed
-            || _userScrolledUp
+        if (isOverlayVisible)
+        {
+            if (IsViewportDetachedByUser())
+            {
+                _restoreDetachedViewportAfterOverlay = true;
+                _restoreDetachedViewportConversationId = CurrentViewportConversationId;
+            }
+            _pointerScrollIntentPending = false;
+            _pointerScrollReleasePending = false;
+            _resumeViewportCoordinatorAfterOverlayPending = true;
+            InvalidateViewportCoordinator();
+            return;
+        }
+
+        if (!overlayJustDismissed)
+        {
+            return;
+        }
+
+        ResumeViewportCoordinatorAfterOverlayIfNeeded();
+    }
+
+    private void ResumeViewportCoordinatorAfterOverlayIfNeeded()
+    {
+        if (!_resumeViewportCoordinatorAfterOverlayPending
+            || ViewModel.IsActivationOverlayVisible
             || !_isLoaded
+            || !ViewModel.IsSessionActive
+            || !_isMessagesListLoaded
             || MessagesList is null
+            || string.IsNullOrWhiteSpace(ViewModel.CurrentSessionId)
             || ViewModel.MessageHistory.Count <= 0)
         {
             return;
         }
 
+        _resumeViewportCoordinatorAfterOverlayPending = false;
+        if (_restoreDetachedViewportAfterOverlay
+            && !string.Equals(_restoreDetachedViewportConversationId, CurrentViewportConversationId, StringComparison.Ordinal))
+        {
+            _restoreDetachedViewportAfterOverlay = false;
+            _restoreDetachedViewportConversationId = null;
+        }
+
+        ActivateViewportCoordinatorForCurrentSession();
+        if (_restoreDetachedViewportAfterOverlay)
+        {
+            _restoreDetachedViewportAfterOverlay = false;
+            _restoreDetachedViewportConversationId = null;
+            ApplyViewportCommand(_viewportCoordinator.Handle(new TranscriptViewportEvent.UserIntentScroll(
+                CurrentViewportConversationId,
+                _scrollScheduleGeneration)));
+            return;
+        }
+
         BeginTranscriptSettleRound();
         TryIssueTranscriptScrollRequest();
+        TryRefreshViewportCoordinatorFromView();
     }
 
     private void OnMessagesListPointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        _manualScrollIntentPending = true;
-        StopInitialScrollForManualInteraction();
+        _pointerScrollIntentPending = true;
+        _pointerScrollReleasePending = false;
+        if (MessagesList is not null)
+        {
+            _ = MessagesList.Focus(FocusState.Programmatic);
+        }
+    }
+
+    private void OnMessagesListPointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        _pointerScrollReleasePending = true;
+        var releaseGeneration = _scrollScheduleGeneration;
+        _ = DispatcherQueue.TryEnqueue(() =>
+        {
+            if (!_pointerScrollIntentPending
+                || !_pointerScrollReleasePending
+                || releaseGeneration != _scrollScheduleGeneration
+                || ViewModel.IsActivationOverlayVisible)
+            {
+                return;
+            }
+
+            if (IsListViewportAtBottom())
+            {
+                _pointerScrollIntentPending = false;
+                _pointerScrollReleasePending = false;
+            }
+        });
     }
 
     private void OnMessagesListPointerWheelChanged(object sender, PointerRoutedEventArgs e)
     {
-        _manualScrollIntentPending = true;
-        StopInitialScrollForManualInteraction();
+        RegisterUserViewportIntent();
     }
 
     private void OnMessagesListKeyDown(object sender, KeyRoutedEventArgs e)
@@ -503,8 +778,7 @@ public sealed partial class MiniChatView : Page
             or Windows.System.VirtualKey.Home
             or Windows.System.VirtualKey.End)
         {
-            _manualScrollIntentPending = true;
-            StopInitialScrollForManualInteraction();
+            RegisterUserViewportIntent();
         }
     }
 

@@ -190,6 +190,24 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void MiniChatView_UsesCoordinatorBasedViewportPolicy()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs");
+
+        Assert.Contains("TranscriptViewportCoordinator", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("_userScrolledUp = !IsListViewportAtBottom()", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MiniChatView_DoesNotTreatPointerPressedAsViewportDetachIntent()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs");
+
+        Assert.Contains("private void OnMessagesListPointerPressed", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("OnMessagesListPointerPressed(object sender, PointerRoutedEventArgs e)\r\n    {\r\n        RegisterUserViewportIntent();", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MainPage_SearchStringsAreLocalized()
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");
