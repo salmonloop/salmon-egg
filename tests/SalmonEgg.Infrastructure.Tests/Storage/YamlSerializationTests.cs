@@ -37,7 +37,7 @@ id: test-id
 name: test-server
 transport: stdio
 stdio_command: my_cmd
-heartbeat_interval_seconds: 60";
+connection_timeout_seconds: 15";
         var deserializer = YamlSerialization.CreateDeserializer();
 
         var result = deserializer.Deserialize<ServerConfigurationYamlV1>(yaml);
@@ -47,7 +47,7 @@ heartbeat_interval_seconds: 60";
         Assert.Equal("test-server", result.Name);
         Assert.Equal("stdio", result.Transport);
         Assert.Equal("my_cmd", result.StdioCommand);
-        Assert.Equal(60, result.HeartbeatIntervalSeconds);
+        Assert.Equal(15, result.ConnectionTimeoutSeconds);
     }
 
     [Fact]

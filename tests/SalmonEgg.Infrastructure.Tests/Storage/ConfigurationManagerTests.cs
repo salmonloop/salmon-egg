@@ -107,7 +107,6 @@ public sealed class ConfigurationManagerTests : IDisposable
             Transport = TransportType.Stdio,
             StdioCommand = "ssh",
             StdioArgs = "-T -o BatchMode=yes user@host /opt/acp/bin/agent stdio",
-            HeartbeatInterval = 30,
             ConnectionTimeout = 10
         };
 
@@ -222,7 +221,6 @@ public sealed class ConfigurationManagerTests : IDisposable
             Name = $"Test Configuration {id}",
             ServerUrl = "ws://localhost:8080",
             Transport = TransportType.WebSocket,
-            HeartbeatInterval = 30,
             ConnectionTimeout = 10
         };
 }

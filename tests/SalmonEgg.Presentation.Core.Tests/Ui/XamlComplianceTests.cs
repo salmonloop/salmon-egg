@@ -391,7 +391,6 @@ public sealed class XamlComplianceTests
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AgentProfileEditorPage.xaml");
 
-        Assert.DoesNotContain("ValueChanged=\"OnHeartbeatValueChanged\"", xaml);
         Assert.DoesNotContain("ValueChanged=\"OnTimeoutValueChanged\"", xaml);
     }
 

@@ -14,6 +14,7 @@ public readonly record struct ConversationWarmReuseDecision(
 public static class ConversationRuntimeReasons
 {
     public const string SessionLoadCompleted = nameof(SessionLoadCompleted);
+    public const string SessionResumeCompleted = nameof(SessionResumeCompleted);
     public const string WarmReuse = nameof(WarmReuse);
     public const string WarmReuseAfterProfileReconnect = nameof(WarmReuseAfterProfileReconnect);
     public const string MarkedHydrated = nameof(MarkedHydrated);
@@ -29,6 +30,7 @@ public static class ConversationWarmReusePolicy
         }
 
         return string.Equals(hydratedRuntime.Reason, ConversationRuntimeReasons.SessionLoadCompleted, StringComparison.Ordinal)
+            || string.Equals(hydratedRuntime.Reason, ConversationRuntimeReasons.SessionResumeCompleted, StringComparison.Ordinal)
             || string.Equals(hydratedRuntime.Reason, ConversationRuntimeReasons.WarmReuse, StringComparison.Ordinal)
             || string.Equals(hydratedRuntime.Reason, ConversationRuntimeReasons.WarmReuseAfterProfileReconnect, StringComparison.Ordinal)
             || string.Equals(hydratedRuntime.Reason, ConversationRuntimeReasons.MarkedHydrated, StringComparison.Ordinal);

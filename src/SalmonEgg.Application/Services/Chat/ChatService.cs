@@ -358,6 +358,78 @@ namespace SalmonEgg.Application.Services.Chat
             }
         }
 
+        public Task<SessionResumeResponse> ResumeSessionAsync(SessionResumeParams @params)
+            => ResumeSessionAsync(@params, CancellationToken.None);
+
+        public async Task<SessionResumeResponse> ResumeSessionAsync(SessionResumeParams @params, CancellationToken cancellationToken)
+        {
+            var previousSessionId = _currentSessionId;
+
+            try
+            {
+                _currentSessionId = @params.SessionId;
+                _currentPlan = null;
+                _currentMode = null;
+
+                var session = await GetOrCreateSessionAsync(@params.SessionId, @params.Cwd).ConfigureAwait(false);
+                session.Cwd = @params.Cwd;
+
+                var response = await _acpClient.ResumeSessionAsync(@params, cancellationToken).ConfigureAwait(false);
+                session.Cwd = @params.Cwd;
+                session.State = SessionState.Active;
+                return response;
+            }
+            catch (OperationCanceledException)
+            {
+                _currentSessionId = previousSessionId;
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _currentSessionId = previousSessionId;
+
+                var entry = new ErrorLogEntry(
+                    "ResumeSessionAsync failed",
+                    ex.Message,
+                    ErrorSeverity.Error,
+                    nameof(ResumeSessionAsync),
+                    @params.SessionId,
+                    ex);
+                _errorLogger.LogError(entry);
+                throw;
+            }
+        }
+
+        public async Task<SessionCloseResponse> CloseSessionAsync(SessionCloseParams @params, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var response = await _acpClient.CloseSessionAsync(@params, cancellationToken).ConfigureAwait(false);
+                _sessionManager.RemoveSession(@params.SessionId);
+
+                if (string.Equals(_currentSessionId, @params.SessionId, StringComparison.Ordinal))
+                {
+                    _currentSessionId = null;
+                    _currentPlan = null;
+                    _currentMode = null;
+                }
+
+                return response;
+            }
+            catch (Exception ex)
+            {
+                var entry = new ErrorLogEntry(
+                    "CloseSessionAsync failed",
+                    ex.Message,
+                    ErrorSeverity.Error,
+                    nameof(CloseSessionAsync),
+                    @params.SessionId,
+                    ex);
+                _errorLogger.LogError(entry);
+                throw;
+            }
+        }
+
         public async Task<SessionListResponse> ListSessionsAsync(SessionListParams? @params = null, CancellationToken cancellationToken = default)
         {
             try

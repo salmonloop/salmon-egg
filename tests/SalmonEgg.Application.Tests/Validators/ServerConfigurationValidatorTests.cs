@@ -18,7 +18,6 @@ public sealed class ServerConfigurationValidatorTests
             Name = "SSH Bridge",
             Transport = TransportType.Stdio,
             StdioCommand = "ssh",
-            HeartbeatInterval = 30,
             ConnectionTimeout = 10
         };
 
@@ -97,26 +96,6 @@ public sealed class ServerConfigurationValidatorTests
         var result = _validator.TestValidate(configuration);
         result.ShouldHaveValidationErrorFor(x => x.ServerUrl)
             .WithErrorMessage("Server URL format is invalid, must be a valid WebSocket (ws:// or wss://) or HTTP (http:// or https://) URL");
-    }
-
-    [Theory]
-    [InlineData(0)]
-    [InlineData(-1)]
-    public void Validate_WhenHeartbeatIntervalIsZeroOrLess_ShouldHaveError(int interval)
-    {
-        var configuration = new ServerConfiguration { HeartbeatInterval = interval };
-        var result = _validator.TestValidate(configuration);
-        result.ShouldHaveValidationErrorFor(x => x.HeartbeatInterval)
-            .WithErrorMessage("Heartbeat interval must be greater than 0 seconds");
-    }
-
-    [Fact]
-    public void Validate_WhenHeartbeatIntervalIsGreaterThan300_ShouldHaveError()
-    {
-        var configuration = new ServerConfiguration { HeartbeatInterval = 301 };
-        var result = _validator.TestValidate(configuration);
-        result.ShouldHaveValidationErrorFor(x => x.HeartbeatInterval)
-            .WithErrorMessage("Heartbeat interval cannot exceed 300 seconds (5 minutes)");
     }
 
     [Theory]

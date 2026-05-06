@@ -120,6 +120,21 @@ public class ConversationWarmReusePolicyTests
     }
 
     [Fact]
+    public void HasAuthoritativeWarmRuntime_WhenReasonIsSessionResumeCompleted_ReturnsTrue()
+    {
+        var runtime = new ConversationRuntimeSlice(
+            "conv-1",
+            ConversationRuntimePhase.Warm,
+            "conn-1",
+            "remote-1",
+            "profile-1",
+            "SessionResumeCompleted",
+            DateTime.UtcNow);
+
+        Assert.True(ConversationWarmReusePolicy.HasAuthoritativeWarmRuntime(runtime));
+    }
+
+    [Fact]
     public void CanReuseRemoteWarmConversation_WhenConnectionInstanceIdDiffers_ReturnsFalse()
     {
         var binding = new ConversationBindingSlice("conv-1", "remote-1", "profile-1");

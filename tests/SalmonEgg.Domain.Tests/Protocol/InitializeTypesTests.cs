@@ -98,6 +98,62 @@ public sealed class InitializeTypesTests
     }
 
     [Test]
+    public void AgentCapabilities_Should_Deserialize_Standard_Session_Capability_Objects()
+    {
+        var json = """
+                   {
+                     "sessionCapabilities": {
+                       "resume": {},
+                       "close": {},
+                       "list": {}
+                     }
+                   }
+                   """;
+
+        var capabilities = JsonSerializer.Deserialize<AgentCapabilities>(json);
+
+        Assert.That(capabilities, Is.Not.Null);
+        Assert.That(capabilities!.SessionCapabilities, Is.Not.Null);
+        Assert.That(capabilities.SessionCapabilities!.List, Is.Not.Null);
+        Assert.That(capabilities.SessionCapabilities.Resume, Is.Not.Null);
+        Assert.That(capabilities.SessionCapabilities.Close, Is.Not.Null);
+    }
+
+    [Test]
+    public void AgentCapabilities_Should_Report_Standard_Session_Capability_Support()
+    {
+        var json = """
+                   {
+                     "loadSession": true,
+                     "sessionCapabilities": {
+                       "resume": {},
+                       "close": {},
+                       "list": {}
+                     }
+                   }
+                   """;
+
+        var capabilities = JsonSerializer.Deserialize<AgentCapabilities>(json);
+
+        Assert.That(capabilities, Is.Not.Null);
+        Assert.That(capabilities!.SupportsSessionLoading, Is.True);
+        Assert.That(capabilities.SupportsSessionResume, Is.True);
+        Assert.That(capabilities.SupportsSessionClose, Is.True);
+        Assert.That(capabilities.SupportsSessionList, Is.True);
+    }
+
+    [Test]
+    public void AgentCapabilities_Should_Not_Report_Missing_Standard_Session_Capabilities_As_Supported()
+    {
+        var capabilities = new AgentCapabilities();
+
+        Assert.That(capabilities.SupportsSessionLoading, Is.False);
+        Assert.That(capabilities.SupportsSessionResume, Is.False);
+        Assert.That(capabilities.SupportsSessionClose, Is.False);
+        Assert.That(capabilities.SupportsSessionList, Is.False);
+    }
+
+    [Test]
     public void InitializeParams_Meta_Should_Serialize_With_UnderscoreMeta()
     {
         // Given: InitializeParams with _meta
@@ -225,4 +281,5 @@ public sealed class InitializeTypesTests
             capabilities.SupportsExtension(ClientCapabilityMetadata.LegacyAskUserExtensionMethod),
             Is.False);
     }
+
 }

@@ -1061,7 +1061,6 @@ internal sealed class GuiAppDataScope : IDisposable
             "transport: 'stdio'",
             $"stdio_command: '{normalizedCommand}'",
             $"stdio_args: '{normalizedArgs}'",
-            "heartbeat_interval_seconds: 30",
             "connection_timeout_seconds: 10",
             "authentication:",
             "  mode: 'none'",

@@ -4,7 +4,6 @@ using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Timers;
 using Polly;
 using Polly.Retry;
 using Serilog;
@@ -31,7 +30,6 @@ namespace SalmonEgg.Infrastructure.Network
         private IDisposable? _messageSubscription;
         private IDisposable? _stateSubscription;
         private ServerConfiguration? _currentConfig;
-        private System.Timers.Timer? _heartbeatTimer;
         private bool _disposed;
         private bool _isReconnecting;
         private bool _isManualDisconnect;
@@ -132,9 +130,6 @@ namespace SalmonEgg.Infrastructure.Network
                 // 发送初始化消息
                 await SendInitializeMessageAsync(ct);
 
-                // 启动心跳定时器
-                StartHeartbeat(config.HeartbeatInterval);
-
                 // 更新状态为已连接
                 UpdateConnectionState(ConnectionStatus.Connected, config.ServerUrl ?? string.Empty);
 
@@ -175,9 +170,6 @@ namespace SalmonEgg.Infrastructure.Network
                 
                 // 设置手动断开标志，防止自动重连
                 _isManualDisconnect = true;
-
-                // 停止心跳定时器
-                StopHeartbeat();
 
                 if (_transport != null)
                 {
@@ -495,9 +487,6 @@ namespace SalmonEgg.Infrastructure.Network
                 // 发送初始化消息
                 await SendInitializeMessageAsync(CancellationToken.None);
 
-                // 重新启动心跳定时器
-                StartHeartbeat(_currentConfig.HeartbeatInterval);
-
                 // 更新状态为已连接
                 UpdateConnectionState(ConnectionStatus.Connected, _currentConfig.ServerUrl ?? string.Empty);
 
@@ -570,73 +559,6 @@ namespace SalmonEgg.Infrastructure.Network
         }
 
         /// <summary>
-        /// 启动心跳定时器
-        /// </summary>
-        private void StartHeartbeat(int intervalSeconds)
-        {
-            // 停止现有的心跳定时器（如果有）
-            StopHeartbeat();
-
-            _logger.Debug("Heartbeat timer started with interval of: {Interval} seconds", intervalSeconds);
-
-            _heartbeatTimer = new System.Timers.Timer(intervalSeconds * 1000);
-            _heartbeatTimer.Elapsed += OnHeartbeatTimerElapsed;
-            _heartbeatTimer.AutoReset = true;
-            _heartbeatTimer.Start();
-        }
-
-        /// <summary>
-        /// 停止心跳定时器
-        /// </summary>
-        private void StopHeartbeat()
-        {
-            if (_heartbeatTimer != null)
-            {
-                _logger.Debug("Heartbeat timer stopped");
-                _heartbeatTimer.Stop();
-                _heartbeatTimer.Elapsed -= OnHeartbeatTimerElapsed;
-                _heartbeatTimer.Dispose();
-                _heartbeatTimer = null;
-            }
-        }
-
-        /// <summary>
-        /// 心跳定时器触发事件处理
-        /// </summary>
-        private async void OnHeartbeatTimerElapsed(object? sender, ElapsedEventArgs e)
-        {
-            try
-            {
-                // 检查连接状态
-                var currentState = _connectionStateChanges.Value;
-                if (currentState.Status != ConnectionStatus.Connected || _transport == null)
-                {
-                    _logger.Debug("Skip heartbeat: Not connected");
-                    return;
-                }
-
-                // 创建心跳消息
-                var heartbeatMessage = new AcpMessage
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    Type = "notification",
-                    Method = "heartbeat",
-                    Timestamp = DateTime.UtcNow
-                };
-
-                // 序列化并发送心跳消息
-                var json = _protocolService.SerializeMessage(heartbeatMessage);
-                await _transport.SendAsync(json, CancellationToken.None);
-
-                _logger.Debug("Heartbeat message sent successfully to server: {MessageId}", heartbeatMessage.Id);
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning(ex, "Heartbeat message send failed");
-            }
-        }
-
-        /// <summary>
         /// 释放资源
         /// </summary>
         public void Dispose()
@@ -646,7 +568,6 @@ namespace SalmonEgg.Infrastructure.Network
                 return;
             }
 
-            StopHeartbeat();
             UnsubscribeFromTransport();
             _incomingMessages?.Dispose();
             _connectionStateChanges?.Dispose();

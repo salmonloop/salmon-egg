@@ -97,13 +97,6 @@
                                          Text="{x:Bind ViewModel.ProxyUrl, Mode=TwoWay}"/>
 
                                 <TextBlock x:Uid="AgentProfileEditorConnectionTitle" FontWeight="SemiBold" Margin="0,8,0,0"/>
-                                <NumberBox x:Name="HeartbeatBox"
-                                           x:Uid="AgentProfileEditorHeartbeat"
-                                           HorizontalAlignment="Stretch"
-                                           Minimum="5"
-                                           Maximum="300"
-                                           SpinButtonPlacementMode="Inline"
-                                           Value="{x:Bind ViewModel.HeartbeatInterval, Mode=TwoWay}"/>
                                 <NumberBox x:Name="TimeoutBox"
                                            x:Uid="AgentProfileEditorTimeout"
                                            HorizontalAlignment="Stretch"

@@ -234,6 +234,142 @@ namespace SalmonEgg.Domain.Models.Protocol
     }
 
     /// <summary>
+    /// Session/Resume 方法的请求参数。
+    /// 用于恢复已存在的会话上下文，但不要求 Agent 重放历史消息。
+    /// </summary>
+    public class SessionResumeParams
+    {
+        /// <summary>
+        /// 会话 ID（必填）。
+        /// </summary>
+        [JsonPropertyName("sessionId")]
+        public string SessionId { get; set; } = string.Empty;
+
+        /// <summary>
+        /// 会话的工作目录（必填）。
+        /// </summary>
+        [JsonPropertyName("cwd")]
+        public string Cwd { get; set; } = string.Empty;
+
+        /// <summary>
+        /// MCP 服务器配置列表。
+        /// ACP session/resume 要求该字段始终为数组，即使当前没有任何 MCP server 也必须发送 []。
+        /// </summary>
+        [JsonPropertyName("mcpServers")]
+        public List<McpServer> McpServers { get; set; } = new List<McpServer>();
+
+        /// <summary>
+        /// 创建新的 SessionResumeParams 实例。
+        /// </summary>
+        public SessionResumeParams()
+        {
+        }
+
+        /// <summary>
+        /// 创建新的 SessionResumeParams 实例。
+        /// </summary>
+        /// <param name="sessionId">会话 ID</param>
+        /// <param name="cwd">工作目录</param>
+        /// <param name="mcpServers">MCP 服务器配置</param>
+        public SessionResumeParams(string sessionId, string cwd, List<McpServer>? mcpServers = null)
+        {
+            SessionId = sessionId;
+            Cwd = cwd;
+            McpServers = mcpServers ?? new List<McpServer>();
+        }
+    }
+
+    /// <summary>
+    /// Session/Resume 方法的响应。
+    /// 可能返回 null / 空对象，或返回模式与配置选项快照。
+    /// </summary>
+    public class SessionResumeResponse
+    {
+        /// <summary>
+        /// 会话模式状态（可选，兼容旧 Agent 可能直接返回数组）。
+        /// </summary>
+        [JsonPropertyName("modes")]
+        [JsonConverter(typeof(SessionModesStateJsonConverter))]
+        public SessionModesState? Modes { get; set; }
+
+        /// <summary>
+        /// 可用的配置选项列表（可选）。
+        /// </summary>
+        [JsonPropertyName("configOptions")]
+        public List<ConfigOption>? ConfigOptions { get; set; }
+
+        /// <summary>
+        /// 创建新的 SessionResumeResponse 实例。
+        /// </summary>
+        public SessionResumeResponse()
+        {
+        }
+
+        /// <summary>
+        /// 创建新的 SessionResumeResponse 实例。
+        /// </summary>
+        /// <param name="modes">模式状态</param>
+        /// <param name="configOptions">配置选项列表</param>
+        public SessionResumeResponse(SessionModesState? modes, List<ConfigOption>? configOptions = null)
+        {
+            Modes = modes;
+            ConfigOptions = configOptions;
+        }
+
+        /// <summary>
+        /// 表示恢复完成的静态实例。
+        /// </summary>
+        public static readonly SessionResumeResponse Completed = new SessionResumeResponse();
+    }
+
+    /// <summary>
+    /// Session/Close 方法的请求参数。
+    /// 用于关闭已存在的会话并释放 Agent 侧资源。
+    /// </summary>
+    public class SessionCloseParams
+    {
+        /// <summary>
+        /// 会话 ID（必填）。
+        /// </summary>
+        [JsonPropertyName("sessionId")]
+        public string SessionId { get; set; } = string.Empty;
+
+        /// <summary>
+        /// 创建新的 SessionCloseParams 实例。
+        /// </summary>
+        public SessionCloseParams()
+        {
+        }
+
+        /// <summary>
+        /// 创建新的 SessionCloseParams 实例。
+        /// </summary>
+        /// <param name="sessionId">会话 ID</param>
+        public SessionCloseParams(string sessionId)
+        {
+            SessionId = sessionId;
+        }
+    }
+
+    /// <summary>
+    /// Session/Close 方法的响应。
+    /// </summary>
+    public class SessionCloseResponse
+    {
+        /// <summary>
+        /// 创建新的 SessionCloseResponse 实例。
+        /// </summary>
+        public SessionCloseResponse()
+        {
+        }
+
+        /// <summary>
+        /// 表示关闭完成的静态实例。
+        /// </summary>
+        public static readonly SessionCloseResponse Completed = new SessionCloseResponse();
+    }
+
+    /// <summary>
     /// Session/Set_Config_Option 方法的请求参数。
     /// 用于设置会话的配置选项。
     /// </summary>

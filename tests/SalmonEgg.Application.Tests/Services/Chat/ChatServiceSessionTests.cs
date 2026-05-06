@@ -146,6 +146,147 @@ public sealed class ChatServiceSessionTests
     }
 
     [Fact]
+    public async Task ResumeSessionAsync_WhenTargetSessionIsNotTracked_PreRegistersSessionWithoutClearingCachedHistory()
+    {
+        var acpClient = new Mock<IAcpClient>(MockBehavior.Strict);
+        var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
+        var sessionManager = new SessionManager();
+
+        acpClient.SetupGet(c => c.IsInitialized).Returns(true);
+        acpClient.SetupGet(c => c.IsConnected).Returns(true);
+        acpClient.SetupGet(c => c.AgentInfo).Returns((AgentInfo?)null);
+        acpClient.SetupGet(c => c.AgentCapabilities).Returns((AgentCapabilities?)null);
+        acpClient
+            .Setup(c => c.ResumeSessionAsync(
+                It.Is<SessionResumeParams>(p => p.SessionId == "remote-1"),
+                default))
+            .Callback(() =>
+            {
+                var tracked = sessionManager.GetSession("remote-1");
+                Assert.NotNull(tracked);
+                Assert.Equal(Environment.CurrentDirectory, tracked!.Cwd);
+            })
+            .ReturnsAsync(new SessionResumeResponse());
+
+        var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
+
+        await sut.ResumeSessionAsync(new SessionResumeParams("remote-1", Environment.CurrentDirectory));
+
+        var session = sessionManager.GetSession("remote-1");
+        Assert.NotNull(session);
+        Assert.Equal(Environment.CurrentDirectory, session!.Cwd);
+        Assert.Equal(SessionState.Active, session.State);
+        Assert.Empty(session.History);
+
+        sut.Dispose();
+    }
+
+    [Fact]
+    public async Task ResumeSessionAsync_WhenTargetSessionHasCachedHistory_PreservesHistory()
+    {
+        var acpClient = new Mock<IAcpClient>(MockBehavior.Strict);
+        var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
+        var sessionManager = new SessionManager();
+
+        await sessionManager.CreateSessionAsync("remote-1", cwd: Environment.CurrentDirectory);
+        sessionManager.UpdateSession(
+            "remote-1",
+            s => s.AddHistoryEntry(SalmonEgg.Domain.Models.Session.SessionUpdateEntry.CreateMessage(new TextContentBlock("cached"))));
+
+        acpClient.SetupGet(c => c.IsInitialized).Returns(true);
+        acpClient.SetupGet(c => c.IsConnected).Returns(true);
+        acpClient.SetupGet(c => c.AgentInfo).Returns((AgentInfo?)null);
+        acpClient.SetupGet(c => c.AgentCapabilities).Returns((AgentCapabilities?)null);
+        acpClient
+            .Setup(c => c.ResumeSessionAsync(It.IsAny<SessionResumeParams>(), default))
+            .ReturnsAsync(new SessionResumeResponse());
+
+        var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
+
+        await sut.ResumeSessionAsync(new SessionResumeParams("remote-1", Environment.CurrentDirectory));
+
+        var session = sessionManager.GetSession("remote-1");
+        Assert.NotNull(session);
+        Assert.Single(session!.History);
+        Assert.Equal("cached", ((TextContentBlock)session.History[0].Content!).Text);
+
+        sut.Dispose();
+    }
+
+    [Fact]
+    public async Task CloseSessionAsync_WhenClosingCurrentTrackedSession_RemovesLocalSessionAndClearsCurrentSession()
+    {
+        var acpClient = new Mock<IAcpClient>(MockBehavior.Strict);
+        var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
+        var sessionManager = new SessionManager();
+
+        acpClient.SetupGet(c => c.IsInitialized).Returns(true);
+        acpClient.SetupGet(c => c.IsConnected).Returns(true);
+        acpClient.SetupGet(c => c.AgentInfo).Returns((AgentInfo?)null);
+        acpClient.SetupGet(c => c.AgentCapabilities).Returns((AgentCapabilities?)null);
+        acpClient
+            .Setup(c => c.ResumeSessionAsync(It.IsAny<SessionResumeParams>(), default))
+            .ReturnsAsync(new SessionResumeResponse());
+        acpClient
+            .Setup(c => c.CloseSessionAsync(
+                It.Is<SessionCloseParams>(p => p.SessionId == "remote-1"),
+                default))
+            .ReturnsAsync(SessionCloseResponse.Completed);
+
+        var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
+
+        await sut.ResumeSessionAsync(new SessionResumeParams("remote-1", Environment.CurrentDirectory));
+        Assert.Equal("remote-1", sut.CurrentSessionId);
+        Assert.NotNull(sessionManager.GetSession("remote-1"));
+
+        await sut.CloseSessionAsync(new SessionCloseParams("remote-1"));
+
+        Assert.Null(sut.CurrentSessionId);
+        Assert.Null(sessionManager.GetSession("remote-1"));
+
+        sut.Dispose();
+    }
+
+    [Fact]
+    public async Task CloseSessionAsync_WhenClosingNonCurrentTrackedSession_PreservesCurrentSessionAndRemovesClosedSession()
+    {
+        var acpClient = new Mock<IAcpClient>(MockBehavior.Strict);
+        var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
+        var sessionManager = new SessionManager();
+
+        acpClient.SetupGet(c => c.IsInitialized).Returns(true);
+        acpClient.SetupGet(c => c.IsConnected).Returns(true);
+        acpClient.SetupGet(c => c.AgentInfo).Returns((AgentInfo?)null);
+        acpClient.SetupGet(c => c.AgentCapabilities).Returns((AgentCapabilities?)null);
+        acpClient
+            .Setup(c => c.ResumeSessionAsync(
+                It.Is<SessionResumeParams>(p => p.SessionId == "remote-1"),
+                default))
+            .ReturnsAsync(new SessionResumeResponse());
+        acpClient
+            .Setup(c => c.CloseSessionAsync(
+                It.Is<SessionCloseParams>(p => p.SessionId == "remote-2"),
+                default))
+            .ReturnsAsync(SessionCloseResponse.Completed);
+
+        await sessionManager.CreateSessionAsync("remote-2", cwd: Environment.CurrentDirectory);
+
+        var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
+
+        await sut.ResumeSessionAsync(new SessionResumeParams("remote-1", Environment.CurrentDirectory));
+        Assert.Equal("remote-1", sut.CurrentSessionId);
+        Assert.NotNull(sessionManager.GetSession("remote-2"));
+
+        await sut.CloseSessionAsync(new SessionCloseParams("remote-2"));
+
+        Assert.Equal("remote-1", sut.CurrentSessionId);
+        Assert.NotNull(sessionManager.GetSession("remote-1"));
+        Assert.Null(sessionManager.GetSession("remote-2"));
+
+        sut.Dispose();
+    }
+
+    [Fact]
     public void SessionUpdate_CurrentModeUpdate_UsesNormalizedModeIdForLegacyPayload()
     {
         var acpClient = new Mock<IAcpClient>(MockBehavior.Loose);

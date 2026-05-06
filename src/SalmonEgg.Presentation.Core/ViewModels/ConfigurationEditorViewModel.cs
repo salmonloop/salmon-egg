@@ -69,9 +69,6 @@ public partial class ConfigurationEditorViewModel(
     private string _proxyUrl = string.Empty;
 
     [ObservableProperty]
-    private int _heartbeatInterval = 30;
-
-    [ObservableProperty]
     private int _connectionTimeout = 10;
 
     public bool IsEditing { get; private set; }
@@ -88,7 +85,6 @@ public partial class ConfigurationEditorViewModel(
             ServerUrl = string.Empty,
             StdioCommand = string.Empty,
             StdioArgs = string.Empty,
-            HeartbeatInterval = 30,
             ConnectionTimeout = 10
         };
 
@@ -102,7 +98,6 @@ public partial class ConfigurationEditorViewModel(
         ApiKey = string.Empty;
         ProxyEnabled = false;
         ProxyUrl = string.Empty;
-        HeartbeatInterval = Configuration.HeartbeatInterval;
         ConnectionTimeout = Configuration.ConnectionTimeout;
         ClearError();
     }
@@ -133,7 +128,6 @@ public partial class ConfigurationEditorViewModel(
         Transport = Configuration.Transport;
         Token = Configuration.Authentication?.Token ?? string.Empty;
         ApiKey = Configuration.Authentication?.ApiKey ?? string.Empty;
-        HeartbeatInterval = Configuration.HeartbeatInterval;
         ConnectionTimeout = Configuration.ConnectionTimeout;
 
         if (Configuration.Proxy != null)
@@ -154,7 +148,6 @@ public partial class ConfigurationEditorViewModel(
             Name = "New Configuration",
             ServerUrl = "ws://localhost:8080",
             Transport = TransportType.WebSocket,
-            HeartbeatInterval = 30,
             ConnectionTimeout = 10
         };
         Name = Configuration.Name;
@@ -186,7 +179,6 @@ public partial class ConfigurationEditorViewModel(
             ServerUrl = transportConfig.SelectedTransportType == TransportType.Stdio ? string.Empty : (transportConfig.RemoteUrl ?? string.Empty),
             StdioCommand = transportConfig.SelectedTransportType == TransportType.Stdio ? (transportConfig.StdioCommand ?? string.Empty) : string.Empty,
             StdioArgs = transportConfig.SelectedTransportType == TransportType.Stdio ? (transportConfig.StdioArgs ?? string.Empty) : string.Empty,
-            HeartbeatInterval = 30,
             ConnectionTimeout = 10
         };
 
@@ -225,7 +217,6 @@ public partial class ConfigurationEditorViewModel(
                 Configuration.StdioArgs = string.Empty;
             }
 
-            Configuration.HeartbeatInterval = HeartbeatInterval;
             Configuration.ConnectionTimeout = ConnectionTimeout;
 
             if (!string.IsNullOrEmpty(Token) || !string.IsNullOrEmpty(ApiKey))

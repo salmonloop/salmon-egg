@@ -459,6 +459,149 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         [Fact]
+        public async Task ResumeSessionAsync_WhenAgentDoesNotSupportSessionResume_DoesNotSendProtocolRequest()
+        {
+            var client = await CreateInitializedClientAsync(
+                capabilities: new AgentCapabilities(loadSession: true));
+
+            var result = await client.ResumeSessionAsync(new SessionResumeParams("session-123", AbsoluteCwd));
+
+            Assert.Same(SessionResumeResponse.Completed, result);
+            _transportMock.Verify(
+                t => t.SendMessageAsync(It.IsRegex("session/resume"), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
+        public async Task ResumeSessionAsync_WhenCwdIsRelative_ThrowsInvalidParams()
+        {
+            var client = await CreateInitializedClientAsync(
+                capabilities: new AgentCapabilities(sessionCapabilities: new SessionCapabilities
+                {
+                    Resume = new SessionResumeCapabilities()
+                }));
+
+            var ex = await Assert.ThrowsAsync<AcpException>(() =>
+                client.ResumeSessionAsync(new SessionResumeParams("session-123", "relative-path")));
+
+            Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
+            _transportMock.Verify(
+                t => t.SendMessageAsync(It.IsRegex("session/resume"), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
+        public async Task ResumeSessionAsync_WhenSupported_SendsStandardSessionResumeAndParsesResponse()
+        {
+            var parser = new MessageParser();
+            var sentMessages = new ConcurrentQueue<string>();
+            var client = await CreateInitializedClientAsync(
+                capabilities: new AgentCapabilities(sessionCapabilities: new SessionCapabilities
+                {
+                    Resume = new SessionResumeCapabilities()
+                }));
+
+            _transportMock
+                .Setup(t => t.SendMessageAsync(It.IsRegex("session/resume"), It.IsAny<CancellationToken>()))
+                .Callback<string, CancellationToken>((message, _) => sentMessages.Enqueue(message))
+                .ReturnsAsync(true);
+
+            var responseTrigger = Task.Run(async () =>
+            {
+                await Task.Delay(10);
+                var response = new JsonRpcResponse(
+                    2,
+                    JsonSerializer.SerializeToElement(
+                        new
+                        {
+                            modes = new
+                            {
+                                currentModeId = "plan",
+                                availableModes = new[]
+                                {
+                                    new
+                                    {
+                                        id = "plan",
+                                        name = "Plan"
+                                    }
+                                }
+                            }
+                        },
+                        parser.Options));
+                _transportMock.Raise(
+                    t => t.MessageReceived += null,
+                    new MessageReceivedEventArgs(parser.SerializeMessage(response)));
+            });
+
+            var result = await client.ResumeSessionAsync(new SessionResumeParams("session-123", AbsoluteCwd));
+            await responseTrigger;
+
+            Assert.NotNull(result.Modes);
+            Assert.Equal("plan", result.Modes!.CurrentModeId);
+            Assert.True(sentMessages.TryDequeue(out var requestJson));
+
+            using var document = JsonDocument.Parse(requestJson);
+            Assert.Equal("session/resume", document.RootElement.GetProperty("method").GetString());
+            var @params = document.RootElement.GetProperty("params");
+            Assert.Equal("session-123", @params.GetProperty("sessionId").GetString());
+            Assert.Equal(AbsoluteCwd, @params.GetProperty("cwd").GetString());
+            Assert.Equal(JsonValueKind.Array, @params.GetProperty("mcpServers").ValueKind);
+        }
+
+        [Fact]
+        public async Task CloseSessionAsync_WhenAgentDoesNotSupportSessionClose_DoesNotSendProtocolRequest()
+        {
+            var client = await CreateInitializedClientAsync(
+                capabilities: new AgentCapabilities(loadSession: true));
+
+            var result = await client.CloseSessionAsync(new SessionCloseParams("session-123"));
+
+            Assert.Same(SessionCloseResponse.Completed, result);
+            _transportMock.Verify(
+                t => t.SendMessageAsync(It.IsRegex("session/close"), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
+        public async Task CloseSessionAsync_WhenSupported_SendsStandardSessionClose()
+        {
+            var parser = new MessageParser();
+            var sentMessages = new ConcurrentQueue<string>();
+            var client = await CreateInitializedClientAsync(
+                capabilities: new AgentCapabilities(sessionCapabilities: new SessionCapabilities
+                {
+                    Close = new SessionCloseCapabilities()
+                }));
+
+            _transportMock
+                .Setup(t => t.SendMessageAsync(It.IsRegex("session/close"), It.IsAny<CancellationToken>()))
+                .Callback<string, CancellationToken>((message, _) => sentMessages.Enqueue(message))
+                .ReturnsAsync(true);
+
+            var responseTrigger = Task.Run(async () =>
+            {
+                await Task.Delay(10);
+                var response = new JsonRpcResponse(
+                    2,
+                    JsonSerializer.SerializeToElement(new { }, parser.Options));
+                _transportMock.Raise(
+                    t => t.MessageReceived += null,
+                    new MessageReceivedEventArgs(parser.SerializeMessage(response)));
+            });
+
+            var result = await client.CloseSessionAsync(new SessionCloseParams("session-123"));
+            await responseTrigger;
+
+            Assert.NotNull(result);
+            Assert.True(sentMessages.TryDequeue(out var requestJson));
+
+            using var document = JsonDocument.Parse(requestJson);
+            Assert.Equal("session/close", document.RootElement.GetProperty("method").GetString());
+            var @params = document.RootElement.GetProperty("params");
+            Assert.Equal("session-123", @params.GetProperty("sessionId").GetString());
+        }
+
+        [Fact]
         public async Task CreateSessionAsync_TimeoutMessage_ContainsMethodAndLastRx()
         {
             var timeouts = new AcpClient.AcpRequestTimeouts(

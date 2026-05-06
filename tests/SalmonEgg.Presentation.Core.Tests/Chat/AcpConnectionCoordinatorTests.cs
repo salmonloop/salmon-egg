@@ -114,6 +114,81 @@ public sealed class AcpConnectionCoordinatorTests
     }
 
     [Fact]
+    public async Task ResyncAsync_WhenOnlyResumeIsSupported_ResumesWithoutResettingProjection()
+    {
+        var expectedResponse = new SessionResumeResponse(
+            new SessionModesState
+            {
+                CurrentModeId = "agent",
+                AvailableModes = [new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "agent", Name = "Agent" }]
+            });
+        var inner = new FakeChatService
+        {
+            AgentCapabilities = new AgentCapabilities(sessionCapabilities: new SessionCapabilities
+            {
+                Resume = new SessionResumeCapabilities()
+            }),
+            OnResumeSessionAsync = (_, _) => Task.FromResult(expectedResponse)
+        };
+
+        var sink = new FakeSink
+        {
+            CurrentChatService = inner,
+            CurrentSessionId = "conv-1",
+            CurrentRemoteSessionId = "remote-1",
+            IsSessionActive = true
+        };
+
+        var coordinator = new AcpConnectionCoordinator(
+            Mock.Of<IChatConnectionStore>(),
+            Mock.Of<ILogger<AcpConnectionCoordinator>>());
+
+        await coordinator.ResyncAsync(sink);
+
+        Assert.Equal(0, sink.ResetHydratedConversationForResyncCalls);
+        Assert.Null(inner.LastLoadParams);
+        Assert.NotNull(inner.LastResumeParams);
+        Assert.Equal("remote-1", inner.LastResumeParams!.SessionId);
+        Assert.NotNull(inner.LastResumeParams.McpServers);
+        Assert.Empty(inner.LastResumeParams.McpServers);
+        Assert.NotNull(sink.AppliedLoadResponse);
+        Assert.Equal("agent", sink.AppliedLoadResponse!.Modes?.CurrentModeId);
+        Assert.Equal(1, sink.MarkConversationRemoteHydratedCalls);
+    }
+
+    [Fact]
+    public async Task ResyncAsync_WhenLoadAndResumeAreSupported_PrefersLoadReplay()
+    {
+        var inner = new FakeChatService
+        {
+            AgentCapabilities = new AgentCapabilities(
+                loadSession: true,
+                sessionCapabilities: new SessionCapabilities
+                {
+                    Resume = new SessionResumeCapabilities()
+                })
+        };
+
+        var sink = new FakeSink
+        {
+            CurrentChatService = inner,
+            CurrentSessionId = "conv-1",
+            CurrentRemoteSessionId = "remote-1",
+            IsSessionActive = true
+        };
+
+        var coordinator = new AcpConnectionCoordinator(
+            Mock.Of<IChatConnectionStore>(),
+            Mock.Of<ILogger<AcpConnectionCoordinator>>());
+
+        await coordinator.ResyncAsync(sink);
+
+        Assert.NotNull(inner.LastLoadParams);
+        Assert.Null(inner.LastResumeParams);
+        Assert.Equal(1, sink.ResetHydratedConversationForResyncCalls);
+    }
+
+    [Fact]
     public async Task ResyncAsync_WhenAdapterWasAlreadyHydrated_ReplaysOnlyAfterSinkReset()
     {
         var uiDispatcher = new ImmediateUiDispatcher();
@@ -499,7 +574,11 @@ public sealed class AcpConnectionCoordinatorTests
 
         public Func<SessionLoadParams, CancellationToken, Task<SessionLoadResponse>>? OnLoadSessionAsync { get; set; }
 
+        public Func<SessionResumeParams, CancellationToken, Task<SessionResumeResponse>>? OnResumeSessionAsync { get; set; }
+
         public SessionLoadParams? LastLoadParams { get; private set; }
+
+        public SessionResumeParams? LastResumeParams { get; private set; }
 
         public event EventHandler<SessionUpdateEventArgs>? SessionUpdateReceived;
 
@@ -556,6 +635,18 @@ public sealed class AcpConnectionCoordinatorTests
             LastLoadParams = @params;
             return OnLoadSessionAsync?.Invoke(@params, cancellationToken) ?? Task.FromResult(SessionLoadResponse.Completed);
         }
+
+        public Task<SessionResumeResponse> ResumeSessionAsync(SessionResumeParams @params)
+            => ResumeSessionAsync(@params, CancellationToken.None);
+
+        public Task<SessionResumeResponse> ResumeSessionAsync(SessionResumeParams @params, CancellationToken cancellationToken)
+        {
+            LastResumeParams = @params;
+            return OnResumeSessionAsync?.Invoke(@params, cancellationToken) ?? Task.FromResult(SessionResumeResponse.Completed);
+        }
+
+        public Task<SessionCloseResponse> CloseSessionAsync(SessionCloseParams @params, CancellationToken cancellationToken = default)
+            => Task.FromResult(SessionCloseResponse.Completed);
 
         public Task<SessionListResponse> ListSessionsAsync(SessionListParams? @params = null, CancellationToken cancellationToken = default)
             => Task.FromResult(new SessionListResponse());

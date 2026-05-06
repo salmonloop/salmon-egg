@@ -45,13 +45,6 @@ namespace SalmonEgg.Application.Validators
                     .WithMessage("Server URL format is invalid, must be a valid WebSocket (ws:// or wss://) or HTTP (http:// or https://) URL");
             });
 
-            // Validate heartbeat interval
-            RuleFor(x => x.HeartbeatInterval)
-                .GreaterThan(0)
-                .WithMessage("Heartbeat interval must be greater than 0 seconds")
-                .LessThanOrEqualTo(300)
-                .WithMessage("Heartbeat interval cannot exceed 300 seconds (5 minutes)");
-
             // Validate connection timeout
             RuleFor(x => x.ConnectionTimeout)
                 .GreaterThan(0)

@@ -53,7 +53,6 @@ name: "远程 SSH Agent"
 transport: "stdio"
 stdio_command: "ssh"
 stdio_args: "-T -o BatchMode=yes -o RequestTTY=no -o LogLevel=ERROR user@host /opt/acp/bin/agent stdio"
-heartbeat_interval_seconds: 30
 connection_timeout_seconds: 10
 authentication:
   mode: "none"

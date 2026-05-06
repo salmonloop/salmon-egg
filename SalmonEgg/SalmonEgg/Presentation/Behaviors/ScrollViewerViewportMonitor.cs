@@ -118,7 +118,7 @@ public static class ScrollViewerViewportMonitor
         }
     }
 
-    private static void OnListViewLayoutUpdated(object sender, object e)
+    private static void OnListViewLayoutUpdated(object? sender, object e)
     {
         if (sender is not ListView listView)
         {
@@ -175,7 +175,7 @@ public static class ScrollViewerViewportMonitor
         }
     }
 
-    private static void OnScrollViewerViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
+    private static void OnScrollViewerViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
     {
         if (sender is not ScrollViewer scrollViewer)
         {

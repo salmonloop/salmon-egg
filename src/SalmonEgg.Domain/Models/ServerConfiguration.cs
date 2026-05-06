@@ -62,11 +62,6 @@ namespace SalmonEgg.Domain.Models
         public ProxyConfig? Proxy { get; set; }
 
         /// <summary>
-        /// 心跳间隔（秒）
-        /// </summary>
-        public int HeartbeatInterval { get; set; } = 30;
-
-        /// <summary>
         /// 连接超时（秒）
         /// </summary>
         public int ConnectionTimeout { get; set; } = 10;

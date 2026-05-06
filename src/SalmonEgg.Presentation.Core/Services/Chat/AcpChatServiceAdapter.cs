@@ -96,6 +96,15 @@ public sealed class AcpChatServiceAdapter : IChatService, IAcpSessionUpdateBuffe
     public Task<SessionLoadResponse> LoadSessionAsync(SessionLoadParams @params, CancellationToken cancellationToken)
         => _inner.LoadSessionAsync(@params, cancellationToken);
 
+    public Task<SessionResumeResponse> ResumeSessionAsync(SessionResumeParams @params)
+        => _inner.ResumeSessionAsync(@params);
+
+    public Task<SessionResumeResponse> ResumeSessionAsync(SessionResumeParams @params, CancellationToken cancellationToken)
+        => _inner.ResumeSessionAsync(@params, cancellationToken);
+
+    public Task<SessionCloseResponse> CloseSessionAsync(SessionCloseParams @params, CancellationToken cancellationToken = default)
+        => _inner.CloseSessionAsync(@params, cancellationToken);
+
     public Task<SessionListResponse> ListSessionsAsync(SessionListParams? @params = null, CancellationToken cancellationToken = default)
         => _inner.ListSessionsAsync(@params, cancellationToken);
 

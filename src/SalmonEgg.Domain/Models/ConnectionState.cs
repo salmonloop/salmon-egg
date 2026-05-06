@@ -23,11 +23,6 @@ namespace SalmonEgg.Domain.Models
         public DateTime? ConnectedAt { get; set; }
 
         /// <summary>
-        /// 最后心跳时间
-        /// </summary>
-        public DateTime? LastHeartbeat { get; set; }
-
-        /// <summary>
         /// 错误消息
         /// </summary>
         public string ErrorMessage { get; set; } = string.Empty;

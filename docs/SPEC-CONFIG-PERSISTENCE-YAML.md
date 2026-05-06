@@ -67,7 +67,6 @@ name: "Local Agent"
 transport: "websocket"   # websocket | stdio | http_sse（全部使用 snake_case）
 server_url: "ws://127.0.0.1:8080"
 
-heartbeat_interval_seconds: 30
 connection_timeout_seconds: 10
 
 authentication:
@@ -86,7 +85,6 @@ name: "Remote Agent via SSH"
 transport: "stdio"
 stdio_command: "ssh"
 stdio_args: "-T -o BatchMode=yes -o RequestTTY=no -o LogLevel=ERROR user@host /opt/acp/bin/agent stdio"
-heartbeat_interval_seconds: 30
 connection_timeout_seconds: 10
 authentication:
   mode: "none"

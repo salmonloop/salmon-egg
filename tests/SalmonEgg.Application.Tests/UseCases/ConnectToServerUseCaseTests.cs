@@ -97,7 +97,6 @@ namespace SalmonEgg.Application.Tests.UseCases
                 Name = "Test Server",
                 ServerUrl = "wss://test.example.com",
                 Transport = TransportType.WebSocket,
-                HeartbeatInterval = 30,
                 ConnectionTimeout = 10
             };
 
@@ -127,7 +126,6 @@ namespace SalmonEgg.Application.Tests.UseCases
                 Name = "Test Server",
                 ServerUrl = "wss://test.example.com",
                 Transport = TransportType.WebSocket,
-                HeartbeatInterval = 30,
                 ConnectionTimeout = 10
             };
 
@@ -169,7 +167,6 @@ namespace SalmonEgg.Application.Tests.UseCases
                 Name = "Test Server",
                 ServerUrl = "wss://test.example.com",
                 Transport = TransportType.WebSocket,
-                HeartbeatInterval = 30,
                 ConnectionTimeout = 10
             };
 

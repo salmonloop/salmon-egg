@@ -3632,6 +3632,9 @@ public partial class ChatViewModelTests
         public SessionModeState? CurrentMode => null;
 
         public Func<SessionLoadParams, CancellationToken, Task<SessionLoadResponse>>? OnLoadSessionAsync { get; init; }
+        public Func<SessionResumeParams, CancellationToken, Task<SessionResumeResponse>>? OnResumeSessionAsync { get; init; }
+        public int LoadSessionCallCount { get; private set; }
+        public int ResumeSessionCallCount { get; private set; }
 
         public event EventHandler<SessionUpdateEventArgs>? SessionUpdateReceived;
 
@@ -3686,8 +3689,22 @@ public partial class ChatViewModelTests
         public Task<SessionLoadResponse> LoadSessionAsync(SessionLoadParams @params, CancellationToken cancellationToken)
         {
             CurrentSessionId = @params.SessionId;
+            LoadSessionCallCount++;
             return OnLoadSessionAsync?.Invoke(@params, cancellationToken) ?? Task.FromResult(SessionLoadResponse.Completed);
         }
+
+        public Task<SessionResumeResponse> ResumeSessionAsync(SessionResumeParams @params)
+            => ResumeSessionAsync(@params, CancellationToken.None);
+
+        public Task<SessionResumeResponse> ResumeSessionAsync(SessionResumeParams @params, CancellationToken cancellationToken)
+        {
+            CurrentSessionId = @params.SessionId;
+            ResumeSessionCallCount++;
+            return OnResumeSessionAsync?.Invoke(@params, cancellationToken) ?? Task.FromResult(SessionResumeResponse.Completed);
+        }
+
+        public Task<SessionCloseResponse> CloseSessionAsync(SessionCloseParams @params, CancellationToken cancellationToken = default)
+            => Task.FromResult(SessionCloseResponse.Completed);
 
         public Task<SessionListResponse> ListSessionsAsync(SessionListParams? @params = null, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
@@ -3825,6 +3842,19 @@ public partial class ChatViewModelTests
             return OnLoadSessionAsync?.Invoke(@params, cancellationToken)
                 ?? Task.FromResult(SessionLoadResponse.Completed);
         }
+
+        public Task<SessionResumeResponse> ResumeSessionAsync(SessionResumeParams @params)
+            => ResumeSessionAsync(@params, CancellationToken.None);
+
+        public Task<SessionResumeResponse> ResumeSessionAsync(SessionResumeParams @params, CancellationToken cancellationToken)
+        {
+            CurrentSessionId = @params.SessionId;
+            _knownRemoteSessions.Add(@params.SessionId);
+            return Task.FromResult(SessionResumeResponse.Completed);
+        }
+
+        public Task<SessionCloseResponse> CloseSessionAsync(SessionCloseParams @params, CancellationToken cancellationToken = default)
+            => Task.FromResult(SessionCloseResponse.Completed);
 
         public Task<SessionListResponse> ListSessionsAsync(SessionListParams? @params = null, CancellationToken cancellationToken = default)
         {
@@ -11979,6 +12009,99 @@ public partial class ChatViewModelTests
         Assert.Empty(fixture.ViewModel.MessageHistory);
         var currentState = await fixture.GetStateAsync();
         Assert.Empty(currentState.ResolveContentSlice("conv-remote")?.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty);
+    }
+
+    [Fact]
+    public async Task ActivateConversationAsync_RemoteBoundConversation_WhenOnlyResumeIsSupported_CompletesWithResumeRuntimeReason()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
+        var sessionManager = new Mock<ISessionManager>();
+        sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.TryGetValue(id, out var session) ? session : null);
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .Returns<string, string?>((id, cwd) =>
+            {
+                var session = new Session(id, cwd);
+                sessions[id] = session;
+                return Task.FromResult(session);
+            });
+        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
+            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
+            {
+                if (!sessions.TryGetValue(id, out var session))
+                {
+                    return false;
+                }
+
+                update(session);
+                if (updateActivity)
+                {
+                    session.UpdateActivity();
+                }
+
+                return true;
+            });
+        sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.Remove(id));
+
+        var chatService = new ReplayLoadChatService
+        {
+            AgentCapabilities = new AgentCapabilities(
+                sessionCapabilities: new SessionCapabilities
+                {
+                    Resume = new SessionResumeCapabilities()
+                }),
+            OnResumeSessionAsync = (_, _) => Task.FromResult(new SessionResumeResponse(
+                new SessionModesState
+                {
+                    CurrentModeId = "agent",
+                    AvailableModes = [new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "agent", Name = "Agent" }]
+                }))
+        };
+
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync());
+
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-local",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-remote",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService));
+        await DispatchConnectedAsync(fixture, "profile-1");
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+        await WaitForConditionAsync(() =>
+            Task.FromResult(string.Equals(fixture.ViewModel.ConnectionInstanceId, "conn-1", StringComparison.Ordinal)));
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-local",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-remote", new ConversationBindingSlice("conv-remote", "remote-1", "profile-1"))
+        });
+
+        var activated = await fixture.ViewModel.SwitchConversationAsync("conv-remote");
+
+        Assert.True(activated);
+        Assert.Equal(0, chatService.LoadSessionCallCount);
+        Assert.Equal(1, chatService.ResumeSessionCallCount);
+        var currentState = await fixture.GetStateAsync();
+        var runtime = currentState.ResolveRuntimeState("conv-remote");
+        Assert.NotNull(runtime);
+        Assert.Equal("SessionResumeCompleted", runtime!.Value.Reason);
+        Assert.Equal(ConversationRuntimePhase.Warm, runtime.Value.Phase);
     }
 
     [Fact]

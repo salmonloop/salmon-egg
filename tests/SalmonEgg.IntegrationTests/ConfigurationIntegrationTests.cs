@@ -52,7 +52,6 @@ public sealed class ConfigurationIntegrationTests : IDisposable
             Name = "Integration Test Server",
             ServerUrl = "wss://integration-test.example.com",
             Transport = TransportType.WebSocket,
-            HeartbeatInterval = 60,
             ConnectionTimeout = 20,
             Authentication = new AuthenticationConfig
             {
@@ -76,7 +75,6 @@ public sealed class ConfigurationIntegrationTests : IDisposable
         Assert.Equal(config.Name, loaded.Name);
         Assert.Equal(config.ServerUrl, loaded.ServerUrl);
         Assert.Equal(config.Transport, loaded.Transport);
-        Assert.Equal(config.HeartbeatInterval, loaded.HeartbeatInterval);
         Assert.Equal(config.ConnectionTimeout, loaded.ConnectionTimeout);
         Assert.NotNull(loaded.Authentication);
         Assert.Equal("integration-token-123", loaded.Authentication!.Token);

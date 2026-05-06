@@ -51,7 +51,7 @@
 2. 允许 `warm reuse` 必须同时满足全部条件：
    - `conversation binding` 存在且 `remoteSessionId` 非空；
    - runtime state 属于同一 conversation，`Phase == Warm`；
-   - runtime reason 必须来自集中定义的 authoritative warm reason：`SessionLoadCompleted`、`WarmReuse`、`WarmReuseAfterProfileReconnect`、`MarkedHydrated`；
+   - runtime reason 必须来自集中定义的 authoritative warm reason：`SessionLoadCompleted`、`SessionResumeCompleted`、`WarmReuse`、`WarmReuseAfterProfileReconnect`、`MarkedHydrated`；
    - runtime 的 `RemoteSessionId` 与 `ProfileId` 必须分别等于当前 binding 的 `remoteSessionId` 与 `profileId`；
    - 当前连接身份必须来自目标 profile 的 authoritative foreground connection，且 `current.ProfileId == binding.ProfileId`；
    - `current.ConnectionInstanceId` 必须非空，且等于 runtime 的 `ConnectionInstanceId`；

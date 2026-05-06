@@ -27,7 +27,7 @@ namespace SalmonEgg.Infrastructure.Tests.Network
         }
 
         [Fact]
-        public async Task ConnectAsync_ShouldStartHeartbeat_WhenConnected()
+        public async Task ConnectAsync_ShouldInitialize_WhenConnected()
         {
             // Arrange
             var config = new ServerConfiguration
@@ -36,7 +36,6 @@ namespace SalmonEgg.Infrastructure.Tests.Network
                 Name = "Test Server",
                 ServerUrl = "ws://localhost:8080",
                 Transport = TransportType.WebSocket,
-                HeartbeatInterval = 5
             };
 
             var transportFactory = new Func<TransportType, ITransport>(_ => _mockTransport.Object);
@@ -59,7 +58,7 @@ namespace SalmonEgg.Infrastructure.Tests.Network
         }
 
         [Fact]
-        public async Task DisconnectAsync_ShouldStopHeartbeat_WhenDisconnected()
+        public async Task DisconnectAsync_ShouldDisconnectTransport_WhenDisconnected()
         {
             // Arrange
             var config = new ServerConfiguration
@@ -68,7 +67,6 @@ namespace SalmonEgg.Infrastructure.Tests.Network
                 Name = "Test Server",
                 ServerUrl = "ws://localhost:8080",
                 Transport = TransportType.WebSocket,
-                HeartbeatInterval = 5
             };
 
             var transportFactory = new Func<TransportType, ITransport>(_ => _mockTransport.Object);
@@ -126,7 +124,6 @@ namespace SalmonEgg.Infrastructure.Tests.Network
                 Name = "Test Server",
                 ServerUrl = "ws://localhost:8080",
                 Transport = TransportType.WebSocket,
-                HeartbeatInterval = 5
             };
 
             var transportFactory = new Func<TransportType, ITransport>(_ => _mockTransport.Object);
@@ -165,7 +162,6 @@ namespace SalmonEgg.Infrastructure.Tests.Network
                 Name = "Test Server",
                 ServerUrl = "invalid-url",
                 Transport = TransportType.WebSocket,
-                HeartbeatInterval = 5
             };
 
             var transportFactory = new Func<TransportType, ITransport>(_ => _mockTransport.Object);
@@ -192,7 +188,6 @@ namespace SalmonEgg.Infrastructure.Tests.Network
                 Name = "Test Server",
                 ServerUrl = "http://localhost:8080", // Invalid for WebSocket
                 Transport = TransportType.WebSocket,
-                HeartbeatInterval = 5
             };
 
             var transportFactory = new Func<TransportType, ITransport>(_ => _mockTransport.Object);
@@ -219,7 +214,6 @@ namespace SalmonEgg.Infrastructure.Tests.Network
                 Name = "Test Server",
                 ServerUrl = "ws://localhost:8080", // Invalid for HTTP SSE
                 Transport = TransportType.HttpSse,
-                HeartbeatInterval = 5
             };
 
             var transportFactory = new Func<TransportType, ITransport>(_ => _mockTransport.Object);
@@ -272,25 +266,19 @@ namespace SalmonEgg.Infrastructure.Tests.Network
             connectionManager.Dispose();
 
             // Assert
-            // Verify that resources were cleaned up (no specific verification since heartbeat wasn't started)
+            // Verify that resources were cleaned up.
             Assert.True(true);
         }
 
-        /// <summary>
-        /// Tests the heartbeat mechanism
-        /// Verifies that heartbeats are sent continuously while connected
-        /// </summary>
         [Fact]
-        public async Task Heartbeat_ShouldContinueSending_WhileConnected()
+        public async Task ConnectAsync_DoesNotSendCustomProtocolKeepalive_WhileConnected()
         {
-            // Arrange
             var config = new ServerConfiguration
             {
                 Id = "test",
                 Name = "Test Server",
                 ServerUrl = "ws://localhost:8080",
                 Transport = TransportType.WebSocket,
-                HeartbeatInterval = 1 // 1 second interval for testing
             };
 
             var transportFactory = new Func<TransportType, ITransport>(_ => _mockTransport.Object);
@@ -299,26 +287,15 @@ namespace SalmonEgg.Infrastructure.Tests.Network
                 _mockLogger.Object,
                 transportFactory);
 
-            // Act
             var connectTask = connectionManager.ConnectAsync(config, CancellationToken.None);
             _mockStateSubject.OnNext(TransportState.Connected);
             await connectTask;
 
-            // Wait for heartbeat timer to trigger
-            await Task.Delay(1500); // Wait 1.5 seconds, should trigger at least one heartbeat
-
-            // Simulate heartbeat response
-            _mockMessagesSubject.OnNext("{\"id\":\"heartbeat-response\",\"type\":\"response\",\"result\":\"ok\"}");
-
-            // Wait more time to ensure heartbeats continue
             await Task.Delay(1500);
 
-            // Disconnect
             await connectionManager.DisconnectAsync();
 
-            // Assert
-            // Verify heartbeat messages were sent at least once
-            _mockTransport.Verify(x => x.SendAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.AtLeast(2)); // Init message + at least one heartbeat
+            _mockTransport.Verify(x => x.SendAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
         }
 
         /// <summary>
@@ -334,7 +311,6 @@ namespace SalmonEgg.Infrastructure.Tests.Network
                 Name = "Test Server",
                 ServerUrl = "ws://localhost:8080",
                 Transport = TransportType.WebSocket,
-                HeartbeatInterval = 5
             };
 
             var transportFactory = new Func<TransportType, ITransport>(_ => _mockTransport.Object);
@@ -364,7 +340,6 @@ namespace SalmonEgg.Infrastructure.Tests.Network
                 Name = "Test Server",
                 ServerUrl = "invalid-url",
                 Transport = TransportType.WebSocket,
-                HeartbeatInterval = 5
             };
 
             var transportFactory = new Func<TransportType, ITransport>(_ => _mockTransport.Object);
@@ -394,7 +369,6 @@ namespace SalmonEgg.Infrastructure.Tests.Network
                 Name = "Test Server",
                 ServerUrl = "ws://localhost:8080",
                 Transport = TransportType.WebSocket,
-                HeartbeatInterval = 5
             };
 
             // Mock connection failure
@@ -429,7 +403,6 @@ namespace SalmonEgg.Infrastructure.Tests.Network
                 Name = "Test Server",
                 ServerUrl = "ws://localhost:8080",
                 Transport = TransportType.WebSocket,
-                HeartbeatInterval = 5,
                 Proxy = new ProxyConfig
                 {
                     Enabled = true,

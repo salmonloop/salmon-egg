@@ -43,7 +43,6 @@ namespace SalmonEgg.IntegrationTests
                 Name = "Test Server",
                 ServerUrl = "wss://echo.websocket.org",
                 Transport = TransportType.WebSocket,
-                HeartbeatInterval = 30,
                 ConnectionTimeout = 10
             };
 

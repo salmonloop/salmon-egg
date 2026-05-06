@@ -260,6 +260,11 @@ public partial class ChatViewModel
         }
 
         var chatService = resolvedConnection.ChatService;
+        var recoveryMode = AcpSessionRecoveryPolicy.Resolve(chatService.AgentCapabilities);
+        if (recoveryMode == AcpSessionRecoveryMode.None)
+        {
+            return true;
+        }
 
         if (string.IsNullOrWhiteSpace(binding.RemoteSessionId))
         {
@@ -271,7 +276,7 @@ public partial class ChatViewModel
                 conversationId,
                 ConversationRuntimePhase.RemoteHydrating,
                 binding,
-                reason: "SessionLoadStarted",
+                reason: recoveryMode == AcpSessionRecoveryMode.Load ? "SessionLoadStarted" : "SessionResumeStarted",
                 cancellationToken,
                 connectionInstanceId: resolvedConnection.ConnectionInstanceId)
             .ConfigureAwait(false);
@@ -286,13 +291,12 @@ public partial class ChatViewModel
 
         try
         {
-            hydrationAttemptId = adapter?.BeginHydrationBufferingScope(binding.RemoteSessionId);
             var ownsRemoteHydrationUi = ShouldOwnRemoteHydrationUi(conversationId, activationVersion);
             var transcriptBaselineCount = await GetProjectedTranscriptCountAsync(conversationId).ConfigureAwait(false);
             var knownTranscriptGrowthGraceDeadlineUtc = DateTime.UtcNow + RemoteReplayKnownTranscriptGrowthGracePeriod;
             var replayBaseline = GetSessionUpdateObservationCount(binding.RemoteSessionId);
             var transcriptProjectionBaseline = GetTranscriptProjectionObservationCount(binding.RemoteSessionId);
-            var requiresTranscriptGrowthObservation = adapter != null;
+            var requiresTranscriptGrowthObservation = recoveryMode == AcpSessionRecoveryMode.Load && adapter != null;
             var hasCachedTranscript = transcriptBaselineCount > 0;
             var shouldAwaitReplayProjection =
                 requiresTranscriptGrowthObservation &&
@@ -350,38 +354,60 @@ public partial class ChatViewModel
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            await ResetConversationProjectionForResyncAsync(conversationId, cancellationToken).ConfigureAwait(false);
-            await SetHydrationOverlayPhaseAsync(
-                    conversationId,
-                    activationVersion,
-                    HydrationOverlayPhase.RequestingSessionLoad)
-                .ConfigureAwait(false);
-            var sessionLoadTask = chatService.LoadSessionAsync(
-                new SessionLoadParams(binding.RemoteSessionId!, GetSessionCwdOrDefault(conversationId)),
-                cancellationToken);
-            var sessionLoadResponse = await sessionLoadTask
-                .WaitAsync(RemoteSessionLoadTimeout, cancellationToken)
-                .ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
-            if (adapter != null)
+            AcpSessionRecoveryProjection recoveryProjection;
+            if (recoveryMode == AcpSessionRecoveryMode.Load)
             {
-                if (!adapter.TryMarkHydrated(hydrationAttemptId!.Value))
-                {
-                    Logger.LogWarning(
-                        "Discarding remote hydration completion because buffering attempt is stale. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
+                hydrationAttemptId = adapter?.BeginHydrationBufferingScope(binding.RemoteSessionId);
+                await ResetConversationProjectionForResyncAsync(conversationId, cancellationToken).ConfigureAwait(false);
+                await SetHydrationOverlayPhaseAsync(
                         conversationId,
-                        binding.RemoteSessionId);
-                    await RecoverProjectionAfterStaleHydrationAttemptAsync(
+                        activationVersion,
+                        HydrationOverlayPhase.RequestingSessionLoad)
+                    .ConfigureAwait(false);
+                var sessionLoadTask = chatService.LoadSessionAsync(
+                    new SessionLoadParams(binding.RemoteSessionId!, GetSessionCwdOrDefault(conversationId)),
+                    cancellationToken);
+                recoveryProjection = AcpSessionRecoveryProjection.FromLoad(
+                    await sessionLoadTask
+                        .WaitAsync(RemoteSessionLoadTimeout, cancellationToken)
+                        .ConfigureAwait(false));
+                cancellationToken.ThrowIfCancellationRequested();
+                if (adapter != null && hydrationAttemptId.HasValue)
+                {
+                    if (!adapter.TryMarkHydrated(hydrationAttemptId.Value))
+                    {
+                        Logger.LogWarning(
+                            "Discarding remote hydration completion because buffering attempt is stale. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
                             conversationId,
-                            activationVersion,
-                            binding,
-                            ConversationRuntimePhase.RemoteConnectionReady,
-                            cancellationToken)
-                        .ConfigureAwait(false);
-                    return false;
+                            binding.RemoteSessionId);
+                        await RecoverProjectionAfterStaleHydrationAttemptAsync(
+                                conversationId,
+                                activationVersion,
+                                binding,
+                                ConversationRuntimePhase.RemoteConnectionReady,
+                                cancellationToken)
+                            .ConfigureAwait(false);
+                        return false;
+                    }
                 }
             }
-            await ApplySessionLoadResponseAsync(conversationId, sessionLoadResponse).ConfigureAwait(true);
+            else
+            {
+                await SetHydrationOverlayPhaseAsync(
+                        conversationId,
+                        activationVersion,
+                        HydrationOverlayPhase.RequestingSessionLoad)
+                    .ConfigureAwait(false);
+                var sessionResumeTask = chatService.ResumeSessionAsync(
+                    new SessionResumeParams(binding.RemoteSessionId!, GetSessionCwdOrDefault(conversationId)),
+                    cancellationToken);
+                recoveryProjection = AcpSessionRecoveryProjection.FromResume(
+                    await sessionResumeTask
+                        .WaitAsync(RemoteSessionLoadTimeout, cancellationToken)
+                        .ConfigureAwait(false));
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+            await ApplySessionLoadResponseAsync(conversationId, recoveryProjection.SessionLoadResponse).ConfigureAwait(true);
             cancellationToken.ThrowIfCancellationRequested();
 
             if (shouldAwaitReplayProjection)
@@ -405,8 +431,10 @@ public partial class ChatViewModel
                     .ConfigureAwait(false);
             }
 
-            if (adapter != null
-                && !adapter.TryMarkHydrated(hydrationAttemptId!.Value, reason: "PostDrainVerification"))
+            if (recoveryMode == AcpSessionRecoveryMode.Load
+                && adapter != null
+                && hydrationAttemptId.HasValue
+                && !adapter.TryMarkHydrated(hydrationAttemptId.Value, reason: "PostDrainVerification"))
             {
                 Logger.LogWarning(
                     "Discarding remote hydration finalization because buffering attempt became stale after replay drain. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
@@ -442,7 +470,7 @@ public partial class ChatViewModel
                     conversationId,
                     ConversationRuntimePhase.Warm,
                     binding,
-                    reason: ConversationRuntimeReasons.SessionLoadCompleted,
+                    reason: recoveryProjection.CompletedRuntimeReason,
                     cancellationToken,
                     connectionInstanceId: resolvedConnection.ConnectionInstanceId)
                 .ConfigureAwait(false);
@@ -643,7 +671,7 @@ public partial class ChatViewModel
             return true;
         }
 
-        if (_chatService?.AgentCapabilities?.LoadSession == false)
+        if (AcpSessionRecoveryPolicy.Resolve(_chatService?.AgentCapabilities) == AcpSessionRecoveryMode.None)
         {
             return true;
         }
@@ -1458,7 +1486,7 @@ public partial class ChatViewModel
         }
 
         var chatService = resolvedConnection.ChatService;
-        if (chatService.AgentCapabilities?.LoadSession != true)
+        if (AcpSessionRecoveryPolicy.Resolve(chatService.AgentCapabilities) == AcpSessionRecoveryMode.None)
         {
             return true;
         }
@@ -1517,7 +1545,7 @@ public partial class ChatViewModel
             return ConversationActivationHydrationMode.WorkspaceSnapshot;
         }
 
-        if (_chatService?.AgentCapabilities?.LoadSession == false)
+        if (AcpSessionRecoveryPolicy.Resolve(_chatService?.AgentCapabilities) == AcpSessionRecoveryMode.None)
         {
             return ConversationActivationHydrationMode.WorkspaceSnapshot;
         }

@@ -136,7 +136,6 @@ ConnectToServerUseCase.ExecuteAsync(configId)
    a. Select transport (Stdio subprocess / WebSocket / HTTP SSE)
    b. Establish connection
    c. Send initialization message
-   d. Start heartbeat mechanism
        ↓
 ConnectionStateChanges → MainViewModel
        ↓

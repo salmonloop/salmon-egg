@@ -20,8 +20,6 @@ internal sealed class ServerConfigurationYamlV1
 
     public string StdioArgs { get; set; } = string.Empty;
 
-    public int HeartbeatIntervalSeconds { get; set; } = 30;
-
     public int ConnectionTimeoutSeconds { get; set; } = 10;
 
     public AuthenticationYamlV1 Authentication { get; set; } = new();

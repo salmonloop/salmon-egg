@@ -61,8 +61,10 @@ namespace SalmonEgg.Infrastructure.Client
         private AgentCapabilities? _agentCapabilities;
         private long _nextMessageId;
         private long _lastReceivedUnixMs;
-        private bool SupportsSessionList => _agentCapabilities?.SessionCapabilities?.List != null;
+        private bool SupportsSessionList => _agentCapabilities?.SupportsSessionList == true;
         private bool SupportsSessionLoad => _agentCapabilities?.SupportsSessionLoading == true;
+        private bool SupportsSessionResume => _agentCapabilities?.SupportsSessionResume == true;
+        private bool SupportsSessionClose => _agentCapabilities?.SupportsSessionClose == true;
 
         /// <summary>
         /// 初始化事件。
@@ -328,6 +330,93 @@ namespace SalmonEgg.Infrastructure.Client
                 _parser.Options);
 
             return sessionLoadResponse ?? SessionLoadResponse.Completed;
+        }
+
+        /// <summary>
+        /// 恢复已有会话但不要求 Agent 重放历史。
+        /// </summary>
+        public async Task<SessionResumeResponse> ResumeSessionAsync(SessionResumeParams @params, CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+            ValidateRequiredAbsolutePath(@params.Cwd, "cwd", "session/resume");
+
+            if (!SupportsSessionResume)
+            {
+                _errorLogger.LogError(new ErrorLogEntry(
+                    "SESSION_RESUME_UNSUPPORTED",
+                    "Agent does not support session/resume capability",
+                    ErrorSeverity.Info,
+                    nameof(ResumeSessionAsync)));
+
+                return SessionResumeResponse.Completed;
+            }
+
+            var request = new JsonRpcRequest(
+                Interlocked.Increment(ref _nextMessageId),
+                "session/resume",
+                JsonSerializer.SerializeToElement(@params, typeof(SessionResumeParams), _parser.Options));
+
+            var response = await SendRequestAsync(request, cancellationToken, _timeouts.SessionLoadTimeout).ConfigureAwait(false);
+
+            if (response.IsError)
+            {
+                throw new AcpException(response.Error!.Code, response.Error.Message, response.Error.Data);
+            }
+
+            if (!response.Result.HasValue ||
+                response.Result.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            {
+                return SessionResumeResponse.Completed;
+            }
+
+            var sessionResumeResponse = JsonSerializer.Deserialize<SessionResumeResponse>(
+                response.Result.Value.GetRawText(),
+                _parser.Options);
+
+            return sessionResumeResponse ?? SessionResumeResponse.Completed;
+        }
+
+        /// <summary>
+        /// 关闭已有会话并释放 Agent 侧资源。
+        /// </summary>
+        public async Task<SessionCloseResponse> CloseSessionAsync(SessionCloseParams @params, CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+
+            if (!SupportsSessionClose)
+            {
+                _errorLogger.LogError(new ErrorLogEntry(
+                    "SESSION_CLOSE_UNSUPPORTED",
+                    "Agent does not support session/close capability",
+                    ErrorSeverity.Info,
+                    nameof(CloseSessionAsync)));
+
+                return SessionCloseResponse.Completed;
+            }
+
+            var request = new JsonRpcRequest(
+                Interlocked.Increment(ref _nextMessageId),
+                "session/close",
+                JsonSerializer.SerializeToElement(@params, typeof(SessionCloseParams), _parser.Options));
+
+            var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
+
+            if (response.IsError)
+            {
+                throw new AcpException(response.Error!.Code, response.Error.Message, response.Error.Data);
+            }
+
+            if (!response.Result.HasValue ||
+                response.Result.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            {
+                return SessionCloseResponse.Completed;
+            }
+
+            var sessionCloseResponse = JsonSerializer.Deserialize<SessionCloseResponse>(
+                response.Result.Value.GetRawText(),
+                _parser.Options);
+
+            return sessionCloseResponse ?? SessionCloseResponse.Completed;
         }
 
         /// <summary>

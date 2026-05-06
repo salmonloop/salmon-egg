@@ -181,7 +181,6 @@ public sealed class ConfigurationManager : IConfigurationService
             ServerUrl = config.ServerUrl,
             StdioCommand = config.StdioCommand,
             StdioArgs = config.StdioArgs,
-            HeartbeatIntervalSeconds = config.HeartbeatInterval,
             ConnectionTimeoutSeconds = config.ConnectionTimeout,
             Authentication = new AuthenticationYamlV1 { Mode = mode },
             Proxy = config.Proxy is { Enabled: true }
@@ -200,7 +199,6 @@ public sealed class ConfigurationManager : IConfigurationService
             StdioCommand = yamlModel.StdioCommand ?? string.Empty,
             StdioArgs = yamlModel.StdioArgs ?? string.Empty,
             Transport = TransportFromString(yamlModel.Transport),
-            HeartbeatInterval = yamlModel.HeartbeatIntervalSeconds > 0 ? yamlModel.HeartbeatIntervalSeconds : 30,
             ConnectionTimeout = yamlModel.ConnectionTimeoutSeconds > 0 ? yamlModel.ConnectionTimeoutSeconds : 10
         };
 

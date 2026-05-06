@@ -113,6 +113,21 @@ namespace SalmonEgg.Application.Services.Chat
         Task<SessionLoadResponse> LoadSessionAsync(SessionLoadParams @params, CancellationToken cancellationToken);
 
         /// <summary>
+        /// 恢复现有会话，但不要求 Agent 重放历史。
+        /// </summary>
+        Task<SessionResumeResponse> ResumeSessionAsync(SessionResumeParams @params);
+
+        /// <summary>
+        /// 恢复现有会话，并允许调用方取消过时的恢复请求。
+        /// </summary>
+        Task<SessionResumeResponse> ResumeSessionAsync(SessionResumeParams @params, CancellationToken cancellationToken);
+
+        /// <summary>
+        /// 关闭远端 Agent 会话。
+        /// </summary>
+        Task<SessionCloseResponse> CloseSessionAsync(SessionCloseParams @params, CancellationToken cancellationToken = default);
+
+        /// <summary>
         /// 列出远端 Agent 支持的会话列表
         /// </summary>
         Task<SessionListResponse> ListSessionsAsync(SessionListParams? @params = null, CancellationToken cancellationToken = default);

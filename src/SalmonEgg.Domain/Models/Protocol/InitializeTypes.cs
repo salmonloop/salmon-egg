@@ -407,6 +407,21 @@ namespace SalmonEgg.Domain.Models.Protocol
         public bool SupportsSessionLoading => LoadSession ?? false;
 
         /// <summary>
+        /// 判断是否支持会话恢复。
+        /// </summary>
+        public bool SupportsSessionResume => SessionCapabilities?.Resume != null;
+
+        /// <summary>
+        /// 判断是否支持会话关闭。
+        /// </summary>
+        public bool SupportsSessionClose => SessionCapabilities?.Close != null;
+
+        /// <summary>
+        /// 判断是否支持会话列表。
+        /// </summary>
+        public bool SupportsSessionList => SessionCapabilities?.List != null;
+
+        /// <summary>
         /// 判断是否支持 HTTP 传输。
         /// </summary>
         public bool SupportsHttp => McpCapabilities?.Http ?? false;
@@ -509,6 +524,18 @@ namespace SalmonEgg.Domain.Models.Protocol
         public SessionListCapabilities? List { get; set; }
 
         /// <summary>
+        /// 是否支持会话恢复功能。
+        /// </summary>
+        [JsonPropertyName("resume")]
+        public SessionResumeCapabilities? Resume { get; set; }
+
+        /// <summary>
+        /// 是否支持会话关闭功能。
+        /// </summary>
+        [JsonPropertyName("close")]
+        public SessionCloseCapabilities? Close { get; set; }
+
+        /// <summary>
         /// 创建新的 SessionCapabilities 实例。
         /// </summary>
         public SessionCapabilities()
@@ -525,6 +552,32 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// 创建新的 SessionListCapabilities 实例。
         /// </summary>
         public SessionListCapabilities()
+        {
+        }
+    }
+
+    /// <summary>
+    /// 会话恢复能力类。
+    /// </summary>
+    public class SessionResumeCapabilities
+    {
+        /// <summary>
+        /// 创建新的 SessionResumeCapabilities 实例。
+        /// </summary>
+        public SessionResumeCapabilities()
+        {
+        }
+    }
+
+    /// <summary>
+    /// 会话关闭能力类。
+    /// </summary>
+    public class SessionCloseCapabilities
+    {
+        /// <summary>
+        /// 创建新的 SessionCloseCapabilities 实例。
+        /// </summary>
+        public SessionCloseCapabilities()
         {
         }
     }

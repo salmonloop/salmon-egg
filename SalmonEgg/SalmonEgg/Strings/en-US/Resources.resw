@@ -865,9 +865,6 @@
   <data name="AgentProfileEditorConnectionTitle.Text" xml:space="preserve">
     <value>Connection</value>
   </data>
-  <data name="AgentProfileEditorHeartbeat.Header" xml:space="preserve">
-    <value>Heartbeat interval (seconds)</value>
-  </data>
   <data name="AgentProfileEditorTimeout.Header" xml:space="preserve">
     <value>Connection timeout (seconds)</value>
   </data>

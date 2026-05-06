@@ -811,9 +811,6 @@
   <data name="AgentProfileEditorConnectionTitle.Text" xml:space="preserve">
     <value>连接</value>
   </data>
-  <data name="AgentProfileEditorHeartbeat.Header" xml:space="preserve">
-    <value>心跳间隔（秒）</value>
-  </data>
   <data name="AgentProfileEditorTimeout.Header" xml:space="preserve">
     <value>连接超时（秒）</value>
   </data>
