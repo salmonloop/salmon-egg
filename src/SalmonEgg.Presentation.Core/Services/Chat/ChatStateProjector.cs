@@ -17,15 +17,19 @@ public interface IChatStateProjector
 public sealed class ChatStateProjector : IChatStateProjector
 {
     private readonly ChatSessionToolingProjector _sessionToolingProjector;
+    private readonly TranscriptProjectionRestoreTokenProjector _restoreTokenProjector;
 
     public ChatStateProjector()
-        : this(new ChatSessionToolingProjector())
+        : this(new ChatSessionToolingProjector(), new TranscriptProjectionRestoreTokenProjector())
     {
     }
 
-    public ChatStateProjector(ChatSessionToolingProjector sessionToolingProjector)
+    public ChatStateProjector(
+        ChatSessionToolingProjector sessionToolingProjector,
+        TranscriptProjectionRestoreTokenProjector restoreTokenProjector)
     {
         _sessionToolingProjector = sessionToolingProjector ?? throw new ArgumentNullException(nameof(sessionToolingProjector));
+        _restoreTokenProjector = restoreTokenProjector ?? throw new ArgumentNullException(nameof(restoreTokenProjector));
     }
 
     public ChatUiProjection Apply(
@@ -73,6 +77,11 @@ public sealed class ChatStateProjector : IChatStateProjector
         var planEntries = contentSlice?.PlanEntries
             ?? storeState.PlanEntries
             ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty;
+        var restoreProjection = _restoreTokenProjector.Project(
+            conversationId: hydratedConversationId ?? string.Empty,
+            transcript,
+            firstVisibleIndex: transcript.Count > 0 ? transcript.Count - 1 : -1,
+            relativeOffsetWithinItem: 0d);
 
         return new ChatUiProjection(
             HydratedConversationId: hydratedConversationId,
@@ -97,6 +106,7 @@ public sealed class ChatStateProjector : IChatStateProjector
             AgentVersion: displayAgentVersion,
             CurrentPrompt: storeState.DraftText ?? string.Empty,
             Transcript: transcript,
+            RestoreProjection: restoreProjection,
             ShowPlanPanel: contentSlice?.ShowPlanPanel ?? storeState.ShowPlanPanel,
             PlanTitle: contentSlice?.PlanTitle ?? storeState.PlanTitle,
             PlanEntries: planEntries,
@@ -164,6 +174,7 @@ public sealed record ChatUiProjection(
     string? AgentVersion,
     string CurrentPrompt,
     IImmutableList<ConversationMessageSnapshot> Transcript,
+    TranscriptProjectionRestoreProjection RestoreProjection,
     bool ShowPlanPanel,
     string? PlanTitle,
     IReadOnlyList<ConversationPlanEntrySnapshot> PlanEntries,
