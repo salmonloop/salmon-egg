@@ -13,10 +13,10 @@ using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.Core.ViewModels.ShellLayout;
 using Windows.Foundation;
 
-namespace SalmonEgg.Presentation.Views.Chat
+namespace SalmonEgg.Presentation.Views.Chat;
+
+public sealed partial class ChatView : Page
 {
-    public sealed partial class ChatView : Page
-    {
         public ChatShellViewModel ShellViewModel { get; }
         public ChatViewModel ViewModel => ShellViewModel.Chat;
         public ShellLayoutViewModel LayoutVM => ShellViewModel.ShellLayout;
@@ -1485,8 +1485,8 @@ namespace SalmonEgg.Presentation.Views.Chat
             Grid.SetRow(SessionHeaderAgentDisplay, 1);
             Grid.SetColumn(SessionHeaderAgentDisplay, 0);
             Grid.SetColumnSpan(SessionHeaderAgentDisplay, 2);
-            SessionHeaderAgentDisplay.HorizontalAlignment = HorizontalAlignment.Left;
-            SessionHeaderAgentDisplay.Margin = new Thickness(28, 0, 0, 0);
+            SessionHeaderAgentDisplay.HorizontalAlignment = HorizontalAlignment.Right;
+            SessionHeaderAgentDisplay.Margin = new Thickness(0);
             SessionHeaderAgentDisplay.MaxWidth = 320;
         }
 
@@ -1543,5 +1543,4 @@ namespace SalmonEgg.Presentation.Views.Chat
                     break;
             }
         }
-    }
 }

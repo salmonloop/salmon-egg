@@ -104,6 +104,18 @@ public sealed class ChatViewXamlTests
     }
 
     [Fact]
+    public void ChatViewSessionHeader_NarrowLayout_KeepsAgentRowRightAligned()
+    {
+        var codeBehind = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
+
+        Assert.Contains("Grid.SetRow(SessionHeaderAgentDisplay, 1);", codeBehind, StringComparison.Ordinal);
+        Assert.Contains("Grid.SetColumnSpan(SessionHeaderAgentDisplay, 2);", codeBehind, StringComparison.Ordinal);
+        Assert.Contains("SessionHeaderAgentDisplay.HorizontalAlignment = HorizontalAlignment.Right;", codeBehind, StringComparison.Ordinal);
+        Assert.DoesNotContain("SessionHeaderAgentDisplay.HorizontalAlignment = HorizontalAlignment.Left;", codeBehind, StringComparison.Ordinal);
+        Assert.DoesNotContain("SessionHeaderAgentDisplay.Margin = new Thickness(28, 0, 0, 0);", codeBehind, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void WindowsGuiAppSession_AnywhereLookupStaysWithinApplicationWindows()
     {
         var code = LoadText(@"tests\SalmonEgg.GuiTests.Windows\WindowsGuiAppSession.cs");
