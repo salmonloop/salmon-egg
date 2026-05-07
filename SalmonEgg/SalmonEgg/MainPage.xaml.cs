@@ -813,6 +813,7 @@ public sealed partial class MainPage : Page
             _logger.LogDebug(
                 "NavVM settings changed SettingsSelected={IsSettingsSelected}",
                 NavVM.IsSettingsSelected);
+
             UpdateMainNavAutomationSelectionState();
         }
     }

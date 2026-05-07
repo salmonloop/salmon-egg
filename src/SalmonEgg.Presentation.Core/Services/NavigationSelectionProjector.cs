@@ -11,6 +11,7 @@ public sealed class NavigationSelectionProjector : INavigationSelectionProjector
         NavigationSelectionState selection,
         StartNavItemViewModel startItem,
         DiscoverSessionsNavItemViewModel discoverSessionsItem,
+        SettingsNavItemViewModel settingsItem,
         IReadOnlyDictionary<string, SessionNavItemViewModel> sessionIndex,
         IReadOnlyDictionary<string, ProjectNavItemViewModel> projectIndex)
     {
@@ -35,7 +36,7 @@ public sealed class NavigationSelectionProjector : INavigationSelectionProjector
 
             case NavigationSelectionState.Settings:
                 return new NavigationViewProjection(
-                    ControlSelectedItem: null,
+                    ControlSelectedItem: settingsItem,
                     IsSettingsSelected: true,
                     ActiveProjectIds: activeProjects,
                     SelectedSessionIds: selectedSessions);

@@ -6,6 +6,7 @@ public static class NavItemTag
 {
     public static string Start => "Start";
     public static string DiscoverSessions => "DiscoverSessions";
+    public static string Settings => "Settings";
     public static string SessionsLabel => "SessionsLabel";
     public static string AddProject => "AddProject";
 

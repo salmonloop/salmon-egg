@@ -385,8 +385,8 @@ public sealed class MainNavigationViewModelSelectionTests
 
             Assert.IsType<NavigationSelectionState.Settings>(navVm.CurrentSelection);
             Assert.True(navVm.IsSettingsSelected);
-            Assert.Null(navVm.ProjectedControlSelectedItem);
-            Assert.Null(navVm.ProjectedControlSelectedItem);
+            Assert.IsType<SettingsNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+            Assert.IsType<SettingsNavItemViewModel>(navVm.ProjectedControlSelectedItem);
         }
         finally
         {
@@ -1826,6 +1826,7 @@ public sealed class MainNavigationViewModelSelectionTests
             NavigationSelectionState selection,
             StartNavItemViewModel startItem,
             DiscoverSessionsNavItemViewModel discoverSessionsItem,
+            SettingsNavItemViewModel settingsItem,
             IReadOnlyDictionary<string, SessionNavItemViewModel> sessionIndex,
             IReadOnlyDictionary<string, ProjectNavItemViewModel> projectIndex)
             => _projection;

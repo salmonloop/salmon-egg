@@ -29,6 +29,17 @@ public sealed partial class DiscoverSessionsNavItemViewModel : MainNavItemViewMo
     }
 }
 
+public sealed partial class SettingsNavItemViewModel : MainNavItemViewModel
+{
+    public string Title { get; }
+
+    public SettingsNavItemViewModel(string title, INavigationPaneState navigationState, IUiDispatcher uiDispatcher)
+        : base(navigationState, uiDispatcher)
+    {
+        Title = title;
+    }
+}
+
 public sealed partial class ProjectNavItemViewModel : MainNavItemViewModel
 {
     public string ProjectId { get; }

@@ -76,6 +76,19 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
+    public void CoreStrings_ProvidesEnglishSettingsNavigationLabel()
+    {
+        var root = FindRepoRoot();
+        var en = File.ReadAllText(Path.Combine(root, @"src\SalmonEgg.Presentation.Core\Resources\CoreStrings.en.resx"));
+        var enUs = File.ReadAllText(Path.Combine(root, @"src\SalmonEgg.Presentation.Core\Resources\CoreStrings.en-US.resx"));
+
+        Assert.Contains("<data name=\"Nav_Settings\"", en, StringComparison.Ordinal);
+        Assert.Contains("<value>Settings</value>", en, StringComparison.Ordinal);
+        Assert.Contains("<data name=\"Nav_Settings\"", enUs, StringComparison.Ordinal);
+        Assert.Contains("<value>Settings</value>", enUs, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MainPage_DoesNotImperativelyProjectNavigationPaneState()
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
@@ -290,12 +303,29 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
+    public void MainNavigationXaml_HidesBuiltInSettingsItem_WhenSettingsLivesInFooterSelectionModel()
+    {
+        var xaml = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml");
+
+        Assert.Contains("IsSettingsVisible=\"False\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MainPage_DoesNotBridgeSettingsThroughControlSpecificSelectedItemWriteback()
+    {
+        var code = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
+
+        Assert.DoesNotContain("MainNavControlSelectedItem", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("MainNavView.SettingsItem", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MainPage_TreeRebuildReliesOnProjectedSelectionBindingInsteadOfImperativeSelectedItemWriteback()
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
 
         Assert.Contains("NavVM.TreeRebuilt += OnNavigationTreeRebuilt;", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("MainNavView.SelectedItem = NavVM.ProjectedControlSelectedItem;", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("MainNavView.SelectedItem =", code, StringComparison.Ordinal);
         Assert.Contains("UpdateMainNavAutomationSelectionState();", code, StringComparison.Ordinal);
     }
 
@@ -320,6 +350,7 @@ public sealed class NavigationCoreTests
             "public Task HandleSelectionChangedAsync",
             "private Task<bool> HandleItemInvokedCoreAsync");
 
+        Assert.DoesNotContain("ActivateSettingsAsync", section, StringComparison.Ordinal);
         Assert.DoesNotContain("ActivateStartAsync", section, StringComparison.Ordinal);
         Assert.DoesNotContain("ActivateDiscoverSessionsAsync", section, StringComparison.Ordinal);
         Assert.DoesNotContain("ActivateSessionAsync", section, StringComparison.Ordinal);

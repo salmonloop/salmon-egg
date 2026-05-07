@@ -62,6 +62,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     public StartNavItemViewModel StartItem { get; }
     public DiscoverSessionsNavItemViewModel DiscoverSessionsItem { get; }
+    public SettingsNavItemViewModel SettingsItem { get; }
     public SessionsLabelNavItemViewModel SessionsLabelItem { get; }
     public AddProjectNavItemViewModel AddProjectItem { get; }
 
@@ -164,10 +165,12 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
         StartItem = new StartNavItemViewModel(_navigationState, _uiDispatcher);
         DiscoverSessionsItem = new DiscoverSessionsNavItemViewModel(_navigationState, _uiDispatcher);
+        SettingsItem = new SettingsNavItemViewModel(localizer["Nav_Settings"], _navigationState, _uiDispatcher);
         SessionsLabelItem = new SessionsLabelNavItemViewModel(_navigationState, _uiDispatcher, localizer["Nav_Sessions"]);
         AddProjectItem = new AddProjectNavItemViewModel(AddProjectCommand, _navigationState, _uiDispatcher);
 
         FooterItems.Add(DiscoverSessionsItem);
+        FooterItems.Add(SettingsItem);
 
         Items.Add(StartItem);
         Items.Add(SessionsLabelItem);
@@ -208,6 +211,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
         DisposeItem(StartItem);
         DisposeItem(DiscoverSessionsItem);
+        DisposeItem(SettingsItem);
         DisposeItem(SessionsLabelItem);
         DisposeItem(AddProjectItem);
         foreach (var item in Items)
@@ -729,6 +733,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 NavigationSelectionState.StartSelection,
                 StartItem,
                 DiscoverSessionsItem,
+                SettingsItem,
                 _sessionIndex,
                 _projectIndex);
             ApplyVisualSelectionState(_projection);
@@ -760,6 +765,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             projectedSelection,
             StartItem,
             DiscoverSessionsItem,
+            SettingsItem,
             _sessionIndex,
             _projectIndex);
 

@@ -30,21 +30,11 @@ public sealed class MainNavigationViewAdapter
 
     public Task HandleSelectionChangedAsync(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
-        if (args.IsSettingsSelected)
-        {
-            return _navigationCoordinator.ActivateSettingsAsync("General");
-        }
-
         return Task.CompletedTask;
     }
 
     private Task<bool> HandleItemInvokedCoreAsync(NavigationViewItemInvokedEventArgs args)
     {
-        if (args.IsSettingsInvoked)
-        {
-            return _navigationCoordinator.ActivateSettingsAsync("General").ContinueWith(_ => true);
-        }
-
         if (args.InvokedItemContainer is not NavigationViewItem navItem || navItem.Tag is not string tag)
         {
             return Task.FromResult(false);
@@ -78,6 +68,11 @@ public sealed class MainNavigationViewAdapter
         if (string.Equals(tag, NavItemTag.DiscoverSessions, StringComparison.Ordinal))
         {
             return _navigationCoordinator.ActivateDiscoverSessionsAsync().ContinueWith(_ => true);
+        }
+
+        if (string.Equals(tag, NavItemTag.Settings, StringComparison.Ordinal))
+        {
+            return _navigationCoordinator.ActivateSettingsAsync("General").ContinueWith(_ => true);
         }
 
         if (NavItemTag.TryParseSession(tag, out var sessionId))

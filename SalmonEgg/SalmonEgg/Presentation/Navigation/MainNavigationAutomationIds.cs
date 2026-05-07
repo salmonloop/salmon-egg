@@ -8,6 +8,8 @@ public static class MainNavigationAutomationIds
 
     public static string DiscoverSessionsItem() => "MainNav.DiscoverSessions";
 
+    public static string SettingsItem() => "SettingsItem";
+
     public static string SessionsLabel() => "MainNav.SessionsLabel";
 
     public static string AddProject() => "MainNav.AddProject";

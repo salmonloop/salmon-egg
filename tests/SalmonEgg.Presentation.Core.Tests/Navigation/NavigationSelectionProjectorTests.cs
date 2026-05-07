@@ -38,6 +38,7 @@ public sealed class NavigationSelectionProjectorTests
             new NavigationSelectionState.Session("session-1"),
             start,
             new DiscoverSessionsNavItemViewModel(navState, new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher()),
+            new SettingsNavItemViewModel("Settings", navState, new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher()),
             new Dictionary<string, SessionNavItemViewModel> { ["session-1"] = session },
             new Dictionary<string, ProjectNavItemViewModel> { ["project-1"] = project });
 
@@ -71,6 +72,7 @@ public sealed class NavigationSelectionProjectorTests
             new NavigationSelectionState.Session("session-1"),
             start,
             new DiscoverSessionsNavItemViewModel(navState, new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher()),
+            new SettingsNavItemViewModel("Settings", navState, new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher()),
             new Dictionary<string, SessionNavItemViewModel> { ["session-1"] = session },
             new Dictionary<string, ProjectNavItemViewModel> { ["project-1"] = project });
 
@@ -98,11 +100,33 @@ public sealed class NavigationSelectionProjectorTests
             new NavigationSelectionState.Session("session-1"),
             start,
             new DiscoverSessionsNavItemViewModel(navState, new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher()),
+            new SettingsNavItemViewModel("Settings", navState, new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher()),
             new Dictionary<string, SessionNavItemViewModel> { ["session-1"] = session },
             new Dictionary<string, ProjectNavItemViewModel>());
 
         Assert.Same(session, projection.ControlSelectedItem);
         Assert.Contains("session-1", projection.SelectedSessionIds);
+    }
+
+    [Fact]
+    public void Project_UsesSettingsFooterItem_ForSettingsSelection()
+    {
+        var navState = new FakeNavigationPaneState(isPaneOpen: true);
+        var start = new StartNavItemViewModel(navState, new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher());
+        var discover = new DiscoverSessionsNavItemViewModel(navState, new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher());
+        var settings = new SettingsNavItemViewModel("Settings", navState, new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher());
+
+        var projector = new NavigationSelectionProjector();
+        var projection = projector.Project(
+            NavigationSelectionState.SettingsSelection,
+            start,
+            discover,
+            settings,
+            new Dictionary<string, SessionNavItemViewModel>(),
+            new Dictionary<string, ProjectNavItemViewModel>());
+
+        Assert.Same(settings, projection.ControlSelectedItem);
+        Assert.True(projection.IsSettingsSelected);
     }
 
     private sealed class FakeNavigationPaneState : INavigationPaneState

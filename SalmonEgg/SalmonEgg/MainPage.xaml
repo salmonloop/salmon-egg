@@ -75,6 +75,21 @@
             </NavigationViewItem>
         </DataTemplate>
 
+        <DataTemplate x:Key="SettingsNavTemplate" x:DataType="nav:SettingsNavItemViewModel">
+            <NavigationViewItem AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.SettingsItem()}"
+                                Tag="{x:Bind navModels:NavItemTag.Settings}">
+                <NavigationViewItem.Icon>
+                    <SymbolIcon Symbol="Setting" />
+                </NavigationViewItem.Icon>
+                <NavigationViewItem.Content>
+                    <TextBlock Text="{x:Bind Title, Mode=OneWay}"
+                               TextTrimming="CharacterEllipsis"
+                               MaxLines="1"
+                               VerticalAlignment="Center" />
+                </NavigationViewItem.Content>
+            </NavigationViewItem>
+        </DataTemplate>
+
         <DataTemplate x:Key="SessionsLabelTemplate" x:DataType="nav:SessionsLabelNavItemViewModel">
             <NavigationViewItemHeader Content="{x:Bind Title, Mode=OneWay}"
                                       AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.SessionsLabel()}" />
@@ -200,6 +215,7 @@
         <navViews:MainNavItemTemplateSelector x:Key="MainNavItemTemplateSelector"
                                               StartTemplate="{StaticResource StartNavTemplate}"
                                               DiscoverSessionsTemplate="{StaticResource DiscoverSessionsNavTemplate}"
+                                              SettingsTemplate="{StaticResource SettingsNavTemplate}"
                                               LabelTemplate="{StaticResource SessionsLabelTemplate}"
                                               AddProjectTemplate="{StaticResource AddProjectTemplate}"
                                               ProjectTemplate="{StaticResource ProjectNavTemplate}"
@@ -503,7 +519,7 @@
                              IsPaneOpen="{x:Bind LayoutVM.IsNavPaneOpen, Mode=OneWay}"
                              IsBackButtonVisible="Collapsed"
                              IsPaneToggleButtonVisible="False"
-                             IsSettingsVisible="True"
+                             IsSettingsVisible="False"
                              AlwaysShowHeader="False"
                              SelectedItem="{x:Bind NavVM.ProjectedControlSelectedItem, Mode=OneWay}"
                              Padding="{x:Bind LayoutVM.NavViewPadding, Mode=OneWay, Converter={StaticResource PaddingConverter}}"
