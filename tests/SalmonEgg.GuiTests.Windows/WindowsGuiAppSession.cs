@@ -433,6 +433,24 @@ internal sealed class WindowsGuiAppSession : IDisposable
         Keyboard.Release(VirtualKeyShort.RETURN);
     }
 
+    public void PressShortcut(params VirtualKeyShort[] keys)
+    {
+        if (keys is null || keys.Length == 0)
+        {
+            return;
+        }
+
+        foreach (var key in keys)
+        {
+            Keyboard.Press(key);
+        }
+
+        for (var i = keys.Length - 1; i >= 0; i--)
+        {
+            Keyboard.Release(keys[i]);
+        }
+    }
+
     public void PressUp()
     {
         PressKey(VirtualKeyShort.UP);

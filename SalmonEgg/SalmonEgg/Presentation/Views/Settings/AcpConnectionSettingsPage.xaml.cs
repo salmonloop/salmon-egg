@@ -15,7 +15,7 @@ public sealed partial class AcpConnectionSettingsPage : SettingsPageBase
         ViewModel = App.ServiceProvider.GetRequiredService<AcpConnectionSettingsViewModel>();
         InitializeComponent();
         Loaded += OnLoaded;
-        SetSettingsBreadcrumbFromResource("SettingsNav_AgentAcp.Content", "Agent (ACP)");
+        SetSettingsBreadcrumbFromResource("SettingsNav_AgentAcp.Content", "ACP / Agent");
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -73,5 +73,4 @@ public sealed partial class AcpConnectionSettingsPage : SettingsPageBase
 
         await item.ToggleConnectionCommand.ExecuteAsync(null);
     }
-
-    }
+}

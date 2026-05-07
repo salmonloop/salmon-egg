@@ -177,8 +177,7 @@ public sealed class DefaultGlobalSearchPipeline : IGlobalSearchPipeline
         {
             ("new_session", "新建会话", "创建新的聊天会话", "new"),
             ("new_project", "新建项目", "添加新的项目文件夹", "project"),
-            ("toggle_theme", "切换主题", "在亮色/暗色/系统主题间切换", "theme"),
-            ("toggle_anim", "切换动画", "启用或禁用界面动画", "animation")
+            ("toggle_theme", "切换主题", "在亮色/暗色/系统主题间切换", "theme")
         };
 
         var items = commands

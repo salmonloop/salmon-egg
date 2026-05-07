@@ -38,6 +38,10 @@
                         CornerRadius="8"
                         Padding="16">
                     <StackPanel Spacing="12">
+                        <TextBlock x:Uid="Shortcuts_AppOnlyHint"
+                                   Text="这些快捷键仅在 SalmonEgg 窗口处于前台时生效，不会注册系统级热键，也不会覆盖输入框内的原生编辑行为。"
+                                   Opacity="0.75"
+                                   TextWrapping="Wrap"/>
                         <ListView ItemsSource="{x:Bind ViewModel.Shortcuts, Mode=OneWay}"
                                   SelectionMode="None">
                             <ListView.ItemTemplate>
@@ -55,7 +59,7 @@
                                         </StackPanel>
 
                                         <TextBox Grid.Column="1"
-                                                 Text="{x:Bind Gesture, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                 Text="{x:Bind Gesture, Mode=TwoWay}"
                                                  x:Uid="Shortcuts_GestureInput"
                                                  PlaceholderText="例如：Ctrl+K"
                                                  HorizontalAlignment="Stretch" />

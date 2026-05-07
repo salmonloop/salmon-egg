@@ -40,7 +40,7 @@
                                     Tag="Appearance"
                                     AutomationProperties.AutomationId="SettingsNav.Appearance" />
                 <NavigationViewItem x:Uid="SettingsNav_AgentAcp"
-                                    Content="Agent (ACP)"
+                                    Content="ACP / Agent"
                                     Tag="AgentAcp"
                                     AutomationProperties.AutomationId="SettingsNav.AgentAcp" />
                 <NavigationViewItem x:Uid="SettingsNav_DataStorage"

@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using SalmonEgg.Presentation.Core.Services.Shortcuts;
 
 namespace SalmonEgg.Presentation.ViewModels.Settings;
 
@@ -54,6 +55,7 @@ public sealed partial class ShortcutsSettingsViewModel : ObservableObject
     {
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
 
+        PruneUnsupportedBindings();
         SeedDefaults();
         ApplySavedOverrides();
 
@@ -71,10 +73,27 @@ public sealed partial class ShortcutsSettingsViewModel : ObservableObject
             return;
         }
 
-        Shortcuts.Add(new ShortcutEntryViewModel("new_session", "新建会话", "Ctrl+N"));
-        Shortcuts.Add(new ShortcutEntryViewModel("search", "搜索", "Ctrl+K"));
-        Shortcuts.Add(new ShortcutEntryViewModel("toggle_right_pane", "切换右侧面板", "Ctrl+\\"));
-        Shortcuts.Add(new ShortcutEntryViewModel("focus_input", "聚焦输入框", "Ctrl+L"));
+        foreach (var definition in AppShortcutCatalog.EditableActions)
+        {
+            Shortcuts.Add(new ShortcutEntryViewModel(
+                definition.ActionId,
+                definition.DisplayName,
+                definition.DefaultGesture));
+        }
+    }
+
+    private void PruneUnsupportedBindings()
+    {
+        var unsupportedActionIds = _preferences.KeyBindings
+            .Where(binding => !AppShortcutCatalog.TryGet(binding.ActionId, out _))
+            .Select(binding => binding.ActionId)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        foreach (var actionId in unsupportedActionIds)
+        {
+            _preferences.RemoveKeyBinding(actionId);
+        }
     }
 
     private void ApplySavedOverrides()
@@ -122,6 +141,7 @@ public sealed partial class ShortcutsSettingsViewModel : ObservableObject
                 return;
             }
 
+            shortcut.NormalizeGesture();
             HasInvalid = Shortcuts.Any(s => !s.IsGestureValid);
             if (string.IsNullOrWhiteSpace(shortcut.Gesture))
             {
@@ -184,32 +204,21 @@ public sealed partial class ShortcutEntryViewModel : ObservableObject
                 return true;
             }
 
-            // Minimal validation: "Ctrl+X", "Ctrl+Shift+X", etc.
-            var parts = Gesture.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            if (parts.Length < 2)
-            {
-                return false;
-            }
+            return AppShortcutGesture.TryParse(Gesture, out _);
+        }
+    }
 
-            var key = parts.Last();
-            var modifiers = parts.Take(parts.Length - 1).ToArray();
-            if (modifiers.Length == 0)
-            {
-                return false;
-            }
+    public void NormalizeGesture()
+    {
+        if (!AppShortcutGesture.TryParse(Gesture, out var parsed))
+        {
+            return;
+        }
 
-            foreach (var m in modifiers)
-            {
-                if (!string.Equals(m, "Ctrl", StringComparison.OrdinalIgnoreCase) &&
-                    !string.Equals(m, "Alt", StringComparison.OrdinalIgnoreCase) &&
-                    !string.Equals(m, "Shift", StringComparison.OrdinalIgnoreCase) &&
-                    !string.Equals(m, "Win", StringComparison.OrdinalIgnoreCase))
-                {
-                    return false;
-                }
-            }
-
-            return key.Length is >= 1 and <= 12;
+        var normalized = parsed.ToString();
+        if (!string.Equals(Gesture, normalized, StringComparison.Ordinal))
+        {
+            Gesture = normalized;
         }
     }
 

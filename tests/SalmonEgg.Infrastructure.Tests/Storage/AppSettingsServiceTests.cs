@@ -133,5 +133,66 @@ public sealed class AppSettingsServiceTests : IDisposable
         var loaded = await service.LoadAsync();
         Assert.Equal("LoadResponse", loaded.AcpHydrationCompletionMode);
     }
+
+    [Fact]
+    public async Task SaveThenLoad_DoesNotPersistRemovedStorageKeys_AndKeepsLastSelectedProjectId()
+    {
+        var service = new AppSettingsService();
+        var settings = new AppSettings
+        {
+            Theme = "Dark",
+            LastSelectedProjectId = "project-123"
+        };
+
+        await service.SaveAsync(settings);
+
+        var appYamlPath = Path.Combine(_testDirectory, "SalmonEgg", "config", "app.yaml");
+        var yaml = await File.ReadAllTextAsync(appYamlPath);
+
+        Assert.DoesNotContain("HistoryRetentionDays", yaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("RememberRecentProjectPaths", yaml, StringComparison.Ordinal);
+
+        var loaded = await service.LoadAsync();
+        Assert.Equal("project-123", loaded.LastSelectedProjectId);
+    }
+
+    [Fact]
+    public async Task LoadAsync_IgnoresLegacyRemovedStorageKeys()
+    {
+        var appYamlPath = Path.Combine(_testDirectory, "SalmonEgg", "config", "app.yaml");
+        Directory.CreateDirectory(Path.GetDirectoryName(appYamlPath)!);
+
+        await File.WriteAllTextAsync(
+            appYamlPath,
+            """
+            schema_version: 1
+            theme: Dark
+            history_retention_days: 45
+            remember_recent_project_paths: false
+            last_selected_project_id: project-123
+            """);
+
+        var service = new AppSettingsService();
+
+        var loaded = await service.LoadAsync();
+
+        Assert.Equal("Dark", loaded.Theme);
+        Assert.Equal("project-123", loaded.LastSelectedProjectId);
+    }
+
+    [Fact]
+    public void RemovedStoragePreferenceProperties_AreNotInPersistedModels()
+    {
+        Assert.Null(typeof(AppSettings).GetProperty("HistoryRetentionDays"));
+        Assert.Null(typeof(AppSettings).GetProperty("RememberRecentProjectPaths"));
+
+        var yamlModelType = typeof(AppSettingsService).Assembly.GetType(
+            "SalmonEgg.Infrastructure.Storage.YamlModels.AppSettingsYamlV1",
+            throwOnError: true);
+
+        Assert.NotNull(yamlModelType);
+        Assert.Null(yamlModelType!.GetProperty("HistoryRetentionDays"));
+        Assert.Null(yamlModelType.GetProperty("RememberRecentProjectPaths"));
+    }
 }
 

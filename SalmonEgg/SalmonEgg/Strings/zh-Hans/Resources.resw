@@ -20,7 +20,7 @@
     <value>外观</value>
   </data>
   <data name="SettingsNav_AgentAcp.Content" xml:space="preserve">
-    <value>Agent (ACP)</value>
+    <value>ACP / Agent</value>
   </data>
   <data name="SettingsNav_DataStorage.Content" xml:space="preserve">
     <value>数据与存储</value>
@@ -157,18 +157,6 @@
   <data name="DataStorage_SaveLocalHistory.OffContent" xml:space="preserve">
     <value>关闭</value>
   </data>
-  <data name="DataStorage_HistoryRetentionLabel.Text" xml:space="preserve">
-    <value>历史保留天数</value>
-  </data>
-  <data name="DataStorage_RememberRecentProjects.Header" xml:space="preserve">
-    <value>记住最近项目路径</value>
-  </data>
-  <data name="DataStorage_RememberRecentProjects.OnContent" xml:space="preserve">
-    <value>开启</value>
-  </data>
-  <data name="DataStorage_RememberRecentProjects.OffContent" xml:space="preserve">
-    <value>关闭</value>
-  </data>
   <data name="DataStorage_CacheTitle.Text" xml:space="preserve">
     <value>缓存</value>
   </data>
@@ -297,6 +285,9 @@
   <data name="Shortcuts_CustomTitle.Text" xml:space="preserve">
     <value>自定义</value>
   </data>
+  <data name="Shortcuts_AppOnlyHint.Text" xml:space="preserve">
+    <value>这些快捷键仅在 SalmonEgg 窗口处于前台时生效，不会注册系统级热键，也不会覆盖输入框内的原生编辑行为。</value>
+  </data>
   <data name="Shortcuts_GestureInput.PlaceholderText" xml:space="preserve">
     <value>例如：Ctrl+K</value>
   </data>
@@ -420,14 +411,20 @@
   <data name="Acp_EndpointLabel.Text" xml:space="preserve">
     <value>端点</value>
   </data>
+  <data name="Acp_IntegrationTitle.Text" xml:space="preserve">
+    <value>SalmonEgg 集成设置</value>
+  </data>
+  <data name="Acp_IntegrationHint.Text" xml:space="preserve">
+    <value>这些选项只影响 SalmonEgg 如何保存配置、连接 ACP Agent，以及适配本地资源。</value>
+  </data>
   <data name="Acp_ProfilesTitle.Text" xml:space="preserve">
-    <value>我的 Agent</value>
+    <value>ACP 连接配置</value>
   </data>
   <data name="Acp_ProfilesRefresh.Content" xml:space="preserve">
     <value>刷新</value>
   </data>
   <data name="Acp_ProfilesAdd.Content" xml:space="preserve">
-    <value>新建</value>
+    <value>新建配置</value>
   </data>
   <data name="Acp_ProfileMore.ToolTipService.ToolTip" xml:space="preserve">
     <value>更多</value>
@@ -441,17 +438,47 @@
   <data name="Acp_ProfileDelete.Text" xml:space="preserve">
     <value>删除</value>
   </data>
+  <data name="Acp_PathMappingsTitle.Text" xml:space="preserve">
+    <value>本地路径映射</value>
+  </data>
+  <data name="Acp_PathMappingsAdd.Content" xml:space="preserve">
+    <value>新增映射</value>
+  </data>
+  <data name="Acp_PathMappingsHint.Text" xml:space="preserve">
+    <value>SalmonEgg 使用这些映射把 Agent 返回的远程工作区路径转换为本地文件系统路径。</value>
+  </data>
+  <data name="Acp_PathMappingsRemotePath.Header" xml:space="preserve">
+    <value>远程根路径</value>
+  </data>
+  <data name="Acp_PathMappingsLocalPath.Header" xml:space="preserve">
+    <value>本地根路径</value>
+  </data>
+  <data name="Acp_PathMappingsRemove.ToolTipService.ToolTip" xml:space="preserve">
+    <value>移除映射</value>
+  </data>
+  <data name="Acp_ConceptsTitle.Text" xml:space="preserve">
+    <value>ACP / Agent 标准概念</value>
+  </data>
+  <data name="Acp_ConceptsHint.Text" xml:space="preserve">
+    <value>这里展示的是已连接 ACP Agent 上报的信息，或 ACP 会话语义中的只读概念。</value>
+  </data>
   <data name="Acp_DiagnosticsTitle.Text" xml:space="preserve">
-    <value>诊断</value>
+    <value>当前 ACP Agent 信息</value>
   </data>
   <data name="Acp_DiagnosticsSubtitle.Text" xml:space="preserve">
-    <value>连接相关信息</value>
+    <value>来自当前所选配置连接的只读信息。</value>
   </data>
   <data name="Acp_DiagnosticsAgentLabel.Text" xml:space="preserve">
     <value>Agent</value>
   </data>
   <data name="Acp_DiagnosticsVersionLabel.Text" xml:space="preserve">
     <value>版本</value>
+  </data>
+  <data name="Acp_DiagnosticsStatusLabel.Text" xml:space="preserve">
+    <value>状态</value>
+  </data>
+  <data name="Acp_DiagnosticsEndpointLabel.Text" xml:space="preserve">
+    <value>端点</value>
   </data>
 
   <data name="Start_Title.Text" xml:space="preserve">
@@ -857,10 +884,10 @@
     <value>导入会话</value>
   </data>
   <data name="Acp_HydrationCompletionTitle.Text" xml:space="preserve">
-    <value>会话加载完成策略</value>
+    <value>会话加载完成判定</value>
   </data>
   <data name="Acp_HydrationCompletionHint.Text" xml:space="preserve">
-    <value>用于控制远程会话在何时被判定为“加载完成”。</value>
+    <value>SalmonEgg 使用此设置决定远程 ACP 会话在 session/load 返回后何时可视为“已就绪”。</value>
   </data>
   <data name="Acp_HydrationMode_StrictReplay.Name" xml:space="preserve">
     <value>严格回放</value>

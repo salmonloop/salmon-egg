@@ -27,8 +27,6 @@ public class AppPreferencesViewModelTests
             MinimizeToTray = true,
             Language = "System",
             SaveLocalHistory = true,
-            HistoryRetentionDays = 30,
-            RememberRecentProjectPaths = true,
             CacheRetentionDays = 7
         };
 
@@ -76,8 +74,6 @@ public class AppPreferencesViewModelTests
             MinimizeToTray = true,
             Language = "System",
             SaveLocalHistory = true,
-            HistoryRetentionDays = 30,
-            RememberRecentProjectPaths = true,
             CacheRetentionDays = 7,
             ProjectPathMappings = new List<ProjectPathMapping>
             {
@@ -151,8 +147,6 @@ public class AppPreferencesViewModelTests
             MinimizeToTray = true,
             Language = "System",
             SaveLocalHistory = true,
-            HistoryRetentionDays = 30,
-            RememberRecentProjectPaths = true,
             CacheRetentionDays = 7
         });
         appSettingsService.Setup(s => s.SaveAsync(It.IsAny<AppSettings>())).Returns(Task.CompletedTask);
@@ -196,5 +190,52 @@ public class AppPreferencesViewModelTests
                 && saved.ProjectPathMappings[0].RemoteRootPath == "/remote"
                 && saved.ProjectPathMappings[0].LocalRootPath == "local")),
             Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public void RemovedStoragePreferenceProperties_AreNotExposed()
+    {
+        Assert.Null(typeof(AppPreferencesViewModel).GetProperty("HistoryRetentionDays"));
+        Assert.Null(typeof(AppPreferencesViewModel).GetProperty("RememberRecentProjectPaths"));
+        Assert.Null(typeof(AppSettings).GetProperty("HistoryRetentionDays"));
+        Assert.Null(typeof(AppSettings).GetProperty("RememberRecentProjectPaths"));
+    }
+
+    [Fact]
+    public async Task ResetToDefaults_PreservesLastSelectedProjectId()
+    {
+        var appSettingsService = new Mock<IAppSettingsService>();
+        appSettingsService.Setup(s => s.LoadAsync()).ReturnsAsync(new AppSettings
+        {
+            LastSelectedProjectId = "project-123"
+        });
+        appSettingsService.Setup(s => s.SaveAsync(It.IsAny<AppSettings>())).Returns(Task.CompletedTask);
+
+        var startupService = new Mock<IAppStartupService>();
+        startupService.SetupGet(s => s.IsSupported).Returns(false);
+
+        var languageService = new Mock<IAppLanguageService>();
+        var capabilities = new Mock<IPlatformCapabilityService>();
+        capabilities.SetupGet(c => c.SupportsLaunchOnStartup).Returns(false);
+        capabilities.SetupGet(c => c.SupportsTray).Returns(false);
+        capabilities.SetupGet(c => c.SupportsLanguageOverride).Returns(false);
+
+        var uiRuntime = new Mock<IUiRuntimeService>();
+        var logger = new Mock<ILogger<AppPreferencesViewModel>>();
+
+        var vm = new AppPreferencesViewModel(
+            appSettingsService.Object,
+            startupService.Object,
+            languageService.Object,
+            capabilities.Object,
+            uiRuntime.Object,
+            logger.Object,
+            new ImmediateUiDispatcher());
+
+        await Task.Delay(100);
+
+        vm.ResetToDefaults();
+
+        Assert.Equal("project-123", vm.LastSelectedProjectId);
     }
 }

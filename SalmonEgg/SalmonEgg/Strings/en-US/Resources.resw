@@ -20,7 +20,7 @@
     <value>Appearance</value>
   </data>
   <data name="SettingsNav_AgentAcp.Content" xml:space="preserve">
-    <value>Agent (ACP)</value>
+    <value>ACP / Agent</value>
   </data>
   <data name="SettingsNav_DataStorage.Content" xml:space="preserve">
     <value>Data &amp; Storage</value>
@@ -244,18 +244,6 @@
   <data name="DataStorage_SaveLocalHistory.OffContent" xml:space="preserve">
     <value>Off</value>
   </data>
-  <data name="DataStorage_HistoryRetentionLabel.Text" xml:space="preserve">
-    <value>History retention (days)</value>
-  </data>
-  <data name="DataStorage_RememberRecentProjects.Header" xml:space="preserve">
-    <value>Remember recent project paths</value>
-  </data>
-  <data name="DataStorage_RememberRecentProjects.OnContent" xml:space="preserve">
-    <value>On</value>
-  </data>
-  <data name="DataStorage_RememberRecentProjects.OffContent" xml:space="preserve">
-    <value>Off</value>
-  </data>
   <data name="DataStorage_CacheTitle.Text" xml:space="preserve">
     <value>Cache</value>
   </data>
@@ -384,6 +372,9 @@
   <data name="Shortcuts_CustomTitle.Text" xml:space="preserve">
     <value>Customize</value>
   </data>
+  <data name="Shortcuts_AppOnlyHint.Text" xml:space="preserve">
+    <value>These shortcuts work only while the SalmonEgg window is active. They do not register system-wide hotkeys or override native text editing behaviors.</value>
+  </data>
   <data name="Shortcuts_GestureInput.PlaceholderText" xml:space="preserve">
     <value>e.g. Ctrl+K</value>
   </data>
@@ -507,14 +498,20 @@
   <data name="Acp_EndpointLabel.Text" xml:space="preserve">
     <value>Endpoint</value>
   </data>
+  <data name="Acp_IntegrationTitle.Text" xml:space="preserve">
+    <value>SalmonEgg integration settings</value>
+  </data>
+  <data name="Acp_IntegrationHint.Text" xml:space="preserve">
+    <value>These options affect only how SalmonEgg stores profiles, connects to ACP agents, and adapts local resources.</value>
+  </data>
   <data name="Acp_ProfilesTitle.Text" xml:space="preserve">
-    <value>My agents</value>
+    <value>ACP connection profiles</value>
   </data>
   <data name="Acp_ProfilesRefresh.Content" xml:space="preserve">
     <value>Refresh</value>
   </data>
   <data name="Acp_ProfilesAdd.Content" xml:space="preserve">
-    <value>New</value>
+    <value>New profile</value>
   </data>
   <data name="Acp_ProfileMore.ToolTipService.ToolTip" xml:space="preserve">
     <value>More</value>
@@ -528,17 +525,47 @@
   <data name="Acp_ProfileDelete.Text" xml:space="preserve">
     <value>Delete</value>
   </data>
+  <data name="Acp_PathMappingsTitle.Text" xml:space="preserve">
+    <value>Local path mappings</value>
+  </data>
+  <data name="Acp_PathMappingsAdd.Content" xml:space="preserve">
+    <value>Add mapping</value>
+  </data>
+  <data name="Acp_PathMappingsHint.Text" xml:space="preserve">
+    <value>SalmonEgg uses these mappings to translate remote workspace paths reported by the agent into local file system paths.</value>
+  </data>
+  <data name="Acp_PathMappingsRemotePath.Header" xml:space="preserve">
+    <value>Remote root path</value>
+  </data>
+  <data name="Acp_PathMappingsLocalPath.Header" xml:space="preserve">
+    <value>Local root path</value>
+  </data>
+  <data name="Acp_PathMappingsRemove.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Remove mapping</value>
+  </data>
+  <data name="Acp_ConceptsTitle.Text" xml:space="preserve">
+    <value>ACP / Agent standard concepts</value>
+  </data>
+  <data name="Acp_ConceptsHint.Text" xml:space="preserve">
+    <value>This section shows read-only information reported by the connected ACP agent or defined by ACP session semantics.</value>
+  </data>
   <data name="Acp_DiagnosticsTitle.Text" xml:space="preserve">
-    <value>Diagnostics</value>
+    <value>Connected ACP agent details</value>
   </data>
   <data name="Acp_DiagnosticsSubtitle.Text" xml:space="preserve">
-    <value>Connection details</value>
+    <value>Read-only details from the selected profile's current connection.</value>
   </data>
   <data name="Acp_DiagnosticsAgentLabel.Text" xml:space="preserve">
     <value>Agent</value>
   </data>
   <data name="Acp_DiagnosticsVersionLabel.Text" xml:space="preserve">
     <value>Version</value>
+  </data>
+  <data name="Acp_DiagnosticsStatusLabel.Text" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="Acp_DiagnosticsEndpointLabel.Text" xml:space="preserve">
+    <value>Endpoint</value>
   </data>
 
   <data name="Start_Title.Text" xml:space="preserve">
@@ -911,10 +938,10 @@
     <value>Import session</value>
   </data>
   <data name="Acp_HydrationCompletionTitle.Text" xml:space="preserve">
-    <value>Session Load Completion Policy</value>
+    <value>Session load completion handling</value>
   </data>
   <data name="Acp_HydrationCompletionHint.Text" xml:space="preserve">
-    <value>Choose when a remote session should be considered fully loaded.</value>
+    <value>SalmonEgg uses this setting to decide when a remote ACP session is ready in the UI after session/load returns.</value>
   </data>
   <data name="Acp_HydrationMode_StrictReplay.Name" xml:space="preserve">
     <value>Strict Replay</value>

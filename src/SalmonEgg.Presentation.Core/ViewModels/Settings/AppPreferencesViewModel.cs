@@ -53,12 +53,6 @@ public partial class AppPreferencesViewModel : ObservableObject
     private bool _saveLocalHistory = true;
 
     [ObservableProperty]
-    private int _historyRetentionDays = 30;
-
-    [ObservableProperty]
-    private bool _rememberRecentProjectPaths = true;
-
-    [ObservableProperty]
     private int _cacheRetentionDays = 7;
 
     // Navigation state (Projects -> Sessions) lives in AppSettings to persist between launches.
@@ -155,8 +149,6 @@ public partial class AppPreferencesViewModel : ObservableObject
                 Language = settings.Language;
                 LastSelectedServerId = settings.LastSelectedServerId;
                 SaveLocalHistory = settings.SaveLocalHistory;
-                HistoryRetentionDays = settings.HistoryRetentionDays;
-                RememberRecentProjectPaths = settings.RememberRecentProjectPaths;
                 CacheRetentionDays = settings.CacheRetentionDays;
                 LastSelectedProjectId = settings.LastSelectedProjectId;
                 AcpEnableConnectionEviction = settings.AcpEnableConnectionEviction;
@@ -259,8 +251,6 @@ public partial class AppPreferencesViewModel : ObservableObject
     }
     partial void OnLastSelectedServerIdChanged(string? value) => ScheduleSave();
     partial void OnSaveLocalHistoryChanged(bool value) => ScheduleSave();
-    partial void OnHistoryRetentionDaysChanged(int value) => ScheduleSave();
-    partial void OnRememberRecentProjectPathsChanged(bool value) => ScheduleSave();
     partial void OnCacheRetentionDaysChanged(int value) => ScheduleSave();
     partial void OnLastSelectedProjectIdChanged(string? value) => ScheduleSave();
     partial void OnAcpEnableConnectionEvictionChanged(bool value) => ScheduleSave();
@@ -353,8 +343,6 @@ public partial class AppPreferencesViewModel : ObservableObject
             Language = "System";
             LastSelectedServerId = null;
             SaveLocalHistory = true;
-            HistoryRetentionDays = 30;
-            RememberRecentProjectPaths = true;
             CacheRetentionDays = 7;
             AcpEnableConnectionEviction = false;
             AcpConnectionIdleTtlMinutes = null;
@@ -398,8 +386,6 @@ public partial class AppPreferencesViewModel : ObservableObject
                     Language = Language,
                     LastSelectedServerId = LastSelectedServerId,
                     SaveLocalHistory = SaveLocalHistory,
-                    HistoryRetentionDays = HistoryRetentionDays,
-                    RememberRecentProjectPaths = RememberRecentProjectPaths,
                     CacheRetentionDays = CacheRetentionDays,
                     AcpEnableConnectionEviction = AcpEnableConnectionEviction,
                     AcpConnectionIdleTtlMinutes = AcpConnectionIdleTtlMinutes,

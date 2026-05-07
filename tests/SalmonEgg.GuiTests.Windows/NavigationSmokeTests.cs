@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using FlaUI.Core.Definitions;
 using FlaUI.Core.AutomationElements;
+using FlaUI.Core.WindowsAPI;
 
 namespace SalmonEgg.GuiTests.Windows;
 
@@ -71,6 +72,22 @@ public sealed class NavigationSmokeTests
         Assert.NotNull(chatHeader);
         Assert.Contains("GUI Session 01", chatHeader.Name, StringComparison.Ordinal);
         Assert.True(selectionItem.IsSelected.Value);
+    }
+
+    [SkippableFact]
+    public void CtrlKShortcut_FocusesTopSearchBox()
+    {
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var startItem = session.FindByAutomationId("MainNav.Start");
+        session.FocusElement(startItem);
+
+        session.PressShortcut(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_K);
+
+        Assert.True(
+            session.IsFocusWithinAutomationId("TopSearchBox"),
+            $"Expected Ctrl+K to move focus into TopSearchBox.{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
     [SkippableFact]

@@ -33,22 +33,6 @@
                                       IsOn="{x:Bind ViewModel.Preferences.SaveLocalHistory, Mode=TwoWay}"
                                       OnContent="开启"
                                       OffContent="关闭" />
-
-                        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                            <TextBlock x:Uid="DataStorage_HistoryRetentionLabel" Text="历史保留天数" VerticalAlignment="Center" />
-                            <NumberBox Value="{x:Bind ViewModel.Preferences.HistoryRetentionDays, Mode=TwoWay}"
-                                       Minimum="1"
-                                       Maximum="365"
-                                       SmallChange="1"
-                                       SpinButtonPlacementMode="Inline"
-                                       Width="140" />
-                        </StackPanel>
-
-                        <ToggleSwitch x:Uid="DataStorage_RememberRecentProjects"
-                                      Header="记住最近项目路径"
-                                      IsOn="{x:Bind ViewModel.Preferences.RememberRecentProjectPaths, Mode=TwoWay}"
-                                      OnContent="开启"
-                                      OffContent="关闭" />
                     </StackPanel>
                 </Border>
             </StackPanel>

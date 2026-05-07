@@ -23,6 +23,7 @@ using SalmonEgg.Presentation.Models;
 using SalmonEgg.Presentation.Models.Search;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Navigation;
+using SalmonEgg.Presentation.Shortcuts;
 using SalmonEgg.Presentation.ViewModels;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.ViewModels.Navigation;
@@ -30,6 +31,7 @@ using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.Core.Mvux.ShellLayout;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Input;
+using SalmonEgg.Presentation.Core.Services.Shortcuts;
 using SalmonEgg.Presentation.Core.ViewModels.ShellLayout;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.Utilities;
@@ -66,6 +68,7 @@ public sealed partial class MainPage : Page
     private readonly DeferredActionGate<string> _archiveOnFlyoutClosed = new(StringComparer.Ordinal);
     private readonly DeferredActionGate<string> _moveOnFlyoutClosed = new(StringComparer.Ordinal);
     private readonly DeferredActionGate<string> _renameOnFlyoutClosed = new(StringComparer.Ordinal);
+    private readonly Dictionary<KeyboardAccelerator, string> _appShortcutActions = new();
     private string? _pendingArchiveSessionId;
     private string? _pendingMoveSessionId;
     private string? _pendingRenameSessionId;
@@ -143,6 +146,7 @@ public sealed partial class MainPage : Page
 
         // 2. Listen for global preference changes (animations, theme, backdrop)
         Preferences.PropertyChanged += OnPreferencesPropertyChanged;
+        Preferences.KeyBindings.CollectionChanged += OnShortcutBindingsChanged;
         _chatViewModel.PropertyChanged += OnChatViewModelPropertyChanged;
         NavVM.PropertyChanged += OnNavigationViewModelPropertyChanged;
         NavVM.TreeRebuilt += OnNavigationTreeRebuilt;
@@ -151,6 +155,7 @@ public sealed partial class MainPage : Page
         // 3. Initialize theme and motion state
         ApplyTheme();
         ApplyBackdrop();
+        RebuildAppShortcuts();
         // NavVM.PropertyChanged registration removed as layout is now driven by LayoutVM SSOT
 
         // 4. Default to Start view on launch
@@ -190,6 +195,7 @@ public sealed partial class MainPage : Page
     {
         DetachGamepadInput();
         Preferences.PropertyChanged -= OnPreferencesPropertyChanged;
+        Preferences.KeyBindings.CollectionChanged -= OnShortcutBindingsChanged;
         _chatViewModel.PropertyChanged -= OnChatViewModelPropertyChanged;
         NavVM.PropertyChanged -= OnNavigationViewModelPropertyChanged;
         NavVM.TreeRebuilt -= OnNavigationTreeRebuilt;
@@ -248,6 +254,74 @@ public sealed partial class MainPage : Page
             UpdateTrayState();
         }
 #endif
+    }
+
+    private void OnShortcutBindingsChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        RebuildAppShortcuts();
+    }
+
+    private void RebuildAppShortcuts()
+    {
+        foreach (var accelerator in _appShortcutActions.Keys)
+        {
+            accelerator.Invoked -= OnAppShortcutInvoked;
+        }
+
+        KeyboardAccelerators.Clear();
+        _appShortcutActions.Clear();
+
+        var savedBindings = Preferences.KeyBindings
+            .Where(binding => !string.IsNullOrWhiteSpace(binding.ActionId) && !string.IsNullOrWhiteSpace(binding.Gesture))
+            .ToDictionary(binding => binding.ActionId, binding => binding.Gesture, StringComparer.OrdinalIgnoreCase);
+
+        var bindingMap = AppShortcutBindingMap.Create(savedBindings);
+        foreach (var binding in bindingMap.AsDictionary())
+        {
+            if (!WinUiAppShortcutProjector.TryProject(binding.Key, out var key, out var modifiers))
+            {
+                continue;
+            }
+
+            var accelerator = new KeyboardAccelerator
+            {
+                Key = key,
+                Modifiers = modifiers
+            };
+            accelerator.Invoked += OnAppShortcutInvoked;
+            KeyboardAccelerators.Add(accelerator);
+            _appShortcutActions[accelerator] = binding.Value;
+        }
+    }
+
+    private async void OnAppShortcutInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        if (!_appShortcutActions.TryGetValue(sender, out var actionId))
+        {
+            return;
+        }
+
+        switch (actionId)
+        {
+            case AppShortcutActionIds.NewSession:
+                await NavVM.PrepareStartForProjectAsync(MainNavigationViewModel.UnclassifiedProjectId).ConfigureAwait(true);
+                args.Handled = true;
+                return;
+            case AppShortcutActionIds.Search:
+                FocusTopSearchBox();
+                args.Handled = true;
+                return;
+        }
+    }
+
+    private void FocusTopSearchBox()
+    {
+        if (!LayoutVM.SearchBoxVisible)
+        {
+            return;
+        }
+
+        _ = TopSearchBox.Focus(FocusState.Keyboard);
     }
 
     private void ApplyTheme()

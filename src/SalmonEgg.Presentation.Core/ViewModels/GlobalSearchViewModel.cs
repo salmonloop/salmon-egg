@@ -265,10 +265,6 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
                     _ => "Light"
                 };
                 break;
-
-            case "animation":
-                _preferences.IsAnimationEnabled = !_preferences.IsAnimationEnabled;
-                break;
         }
     }
 

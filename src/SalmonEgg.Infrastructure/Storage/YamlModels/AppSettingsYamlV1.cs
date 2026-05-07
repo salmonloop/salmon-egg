@@ -30,10 +30,6 @@ internal sealed class AppSettingsYamlV1
     // Data & Storage / Privacy
     public bool SaveLocalHistory { get; set; } = true;
 
-    public int HistoryRetentionDays { get; set; } = 30;
-
-    public bool RememberRecentProjectPaths { get; set; } = true;
-
     public int CacheRetentionDays { get; set; } = 7;
 
     // Shortcuts

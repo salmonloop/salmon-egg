@@ -30,269 +30,291 @@
         <controls:ResponsiveSettingsHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
             <controls:ResponsiveSettingsHost.Child>
                 <StackPanel Spacing="28">
-                    <!-- Profiles -->
-                    <StackPanel Spacing="12">
-                        <Grid ColumnDefinitions="*,Auto">
-                            <TextBlock x:Uid="Acp_ProfilesTitle"
-                                       Text="我的 Agent"
-                                       FontSize="18"
-                                       FontWeight="SemiBold"
-                                       Foreground="{ThemeResource AccentBrush}"
-                                       VerticalAlignment="Center"/>
-                            <StackPanel Grid.Column="1"
-                                        Orientation="Horizontal"
-                                        Spacing="8"
-                                        VerticalAlignment="Center">
-                                <Button x:Uid="Acp_ProfilesRefresh"
-                                        Content="刷新"
-                                        Command="{x:Bind ViewModel.Profiles.RefreshCommand}"
-                                        IsEnabled="{x:Bind ViewModel.Profiles.IsLoading, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"/>
-                                <Button x:Uid="Acp_ProfilesAdd"
-                                        Content="新建"
-                                        Style="{StaticResource AccentButtonStyle}"
-                                        Click="OnAddProfileClick"/>
-                            </StackPanel>
-                        </Grid>
-
-                        <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                                BorderThickness="1"
-                                CornerRadius="8">
-                            <ListView ItemsSource="{x:Bind ViewModel.Profiles.ProfileItems, Mode=OneWay}"
-                                      SelectedItem="{x:Bind ViewModel.Profiles.SelectedProfileItem, Mode=TwoWay}"
-                                      SelectionMode="Single"
-                                      MinHeight="140"
-                                      Background="Transparent"
-                                      ItemContainerStyle="{StaticResource AgentListItemStyle}">
-                                <ListView.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:AgentProfileItemViewModel">
-                                        <Grid Padding="14,10"
-                                              ColumnDefinitions="Auto,*,Auto,Auto,Auto"
-                                              ColumnSpacing="12">
-                                            <Border Width="36"
-                                                    Height="36"
-                                                    CornerRadius="8"
-                                                    Background="{ThemeResource AccentFillColorDefaultBrush}"
-                                                    Opacity="0.18"
-                                                    VerticalAlignment="Center">
-                                                <Viewbox Width="18" Height="18" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                                              Glyph="{x:Bind TransportGlyph}"
-                                                              Foreground="{ThemeResource AccentBrush}"/>
-                                                </Viewbox>
-                                            </Border>
-
-                                            <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                                                <TextBlock Text="{x:Bind Name}"
-                                                           FontWeight="SemiBold"
-                                                           TextTrimming="CharacterEllipsis"/>
-                                                <TextBlock Text="{x:Bind EndpointDescription}"
-                                                           FontSize="12"
-                                                           Opacity="0.65"
-                                                           TextTrimming="CharacterEllipsis"/>
-                                            </StackPanel>
-
-                                            <Grid Grid.Column="2" VerticalAlignment="Center">
-                                                <Border CornerRadius="12"
-                                                        Padding="8,4"
-                                                        Background="{ThemeResource SystemFillColorSuccessBackgroundBrush}"
-                                                        Visibility="{x:Bind IsConnected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                    <TextBlock Text="{x:Bind StatusLabel, Mode=OneWay}"
-                                                               FontSize="12"
-                                                               FontWeight="Medium"
-                                                               Foreground="{ThemeResource SystemFillColorSuccessBrush}"/>
-                                                </Border>
-
-                                                <Border CornerRadius="12"
-                                                        Padding="8,4"
-                                                        Background="{ThemeResource SystemFillColorNeutralBrush}"
-                                                        Visibility="{x:Bind IsNotConnected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                    <TextBlock Text="{x:Bind StatusLabel, Mode=OneWay}"
-                                                               FontSize="12"
-                                                               FontWeight="Medium"
-                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                                </Border>
-                                            </Grid>
-
-                                            <ToggleSwitch Grid.Column="3"
-                                                          VerticalAlignment="Center"
-                                                          Margin="0,0,8,0"
-                                                          OffContent=""
-                                                          OnContent=""
-                                                          IsOn="{x:Bind IsConnected, Mode=OneWay}"
-                                                          IsEnabled="{x:Bind IsConnecting, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"
-                                                          Toggled="OnProfileConnectionToggleToggled"/>
-
-                                            <Button Grid.Column="4"
-                                                    Style="{StaticResource SubtleButtonStyle}"
-                                                    VerticalAlignment="Center"
-                                                    x:Uid="Acp_ProfileMore"
-                                                    ToolTipService.ToolTip="更多">
-                                                <Button.Content>
-                                                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE712;"/>
-                                                </Button.Content>
-                                                <Button.Flyout>
-                                                    <MenuFlyout>
-                                                        <MenuFlyoutItem x:Uid="Acp_ProfileEdit"
-                                                                        Text="编辑"
-                                                                        Tag="{x:Bind ProfileId}"
-                                                                        Click="OnEditProfileMenuClick"/>
-                                                        <MenuFlyoutItem x:Uid="Acp_ProfileDelete"
-                                                                        Text="删除"
-                                                                        Tag="{x:Bind ProfileId}"
-                                                                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                                                        Click="OnDeleteProfileMenuClick"/>
-                                                    </MenuFlyout>
-                                                </Button.Flyout>
-                                            </Button>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ListView.ItemTemplate>
-                            </ListView>
-                        </Border>
-                    </StackPanel>
-
-                    <!-- Path mappings -->
-                    <StackPanel Spacing="12"
-                                AutomationProperties.AutomationId="Acp.PathMappings.Section">
-                        <Grid ColumnDefinitions="*,Auto">
-                            <TextBlock x:Uid="Acp_PathMappingsTitle"
-                                       Text="路径映射"
-                                       FontSize="18"
-                                       FontWeight="SemiBold"
-                                       Foreground="{ThemeResource AccentBrush}"
-                                       VerticalAlignment="Center"/>
-                            <Button Grid.Column="1"
-                                    x:Uid="Acp_PathMappingsAdd"
-                                    Content="新增映射"
-                                    Command="{x:Bind ViewModel.AddPathMappingCommand}"
-                                    AutomationProperties.AutomationId="Acp.PathMappings.Add"/>
-                        </Grid>
-
-                        <TextBlock x:Uid="Acp_PathMappingsHint"
-                                   Text="请先在上方 Agent 列表中选择一个配置，然后编辑远程到本地的路径映射。"
-                                   Opacity="0.7"
+                    <StackPanel Spacing="16">
+                        <TextBlock x:Uid="Acp_IntegrationTitle"
+                                   Text="SalmonEgg 集成设置"
+                                   FontSize="20"
+                                   FontWeight="SemiBold"/>
+                        <TextBlock x:Uid="Acp_IntegrationHint"
+                                   Text="这些选项只影响 SalmonEgg 如何保存配置、连接 ACP Agent，以及适配本地资源。"
+                                   Opacity="0.75"
                                    TextWrapping="Wrap"/>
 
-                        <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                                BorderThickness="1"
-                                CornerRadius="8">
-                            <ListView ItemsSource="{x:Bind ViewModel.PathMappingRows, Mode=OneWay}"
-                                      SelectionMode="None"
-                                      MinHeight="120"
-                                      Background="Transparent"
-                                      ItemContainerStyle="{StaticResource AgentListItemStyle}"
-                                      AutomationProperties.AutomationId="Acp.PathMappings.List">
-                                <ListView.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:AcpPathMappingRowViewModel">
-                                        <Grid Padding="14,10"
-                                              ColumnDefinitions="*,Auto"
-                                              RowDefinitions="Auto,Auto"
-                                              ColumnSpacing="10"
-                                              RowSpacing="8">
-                                            <TextBox Grid.Row="0"
-                                                     Grid.Column="0"
-                                                     x:Uid="Acp_PathMappingsRemotePath"
-                                                     Header="远程根路径"
-                                                     PlaceholderText="/workspace/project"
-                                                     Text="{x:Bind RemoteRootPath, Mode=TwoWay}"/>
+                        <!-- Profiles -->
+                        <StackPanel Spacing="12">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock x:Uid="Acp_ProfilesTitle"
+                                           Text="ACP 连接配置"
+                                           FontSize="18"
+                                           FontWeight="SemiBold"
+                                           Foreground="{ThemeResource AccentBrush}"
+                                           VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="1"
+                                            Orientation="Horizontal"
+                                            Spacing="8"
+                                            VerticalAlignment="Center">
+                                    <Button x:Uid="Acp_ProfilesRefresh"
+                                            Content="刷新"
+                                            Command="{x:Bind ViewModel.Profiles.RefreshCommand}"
+                                            IsEnabled="{x:Bind ViewModel.Profiles.IsLoading, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"/>
+                                    <Button x:Uid="Acp_ProfilesAdd"
+                                            Content="新建配置"
+                                            Style="{StaticResource AccentButtonStyle}"
+                                            Click="OnAddProfileClick"/>
+                                </StackPanel>
+                            </Grid>
 
-                                            <TextBox Grid.Row="1"
-                                                     Grid.Column="0"
-                                                     x:Uid="Acp_PathMappingsLocalPath"
-                                                     Header="本地根路径"
-                                                     PlaceholderText="C:\project 或 /Users/name/project"
-                                                     Text="{x:Bind LocalRootPath, Mode=TwoWay}"/>
+                            <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
+                                    BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8">
+                                <ListView ItemsSource="{x:Bind ViewModel.Profiles.ProfileItems, Mode=OneWay}"
+                                          SelectedItem="{x:Bind ViewModel.Profiles.SelectedProfileItem, Mode=TwoWay}"
+                                          SelectionMode="Single"
+                                          MinHeight="140"
+                                          Background="Transparent"
+                                          ItemContainerStyle="{StaticResource AgentListItemStyle}">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:AgentProfileItemViewModel">
+                                            <Grid Padding="14,10"
+                                                  ColumnDefinitions="Auto,*,Auto,Auto,Auto"
+                                                  ColumnSpacing="12">
+                                                <Border Width="36"
+                                                        Height="36"
+                                                        CornerRadius="8"
+                                                        Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                                        Opacity="0.18"
+                                                        VerticalAlignment="Center">
+                                                    <Viewbox Width="18" Height="18" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                        <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                                                  Glyph="{x:Bind TransportGlyph}"
+                                                                  Foreground="{ThemeResource AccentBrush}"/>
+                                                    </Viewbox>
+                                                </Border>
 
-                                            <Button Grid.Row="0"
-                                                    Grid.RowSpan="2"
-                                                    Grid.Column="1"
-                                                    x:Uid="Acp_PathMappingsRemove"
-                                                    Command="{x:Bind RemoveCommand}"
-                                                    VerticalAlignment="Center"
-                                                    Style="{StaticResource SubtleButtonStyle}">
-                                                <Button.Content>
-                                                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                                              Glyph="&#xE74D;"/>
-                                                </Button.Content>
-                                            </Button>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ListView.ItemTemplate>
-                            </ListView>
-                        </Border>
-                    </StackPanel>
+                                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                                    <TextBlock Text="{x:Bind Name}"
+                                                               FontWeight="SemiBold"
+                                                               TextTrimming="CharacterEllipsis"/>
+                                                    <TextBlock Text="{x:Bind EndpointDescription}"
+                                                               FontSize="12"
+                                                               Opacity="0.65"
+                                                               TextTrimming="CharacterEllipsis"/>
+                                                </StackPanel>
 
-                    <!-- Hydration policy -->
-                    <StackPanel Spacing="12">
-                        <TextBlock x:Uid="Acp_HydrationCompletionTitle"
-                                   Text="Session Load Completion Policy"
-                                   FontSize="18"
-                                   FontWeight="SemiBold"
-                                   Foreground="{ThemeResource AccentBrush}"/>
+                                                <Grid Grid.Column="2" VerticalAlignment="Center">
+                                                    <Border CornerRadius="12"
+                                                            Padding="8,4"
+                                                            Background="{ThemeResource SystemFillColorSuccessBackgroundBrush}"
+                                                            Visibility="{x:Bind IsConnected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                        <TextBlock Text="{x:Bind StatusLabel, Mode=OneWay}"
+                                                                   FontSize="12"
+                                                                   FontWeight="Medium"
+                                                                   Foreground="{ThemeResource SystemFillColorSuccessBrush}"/>
+                                                    </Border>
 
-                        <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                                BorderThickness="1"
-                                CornerRadius="8"
-                                Padding="16">
-                            <StackPanel Spacing="8">
-                                <TextBlock x:Uid="Acp_HydrationCompletionHint"
-                                           Text="Choose when a remote session should be considered fully loaded."
-                                           Opacity="0.7"
-                                           TextWrapping="Wrap"/>
-                                <ComboBox ItemsSource="{x:Bind ViewModel.HydrationCompletionModeOptions, Mode=OneWay}"
-                                          SelectedItem="{x:Bind ViewModel.SelectedHydrationCompletionMode, Mode=TwoWay}"
-                                          HorizontalAlignment="Stretch">
-                                    <ComboBox.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:HydrationCompletionModeOptionViewModel">
-                                            <TextBlock Text="{x:Bind Value, Converter={StaticResource HydrationCompletionModeLocalizationConverter}}"/>
+                                                    <Border CornerRadius="12"
+                                                            Padding="8,4"
+                                                            Background="{ThemeResource SystemFillColorNeutralBrush}"
+                                                            Visibility="{x:Bind IsNotConnected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                        <TextBlock Text="{x:Bind StatusLabel, Mode=OneWay}"
+                                                                   FontSize="12"
+                                                                   FontWeight="Medium"
+                                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                    </Border>
+                                                </Grid>
+
+                                                <ToggleSwitch Grid.Column="3"
+                                                              VerticalAlignment="Center"
+                                                              Margin="0,0,8,0"
+                                                              OffContent=""
+                                                              OnContent=""
+                                                              IsOn="{x:Bind IsConnected, Mode=OneWay}"
+                                                              IsEnabled="{x:Bind IsConnecting, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"
+                                                              Toggled="OnProfileConnectionToggleToggled"/>
+
+                                                <Button Grid.Column="4"
+                                                        Style="{StaticResource SubtleButtonStyle}"
+                                                        VerticalAlignment="Center"
+                                                        x:Uid="Acp_ProfileMore"
+                                                        ToolTipService.ToolTip="更多">
+                                                    <Button.Content>
+                                                        <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE712;"/>
+                                                    </Button.Content>
+                                                    <Button.Flyout>
+                                                        <MenuFlyout>
+                                                            <MenuFlyoutItem x:Uid="Acp_ProfileEdit"
+                                                                            Text="编辑"
+                                                                            Tag="{x:Bind ProfileId}"
+                                                                            Click="OnEditProfileMenuClick"/>
+                                                            <MenuFlyoutItem x:Uid="Acp_ProfileDelete"
+                                                                            Text="删除"
+                                                                            Tag="{x:Bind ProfileId}"
+                                                                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                                            Click="OnDeleteProfileMenuClick"/>
+                                                        </MenuFlyout>
+                                                    </Button.Flyout>
+                                                </Button>
+                                            </Grid>
                                         </DataTemplate>
-                                    </ComboBox.ItemTemplate>
-                                </ComboBox>
-                                <TextBlock Text="{x:Bind ViewModel.SelectedHydrationCompletionMode, Mode=OneWay, Converter={StaticResource HydrationCompletionModeLocalizationConverter}, ConverterParameter=Description}"
-                                           Opacity="0.75"
-                                           TextWrapping="Wrap"/>
-                            </StackPanel>
-                        </Border>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Path mappings -->
+                        <StackPanel Spacing="12"
+                                    AutomationProperties.AutomationId="Acp.PathMappings.Section">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock x:Uid="Acp_PathMappingsTitle"
+                                           Text="本地路径映射"
+                                           FontSize="18"
+                                           FontWeight="SemiBold"
+                                           Foreground="{ThemeResource AccentBrush}"
+                                           VerticalAlignment="Center"/>
+                                <Button Grid.Column="1"
+                                        x:Uid="Acp_PathMappingsAdd"
+                                        Content="新增映射"
+                                        Command="{x:Bind ViewModel.AddPathMappingCommand}"
+                                        AutomationProperties.AutomationId="Acp.PathMappings.Add"/>
+                            </Grid>
+
+                            <TextBlock x:Uid="Acp_PathMappingsHint"
+                                       Text="SalmonEgg 使用这些映射把 Agent 返回的远程工作区路径转换为本地文件系统路径。"
+                                       Opacity="0.7"
+                                       TextWrapping="Wrap"/>
+
+                            <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
+                                    BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8">
+                                <ListView ItemsSource="{x:Bind ViewModel.PathMappingRows, Mode=OneWay}"
+                                          SelectionMode="None"
+                                          MinHeight="120"
+                                          Background="Transparent"
+                                          ItemContainerStyle="{StaticResource AgentListItemStyle}"
+                                          AutomationProperties.AutomationId="Acp.PathMappings.List">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:AcpPathMappingRowViewModel">
+                                            <Grid Padding="14,10"
+                                                  ColumnDefinitions="*,Auto"
+                                                  RowDefinitions="Auto,Auto"
+                                                  ColumnSpacing="10"
+                                                  RowSpacing="8">
+                                                <TextBox Grid.Row="0"
+                                                         Grid.Column="0"
+                                                         x:Uid="Acp_PathMappingsRemotePath"
+                                                         Header="远程根路径"
+                                                         PlaceholderText="/workspace/project"
+                                                         Text="{x:Bind RemoteRootPath, Mode=TwoWay}"/>
+
+                                                <TextBox Grid.Row="1"
+                                                         Grid.Column="0"
+                                                         x:Uid="Acp_PathMappingsLocalPath"
+                                                         Header="本地根路径"
+                                                         PlaceholderText="C:\project 或 /Users/name/project"
+                                                         Text="{x:Bind LocalRootPath, Mode=TwoWay}"/>
+
+                                                <Button Grid.Row="0"
+                                                        Grid.RowSpan="2"
+                                                        Grid.Column="1"
+                                                        x:Uid="Acp_PathMappingsRemove"
+                                                        Command="{x:Bind RemoveCommand}"
+                                                        VerticalAlignment="Center"
+                                                        Style="{StaticResource SubtleButtonStyle}">
+                                                    <Button.Content>
+                                                        <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                                                  Glyph="&#xE74D;"/>
+                                                    </Button.Content>
+                                                </Button>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Hydration policy -->
+                        <StackPanel Spacing="12">
+                            <TextBlock x:Uid="Acp_HydrationCompletionTitle"
+                                       Text="会话加载完成判定"
+                                       FontSize="18"
+                                       FontWeight="SemiBold"
+                                       Foreground="{ThemeResource AccentBrush}"/>
+
+                            <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
+                                    BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="16">
+                                <StackPanel Spacing="8">
+                                    <TextBlock x:Uid="Acp_HydrationCompletionHint"
+                                               Text="SalmonEgg 使用此设置决定远程 ACP 会话在 session/load 返回后何时可视为“已就绪”。"
+                                               Opacity="0.7"
+                                               TextWrapping="Wrap"/>
+                                    <ComboBox ItemsSource="{x:Bind ViewModel.HydrationCompletionModeOptions, Mode=OneWay}"
+                                              SelectedItem="{x:Bind ViewModel.SelectedHydrationCompletionMode, Mode=TwoWay}"
+                                              HorizontalAlignment="Stretch">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:HydrationCompletionModeOptionViewModel">
+                                                <TextBlock Text="{x:Bind Value, Converter={StaticResource HydrationCompletionModeLocalizationConverter}}"/>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                    <TextBlock Text="{x:Bind ViewModel.SelectedHydrationCompletionMode, Mode=OneWay, Converter={StaticResource HydrationCompletionModeLocalizationConverter}, ConverterParameter=Description}"
+                                               Opacity="0.75"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
                     </StackPanel>
 
-                    <!-- Diagnostics -->
-                    <StackPanel Spacing="12">
-                        <TextBlock x:Uid="Acp_DiagnosticsTitle"
-                                   Text="诊断"
-                                   FontSize="18"
-                                   FontWeight="SemiBold"
-                                   Foreground="{ThemeResource AccentBrush}"/>
+                    <StackPanel Spacing="16">
+                        <TextBlock x:Uid="Acp_ConceptsTitle"
+                                   Text="ACP / Agent 标准概念"
+                                   FontSize="20"
+                                   FontWeight="SemiBold"/>
+                        <TextBlock x:Uid="Acp_ConceptsHint"
+                                   Text="这里展示的是已连接 ACP Agent 上报的信息，或 ACP 会话语义中的只读概念。"
+                                   Opacity="0.75"
+                                   TextWrapping="Wrap"/>
 
-                        <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                                BorderThickness="1"
-                                CornerRadius="8"
-                                Padding="16">
-                            <StackPanel Spacing="10">
-                                <TextBlock x:Uid="Acp_DiagnosticsSubtitle"
-                                           Text="连接相关信息"
-                                           FontWeight="Medium"/>
-                                <Grid ColumnDefinitions="Auto,*"
-                                      RowDefinitions="Auto,Auto,Auto,Auto"
-                                      ColumnSpacing="12"
-                                      RowSpacing="6">
-                                    <TextBlock Grid.Row="0" Grid.Column="0" x:Uid="Acp_DiagnosticsAgentLabel" Text="Agent" Opacity="0.7"/>
-                                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{x:Bind ViewModel.SelectedProfileAgentName, Mode=OneWay}"/>
+                        <!-- Diagnostics -->
+                        <StackPanel Spacing="12">
+                            <TextBlock x:Uid="Acp_DiagnosticsTitle"
+                                       Text="当前 ACP Agent 信息"
+                                       FontSize="18"
+                                       FontWeight="SemiBold"
+                                       Foreground="{ThemeResource AccentBrush}"/>
 
-                                    <TextBlock Grid.Row="1" Grid.Column="0" x:Uid="Acp_DiagnosticsVersionLabel" Text="版本" Opacity="0.7"/>
-                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{x:Bind ViewModel.SelectedProfileAgentVersion, Mode=OneWay}" Opacity="0.85"/>
+                            <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
+                                    BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="16">
+                                <StackPanel Spacing="10">
+                                    <TextBlock x:Uid="Acp_DiagnosticsSubtitle"
+                                               Text="来自当前所选配置连接的只读信息。"
+                                               FontWeight="Medium"/>
+                                    <Grid ColumnDefinitions="Auto,*"
+                                          RowDefinitions="Auto,Auto,Auto,Auto"
+                                          ColumnSpacing="12"
+                                          RowSpacing="6">
+                                        <TextBlock Grid.Row="0" Grid.Column="0" x:Uid="Acp_DiagnosticsAgentLabel" Text="Agent" Opacity="0.7"/>
+                                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{x:Bind ViewModel.SelectedProfileAgentName, Mode=OneWay}"/>
 
-                                    <TextBlock Grid.Row="2" Grid.Column="0" x:Uid="Acp_DiagnosticsStatusLabel" Text="状态" Opacity="0.7"/>
-                                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{x:Bind ViewModel.SelectedProfileStatus, Mode=OneWay}" Opacity="0.85"/>
+                                        <TextBlock Grid.Row="1" Grid.Column="0" x:Uid="Acp_DiagnosticsVersionLabel" Text="版本" Opacity="0.7"/>
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{x:Bind ViewModel.SelectedProfileAgentVersion, Mode=OneWay}" Opacity="0.85"/>
 
-                                    <TextBlock Grid.Row="3" Grid.Column="0" x:Uid="Acp_DiagnosticsEndpointLabel" Text="Endpoint" Opacity="0.7"/>
-                                    <TextBlock Grid.Row="3" Grid.Column="1" Text="{x:Bind ViewModel.SelectedProfileEndpoint, Mode=OneWay}" Opacity="0.85"/>
-                                </Grid>
-                            </StackPanel>
-                        </Border>
+                                        <TextBlock Grid.Row="2" Grid.Column="0" x:Uid="Acp_DiagnosticsStatusLabel" Text="状态" Opacity="0.7"/>
+                                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{x:Bind ViewModel.SelectedProfileStatus, Mode=OneWay}" Opacity="0.85"/>
+
+                                        <TextBlock Grid.Row="3" Grid.Column="0" x:Uid="Acp_DiagnosticsEndpointLabel" Text="Endpoint" Opacity="0.7"/>
+                                        <TextBlock Grid.Row="3" Grid.Column="1" Text="{x:Bind ViewModel.SelectedProfileEndpoint, Mode=OneWay}" Opacity="0.85"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
                     </StackPanel>
                 </StackPanel>
             </controls:ResponsiveSettingsHost.Child>
