@@ -751,12 +751,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private string? _currentPlanTitle;
 
     [ObservableProperty]
-    private ObservableCollection<BottomPanelTabViewModel> _bottomPanelTabs = new();
-
-    [ObservableProperty]
-    private BottomPanelTabViewModel? _selectedBottomPanelTab;
-
-    [ObservableProperty]
     private ObservableCollection<TerminalPanelSessionViewModel> _terminalSessions = new();
 
     [ObservableProperty]
@@ -1398,17 +1392,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         RefreshProjectAffinityCorrectionState(value);
         ApplyProjectAffinityOverrideCommand.NotifyCanExecuteChanged();
         ClearProjectAffinityOverrideCommand.NotifyCanExecuteChanged();
-    }
-
-    partial void OnSelectedBottomPanelTabChanged(BottomPanelTabViewModel? value)
-    {
-        var conversationId = CurrentSessionId;
-        if (string.IsNullOrWhiteSpace(conversationId))
-        {
-            return;
-        }
-
-        _panelStateCoordinator.UpdateSelectedTab(conversationId, value);
     }
 
     private async Task SelectAndHydrateConversationAsync(string? conversationId)

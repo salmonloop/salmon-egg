@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.ViewModels.Chat.Panels;
 using Xunit;
@@ -8,14 +7,12 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat.Panels;
 public sealed class ChatConversationPanelStateCoordinatorTests
 {
     [Fact]
-    public void SyncConversation_WithoutExistingState_CreatesDefaultTabsAndSelectsFirst()
+    public void SyncConversation_WithoutExistingState_CreatesTerminalPanelSelection()
     {
         var sut = new ChatConversationPanelStateCoordinator();
 
         var selection = sut.SyncConversation("conv-1");
 
-        Assert.Equal(2, selection.Tabs.Count);
-        Assert.Equal("terminal", selection.SelectedTab?.Id);
         Assert.Empty(selection.TerminalSessions);
         Assert.Null(selection.SelectedTerminal);
         Assert.Null(selection.PendingAskUserRequest);
@@ -57,9 +54,7 @@ public sealed class ChatConversationPanelStateCoordinatorTests
 
         var selection = sut.RemoveConversation("conv-1", isCurrentConversation: true);
 
-        Assert.Empty(selection.Tabs);
         Assert.Empty(selection.TerminalSessions);
-        Assert.Null(selection.SelectedTab);
         Assert.Null(selection.SelectedTerminal);
         Assert.Null(selection.PendingAskUserRequest);
     }

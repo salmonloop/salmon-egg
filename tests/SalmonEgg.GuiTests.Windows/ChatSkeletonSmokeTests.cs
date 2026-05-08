@@ -446,7 +446,13 @@ public sealed class ChatSkeletonSmokeTests
                 appData);
             Assert.Contains("GUI Session 01", header.Name, StringComparison.Ordinal);
 
-            _ = EnsureTerminalPanelVisible(session, appData, "local-terminal-open");
+            var terminal = EnsureTerminalPanelVisible(session, appData, "local-terminal-open");
+            Assert.True(
+                session.WaitUntilOnscreen("BottomPanel.TerminalWebView", TimeSpan.FromSeconds(5)),
+                $"Local terminal surface was created but not onscreen. terminalBounds={terminal.BoundingRectangle}");
+            Assert.True(
+                terminal.BoundingRectangle.Width > 200 && terminal.BoundingRectangle.Height > 80,
+                $"Local terminal surface was not allocated visible layout space. terminalBounds={terminal.BoundingRectangle}");
             const string expectedPromptFragment = "project-1>";
             if (!WaitForAutomationNameContains(
                     session,

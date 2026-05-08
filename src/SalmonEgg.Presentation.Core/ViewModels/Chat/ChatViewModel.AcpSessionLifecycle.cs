@@ -1090,8 +1090,6 @@ public partial class ChatViewModel
     private void SyncConversationPanelState(string? conversationId)
     {
         var selection = _panelRuntimeCoordinator.SyncConversation(_panelStateCoordinator, conversationId);
-        BottomPanelTabs = selection.Tabs;
-        SelectedBottomPanelTab = selection.SelectedTab;
         TerminalSessions = selection.TerminalSessions;
         SelectedTerminalSession = selection.SelectedTerminal;
         PendingAskUserRequest = selection.PendingAskUserRequest;
@@ -1178,8 +1176,6 @@ public partial class ChatViewModel
 
         if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
         {
-            BottomPanelTabs = selection.Tabs;
-            SelectedBottomPanelTab = selection.SelectedTab;
             TerminalSessions = selection.TerminalSessions;
             SelectedTerminalSession = selection.SelectedTerminal;
             ActiveLocalTerminalSession = null;
@@ -1806,15 +1802,6 @@ public partial class ChatViewModel
         {
             TerminalSessions = selection.TerminalSessions;
             SelectedTerminalSession = selection.SelectedTerminal;
-        }
-    }
-
-    private void SelectBottomPanelTab(string tabId)
-    {
-        if (BottomPanelTabs.FirstOrDefault(tab =>
-            string.Equals(tab.Id, tabId, StringComparison.Ordinal)) is { } tab)
-        {
-            SelectedBottomPanelTab = tab;
         }
     }
 

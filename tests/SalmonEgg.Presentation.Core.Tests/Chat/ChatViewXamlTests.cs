@@ -164,13 +164,15 @@ public sealed class ChatViewXamlTests
     }
 
     [Fact]
-    public void ChatViewXaml_BindsTerminalPanelStateIntoBottomPanelHost()
+    public void ChatViewXaml_BindsLocalTerminalSessionIntoBottomPanelHost()
     {
         var root = FindRepoRoot();
         var xaml = File.ReadAllText(Path.Combine(root, "SalmonEgg", "SalmonEgg", "MainPage.xaml"));
 
-        Assert.Contains("TerminalSessions=\"{x:Bind ChatVM.TerminalSessions, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("SelectedTerminalSession=\"{x:Bind ChatVM.SelectedTerminalSession, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("TabsSource=", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("SelectedTab=", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("TerminalSessions=", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("SelectedTerminalSession=", xaml, StringComparison.Ordinal);
         Assert.Contains("LocalTerminalSession=\"{x:Bind ChatVM.ActiveLocalTerminalSession, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
     }
 
@@ -180,10 +182,22 @@ public sealed class ChatViewXamlTests
         var root = FindRepoRoot();
         var xaml = File.ReadAllText(Path.Combine(root, "SalmonEgg", "SalmonEgg", "Presentation", "Views", "Chat", "BottomPanelHost.xaml"));
 
+        Assert.Contains("<TabView", xaml, StringComparison.Ordinal);
+        Assert.Contains("HorizontalAlignment=\"Stretch\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("VerticalAlignment=\"Stretch\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("SelectedIndex=\"0\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("<TabView.TabItems>", xaml, StringComparison.Ordinal);
+        Assert.Contains("<TabViewItem", xaml, StringComparison.Ordinal);
+        Assert.Contains("Header=\"{x:Bind TerminalTabTitle, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("IsAddTabButtonVisible=\"False\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("CanReorderTabs=\"False\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("<TabViewItem.Content>", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<ListView", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Converter={StaticResource BoolToVisibilityConverter}", xaml, StringComparison.Ordinal);
         Assert.Contains("controls:XtermTerminalView", xaml, StringComparison.Ordinal);
-        Assert.Contains("IsTerminalTabSelected", xaml, StringComparison.Ordinal);
         Assert.Contains("Session=\"{x:Bind EffectiveLocalTerminalSession, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ContentText=\"{x:Bind LocalTerminalContentText, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("BottomPanelOutputSourceLabel", xaml, StringComparison.Ordinal);
     }
 
     [Fact]

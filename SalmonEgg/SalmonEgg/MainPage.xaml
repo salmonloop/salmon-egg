@@ -588,10 +588,6 @@
 
                         <chatViews:BottomPanelHost x:Name="BottomPanelHost"
                                                    Grid.Row="1"
-                                                   TabsSource="{x:Bind ChatVM.BottomPanelTabs, Mode=OneWay}"
-                                                   SelectedTab="{x:Bind ChatVM.SelectedBottomPanelTab, Mode=TwoWay}"
-                                                   TerminalSessions="{x:Bind ChatVM.TerminalSessions, Mode=OneWay}"
-                                                   SelectedTerminalSession="{x:Bind ChatVM.SelectedTerminalSession, Mode=OneWay}"
                                                    LocalTerminalSession="{x:Bind ChatVM.ActiveLocalTerminalSession, Mode=OneWay}">
                             <chatViews:BottomPanelHost.RenderTransform>
                                 <TranslateTransform x:Name="BottomPanelTranslate" />

@@ -30,7 +30,6 @@ public sealed class ChatConversationPanelRuntimeCoordinatorTests
 
         var selection = coordinator.SyncConversation(panelCoordinator, null);
 
-        Assert.Empty(selection.Tabs);
         Assert.Empty(selection.TerminalSessions);
     }
 }
