@@ -154,9 +154,14 @@ public sealed class ChatViewXamlTests
 
         Assert.Contains("IItemsRangeInfo", adapterCode, StringComparison.Ordinal);
         Assert.Contains("RangesChanged(ItemIndexRange visibleRange, IReadOnlyList<ItemIndexRange> trackedItems)", adapterCode, StringComparison.Ordinal);
-        Assert.Contains("_source.ApplyRequiredRanges(ConvertRange(visibleRange), trackedRanges);", adapterCode, StringComparison.Ordinal);
+        Assert.Contains("_rangeCache.ApplyRequiredRanges(ConvertRange(visibleRange), trackedRanges);", adapterCode, StringComparison.Ordinal);
+        Assert.Contains("new ChatTranscriptRangeCache(_source)", adapterCode, StringComparison.Ordinal);
+        Assert.Contains("e.Action == NotifyCollectionChangedAction.Reset", adapterCode, StringComparison.Ordinal);
+        Assert.Contains("_rangeCache?.Clear();", adapterCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("_source.ApplyRequiredRanges", adapterCode, StringComparison.Ordinal);
         Assert.Contains("ItemsSource=\"{x:Bind TranscriptItemsSource, Mode=OneWay}\"", chatViewXaml, StringComparison.Ordinal);
         Assert.Contains("ItemsSource=\"{x:Bind TranscriptItemsSource, Mode=OneWay}\"", miniChatViewXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("public void ApplyRequiredRanges", coreCollectionCode, StringComparison.Ordinal);
         Assert.DoesNotContain("Microsoft.UI.Xaml", coreCollectionCode, StringComparison.Ordinal);
         Assert.DoesNotContain("ItemIndexRange", coreCollectionCode, StringComparison.Ordinal);
         Assert.DoesNotContain("IItemsRangeInfo", coreCollectionCode, StringComparison.Ordinal);

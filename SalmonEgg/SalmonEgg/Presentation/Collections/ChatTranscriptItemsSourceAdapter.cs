@@ -17,6 +17,7 @@ public sealed class ChatTranscriptItemsSourceAdapter :
     IDisposable
 {
     private ChatTranscriptVirtualizedMessageCollection? _source;
+    private ChatTranscriptRangeCache? _rangeCache;
 
     public ChatTranscriptItemsSourceAdapter(ChatTranscriptVirtualizedMessageCollection source)
     {
@@ -44,6 +45,7 @@ public sealed class ChatTranscriptItemsSourceAdapter :
             }
 
             _source = value;
+            _rangeCache = _source is null ? null : new ChatTranscriptRangeCache(_source);
 
             if (_source is not null)
             {
@@ -73,12 +75,12 @@ public sealed class ChatTranscriptItemsSourceAdapter :
     {
         get
         {
-            if (_source is null)
+            if (_rangeCache is null)
             {
                 throw new ArgumentOutOfRangeException(nameof(index));
             }
 
-            return _source[index];
+            return _rangeCache[index];
         }
         set => throw new NotSupportedException();
     }
@@ -90,13 +92,18 @@ public sealed class ChatTranscriptItemsSourceAdapter :
             return;
         }
 
+        if (_rangeCache is null)
+        {
+            return;
+        }
+
         var trackedRanges = new TranscriptVirtualizationRange[trackedItems.Count];
         for (var index = 0; index < trackedItems.Count; index++)
         {
             trackedRanges[index] = ConvertRange(trackedItems[index]);
         }
 
-        _source.ApplyRequiredRanges(ConvertRange(visibleRange), trackedRanges);
+        _rangeCache.ApplyRequiredRanges(ConvertRange(visibleRange), trackedRanges);
     }
 
     public int Add(object? value) => throw new NotSupportedException();
@@ -106,8 +113,8 @@ public sealed class ChatTranscriptItemsSourceAdapter :
     public bool Contains(object? value) => IndexOf(value) >= 0;
 
     public int IndexOf(object? value)
-        => value is ChatMessageViewModel message && _source is not null
-            ? _source.IndexOf(message)
+        => value is ChatMessageViewModel message && _rangeCache is not null
+            ? _rangeCache.IndexOf(message)
             : -1;
 
     public void Insert(int index, object? value) => throw new NotSupportedException();
@@ -123,19 +130,19 @@ public sealed class ChatTranscriptItemsSourceAdapter :
             return;
         }
 
-        _source.CopyTo(array, index);
+        _rangeCache?.CopyTo(array, index);
     }
 
     public IEnumerator GetEnumerator()
     {
-        if (_source is null)
+        if (_rangeCache is null)
         {
             yield break;
         }
 
-        for (var index = 0; index < _source.Count; index++)
+        for (var index = 0; index < _rangeCache.Count; index++)
         {
-            yield return _source[index];
+            yield return _rangeCache[index];
         }
     }
 
@@ -146,6 +153,15 @@ public sealed class ChatTranscriptItemsSourceAdapter :
 
     private void OnSourceCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
+        if (e.Action == NotifyCollectionChangedAction.Reset)
+        {
+            _rangeCache?.Clear();
+        }
+        else
+        {
+            _rangeCache?.PruneChangedItems();
+        }
+
         CollectionChanged?.Invoke(this, e);
     }
 

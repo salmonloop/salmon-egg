@@ -77,7 +77,7 @@ public sealed class ChatTranscriptVirtualizedMessageCollection :
                 return message;
             }
 
-            var projected = Project(index);
+            var projected = CreateItem(index);
             _cache[index] = projected;
             return projected;
         }
@@ -125,24 +125,6 @@ public sealed class ChatTranscriptVirtualizedMessageCollection :
             OnPropertyChanged(nameof(Count));
         }
     }
-
-    public void ApplyRequiredRanges(
-        TranscriptVirtualizationRange visibleRange,
-        IReadOnlyList<TranscriptVirtualizationRange> trackedRanges)
-    {
-        var ranges = BuildValidRanges(visibleRange, trackedRanges);
-        foreach (var range in ranges)
-        {
-            for (var index = range.FirstIndex; index <= range.LastIndex; index++)
-            {
-                _ = this[index];
-            }
-        }
-
-        PruneCacheOutside(ranges);
-    }
-
-    public bool IsItemCached(int index) => _cache.ContainsKey(index);
 
     public int IndexOf(ChatMessageViewModel item)
     {
@@ -224,14 +206,29 @@ public sealed class ChatTranscriptVirtualizedMessageCollection :
         }
     }
 
-    private ChatMessageViewModel Project(int index)
+    public ChatMessageViewModel CreateItem(int index)
     {
+        if (index < 0 || index >= _transcript.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index));
+        }
+
         if (_projector is null)
         {
             throw new InvalidOperationException("Transcript projector has not been initialized.");
         }
 
         return _projector(_transcript[index], index);
+    }
+
+    public bool MatchesItem(int index, ChatMessageViewModel item)
+    {
+        if (index < 0 || index >= _transcript.Count || _matchesSnapshot is null)
+        {
+            return false;
+        }
+
+        return _matchesSnapshot(item, _transcript[index]);
     }
 
     private void PruneChangedCachedItems(
@@ -252,51 +249,6 @@ public sealed class ChatTranscriptVirtualizedMessageCollection :
                 || !_matchesSnapshot(entry.Value, newTranscript[entry.Key]))
             {
                 _cache.Remove(entry.Key);
-            }
-        }
-    }
-
-    private List<TranscriptVirtualizationRange> BuildValidRanges(
-        TranscriptVirtualizationRange visibleRange,
-        IReadOnlyList<TranscriptVirtualizationRange> trackedRanges)
-    {
-        var ranges = new List<TranscriptVirtualizationRange>();
-        AddIfValid(visibleRange);
-        if (trackedRanges is not null)
-        {
-            foreach (var range in trackedRanges)
-            {
-                AddIfValid(range);
-            }
-        }
-
-        return ranges;
-
-        void AddIfValid(TranscriptVirtualizationRange range)
-        {
-            if (range.Length <= 0 || Count <= 0)
-            {
-                return;
-            }
-
-            var first = Math.Clamp(range.FirstIndex, 0, Count - 1);
-            var last = Math.Clamp(range.LastIndex, 0, Count - 1);
-            if (last < first)
-            {
-                return;
-            }
-
-            ranges.Add(new TranscriptVirtualizationRange(first, last - first + 1));
-        }
-    }
-
-    private void PruneCacheOutside(IReadOnlyList<TranscriptVirtualizationRange> ranges)
-    {
-        foreach (var index in _cache.Keys.ToArray())
-        {
-            if (!ranges.Any(range => range.Contains(index)))
-            {
-                _cache.Remove(index);
             }
         }
     }
