@@ -4266,6 +4266,9 @@ public partial class ChatViewModelTests
             LatestState = state;
             await State.Update(_ => state, CancellationToken.None);
         }
+
+        public ValueTask<ChatState> GetCurrentStateAsync()
+            => ValueTask.FromResult(LatestState);
     }
 
     [Fact]
@@ -16619,6 +16622,76 @@ public partial class ChatViewModelTests
             && (status.Contains("聊天", StringComparison.Ordinal) || status.Contains("消息", StringComparison.Ordinal))
             && !status.Contains("ACP", StringComparison.OrdinalIgnoreCase)
             && !status.Contains("协议", StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LargeTranscriptActivation_UsesBoundedTailProjectionWhileKeepingAuthoritativeTranscriptComplete()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync());
+
+        var transcript = Enumerable.Range(0, 200)
+            .Select(i => new ConversationMessageSnapshot
+            {
+                Id = $"message-{i}",
+                ContentType = "text",
+                TextContent = $"Message {i}",
+                Timestamp = new DateTime(2026, 5, 8, 0, 0, 0, DateTimeKind.Utc).AddSeconds(i)
+            })
+            .ToImmutableList();
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-large",
+            Transcript = transcript
+        });
+
+        Assert.True(fixture.ViewModel.MessageHistory.Count < transcript.Count);
+        Assert.Equal("message-199", fixture.ViewModel.MessageHistory[^1].Id);
+        Assert.Equal("conv-large", fixture.ViewModel.CurrentSessionId);
+    }
+
+    [Fact]
+    public async Task LargeTranscriptActivation_WhenTranscriptAppends_PreservesBoundedTailProjection()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync());
+
+        var transcript = Enumerable.Range(0, 200)
+            .Select(i => new ConversationMessageSnapshot
+            {
+                Id = $"message-{i}",
+                ContentType = "text",
+                TextContent = $"Message {i}",
+                Timestamp = new DateTime(2026, 5, 8, 0, 0, 0, DateTimeKind.Utc).AddSeconds(i)
+            })
+            .ToImmutableList();
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-large",
+            Transcript = transcript
+        });
+
+        var initialRenderedCount = fixture.ViewModel.MessageHistory.Count;
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-large",
+            Transcript = transcript.Add(new ConversationMessageSnapshot
+            {
+                Id = "message-200",
+                ContentType = "text",
+                TextContent = "Message 200",
+                Timestamp = new DateTime(2026, 5, 8, 0, 3, 20, DateTimeKind.Utc)
+            })
+        });
+
+        Assert.Equal(initialRenderedCount, fixture.ViewModel.MessageHistory.Count);
+        Assert.Equal("message-200", fixture.ViewModel.MessageHistory[^1].Id);
+        Assert.Equal("message-81", fixture.ViewModel.MessageHistory[0].Id);
     }
 }
 

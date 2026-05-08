@@ -54,15 +54,22 @@ public partial class ChatViewModel
 {
     private void OnSessionUpdateReceived(object? sender, SessionUpdateEventArgs e)
     {
-        TrackPendingSessionUpdate(_sessionUpdateWorkQueue.Enqueue(() => ProcessSessionUpdateAsync(e)));
+        if (_disposed || _disposeCts.IsCancellationRequested)
+        {
+            return;
+        }
+
+        TrackPendingSessionUpdate(_sessionUpdateWorkQueue.Enqueue(() => ProcessSessionUpdateAsync(e, _disposeCts.Token)));
     }
 
-    private async Task ProcessSessionUpdateAsync(SessionUpdateEventArgs e)
+    private async Task ProcessSessionUpdateAsync(SessionUpdateEventArgs e, CancellationToken cancellationToken)
     {
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             RecordSessionUpdateObservation(e.SessionId);
-            var storeState = await _chatStore.State ?? ChatState.Empty;
+            var storeState = await _chatStore.GetCurrentStateAsync().ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             var activeConversationId = !string.IsNullOrWhiteSpace(storeState.HydratedConversationId)
                 ? storeState.HydratedConversationId
                 : storeState.ActiveTurn?.ConversationId;
@@ -78,6 +85,7 @@ public partial class ChatViewModel
                 return;
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             var targetConversationId = boundConversationId!;
             var isActiveTarget =
                 !string.IsNullOrWhiteSpace(activeConversationId)
@@ -173,6 +181,9 @@ public partial class ChatViewModel
                     await ApplySessionUpdateDeltaAsync(targetConversationId, route.Delta).ConfigureAwait(true);
                 }
             }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested || _disposeCts.IsCancellationRequested)
+        {
         }
         catch (Exception ex)
         {

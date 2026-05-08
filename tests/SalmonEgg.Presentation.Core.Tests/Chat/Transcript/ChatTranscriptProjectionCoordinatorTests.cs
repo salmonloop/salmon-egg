@@ -2,13 +2,19 @@ using System;
 using System.Collections.ObjectModel;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Text.Json;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Moq;
 using SalmonEgg.Domain.Interfaces.Storage;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Domain.Models.ConversationPreview;
+using SalmonEgg.Domain.Services;
+using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.ViewModels.Chat.Transcript;
 using SalmonEgg.Presentation.ViewModels.Chat;
+using SalmonEgg.Presentation.ViewModels.Settings;
 using Xunit;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat;
@@ -16,7 +22,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
 public partial class ChatViewModelTests
 {
     [Fact]
-    public async Task ApplyProjection_WhenSessionChanges_ReplacesMessageHistory()
+    public async Task ApplyProjection_WhenSessionChanges_ReusesMessageHistory()
     {
         await using var fixture = CreateViewModel();
         await fixture.ViewModel.RestoreAsync();
@@ -55,7 +61,7 @@ public partial class ChatViewModelTests
             ]
         });
 
-        Assert.NotSame(originalHistory, fixture.ViewModel.MessageHistory);
+        Assert.Same(originalHistory, fixture.ViewModel.MessageHistory);
         Assert.Collection(
             fixture.ViewModel.MessageHistory,
             message =>
@@ -149,6 +155,7 @@ public partial class ChatViewModelTests
                 }
             ]
         });
+        await WaitForConditionAsync(() => Task.FromResult(fixture.ViewModel.CurrentSessionId == "conv-1"));
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -156,6 +163,7 @@ public partial class ChatViewModelTests
             Transcript = [],
             IsHydrating = true
         });
+        await WaitForConditionAsync(() => Task.FromResult(fixture.ViewModel.CurrentSessionId == "conv-2"));
 
         Assert.Equal("conv-2", fixture.ViewModel.CurrentSessionId);
         Assert.Empty(fixture.ViewModel.MessageHistory);
@@ -165,12 +173,79 @@ public partial class ChatViewModelTests
             fixture.ViewModel.MessageHistory,
             message => string.Equals(message.TextContent, "stale transcript", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public async Task ExportCurrentSessionJson_UsesAuthoritativeTranscript_NotRenderedViewportWindow()
+    {
+        await using var fixture = CreateViewModel();
+        await fixture.ViewModel.RestoreAsync();
+        var transcript = ImmutableList.CreateRange(
+            Enumerable.Range(0, 160)
+                .Select(index => new ConversationMessageSnapshot
+                {
+                    Id = $"message-{index}",
+                    Timestamp = new DateTime(2026, 5, 8, 0, 0, 0, DateTimeKind.Utc).AddSeconds(index),
+                    IsOutgoing = index % 2 == 0,
+                    ContentType = "text",
+                    TextContent = $"payload-{index}"
+                }));
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-large",
+            Transcript = transcript,
+            ConversationContents = ImmutableDictionary<string, ConversationContentSlice>.Empty.SetItem(
+                "conv-large",
+                new ConversationContentSlice(
+                    transcript,
+                    ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                    ShowPlanPanel: false,
+                    PlanTitle: null))
+        });
+        await WaitForConditionAsync(() => Task.FromResult(fixture.ViewModel.CurrentSessionId == "conv-large"));
+
+        Assert.True(fixture.ViewModel.MessageHistory.Count < transcript.Count);
+
+        var exportDirectory = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(),
+            $"salmon-export-test-{Guid.NewGuid():N}");
+        System.IO.Directory.CreateDirectory(exportDirectory);
+
+        try
+        {
+            var paths = new Mock<IAppDataService>();
+            paths.SetupGet(path => path.ExportsDirectoryPath).Returns(exportDirectory);
+            var maintenance = new Mock<IAppMaintenanceService>();
+            var diagnostics = new Mock<IDiagnosticsBundleService>();
+            var shell = new Mock<IPlatformShellService>();
+            shell.Setup(service => service.OpenFileAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
+            var preferences = (AppPreferencesViewModel)RuntimeHelpers.GetUninitializedObject(typeof(AppPreferencesViewModel));
+            var settings = new DataStorageSettingsViewModel(
+                preferences,
+                fixture.ViewModel,
+                paths.Object,
+                maintenance.Object,
+                diagnostics.Object,
+                shell.Object,
+                Mock.Of<ILogger<DataStorageSettingsViewModel>>());
+
+            await settings.ExportCurrentSessionJsonCommand.ExecuteAsync(null);
+
+            var exportFile = Assert.Single(System.IO.Directory.GetFiles(exportDirectory, "*.json"));
+            using var json = JsonDocument.Parse(await System.IO.File.ReadAllTextAsync(exportFile));
+            Assert.Equal(transcript.Count, json.RootElement.GetProperty("Messages").GetArrayLength());
+        }
+        finally
+        {
+            System.IO.Directory.Delete(exportDirectory, recursive: true);
+        }
+    }
 }
 
 public sealed class ChatTranscriptProjectionCoordinatorUnitTests
 {
     [Fact]
-    public async Task ApplyProjection_WhenSessionChanges_ReplacesCollectionAndSavesPreviewOnce()
+    public async Task ApplyProjection_WhenSessionChanges_ReusesCollectionAndSavesPreviewOnce()
     {
         var previewStore = new Mock<IConversationPreviewStore>();
         previewStore.Setup(store => store.SaveAsync(It.IsAny<ConversationPreviewSnapshot>(), default))
@@ -181,6 +256,7 @@ public sealed class ChatTranscriptProjectionCoordinatorUnitTests
         {
             new() { Id = "stale", TextContent = "stale" }
         };
+        var originalHistory = history;
         var context = CreateContext(
             () => history,
             value => history = value,
@@ -219,6 +295,7 @@ public sealed class ChatTranscriptProjectionCoordinatorUnitTests
             ],
             isHydrating: false);
 
+        Assert.Same(originalHistory, history);
         Assert.Collection(
             history,
             message =>
@@ -383,6 +460,8 @@ public sealed class ChatTranscriptProjectionCoordinatorUnitTests
             MatchesSnapshot = static (message, snapshot) =>
                 string.Equals(message.Id, snapshot.Id, StringComparison.Ordinal)
                 && string.Equals(message.TextContent, snapshot.TextContent, StringComparison.Ordinal),
+            GetProjectionItemKey = SalmonEgg.Presentation.Core.Services.Chat.TranscriptProjectionRestoreTokenProjector.CreateProjectionItemKey,
+            IsTailAnchored = static () => true,
             UpdateVisibleTranscriptConversationId = updateVisibleTranscriptConversationId,
             RaiseTranscriptStateChanged = static () => { }
         };

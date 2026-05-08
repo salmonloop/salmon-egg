@@ -48,6 +48,7 @@ public sealed partial class ChatView : Page
         private int _pendingRestoreResolvedIndex = -1;
         private int _pendingRestoreRequestedMaterializationIndex = -1;
         private double _pendingRestoreRequestedVerticalOffset = double.NaN;
+        private bool _pendingRestoreRetryScheduled;
         private string _transcriptViewportAutomationState = "inactive";
         private ObservableCollection<ChatMessageViewModel>? _trackedMessageHistory;
         private long _messagesListViewportTokenCallback;
@@ -181,6 +182,7 @@ public sealed partial class ChatView : Page
             }
 
             BeginLayoutLoadingIfPendingMessages();
+            TryApplyPendingProjectionRestore();
 
             if (_transcriptScrollSettler.HasPendingWork && IsViewportDetachedByUser())
             {
@@ -228,7 +230,6 @@ public sealed partial class ChatView : Page
         private void OnMessagesListLayoutUpdated(object? sender, object e)
         {
             var lastItemContainerGenerated = HasLastItemContainerGenerated(ViewModel.MessageHistory.Count);
-            TryApplyPendingProjectionRestore();
             RefreshLayoutLoadingState(lastItemContainerGenerated);
 
             if (_transcriptScrollSettler.HasPendingWork && IsViewportDetachedByUser())
@@ -279,6 +280,12 @@ public sealed partial class ChatView : Page
         private void OnMessagesListViewportChanged(DependencyObject sender, DependencyProperty dp)
         {
             TryApplyPendingProjectionRestore();
+            if (TryExpandOlderTranscriptWindowAtTop())
+            {
+                UpdateTranscriptViewportAutomationState();
+                return;
+            }
+
             TryRefreshViewportCoordinatorFromView();
             UpdateTranscriptViewportAutomationState();
         }
@@ -463,6 +470,39 @@ public sealed partial class ChatView : Page
                 ResolveRelativeOffsetWithinAnchor(firstVisibleIndex));
         }
 
+        private bool TryExpandOlderTranscriptWindowAtTop()
+        {
+            if (_pendingRestoreToken is not null
+                || MessagesList is null
+                || !_isViewLoaded
+                || _suspendAutoScrollTracking
+                || ViewModel.IsActivationOverlayVisible
+                || !ViewModel.IsSessionActive
+                || !IsViewportDetachedByUser())
+            {
+                return false;
+            }
+
+            var verticalOffset = ScrollViewerViewportMonitor.GetVerticalOffset(MessagesList);
+            if (verticalOffset > 1d)
+            {
+                return false;
+            }
+
+            var restoreToken = TryCaptureProjectionRestoreToken();
+            if (!ViewModel.TryExpandOlderRenderedTranscriptWindow())
+            {
+                return false;
+            }
+
+            if (restoreToken is { } nonNullRestoreToken)
+            {
+                QueueProjectionOwnedRestore(nonNullRestoreToken, _scrollScheduleGeneration);
+            }
+
+            return true;
+        }
+
         private int ResolveFirstVisibleIndex()
         {
             if (MessagesList is null)
@@ -620,12 +660,14 @@ public sealed partial class ChatView : Page
                     break;
 
                 case TranscriptViewportCommandKind.MarkAutoFollowDetached:
+                    ViewModel.SetRenderedTranscriptTailAnchored(false);
                     _attachToBottomIntentPending = false;
                     _scrollToBottomScheduled = false;
                     ClearPendingProjectionRestore();
                     break;
 
                 case TranscriptViewportCommandKind.MarkAutoFollowAttached:
+                    ViewModel.SetRenderedTranscriptTailAnchored(true);
                     _attachToBottomIntentPending = false;
                     ClearPendingProjectionRestore();
                     break;
@@ -675,8 +717,30 @@ public sealed partial class ChatView : Page
             TryApplyPendingProjectionRestore();
         }
 
+        private void SchedulePendingProjectionRestoreRetry()
+        {
+            if (_pendingRestoreRetryScheduled)
+            {
+                return;
+            }
+
+            _pendingRestoreRetryScheduled = true;
+            _ = SchedulePendingProjectionRestoreRetryAsync();
+        }
+
+        private async System.Threading.Tasks.Task SchedulePendingProjectionRestoreRetryAsync()
+        {
+            await System.Threading.Tasks.Task.Delay(TimeSpan.FromMilliseconds(16)).ConfigureAwait(false);
+            _ = DispatcherQueue.TryEnqueue(() =>
+            {
+                _pendingRestoreRetryScheduled = false;
+                TryApplyPendingProjectionRestore();
+            });
+        }
+
         private void TryApplyPendingProjectionRestore()
         {
+            _pendingRestoreRetryScheduled = false;
             if (_pendingRestoreToken is not { } token
                 || MessagesList is null
                 || !_isViewLoaded)
@@ -694,6 +758,13 @@ public sealed partial class ChatView : Page
             var index = ResolvePendingProjectionRestoreIndex(token);
             if (index < 0 || index >= ViewModel.MessageHistory.Count)
             {
+                if (ViewModel.TryMaterializeRenderedTranscriptProjectionItem(token.ProjectionItemKey))
+                {
+                    _pendingRestoreResolvedIndex = -1;
+                    SchedulePendingProjectionRestoreRetry();
+                    return;
+                }
+
                 ReportPendingProjectionRestoreUnavailable("ProjectionItemMissing");
                 return;
             }
@@ -702,6 +773,13 @@ public sealed partial class ChatView : Page
             {
                 if (_pendingRestoreRequestedMaterializationIndex == index)
                 {
+                    if (++_pendingRestoreAttemptCount >= MaxRestoreAttempts)
+                    {
+                        ReportPendingProjectionRestoreUnavailable("ProjectionItemNotMaterialized");
+                        return;
+                    }
+
+                    SchedulePendingProjectionRestoreRetry();
                     return;
                 }
 
@@ -713,6 +791,7 @@ public sealed partial class ChatView : Page
 
                 _pendingRestoreRequestedMaterializationIndex = index;
                 MessagesList.ScrollIntoView(ViewModel.MessageHistory[index]);
+                SchedulePendingProjectionRestoreRetry();
                 return;
             }
 
@@ -761,6 +840,7 @@ public sealed partial class ChatView : Page
 
             _pendingRestoreRequestedVerticalOffset = targetVerticalOffset;
             scrollViewer.ChangeView(null, targetVerticalOffset, null, true);
+            SchedulePendingProjectionRestoreRetry();
         }
 
         private int ResolvePendingProjectionRestoreIndex(TranscriptProjectionRestoreToken token)
@@ -829,6 +909,7 @@ public sealed partial class ChatView : Page
             _pendingRestoreResolvedIndex = -1;
             _pendingRestoreRequestedMaterializationIndex = -1;
             _pendingRestoreRequestedVerticalOffset = double.NaN;
+            _pendingRestoreRetryScheduled = false;
         }
 
         private void RequestScrollToBottom()

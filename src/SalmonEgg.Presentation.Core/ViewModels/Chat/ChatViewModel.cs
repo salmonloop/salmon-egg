@@ -146,6 +146,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private CancellationTokenSource? _voiceInputCts;
     private CancellationTokenSource? _transientNotificationCts;
     private CancellationTokenSource? _storeStateCts;
+    private readonly CancellationTokenSource _disposeCts = new();
     private readonly object _selectedProfileConnectSync = new();
     private readonly object _ambientConnectionRequestSync = new();
     private Task? _selectedProfileConnectTask;
@@ -188,6 +189,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private string? _pendingHistoryOverlayDismissConversationId;
     private string? _sessionSwitchPreviewConversationId;
     private string? _visibleTranscriptConversationId;
+    private bool _isRenderedTranscriptTailAnchored = true;
     private string? _activeVoiceInputRequestId;
     private string _voiceInputBasePrompt = string.Empty;
 
@@ -894,13 +896,17 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _sessionHeaderActionCoordinator = new ChatSessionHeaderActionCoordinator();
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
         _previewStore = previewStore ?? throw new ArgumentNullException(nameof(previewStore));
-        _transcriptProjectionCoordinator = new ChatTranscriptProjectionCoordinator(_previewStore);
+        _transcriptProjectionCoordinator = new ChatTranscriptProjectionCoordinator(
+            _previewStore,
+            new ChatTranscriptViewportProjectionCoordinator());
         _transcriptProjectionContext = new ChatTranscriptProjectionContext
         {
             GetMessageHistory = () => MessageHistory,
             SetMessageHistory = history => MessageHistory = history,
             FromSnapshot = FromSnapshot,
             MatchesSnapshot = MatchesSnapshot,
+            GetProjectionItemKey = GetProjectionItemKey,
+            IsTailAnchored = () => _isRenderedTranscriptTailAnchored,
             UpdateVisibleTranscriptConversationId = UpdateVisibleTranscriptConversationId,
             RaiseTranscriptStateChanged = RaiseTranscriptProjectionStateChanged
         };
@@ -1078,7 +1084,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             var projectionSequence = Interlocked.Increment(ref _storeProjectionSequence);
             var latestConnectionState = await _chatConnectionStore.State ?? ChatConnectionState.Empty;
             var projection = CreateProjection(state, latestConnectionState);
-            await PostToUiAsync(async () =>
+            var projectionTask = PostToUiAsync(() =>
             {
                 if (token.IsCancellationRequested || _disposed)
                 {
@@ -1098,7 +1104,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
                 }
 
                 ApplyStoreProjection(projection);
-            }).ConfigureAwait(false);
+            });
+
+            await AwaitUiProjectionAsync(projectionTask, token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested || ct.IsCancellationRequested)
         {
@@ -1476,7 +1484,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
                 prebuildStopwatch.ElapsedMilliseconds);
         }
 
-        await PostToUiAsync(() =>
+        var uiProjectionTask = PostToUiAsync(() =>
         {
             if (_disposed)
             {
@@ -1491,7 +1499,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             // Note: ApplyStoreProjection now internally calls SyncMessageHistory
             // before notifying state changes to avoid race conditions on the UI thread.
             ApplyStoreProjection(projection, preparedTranscript);
-        }).ConfigureAwait(false);
+        });
+        await AwaitUiProjectionAsync(uiProjectionTask, _storeStateCts?.Token ?? CancellationToken.None).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1501,6 +1510,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     /// </summary>
     private Task PostToUiAsync(Action action) => _uiDispatcher.EnqueueAsync(action);
     private Task PostToUiAsync(Func<Task> function) => _uiDispatcher.EnqueueAsync(function);
+
+    private static Task AwaitUiProjectionAsync(Task task, CancellationToken cancellationToken)
+        => cancellationToken.CanBeCanceled
+            ? task.WaitAsync(cancellationToken)
+            : task;
 
     private bool ShouldApplyStoreProjection(ChatUiProjection projection, long activationVersion)
         => _chatUiProjectionApplicationCoordinator.ShouldApply(projection, activationVersion);
@@ -1786,6 +1800,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
         return vm;
     }
+
+    private static string GetProjectionItemKey(ConversationMessageSnapshot snapshot, int projectionIndex)
+        => TranscriptProjectionRestoreTokenProjector.CreateProjectionItemKey(snapshot, projectionIndex);
 
     private static bool MatchesSnapshot(ChatMessageViewModel viewModel, ConversationMessageSnapshot snapshot)
     {
@@ -2351,18 +2368,18 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         ShowTransportConfigPanel = !ShowTransportConfigPanel;
     }
 
-       private void SubscribeToChatService(IChatService chatService)
-       {
-           chatService.SessionUpdateReceived += OnSessionUpdateReceived;
-           chatService.PermissionRequestReceived += OnPermissionRequestReceived;
-            chatService.FileSystemRequestReceived += OnFileSystemRequestReceived;
-            chatService.TerminalRequestReceived += OnTerminalRequestReceived;
-            chatService.TerminalStateChangedReceived += OnTerminalStateChangedReceived;
-            chatService.AskUserRequestReceived += OnAskUserRequestReceived;
-            chatService.ErrorOccurred += OnErrorOccurred;
+    private void SubscribeToChatService(IChatService chatService)
+    {
+        chatService.SessionUpdateReceived += OnSessionUpdateReceived;
+        chatService.PermissionRequestReceived += OnPermissionRequestReceived;
+        chatService.FileSystemRequestReceived += OnFileSystemRequestReceived;
+        chatService.TerminalRequestReceived += OnTerminalRequestReceived;
+        chatService.TerminalStateChangedReceived += OnTerminalStateChangedReceived;
+        chatService.AskUserRequestReceived += OnAskUserRequestReceived;
+        chatService.ErrorOccurred += OnErrorOccurred;
 
-           _ = _authenticationCoordinator.UpdateAgentInfoAsync(_chatService, _chatStore, SelectedProfileId);
-       }
+        _ = _authenticationCoordinator.UpdateAgentInfoAsync(_chatService, _chatStore, SelectedProfileId);
+    }
 
        private void UnsubscribeFromChatService(IChatService chatService)
        {
@@ -2659,22 +2676,24 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
            _sendPromptCts?.Cancel();
            _voiceInputCts?.Cancel();
            _transientNotificationCts?.Cancel();
+           _disposeCts.Cancel();
            try { _ = _voiceInputService.StopAsync(); } catch { }
            StopStoreProjection();
 
-            try { _sendPromptCts?.Dispose(); } catch { }
-            try { _voiceInputCts?.Dispose(); } catch { }
-            try { _transientNotificationCts?.Dispose(); } catch { }
-            try { _conversationActivationOrchestrator.Dispose(); } catch { }
-            try { _ = _localTerminalPanelCoordinator?.DisposeAsync().AsTask(); } catch { }
-            try { _remoteConversationActivationGate.Dispose(); } catch { }
+           try { _sendPromptCts?.Dispose(); } catch { }
+           try { _voiceInputCts?.Dispose(); } catch { }
+           try { _transientNotificationCts?.Dispose(); } catch { }
+           try { _disposeCts.Dispose(); } catch { }
+           try { _conversationActivationOrchestrator.Dispose(); } catch { }
+           try { _ = _localTerminalPanelCoordinator?.DisposeAsync().AsTask(); } catch { }
+           try { _remoteConversationActivationGate.Dispose(); } catch { }
 
-            _selectedProfileConnectTask = null;
-            _pendingSelectedProfileConnect = null;
-            _sendPromptCts = null;
-       _voiceInputCts = null;
-       _transientNotificationCts = null;
-       }
+           _selectedProfileConnectTask = null;
+           _pendingSelectedProfileConnect = null;
+           _sendPromptCts = null;
+           _voiceInputCts = null;
+           _transientNotificationCts = null;
+        }
 
     private void RaisePlanEntryDerivedPropertyNotifications()
     {

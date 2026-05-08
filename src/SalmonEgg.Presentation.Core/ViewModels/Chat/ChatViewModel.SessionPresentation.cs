@@ -187,6 +187,7 @@ public partial class ChatViewModel
         // Set the session ID before subsequent projection so loading state is derived
         // from the active conversation that the UI is about to display.
         CurrentSessionId = projection.HydratedConversationId;
+        _isRenderedTranscriptTailAnchored = true;
         _transcriptProjectionCoordinator.ApplyProjection(
             _transcriptProjectionContext,
             projection.HydratedConversationId,
@@ -285,6 +286,69 @@ public partial class ChatViewModel
             _currentRestoreProjectionEpoch,
             message.ProjectionItemKey,
             offsetHint);
+    }
+
+    public bool TryExpandOlderRenderedTranscriptWindow()
+    {
+        if (string.IsNullOrWhiteSpace(CurrentSessionId))
+        {
+            return false;
+        }
+
+        var expanded = _transcriptProjectionCoordinator.TryExpandOlderWindow(
+            _transcriptProjectionContext,
+            CurrentSessionId);
+        if (expanded)
+        {
+            _isRenderedTranscriptTailAnchored = false;
+        }
+
+        return expanded;
+    }
+
+    public bool TryMaterializeRenderedTranscriptProjectionItem(string? projectionItemKey)
+    {
+        if (string.IsNullOrWhiteSpace(CurrentSessionId))
+        {
+            return false;
+        }
+
+        var materialized = _transcriptProjectionCoordinator.TryMaterializeProjectionItem(
+            _transcriptProjectionContext,
+            CurrentSessionId,
+            projectionItemKey);
+        if (materialized)
+        {
+            _isRenderedTranscriptTailAnchored = false;
+        }
+
+        return materialized;
+    }
+
+    public void SetRenderedTranscriptTailAnchored(bool isTailAnchored)
+    {
+        _isRenderedTranscriptTailAnchored = isTailAnchored;
+    }
+
+    public async ValueTask<IReadOnlyList<ConversationMessageSnapshot>> GetCurrentSessionTranscriptSnapshotAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var conversationId = CurrentSessionId;
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return Array.Empty<ConversationMessageSnapshot>();
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var state = await _chatStore.GetCurrentStateAsync().ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var transcript = state.ResolveContentSlice(conversationId)?.Transcript
+            ?? (string.Equals(state.HydratedConversationId, conversationId, StringComparison.Ordinal)
+                ? state.Transcript
+                : null)
+            ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+        return transcript.Select(CloneSnapshot).ToArray();
     }
 
     private void UpdateRestoreProjectionMetadata(ChatUiProjection projection)

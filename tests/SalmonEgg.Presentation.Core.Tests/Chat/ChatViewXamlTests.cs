@@ -116,6 +116,26 @@ public sealed class ChatViewXamlTests
     }
 
     [Fact]
+    public void ChatTranscriptRestore_RetriesFromProjectionAndViewportCheckpoints_NotFromLayoutUpdated()
+    {
+        var chatViewCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
+        var miniChatViewCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs");
+
+        Assert.Contains("TryApplyPendingProjectionRestore();", chatViewCode, StringComparison.Ordinal);
+        Assert.Contains("TryApplyPendingProjectionRestore();", miniChatViewCode, StringComparison.Ordinal);
+        Assert.Contains("private void OnMessagesListViewportChanged", chatViewCode, StringComparison.Ordinal);
+        Assert.Contains("private void OnMessagesListViewportChanged", miniChatViewCode, StringComparison.Ordinal);
+        Assert.Contains("private void SchedulePendingProjectionRestoreRetry()", chatViewCode, StringComparison.Ordinal);
+        Assert.Contains("private void SchedulePendingProjectionRestoreRetry()", miniChatViewCode, StringComparison.Ordinal);
+        Assert.Contains("TryExpandOlderTranscriptWindowAtTop()", chatViewCode, StringComparison.Ordinal);
+        Assert.Contains("TryExpandOlderTranscriptWindowAtTop()", miniChatViewCode, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.TryExpandOlderRenderedTranscriptWindow()", chatViewCode, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.TryExpandOlderRenderedTranscriptWindow()", miniChatViewCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("OnMessagesListLayoutUpdated(object? sender, object e)\r\n        {\r\n            var lastItemContainerGenerated = HasLastItemContainerGenerated(ViewModel.MessageHistory.Count);\r\n            TryApplyPendingProjectionRestore();", chatViewCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("OnMessagesListLayoutUpdated(object? sender, object e)\r\n    {\r\n        var lastItemContainerGenerated = HasLastItemContainerGenerated(ViewModel.MessageHistory.Count);\r\n        TryApplyPendingProjectionRestore();", miniChatViewCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void WindowsGuiAppSession_AnywhereLookupStaysWithinApplicationWindows()
     {
         var code = LoadText(@"tests\SalmonEgg.GuiTests.Windows\WindowsGuiAppSession.cs");

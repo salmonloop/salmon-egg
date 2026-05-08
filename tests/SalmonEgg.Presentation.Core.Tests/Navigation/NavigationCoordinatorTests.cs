@@ -1570,6 +1570,8 @@ public sealed class NavigationCoordinatorTests
         var state = State.Value(new object(), () => ChatState.Empty);
         var chatStore = new Mock<IChatStore>();
         chatStore.Setup(s => s.State).Returns(state);
+        chatStore.Setup(s => s.GetCurrentStateAsync())
+            .Returns(async () => await state ?? ChatState.Empty);
         chatStore.Setup(s => s.Dispatch(It.IsAny<ChatAction>()))
             .Returns<ChatAction>(action => state.Update(s => ChatReducer.Reduce(s!, action), CancellationToken.None));
 

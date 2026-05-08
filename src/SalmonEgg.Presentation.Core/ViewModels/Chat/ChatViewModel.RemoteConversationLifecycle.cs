@@ -1380,7 +1380,7 @@ public partial class ChatViewModel
                 return false;
             }
 
-            var readyAfterConnect = await IsRemoteConnectionReadyAsync(binding.ProfileId, cancellationToken).ConfigureAwait(false);
+            var readyAfterConnect = await WaitForRemoteConnectionReadyAsync(binding.ProfileId, cancellationToken).ConfigureAwait(false);
             if (IsActivationContextStale(activationVersion, cancellationToken))
             {
                 return false;

@@ -21,6 +21,12 @@ public interface IChatStore
     /// </summary>
     /// <param name="action">The action to dispatch.</param>
     ValueTask Dispatch(ChatAction action);
+
+    /// <summary>
+    /// Gets the latest authoritative store state, including in-flight state already committed by the store
+    /// before downstream reactive projections have observed it.
+    /// </summary>
+    ValueTask<ChatState> GetCurrentStateAsync();
 }
 
 /// <summary>
@@ -69,6 +75,9 @@ public sealed class ChatStore : IChatStore
             _dispatchGate.Release();
         }
     }
+
+    public async ValueTask<ChatState> GetCurrentStateAsync()
+        => _cachedState ?? await State ?? ChatState.Empty;
 
     private bool TryAdvanceProjectedGeneration(long generation)
     {

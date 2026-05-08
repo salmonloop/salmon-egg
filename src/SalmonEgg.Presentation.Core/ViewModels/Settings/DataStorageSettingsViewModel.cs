@@ -92,6 +92,7 @@ public partial class DataStorageSettingsViewModel : ObservableObject
             var fileName = $"session-{sessionId}-{timestamp}.{format}";
             fileName = SanitizeFileName(fileName);
             var path = Path.Combine(_paths.ExportsDirectoryPath, fileName);
+            var transcript = await Chat.GetCurrentSessionTranscriptSnapshotAsync().ConfigureAwait(false);
 
             if (string.Equals(format, "json", StringComparison.OrdinalIgnoreCase))
             {
@@ -100,9 +101,9 @@ public partial class DataStorageSettingsViewModel : ObservableObject
                     Chat.AgentName,
                     Chat.AgentVersion,
                     DateTimeOffset.UtcNow,
-                    Chat.MessageHistory.Select(m => new ExportMessage(
+                    transcript.Select(m => new ExportMessage(
                         m.Id,
-                        m.Timestamp,
+                        ToExportTimestamp(m.Timestamp),
                         m.IsOutgoing,
                         m.ContentType,
                         m.Title,
@@ -121,10 +122,10 @@ public partial class DataStorageSettingsViewModel : ObservableObject
                 sb.AppendLine($"- ExportedAt(UTC): `{DateTimeOffset.UtcNow:O}`");
                 sb.AppendLine();
 
-                foreach (var m in Chat.MessageHistory)
+                foreach (var m in transcript)
                 {
                     var who = m.IsOutgoing ? "User" : "Agent";
-                    sb.AppendLine($"## {who} · {m.Timestamp:O}");
+                    sb.AppendLine($"## {who} · {ToExportTimestamp(m.Timestamp):O}");
                     if (!string.IsNullOrWhiteSpace(m.Title))
                     {
                         sb.AppendLine();
@@ -202,6 +203,14 @@ public partial class DataStorageSettingsViewModel : ObservableObject
             name = name.Replace(c, '_');
         }
         return name;
+    }
+
+    private static DateTimeOffset ToExportTimestamp(DateTime timestamp)
+    {
+        var utc = timestamp.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(timestamp, DateTimeKind.Utc)
+            : timestamp.ToUniversalTime();
+        return new DateTimeOffset(utc);
     }
 }
 
