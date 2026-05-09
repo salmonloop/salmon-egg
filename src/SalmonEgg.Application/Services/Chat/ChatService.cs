@@ -295,7 +295,7 @@ namespace SalmonEgg.Application.Services.Chat
                     hadPreviousHistory = true;
                     previousHistory = session.History.ToList();
                 }
-                
+
                 // Clear history before loading to ensure we don't have duplicate entries 
                 // if the server replays the history during the load process.
                 _sessionManager.UpdateSession(@params.SessionId, s => s.History.Clear());
@@ -583,8 +583,16 @@ namespace SalmonEgg.Application.Services.Chat
                 if (string.IsNullOrEmpty(_currentSessionId))
                     return null;
 
-                // TODO: Modes should be cached from response or requested via separate protocol call if available.
-                return null;
+                var session = _sessionManager.GetSession(_currentSessionId);
+                if (session == null || session.Mode.AvailableModes == null || session.Mode.AvailableModes.Count == 0)
+                    return null;
+
+                return session.Mode.AvailableModes.Select(m => new SalmonEgg.Domain.Models.Protocol.SessionMode
+                {
+                    Id = m.Id,
+                    Name = m.Name,
+                    Description = m.Description
+                }).ToList();
             }
             catch (Exception ex)
             {
