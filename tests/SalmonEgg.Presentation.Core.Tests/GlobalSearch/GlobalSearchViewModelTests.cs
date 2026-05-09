@@ -227,6 +227,109 @@ public sealed class GlobalSearchViewModelTests
     }
 
     [Fact]
+    public async Task ActivateSuggestionAsync_WhenEntryIsNull_DoesNothing()
+    {
+        using var viewModel = new GlobalSearchViewModel(
+            CreateNavigationViewModel(CreatePreferencesWithProject(), new ConversationCatalogPresenter()),
+            CreatePreferencesWithProject(),
+            Mock.Of<INavigationCoordinator>(),
+            new ConversationCatalogPresenter(),
+            new ProjectAffinityResolver(),
+            new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
+            Mock.Of<IStringLocalizer<CoreStrings>>(),
+            Mock.Of<ILogger<GlobalSearchViewModel>>());
+
+        var initialQuery = viewModel.Query;
+        await viewModel.ActivateSuggestionAsync(null);
+
+        Assert.Equal(initialQuery, viewModel.Query);
+    }
+
+    [Fact]
+    public async Task ActivateSuggestionAsync_WhenEntryIsNotActionable_DoesNothing()
+    {
+        using var viewModel = new GlobalSearchViewModel(
+            CreateNavigationViewModel(CreatePreferencesWithProject(), new ConversationCatalogPresenter()),
+            CreatePreferencesWithProject(),
+            Mock.Of<INavigationCoordinator>(),
+            new ConversationCatalogPresenter(),
+            new ProjectAffinityResolver(),
+            new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
+            Mock.Of<IStringLocalizer<CoreStrings>>(),
+            Mock.Of<ILogger<GlobalSearchViewModel>>());
+
+        var statusEntry = new SearchSuggestionEntry
+        {
+            AutomationId = "StatusId",
+            Title = "Status",
+            Kind = SearchSuggestionEntryKind.Status
+        };
+
+        var initialQuery = viewModel.Query;
+        await viewModel.ActivateSuggestionAsync(statusEntry);
+
+        Assert.Equal(initialQuery, viewModel.Query);
+    }
+
+    [Fact]
+    public async Task ActivateSuggestionAsync_WhenResultKindWithNullResultItem_DoesNothing()
+    {
+        using var viewModel = new GlobalSearchViewModel(
+            CreateNavigationViewModel(CreatePreferencesWithProject(), new ConversationCatalogPresenter()),
+            CreatePreferencesWithProject(),
+            Mock.Of<INavigationCoordinator>(),
+            new ConversationCatalogPresenter(),
+            new ProjectAffinityResolver(),
+            new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
+            Mock.Of<IStringLocalizer<CoreStrings>>(),
+            Mock.Of<ILogger<GlobalSearchViewModel>>());
+
+        var resultEntry = new SearchSuggestionEntry
+        {
+            AutomationId = "ResultId",
+            Title = "Result without item",
+            Kind = SearchSuggestionEntryKind.Result,
+            ResultItem = null
+        };
+
+        var initialQuery = viewModel.Query;
+        await viewModel.ActivateSuggestionAsync(resultEntry);
+
+        Assert.Equal(initialQuery, viewModel.Query);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task ActivateSuggestionAsync_WhenHistoryKindWithNullOrWhitespaceHistoryQuery_DoesNothing(string? historyQuery)
+    {
+        using var viewModel = new GlobalSearchViewModel(
+            CreateNavigationViewModel(CreatePreferencesWithProject(), new ConversationCatalogPresenter()),
+            CreatePreferencesWithProject(),
+            Mock.Of<INavigationCoordinator>(),
+            new ConversationCatalogPresenter(),
+            new ProjectAffinityResolver(),
+            new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
+            Mock.Of<IStringLocalizer<CoreStrings>>(),
+            Mock.Of<ILogger<GlobalSearchViewModel>>());
+
+        var historyEntry = new SearchSuggestionEntry
+        {
+            AutomationId = "HistoryId",
+            Title = "History without query",
+            Kind = SearchSuggestionEntryKind.History,
+            HistoryQuery = historyQuery
+        };
+
+        var initialQuery = viewModel.Query;
+        await viewModel.ActivateSuggestionAsync(historyEntry);
+
+        Assert.Equal(initialQuery, viewModel.Query);
+    }
+
+
+    [Fact]
     public async Task StaleFailure_DoesNotOverrideLatestSuccessfulResult()
     {
         var preferences = CreatePreferencesWithProject();
