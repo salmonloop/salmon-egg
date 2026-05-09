@@ -508,26 +508,26 @@ public sealed class NavigationCoreTests
             "private void RegisterUserViewportDetachment()",
             "private TranscriptProjectionRestoreToken? TryCaptureProjectionRestoreToken()");
 
-        Assert.Contains("new TranscriptViewportEvent.UserDetached(", detachSection, StringComparison.Ordinal);
-        Assert.Contains("new TranscriptViewportEvent.UserIntentScroll(", detachSection, StringComparison.Ordinal);
+        Assert.Contains("CreateUserDetachedEvent(", detachSection, StringComparison.Ordinal);
+        Assert.Contains("CreateUserIntentScrollEvent(", detachSection, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void ChatViewCodeBehind_PointerPendingDetachUsesSharedDetachedRoute()
+    public void ChatViewCodeBehind_DelegatesViewportObservationPolicyToCoreOrchestrator()
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
-        var pointerPendingSection = ExtractSection(
+        var refreshSection = ExtractSection(
             code,
-            "if (_pointerScrollIntentPending)",
-            "ApplyViewportCommand(_viewportCoordinator.Handle(new TranscriptViewportEvent.ViewportFactChanged(");
+            "private void TryRefreshViewportCoordinatorFromView",
+            "private void ApplyViewportCommand");
 
-        Assert.Contains("RegisterUserViewportDetachment();", pointerPendingSection, StringComparison.Ordinal);
-        Assert.Contains("StopInitialScrollForManualInteraction();", pointerPendingSection, StringComparison.Ordinal);
-        Assert.DoesNotContain("new TranscriptViewportEvent.UserIntentScroll(", pointerPendingSection, StringComparison.Ordinal);
+        Assert.Contains("_viewportOrchestrator.ObserveViewportFact(", refreshSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("RegisterUserViewportDetachment();", refreshSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("new TranscriptViewportEvent.UserIntentScroll(", refreshSection, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void ChatViewsCodeBehind_NativeViewportMovementUsesSharedDetachedRoute()
+    public void ChatViewsCodeBehind_NativeViewportMovementPolicyIsOwnedByCoreOrchestrator()
     {
         foreach (var path in new[]
         {
@@ -540,18 +540,16 @@ public sealed class NavigationCoreTests
                 code,
                 "private void TryRefreshViewportCoordinatorFromView",
                 "private void ApplyViewportCommand");
-            var helperSection = ExtractSection(
-                code,
-                "private bool ShouldDetachForNativeViewportMovement",
-                "private void ApplyViewportCommand");
 
-            Assert.Contains("if (ShouldDetachForNativeViewportMovement(fact))", refreshSection, StringComparison.Ordinal);
-            Assert.Contains("RegisterUserViewportDetachment();", refreshSection, StringComparison.Ordinal);
-            Assert.Contains("_viewportCoordinator.IsAutoFollowAttached", helperSection, StringComparison.Ordinal);
-            Assert.Contains("!_transcriptScrollSettler.HasPendingWork", helperSection, StringComparison.Ordinal);
-            Assert.Contains("!fact.IsProgrammaticScrollInFlight", helperSection, StringComparison.Ordinal);
-            Assert.Contains("(_pointerScrollIntentPending || _pointerScrollReleasePending || _attachToBottomIntentPending)", helperSection, StringComparison.Ordinal);
+            Assert.Contains("_viewportOrchestrator.ObserveViewportFact(", refreshSection, StringComparison.Ordinal);
+            Assert.DoesNotContain("ShouldDetachForNativeViewportMovement", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("RefreshDetachedViewportRestoreToken", code, StringComparison.Ordinal);
         }
+
+        var orchestratorCode = LoadFile(@"src\SalmonEgg.Presentation.Core\Utilities\TranscriptViewportOrchestrator.cs");
+        Assert.Contains("private bool ShouldDetachForNativeViewportMovement", orchestratorCode, StringComparison.Ordinal);
+        Assert.Contains("Handle(CreateUserDetachedEvent(conversationId, capturedRestoreToken))", orchestratorCode, StringComparison.Ordinal);
+        Assert.Contains("Handle(CreateUserIntentScrollEvent(conversationId))", orchestratorCode, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -588,7 +586,7 @@ public sealed class NavigationCoreTests
                 "private void OnMessagesListViewportChanged",
                 "private void OnMessagesListPointerPressed");
 
-            Assert.Contains("if (_transcriptScrollSettler.HasPendingWork)", viewportChangedSection, StringComparison.Ordinal);
+            Assert.Contains("if (_viewportOrchestrator.HasPendingSettle)", viewportChangedSection, StringComparison.Ordinal);
             Assert.Contains("TryAdvanceTranscriptSettleFromLayout(lastItemContainerGenerated);", viewportChangedSection, StringComparison.Ordinal);
             Assert.Contains("TryIssueTranscriptScrollRequest();", viewportChangedSection, StringComparison.Ordinal);
         }
@@ -647,6 +645,56 @@ public sealed class NavigationCoreTests
             Assert.DoesNotContain("_pendingRestoreResolvedIndex", code, StringComparison.Ordinal);
             Assert.DoesNotContain("_pendingRestoreRequestedMaterializationIndex", code, StringComparison.Ordinal);
             Assert.DoesNotContain("_pendingRestoreRetryScheduled", code, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void TranscriptAutoFollowSettleState_IsOwnedBySingleCoreController()
+    {
+        var controllerCode = LoadFile(@"src\SalmonEgg.Presentation.Core\Utilities\TranscriptViewportOrchestrator.cs");
+
+        Assert.Contains("private readonly TranscriptScrollSettler _scrollSettler", controllerCode, StringComparison.Ordinal);
+        Assert.Contains("private readonly TranscriptViewportCoordinator _viewportCoordinator", controllerCode, StringComparison.Ordinal);
+        Assert.Contains("public TranscriptViewportOrchestratorSnapshot Snapshot", controllerCode, StringComparison.Ordinal);
+
+        foreach (var path in new[]
+        {
+            @"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs",
+            @"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs"
+        })
+        {
+            var code = LoadFile(path);
+
+            Assert.Contains("TranscriptViewportOrchestrator", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("private readonly TranscriptScrollSettler _transcriptScrollSettler", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("private readonly TranscriptViewportCoordinator _viewportCoordinator", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("private bool _attachToBottomIntentPending", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("private bool _pointerScrollIntentPending", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("private bool _pointerScrollReleasePending", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("private bool _suspendAutoScrollTracking", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("private int _scrollScheduleGeneration", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("private int _scheduledScrollRequestVersion", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("private int _activeTranscriptScrollGeneration", code, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void ChatViewsCodeBehind_UseOpaqueTokensInsteadOfReadingOrchestratorInternalCounters()
+    {
+        foreach (var path in new[]
+        {
+            @"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs",
+            @"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs"
+        })
+        {
+            var code = LoadFile(path);
+
+            Assert.Contains("TryCaptureActiveScrollRequestToken(", code, StringComparison.Ordinal);
+            Assert.Contains("MatchesActiveScrollRequest(", code, StringComparison.Ordinal);
+            Assert.Contains("TryBeginScrollToBottomSchedule(", code, StringComparison.Ordinal);
+            Assert.Contains("CanExecuteScrollToBottomSchedule(", code, StringComparison.Ordinal);
+            Assert.DoesNotContain(".ActiveScrollGeneration", code, StringComparison.Ordinal);
+            Assert.DoesNotContain(".ScheduledScrollRequestVersion", code, StringComparison.Ordinal);
         }
     }
 

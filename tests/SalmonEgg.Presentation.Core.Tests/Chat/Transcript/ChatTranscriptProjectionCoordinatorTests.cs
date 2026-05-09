@@ -401,6 +401,32 @@ public sealed class ChatTranscriptProjectionCoordinatorUnitTests
     }
 
     [Fact]
+    public void BuildPreviewSnapshot_WhenTranscriptIsLarge_CapsPreviewWindowAndEntryText()
+    {
+        var coordinator = new ChatTranscriptProjectionCoordinator(Mock.Of<IConversationPreviewStore>());
+        var longText = new string('x', 5000);
+        var transcript = ImmutableList.CreateRange(
+            Enumerable.Range(0, 80)
+                .Select(index => new ConversationMessageSnapshot
+                {
+                    Id = $"message-{index}",
+                    Timestamp = new DateTime(2026, 5, 3, 0, 0, 0, DateTimeKind.Utc).AddSeconds(index),
+                    IsOutgoing = index % 2 == 0,
+                    ContentType = "text",
+                    TextContent = $"{index}:{longText}"
+                }));
+
+        var snapshot = coordinator.BuildPreviewSnapshot("conv-large", transcript, isHydrating: false);
+
+        Assert.NotNull(snapshot);
+        Assert.True(snapshot!.Entries.Count <= 24);
+        Assert.Equal(24, snapshot.Entries.Count);
+        Assert.All(snapshot.Entries, entry => Assert.True(entry.Text.Length <= 1024));
+        Assert.Equal("56:" + new string('x', 1021), snapshot.Entries[0].Text);
+        Assert.Equal("79:" + new string('x', 1021), snapshot.Entries[^1].Text);
+    }
+
+    [Fact]
     public void ApplyProjection_WhenSameSessionReceivesLargeTranscriptGrowth_KeepsVirtualizedSourceStable()
     {
         var previewStore = new Mock<IConversationPreviewStore>();

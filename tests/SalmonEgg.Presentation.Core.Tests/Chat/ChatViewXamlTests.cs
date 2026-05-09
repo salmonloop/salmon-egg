@@ -144,6 +144,23 @@ public sealed class ChatViewXamlTests
     }
 
     [Fact]
+    public void ChatTranscriptViewport_UsesHostDrivenViewportEventsWithoutPageLayoutUpdatedHooks()
+    {
+        var chatViewCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
+        var miniChatViewCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs");
+        var chatViewXaml = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml");
+        var miniChatViewXaml = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml");
+        var hostCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Transcript\ListViewTranscriptViewportHost.cs");
+
+        Assert.DoesNotContain("LayoutUpdated=\"OnMessagesListLayoutUpdated\"", chatViewXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("LayoutUpdated=\"OnMessagesListLayoutUpdated\"", miniChatViewXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("private void OnMessagesListLayoutUpdated", chatViewCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("private void OnMessagesListLayoutUpdated", miniChatViewCode, StringComparison.Ordinal);
+        Assert.Contains("ScrollViewer", hostCode, StringComparison.Ordinal);
+        Assert.Contains("ViewChanged", hostCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
     [Trait("Suite", "Smoke")]
     public void ChatTranscriptVirtualization_UsesNativeListViewBindingWithoutUiTypesInCore()
     {

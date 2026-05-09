@@ -10,6 +10,8 @@ namespace SalmonEgg.Presentation.ViewModels.Chat.Transcript;
 
 internal sealed class ChatTranscriptProjectionCoordinator
 {
+    private const int MaxPreviewEntryCount = 24;
+    private const int MaxPreviewTextLength = 1024;
     private readonly IConversationPreviewStore _previewStore;
     private readonly object _previewSnapshotSync = new();
     private string? _lastSavedPreviewConversationId;
@@ -41,10 +43,12 @@ internal sealed class ChatTranscriptProjectionCoordinator
             return null;
         }
 
+        var startIndex = Math.Max(0, transcript.Count - MaxPreviewEntryCount);
         var previewEntries = transcript
+            .Skip(startIndex)
             .Select(m => new PreviewEntry(
                 m.IsOutgoing ? "user" : "assistant",
-                m.TextContent ?? string.Empty,
+                TrimPreviewText(m.TextContent),
                 m.Timestamp))
             .ToArray();
 
@@ -100,6 +104,18 @@ internal sealed class ChatTranscriptProjectionCoordinator
         }
 
         SavePreviewSnapshot(snapshot);
+    }
+
+    private static string TrimPreviewText(string? text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return string.Empty;
+        }
+
+        return text.Length <= MaxPreviewTextLength
+            ? text
+            : text[..MaxPreviewTextLength];
     }
 
     private static void ApplyTranscript(

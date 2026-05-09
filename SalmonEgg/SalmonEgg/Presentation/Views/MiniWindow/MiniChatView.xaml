@@ -112,8 +112,7 @@
                   MinWidth="0"
                   Loaded="OnMessagesListLoaded"
                   Unloaded="OnMessagesListUnloaded"
-                  PointerReleased="OnMessagesListPointerReleased"
-                  LayoutUpdated="OnMessagesListLayoutUpdated">
+                  PointerReleased="OnMessagesListPointerReleased">
             <ListView.ItemsPanel>
                 <ItemsPanelTemplate>
                                     <ItemsStackPanel Orientation="Vertical" />

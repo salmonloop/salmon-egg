@@ -1,5 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Media;
 using SalmonEgg.Presentation.ViewModels.Chat.Transcript;
 using Windows.Foundation;
 
@@ -10,6 +12,7 @@ public sealed class ListViewTranscriptViewportHost : ITranscriptViewportHost
     private readonly ListViewBase _listView;
     private readonly Func<TranscriptVirtualizationRange?>? _visibleRangeProvider;
     private readonly SortedSet<int> _realizedIndices = new();
+    private ScrollViewer? _scrollViewer;
     private bool _viewportChangedQueued;
 
     public ListViewTranscriptViewportHost(
@@ -20,6 +23,9 @@ public sealed class ListViewTranscriptViewportHost : ITranscriptViewportHost
         _visibleRangeProvider = visibleRangeProvider;
         _listView.ContainerContentChanging += OnContainerContentChanging;
         _listView.SizeChanged += OnSizeChanged;
+        _listView.Loaded += OnListViewLoaded;
+        _listView.Unloaded += OnListViewUnloaded;
+        AttachScrollViewer();
     }
 
     public event EventHandler? ViewportChanged;
@@ -126,6 +132,9 @@ public sealed class ListViewTranscriptViewportHost : ITranscriptViewportHost
 
     public void Dispose()
     {
+        DetachScrollViewer();
+        _listView.Loaded -= OnListViewLoaded;
+        _listView.Unloaded -= OnListViewUnloaded;
         _listView.ContainerContentChanging -= OnContainerContentChanging;
         _listView.SizeChanged -= OnSizeChanged;
         _viewportChangedQueued = false;
@@ -180,6 +189,76 @@ public sealed class ListViewTranscriptViewportHost : ITranscriptViewportHost
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
         QueueViewportChanged();
+    }
+
+    private void OnListViewLoaded(object sender, RoutedEventArgs e)
+    {
+        AttachScrollViewer();
+        QueueViewportChanged();
+    }
+
+    private void OnListViewUnloaded(object sender, RoutedEventArgs e)
+    {
+        DetachScrollViewer();
+    }
+
+    private void OnScrollViewerViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
+    {
+        QueueViewportChanged();
+    }
+
+    private void AttachScrollViewer()
+    {
+        if (_scrollViewer is not null)
+        {
+            return;
+        }
+
+        _scrollViewer = FindDescendant<ScrollViewer>(_listView);
+        if (_scrollViewer is not null)
+        {
+            _scrollViewer.ViewChanged += OnScrollViewerViewChanged;
+        }
+    }
+
+    private void DetachScrollViewer()
+    {
+        if (_scrollViewer is null)
+        {
+            return;
+        }
+
+        _scrollViewer.ViewChanged -= OnScrollViewerViewChanged;
+        _scrollViewer = null;
+    }
+
+    private static T? FindDescendant<T>(DependencyObject? root)
+        where T : DependencyObject
+    {
+        if (root is null)
+        {
+            return default;
+        }
+
+        var queue = new Queue<DependencyObject>();
+        queue.Enqueue(root);
+
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+            if (current is T match)
+            {
+                return match;
+            }
+
+            var childCount = VisualTreeHelper.GetChildrenCount(current);
+            for (var index = 0; index < childCount; index++)
+            {
+                queue.Enqueue(VisualTreeHelper.GetChild(current, index));
+            }
+        }
+
+        return default;
     }
 
     private void QueueViewportChanged()

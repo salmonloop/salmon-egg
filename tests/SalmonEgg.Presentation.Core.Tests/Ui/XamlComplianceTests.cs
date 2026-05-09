@@ -194,7 +194,7 @@ public sealed class XamlComplianceTests
     {
         var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs");
 
-        Assert.Contains("TranscriptViewportCoordinator", code, StringComparison.Ordinal);
+        Assert.Contains("TranscriptViewportOrchestrator", code, StringComparison.Ordinal);
         Assert.DoesNotContain("_userScrolledUp = !IsListViewportAtBottom()", code, StringComparison.Ordinal);
     }
 
@@ -252,8 +252,8 @@ public sealed class XamlComplianceTests
             "private void RegisterUserViewportDetachment()",
             "private TranscriptProjectionRestoreToken? TryCaptureProjectionRestoreToken()");
 
-        Assert.Contains("new TranscriptViewportEvent.UserDetached(", detachSection, StringComparison.Ordinal);
-        Assert.Contains("new TranscriptViewportEvent.UserIntentScroll(", detachSection, StringComparison.Ordinal);
+        Assert.Contains("CreateUserDetachedEvent(", detachSection, StringComparison.Ordinal);
+        Assert.Contains("CreateUserIntentScrollEvent(", detachSection, StringComparison.Ordinal);
     }
 
     [Fact]

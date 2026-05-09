@@ -10892,6 +10892,52 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task ApplyStoreProjection_WhenTranscriptIsLarge_PersistsBoundedPreviewSummary()
+    {
+        var previewStore = new Mock<IConversationPreviewStore>();
+        previewStore.Setup(store => store.LoadAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ConversationPreviewSnapshot?)null);
+        previewStore.Setup(store => store.SaveAsync(It.IsAny<ConversationPreviewSnapshot>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        previewStore.Setup(store => store.DeleteAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        await using var fixture = CreateViewModel(previewStore: previewStore.Object);
+        await fixture.ViewModel.RestoreAsync();
+
+        var longText = new string('x', 5000);
+        var transcript = Enumerable.Range(0, 80)
+            .Select(index => new ConversationMessageSnapshot
+            {
+                Id = $"message-{index}",
+                Timestamp = new DateTime(2026, 5, 9, 0, 0, 0, DateTimeKind.Utc).AddSeconds(index),
+                IsOutgoing = index % 2 == 0,
+                ContentType = "text",
+                TextContent = $"{index}:{longText}"
+            })
+            .ToImmutableList();
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-large",
+            Transcript = transcript
+        });
+
+        await WaitForConditionAsync(() => Task.FromResult(fixture.ViewModel.MessageHistory.Count == transcript.Count));
+
+        previewStore.Verify(
+            store => store.SaveAsync(
+                It.Is<ConversationPreviewSnapshot>(snapshot =>
+                    string.Equals(snapshot.ConversationId, "conv-large", StringComparison.Ordinal)
+                    && snapshot.Entries.Count == 24
+                    && snapshot.Entries.All(entry => entry.Text.Length <= 1024)
+                    && snapshot.Entries[0].Text == "56:" + new string('x', 1021)
+                    && snapshot.Entries.Last().Text == "79:" + new string('x', 1021)),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
     public async Task ApplyStoreProjection_RemoteBoundConversation_DoesNotPersistTranscriptPreview()
     {
         var previewStore = new Mock<IConversationPreviewStore>();
