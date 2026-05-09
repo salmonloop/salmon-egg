@@ -88,7 +88,7 @@ public sealed class ConversationActivationOrchestrator : IConversationActivation
         {
             await context.WaitForForegroundGateAsync().ConfigureAwait(false);
             var result = await sink.ExecuteActivationAsync(request, context, context.CancellationToken).ConfigureAwait(false);
-            if (!result.CompletionOwnedByBackground)
+            if (!result.CompletionOwnedByBackground || request.AwaitRemoteHydration)
             {
                 await FinalizeActivationAsync(request, context, sink, result, CancellationToken.None).ConfigureAwait(false);
             }
