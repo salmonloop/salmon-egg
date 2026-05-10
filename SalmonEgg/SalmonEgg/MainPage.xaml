@@ -21,7 +21,8 @@
     xmlns:behaviors="using:SalmonEgg.Presentation.Behaviors"
     mc:Ignorable="d"
     Background="Transparent"
-    AllowDrop="False">
+    AllowDrop="False"
+    KeyboardAcceleratorPlacementMode="Hidden">
 
     <Page.Resources>
         <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
