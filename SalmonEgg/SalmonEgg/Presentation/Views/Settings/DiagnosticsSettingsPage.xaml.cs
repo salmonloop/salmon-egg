@@ -1,6 +1,9 @@
+using System;
+using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.Extensions.Logging;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.Views;
 
@@ -9,21 +12,23 @@ namespace SalmonEgg.Presentation.Views.Settings;
 public sealed partial class DiagnosticsSettingsPage : SettingsPageBase
 {
     private ScrollViewer? _liveLogScrollViewer;
+    private readonly ILogger<DiagnosticsSettingsPage> _logger;
 
     public DiagnosticsSettingsViewModel ViewModel { get; }
 
     public DiagnosticsSettingsPage()
     {
+        _logger = App.ServiceProvider.GetRequiredService<ILogger<DiagnosticsSettingsPage>>();
         ViewModel = App.ServiceProvider.GetRequiredService<DiagnosticsSettingsViewModel>();
         InitializeComponent();
         SetSettingsBreadcrumbFromResource("SettingsNav_Diagnostics.Content", "诊断与日志");
         Unloaded += OnUnloaded;
     }
 
-    private async void OnUnloaded(object sender, RoutedEventArgs e)
+    private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         _liveLogScrollViewer = null;
-        await ViewModel.LiveLogViewer.HandlePageUnloadedAsync();
+        _ = HandlePageUnloadedAsync();
     }
 
     private void OnLiveLogTextChanged(object sender, TextChangedEventArgs e)
@@ -64,5 +69,17 @@ public sealed partial class DiagnosticsSettingsPage : SettingsPageBase
         }
 
         return null;
+    }
+
+    private async Task HandlePageUnloadedAsync()
+    {
+        try
+        {
+            await ViewModel.LiveLogViewer.HandlePageUnloadedAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Diagnostics page unload cleanup failed");
+        }
     }
 }
