@@ -525,6 +525,48 @@ public sealed class DiscoverSessionsViewModelTests
     }
 
     [Fact]
+    public void SetLayoutMode_WhenModeIsUnchanged_DoesNotRaiseDerivedPaneNotifications()
+    {
+        var profile = CreateProfile();
+        var profilesViewModel = CreateProfilesViewModel(profile);
+        using var viewModel = CreateViewModel(
+            profilesViewModel,
+            new FakeDiscoverSessionsConnectionFacade(),
+            new StubImportCoordinator(),
+            new StubNavigationCoordinator());
+        var changedProperties = new List<string>();
+        viewModel.PropertyChanged += (_, e) => changedProperties.Add(e.PropertyName ?? string.Empty);
+
+        viewModel.SetLayoutMode(DiscoverLayoutMode.Wide);
+
+        Assert.DoesNotContain(nameof(DiscoverSessionsViewModel.ShowProfilesPane), changedProperties);
+        Assert.DoesNotContain(nameof(DiscoverSessionsViewModel.ShowDetailsPane), changedProperties);
+        Assert.DoesNotContain(nameof(DiscoverSessionsViewModel.ShowCompactBackButton), changedProperties);
+    }
+
+    [Fact]
+    public void OpenProfileDetails_WhenAlreadyInDetailPane_DoesNotRaiseDerivedPaneNotifications()
+    {
+        var profile = CreateProfile();
+        var profilesViewModel = CreateProfilesViewModel(profile);
+        using var viewModel = CreateViewModel(
+            profilesViewModel,
+            new FakeDiscoverSessionsConnectionFacade(),
+            new StubImportCoordinator(),
+            new StubNavigationCoordinator());
+        viewModel.SetLayoutMode(DiscoverLayoutMode.Narrow);
+        viewModel.OpenProfileDetailsCommand.Execute(null);
+        var changedProperties = new List<string>();
+        viewModel.PropertyChanged += (_, e) => changedProperties.Add(e.PropertyName ?? string.Empty);
+
+        viewModel.OpenProfileDetailsCommand.Execute(null);
+
+        Assert.DoesNotContain(nameof(DiscoverSessionsViewModel.ShowProfilesPane), changedProperties);
+        Assert.DoesNotContain(nameof(DiscoverSessionsViewModel.ShowDetailsPane), changedProperties);
+        Assert.DoesNotContain(nameof(DiscoverSessionsViewModel.ShowCompactBackButton), changedProperties);
+    }
+
+    [Fact]
     public void SelectingProfile_InNarrowMode_MovesToDetailPane()
     {
         var profile1 = CreateProfile();

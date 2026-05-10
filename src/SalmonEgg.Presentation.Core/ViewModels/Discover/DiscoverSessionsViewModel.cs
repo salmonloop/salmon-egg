@@ -120,6 +120,11 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
 
     public void SetLayoutMode(DiscoverLayoutMode mode)
     {
+        if (LayoutMode == mode)
+        {
+            return;
+        }
+
         LayoutMode = mode;
         OnPropertyChanged(nameof(ShowProfilesPane));
         OnPropertyChanged(nameof(ShowDetailsPane));
@@ -129,7 +134,9 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
     [RelayCommand]
     private void OpenProfileDetails()
     {
-        if (LayoutMode == DiscoverLayoutMode.Narrow && SelectedProfile != null)
+        if (LayoutMode == DiscoverLayoutMode.Narrow
+            && SelectedProfile != null
+            && ActivePaneMode != DiscoverPaneMode.Detail)
         {
             ActivePaneMode = DiscoverPaneMode.Detail;
             OnPropertyChanged(nameof(ShowProfilesPane));
@@ -141,7 +148,8 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
     [RelayCommand]
     private void BackToProfiles()
     {
-        if (LayoutMode == DiscoverLayoutMode.Narrow)
+        if (LayoutMode == DiscoverLayoutMode.Narrow
+            && ActivePaneMode != DiscoverPaneMode.List)
         {
             ActivePaneMode = DiscoverPaneMode.List;
             OnPropertyChanged(nameof(ShowProfilesPane));
