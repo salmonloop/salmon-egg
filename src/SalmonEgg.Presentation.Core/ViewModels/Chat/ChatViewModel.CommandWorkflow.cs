@@ -316,7 +316,7 @@ public partial class ChatViewModel
     private Task FailPromptSendAsync(PromptSendContext context, string reason)
         => _chatStore.Dispatch(new FailTurnAction(context.ConversationId, context.TurnId, reason)).AsTask();
 
-    private ChatInputState ResolveInputState()
+    private ChatComposerPresentationState ResolveInputState()
         => _inputStatePresenter.Present(new ChatInputStateInput(
             IsBusy: IsBusy,
             IsPromptInFlight: IsPromptInFlight,
@@ -380,6 +380,7 @@ public partial class ChatViewModel
             var requestId = Guid.NewGuid().ToString("N");
             _activeVoiceInputRequestId = requestId;
             _voiceInputBasePrompt = CurrentPrompt ?? string.Empty;
+            IsVoiceInputListening = true;
 
             var options = new VoiceInputSessionOptions(
                 requestId,
@@ -388,16 +389,18 @@ public partial class ChatViewModel
                 PreferOffline: false);
 
             await _voiceInputService.StartAsync(options, _voiceInputCts.Token);
-            IsVoiceInputListening = true;
         }
         catch (OperationCanceledException)
         {
             // Cancellation is expected when voice input is quickly superseded.
+            IsVoiceInputListening = false;
+            _activeVoiceInputRequestId = null;
         }
         catch (Exception ex)
         {
             VoiceInputErrorMessage = ex.Message;
             ShowTransientNotificationToast($"Voice input failed: {ex.Message}");
+            IsVoiceInputListening = false;
             _activeVoiceInputRequestId = null;
             _voiceInputBasePrompt = CurrentPrompt ?? string.Empty;
         }
@@ -410,15 +413,26 @@ public partial class ChatViewModel
     [RelayCommand]
     private async Task StopVoiceInputAsync()
     {
-        if (!IsVoiceInputListening || IsVoiceInputBusy)
+        if (!IsVoiceInputListening)
         {
             return;
         }
 
-        IsVoiceInputBusy = true;
+        if (!IsVoiceInputBusy)
+        {
+            IsVoiceInputBusy = true;
+        }
 
         try
         {
+            try
+            {
+                _voiceInputCts?.Cancel();
+            }
+            catch
+            {
+            }
+
             await _voiceInputService.StopAsync();
         }
         catch (OperationCanceledException)
@@ -843,6 +857,7 @@ public partial class ChatViewModel
         }
 
         SendPromptCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(ComposerState));
         OnPropertyChanged(nameof(CanSendPromptUi));
         RefreshSlashStateFromPrompt();
     }
@@ -850,42 +865,24 @@ public partial class ChatViewModel
     partial void OnIsPromptInFlightChanged(bool value)
     {
         SendPromptCommand.NotifyCanExecuteChanged();
-        OnPropertyChanged(nameof(IsInputEnabled));
-        OnPropertyChanged(nameof(CanSendPromptUi));
-        OnPropertyChanged(nameof(CanStartVoiceInput));
-        OnPropertyChanged(nameof(CanStopVoiceInput));
-        OnPropertyChanged(nameof(ShowVoiceInputStartButton));
-        OnPropertyChanged(nameof(ShowVoiceInputStopButton));
+        NotifyComposerProjectionChanged();
     }
 
     partial void OnIsVoiceInputListeningChanged(bool value)
     {
         SendPromptCommand.NotifyCanExecuteChanged();
-        OnPropertyChanged(nameof(IsInputEnabled));
-        OnPropertyChanged(nameof(CanSendPromptUi));
-        OnPropertyChanged(nameof(CanStartVoiceInput));
-        OnPropertyChanged(nameof(CanStopVoiceInput));
-        OnPropertyChanged(nameof(ShowVoiceInputStartButton));
-        OnPropertyChanged(nameof(ShowVoiceInputStopButton));
+        NotifyComposerProjectionChanged();
     }
 
     partial void OnIsVoiceInputBusyChanged(bool value)
     {
         SendPromptCommand.NotifyCanExecuteChanged();
-        OnPropertyChanged(nameof(IsInputEnabled));
-        OnPropertyChanged(nameof(CanSendPromptUi));
-        OnPropertyChanged(nameof(CanStartVoiceInput));
-        OnPropertyChanged(nameof(CanStopVoiceInput));
-        OnPropertyChanged(nameof(ShowVoiceInputStartButton));
-        OnPropertyChanged(nameof(ShowVoiceInputStopButton));
+        NotifyComposerProjectionChanged();
     }
 
     partial void OnIsVoiceInputSupportedChanged(bool value)
     {
-        OnPropertyChanged(nameof(CanStartVoiceInput));
-        OnPropertyChanged(nameof(CanStopVoiceInput));
-        OnPropertyChanged(nameof(ShowVoiceInputStartButton));
-        OnPropertyChanged(nameof(ShowVoiceInputStopButton));
+        NotifyComposerProjectionChanged();
     }
 
     partial void OnPendingAskUserRequestChanged(AskUserRequestViewModel? value)
@@ -902,10 +899,6 @@ public partial class ChatViewModel
         }
 
         SendPromptCommand.NotifyCanExecuteChanged();
-        OnPropertyChanged(nameof(IsInputEnabled));
-        OnPropertyChanged(nameof(CanSendPromptUi));
-        OnPropertyChanged(nameof(CanStartVoiceInput));
-        OnPropertyChanged(nameof(CanStopVoiceInput));
         OnPropertyChanged(nameof(HasPendingAskUserRequest));
         OnPropertyChanged(nameof(AskUserPrompt));
         OnPropertyChanged(nameof(AskUserQuestions));
@@ -924,13 +917,13 @@ public partial class ChatViewModel
     partial void OnIsConnectedChanged(bool value)
     {
         SendPromptCommand.NotifyCanExecuteChanged();
-        OnPropertyChanged(nameof(CanSendPromptUi));
+        NotifyComposerProjectionChanged();
     }
 
     partial void OnIsSessionActiveChanged(bool value)
     {
         SendPromptCommand.NotifyCanExecuteChanged();
-        OnPropertyChanged(nameof(CanSendPromptUi));
+        NotifyComposerProjectionChanged();
         RefreshCurrentSessionDisplayName();
         OnPropertyChanged(nameof(ShouldShowActiveConversationRoot));
         OnPropertyChanged(nameof(ShouldLoadActiveConversationRoot));

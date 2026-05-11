@@ -34,6 +34,7 @@ using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Core.Services.Chat.Slash;
 using SalmonEgg.Presentation.Core.Services.Input;
+using SalmonEgg.Presentation.Core.ViewModels.Chat.Input;
 using SalmonEgg.Presentation.Core.ViewModels.ShellLayout;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.ViewModels.Chat;
@@ -614,6 +615,35 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task StopVoiceInputCommand_WhenStartIsStuck_CancelsActiveVoiceSessionAndClearsBusyState()
+    {
+        var voiceInput = new FakeVoiceInputService
+        {
+            IsSupported = true,
+            PermissionResult = VoiceInputPermissionResult.Granted(),
+            BlockStartUntilCancellation = true
+        };
+
+        await using var fixture = CreateViewModel(voiceInputService: voiceInput);
+        fixture.ViewModel.IsSessionActive = true;
+
+        var startTask = fixture.ViewModel.StartVoiceInputCommand.ExecuteAsync(null);
+
+        await WaitForConditionAsync(() => Task.FromResult(
+            fixture.ViewModel.IsVoiceInputListening
+            && fixture.ViewModel.IsVoiceInputBusy
+            && fixture.ViewModel.CanStopVoiceInput));
+
+        await fixture.ViewModel.StopVoiceInputCommand.ExecuteAsync(null);
+        await startTask;
+
+        Assert.False(fixture.ViewModel.IsVoiceInputListening);
+        Assert.False(fixture.ViewModel.IsVoiceInputBusy);
+        Assert.Null(fixture.ViewModel.VoiceInputErrorMessage);
+        Assert.Equal(1, voiceInput.StopCount);
+    }
+
+    [Fact]
     public async Task StartVoiceInputCommand_WhenPermissionDenied_RequestsAuthorizationHelp()
     {
         var voiceInput = new FakeVoiceInputService
@@ -631,6 +661,70 @@ public partial class ChatViewModelTests
         await fixture.ViewModel.StartVoiceInputCommand.ExecuteAsync(null);
 
         Assert.Equal(1, voiceInput.AuthorizationHelpRequestCount);
+    }
+
+    [Fact]
+    public async Task ComposerState_WhenPromptInFlight_ProjectsPromptInFlightModeAndCancelEscapeAction()
+    {
+        await using var fixture = CreateViewModel();
+
+        fixture.ViewModel.IsPromptInFlight = true;
+
+        Assert.Equal(ChatComposerMode.PromptInFlight, fixture.ViewModel.ComposerState.Mode);
+        Assert.True(fixture.ViewModel.ComposerState.ShowCancelButton);
+        Assert.True(fixture.ViewModel.ComposerState.CanCancelPrompt);
+        Assert.False(fixture.ViewModel.ComposerState.IsInteractiveSurfaceEnabled);
+        Assert.False(fixture.ViewModel.ComposerState.ShowVoiceStopButton);
+    }
+
+    [Fact]
+    public async Task ComposerState_WhenVoiceListening_ProjectsVoiceListeningModeAndStopEscapeAction()
+    {
+        await using var fixture = CreateViewModel();
+
+        fixture.ViewModel.IsVoiceInputSupported = true;
+        fixture.ViewModel.IsVoiceInputListening = true;
+        fixture.ViewModel.IsVoiceInputBusy = true;
+
+        Assert.Equal(ChatComposerMode.VoiceListening, fixture.ViewModel.ComposerState.Mode);
+        Assert.True(fixture.ViewModel.ComposerState.ShowVoiceStopButton);
+        Assert.True(fixture.ViewModel.ComposerState.CanStopVoiceInput);
+        Assert.True(fixture.ViewModel.ComposerState.IsTextInputEnabled);
+        Assert.False(fixture.ViewModel.ComposerState.AreComposerToolsEnabled);
+        Assert.False(fixture.ViewModel.ComposerState.ShowCancelButton);
+    }
+
+    [Fact]
+    public async Task ComposerState_WhenPromptInFlightChanges_RaisesComposerStateNotification()
+    {
+        await using var fixture = CreateViewModel();
+        var raised = new List<string>();
+        fixture.ViewModel.PropertyChanged += (_, e) =>
+        {
+            if (!string.IsNullOrWhiteSpace(e.PropertyName))
+            {
+                raised.Add(e.PropertyName!);
+            }
+        };
+
+        fixture.ViewModel.IsPromptInFlight = true;
+
+        Assert.Contains(nameof(ChatViewModel.ComposerState), raised);
+    }
+
+    [Fact]
+    public async Task ShouldShowSlashCommandsUi_WhenPromptInFlight_HidesSlashSurfaceUntilComposerReenabled()
+    {
+        await using var fixture = CreateViewModel();
+
+        fixture.ViewModel.ShowSlashCommands = true;
+        Assert.True(fixture.ViewModel.ShouldShowSlashCommandsUi);
+
+        fixture.ViewModel.IsPromptInFlight = true;
+        Assert.False(fixture.ViewModel.ShouldShowSlashCommandsUi);
+
+        fixture.ViewModel.IsPromptInFlight = false;
+        Assert.True(fixture.ViewModel.ShouldShowSlashCommandsUi);
     }
 
     [Fact]
@@ -5155,6 +5249,8 @@ public partial class ChatViewModelTests
 
         public bool ThrowIfStopCalledAfterCallerCancellation { get; set; }
 
+        public bool BlockStartUntilCancellation { get; set; }
+
         public List<string> StartedSessionIds { get; } = new();
 
         public VoiceInputPermissionResult PermissionResult { get; set; } =
@@ -5182,7 +5278,9 @@ public partial class ChatViewModelTests
             IsListening = true;
             _lastStartCancellationToken = cancellationToken;
             StartedSessionIds.Add(options.RequestId);
-            return Task.CompletedTask;
+            return BlockStartUntilCancellation
+                ? Task.Delay(Timeout.Infinite, cancellationToken)
+                : Task.CompletedTask;
         }
 
         public Task StopAsync(CancellationToken cancellationToken = default)

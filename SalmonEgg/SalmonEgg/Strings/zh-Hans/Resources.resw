@@ -550,6 +550,12 @@
   <data name="ChatModeSelector.PlaceholderText" xml:space="preserve">
     <value>选择模式</value>
   </data>
+  <data name="ChatComposerPromptInFlightStatus.Text" xml:space="preserve">
+    <value>正在等待本轮响应完成</value>
+  </data>
+  <data name="ChatComposerVoiceListeningStatus.Text" xml:space="preserve">
+    <value>语音输入进行中</value>
+  </data>
   <data name="ChatAcpProfileSelector.PlaceholderText" xml:space="preserve">
     <value>选择 ACP 配置文件</value>
   </data>
@@ -720,6 +726,15 @@
   </data>
   <data name="MiniChatInputBox.PlaceholderText" xml:space="preserve">
     <value>输入消息</value>
+  </data>
+  <data name="MiniChatComposerPromptInFlightStatus.Text" xml:space="preserve">
+    <value>正在等待本轮响应完成</value>
+  </data>
+  <data name="MiniChatComposerVoiceListeningStatus.Text" xml:space="preserve">
+    <value>语音输入进行中</value>
+  </data>
+  <data name="MiniChatCancelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>取消发送</value>
   </data>
   <data name="MiniChatSendButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>发送</value>

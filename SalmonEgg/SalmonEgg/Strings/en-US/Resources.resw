@@ -62,6 +62,12 @@
   <data name="ChatModeSelector.PlaceholderText" xml:space="preserve">
     <value>Choose mode</value>
   </data>
+  <data name="ChatComposerPromptInFlightStatus.Text" xml:space="preserve">
+    <value>Waiting for the current response to finish.</value>
+  </data>
+  <data name="ChatComposerVoiceListeningStatus.Text" xml:space="preserve">
+    <value>Voice input is active.</value>
+  </data>
   <data name="ChatAcpProfileSelector.PlaceholderText" xml:space="preserve">
     <value>Select ACP profile</value>
   </data>
@@ -777,6 +783,15 @@
   </data>
   <data name="MiniChatInputBox.PlaceholderText" xml:space="preserve">
     <value>Type a message</value>
+  </data>
+  <data name="MiniChatComposerPromptInFlightStatus.Text" xml:space="preserve">
+    <value>Waiting for the current response to finish.</value>
+  </data>
+  <data name="MiniChatComposerVoiceListeningStatus.Text" xml:space="preserve">
+    <value>Voice input is active.</value>
+  </data>
+  <data name="MiniChatCancelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Cancel</value>
   </data>
   <data name="MiniChatSendButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Send</value>

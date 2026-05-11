@@ -2,18 +2,48 @@ namespace SalmonEgg.Presentation.Core.ViewModels.Chat.Input;
 
 public sealed class ChatInputStatePresenter
 {
-    public ChatInputState Present(ChatInputStateInput input)
+    public ChatComposerPresentationState Present(ChatInputStateInput input)
     {
-        var isInputEnabled =
-            !input.IsBusy
-            && !input.IsPromptInFlight
-            && !input.IsVoiceInputListening
-            && !input.IsVoiceInputBusy
-            && !input.HasPendingAskUserRequest
-            && !input.ShouldShowLoadingOverlayPresenter;
+        if (input.IsVoiceInputListening)
+        {
+            return new ChatComposerPresentationState(
+                Mode: ChatComposerMode.VoiceListening,
+                IsTextInputEnabled: true,
+                AreComposerToolsEnabled: false,
+                CanSendPrompt: false,
+                ShowCancelButton: false,
+                CanCancelPrompt: false,
+                CanStartVoiceInput: false,
+                ShowVoiceStartButton: false,
+                ShowVoiceStopButton: true,
+                CanStopVoiceInput: true,
+                ShowPromptInFlightStatus: false,
+                ShowVoiceListeningStatus: true);
+        }
+
+        if (input.IsPromptInFlight)
+        {
+            return new ChatComposerPresentationState(
+                Mode: ChatComposerMode.PromptInFlight,
+                IsTextInputEnabled: false,
+                AreComposerToolsEnabled: false,
+                CanSendPrompt: false,
+                ShowCancelButton: true,
+                CanCancelPrompt: true,
+                CanStartVoiceInput: false,
+                ShowVoiceStartButton: false,
+                ShowVoiceStopButton: false,
+                CanStopVoiceInput: false,
+                ShowPromptInFlightStatus: true,
+                ShowVoiceListeningStatus: false);
+        }
+
+        var isSurfaceBlocked =
+            input.IsBusy
+            || input.IsVoiceInputBusy;
 
         var canSendPrompt =
-            isInputEnabled
+            !isSurfaceBlocked
             && input.IsSessionActive
             && input.HasChatService
             && input.IsInitialized
@@ -22,21 +52,20 @@ public sealed class ChatInputStatePresenter
 
         var canStartVoiceInput =
             input.IsVoiceInputSupported
-            && !input.IsVoiceInputListening
-            && !input.IsVoiceInputBusy
-            && isInputEnabled;
+            && !isSurfaceBlocked;
 
-        var canStopVoiceInput =
-            input.IsVoiceInputSupported
-            && input.IsVoiceInputListening
-            && !input.IsVoiceInputBusy;
-
-        return new ChatInputState(
-            IsInputEnabled: isInputEnabled,
+        return new ChatComposerPresentationState(
+            Mode: ChatComposerMode.Enabled,
+            IsTextInputEnabled: !isSurfaceBlocked,
+            AreComposerToolsEnabled: !isSurfaceBlocked,
             CanSendPrompt: canSendPrompt,
+            ShowCancelButton: false,
+            CanCancelPrompt: false,
             CanStartVoiceInput: canStartVoiceInput,
-            CanStopVoiceInput: canStopVoiceInput,
-            ShowVoiceInputStartButton: input.IsVoiceInputSupported && !input.IsVoiceInputListening,
-            ShowVoiceInputStopButton: input.IsVoiceInputSupported && input.IsVoiceInputListening);
+            ShowVoiceStartButton: input.IsVoiceInputSupported,
+            ShowVoiceStopButton: false,
+            CanStopVoiceInput: false,
+            ShowPromptInFlightStatus: false,
+            ShowVoiceListeningStatus: false);
     }
 }

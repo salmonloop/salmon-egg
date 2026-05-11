@@ -208,10 +208,7 @@ public partial class ChatViewModel
         OnPropertyChanged(nameof(ShouldShowBlockingLoadingMask));
         OnPropertyChanged(nameof(ShouldShowLoadingOverlayStatusPill));
         OnPropertyChanged(nameof(ShouldShowLoadingOverlayPresenter));
-        OnPropertyChanged(nameof(IsInputEnabled));
-        OnPropertyChanged(nameof(CanSendPromptUi));
-        OnPropertyChanged(nameof(CanStartVoiceInput));
-        OnPropertyChanged(nameof(CanStopVoiceInput));
+        NotifyComposerProjectionChanged();
     }
 
     private void TrackPendingSessionUpdate(Task task)

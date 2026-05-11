@@ -231,27 +231,38 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private ObservableCollection<MiniWindowConversationItemViewModel> _miniWindowSessions = new();
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ComposerState))]
     [NotifyPropertyChangedFor(nameof(CanSendPromptUi))]
     private bool _isSessionActive;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ComposerState))]
     [NotifyPropertyChangedFor(nameof(IsInputEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsTextInputEnabled))]
+    [NotifyPropertyChangedFor(nameof(AreComposerToolsEnabled))]
     [NotifyPropertyChangedFor(nameof(CanSendPromptUi))]
     private bool _isPromptInFlight;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ComposerState))]
     [NotifyPropertyChangedFor(nameof(IsInputEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsTextInputEnabled))]
+    [NotifyPropertyChangedFor(nameof(AreComposerToolsEnabled))]
     [NotifyPropertyChangedFor(nameof(CanStartVoiceInput))]
     [NotifyPropertyChangedFor(nameof(CanStopVoiceInput))]
     private bool _isVoiceInputListening;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ComposerState))]
     [NotifyPropertyChangedFor(nameof(IsInputEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsTextInputEnabled))]
+    [NotifyPropertyChangedFor(nameof(AreComposerToolsEnabled))]
     [NotifyPropertyChangedFor(nameof(CanStartVoiceInput))]
     [NotifyPropertyChangedFor(nameof(CanStopVoiceInput))]
     private bool _isVoiceInputBusy;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ComposerState))]
     [NotifyPropertyChangedFor(nameof(CanStartVoiceInput))]
     [NotifyPropertyChangedFor(nameof(CanStopVoiceInput))]
     private bool _isVoiceInputSupported;
@@ -537,6 +548,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private string? _agentVersion;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ComposerState))]
     [NotifyPropertyChangedFor(nameof(IsInitialized))]
     [NotifyPropertyChangedFor(nameof(CanSendPromptUi))]
     [NotifyPropertyChangedFor(nameof(IsOverlayVisible))]
@@ -569,7 +581,13 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     public bool HasConnectionError => !string.IsNullOrWhiteSpace(ConnectionErrorMessage);
 
+    public ChatComposerPresentationState ComposerState => ResolveInputState();
+
     public bool IsInputEnabled => ResolveInputState().IsInputEnabled;
+
+    public bool IsTextInputEnabled => ResolveInputState().IsTextInputEnabled;
+
+    public bool AreComposerToolsEnabled => ResolveInputState().AreComposerToolsEnabled;
 
     public bool HasPendingAskUserRequest => ResolveAskUserState().HasPendingRequest;
 
@@ -595,6 +613,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     public bool ShowVoiceInputStopButton => ResolveInputState().ShowVoiceInputStopButton;
 
+    public bool ShouldShowSlashCommandsUi => ShowSlashCommands && ComposerState.AreComposerToolsEnabled;
+
     public bool HasPlanEntries => ResolvePlanPanelState().HasPlanEntries;
 
     public bool ShouldShowPlanList => ResolvePlanPanelState().ShouldShowPlanList;
@@ -602,6 +622,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     public bool ShouldShowPlanEmpty => ResolvePlanPanelState().ShouldShowPlanEmpty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ComposerState))]
     [NotifyPropertyChangedFor(nameof(CanSendPromptUi))]
     [NotifyPropertyChangedFor(nameof(IsInitialized))]
     [NotifyPropertyChangedFor(nameof(IsOverlayVisible))]
@@ -742,6 +763,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private SlashCommandViewModel? _selectedSlashCommand;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShouldShowSlashCommandsUi))]
     private bool _showSlashCommands;
 
     [ObservableProperty]
@@ -785,7 +807,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     [NotifyPropertyChangedFor(nameof(AskUserHasError))]
     [NotifyPropertyChangedFor(nameof(AskUserErrorMessage))]
     [NotifyPropertyChangedFor(nameof(AskUserSubmitCommand))]
+    [NotifyPropertyChangedFor(nameof(ComposerState))]
     [NotifyPropertyChangedFor(nameof(IsInputEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsTextInputEnabled))]
+    [NotifyPropertyChangedFor(nameof(AreComposerToolsEnabled))]
     [NotifyPropertyChangedFor(nameof(CanSendPromptUi))]
     private AskUserRequestViewModel? _pendingAskUserRequest;
 
@@ -1148,10 +1173,21 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     {
         // Keep send button enabled state accurate when IsBusy toggles (we rely on command CanExecute).
         SendPromptCommand.NotifyCanExecuteChanged();
+        NotifyComposerProjectionChanged();
+    }
+
+    private void NotifyComposerProjectionChanged()
+    {
+        OnPropertyChanged(nameof(ComposerState));
         OnPropertyChanged(nameof(IsInputEnabled));
+        OnPropertyChanged(nameof(IsTextInputEnabled));
+        OnPropertyChanged(nameof(AreComposerToolsEnabled));
         OnPropertyChanged(nameof(CanSendPromptUi));
         OnPropertyChanged(nameof(CanStartVoiceInput));
         OnPropertyChanged(nameof(CanStopVoiceInput));
+        OnPropertyChanged(nameof(ShowVoiceInputStartButton));
+        OnPropertyChanged(nameof(ShowVoiceInputStopButton));
+        OnPropertyChanged(nameof(ShouldShowSlashCommandsUi));
     }
 
     private void OnAcpProfilesPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -1341,6 +1377,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private void OnCurrentSessionIdChanged(string? value)
     {
         RefreshCurrentSessionDisplayName();
+        NotifyComposerProjectionChanged();
 
         if (string.IsNullOrWhiteSpace(value))
         {

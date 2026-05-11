@@ -286,6 +286,30 @@ public sealed class XamlComplianceTests
         Assert.Contains("x:Uid=\"CancelButton\"", xaml);
     }
 
+    [Fact]
+    public void ChatInputArea_ComposerBlockedStates_UseUnifiedViewModelProjection()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml");
+
+        Assert.Contains("Visibility=\"{x:Bind ViewModel.IsPromptInFlight, Mode=OneWay", xaml);
+        Assert.Contains("Visibility=\"{x:Bind ViewModel.IsVoiceInputListening, Mode=OneWay", xaml);
+        Assert.Contains("Visibility=\"{x:Bind ViewModel.ShouldShowSlashCommandsUi, Mode=OneWay", xaml);
+        Assert.Contains("IsEnabled=\"{x:Bind ViewModel.IsTextInputEnabled, Mode=OneWay}\"", xaml);
+        Assert.Contains("IsEnabled=\"{x:Bind ViewModel.AreComposerToolsEnabled, Mode=OneWay}\"", xaml);
+        Assert.Contains("IsEnabled=\"{x:Bind ViewModel.CanStartVoiceInput, Mode=OneWay}\"", xaml);
+        Assert.Contains("IsEnabled=\"{x:Bind ViewModel.CanStopVoiceInput, Mode=OneWay}\"", xaml);
+        Assert.DoesNotContain("ViewModel.ComposerState.", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatInputArea_BlockedStatusCopy_UsesLocalizedUids()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml");
+
+        Assert.Contains("x:Uid=\"ChatComposerPromptInFlightStatus\"", xaml);
+        Assert.Contains("x:Uid=\"ChatComposerVoiceListeningStatus\"", xaml);
+    }
+
     [Theory]
     [InlineData(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml")]
     [InlineData(@"SalmonEgg\SalmonEgg\Presentation\Views\Start\StartView.xaml")]
@@ -502,7 +526,23 @@ public sealed class XamlComplianceTests
         Assert.Contains("x:Uid=\"MiniChatSessionSelector\"", xaml);
         Assert.Contains("x:Uid=\"MiniChatReturnButton\"", xaml);
         Assert.Contains("x:Uid=\"MiniChatInputBox\"", xaml);
+        Assert.Contains("x:Uid=\"MiniChatComposerPromptInFlightStatus\"", xaml);
+        Assert.Contains("x:Uid=\"MiniChatComposerVoiceListeningStatus\"", xaml);
+        Assert.Contains("x:Uid=\"MiniChatCancelButton\"", xaml);
         Assert.Contains("x:Uid=\"MiniChatSendButton\"", xaml);
+    }
+
+    [Fact]
+    public void MiniChatView_ComposerBlockedStates_UseSameProjectionAsMainComposer()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml");
+
+        Assert.Contains("Visibility=\"{x:Bind ViewModel.IsPromptInFlight, Mode=OneWay", xaml);
+        Assert.Contains("Visibility=\"{x:Bind ViewModel.ComposerState.ShowPromptInFlightStatus, Mode=OneWay", xaml);
+        Assert.Contains("Visibility=\"{x:Bind ViewModel.ComposerState.ShowVoiceListeningStatus, Mode=OneWay", xaml);
+        Assert.Contains("IsEnabled=\"{x:Bind ViewModel.IsTextInputEnabled, Mode=OneWay}\"", xaml);
+        Assert.Contains("IsEnabled=\"{x:Bind ViewModel.CanStartVoiceInput, Mode=OneWay}\"", xaml);
+        Assert.Contains("IsEnabled=\"{x:Bind ViewModel.CanStopVoiceInput, Mode=OneWay}\"", xaml);
     }
 
     [Fact]
@@ -766,7 +806,8 @@ public sealed class XamlComplianceTests
         Assert.Contains("OnSendAcceleratorInvoked", code);
         Assert.Contains("OnNewLineAcceleratorInvoked", code);
         Assert.Contains("_isImeComposing", code);
-        Assert.Contains("InputBox.IsEnabled", code);
+        Assert.Contains("IsPromptEditingAvailable()", code);
+        Assert.DoesNotContain("InputBox.IsEnabled && ViewModel.IsInputEnabled", code, StringComparison.Ordinal);
     }
 
 

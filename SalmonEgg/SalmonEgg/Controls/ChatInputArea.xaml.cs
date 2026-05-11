@@ -214,12 +214,15 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
         var canExecute = false;
         try { canExecute = command.CanExecute(null); } catch { }
 
-        CanSubmitUi = hasText && canExecute && ViewModel.IsInputEnabled;
+        CanSubmitUi = hasText && canExecute && IsPromptEditingAvailable();
     }
+
+    private bool IsPromptEditingAvailable()
+        => ViewModel?.IsTextInputEnabled == true;
 
     private void OnInputKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        if (_isImeComposing)
+        if (_isImeComposing || ViewModel == null || !IsPromptEditingAvailable())
         {
             return;
         }
@@ -264,7 +267,7 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
 
     private void OnSendAcceleratorInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
-        if (_isImeComposing)
+        if (_isImeComposing || ViewModel == null || !IsPromptEditingAvailable())
         {
             return;
         }
@@ -285,7 +288,7 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
 
     private void OnNewLineAcceleratorInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
-        if (_isImeComposing)
+        if (_isImeComposing || !IsPromptEditingAvailable())
         {
             return;
         }
@@ -341,7 +344,7 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
             intent,
             focusContext,
             ViewModel.ShowSlashCommands,
-            InputBox.IsEnabled && ViewModel.IsInputEnabled,
+            IsPromptEditingAvailable(),
             _isImeComposing);
 
         return action switch
@@ -355,6 +358,11 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
 
     private bool TryAcceptSelectedSlashCommandAndMoveCaretToEnd()
     {
+        if (ViewModel == null || !IsPromptEditingAvailable())
+        {
+            return false;
+        }
+
         if (!ViewModel.TryAcceptSelectedSlashCommand())
         {
             return false;
