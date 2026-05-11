@@ -79,10 +79,10 @@ public sealed class TranscriptViewportController
         _isLoaded = true;
         _orchestrator.StartLifecycleGeneration();
         _orchestrator.ResetInteractionState();
-        _conversationId = ResolveConversationId(conversationId, isSessionActive);
+        _conversationId = ResolveAuthoritativeConversationId(conversationId, isSessionActive);
         _isSessionActive = isSessionActive;
         _isOverlayVisible = isOverlayVisible;
-        _ = ApplyCommand(_orchestrator.Activate(_conversationId, TranscriptViewportActivationKind.ColdEnter));
+        _ = ApplyCommand(_orchestrator.Activate(_conversationId, ResolveInitialActivationKind(_conversationId)));
         if (!_isOverlayVisible && hasMessages && !_orchestrator.IsViewportDetached)
         {
             _orchestrator.BeginSettleRound(_conversationId);
@@ -118,12 +118,12 @@ public sealed class TranscriptViewportController
         }
 
         _orchestrator.ResetForConversationChange();
-        _conversationId = ResolveConversationId(conversationId, isSessionActive);
+        _conversationId = ResolveAuthoritativeConversationId(conversationId, isSessionActive);
         _isSessionActive = isSessionActive;
         _isOverlayVisible = isOverlayVisible;
         _orchestrator.ClearUserScrollIntent();
         actions.AddRange(ApplyCommand(_orchestrator.Activate(
-            CanTrackViewport(hasMessages) ? _conversationId : string.Empty,
+            _conversationId,
             TranscriptViewportActivationKind.WarmReturn)));
         if (!_orchestrator.IsViewportDetached && CanTrackViewport(hasMessages))
         {
@@ -141,12 +141,12 @@ public sealed class TranscriptViewportController
         bool hasMessages,
         TranscriptViewportActivationKind activationKind)
     {
-        _conversationId = ResolveConversationId(conversationId, isSessionActive);
+        _conversationId = ResolveAuthoritativeConversationId(conversationId, isSessionActive);
         _isSessionActive = isSessionActive;
         _isOverlayVisible = isOverlayVisible;
         var actions = new List<TranscriptViewportControllerAction>();
         actions.AddRange(ApplyCommand(_orchestrator.Activate(
-            CanTrackViewport(hasMessages) ? _conversationId : string.Empty,
+            _conversationId,
             activationKind)));
         if (!_orchestrator.IsViewportDetached && CanTrackViewport(hasMessages))
         {
@@ -276,9 +276,11 @@ public sealed class TranscriptViewportController
         _orchestrator.MarkUserScrollIntentStarted();
         _orchestrator.ClearAttachIntentOnly();
         _orchestrator.StopInitialScrollForManualInteraction();
-        var command = restoreToken is { } token
-            ? _orchestrator.Handle(_orchestrator.CreateUserDetachedEvent(_conversationId, token))
-            : _orchestrator.Handle(_orchestrator.CreateUserIntentScrollEvent(_conversationId));
+        var command = viewState.IsAtBottom
+            ? _orchestrator.Handle(_orchestrator.CreateUserIntentScrollEvent(_conversationId))
+            : restoreToken is { } token
+                ? _orchestrator.Handle(_orchestrator.CreateUserDetachedEvent(_conversationId, token))
+                : _orchestrator.Handle(_orchestrator.CreateUserIntentScrollEvent(_conversationId));
         actions.AddRange(ApplyCommand(command));
         if (_orchestrator.HasPendingSettle)
         {
@@ -519,14 +521,17 @@ public sealed class TranscriptViewportController
             && viewState.IsViewportReady;
 
     private bool CanObserveViewport(TranscriptViewportViewState viewState)
-        => CanTrackViewport(viewState.HasMessages)
+        => HasAuthoritativeConversationContext()
             && viewState.IsViewReady;
 
     private bool CanTrackViewport(bool hasMessages)
+        => HasAuthoritativeConversationContext()
+            && hasMessages;
+
+    private bool HasAuthoritativeConversationContext()
         => _isLoaded
             && _isSessionActive
             && !_isOverlayVisible
-            && hasMessages
             && !string.IsNullOrWhiteSpace(_conversationId);
 
     private static TranscriptScrollSettleObservation ResolveSettleObservation(
@@ -542,7 +547,18 @@ public sealed class TranscriptViewportController
             : TranscriptScrollSettleObservation.ReadyButNotAtBottom;
     }
 
-    private static string ResolveConversationId(string? conversationId, bool isSessionActive)
+    private TranscriptViewportActivationKind ResolveInitialActivationKind(string conversationId)
+    {
+        var existing = string.IsNullOrWhiteSpace(conversationId)
+            ? null
+            : _orchestrator.GetConversationState(conversationId);
+
+        return existing is null
+            ? TranscriptViewportActivationKind.ColdEnter
+            : TranscriptViewportActivationKind.WarmReturn;
+    }
+
+    private static string ResolveAuthoritativeConversationId(string? conversationId, bool isSessionActive)
         => isSessionActive && !string.IsNullOrWhiteSpace(conversationId)
             ? conversationId
             : string.Empty;

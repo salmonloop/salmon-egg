@@ -123,6 +123,7 @@ internal sealed class TranscriptProjectionRestoreController
                     return Unavailable("ProjectionItemNotMaterialized");
                 }
 
+                host.ScrollItemIntoView(index, TranscriptItemScrollAlignment.Leading);
                 return new TranscriptProjectionRestoreResult(TranscriptProjectionRestoreResultKind.Retry);
             }
 
@@ -132,7 +133,20 @@ internal sealed class TranscriptProjectionRestoreController
             }
 
             _pendingRequestedMaterializationIndex = index;
-            host.ScrollItemIntoView(index);
+            host.ScrollItemIntoView(index, TranscriptItemScrollAlignment.Leading);
+            return new TranscriptProjectionRestoreResult(TranscriptProjectionRestoreResultKind.Retry);
+        }
+
+        if (!host.TryGetFirstVisibleIndex(messageCount, out var firstVisibleIndex)
+            || firstVisibleIndex != index)
+        {
+            if (++_pendingAttemptCount >= _maxAttempts)
+            {
+                return Unavailable("ProjectionAnchorNotRestored");
+            }
+
+            _pendingRequestedMaterializationIndex = index;
+            host.ScrollItemIntoView(index, TranscriptItemScrollAlignment.Leading);
             return new TranscriptProjectionRestoreResult(TranscriptProjectionRestoreResultKind.Retry);
         }
 

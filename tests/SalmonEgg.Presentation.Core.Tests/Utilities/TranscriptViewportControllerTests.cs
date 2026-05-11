@@ -6,6 +6,24 @@ namespace SalmonEgg.Presentation.Core.Tests.Utilities;
 public sealed class TranscriptViewportControllerTests
 {
     [Fact]
+    public void Load_WithActiveConversationButNoMessages_KeepsRealConversationForLaterViewportFacts()
+    {
+        var sut = new TranscriptViewportController();
+
+        sut.Load("conv-empty", isSessionActive: true, isOverlayVisible: false, hasMessages: false);
+        var actions = sut.OnViewportChanged(new TranscriptViewportViewState(
+            IsViewReady: true,
+            IsViewportReady: false,
+            HasMessages: false,
+            IsAtBottom: true,
+            IsLastItemVisibleAtBottom: false));
+
+        Assert.Empty(actions);
+        Assert.Equal(TranscriptViewportState.Idle, sut.State);
+        Assert.NotNull(sut.GetConversationState("conv-empty"));
+    }
+
+    [Fact]
     public void AttachedAppendWhenViewportIsReadyButAwayFromBottom_IssuesNativeScrollRequest()
     {
         var sut = new TranscriptViewportController();
@@ -68,6 +86,59 @@ public sealed class TranscriptViewportControllerTests
         Assert.Contains(actions, action => action.Kind == TranscriptViewportControllerActionKind.AutoFollowDetached);
         Assert.True(sut.IsViewportDetached);
         Assert.False(sut.IsAutoFollowAttached);
+    }
+
+    [Fact]
+    public void ExplicitAwayIntentAtBottom_DelaysRestoreTokenCaptureUntilViewportActuallyMoves()
+    {
+        var sut = new TranscriptViewportController();
+        var preMoveToken = new TranscriptProjectionRestoreToken("conv-1", 7, "item-before");
+        var postMoveToken = new TranscriptProjectionRestoreToken("conv-1", 7, "item-after");
+        sut.Load("conv-1", isSessionActive: true, isOverlayVisible: false, hasMessages: true);
+
+        _ = sut.OnUserViewportDetachIntent(
+            new TranscriptViewportViewState(
+                IsViewReady: true,
+                IsViewportReady: true,
+                HasMessages: true,
+                IsAtBottom: true,
+                IsLastItemVisibleAtBottom: true),
+            preMoveToken);
+
+        Assert.Null(sut.GetConversationState("conv-1")?.RestoreToken);
+
+        _ = sut.OnViewportChanged(
+            new TranscriptViewportViewState(
+                IsViewReady: true,
+                IsViewportReady: true,
+                HasMessages: true,
+                IsAtBottom: false,
+                IsLastItemVisibleAtBottom: false),
+            postMoveToken);
+
+        Assert.Equal(postMoveToken, sut.GetConversationState("conv-1")?.RestoreToken);
+    }
+
+    [Fact]
+    public void Load_DoesNotClobberExistingDetachedConversationStateBeforeWarmResume()
+    {
+        var sut = new TranscriptViewportController();
+        sut.Load("conv-a", isSessionActive: true, isOverlayVisible: false, hasMessages: true);
+        _ = sut.OnUserViewportDetachIntent(
+            new TranscriptViewportViewState(
+                IsViewReady: true,
+                IsViewportReady: true,
+                HasMessages: true,
+                IsAtBottom: false,
+                IsLastItemVisibleAtBottom: false),
+            new TranscriptProjectionRestoreToken("conv-a", 7, "item-3"));
+
+        _ = sut.Unload();
+
+        sut.Load("conv-a", isSessionActive: true, isOverlayVisible: false, hasMessages: true);
+
+        Assert.True(sut.IsViewportDetached);
+        Assert.Equal(TranscriptViewportState.DetachedPendingRestore, sut.State);
     }
 
 

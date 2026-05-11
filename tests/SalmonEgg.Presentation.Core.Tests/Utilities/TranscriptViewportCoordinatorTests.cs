@@ -5,7 +5,28 @@ namespace SalmonEgg.Presentation.Core.Tests.Utilities;
 public sealed class TranscriptViewportCoordinatorTests
 {
     [Fact]
-    public void WarmReturn_DetachedConversationWithPendingToken_DispatchesRestoreImmediately()
+    public void SessionActivated_WithRealConversationIdButNoMessages_KeepsConversationContextAuthoritative()
+    {
+        var sut = new TranscriptViewportCoordinator();
+
+        sut.Handle(new TranscriptViewportEvent.SessionActivated("conv-a", 1, TranscriptViewportActivationKind.ColdEnter));
+
+        var command = sut.Handle(new TranscriptViewportEvent.ViewportFactChanged(
+            "conv-a",
+            1,
+            new TranscriptViewportFact(
+                HasItems: false,
+                IsReady: false,
+                IsAtBottom: true,
+                IsProgrammaticScrollInFlight: false)));
+
+        Assert.Equal(TranscriptViewportState.Idle, sut.State);
+        Assert.NotEqual("StaleOrMismatchedContext", command.Reason);
+        Assert.Equal(TranscriptViewportState.Idle, sut.GetConversationState("conv-a")?.Mode);
+    }
+
+    [Fact]
+    public void WarmReturn_DetachedConversationWithPendingToken_WaitsForProjectionReady()
     {
         var sut = new TranscriptViewportCoordinator();
         var token = new TranscriptProjectionRestoreToken(
@@ -18,11 +39,10 @@ public sealed class TranscriptViewportCoordinatorTests
 
         var command = sut.Handle(new TranscriptViewportEvent.SessionActivated("conv-a", 2, TranscriptViewportActivationKind.WarmReturn));
 
-        Assert.Equal(TranscriptViewportCommandKind.RequestRestore, command.Kind);
-        Assert.Equal(token, command.RestoreToken);
-        Assert.Equal(TranscriptViewportState.DetachedRestoring, sut.State);
+        Assert.Equal(TranscriptViewportCommandKind.None, command.Kind);
+        Assert.Equal(TranscriptViewportState.DetachedPendingRestore, sut.State);
         Assert.False(sut.IsAutoFollowAttached);
-        Assert.Equal(TranscriptViewportState.DetachedRestoring, sut.GetConversationState("conv-a")?.Mode);
+        Assert.Equal(TranscriptViewportState.DetachedPendingRestore, sut.GetConversationState("conv-a")?.Mode);
         Assert.Equal(token, sut.GetConversationState("conv-a")?.RestoreToken);
     }
 
@@ -34,13 +54,17 @@ public sealed class TranscriptViewportCoordinatorTests
 
         sut.Handle(new TranscriptViewportEvent.SessionActivated("conv-a", 1, TranscriptViewportActivationKind.ColdEnter));
         sut.Handle(new TranscriptViewportEvent.UserDetached("conv-a", 1, token));
-        var command = sut.Handle(new TranscriptViewportEvent.SessionActivated("conv-a", 2, TranscriptViewportActivationKind.WarmReturn));
+        var warmReturn = sut.Handle(new TranscriptViewportEvent.SessionActivated("conv-a", 2, TranscriptViewportActivationKind.WarmReturn));
+        Assert.Equal(TranscriptViewportCommandKind.None, warmReturn.Kind);
+        Assert.Equal(TranscriptViewportState.DetachedPendingRestore, sut.State);
+
+        var command = sut.Handle(new TranscriptViewportEvent.ProjectionReady("conv-a", 2, 7));
 
         Assert.Equal(TranscriptViewportCommandKind.RequestRestore, command.Kind);
         Assert.Equal(token, command.RestoreToken);
         Assert.Equal(TranscriptViewportState.DetachedRestoring, sut.State);
         Assert.False(sut.IsAutoFollowAttached);
-        Assert.Equal(nameof(TranscriptViewportEvent.SessionActivated), command.Transition?.EventName);
+        Assert.Equal(nameof(TranscriptViewportEvent.ProjectionReady), command.Transition?.EventName);
         Assert.Equal(7, sut.GetConversationState("conv-a")?.PendingProjectionEpoch);
     }
 
@@ -53,6 +77,7 @@ public sealed class TranscriptViewportCoordinatorTests
         sut.Handle(new TranscriptViewportEvent.SessionActivated("conv-a", 1, TranscriptViewportActivationKind.ColdEnter));
         sut.Handle(new TranscriptViewportEvent.UserDetached("conv-a", 1, token));
         sut.Handle(new TranscriptViewportEvent.SessionActivated("conv-a", 2, TranscriptViewportActivationKind.WarmReturn));
+        sut.Handle(new TranscriptViewportEvent.ProjectionReady("conv-a", 2, 7));
 
         var command = sut.Handle(new TranscriptViewportEvent.RestoreConfirmed("conv-a", 2, token));
 
@@ -72,6 +97,7 @@ public sealed class TranscriptViewportCoordinatorTests
         sut.Handle(new TranscriptViewportEvent.SessionActivated("conv-a", 1, TranscriptViewportActivationKind.ColdEnter));
         sut.Handle(new TranscriptViewportEvent.UserDetached("conv-a", 1, token));
         sut.Handle(new TranscriptViewportEvent.SessionActivated("conv-a", 2, TranscriptViewportActivationKind.WarmReturn));
+        sut.Handle(new TranscriptViewportEvent.ProjectionReady("conv-a", 2, 7));
 
         var command = sut.Handle(new TranscriptViewportEvent.RestoreUnavailable("conv-a", 2, "ItemNotMaterialized"));
 
@@ -91,6 +117,7 @@ public sealed class TranscriptViewportCoordinatorTests
         sut.Handle(new TranscriptViewportEvent.SessionActivated("conv-a", 1, TranscriptViewportActivationKind.ColdEnter));
         sut.Handle(new TranscriptViewportEvent.UserDetached("conv-a", 1, token));
         sut.Handle(new TranscriptViewportEvent.SessionActivated("conv-a", 2, TranscriptViewportActivationKind.WarmReturn));
+        sut.Handle(new TranscriptViewportEvent.ProjectionReady("conv-a", 2, 7));
 
         var command = sut.Handle(new TranscriptViewportEvent.RestoreAbandoned("conv-a", 2, "UserInterrupted"));
 
@@ -115,7 +142,7 @@ public sealed class TranscriptViewportCoordinatorTests
 
         Assert.Equal(TranscriptViewportCommandKind.None, command.Kind);
         Assert.Equal("StaleOrMismatchedContext", command.Reason);
-        Assert.Equal(TranscriptViewportState.DetachedRestoring, sut.State);
-        Assert.Equal(TranscriptViewportState.DetachedRestoring, sut.GetConversationState("conv-a")?.Mode);
+        Assert.Equal(TranscriptViewportState.DetachedPendingRestore, sut.State);
+        Assert.Equal(TranscriptViewportState.DetachedPendingRestore, sut.GetConversationState("conv-a")?.Mode);
     }
 }

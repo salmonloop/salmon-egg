@@ -76,22 +76,22 @@ public sealed class TranscriptViewportCoordinator
             var detachedState = existing with
             {
                 Mode = hasRestoreToken
-                    ? TranscriptViewportState.DetachedRestoring
+                    ? TranscriptViewportState.DetachedPendingRestore
                     : TranscriptViewportState.DetachedByUser,
                 LastActivationGeneration = evt.Generation,
                 RestorePending = false,
-                PendingProjectionEpoch = existing.RestoreToken?.ProjectionEpoch,
+                PendingProjectionEpoch = hasRestoreToken
+                    ? existing.RestoreToken?.ProjectionEpoch
+                    : null,
             };
 
             return Transition(
                 evt,
                 detachedState,
                 isAutoFollowAttached: false,
+                TranscriptViewportCommandKind.None,
                 hasRestoreToken
-                    ? TranscriptViewportCommandKind.RequestRestore
-                    : TranscriptViewportCommandKind.None,
-                hasRestoreToken
-                    ? "WarmReturnDispatchRestore"
+                    ? "WarmReturnAwaitProjectionReady"
                     : "WarmReturnPreserveDetached",
                 restoreToken: existing.RestoreToken);
         }
@@ -246,12 +246,9 @@ public sealed class TranscriptViewportCoordinator
                 current with
                 {
                     Mode = TranscriptViewportState.Idle,
-                    Anchor = null,
-                    RestorePending = false,
-                    RestoreToken = null,
                     PendingProjectionEpoch = null,
                 },
-                isAutoFollowAttached: true,
+                isAutoFollowAttached: !IsDetachedMode(current.Mode),
                 TranscriptViewportCommandKind.None,
                 "NoItems");
         }

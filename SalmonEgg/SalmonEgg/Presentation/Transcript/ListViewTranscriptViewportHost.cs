@@ -11,7 +11,6 @@ public sealed class ListViewTranscriptViewportHost : ITranscriptViewportHost
 {
     private readonly ListViewBase _listView;
     private readonly Func<TranscriptVirtualizationRange?>? _visibleRangeProvider;
-    private readonly SortedSet<int> _realizedIndices = new();
     private ScrollViewer? _scrollViewer;
     private bool _viewportChangedQueued;
 
@@ -50,9 +49,9 @@ public sealed class ListViewTranscriptViewportHost : ITranscriptViewportHost
     private bool TryGetFirstVisibleIndexInRange(TranscriptVirtualizationRange range, out int index)
     {
         index = -1;
-        var firstPartiallyVisibleIndex = -1;
-        var fullyVisibleTop = _listView.Padding.Top;
-        foreach (var candidate in _realizedIndices.GetViewBetween(range.FirstIndex, range.LastIndex))
+        var viewportTop = _listView.Padding.Top;
+        var viewportBottom = _listView.ActualHeight - _listView.Padding.Bottom;
+        for (var candidate = range.FirstIndex; candidate <= range.LastIndex; candidate++)
         {
             if (!TryGetContainerAnchor(candidate, out var anchor))
             {
@@ -60,23 +59,18 @@ public sealed class ListViewTranscriptViewportHost : ITranscriptViewportHost
             }
 
             var relativeOrigin = anchor.TransformToVisual(_listView).TransformPoint(default);
-            if (relativeOrigin.Y + anchor.ActualHeight < 0)
+            var itemTop = relativeOrigin.Y;
+            var itemBottom = itemTop + anchor.ActualHeight;
+            if (itemBottom <= viewportTop || itemTop >= viewportBottom)
             {
                 continue;
             }
 
-            firstPartiallyVisibleIndex = firstPartiallyVisibleIndex < 0
-                ? candidate
-                : firstPartiallyVisibleIndex;
-            if (relativeOrigin.Y >= fullyVisibleTop)
-            {
-                index = candidate;
-                return true;
-            }
+            index = candidate;
+            return true;
         }
 
-        index = firstPartiallyVisibleIndex;
-        return index >= 0;
+        return false;
     }
 
     public void ScrollItemIntoView(
@@ -171,18 +165,6 @@ public sealed class ListViewTranscriptViewportHost : ITranscriptViewportHost
 
     private void OnContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
     {
-        if (args.ItemIndex >= 0)
-        {
-            if (args.InRecycleQueue)
-            {
-                _realizedIndices.Remove(args.ItemIndex);
-            }
-            else
-            {
-                _realizedIndices.Add(args.ItemIndex);
-            }
-        }
-
         QueueViewportChanged();
     }
 

@@ -110,6 +110,28 @@ public sealed class TranscriptViewportOrchestratorTests
     }
 
     [Fact]
+    public void ObserveViewportFact_DetachedPendingRestore_UserIntentDoesNotReattachOrReclaimBottom()
+    {
+        var sut = new TranscriptViewportOrchestrator();
+        var token = new TranscriptProjectionRestoreToken("conv-a", 7, "item-9");
+        sut.Activate("conv-a", TranscriptViewportActivationKind.ColdEnter);
+        sut.Handle(sut.CreateUserDetachedEvent("conv-a", token));
+        sut.Activate("conv-a", TranscriptViewportActivationKind.WarmReturn);
+
+        var result = sut.ObserveViewportFact(
+            "conv-a",
+            new TranscriptViewportFact(
+                HasItems: true,
+                IsReady: true,
+                IsAtBottom: false,
+                IsProgrammaticScrollInFlight: false),
+            token);
+
+        Assert.NotEqual(TranscriptViewportCommandKind.MarkAutoFollowAttached, result.Command.Kind);
+        Assert.False(sut.IsAutoFollowAttached);
+    }
+
+    [Fact]
     public void ResetForConversationChange_PreventsOldSettleObservationFromMutatingActiveGeneration()
     {
         var sut = new TranscriptViewportOrchestrator();
