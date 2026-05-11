@@ -547,18 +547,18 @@ public sealed class MarkdownTextPresenter : Grid
 #if WINDOWS
     private async void OnWindowsLinkClicked(object? sender, CommunityToolkit.WinUI.Controls.LinkClickedEventArgs e)
     {
-        if (e.Uri is null)
+        if (!ChatMarkdownLinkPolicy.TryResolveLaunchUri(e.Uri, out var uri) || uri is null)
         {
             return;
         }
 
         e.Handled = true;
-        await TryLaunchUriAsync(e.Uri);
+        await TryLaunchUriAsync(uri);
     }
 #else
     private async void OnUnoLinkClicked(object? sender, CommunityToolkit.WinUI.UI.Controls.LinkClickedEventArgs e)
     {
-        if (!Uri.TryCreate(e.Link, UriKind.Absolute, out var uri) || uri is null)
+        if (!ChatMarkdownLinkPolicy.TryResolveLaunchUri(e.Link, out var uri) || uri is null)
         {
             return;
         }
@@ -569,11 +569,6 @@ public sealed class MarkdownTextPresenter : Grid
 
     private static async Task TryLaunchUriAsync(Uri uri)
     {
-        if (!uri.IsAbsoluteUri)
-        {
-            return;
-        }
-
         try
         {
             await Launcher.LaunchUriAsync(uri);

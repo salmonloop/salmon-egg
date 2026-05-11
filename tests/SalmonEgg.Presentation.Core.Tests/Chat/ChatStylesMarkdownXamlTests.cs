@@ -179,6 +179,8 @@ public sealed class ChatStylesMarkdownXamlTests
         Assert.Contains("ParagraphLineHeight = 22", source, StringComparison.Ordinal);
         Assert.Contains("UseListExtras = true", source, StringComparison.Ordinal);
         Assert.DoesNotContain("ChatMarkdownFenceDetector.HasClosedFence", source, StringComparison.Ordinal);
+        Assert.Contains("ChatMarkdownLinkPolicy.TryResolveLaunchUri", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("Uri.TryCreate(e.Link", source, StringComparison.Ordinal);
     }
 
     private static string LoadChatStylesXaml()
