@@ -23,7 +23,6 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
     private readonly INavigationProjectPreferences _projectPreferences;
     private readonly AcpProfilesViewModel _profilesViewModel;
     private readonly IDiscoverSessionsConnectionFacade _connectionFacade;
-    private readonly IDiscoverSessionImportCoordinator _importCoordinator;
     private readonly IProjectAffinityResolver _projectAffinityResolver;
     private readonly IUiDispatcher _uiDispatcher;
     private CancellationTokenSource? _refreshSessionsCts;
@@ -103,7 +102,6 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
         INavigationProjectPreferences projectPreferences,
         AcpProfilesViewModel profilesViewModel,
         IDiscoverSessionsConnectionFacade connectionFacade,
-        IDiscoverSessionImportCoordinator importCoordinator,
         IUiDispatcher uiDispatcher,
         IProjectAffinityResolver? projectAffinityResolver = null)
     {
@@ -112,7 +110,6 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
         _projectPreferences = projectPreferences ?? throw new ArgumentNullException(nameof(projectPreferences));
         _profilesViewModel = profilesViewModel ?? throw new ArgumentNullException(nameof(profilesViewModel));
         _connectionFacade = connectionFacade ?? throw new ArgumentNullException(nameof(connectionFacade));
-        _importCoordinator = importCoordinator ?? throw new ArgumentNullException(nameof(importCoordinator));
         _projectAffinityResolver = projectAffinityResolver ?? new ProjectAffinityResolver();
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
         _selectedProfile = ResolvePreferredSelectedProfile();
@@ -261,6 +258,11 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
                         : _connectionFacade.ConnectionErrorMessage);
             }
 
+            if (chatService.AgentCapabilities?.SupportsSessionList != true)
+            {
+                throw new InvalidOperationException("当前 Agent 未声明 session/list 能力。");
+            }
+
             await PostToUiAsync(() => LoadPhase = DiscoverSessionsLoadPhase.ListingSessions).ConfigureAwait(false);
             var listResponse = await chatService
                 .ListSessionsAsync(new SessionListParams(), cancellationToken)
@@ -367,44 +369,21 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
                 LoadPhase = DiscoverSessionsLoadPhase.ImportingSession;
             }).ConfigureAwait(false);
 
-            var importResult = await _importCoordinator
-                .ImportAsync(session.Id, session.SessionCwd, selectedProfile.Id, session.Title)
+            var openResult = await RunOnUiContextAsync(
+                    () => _navigationCoordinator.ActivateDiscoveredRemoteSessionAsync(
+                        new DiscoverRemoteSessionOpenRequest(
+                            session.Id,
+                            session.SessionCwd,
+                            selectedProfile.Id,
+                            session.Title)))
                 .ConfigureAwait(false);
-            if (!importResult.Succeeded || string.IsNullOrWhiteSpace(importResult.LocalConversationId))
+            if (!openResult.Succeeded)
             {
                 await PostToUiAsync(() =>
                 {
-                    ErrorMessage = string.IsNullOrWhiteSpace(importResult.ErrorMessage)
+                    ErrorMessage = string.IsNullOrWhiteSpace(openResult.ErrorMessage)
                         ? "导入会话失败。"
-                        : importResult.ErrorMessage;
-                    LoadPhase = DiscoverSessionsLoadPhase.Error;
-                }).ConfigureAwait(false);
-                return;
-            }
-
-            await PostToUiAsync(() => LoadPhase = DiscoverSessionsLoadPhase.ActivatingSession).ConfigureAwait(false);
-            var activated = await RunOnUiContextAsync(
-                    () => _navigationCoordinator.ActivateSessionAsync(importResult.LocalConversationId!, null))
-                .ConfigureAwait(false);
-            if (!activated)
-            {
-                await PostToUiAsync(() =>
-                {
-                    ErrorMessage = "加载会话并导入失败，请检查连接状态。";
-                    LoadPhase = DiscoverSessionsLoadPhase.Error;
-                }).ConfigureAwait(false);
-                return;
-            }
-
-            await PostToUiAsync(() => LoadPhase = DiscoverSessionsLoadPhase.HydratingSession).ConfigureAwait(false);
-            var hydrated = await RunOnUiContextAsync(
-                    () => _connectionFacade.HydrateActiveConversationAsync())
-                .ConfigureAwait(false);
-            if (!hydrated)
-            {
-                await PostToUiAsync(() =>
-                {
-                    ErrorMessage = "导入后的会话历史加载失败，请检查 ACP 连接状态。";
+                        : openResult.ErrorMessage;
                     LoadPhase = DiscoverSessionsLoadPhase.Error;
                 }).ConfigureAwait(false);
                 return;

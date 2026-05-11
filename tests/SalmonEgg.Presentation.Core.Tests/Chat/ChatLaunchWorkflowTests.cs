@@ -450,6 +450,10 @@ public sealed class ChatLaunchWorkflowTests
             return Task.FromResult(true);
         }
 
+        public Task<DiscoverRemoteSessionOpenResult> ActivateDiscoveredRemoteSessionAsync(
+            DiscoverRemoteSessionOpenRequest request)
+            => Task.FromResult(new DiscoverRemoteSessionOpenResult(false, null, null));
+
         public void SyncSelectionFromShellContent(ShellNavigationContent content)
         {
         }

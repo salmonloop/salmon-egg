@@ -14,6 +14,8 @@ public sealed class NavigationCoordinator : INavigationCoordinator
     private readonly IShellSelectionMutationSink _selectionSink;
     private readonly IShellNavigationRuntimeState _runtimeState;
     private readonly IConversationSessionSwitcher _conversationSessionSwitcher;
+    private readonly IDiscoverSessionsConnectionFacade _discoverConnectionFacade;
+    private readonly IDiscoverSessionImportCoordinator _discoverImportCoordinator;
     private readonly INavigationProjectSelectionStore _projectSelectionStore;
     private readonly IShellNavigationService _shellNavigationService;
     private readonly ILogger<NavigationCoordinator> _logger;
@@ -28,10 +30,33 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         INavigationProjectSelectionStore projectSelectionStore,
         IShellNavigationService shellNavigationService,
         ILogger<NavigationCoordinator>? logger = null)
+        : this(
+            selectionSink,
+            runtimeState,
+            conversationSessionSwitcher,
+            NoOpDiscoverSessionsConnectionFacade.Instance,
+            NoOpDiscoverSessionImportCoordinator.Instance,
+            projectSelectionStore,
+            shellNavigationService,
+            logger)
+    {
+    }
+
+    public NavigationCoordinator(
+        IShellSelectionMutationSink selectionSink,
+        IShellNavigationRuntimeState runtimeState,
+        IConversationSessionSwitcher conversationSessionSwitcher,
+        IDiscoverSessionsConnectionFacade discoverConnectionFacade,
+        IDiscoverSessionImportCoordinator discoverImportCoordinator,
+        INavigationProjectSelectionStore projectSelectionStore,
+        IShellNavigationService shellNavigationService,
+        ILogger<NavigationCoordinator>? logger = null)
     {
         _selectionSink = selectionSink ?? throw new ArgumentNullException(nameof(selectionSink));
         _runtimeState = runtimeState ?? throw new ArgumentNullException(nameof(runtimeState));
         _conversationSessionSwitcher = conversationSessionSwitcher ?? throw new ArgumentNullException(nameof(conversationSessionSwitcher));
+        _discoverConnectionFacade = discoverConnectionFacade ?? throw new ArgumentNullException(nameof(discoverConnectionFacade));
+        _discoverImportCoordinator = discoverImportCoordinator ?? throw new ArgumentNullException(nameof(discoverImportCoordinator));
         _projectSelectionStore = projectSelectionStore ?? throw new ArgumentNullException(nameof(projectSelectionStore));
         _shellNavigationService = shellNavigationService ?? throw new ArgumentNullException(nameof(shellNavigationService));
         _logger = logger ?? NullLogger<NavigationCoordinator>.Instance;
@@ -39,12 +64,22 @@ public sealed class NavigationCoordinator : INavigationCoordinator
 
     public async Task<bool> ActivateStartAsync(string? projectIdForNewSession = null)
     {
+        var activationToken = BeginActivation();
         try
         {
-            var activationToken = BeginActivation();
             CancelInFlightSessionActivation();
             var navigationResult = await NavigateToStartAsync(activationToken).ConfigureAwait(true);
-            if (navigationResult.Succeeded && IsLatestActivationToken(activationToken))
+            if (!navigationResult.Succeeded)
+            {
+                _logger.LogWarning(
+                    "Navigation activation failed. content={Content} activationVersion={ActivationVersion} reason={Reason}",
+                    ShellNavigationContent.Start,
+                    activationToken,
+                    ActivationFaultReasons.StartNavigationFailed);
+                return false;
+            }
+
+            if (IsLatestActivationToken(activationToken))
             {
                 ClearPendingSessionPreviewState(activationToken);
                 _projectSelectionStore.RememberSelectedProject(projectIdForNewSession);
@@ -52,9 +87,21 @@ public sealed class NavigationCoordinator : INavigationCoordinator
                 _selectionSink.SetSelection(NavigationSelectionState.StartSelection);
                 return true;
             }
+
+            _logger.LogInformation(
+                "Navigation activation ignored stale completion. content={Content} activationVersion={ActivationVersion} reason={Reason}",
+                ShellNavigationContent.Start,
+                activationToken,
+                ActivationFaultReasons.SupersededBeforeCommit);
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogError(
+                ex,
+                "Navigation activation threw. content={Content} activationVersion={ActivationVersion} reason={Reason}",
+                ShellNavigationContent.Start,
+                activationToken,
+                ActivationFaultReasons.StartNavigationException);
         }
 
         return false;
@@ -62,42 +109,92 @@ public sealed class NavigationCoordinator : INavigationCoordinator
 
     public async Task ActivateDiscoverSessionsAsync()
     {
+        var activationToken = BeginActivation();
         try
         {
-            var activationToken = BeginActivation();
             CancelInFlightSessionActivation();
             var navigationResult = await NavigateToDiscoverSessionsAsync(activationToken).ConfigureAwait(true);
-            if (navigationResult.Succeeded && IsLatestActivationToken(activationToken))
+            if (!navigationResult.Succeeded)
+            {
+                _logger.LogWarning(
+                    "Navigation activation failed. content={Content} activationVersion={ActivationVersion} reason={Reason}",
+                    ShellNavigationContent.DiscoverSessions,
+                    activationToken,
+                    ActivationFaultReasons.DiscoverSessionsNavigationFailed);
+                return;
+            }
+
+            if (IsLatestActivationToken(activationToken))
             {
                 ClearPendingSessionPreviewState(activationToken);
                 _runtimeState.CurrentShellContent = ShellNavigationContent.DiscoverSessions;
                 _selectionSink.SetSelection(NavigationSelectionState.DiscoverSessionsSelection);
+                return;
             }
+
+            _logger.LogInformation(
+                "Navigation activation ignored stale completion. content={Content} activationVersion={ActivationVersion} reason={Reason}",
+                ShellNavigationContent.DiscoverSessions,
+                activationToken,
+                ActivationFaultReasons.SupersededBeforeCommit);
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogError(
+                ex,
+                "Navigation activation threw. content={Content} activationVersion={ActivationVersion} reason={Reason}",
+                ShellNavigationContent.DiscoverSessions,
+                activationToken,
+                ActivationFaultReasons.DiscoverSessionsNavigationException);
         }
     }
 
     public async Task ActivateSettingsAsync(string settingsKey)
     {
+        var activationToken = BeginActivation();
+        var normalizedSettingsKey = string.IsNullOrWhiteSpace(settingsKey) ? "General" : settingsKey;
         try
         {
-            var activationToken = BeginActivation();
             CancelInFlightSessionActivation();
             var navigationResult = await NavigateToSettingsAsync(
-                    string.IsNullOrWhiteSpace(settingsKey) ? "General" : settingsKey,
+                    normalizedSettingsKey,
                     activationToken)
                 .ConfigureAwait(true);
-            if (navigationResult.Succeeded && IsLatestActivationToken(activationToken))
+            if (!navigationResult.Succeeded)
+            {
+                _logger.LogWarning(
+                    "Navigation activation failed. content={Content} settingsKey={SettingsKey} activationVersion={ActivationVersion} reason={Reason}",
+                    ShellNavigationContent.Settings,
+                    normalizedSettingsKey,
+                    activationToken,
+                    ActivationFaultReasons.SettingsNavigationFailed);
+                return;
+            }
+
+            if (IsLatestActivationToken(activationToken))
             {
                 ClearPendingSessionPreviewState(activationToken);
                 _runtimeState.CurrentShellContent = ShellNavigationContent.Settings;
                 _selectionSink.SetSelection(NavigationSelectionState.SettingsSelection);
+                return;
             }
+
+            _logger.LogInformation(
+                "Navigation activation ignored stale completion. content={Content} settingsKey={SettingsKey} activationVersion={ActivationVersion} reason={Reason}",
+                ShellNavigationContent.Settings,
+                normalizedSettingsKey,
+                activationToken,
+                ActivationFaultReasons.SupersededBeforeCommit);
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogError(
+                ex,
+                "Navigation activation threw. content={Content} settingsKey={SettingsKey} activationVersion={ActivationVersion} reason={Reason}",
+                ShellNavigationContent.Settings,
+                normalizedSettingsKey,
+                activationToken,
+                ActivationFaultReasons.SettingsNavigationException);
         }
     }
 
@@ -165,6 +262,56 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         return ActivateSessionCoreAsync(request);
     }
 
+    public async Task<DiscoverRemoteSessionOpenResult> ActivateDiscoveredRemoteSessionAsync(
+        DiscoverRemoteSessionOpenRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.RemoteSessionId))
+        {
+            return new DiscoverRemoteSessionOpenResult(false, null, "RemoteSessionIdMissing");
+        }
+
+        var chatService = _discoverConnectionFacade.CurrentChatService;
+        if (chatService is not { IsConnected: true, IsInitialized: true })
+        {
+            return new DiscoverRemoteSessionOpenResult(false, null, "ACP 连接尚未完成初始化。");
+        }
+
+        var recoveryMode = AcpSessionRecoveryPolicy.Resolve(chatService.AgentCapabilities);
+        if (recoveryMode == AcpSessionRecoveryMode.None)
+        {
+            return new DiscoverRemoteSessionOpenResult(false, null, "当前 Agent 未声明可恢复远程会话的 ACP 能力。");
+        }
+
+        var importResult = await _discoverImportCoordinator
+            .ImportAsync(
+                request.RemoteSessionId,
+                request.RemoteSessionCwd,
+                request.ProfileId,
+                request.RemoteSessionTitle)
+            .ConfigureAwait(false);
+        if (!importResult.Succeeded || string.IsNullOrWhiteSpace(importResult.LocalConversationId))
+        {
+            return new DiscoverRemoteSessionOpenResult(
+                false,
+                null,
+                string.IsNullOrWhiteSpace(importResult.ErrorMessage) ? "导入会话失败。" : importResult.ErrorMessage);
+        }
+
+        var activated = await ActivateSessionAsync(importResult.LocalConversationId!, null).ConfigureAwait(false);
+        if (!activated)
+        {
+            return new DiscoverRemoteSessionOpenResult(false, importResult.LocalConversationId, "加载会话并导入失败，请检查连接状态。");
+        }
+
+        var hydrated = await _discoverConnectionFacade.HydrateActiveConversationAsync().ConfigureAwait(false);
+        if (!hydrated)
+        {
+            return new DiscoverRemoteSessionOpenResult(false, importResult.LocalConversationId, "导入后的会话历史加载失败，请检查 ACP 连接状态。");
+        }
+
+        return new DiscoverRemoteSessionOpenResult(true, importResult.LocalConversationId, null);
+    }
+
     private async Task<bool> ActivateSessionCoreAsync(SessionActivationRequest request)
     {
         var activationGateEntered = false;
@@ -177,7 +324,11 @@ public sealed class NavigationCoordinator : INavigationCoordinator
                 || !IsLatestActivationToken(request.Version)
                 || request.CancellationToken.IsCancellationRequested)
             {
-                MarkSessionActivationFaulted(request, navigationResult.Succeeded ? "SupersededBeforeChatShell" : "ChatShellNavigationFailed");
+                MarkSessionActivationFaulted(
+                    request,
+                    navigationResult.Succeeded
+                        ? ActivationFaultReasons.SupersededBeforeChatShell
+                        : ActivationFaultReasons.ChatShellNavigationFailed);
                 return false;
             }
 
@@ -190,7 +341,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
             activationGateEntered = true;
             if (!IsLatestActivationToken(request.Version) || request.CancellationToken.IsCancellationRequested)
             {
-                MarkSessionActivationFaulted(request, "SupersededBeforeConversationSelection");
+                MarkSessionActivationFaulted(request, ActivationFaultReasons.SupersededBeforeConversationSelection);
                 return false;
             }
 
@@ -201,7 +352,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
             {
                 MarkSessionActivationFaulted(
                     request,
-                    activated ? "SupersededAfterConversationSelection" : "ConversationSelectionFailed");
+                    activated ? ActivationFaultReasons.SupersededAfterConversationSelection : ActivationFaultReasons.ConversationSelectionFailed);
                 return false;
             }
 
@@ -217,11 +368,12 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         }
         catch (OperationCanceledException) when (request.CancellationToken.IsCancellationRequested)
         {
-            MarkSessionActivationFaulted(request, "Canceled");
+            MarkSessionActivationFaulted(request, ActivationFaultReasons.Canceled);
             _logger.LogInformation(
-                "Navigation activation canceled. sessionId={SessionId} version={Version}",
+                "Navigation activation canceled. sessionId={SessionId} version={Version} reason={Reason}",
                 request.SessionId,
-                request.Version);
+                request.Version,
+                ActivationFaultReasons.Canceled);
             return false;
         }
         catch (Exception ex)
@@ -229,9 +381,10 @@ public sealed class NavigationCoordinator : INavigationCoordinator
             MarkSessionActivationFaulted(request, ex.GetType().Name);
             _logger.LogError(
                 ex,
-                "Navigation activation failed. sessionId={SessionId} version={Version}",
+                "Navigation activation failed. sessionId={SessionId} version={Version} reason={Reason}",
                 request.SessionId,
-                request.Version);
+                request.Version,
+                ex.GetType().Name);
         }
         finally
         {
@@ -453,6 +606,55 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         CancellationTokenSource CancellationTokenSource)
     {
         public CancellationToken CancellationToken => CancellationTokenSource.Token;
+    }
+
+    private static class ActivationFaultReasons
+    {
+        public const string Canceled = "Canceled";
+        public const string ChatShellNavigationFailed = "ChatShellNavigationFailed";
+        public const string ConversationSelectionFailed = "ConversationSelectionFailed";
+        public const string DiscoverSessionsNavigationException = "DiscoverSessionsNavigationException";
+        public const string DiscoverSessionsNavigationFailed = "DiscoverSessionsNavigationFailed";
+        public const string SettingsNavigationException = "SettingsNavigationException";
+        public const string SettingsNavigationFailed = "SettingsNavigationFailed";
+        public const string StartNavigationException = "StartNavigationException";
+        public const string StartNavigationFailed = "StartNavigationFailed";
+        public const string SupersededAfterConversationSelection = "SupersededAfterConversationSelection";
+        public const string SupersededBeforeChatShell = "SupersededBeforeChatShell";
+        public const string SupersededBeforeCommit = "SupersededBeforeCommit";
+        public const string SupersededBeforeConversationSelection = "SupersededBeforeConversationSelection";
+    }
+
+    private sealed class NoOpDiscoverSessionsConnectionFacade : IDiscoverSessionsConnectionFacade
+    {
+        public static NoOpDiscoverSessionsConnectionFacade Instance { get; } = new();
+
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged
+        {
+            add { }
+            remove { }
+        }
+
+        public bool IsConnecting => false;
+        public bool IsInitializing => false;
+        public bool IsConnected => false;
+        public string? ConnectionErrorMessage => null;
+        public Application.Services.Chat.IChatService? CurrentChatService => null;
+        public Task ConnectToProfileAsync(Domain.Models.ServerConfiguration profile) => Task.CompletedTask;
+        public Task<bool> HydrateActiveConversationAsync(CancellationToken cancellationToken = default) => Task.FromResult(false);
+    }
+
+    private sealed class NoOpDiscoverSessionImportCoordinator : IDiscoverSessionImportCoordinator
+    {
+        public static NoOpDiscoverSessionImportCoordinator Instance { get; } = new();
+
+        public Task<DiscoverSessionImportResult> ImportAsync(
+            string remoteSessionId,
+            string? remoteSessionCwd,
+            string? profileId,
+            string? remoteSessionTitle = null,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(new DiscoverSessionImportResult(false, null, "DiscoverImportUnavailable"));
     }
 }
 

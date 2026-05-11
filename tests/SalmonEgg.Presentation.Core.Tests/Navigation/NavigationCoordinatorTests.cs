@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,6 +13,7 @@ using SalmonEgg.Domain.Interfaces.Storage;
 using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Conversation;
+using SalmonEgg.Domain.Models.Plan;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
@@ -183,6 +185,108 @@ public sealed class NavigationCoordinatorTests
         {
             SynchronizationContext.SetSynchronizationContext(originalContext);
         }
+    }
+
+    [Fact]
+    public async Task ActivateStartAsync_WhenShellNavigationThrows_LogsStructuredFailureAndReturnsFalse()
+    {
+        var selectionStore = new ShellSelectionStateStore();
+        var preferences = CreatePreferencesWithProject();
+        var shellNavigation = CreateShellNavigationService();
+        var logger = new Mock<ILogger<NavigationCoordinator>>();
+        var exception = new InvalidOperationException("Navigation failed");
+        shellNavigation.As<IActivationTokenShellNavigationService>()
+            .Setup(s => s.NavigateToStart(It.IsAny<long>()))
+            .Throws(exception);
+
+        var coordinator = CreateCoordinator(
+            selectionStore,
+            new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(true)),
+            preferences,
+            shellNavigation.Object,
+            logger: logger.Object);
+
+        var activated = await coordinator.ActivateStartAsync();
+
+        Assert.False(activated);
+        logger.Verify(
+            x => x.Log(
+                LogLevel.Error,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) =>
+                    v != null
+                    && v.ToString()!.Contains("Navigation activation threw.", StringComparison.Ordinal)
+                    && v.ToString()!.Contains("content=Start", StringComparison.Ordinal)
+                    && v.ToString()!.Contains("reason=StartNavigationException", StringComparison.Ordinal)),
+                exception,
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task ActivateDiscoveredRemoteSessionAsync_WhenRecoveryCapabilityIsMissing_DoesNotImportOrSwitch()
+    {
+        var selectionStore = new ShellSelectionStateStore();
+        var preferences = CreatePreferencesWithProject();
+        var shellNavigation = CreateShellNavigationService();
+        var switcher = new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(true));
+        var importCoordinator = new Mock<IDiscoverSessionImportCoordinator>(MockBehavior.Strict);
+        var discoverFacade = new FakeDiscoverSessionsConnectionFacade
+        {
+            CurrentChatService = new FakeDiscoverChatService
+            {
+                AgentCapabilities = new AgentCapabilities(loadSession: false, sessionCapabilities: new SessionCapabilities())
+            }
+        };
+
+        var coordinator = CreateCoordinator(
+            selectionStore,
+            switcher,
+            preferences,
+            shellNavigation.Object,
+            discoverConnectionFacade: discoverFacade,
+            discoverImportCoordinator: importCoordinator.Object);
+
+        var result = await coordinator.ActivateDiscoveredRemoteSessionAsync(
+            new DiscoverRemoteSessionOpenRequest("remote-1", "/repo", "profile-1", "Remote"));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("当前 Agent 未声明可恢复远程会话的 ACP 能力。", result.ErrorMessage);
+        Assert.Empty(switcher.ActivatedSessionIds);
+        importCoordinator.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task ActivateDiscoveredRemoteSessionAsync_WhenImportAndActivationSucceed_RunsThroughNavigationOwner()
+    {
+        var selectionStore = new ShellSelectionStateStore();
+        var preferences = CreatePreferencesWithProject();
+        var shellNavigation = CreateShellNavigationService();
+        var switcher = new RecordingConversationSessionSwitcher((sessionId, _) => Task.FromResult(sessionId == "local-1"));
+        var importCoordinator = new Mock<IDiscoverSessionImportCoordinator>();
+        importCoordinator
+            .Setup(x => x.ImportAsync("remote-1", "/repo", "profile-1", "Remote", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DiscoverSessionImportResult(true, "local-1", null));
+
+        var discoverFacade = new Mock<IDiscoverSessionsConnectionFacade>();
+        discoverFacade.SetupGet(x => x.CurrentChatService).Returns(new FakeDiscoverChatService());
+        discoverFacade.Setup(x => x.HydrateActiveConversationAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        var coordinator = CreateCoordinator(
+            selectionStore,
+            switcher,
+            preferences,
+            shellNavigation.Object,
+            discoverConnectionFacade: discoverFacade.Object,
+            discoverImportCoordinator: importCoordinator.Object);
+
+        var result = await coordinator.ActivateDiscoveredRemoteSessionAsync(
+            new DiscoverRemoteSessionOpenRequest("remote-1", "/repo", "profile-1", "Remote"));
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("local-1", result.LocalConversationId);
+        Assert.Equal(new[] { "local-1" }, switcher.ActivatedSessionIds);
+        discoverFacade.Verify(x => x.HydrateActiveConversationAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -1305,14 +1409,20 @@ public sealed class NavigationCoordinatorTests
         IConversationSessionSwitcher activationCoordinator,
         AppPreferencesViewModel preferences,
         IShellNavigationService shellNavigationService,
-        IShellNavigationRuntimeState? runtimeState = null)
+        IShellNavigationRuntimeState? runtimeState = null,
+        ILogger<NavigationCoordinator>? logger = null,
+        IDiscoverSessionsConnectionFacade? discoverConnectionFacade = null,
+        IDiscoverSessionImportCoordinator? discoverImportCoordinator = null)
     {
         return new NavigationCoordinator(
             selectionSink,
             runtimeState ?? new ShellNavigationRuntimeStateStore(),
             activationCoordinator,
+            discoverConnectionFacade ?? new FakeDiscoverSessionsConnectionFacade(),
+            discoverImportCoordinator ?? new StubDiscoverSessionImportCoordinator(),
             new NavigationProjectSelectionStoreAdapter(preferences),
-            shellNavigationService);
+            shellNavigationService,
+            logger);
     }
 
     private static Mock<ISessionManager> CreateSessionManager(params Session[] sessions)
@@ -1570,10 +1680,75 @@ public sealed class NavigationCoordinatorTests
 
         public Task<bool> ActivateSessionAsync(string sessionId, string? projectId) => Task.FromResult(false);
 
+        public Task<DiscoverRemoteSessionOpenResult> ActivateDiscoveredRemoteSessionAsync(
+            DiscoverRemoteSessionOpenRequest request)
+            => Task.FromResult(new DiscoverRemoteSessionOpenResult(false, null, null));
+
         public void SyncSelectionFromShellContent(ShellNavigationContent content)
         {
         }
 
+    }
+
+    private sealed class FakeDiscoverSessionsConnectionFacade : IDiscoverSessionsConnectionFacade
+    {
+        public event PropertyChangedEventHandler? PropertyChanged { add { } remove { } }
+        public bool IsConnecting => false;
+        public bool IsInitializing => false;
+        public bool IsConnected => true;
+        public string? ConnectionErrorMessage => null;
+        public IChatService? CurrentChatService { get; set; } = new FakeDiscoverChatService();
+        public Task ConnectToProfileAsync(ServerConfiguration profile) => Task.CompletedTask;
+        public Task<bool> HydrateActiveConversationAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
+    }
+
+    private sealed class StubDiscoverSessionImportCoordinator : IDiscoverSessionImportCoordinator
+    {
+        public Task<DiscoverSessionImportResult> ImportAsync(
+            string remoteSessionId,
+            string? remoteSessionCwd,
+            string? profileId,
+            string? remoteSessionTitle = null,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(new DiscoverSessionImportResult(true, "imported-local-session", null));
+    }
+
+    private sealed class FakeDiscoverChatService : IChatService
+    {
+        public string? CurrentSessionId => null;
+        public bool IsInitialized => true;
+        public bool IsConnected => true;
+        public AgentInfo? AgentInfo => null;
+        public AgentCapabilities? AgentCapabilities { get; set; } = new(loadSession: true, sessionCapabilities: new SessionCapabilities { List = new SessionListCapabilities() });
+        public IReadOnlyList<SessionUpdateEntry> SessionHistory => Array.Empty<SessionUpdateEntry>();
+        public Plan? CurrentPlan => null;
+        public SessionModeState? CurrentMode => null;
+        public event EventHandler<SessionUpdateEventArgs>? SessionUpdateReceived { add { } remove { } }
+        public event EventHandler<PermissionRequestEventArgs>? PermissionRequestReceived { add { } remove { } }
+        public event EventHandler<FileSystemRequestEventArgs>? FileSystemRequestReceived { add { } remove { } }
+        public event EventHandler<TerminalRequestEventArgs>? TerminalRequestReceived { add { } remove { } }
+        public event EventHandler<TerminalStateChangedEventArgs>? TerminalStateChangedReceived { add { } remove { } }
+        public event EventHandler<AskUserRequestEventArgs>? AskUserRequestReceived { add { } remove { } }
+        public event EventHandler<string>? ErrorOccurred { add { } remove { } }
+        public Task<InitializeResponse> InitializeAsync(InitializeParams @params) => throw new NotSupportedException();
+        public Task<SessionNewResponse> CreateSessionAsync(SessionNewParams @params) => throw new NotSupportedException();
+        public Task<SessionLoadResponse> LoadSessionAsync(SessionLoadParams @params) => throw new NotSupportedException();
+        public Task<SessionLoadResponse> LoadSessionAsync(SessionLoadParams @params, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<SessionResumeResponse> ResumeSessionAsync(SessionResumeParams @params) => throw new NotSupportedException();
+        public Task<SessionResumeResponse> ResumeSessionAsync(SessionResumeParams @params, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<SessionCloseResponse> CloseSessionAsync(SessionCloseParams @params, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<SessionListResponse> ListSessionsAsync(SessionListParams? @params = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<SessionPromptResponse> SendPromptAsync(SessionPromptParams @params, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<SessionSetModeResponse> SetSessionModeAsync(SessionSetModeParams @params) => throw new NotSupportedException();
+        public Task<SessionSetConfigOptionResponse> SetSessionConfigOptionAsync(SessionSetConfigOptionParams @params) => throw new NotSupportedException();
+        public Task<SessionCancelResponse> CancelSessionAsync(SessionCancelParams @params) => throw new NotSupportedException();
+        public Task<AuthenticateResponse> AuthenticateAsync(AuthenticateParams @params, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<bool> RespondToPermissionRequestAsync(object messageId, string outcome, string? optionId = null) => throw new NotSupportedException();
+        public Task<bool> RespondToFileSystemRequestAsync(object messageId, bool success, string? content = null, string? message = null) => throw new NotSupportedException();
+        public Task<bool> RespondToAskUserRequestAsync(object messageId, IReadOnlyDictionary<string, string> answers) => throw new NotSupportedException();
+        public Task<bool> DisconnectAsync() => throw new NotSupportedException();
+        public Task<List<SalmonEgg.Domain.Models.Protocol.SessionMode>?> GetAvailableModesAsync() => throw new NotSupportedException();
+        public void ClearHistory() { }
     }
 
     private static AppPreferencesViewModel CreatePreferencesWithProject()

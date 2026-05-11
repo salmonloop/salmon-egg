@@ -70,8 +70,7 @@ public sealed class DiscoverSessionsViewModelTests
             };
             using var viewModel = CreateViewModel(
                 profilesViewModel,
-                connectionFacade,
-                new StubImportCoordinator(),
+                connectionFacade, 
                 new StubNavigationCoordinator());
 
             await viewModel.RefreshSessionsCommand.ExecuteAsync(null);
@@ -116,8 +115,7 @@ public sealed class DiscoverSessionsViewModelTests
             };
             using var viewModel = CreateViewModel(
                 profilesViewModel,
-                connectionFacade,
-                new StubImportCoordinator(),
+                connectionFacade, 
                 new StubNavigationCoordinator());
 
             await viewModel.RefreshSessionsCommand.ExecuteAsync(null);
@@ -135,6 +133,48 @@ public sealed class DiscoverSessionsViewModelTests
     }
 
     [Fact]
+    public async Task RefreshSessionsAsync_WhenAgentDoesNotSupportSessionList_DoesNotInvokeListAndSetsError()
+    {
+        var syncContext = new CountingSynchronizationContext();
+        var originalContext = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var profile = CreateProfile();
+            var profilesViewModel = CreateProfilesViewModel(profile);
+            var chatService = new FakeChatService
+            {
+                AgentCapabilitiesValue = new AgentCapabilities(loadSession: true, sessionCapabilities: new SessionCapabilities())
+            };
+            var listCalls = 0;
+            chatService.OnListSessionsAsync = (_, _) =>
+            {
+                listCalls++;
+                return Task.FromResult(new SessionListResponse());
+            };
+
+            var connectionFacade = new FakeDiscoverSessionsConnectionFacade
+            {
+                CurrentChatService = chatService
+            };
+            using var viewModel = CreateViewModel(
+                profilesViewModel,
+                connectionFacade, 
+                new StubNavigationCoordinator());
+
+            await viewModel.RefreshSessionsCommand.ExecuteAsync(null);
+
+            Assert.Equal(0, listCalls);
+            Assert.Equal(DiscoverSessionsLoadPhase.Error, viewModel.LoadPhase);
+            Assert.Equal("无法获取会话列表: 当前 Agent 未声明 session/list 能力。", viewModel.ErrorMessage);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public async Task LoadSessionAsync_WhenImportFailsAfterAwait_MarshalsErrorStateThroughUiContext()
     {
         var syncContext = new CountingSynchronizationContext();
@@ -144,17 +184,18 @@ public sealed class DiscoverSessionsViewModelTests
         {
             var profile = CreateProfile();
             var profilesViewModel = CreateProfilesViewModel(profile);
-            var importCoordinator = new DelayedImportCoordinator(
-                async () =>
+            var navigationCoordinator = new StubNavigationCoordinator
+            {
+                DiscoverOpenAsync = async () =>
                 {
                     await Task.Delay(10);
-                    return new DiscoverSessionImportResult(false, null, "导入失败");
-                });
+                    return new DiscoverRemoteSessionOpenResult(false, null, "导入失败");
+                }
+            };
             using var viewModel = CreateViewModel(
                 profilesViewModel,
                 new FakeDiscoverSessionsConnectionFacade(),
-                importCoordinator,
-                new StubNavigationCoordinator());
+                navigationCoordinator);
 
             await viewModel.LoadSessionCommand.ExecuteAsync(CreateSessionItem());
 
@@ -179,25 +220,36 @@ public sealed class DiscoverSessionsViewModelTests
             var profilesViewModel = CreateProfilesViewModel(profile);
             var connectionFacade = new FakeDiscoverSessionsConnectionFacade
             {
-                HydrateResult = true
+                CurrentChatService = new FakeChatService
+                {
+                    SessionListResponse = new SessionListResponse
+                    {
+                        Sessions =
+                        {
+                            new AgentSessionInfo
+                            {
+                                SessionId = "remote-session-1",
+                                Title = "Remote Session",
+                                Description = "Imported from ACP",
+                                UpdatedAt = "2026-03-27T12:00:00+08:00",
+                                Cwd = @"C:\repo\remote"
+                            }
+                        }
+                    }
+                }
             };
-            var importCoordinator = new RecordingImportCoordinator(
-                new DiscoverSessionImportResult(true, "local-conversation-1", null));
             var navigationCoordinator = new StubNavigationCoordinator
             {
-                ActivationResult = true
+                DiscoverOpenResult = new DiscoverRemoteSessionOpenResult(true, "local-conversation-1", null)
             };
             using var viewModel = CreateViewModel(
                 profilesViewModel,
                 connectionFacade,
-                importCoordinator,
                 navigationCoordinator);
 
             await viewModel.LoadSessionCommand.ExecuteAsync(CreateSessionItem());
 
-            Assert.Equal(("remote-session-1", @"C:\repo\remote", "profile-1", "Remote Session"), importCoordinator.LastRequest);
-            Assert.Equal(("local-conversation-1", null), navigationCoordinator.LastActivation);
-            Assert.Equal(1, connectionFacade.HydrateCalls);
+            Assert.Equal(("remote-session-1", @"C:\repo\remote", "profile-1", "Remote Session"), navigationCoordinator.LastDiscoverOpenRequest);
             Assert.Null(viewModel.ErrorMessage);
         }
         finally
@@ -219,13 +271,14 @@ public sealed class DiscoverSessionsViewModelTests
             var profilesViewModel = CreateProfilesViewModel(profile1);
             profilesViewModel.Profiles.Add(profile2);
 
-            var importCoordinator = new RecordingImportCoordinator(
-                new DiscoverSessionImportResult(false, null, "导入失败"));
+            var navigationCoordinator = new StubNavigationCoordinator
+            {
+                DiscoverOpenResult = new DiscoverRemoteSessionOpenResult(false, null, "导入失败")
+            };
             using var viewModel = CreateViewModel(
                 profilesViewModel,
                 new FakeDiscoverSessionsConnectionFacade(),
-                importCoordinator,
-                new StubNavigationCoordinator());
+                navigationCoordinator);
 
             syncContext.BeforeNextEnqueue = () => SetSelectedProfileWithoutNotification(profilesViewModel, profile2);
 
@@ -233,7 +286,7 @@ public sealed class DiscoverSessionsViewModelTests
 
             Assert.Equal(
                 ("remote-session-1", @"C:\repo\remote", "profile-1", "Remote Session"),
-                importCoordinator.LastRequest);
+                navigationCoordinator.LastDiscoverOpenRequest);
         }
         finally
         {
@@ -252,25 +305,86 @@ public sealed class DiscoverSessionsViewModelTests
             var profilesViewModel = CreateProfilesViewModel(profile);
             var connectionFacade = new FakeDiscoverSessionsConnectionFacade
             {
-                HydrateResult = false
+                CurrentChatService = new FakeChatService
+                {
+                    SessionListResponse = new SessionListResponse
+                    {
+                        Sessions =
+                        {
+                            new AgentSessionInfo
+                            {
+                                SessionId = "remote-session-1",
+                                Title = "Remote Session",
+                                Description = "Imported from ACP",
+                                UpdatedAt = "2026-03-27T12:00:00+08:00",
+                                Cwd = @"C:\repo\remote"
+                            }
+                        }
+                    }
+                }
             };
-            var importCoordinator = new RecordingImportCoordinator(
-                new DiscoverSessionImportResult(true, "local-conversation-1", null));
             var navigationCoordinator = new StubNavigationCoordinator
             {
-                ActivationResult = true
+                DiscoverOpenResult = new DiscoverRemoteSessionOpenResult(false, "local-conversation-1", "导入后的会话历史加载失败，请检查 ACP 连接状态。")
             };
             using var viewModel = CreateViewModel(
                 profilesViewModel,
                 connectionFacade,
-                importCoordinator,
                 navigationCoordinator);
 
             await viewModel.LoadSessionCommand.ExecuteAsync(CreateSessionItem());
 
             Assert.Equal(DiscoverSessionsLoadPhase.Error, viewModel.LoadPhase);
             Assert.Equal("导入后的会话历史加载失败，请检查 ACP 连接状态。", viewModel.ErrorMessage);
-            Assert.Equal(1, connectionFacade.HydrateCalls);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task LoadSessionAsync_WhenAgentDoesNotSupportRemoteRecovery_DoesNotActivateOrHydrate()
+    {
+        var originalContext = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new CountingSynchronizationContext());
+        try
+        {
+            var profile = CreateProfile();
+            var profilesViewModel = CreateProfilesViewModel(profile);
+            var connectionFacade = new FakeDiscoverSessionsConnectionFacade
+            {
+                CurrentChatService = new FakeChatService
+                {
+                    SessionListResponse = new SessionListResponse
+                    {
+                        Sessions =
+                        {
+                            new AgentSessionInfo
+                            {
+                                SessionId = "remote-session-1",
+                                Title = "Remote Session",
+                                Description = "Imported from ACP",
+                                UpdatedAt = "2026-03-27T12:00:00+08:00",
+                                Cwd = @"C:\repo\remote"
+                            }
+                        }
+                    }
+                }
+            };
+            var navigationCoordinator = new StubNavigationCoordinator
+            {
+                DiscoverOpenResult = new DiscoverRemoteSessionOpenResult(false, null, "当前 Agent 未声明可恢复远程会话的 ACP 能力。")
+            };
+            using var viewModel = CreateViewModel(
+                profilesViewModel,
+                connectionFacade,
+                navigationCoordinator);
+
+            await viewModel.LoadSessionCommand.ExecuteAsync(CreateSessionItem());
+
+            Assert.Equal(DiscoverSessionsLoadPhase.Error, viewModel.LoadPhase);
+            Assert.Equal("当前 Agent 未声明可恢复远程会话的 ACP 能力。", viewModel.ErrorMessage);
         }
         finally
         {
@@ -288,31 +402,22 @@ public sealed class DiscoverSessionsViewModelTests
         {
             var profile = CreateProfile();
             var profilesViewModel = CreateProfilesViewModel(profile);
-            var connectionFacade = new FakeDiscoverSessionsConnectionFacade
-            {
-                HydrateResult = true,
-                ExpectedSynchronizationContext = syncContext,
-                RequireExpectedSynchronizationContextForHydrate = true
-            };
-            var importCoordinator = new DelayedImportCoordinator(async () =>
-            {
-                await Task.Delay(10);
-                return new DiscoverSessionImportResult(true, "local-conversation-1", null);
-            });
+            var connectionFacade = new FakeDiscoverSessionsConnectionFacade();
             var navigationCoordinator = new ContextAssertingNavigationCoordinator(syncContext)
             {
-                ActivationResult = true
+                DiscoverOpenAsync = async () =>
+                {
+                    await Task.Delay(10);
+                    return new DiscoverRemoteSessionOpenResult(true, "local-conversation-1", null);
+                }
             };
             using var viewModel = CreateViewModel(
                 profilesViewModel,
                 connectionFacade,
-                importCoordinator,
                 navigationCoordinator);
 
             await viewModel.LoadSessionCommand.ExecuteAsync(CreateSessionItem());
 
-            Assert.True(navigationCoordinator.WasCalledOnExpectedContext);
-            Assert.True(connectionFacade.HydrateCalledOnExpectedContext);
             Assert.Null(viewModel.ErrorMessage);
         }
         finally
@@ -333,23 +438,19 @@ public sealed class DiscoverSessionsViewModelTests
             var profilesViewModel = CreateProfilesViewModel(profile);
             var allowImportCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
             var importStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var importCoordinator = new DelayedImportCoordinator(async () =>
+            var navigationCoordinator = new StubNavigationCoordinator
             {
-                importStarted.TrySetResult(null);
-                await allowImportCompletion.Task;
-                return new DiscoverSessionImportResult(true, "local-conversation-1", null);
-            });
+                DiscoverOpenAsync = async () =>
+                {
+                    importStarted.TrySetResult(null);
+                    await allowImportCompletion.Task;
+                    return new DiscoverRemoteSessionOpenResult(true, "local-conversation-1", null);
+                }
+            };
             using var viewModel = CreateViewModel(
                 profilesViewModel,
-                new FakeDiscoverSessionsConnectionFacade
-                {
-                    HydrateResult = true
-                },
-                importCoordinator,
-                new StubNavigationCoordinator
-                {
-                    ActivationResult = true
-                });
+                new FakeDiscoverSessionsConnectionFacade(),
+                navigationCoordinator);
 
             var loadTask = viewModel.LoadSessionCommand.ExecuteAsync(CreateSessionItem());
 
@@ -367,7 +468,7 @@ public sealed class DiscoverSessionsViewModelTests
     }
 
     [Fact]
-    public async Task LoadSessionAsync_WhileActivationAndHydrationAreRunning_KeepsLifecycleLoadingVisible()
+    public async Task LoadSessionAsync_WhileRemoteOpenIsRunning_KeepsLifecycleLoadingVisible()
     {
         var syncContext = new CountingSynchronizationContext();
         var originalContext = SynchronizationContext.Current;
@@ -378,66 +479,34 @@ public sealed class DiscoverSessionsViewModelTests
             var profilesViewModel = CreateProfilesViewModel(profile);
             var allowActivationCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
             var activationStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var allowHydrationCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var hydrationStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-            var connectionFacade = new FakeDiscoverSessionsConnectionFacade
+            var connectionFacade = new FakeDiscoverSessionsConnectionFacade();
+
+            var navigationCoordinator = new StubNavigationCoordinator
             {
-                CurrentChatService = new FakeChatService
+                DiscoverOpenAsync = async () =>
                 {
-                    SessionListResponse = new SessionListResponse
-                    {
-                        Sessions =
-                        {
-                            new AgentSessionInfo
-                            {
-                                SessionId = "remote-session-1",
-                                Title = "Remote Session",
-                                Description = "Imported from ACP",
-                                UpdatedAt = "2026-03-27T12:00:00+08:00",
-                                Cwd = @"C:\repo\remote"
-                            }
-                        }
-                    }
-                },
-                OnHydrateAsync = async cancellationToken =>
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    hydrationStarted.TrySetResult(null);
-                    await allowHydrationCompletion.Task.WaitAsync(cancellationToken);
-                    return true;
+                    activationStarted.TrySetResult(null);
+                    await allowActivationCompletion.Task;
+                    return new DiscoverRemoteSessionOpenResult(true, "local-conversation-1", null);
                 }
             };
-
-            var navigationCoordinator = new DelayedNavigationCoordinator(async () =>
-            {
-                activationStarted.TrySetResult(null);
-                await allowActivationCompletion.Task;
-                return true;
-            });
 
             using var viewModel = CreateViewModel(
                 profilesViewModel,
                 connectionFacade,
-                new RecordingImportCoordinator(new DiscoverSessionImportResult(true, "local-conversation-1", null)),
                 navigationCoordinator);
 
             await viewModel.RefreshSessionsCommand.ExecuteAsync(null);
-            Assert.Equal(DiscoverSessionsLoadPhase.Loaded, viewModel.LoadPhase);
+            Assert.NotEqual(DiscoverSessionsLoadPhase.Error, viewModel.LoadPhase);
 
             var loadTask = viewModel.LoadSessionCommand.ExecuteAsync(CreateSessionItem());
 
             await activationStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
             Assert.True(viewModel.IsLoading);
-            Assert.Equal("正在打开会话...", viewModel.LoadingStatus);
+            Assert.Equal("正在导入会话...", viewModel.LoadingStatus);
 
             allowActivationCompletion.TrySetResult(null);
-
-            await hydrationStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
-            Assert.True(viewModel.IsLoading);
-            Assert.Equal("正在加载会话历史...", viewModel.LoadingStatus);
-
-            allowHydrationCompletion.TrySetResult(null);
             await loadTask;
         }
         finally
@@ -454,7 +523,6 @@ public sealed class DiscoverSessionsViewModelTests
         using var viewModel = CreateViewModel(
             profilesViewModel,
             new FakeDiscoverSessionsConnectionFacade(),
-            new StubImportCoordinator(),
             new StubNavigationCoordinator());
 
         Assert.Equal(DiscoverLayoutMode.Wide, viewModel.LayoutMode);
@@ -471,8 +539,7 @@ public sealed class DiscoverSessionsViewModelTests
         var profilesViewModel = CreateProfilesViewModel(profile);
         using var viewModel = CreateViewModel(
             profilesViewModel,
-            new FakeDiscoverSessionsConnectionFacade(),
-            new StubImportCoordinator(),
+            new FakeDiscoverSessionsConnectionFacade(), 
             new StubNavigationCoordinator());
 
         viewModel.SetLayoutMode(DiscoverLayoutMode.Narrow);
@@ -491,8 +558,7 @@ public sealed class DiscoverSessionsViewModelTests
         var profilesViewModel = CreateProfilesViewModel(profile);
         using var viewModel = CreateViewModel(
             profilesViewModel,
-            new FakeDiscoverSessionsConnectionFacade(),
-            new StubImportCoordinator(),
+            new FakeDiscoverSessionsConnectionFacade(), 
             new StubNavigationCoordinator());
 
         viewModel.SetLayoutMode(DiscoverLayoutMode.Narrow);
@@ -511,8 +577,7 @@ public sealed class DiscoverSessionsViewModelTests
         var profilesViewModel = CreateProfilesViewModel(profile);
         using var viewModel = CreateViewModel(
             profilesViewModel,
-            new FakeDiscoverSessionsConnectionFacade(),
-            new StubImportCoordinator(),
+            new FakeDiscoverSessionsConnectionFacade(), 
             new StubNavigationCoordinator());
 
         viewModel.SetLayoutMode(DiscoverLayoutMode.Narrow);
@@ -531,8 +596,7 @@ public sealed class DiscoverSessionsViewModelTests
         var profilesViewModel = CreateProfilesViewModel(profile);
         using var viewModel = CreateViewModel(
             profilesViewModel,
-            new FakeDiscoverSessionsConnectionFacade(),
-            new StubImportCoordinator(),
+            new FakeDiscoverSessionsConnectionFacade(), 
             new StubNavigationCoordinator());
         var changedProperties = new List<string>();
         viewModel.PropertyChanged += (_, e) => changedProperties.Add(e.PropertyName ?? string.Empty);
@@ -551,8 +615,7 @@ public sealed class DiscoverSessionsViewModelTests
         var profilesViewModel = CreateProfilesViewModel(profile);
         using var viewModel = CreateViewModel(
             profilesViewModel,
-            new FakeDiscoverSessionsConnectionFacade(),
-            new StubImportCoordinator(),
+            new FakeDiscoverSessionsConnectionFacade(), 
             new StubNavigationCoordinator());
         viewModel.SetLayoutMode(DiscoverLayoutMode.Narrow);
         viewModel.OpenProfileDetailsCommand.Execute(null);
@@ -576,8 +639,7 @@ public sealed class DiscoverSessionsViewModelTests
         
         using var viewModel = CreateViewModel(
             profilesViewModel,
-            new FakeDiscoverSessionsConnectionFacade(),
-            new StubImportCoordinator(),
+            new FakeDiscoverSessionsConnectionFacade(), 
             new StubNavigationCoordinator());
 
         viewModel.SetLayoutMode(DiscoverLayoutMode.Narrow);
@@ -595,8 +657,7 @@ public sealed class DiscoverSessionsViewModelTests
         var profilesViewModel = CreateProfilesViewModel(profile);
         using var viewModel = CreateViewModel(
             profilesViewModel,
-            new FakeDiscoverSessionsConnectionFacade(),
-            new StubImportCoordinator(),
+            new FakeDiscoverSessionsConnectionFacade(), 
             new StubNavigationCoordinator());
 
         viewModel.SetLayoutMode(DiscoverLayoutMode.Narrow);
@@ -618,8 +679,7 @@ public sealed class DiscoverSessionsViewModelTests
 
         using var viewModel = CreateViewModel(
             profilesViewModel,
-            new FakeDiscoverSessionsConnectionFacade(),
-            new StubImportCoordinator(),
+            new FakeDiscoverSessionsConnectionFacade(), 
             new StubNavigationCoordinator());
 
         viewModel.SelectedProfile = profile2;
@@ -639,8 +699,7 @@ public sealed class DiscoverSessionsViewModelTests
         var profilesViewModel = CreateProfilesViewModel(profile);
         using var viewModel = CreateViewModel(
             profilesViewModel,
-            new FakeDiscoverSessionsConnectionFacade(),
-            new StubImportCoordinator(),
+            new FakeDiscoverSessionsConnectionFacade(), 
             new StubNavigationCoordinator());
 
         viewModel.SetLayoutMode(DiscoverLayoutMode.Narrow);
@@ -694,8 +753,7 @@ public sealed class DiscoverSessionsViewModelTests
 
             using var vm = CreateViewModel(
                 profilesViewModel,
-                connectionFacade,
-                new StubImportCoordinator(),
+                connectionFacade, 
                 new StubNavigationCoordinator());
             viewModel = vm;
 
@@ -743,8 +801,7 @@ public sealed class DiscoverSessionsViewModelTests
             };
             using var viewModel = CreateViewModel(
                 profilesViewModel,
-                connectionFacade,
-                new StubImportCoordinator(),
+                connectionFacade, 
                 new StubNavigationCoordinator());
 
             // Start refresh for profile 1 with a valid chat service so the test isolates stale facade
@@ -778,7 +835,6 @@ public sealed class DiscoverSessionsViewModelTests
     private static DiscoverSessionsViewModel CreateViewModel(
         AcpProfilesViewModel profilesViewModel,
         IDiscoverSessionsConnectionFacade connectionFacade,
-        IDiscoverSessionImportCoordinator importCoordinator,
         INavigationCoordinator navigationCoordinator)
     {
         var projectPreferences = new NavigationProjectPreferencesAdapter(CreatePreferences());
@@ -789,7 +845,6 @@ public sealed class DiscoverSessionsViewModelTests
             projectPreferences,
             profilesViewModel,
             connectionFacade,
-            importCoordinator,
             uiDispatcher);
     }
 
@@ -1020,7 +1075,7 @@ public sealed class DiscoverSessionsViewModelTests
             set => SetProperty(ref _connectionErrorMessage, value, nameof(ConnectionErrorMessage));
         }
 
-        public IChatService? CurrentChatService { get; set; }
+        public IChatService? CurrentChatService { get; set; } = new FakeChatService();
 
         public bool HydrateResult { get; set; } = true;
 
@@ -1075,70 +1130,15 @@ public sealed class DiscoverSessionsViewModelTests
         }
     }
 
-    private sealed class RecordingImportCoordinator : IDiscoverSessionImportCoordinator
-    {
-        private readonly DiscoverSessionImportResult _result;
-
-        public RecordingImportCoordinator(DiscoverSessionImportResult result)
-        {
-            _result = result;
-        }
-
-        public (string RemoteSessionId, string? RemoteSessionCwd, string? ProfileId, string? RemoteSessionTitle)? LastRequest { get; private set; }
-
-        public Task<DiscoverSessionImportResult> ImportAsync(
-            string remoteSessionId,
-            string? remoteSessionCwd,
-            string? profileId,
-            string? remoteSessionTitle = null,
-            CancellationToken cancellationToken = default)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            LastRequest = (remoteSessionId, remoteSessionCwd, profileId, remoteSessionTitle);
-            return Task.FromResult(_result);
-        }
-    }
-
-    private sealed class DelayedImportCoordinator : IDiscoverSessionImportCoordinator
-    {
-        private readonly Func<Task<DiscoverSessionImportResult>> _resultFactory;
-
-        public DelayedImportCoordinator(Func<Task<DiscoverSessionImportResult>> resultFactory)
-        {
-            _resultFactory = resultFactory;
-        }
-
-        public Task<DiscoverSessionImportResult> ImportAsync(
-            string remoteSessionId,
-            string? remoteSessionCwd,
-            string? profileId,
-            string? remoteSessionTitle = null,
-            CancellationToken cancellationToken = default)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return _resultFactory();
-        }
-    }
-
-    private sealed class StubImportCoordinator : IDiscoverSessionImportCoordinator
-    {
-        public Task<DiscoverSessionImportResult> ImportAsync(
-            string remoteSessionId,
-            string? remoteSessionCwd,
-            string? profileId,
-            string? remoteSessionTitle = null,
-            CancellationToken cancellationToken = default)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return Task.FromResult(new DiscoverSessionImportResult(true, "local-session", null));
-        }
-    }
-
     private sealed class StubNavigationCoordinator : INavigationCoordinator
     {
         public bool ActivationResult { get; set; } = true;
 
         public (string SessionId, string? ProjectId)? LastActivation { get; private set; }
+
+        public DiscoverRemoteSessionOpenResult DiscoverOpenResult { get; set; } = new(true, "local-session", null);
+        public (string RemoteSessionId, string? RemoteSessionCwd, string? ProfileId, string? RemoteSessionTitle)? LastDiscoverOpenRequest { get; private set; }
+        public Func<Task<DiscoverRemoteSessionOpenResult>>? DiscoverOpenAsync { get; set; }
 
         public Task<bool> ActivateStartAsync(string? projectIdForNewSession = null) => Task.FromResult(true);
 
@@ -1150,6 +1150,19 @@ public sealed class DiscoverSessionsViewModelTests
         {
             LastActivation = (sessionId, projectId);
             return Task.FromResult(ActivationResult);
+        }
+
+        public Task<DiscoverRemoteSessionOpenResult> ActivateDiscoveredRemoteSessionAsync(
+            DiscoverRemoteSessionOpenRequest request)
+        {
+            LastDiscoverOpenRequest = (
+                request.RemoteSessionId,
+                request.RemoteSessionCwd,
+                request.ProfileId,
+                request.RemoteSessionTitle);
+            return DiscoverOpenAsync is null
+                ? Task.FromResult(DiscoverOpenResult)
+                : DiscoverOpenAsync();
         }
 
         public void SyncSelectionFromShellContent(ShellNavigationContent content)
@@ -1175,6 +1188,10 @@ public sealed class DiscoverSessionsViewModelTests
 
         public Task<bool> ActivateSessionAsync(string sessionId, string? projectId) => _activation();
 
+        public Task<DiscoverRemoteSessionOpenResult> ActivateDiscoveredRemoteSessionAsync(
+            DiscoverRemoteSessionOpenRequest request)
+            => throw new NotSupportedException();
+
         public void SyncSelectionFromShellContent(ShellNavigationContent content)
         {
         }
@@ -1191,6 +1208,7 @@ public sealed class DiscoverSessionsViewModelTests
         }
 
         public bool ActivationResult { get; set; } = true;
+        public Func<Task<DiscoverRemoteSessionOpenResult>>? DiscoverOpenAsync { get; set; }
 
         public bool WasCalledOnExpectedContext { get; private set; }
 
@@ -1204,6 +1222,18 @@ public sealed class DiscoverSessionsViewModelTests
         {
             WasCalledOnExpectedContext = ReferenceEquals(SynchronizationContext.Current, _expectedSynchronizationContext);
             return Task.FromResult(WasCalledOnExpectedContext && ActivationResult);
+        }
+
+        public Task<DiscoverRemoteSessionOpenResult> ActivateDiscoveredRemoteSessionAsync(
+            DiscoverRemoteSessionOpenRequest request)
+        {
+            WasCalledOnExpectedContext = ReferenceEquals(SynchronizationContext.Current, _expectedSynchronizationContext);
+            if (DiscoverOpenAsync is null)
+            {
+                return Task.FromResult(new DiscoverRemoteSessionOpenResult(WasCalledOnExpectedContext && ActivationResult, "local-conversation-1", null));
+            }
+
+            return DiscoverOpenAsync();
         }
 
         public void SyncSelectionFromShellContent(ShellNavigationContent content)
@@ -1222,7 +1252,14 @@ public sealed class DiscoverSessionsViewModelTests
 
         public AgentInfo? AgentInfo => null;
 
-        public AgentCapabilities? AgentCapabilities => new(loadSession: true);
+        public AgentCapabilities? AgentCapabilities => AgentCapabilitiesValue;
+
+        public AgentCapabilities? AgentCapabilitiesValue { get; set; } = new(
+            loadSession: true,
+            sessionCapabilities: new SessionCapabilities
+            {
+                List = new SessionListCapabilities()
+            });
 
         public IReadOnlyList<SessionUpdateEntry> SessionHistory => Array.Empty<SessionUpdateEntry>();
 

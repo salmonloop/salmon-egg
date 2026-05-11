@@ -260,6 +260,10 @@ public sealed class MainNavigationViewModelPaneTests
 
         public Task<bool> ActivateSessionAsync(string sessionId, string? projectId) => Task.FromResult(false);
 
+        public Task<DiscoverRemoteSessionOpenResult> ActivateDiscoveredRemoteSessionAsync(
+            DiscoverRemoteSessionOpenRequest request)
+            => Task.FromResult(new DiscoverRemoteSessionOpenResult(false, null, null));
+
         public void SyncSelectionFromShellContent(ShellNavigationContent content)
         {
         }

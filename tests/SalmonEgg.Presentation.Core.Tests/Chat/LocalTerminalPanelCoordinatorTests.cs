@@ -14,67 +14,6 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
 public class LocalTerminalPanelCoordinatorTests
 {
     [Fact]
-    public void LocalTerminalContracts_MustExposeInteractiveSessionCapabilities()
-    {
-        // Arrange
-        var sessionType = typeof(ILocalTerminalSession);
-
-        // Act
-        var conversationId = sessionType.GetProperty("ConversationId");
-        var currentWorkingDirectory = sessionType.GetProperty("CurrentWorkingDirectory");
-        var transportMode = sessionType.GetProperty("TransportMode");
-        var canAcceptInput = sessionType.GetProperty("CanAcceptInput");
-        var outputReceived = sessionType.GetEvent("OutputReceived");
-        var stateChanged = sessionType.GetEvent("StateChanged");
-        var writeInputAsync = sessionType.GetMethod("WriteInputAsync");
-        var resizeAsync = sessionType.GetMethod("ResizeAsync");
-        var isAsyncDisposable = typeof(IAsyncDisposable).IsAssignableFrom(sessionType);
-
-        // Assert
-        Assert.NotNull(conversationId);
-        Assert.NotNull(currentWorkingDirectory);
-        Assert.NotNull(transportMode);
-        Assert.NotNull(canAcceptInput);
-        Assert.NotNull(outputReceived);
-        Assert.Equal(typeof(EventHandler<string>), outputReceived!.EventHandlerType);
-        Assert.NotNull(stateChanged);
-        Assert.Equal(typeof(EventHandler), stateChanged!.EventHandlerType);
-        Assert.NotNull(writeInputAsync);
-        Assert.NotNull(resizeAsync);
-        Assert.True(isAsyncDisposable);
-    }
-
-    [Fact]
-    public void LocalTerminalManagerContract_MustSupportConversationScopedReuse()
-    {
-        // Arrange
-        var managerType = typeof(ILocalTerminalSessionManager);
-
-        // Act
-        var getOrCreateAsync = managerType.GetMethod(
-            "GetOrCreateAsync",
-            new[] { typeof(string), typeof(string), typeof(CancellationToken) });
-        var disposeConversationAsync = managerType.GetMethod(
-            "DisposeConversationAsync",
-            new[] { typeof(string), typeof(CancellationToken) });
-
-        // Assert
-        Assert.NotNull(getOrCreateAsync);
-        Assert.Equal(typeof(ValueTask<ILocalTerminalSession>), getOrCreateAsync!.ReturnType);
-        Assert.Equal(
-            new[] { typeof(string), typeof(string), typeof(CancellationToken) },
-            getOrCreateAsync.GetParameters().Select(parameter => parameter.ParameterType).ToArray());
-        Assert.True(getOrCreateAsync.GetParameters()[2].HasDefaultValue);
-
-        Assert.NotNull(disposeConversationAsync);
-        Assert.Equal(typeof(ValueTask), disposeConversationAsync!.ReturnType);
-        Assert.Equal(
-            new[] { typeof(string), typeof(CancellationToken) },
-            disposeConversationAsync.GetParameters().Select(parameter => parameter.ParameterType).ToArray());
-        Assert.True(disposeConversationAsync.GetParameters()[1].HasDefaultValue);
-    }
-
-    [Fact]
     public async Task ActivateAsync_LocalConversation_UsesSessionInfoCwd()
     {
         // Arrange

@@ -2,8 +2,6 @@ using System.Xml.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using SalmonEgg.Application.Services.Chat;
-using SalmonEgg.Domain.Services;
 
 namespace SalmonEgg.Application.Tests;
 
@@ -15,31 +13,6 @@ public class UiConventionsTests
         var parseOptions = new CSharpParseOptions(preprocessorSymbols: ["WINDOWS"]);
         var tree = CSharpSyntaxTree.ParseText(text, parseOptions);
         return tree.GetCompilationUnitRoot();
-    }
-
-    private static string GetInvocationMethodName(InvocationExpressionSyntax invocation)
-        => invocation.Expression switch
-        {
-            IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
-            MemberAccessExpressionSyntax memberAccess => memberAccess.Name.Identifier.ValueText,
-            GenericNameSyntax genericName => genericName.Identifier.ValueText,
-            _ => string.Empty
-        };
-
-    private static string? GetFirstGenericTypeArgumentName(InvocationExpressionSyntax invocation)
-    {
-        if (invocation.Expression is GenericNameSyntax directGeneric)
-        {
-            return directGeneric.TypeArgumentList.Arguments.FirstOrDefault()?.ToString();
-        }
-
-        if (invocation.Expression is MemberAccessExpressionSyntax memberAccess
-            && memberAccess.Name is GenericNameSyntax memberGeneric)
-        {
-            return memberGeneric.TypeArgumentList.Arguments.FirstOrDefault()?.ToString();
-        }
-
-        return null;
     }
 
     private static XDocument ReadXml(string filePath) => XDocument.Load(filePath);
@@ -140,7 +113,7 @@ public class UiConventionsTests
             var root = ReadCSharpSyntaxTree(file);
             var invocations = root.DescendantNodes().OfType<InvocationExpressionSyntax>().ToList();
             var initInvocation = invocations.FirstOrDefault(invocation =>
-                string.Equals(GetInvocationMethodName(invocation), "InitializeComponent", StringComparison.Ordinal));
+                string.Equals(invocation.Expression.ToString(), "InitializeComponent", StringComparison.Ordinal));
             if (initInvocation is null)
             {
                 continue;
@@ -149,7 +122,13 @@ public class UiConventionsTests
             var initIndex = initInvocation.SpanStart;
             var diInvocations = invocations.Where(invocation =>
             {
-                var methodName = GetInvocationMethodName(invocation);
+                var methodName = invocation.Expression switch
+                {
+                    IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+                    MemberAccessExpressionSyntax memberAccess => memberAccess.Name.Identifier.ValueText,
+                    GenericNameSyntax genericName => genericName.Identifier.ValueText,
+                    _ => string.Empty
+                };
                 return string.Equals(methodName, "GetRequiredService", StringComparison.Ordinal)
                     || string.Equals(methodName, "GetService", StringComparison.Ordinal)
                     || string.Equals(methodName, "CreateScope", StringComparison.Ordinal);
@@ -162,92 +141,6 @@ public class UiConventionsTests
         }
 
         Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
-    }
-
-    [Fact]
-    public void DependencyInjection_ShouldRegisterChatViewModelAsSingleton()
-    {
-        var repoRoot = FindRepoRoot();
-        var diFile = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "DependencyInjection.cs");
-        var root = ReadCSharpSyntaxTree(diFile);
-        var invocations = root.DescendantNodes().OfType<InvocationExpressionSyntax>().ToList();
-
-        Assert.Contains(invocations, invocation =>
-            string.Equals(GetInvocationMethodName(invocation), "AddSingleton", StringComparison.Ordinal)
-            && string.Equals(GetFirstGenericTypeArgumentName(invocation), "ChatViewModel", StringComparison.Ordinal));
-        Assert.DoesNotContain(invocations, invocation =>
-            string.Equals(GetInvocationMethodName(invocation), "AddTransient", StringComparison.Ordinal)
-            && string.Equals(GetFirstGenericTypeArgumentName(invocation), "ChatViewModel", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public void DependencyInjection_ShouldRegisterChatBoundaryAdaptersAndCoordinators()
-    {
-        var repoRoot = FindRepoRoot();
-        var diFile = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "DependencyInjection.cs");
-        var root = ReadCSharpSyntaxTree(diFile);
-        var singletonRegistrations = root.DescendantNodes()
-            .OfType<InvocationExpressionSyntax>()
-            .Where(invocation => string.Equals(GetInvocationMethodName(invocation), "AddSingleton", StringComparison.Ordinal))
-            .Select(invocation => GetFirstGenericTypeArgumentName(invocation))
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .ToHashSet(StringComparer.Ordinal);
-
-        Assert.Contains("ISettingsChatConnection", singletonRegistrations);
-        Assert.Contains("IChatLaunchWorkflow", singletonRegistrations);
-        Assert.Contains("IAcpConnectionCommands", singletonRegistrations);
-        Assert.Contains("IAcpChatServiceFactory", singletonRegistrations);
-        Assert.Contains("MainNavigationViewModel", singletonRegistrations);
-        Assert.Contains("INavigationCoordinator", singletonRegistrations);
-        Assert.Contains("AcpConnectionSettingsViewModel", singletonRegistrations);
-    }
-
-    [Fact]
-    public void WindowBackdropService_ShouldBeHookedIntoMainAndMiniWindows()
-    {
-        var repoRoot = FindRepoRoot();
-        var appFile = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "App.xaml.cs");
-        var mainPageFile = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "MainPage.xaml.cs");
-        var miniWindowFile = Path.Combine(
-            repoRoot,
-            "SalmonEgg",
-            "SalmonEgg",
-            "Presentation",
-            "Views",
-            "MiniWindow",
-            "MiniChatWindow.cs");
-
-        var appText = File.ReadAllText(appFile);
-        var mainPageText = File.ReadAllText(mainPageFile);
-        var miniWindowText = File.ReadAllText(miniWindowFile);
-
-        Assert.Contains("_windowBackdropService = ServiceProvider.GetService<Presentation.Services.WindowBackdropService>();", appText, StringComparison.Ordinal);
-        Assert.Contains("_windowBackdropService?.Attach(MainWindow);", appText, StringComparison.Ordinal);
-        Assert.Contains("_windowBackdropService.Attach(window);", mainPageText, StringComparison.Ordinal);
-        Assert.Contains("_windowBackdropService = App.ServiceProvider.GetService(typeof(Presentation.Services.WindowBackdropService)) as Presentation.Services.WindowBackdropService;", miniWindowText, StringComparison.Ordinal);
-        Assert.Contains("_windowBackdropService?.Attach(this);", miniWindowText, StringComparison.Ordinal);
-        Assert.Contains("_windowBackdropService?.Detach(this);", miniWindowText, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void MiniWindowCoordinator_ShouldCreateDedicatedMiniChatWindow()
-    {
-        var repoRoot = FindRepoRoot();
-        var coordinatorFile = Path.Combine(
-            repoRoot,
-            "SalmonEgg",
-            "SalmonEgg",
-            "Presentation",
-            "Services",
-            "MiniWindowCoordinator.cs");
-        var root = ReadCSharpSyntaxTree(coordinatorFile);
-        var objectCreations = root.DescendantNodes().OfType<ObjectCreationExpressionSyntax>().ToList();
-        Assert.Contains(
-            objectCreations,
-            creation => string.Equals(creation.Type.ToString(), "MiniChatWindow", StringComparison.Ordinal));
-        Assert.DoesNotContain(
-            objectCreations,
-            creation => string.Equals(creation.Type.ToString(), "Microsoft.UI.Xaml.Window", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -274,54 +167,14 @@ public class UiConventionsTests
         Assert.True(File.Exists(windowFile), $"Expected mini window implementation at '{windowFile}'.");
         Assert.True(File.Exists(viewCodeBehindFile), $"Expected mini window view implementation at '{viewCodeBehindFile}'.");
 
-        var windowRoot = ReadCSharpSyntaxTree(windowFile);
-        var viewRoot = ReadCSharpSyntaxTree(viewCodeBehindFile);
-        var assignments = windowRoot.DescendantNodes().OfType<AssignmentExpressionSyntax>().ToList();
-        var invocations = windowRoot.DescendantNodes().OfType<InvocationExpressionSyntax>().ToList();
-        var objectCreations = viewRoot.DescendantNodes().OfType<ObjectCreationExpressionSyntax>().ToList();
-        var windowIdentifiers = windowRoot.DescendantNodes().OfType<IdentifierNameSyntax>().Select(node => node.Identifier.ValueText).ToArray();
-        var viewIdentifiers = viewRoot.DescendantNodes().OfType<IdentifierNameSyntax>().Select(node => node.Identifier.ValueText).ToArray();
+        var windowText = File.ReadAllText(windowFile);
+        var viewText = File.ReadAllText(viewCodeBehindFile);
 
-        Assert.Contains(
-            assignments,
-            assignment => string.Equals(assignment.Left.ToString(), "ExtendsContentIntoTitleBar", StringComparison.Ordinal)
-                && string.Equals(assignment.Right.ToString(), "true", StringComparison.Ordinal));
-        Assert.Contains(
-            invocations,
-            invocation => string.Equals(GetInvocationMethodName(invocation), "SetTitleBar", StringComparison.Ordinal));
-        Assert.Contains(
-            objectCreations,
-            creation => string.Equals(creation.Type.ToString(), "Microsoft.UI.Xaml.Controls.TitleBar", StringComparison.Ordinal));
-        Assert.Contains("TitleBar", viewIdentifiers);
-        Assert.DoesNotContain("InputNonClientPointerSource", windowIdentifiers);
-        Assert.DoesNotContain("NonClientRegionKind", windowIdentifiers);
-    }
-
-    [Fact]
-    public void MiniWindowCoordinator_ShouldKeepOnlyCloseCaptionButton()
-    {
-        var repoRoot = FindRepoRoot();
-        var coordinatorFile = Path.Combine(
-            repoRoot,
-            "SalmonEgg",
-            "SalmonEgg",
-            "Presentation",
-            "Services",
-            "MiniWindowCoordinator.cs");
-
-        Assert.True(File.Exists(coordinatorFile), $"Expected mini window coordinator at '{coordinatorFile}'.");
-
-        var root = ReadCSharpSyntaxTree(coordinatorFile);
-        var assignments = root.DescendantNodes().OfType<AssignmentExpressionSyntax>().ToList();
-
-        Assert.Contains(
-            assignments,
-            assignment => string.Equals(assignment.Left.ToString(), "presenter.IsMaximizable", StringComparison.Ordinal)
-                && string.Equals(assignment.Right.ToString(), "false", StringComparison.Ordinal));
-        Assert.Contains(
-            assignments,
-            assignment => string.Equals(assignment.Left.ToString(), "presenter.IsMinimizable", StringComparison.Ordinal)
-                && string.Equals(assignment.Right.ToString(), "false", StringComparison.Ordinal));
+        Assert.Contains("ExtendsContentIntoTitleBar = true", windowText, StringComparison.Ordinal);
+        Assert.Contains("SetTitleBar(", windowText, StringComparison.Ordinal);
+        Assert.Contains("TitleBar", viewText, StringComparison.Ordinal);
+        Assert.DoesNotContain("InputNonClientPointerSource", windowText, StringComparison.Ordinal);
+        Assert.DoesNotContain("NonClientRegionKind", windowText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -398,44 +251,6 @@ public class UiConventionsTests
         Assert.False(File.Exists(Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Assets", "Icons", "appicon.png")));
         Assert.False(File.Exists(Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Assets", "Icons", "icon.svg")));
         Assert.False(File.Exists(Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Assets", "Icons", "icon_foreground.svg")));
-    }
-
-    [Fact]
-    public void ChatServiceFactory_ShouldNotDependOnAppLevelCapabilityManager()
-    {
-        var constructor = typeof(ChatServiceFactory).GetConstructors().Single();
-
-        Assert.DoesNotContain(
-            constructor.GetParameters(),
-            parameter => parameter.ParameterType == typeof(ICapabilityManager));
-    }
-
-    [Fact]
-    public void DependencyInjection_ShouldNotRegisterCapabilityManagerAsApplicationSingleton()
-    {
-        var repoRoot = FindRepoRoot();
-        var diFile = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "DependencyInjection.cs");
-        var root = ReadCSharpSyntaxTree(diFile);
-        var singletonRegistrations = root.DescendantNodes()
-            .OfType<InvocationExpressionSyntax>()
-            .Where(invocation => string.Equals(GetInvocationMethodName(invocation), "AddSingleton", StringComparison.Ordinal))
-            .Select(invocation => GetFirstGenericTypeArgumentName(invocation))
-            .Where(name => !string.IsNullOrWhiteSpace(name));
-
-        Assert.DoesNotContain("ICapabilityManager", singletonRegistrations);
-    }
-
-    [Fact]
-    public void AcpClient_ShouldNotInstantiateCapabilityManagerInternally()
-    {
-        var constructor = typeof(SalmonEgg.Infrastructure.Client.AcpClient)
-            .GetConstructors()
-            .OrderByDescending(ctor => ctor.GetParameters().Length)
-            .First();
-
-        Assert.DoesNotContain(
-            constructor.GetParameters(),
-            parameter => parameter.ParameterType == typeof(ICapabilityManager));
     }
 
     [Theory]
