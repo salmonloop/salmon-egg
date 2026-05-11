@@ -39,4 +39,48 @@ public sealed class ToolCallPillExpansionPolicyTests
 
         Assert.True(shouldShow);
     }
+
+    [Fact]
+    public void ResolveEffectiveExpanded_WhenCompletedAndManuallyExpanded_PreservesManualExpansion()
+    {
+        var isExpanded = ToolCallPillExpansionPolicy.ResolveEffectiveExpanded(
+            currentExpanded: true,
+            isCompleted: true,
+            hasManualOverride: true);
+
+        Assert.True(isExpanded);
+    }
+
+    [Fact]
+    public void ResolveEffectiveExpanded_WhenIncompleteAndManuallyCollapsed_PreservesManualCollapse()
+    {
+        var isExpanded = ToolCallPillExpansionPolicy.ResolveEffectiveExpanded(
+            currentExpanded: false,
+            isCompleted: false,
+            hasManualOverride: true);
+
+        Assert.False(isExpanded);
+    }
+
+    [Fact]
+    public void ResolveEffectiveExpanded_WhenCompletedWithoutManualOverride_UsesDefaultCollapsed()
+    {
+        var isExpanded = ToolCallPillExpansionPolicy.ResolveEffectiveExpanded(
+            currentExpanded: true,
+            isCompleted: true,
+            hasManualOverride: false);
+
+        Assert.False(isExpanded);
+    }
+
+    [Fact]
+    public void ResolveEffectiveExpanded_WhenIncompleteWithoutManualOverride_UsesDefaultExpanded()
+    {
+        var isExpanded = ToolCallPillExpansionPolicy.ResolveEffectiveExpanded(
+            currentExpanded: false,
+            isCompleted: false,
+            hasManualOverride: false);
+
+        Assert.True(isExpanded);
+    }
 }

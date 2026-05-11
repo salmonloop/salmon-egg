@@ -164,17 +164,21 @@
                 Padding="0"
                 HorizontalAlignment="Stretch"
                 HorizontalContentAlignment="Stretch"
-                IsChecked="{x:Bind IsExpanded, Mode=TwoWay}"
-                Click="RootButton_Click"
+                Checked="RootButton_Checked"
+                Unchecked="RootButton_Unchecked"
                 PointerEntered="RootButton_PointerEntered"
                 PointerExited="RootButton_PointerExited"
                 AutomationProperties.AutomationId="ToolCallPill.RootButton"
                 AutomationProperties.Name="{x:Bind AutomationName, Mode=OneWay}"
                 UseSystemFocusVisuals="True">
                 <ToggleButton.Resources>
+                    <SolidColorBrush x:Key="ToggleButtonBackgroundPointerOver" Color="Transparent" />
+                    <SolidColorBrush x:Key="ToggleButtonBackgroundPressed" Color="Transparent" />
                     <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="Transparent" />
                     <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="Transparent" />
                     <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="Transparent" />
+                    <SolidColorBrush x:Key="ToggleButtonBorderBrushPointerOver" Color="Transparent" />
+                    <SolidColorBrush x:Key="ToggleButtonBorderBrushPressed" Color="Transparent" />
                     <SolidColorBrush x:Key="ToggleButtonBorderBrushChecked" Color="Transparent" />
                     <SolidColorBrush x:Key="ToggleButtonBorderBrushCheckedPointerOver" Color="Transparent" />
                     <SolidColorBrush x:Key="ToggleButtonBorderBrushCheckedPressed" Color="Transparent" />

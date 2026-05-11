@@ -223,6 +223,12 @@ public sealed partial class ChatView : Page
 
         private void OnMessagesListPointerPressed(object sender, PointerRoutedEventArgs e)
         {
+            if (MessagesList is not null
+                && !TranscriptPointerIntentFilter.ShouldTrackViewportIntent(e.OriginalSource, MessagesList))
+            {
+                return;
+            }
+
             if (IsViewportDetachedByUser())
             {
                 _viewportController.MarkDetachedViewportInteractionStarted();
@@ -241,6 +247,12 @@ public sealed partial class ChatView : Page
 
         private void OnMessagesListPointerReleased(object sender, PointerRoutedEventArgs e)
         {
+            if (MessagesList is not null
+                && !TranscriptPointerIntentFilter.ShouldTrackViewportIntent(e.OriginalSource, MessagesList))
+            {
+                return;
+            }
+
             _viewportController.MarkUserScrollIntentCompleted();
             var releaseGeneration = _viewportController.Generation;
             _ = DispatcherQueue.TryEnqueue(() =>

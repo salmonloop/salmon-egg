@@ -36,31 +36,34 @@ public sealed class ChatSkeletonSmokeTests
 
         var messagesList = session.FindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(10));
         var toolCallPillButton = session.FindByAutomationId("ToolCallPill.RootButton", TimeSpan.FromSeconds(10));
-        var isExpanded = false;
-        var sawPath = false;
-        var sawQuery = false;
 
-        for (var attempt = 0; attempt < 4; attempt++)
-        {
-            session.ClickElement(toolCallPillButton);
-            isExpanded = WaitUntilToggleState(
-                session,
-                "ToolCallPill.RootButton",
-                ToggleState.On,
-                TimeSpan.FromSeconds(2));
-            var visibleTexts = session.GetVisibleTexts(messagesList);
-            sawPath = visibleTexts.Any(text => text.Contains("appsettings.json", StringComparison.Ordinal));
-            sawQuery = visibleTexts.Any(text => text.Contains("Logging", StringComparison.Ordinal));
-
-            if (isExpanded && sawPath && sawQuery)
-            {
-                break;
-            }
-
-            Thread.Sleep(150);
-        }
-
+        session.ClickElement(toolCallPillButton);
+        var isExpanded = WaitUntilToggleState(
+            session,
+            "ToolCallPill.RootButton",
+            ToggleState.On,
+            TimeSpan.FromSeconds(2));
         Assert.True(isExpanded, "Tool call pill did not expand after activation.");
+
+        session.ClickElement(toolCallPillButton);
+        var isCollapsed = WaitUntilToggleState(
+            session,
+            "ToolCallPill.RootButton",
+            ToggleState.Off,
+            TimeSpan.FromSeconds(2));
+        Assert.True(isCollapsed, "Tool call pill did not collapse after a second activation.");
+
+        session.ClickElement(toolCallPillButton);
+        isExpanded = WaitUntilToggleState(
+            session,
+            "ToolCallPill.RootButton",
+            ToggleState.On,
+            TimeSpan.FromSeconds(2));
+        var visibleTexts = session.GetVisibleTexts(messagesList);
+        var sawPath = visibleTexts.Any(text => text.Contains("appsettings.json", StringComparison.Ordinal));
+        var sawQuery = visibleTexts.Any(text => text.Contains("Logging", StringComparison.Ordinal));
+
+        Assert.True(isExpanded, "Tool call pill did not expand after a third activation.");
         Assert.True(sawPath, "Expanded tool call pill did not expose the expected path details.");
         Assert.True(sawQuery, "Expanded tool call pill did not expose the expected query details.");
 

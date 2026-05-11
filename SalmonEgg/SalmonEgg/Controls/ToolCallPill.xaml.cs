@@ -6,6 +6,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using SalmonEgg.Domain.Models.Tool;
 using SalmonEgg.Presentation.ViewModels.Chat;
@@ -16,8 +17,10 @@ namespace SalmonEgg.Controls;
 public sealed partial class ToolCallPill : UserControl, INotifyPropertyChanged
 {
     private static readonly ResourceLoader ResourceLoader = ResourceLoader.GetForViewIndependentUse();
+
     private bool _isExpanded;
     private bool _hasManualExpansionOverride;
+    private bool _isSynchronizingRootButton;
 
     public static readonly DependencyProperty ToolTitleProperty =
         DependencyProperty.Register(
@@ -171,6 +174,7 @@ public sealed partial class ToolCallPill : UserControl, INotifyPropertyChanged
     {
         InitializeComponent();
         UpdateDisplayProjection();
+        DataContextChanged += ToolCallPill_DataContextChanged;
         Loaded += ToolCallPill_Loaded;
     }
 
@@ -178,6 +182,12 @@ public sealed partial class ToolCallPill : UserControl, INotifyPropertyChanged
     {
         ApplyDefaultExpansionState(false);
         UpdateVisualStates();
+    }
+
+    private void ToolCallPill_DataContextChanged(FrameworkElement sender, DataContextChangedEventArgs args)
+    {
+        _hasManualExpansionOverride = false;
+        ApplyDefaultExpansionState(false);
     }
 
     private static void OnDisplayInputChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -476,18 +486,29 @@ public sealed partial class ToolCallPill : UserControl, INotifyPropertyChanged
 
     private bool _isHovered;
 
-    private void RootButton_Click(object sender, RoutedEventArgs e)
+    private void RootButton_Checked(object sender, RoutedEventArgs e)
     {
-        SetIsExpanded(RootButton.IsChecked == true, useTransitions: true, isUserInitiated: true);
+        if (!_isSynchronizingRootButton)
+        {
+            SetIsExpanded(true, useTransitions: true, isUserInitiated: true);
+        }
     }
 
-    private void RootButton_PointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    private void RootButton_Unchecked(object sender, RoutedEventArgs e)
+    {
+        if (!_isSynchronizingRootButton)
+        {
+            SetIsExpanded(false, useTransitions: true, isUserInitiated: true);
+        }
+    }
+
+    private void RootButton_PointerEntered(object sender, PointerRoutedEventArgs e)
     {
         _isHovered = true;
         UpdateVisualStates();
     }
 
-    private void RootButton_PointerExited(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    private void RootButton_PointerExited(object sender, PointerRoutedEventArgs e)
     {
         _isHovered = false;
         UpdateVisualStates();
@@ -495,14 +516,11 @@ public sealed partial class ToolCallPill : UserControl, INotifyPropertyChanged
 
     private void ApplyDefaultExpansionState(bool useTransitions)
     {
-        if (_hasManualExpansionOverride)
-        {
-            UpdateExpansionState(useTransitions);
-            return;
-        }
-
         SetIsExpanded(
-            ToolCallPillExpansionPolicy.ResolveDefaultExpanded(IsCompleted),
+            ToolCallPillExpansionPolicy.ResolveEffectiveExpanded(
+                IsExpanded,
+                IsCompleted,
+                _hasManualExpansionOverride),
             useTransitions,
             isUserInitiated: false);
     }
@@ -516,16 +534,34 @@ public sealed partial class ToolCallPill : UserControl, INotifyPropertyChanged
 
         if (_isExpanded == value)
         {
+            SyncRootButtonCheckedState(value);
             UpdateExpansionState(useTransitions);
             return;
         }
 
         _isExpanded = value;
+        SyncRootButtonCheckedState(value);
         OnPropertyChanged(nameof(IsExpanded));
         OnPropertyChanged(nameof(PreviewMaxHeight));
         OnPropertyChanged(nameof(InlineContentVisibility));
         UpdateVisualStates();
         UpdateExpansionState(useTransitions);
+    }
+
+    private void SyncRootButtonCheckedState(bool value)
+    {
+        if (RootButton != null && RootButton.IsChecked != value)
+        {
+            _isSynchronizingRootButton = true;
+            try
+            {
+                RootButton.IsChecked = value;
+            }
+            finally
+            {
+                _isSynchronizingRootButton = false;
+            }
+        }
     }
 
     private void UpdateExpansionState(bool useTransitions)
@@ -578,4 +614,5 @@ public sealed partial class ToolCallPill : UserControl, INotifyPropertyChanged
             }
         }
     }
+
 }
