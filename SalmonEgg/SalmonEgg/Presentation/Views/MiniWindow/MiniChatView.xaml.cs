@@ -785,6 +785,12 @@ public sealed partial class MiniChatView : Page
 
     private void OnMessagesListPointerWheelChanged(object sender, PointerRoutedEventArgs e)
     {
+        if (MessagesList is not null
+            && !TranscriptPointerIntentFilter.ShouldTrackViewportIntent(e.OriginalSource, MessagesList))
+        {
+            return;
+        }
+
         RegisterUserViewportIntent();
     }
 
