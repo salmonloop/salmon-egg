@@ -83,11 +83,59 @@
 
         <Expander
             x:Name="RootExpander"
+            Padding="0"
             IsExpanded="{x:Bind IsExpanded, Mode=TwoWay}"
             Expanding="RootExpander_Expanding"
             Collapsed="RootExpander_Collapsed"
             AutomationProperties.AutomationId="ToolCallPill.RootButton"
             AutomationProperties.Name="{x:Bind AutomationName, Mode=OneWay}">
+            <Expander.Resources>
+                <ResourceDictionary>
+                    <ResourceDictionary.ThemeDictionaries>
+                        <ResourceDictionary x:Key="Default">
+                            <SolidColorBrush x:Key="ExpanderHeaderBackground" Color="Transparent" />
+                            <SolidColorBrush x:Key="ExpanderHeaderBorderBrush" Color="Transparent" />
+                            <SolidColorBrush x:Key="ExpanderHeaderBorderPointerOverBrush" Color="Transparent" />
+                            <SolidColorBrush x:Key="ExpanderHeaderBorderPressedBrush" Color="Transparent" />
+                            <Thickness x:Key="ExpanderHeaderBorderThickness">0</Thickness>
+                            <Thickness x:Key="ExpanderHeaderPadding">0</Thickness>
+                            <x:Double x:Key="ExpanderChevronButtonSize">0</x:Double>
+                            <x:Double x:Key="ExpanderChevronGlyphSize">0</x:Double>
+                            <Thickness x:Key="ExpanderChevronMargin">0</Thickness>
+                            <SolidColorBrush x:Key="ExpanderChevronBackground" Color="Transparent" />
+                            <SolidColorBrush x:Key="ExpanderChevronForeground" Color="Transparent" />
+                            <Thickness x:Key="ExpanderChevronBorderThickness">0</Thickness>
+                            <SolidColorBrush x:Key="ExpanderContentBackground" Color="Transparent" />
+                            <SolidColorBrush x:Key="ExpanderContentBorderBrush" Color="Transparent" />
+                        </ResourceDictionary>
+                        <ResourceDictionary x:Key="Dark">
+                            <SolidColorBrush x:Key="ExpanderHeaderBackground" Color="Transparent" />
+                            <SolidColorBrush x:Key="ExpanderHeaderBorderBrush" Color="Transparent" />
+                            <SolidColorBrush x:Key="ExpanderHeaderBorderPointerOverBrush" Color="Transparent" />
+                            <SolidColorBrush x:Key="ExpanderHeaderBorderPressedBrush" Color="Transparent" />
+                            <Thickness x:Key="ExpanderHeaderBorderThickness">0</Thickness>
+                            <Thickness x:Key="ExpanderHeaderPadding">0</Thickness>
+                            <x:Double x:Key="ExpanderChevronButtonSize">0</x:Double>
+                            <x:Double x:Key="ExpanderChevronGlyphSize">0</x:Double>
+                            <Thickness x:Key="ExpanderChevronMargin">0</Thickness>
+                            <SolidColorBrush x:Key="ExpanderChevronBackground" Color="Transparent" />
+                            <SolidColorBrush x:Key="ExpanderChevronForeground" Color="Transparent" />
+                            <Thickness x:Key="ExpanderChevronBorderThickness">0</Thickness>
+                            <SolidColorBrush x:Key="ExpanderContentBackground" Color="Transparent" />
+                            <SolidColorBrush x:Key="ExpanderContentBorderBrush" Color="Transparent" />
+                        </ResourceDictionary>
+                        <ResourceDictionary x:Key="HighContrast">
+                            <StaticResource x:Key="ExpanderHeaderBackground" ResourceKey="SystemColorButtonFaceColorBrush" />
+                            <StaticResource x:Key="ExpanderHeaderBorderBrush" ResourceKey="SystemColorButtonTextColorBrush" />
+                            <StaticResource x:Key="ExpanderHeaderBorderPointerOverBrush" ResourceKey="SystemColorHighlightColorBrush" />
+                            <StaticResource x:Key="ExpanderHeaderBorderPressedBrush" ResourceKey="SystemColorHighlightColorBrush" />
+                            <Thickness x:Key="ExpanderHeaderBorderThickness">2</Thickness>
+                            <StaticResource x:Key="ExpanderContentBackground" ResourceKey="SystemColorWindowColorBrush" />
+                            <StaticResource x:Key="ExpanderContentBorderBrush" ResourceKey="SystemColorWindowTextColorBrush" />
+                        </ResourceDictionary>
+                    </ResourceDictionary.ThemeDictionaries>
+                </ResourceDictionary>
+            </Expander.Resources>
             <Expander.Header>
                 <Grid ColumnSpacing="8">
                     <Grid.ColumnDefinitions>

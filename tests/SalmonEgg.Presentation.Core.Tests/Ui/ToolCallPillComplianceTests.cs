@@ -65,6 +65,30 @@ public sealed class ToolCallPillComplianceTests
         Assert.DoesNotContain("_isSynchronizingRootButton", code, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ToolCallPill_CustomizesExpanderWithLocalLightweightResources()
+    {
+        var xaml = File.ReadAllText(GetRepoPath(@"SalmonEgg\SalmonEgg\Controls\ToolCallPill.xaml"));
+
+        Assert.Contains("<Expander.Resources>", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"ExpanderHeaderBackground\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"ExpanderHeaderBorderBrush\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"ExpanderHeaderPadding\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"ExpanderContentBackground\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"ExpanderContentBorderBrush\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"ExpanderChevronButtonSize\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"ExpanderChevronGlyphSize\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"ExpanderChevronMargin\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"ExpanderChevronForeground\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Color=\"Transparent\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("<Thickness x:Key=\"ExpanderHeaderPadding\">0</Thickness>", xaml, StringComparison.Ordinal);
+        Assert.Contains("<x:Double x:Key=\"ExpanderChevronButtonSize\">0</x:Double>", xaml, StringComparison.Ordinal);
+        Assert.Contains("<x:Double x:Key=\"ExpanderChevronGlyphSize\">0</x:Double>", xaml, StringComparison.Ordinal);
+        Assert.Contains("<Thickness x:Key=\"ExpanderChevronMargin\">0</Thickness>", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("MinHeight=\"0\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<Setter Property=\"Template\"", xaml, StringComparison.Ordinal);
+    }
+
     private static string GetRepoPath(string relativePath)
         => Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory,
