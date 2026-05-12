@@ -324,8 +324,8 @@ public sealed class MarkdownTextPresenter : Grid
             UseListExtras = true,
             UseTaskLists = true,
             UseEmphasisExtras = true,
-            UseAutoLinks = true,
-            DisableLinks = false,
+            UseAutoLinks = !isTextSelectionEnabled,
+            DisableLinks = isTextSelectionEnabled,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             IsTextSelectionEnabled = isTextSelectionEnabled
         };

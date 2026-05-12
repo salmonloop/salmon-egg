@@ -165,6 +165,17 @@ public sealed class ChatStylesMarkdownXamlTests
     }
 
     [Fact]
+    public void MarkdownTextPresenter_SelectableWindowsVariantDisablesLinkParsingWithOfficialSwitch()
+    {
+        var source = LoadRepoFile("SalmonEgg", "SalmonEgg", "Controls", "MarkdownTextPresenter.cs");
+
+        Assert.Contains("UseAutoLinks = !isTextSelectionEnabled", source, StringComparison.Ordinal);
+        Assert.Contains("DisableLinks = isTextSelectionEnabled", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("PointerEntered", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("PointerMoved", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MarkdownTextPresenter_CentralizesMarkdownReadingTypography()
     {
         var source = LoadRepoFile("SalmonEgg", "SalmonEgg", "Controls", "MarkdownTextPresenter.cs");
