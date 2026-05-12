@@ -534,12 +534,6 @@
   <data name="ChatAcpProfileSelector.PlaceholderText" xml:space="preserve">
     <value>选择 ACP 配置文件</value>
   </data>
-  <data name="MarryHerButton.Content" xml:space="preserve">
-    <value>娶她</value>
-  </data>
-  <data name="MarryHerButton.ToolTipService.ToolTip" xml:space="preserve">
-    <value>“娶她”功能占位</value>
-  </data>
   <data name="ProjectNavNewSessionItem.Text" xml:space="preserve">
     <value>新建会话</value>
   </data>
@@ -608,9 +602,6 @@
   </data>
   <data name="BottomPanelOutputTab.Text" xml:space="preserve">
     <value>输出</value>
-  </data>
-  <data name="ChatAcpProfileSelector.PlaceholderText" xml:space="preserve">
-    <value>选择 ACP 配置文件</value>
   </data>
   <data name="SettingsBreadcrumbRoot" xml:space="preserve">
     <value>设置</value>

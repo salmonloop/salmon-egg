@@ -293,7 +293,6 @@ public sealed class XamlComplianceTests
         Assert.DoesNotContain("AutomationProperties.Name=\"取消发送\"", xaml);
         Assert.Contains("x:Uid=\"ChatInputBox\"", xaml);
         Assert.Contains("x:Uid=\"ChatModeSelector\"", xaml);
-        Assert.Contains("x:Uid=\"MarryHerButton\"", xaml);
         Assert.Contains("x:Uid=\"SendButton\"", xaml);
         Assert.Contains("x:Uid=\"CancelButton\"", xaml);
     }

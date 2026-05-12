@@ -71,12 +71,6 @@
   <data name="ChatAcpProfileSelector.PlaceholderText" xml:space="preserve">
     <value>Select ACP profile</value>
   </data>
-  <data name="MarryHerButton.Content" xml:space="preserve">
-    <value>Marry her</value>
-  </data>
-  <data name="MarryHerButton.ToolTipService.ToolTip" xml:space="preserve">
-    <value>Placeholder for the “Marry her” feature</value>
-  </data>
   <data name="Appearance_ThemeDescription.Text" xml:space="preserve">
     <value>Choose your preferred app theme.</value>
   </data>
@@ -665,9 +659,6 @@
   </data>
   <data name="BottomPanelOutputTab.Text" xml:space="preserve">
     <value>Output</value>
-  </data>
-  <data name="ChatAcpProfileSelector.PlaceholderText" xml:space="preserve">
-    <value>Select ACP profile</value>
   </data>
   <data name="SettingsBreadcrumbRoot" xml:space="preserve">
     <value>Settings</value>

@@ -158,15 +158,6 @@
                                     </ComboBox.ItemTemplate>
                                 </ComboBox>
 
-                                <!-- “娶她”功能占位：后续启用时复用同一输入区域组件 -->
-                                <Button x:Uid="MarryHerButton"
-                                        FontSize="12"
-                                        MinHeight="28"
-                                        Padding="12,0"
-                                        CornerRadius="8"
-                                        IsEnabled="{x:Bind ViewModel.AreComposerToolsEnabled, Mode=OneWay}"
-                                        Style="{StaticResource SubtleButtonStyle}"
-                                        Visibility="{x:Bind models:UiFeatures.MarryHerEnabled, Mode=OneTime, Converter={StaticResource BoolToVisibilityConverter}}"/>
                             </StackPanel>
 
                             <StackPanel Grid.Column="1"

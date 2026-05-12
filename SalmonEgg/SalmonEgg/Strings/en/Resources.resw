@@ -147,12 +147,6 @@
   <data name="ChatAcpProfileSelector.PlaceholderText" xml:space="preserve">
     <value>Select ACP profile</value>
   </data>
-  <data name="MarryHerButton.Content" xml:space="preserve">
-    <value>Marry her</value>
-  </data>
-  <data name="MarryHerButton.ToolTipService.ToolTip" xml:space="preserve">
-    <value>Placeholder for the “Marry her” feature</value>
-  </data>
   <data name="ProjectNavNewSessionItem.Text" xml:space="preserve">
     <value>New session</value>
   </data>
@@ -230,9 +224,6 @@
   </data>
   <data name="BottomPanelOutputTab.Text" xml:space="preserve">
     <value>Output</value>
-  </data>
-  <data name="ChatAcpProfileSelector.PlaceholderText" xml:space="preserve">
-    <value>Select ACP profile</value>
   </data>
   <data name="Diagnostics_OpenLiveLog.Content" xml:space="preserve">
     <value>View live logs</value>
