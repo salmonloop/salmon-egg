@@ -826,31 +826,10 @@ public partial class ChatViewModel
 
             if (_chatService != null)
             {
-                if (!string.IsNullOrWhiteSpace(_modeConfigId))
-                {
-                    var setParams = new SessionSetConfigOptionParams(
-                        activeBinding.RemoteSessionId!,
-                        _modeConfigId,
-                        mode.ModeId ?? string.Empty);
-                    var response = await _chatService.SetSessionConfigOptionAsync(setParams).ConfigureAwait(true);
-                    await ApplySessionConfigOptionResponseAsync(
-                        activeBinding.ConversationId,
-                        response,
-                        activeBinding.RemoteSessionId!).ConfigureAwait(true);
-                }
-                else
-                {
-                    var modeParams = new SessionSetModeParams
-                    {
-                        SessionId = activeBinding.RemoteSessionId!,
-                        ModeId = mode.ModeId
-                    };
-                    var response = await _chatService.SetSessionModeAsync(modeParams).ConfigureAwait(true);
-                    await ApplySessionModeResponseAsync(
-                        activeBinding.ConversationId,
-                        response,
-                        activeBinding.RemoteSessionId!).ConfigureAwait(true);
-                }
+                await ApplyModeSelectionAsync(
+                    activeBinding.ConversationId,
+                    activeBinding.RemoteSessionId!,
+                    mode.ModeId).ConfigureAwait(true);
             }
         }
         catch (Exception ex)
@@ -863,6 +842,42 @@ public partial class ChatViewModel
         {
             IsBusy = false;
         }
+    }
+
+    private async Task ApplyModeSelectionAsync(
+        string conversationId,
+        string remoteSessionId,
+        string? modeId)
+    {
+        if (_chatService is null || string.IsNullOrWhiteSpace(remoteSessionId) || string.IsNullOrWhiteSpace(modeId))
+        {
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_modeConfigId))
+        {
+            var setParams = new SessionSetConfigOptionParams(
+                remoteSessionId,
+                _modeConfigId,
+                modeId);
+            var response = await _chatService.SetSessionConfigOptionAsync(setParams).ConfigureAwait(true);
+            await ApplySessionConfigOptionResponseAsync(
+                conversationId,
+                response,
+                remoteSessionId).ConfigureAwait(true);
+            return;
+        }
+
+        var modeParams = new SessionSetModeParams
+        {
+            SessionId = remoteSessionId,
+            ModeId = modeId
+        };
+        var modeResponse = await _chatService.SetSessionModeAsync(modeParams).ConfigureAwait(true);
+        await ApplySessionModeResponseAsync(
+            conversationId,
+            modeResponse,
+            remoteSessionId).ConfigureAwait(true);
     }
 
     [RelayCommand]

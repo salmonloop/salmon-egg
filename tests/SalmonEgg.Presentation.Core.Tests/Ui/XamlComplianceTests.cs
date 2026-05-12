@@ -302,7 +302,6 @@ public sealed class XamlComplianceTests
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml");
 
-        Assert.Contains("Visibility=\"{x:Bind ViewModel.IsPromptInFlight, Mode=OneWay", xaml);
         Assert.Contains("Visibility=\"{x:Bind ViewModel.IsVoiceInputListening, Mode=OneWay", xaml);
         Assert.Contains("Visibility=\"{x:Bind ViewModel.ShouldShowSlashCommandsUi, Mode=OneWay", xaml);
         Assert.Contains("IsEnabled=\"{x:Bind ViewModel.IsTextInputEnabled, Mode=OneWay}\"", xaml);
@@ -319,7 +318,7 @@ public sealed class XamlComplianceTests
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml");
 
-        Assert.Contains("x:Uid=\"ChatComposerPromptInFlightStatus\"", xaml);
+        Assert.DoesNotContain("x:Uid=\"ChatComposerPromptInFlightStatus\"", xaml);
         Assert.Contains("x:Uid=\"ChatComposerVoiceListeningStatus\"", xaml);
     }
 
@@ -539,7 +538,7 @@ public sealed class XamlComplianceTests
         Assert.Contains("x:Uid=\"MiniChatSessionSelector\"", xaml);
         Assert.Contains("x:Uid=\"MiniChatReturnButton\"", xaml);
         Assert.Contains("x:Uid=\"MiniChatInputBox\"", xaml);
-        Assert.Contains("x:Uid=\"MiniChatComposerPromptInFlightStatus\"", xaml);
+        Assert.DoesNotContain("x:Uid=\"MiniChatComposerPromptInFlightStatus\"", xaml);
         Assert.Contains("x:Uid=\"MiniChatComposerVoiceListeningStatus\"", xaml);
         Assert.Contains("x:Uid=\"MiniChatCancelButton\"", xaml);
         Assert.Contains("x:Uid=\"MiniChatSendButton\"", xaml);
@@ -551,7 +550,6 @@ public sealed class XamlComplianceTests
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml");
 
         Assert.Contains("Visibility=\"{x:Bind ViewModel.IsPromptInFlight, Mode=OneWay", xaml);
-        Assert.Contains("Visibility=\"{x:Bind ViewModel.ComposerState.ShowPromptInFlightStatus, Mode=OneWay", xaml);
         Assert.Contains("Visibility=\"{x:Bind ViewModel.ComposerState.ShowVoiceListeningStatus, Mode=OneWay", xaml);
         Assert.Contains("IsEnabled=\"{x:Bind ViewModel.IsTextInputEnabled, Mode=OneWay}\"", xaml);
         Assert.Contains("IsEnabled=\"{x:Bind ViewModel.CanStartVoiceInput, Mode=OneWay}\"", xaml);

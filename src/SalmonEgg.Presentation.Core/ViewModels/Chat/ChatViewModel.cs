@@ -132,6 +132,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly SerialAsyncWorkQueue _sessionUpdateWorkQueue;
     private readonly SerialAsyncWorkQueue _previewSnapshotWorkQueue;
     private readonly LocalTerminalPanelCoordinator? _localTerminalPanelCoordinator;
+    private readonly ObservableCollection<SessionModeViewModel> _newSessionDraftModeOptions = new();
+    private readonly SemaphoreSlim _newSessionDraftGate = new(1, 1);
     private IChatService? _chatService;
     private readonly IUiDispatcher _uiDispatcher;
     private readonly IConversationPreviewStore _previewStore;
@@ -198,6 +200,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private string? _activeVoiceInputRequestId;
     private string? _transportVoiceInputRequestId;
     private VoiceInputTransportState _voiceInputTransportState;
+    private bool _suppressNewSessionDraftModeSelectionDispatch;
+    private CancellationTokenSource? _newSessionDraftModeSelectionCts;
     private string _voiceInputBasePrompt = string.Empty;
     private readonly object _pendingUiProjectionSync = new();
     private ChatUiProjection? _pendingUiProjection;
@@ -742,6 +746,44 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     public IRelayCommand ClearProjectAffinityOverrideCommand { get; }
 
+    public ReadOnlyObservableCollection<SessionModeViewModel> NewSessionDraftModeOptions { get; }
+
+    private SessionModeViewModel? _selectedNewSessionDraftMode;
+
+    public SessionModeViewModel? SelectedNewSessionDraftMode
+    {
+        get => _selectedNewSessionDraftMode;
+        set
+        {
+            if (string.Equals(_selectedNewSessionDraftMode?.ModeId, value?.ModeId, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            if (SetProperty(ref _selectedNewSessionDraftMode, value)
+                && !_suppressNewSessionDraftModeSelectionDispatch)
+            {
+                QueueNewSessionDraftModeSelection(value);
+            }
+        }
+    }
+
+    private bool _isNewSessionDraftLoading;
+
+    public bool IsNewSessionDraftLoading
+    {
+        get => _isNewSessionDraftLoading;
+        private set => SetProperty(ref _isNewSessionDraftLoading, value);
+    }
+
+    private bool _isNewSessionDraftReady;
+
+    public bool IsNewSessionDraftReady
+    {
+        get => _isNewSessionDraftReady;
+        private set => SetProperty(ref _isNewSessionDraftReady, value);
+    }
+
     // Agent Configuration options (as defined by the protocol)
     [ObservableProperty]
     private ObservableCollection<ConfigOptionViewModel> _configOptions = new();
@@ -919,6 +961,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _panelStateCoordinator = new ChatConversationPanelStateCoordinator();
         _panelRuntimeCoordinator = new ChatConversationPanelRuntimeCoordinator();
         _sessionOptionsPresenter = new ChatSessionOptionsPresenter();
+        NewSessionDraftModeOptions = new ReadOnlyObservableCollection<SessionModeViewModel>(_newSessionDraftModeOptions);
         _terminalProjectionCoordinator = new ChatTerminalProjectionCoordinator();
         _interactionEventBridge = new ChatInteractionEventBridge(_authoritativeRemoteSessionRouter, _terminalProjectionCoordinator);
         _authenticationCoordinator = new ChatAuthenticationCoordinator();
@@ -1046,7 +1089,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             await RefreshProjectionAsync(state, token, ct).ConfigureAwait(false);
         }, out _storeStateSubscription);
 
-        _chatConnectionStore.State.ForEach(async (_, ct) =>
+        _chatConnectionStore.State.ForEach(async (connectionState, ct) =>
         {
             if (token.IsCancellationRequested || ct.IsCancellationRequested || _disposed)
             {
@@ -1064,6 +1107,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             }
 
             await RefreshProjectionAsync(state, token, ct).ConfigureAwait(false);
+            _ = ApplyNewSessionDraftProjectionAsync(connectionState ?? ChatConnectionState.Empty);
         }, out _connectionStateSubscription);
     }
 
@@ -2736,6 +2780,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
            _sendPromptCts?.Cancel();
            _voiceInputCts?.Cancel();
            _transientNotificationCts?.Cancel();
+           _newSessionDraftModeSelectionCts?.Cancel();
            _disposeCts.Cancel();
            try { _ = _voiceInputService.StopAsync(); } catch { }
            StopStoreProjection();
@@ -2743,16 +2788,19 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
            try { _sendPromptCts?.Dispose(); } catch { }
            try { _voiceInputCts?.Dispose(); } catch { }
            try { _transientNotificationCts?.Dispose(); } catch { }
+           try { _newSessionDraftModeSelectionCts?.Dispose(); } catch { }
            try { _disposeCts.Dispose(); } catch { }
            try { _conversationActivationOrchestrator.Dispose(); } catch { }
            try { _ = _localTerminalPanelCoordinator?.DisposeAsync().AsTask(); } catch { }
            try { _remoteConversationActivationGate.Dispose(); } catch { }
+           try { _newSessionDraftGate.Dispose(); } catch { }
 
            _selectedProfileConnectTask = null;
            _pendingSelectedProfileConnect = null;
            _sendPromptCts = null;
            _voiceInputCts = null;
            _transientNotificationCts = null;
+           _newSessionDraftModeSelectionCts = null;
         }
 
     private void RaisePlanEntryDerivedPropertyNotifications()

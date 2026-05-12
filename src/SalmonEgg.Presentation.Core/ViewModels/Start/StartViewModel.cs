@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -24,10 +25,17 @@ public sealed partial class StartViewModel : ObservableObject
     private readonly INavigationProjectSelectionStore _projectSelectionStore;
     private readonly MainNavigationViewModel _nav;
     private readonly IChatLaunchWorkflow _chatLaunchWorkflow;
+    private readonly IConversationCatalogReadModel _conversationCatalog;
     private readonly ILogger<StartViewModel> _logger;
     private readonly ObservableCollection<StartProjectOptionViewModel> _startProjectOptions = new();
     private StartComposerState _composerState = StartComposerState.Default;
     private StartComposerSnapshot _composerSnapshot = StartComposerPolicy.Compute(StartComposerState.Default);
+    private string? _selectedStartProjectIdOverride;
+    private bool _suppressMirroredChatDraftUpdates;
+    private bool _isVoicePromptBridgeActive;
+    private string? _chatDraftBeforeVoiceBridge;
+    private CancellationTokenSource? _newSessionDraftCts;
+    private bool _isComposerLoaded;
 
     public ChatViewModel Chat { get; }
 
@@ -41,6 +49,8 @@ public sealed partial class StartViewModel : ObservableObject
             if (SetProperty(ref _isStarting, value))
             {
                 OnPropertyChanged(nameof(IsInputEnabled));
+                OnPropertyChanged(nameof(IsStartModeSelectorEnabled));
+                RefreshVoiceProjection();
                 StartSessionAndSendCommand.NotifyCanExecuteChanged();
             }
         }
@@ -67,6 +77,8 @@ public sealed partial class StartViewModel : ObservableObject
 
     public ReadOnlyObservableCollection<StartProjectOptionViewModel> StartProjectOptions { get; }
 
+    public ReadOnlyObservableCollection<SessionModeViewModel> StartModeOptions => Chat.NewSessionDraftModeOptions;
+
     public IRelayCommand<QuickSuggestionViewModel> ExecuteSuggestionCommand { get; }
 
     public bool IsInputEnabled => !IsStarting;
@@ -77,14 +89,42 @@ public sealed partial class StartViewModel : ObservableObject
         set
         {
             var normalizedSelection = NormalizeProjectSelectionValue(value);
-            if (string.Equals(GetSelectedStartProjectId(), normalizedSelection, StringComparison.Ordinal))
+            if (string.Equals(_selectedStartProjectIdOverride, normalizedSelection, StringComparison.Ordinal)
+                && string.Equals(GetSelectedStartProjectId(), normalizedSelection, StringComparison.Ordinal))
             {
                 return;
             }
 
             _projectSelectionStore.RememberSelectedProject(normalizedSelection);
+            _selectedStartProjectIdOverride = normalizedSelection;
+            OnPropertyChanged(nameof(SelectedStartProjectId));
+            QueueEnsureNewSessionDraft();
         }
     }
+
+    public SessionModeViewModel? SelectedStartMode
+    {
+        get => Chat.SelectedNewSessionDraftMode;
+        set => Chat.SelectedNewSessionDraftMode = value;
+    }
+
+    public bool IsStartModeSelectorVisible => StartModeOptions.Count > 0;
+
+    public bool IsStartModeSelectorEnabled => !IsStarting && !Chat.IsNewSessionDraftLoading && StartModeOptions.Count > 0;
+
+    public bool IsVoiceInputSupported => Chat.IsVoiceInputSupported;
+
+    public bool CanStartVoiceInput => !IsStarting && Chat.CanStartVoiceInput;
+
+    public bool CanStopVoiceInput => !IsStarting && Chat.CanStopVoiceInput;
+
+    public bool ShowVoiceInputStartButton => Chat.ShowVoiceInputStartButton;
+
+    public bool ShowVoiceInputStopButton => Chat.ShowVoiceInputStopButton;
+
+    public IAsyncRelayCommand StartVoiceInputCommand { get; }
+
+    public IAsyncRelayCommand StopVoiceInputCommand { get; }
 
     public StartViewModel(
         ChatViewModel chatViewModel,
@@ -96,7 +136,8 @@ public sealed partial class StartViewModel : ObservableObject
         MainNavigationViewModel nav,
         ILogger<StartViewModel> logger,
         IChatLaunchWorkflow? chatLaunchWorkflow = null,
-        IChatConnectionStore? chatConnectionStore = null)
+        IChatConnectionStore? chatConnectionStore = null,
+        IConversationCatalogReadModel? conversationCatalog = null)
     {
         Chat = chatViewModel ?? throw new ArgumentNullException(nameof(chatViewModel));
         ArgumentNullException.ThrowIfNull(sessionManager);
@@ -106,6 +147,7 @@ public sealed partial class StartViewModel : ObservableObject
         ArgumentNullException.ThrowIfNull(navigationCoordinator);
         _nav = nav ?? throw new ArgumentNullException(nameof(nav));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _conversationCatalog = conversationCatalog ?? NoOpConversationCatalogReadModel.Instance;
         StartProjectOptions = new ReadOnlyObservableCollection<StartProjectOptionViewModel>(_startProjectOptions);
         _chatLaunchWorkflow = chatLaunchWorkflow ?? new ChatLaunchWorkflow(
             new ChatLaunchWorkflowChatFacadeAdapter(
@@ -118,11 +160,16 @@ public sealed partial class StartViewModel : ObservableObject
 
         StartSessionAndSendCommand = new AsyncRelayCommand(StartSessionAndSendAsync, CanStartSessionAndSend);
         ExecuteSuggestionCommand = new RelayCommand<QuickSuggestionViewModel>(ExecuteSuggestion);
+        StartVoiceInputCommand = new AsyncRelayCommand(StartVoiceInputAsync, () => CanStartVoiceInput);
+        StopVoiceInputCommand = new AsyncRelayCommand(StopVoiceInputAsync, () => CanStopVoiceInput);
 
         InitializeSuggestions();
         RefreshStartProjectOptions();
         _preferences.PropertyChanged += OnPreferencesPropertyChanged;
         ((INotifyCollectionChanged)_projectPreferences.Projects).CollectionChanged += OnProjectPreferencesChanged;
+        _conversationCatalog.PropertyChanged += OnConversationCatalogPropertyChanged;
+        Chat.PropertyChanged += OnChatPropertyChanged;
+        ((INotifyCollectionChanged)Chat.NewSessionDraftModeOptions).CollectionChanged += OnStartModeOptionsChanged;
     }
 
     private void InitializeSuggestions()
@@ -141,11 +188,20 @@ public sealed partial class StartViewModel : ObservableObject
 
     public void OnComposerLoaded()
     {
+        _isComposerLoaded = true;
         DispatchComposerAction(new Loaded());
         DispatchComposerAction(new DraftChanged(!string.IsNullOrWhiteSpace(StartPrompt)));
+        OnPropertyChanged(nameof(SelectedStartProjectId));
+        QueueEnsureNewSessionDraft();
     }
 
-    public void OnComposerUnloaded() => DispatchComposerAction(new Unloaded());
+    public void OnComposerUnloaded()
+    {
+        _isComposerLoaded = false;
+        CancelNewSessionDraftRefresh();
+        _ = Chat.DiscardNewSessionDraftAsync();
+        DispatchComposerAction(new Unloaded());
+    }
 
     public void OnComposerActivated() => DispatchComposerAction(new Activated());
 
@@ -181,7 +237,11 @@ public sealed partial class StartViewModel : ObservableObject
         var submitSucceeded = false;
         try
         {
-            await _chatLaunchWorkflow.StartSessionAndSendAsync(promptText).ConfigureAwait(true);
+            await _chatLaunchWorkflow
+                .StartSessionAndSendAsync(
+                    promptText,
+                    NormalizeProjectSelectionValue(SelectedStartProjectId))
+                .ConfigureAwait(true);
             submitSucceeded = true;
         }
         catch (Exception ex)
@@ -221,15 +281,14 @@ public sealed partial class StartViewModel : ObservableObject
     private void OnProjectPreferencesChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
     {
         RefreshStartProjectOptions();
+        QueueEnsureNewSessionDraft();
     }
 
     private string? ResolveDefaultCwd()
     {
-        var pending = _nav.ConsumePendingProjectRootPath();
-        var lastSelectedRoot = _projectPreferences.TryGetProjectRootPath(_projectPreferences.LastSelectedProjectId ?? string.Empty);
-
-        // Fallback: if no project selected, keep it unclassified.
-        return SessionCwdResolver.Resolve(pending, lastSelectedRoot);
+        var selectedRoot = _projectPreferences.TryGetProjectRootPath(SelectedStartProjectId);
+        _ = _nav.ConsumePendingProjectRootPath();
+        return SessionCwdResolver.Resolve(selectedRoot, null);
     }
 
     private void RefreshStartProjectOptions()
@@ -269,10 +328,25 @@ public sealed partial class StartViewModel : ObservableObject
     }
 
     private string GetSelectedStartProjectId()
+        => HasSelectableProject(_selectedStartProjectIdOverride)
+            ? _selectedStartProjectIdOverride!
+            : string.Equals(_selectedStartProjectIdOverride, NavigationProjectIds.Unclassified, StringComparison.Ordinal)
+                ? NavigationProjectIds.Unclassified
+                : ResolveDefaultStartProjectId();
+
+    private string ResolveDefaultStartProjectId()
     {
-        var selectedProjectId = _projectPreferences.LastSelectedProjectId;
-        return HasSelectableProject(selectedProjectId)
-            ? selectedProjectId!
+        var explicitProjectId = NormalizeProjectSelectionValue(_nav.PeekPendingProjectIdForNewSession());
+        if (HasSelectableProject(explicitProjectId))
+        {
+            return explicitProjectId;
+        }
+
+        var recentProjectId = _conversationCatalog.Snapshot
+            .Select(static conversation => conversation.ProjectAffinityOverrideProjectId)
+            .FirstOrDefault(HasSelectableProject);
+        return HasSelectableProject(recentProjectId)
+            ? recentProjectId!
             : NavigationProjectIds.Unclassified;
     }
 
@@ -291,6 +365,222 @@ public sealed partial class StartViewModel : ObservableObject
         => string.IsNullOrWhiteSpace(projectId)
             ? NavigationProjectIds.Unclassified
             : projectId;
+
+    private async Task StartVoiceInputAsync()
+    {
+        if (!CanStartVoiceInput)
+        {
+            return;
+        }
+
+        BeginVoicePromptBridge();
+        await Chat.StartVoiceInputCommand.ExecuteAsync(null);
+        if (!Chat.IsVoiceInputListening)
+        {
+            EndVoicePromptBridge();
+        }
+    }
+
+    private async Task StopVoiceInputAsync()
+    {
+        if (!CanStopVoiceInput)
+        {
+            return;
+        }
+
+        await Chat.StopVoiceInputCommand.ExecuteAsync(null);
+        EndVoicePromptBridge();
+    }
+
+    private void BeginVoicePromptBridge()
+    {
+        if (_isVoicePromptBridgeActive)
+        {
+            return;
+        }
+
+        _chatDraftBeforeVoiceBridge = Chat.CurrentPrompt;
+        _isVoicePromptBridgeActive = true;
+        PushStartDraftToChat();
+    }
+
+    private void EndVoicePromptBridge()
+    {
+        if (!_isVoicePromptBridgeActive)
+        {
+            return;
+        }
+
+        PullChatDraftToStart();
+        RestoreChatDraftAfterVoiceBridge();
+        _isVoicePromptBridgeActive = false;
+        _chatDraftBeforeVoiceBridge = null;
+    }
+
+    private void RestoreChatDraftAfterVoiceBridge()
+    {
+        _suppressMirroredChatDraftUpdates = true;
+        try
+        {
+            Chat.CurrentPrompt = _chatDraftBeforeVoiceBridge ?? string.Empty;
+        }
+        finally
+        {
+            _suppressMirroredChatDraftUpdates = false;
+        }
+    }
+
+    private void PushStartDraftToChat()
+    {
+        _suppressMirroredChatDraftUpdates = true;
+        try
+        {
+            Chat.CurrentPrompt = StartPrompt ?? string.Empty;
+        }
+        finally
+        {
+            _suppressMirroredChatDraftUpdates = false;
+        }
+    }
+
+    private void PullChatDraftToStart()
+    {
+        if (_suppressMirroredChatDraftUpdates)
+        {
+            return;
+        }
+
+        StartPrompt = Chat.CurrentPrompt ?? string.Empty;
+    }
+
+    private void OnChatPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (string.Equals(e.PropertyName, nameof(ChatViewModel.SelectedAcpProfile), StringComparison.Ordinal))
+        {
+            if (_isComposerLoaded)
+            {
+                QueueEnsureNewSessionDraft();
+            }
+            return;
+        }
+
+        if (string.Equals(e.PropertyName, nameof(ChatViewModel.SelectedNewSessionDraftMode), StringComparison.Ordinal))
+        {
+            OnPropertyChanged(nameof(SelectedStartMode));
+            return;
+        }
+
+        if (string.Equals(e.PropertyName, nameof(ChatViewModel.IsNewSessionDraftLoading), StringComparison.Ordinal)
+            || string.Equals(e.PropertyName, nameof(ChatViewModel.IsNewSessionDraftReady), StringComparison.Ordinal)
+            || string.Equals(e.PropertyName, nameof(ChatViewModel.NewSessionDraftModeOptions), StringComparison.Ordinal))
+        {
+            RefreshStartModeProjection();
+            return;
+        }
+
+        if (string.Equals(e.PropertyName, nameof(ChatViewModel.CurrentPrompt), StringComparison.Ordinal)
+            && _isVoicePromptBridgeActive)
+        {
+            PullChatDraftToStart();
+            return;
+        }
+
+        if (string.Equals(e.PropertyName, nameof(ChatViewModel.IsVoiceInputListening), StringComparison.Ordinal))
+        {
+            if (!Chat.IsVoiceInputListening)
+            {
+                EndVoicePromptBridge();
+            }
+
+            RefreshVoiceProjection();
+            return;
+        }
+
+        if (string.Equals(e.PropertyName, nameof(ChatViewModel.IsVoiceInputSupported), StringComparison.Ordinal)
+            || string.Equals(e.PropertyName, nameof(ChatViewModel.CanStartVoiceInput), StringComparison.Ordinal)
+            || string.Equals(e.PropertyName, nameof(ChatViewModel.CanStopVoiceInput), StringComparison.Ordinal)
+            || string.Equals(e.PropertyName, nameof(ChatViewModel.ShowVoiceInputStartButton), StringComparison.Ordinal)
+            || string.Equals(e.PropertyName, nameof(ChatViewModel.ShowVoiceInputStopButton), StringComparison.Ordinal))
+        {
+            RefreshVoiceProjection();
+        }
+    }
+
+    private void RefreshVoiceProjection()
+    {
+        OnPropertyChanged(nameof(IsVoiceInputSupported));
+        OnPropertyChanged(nameof(CanStartVoiceInput));
+        OnPropertyChanged(nameof(CanStopVoiceInput));
+        OnPropertyChanged(nameof(ShowVoiceInputStartButton));
+        OnPropertyChanged(nameof(ShowVoiceInputStopButton));
+        StartVoiceInputCommand.NotifyCanExecuteChanged();
+        StopVoiceInputCommand.NotifyCanExecuteChanged();
+    }
+
+    private void OnConversationCatalogPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (string.Equals(e.PropertyName, nameof(IConversationCatalogReadModel.Snapshot), StringComparison.Ordinal)
+            || string.Equals(e.PropertyName, nameof(IConversationCatalogReadModel.ConversationListVersion), StringComparison.Ordinal))
+        {
+            if (!HasSelectableProject(_selectedStartProjectIdOverride))
+            {
+                OnPropertyChanged(nameof(SelectedStartProjectId));
+            }
+        }
+    }
+
+    private void OnStartModeOptionsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        => RefreshStartModeProjection();
+
+    private void RefreshStartModeProjection()
+    {
+        OnPropertyChanged(nameof(StartModeOptions));
+        OnPropertyChanged(nameof(SelectedStartMode));
+        OnPropertyChanged(nameof(IsStartModeSelectorVisible));
+        OnPropertyChanged(nameof(IsStartModeSelectorEnabled));
+    }
+
+    private void QueueEnsureNewSessionDraft()
+    {
+        if (!_isComposerLoaded)
+        {
+            return;
+        }
+
+        _ = EnsureNewSessionDraftAsync();
+    }
+
+    private async Task EnsureNewSessionDraftAsync()
+    {
+        _newSessionDraftCts?.Cancel();
+        _newSessionDraftCts?.Dispose();
+        _newSessionDraftCts = new CancellationTokenSource();
+        var cancellationToken = _newSessionDraftCts.Token;
+
+        try
+        {
+            await Chat.EnsureNewSessionDraftAsync(ResolvePreviewCwd(), cancellationToken)
+                .ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to prepare start-session draft.");
+        }
+    }
+
+    private void CancelNewSessionDraftRefresh()
+    {
+        _newSessionDraftCts?.Cancel();
+        _newSessionDraftCts?.Dispose();
+        _newSessionDraftCts = null;
+        OnPropertyChanged(nameof(IsStartModeSelectorEnabled));
+    }
+
+    private string? ResolvePreviewCwd()
+        => _projectPreferences.TryGetProjectRootPath(SelectedStartProjectId);
 
     private void DispatchComposerAction(StartComposerAction action)
     {
@@ -343,6 +633,23 @@ public sealed partial class StartViewModel : ObservableObject
         if (previousSnapshot.FreezeComposerInteractions != nextSnapshot.FreezeComposerInteractions)
         {
             OnPropertyChanged(nameof(FreezeComposerInteractions));
+        }
+    }
+
+    private sealed class NoOpConversationCatalogReadModel : IConversationCatalogReadModel
+    {
+        public static NoOpConversationCatalogReadModel Instance { get; } = new();
+
+        public bool IsConversationListLoading => false;
+
+        public int ConversationListVersion => 0;
+
+        public IReadOnlyList<ConversationCatalogItem> Snapshot { get; } = Array.Empty<ConversationCatalogItem>();
+
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged
+        {
+            add { }
+            remove { }
         }
     }
 }

@@ -409,7 +409,19 @@ public static class DependencyInjection
         services.AddTransient<SalmonEgg.Presentation.ViewModels.Discover.DiscoverSessionsViewModel>();
 
         // Start page orchestrator (Start creates session and submits)
-        services.AddSingleton<StartViewModel>();
+        services.AddSingleton<StartViewModel>(sp =>
+            new StartViewModel(
+                sp.GetRequiredService<ChatViewModel>(),
+                sp.GetRequiredService<ISessionManager>(),
+                sp.GetRequiredService<AppPreferencesViewModel>(),
+                sp.GetRequiredService<INavigationProjectPreferences>(),
+                sp.GetRequiredService<INavigationProjectSelectionStore>(),
+                sp.GetRequiredService<INavigationCoordinator>(),
+                sp.GetRequiredService<MainNavigationViewModel>(),
+                sp.GetRequiredService<ILogger<StartViewModel>>(),
+                sp.GetRequiredService<IChatLaunchWorkflow>(),
+                sp.GetRequiredService<IChatConnectionStore>(),
+                sp.GetRequiredService<IConversationCatalogReadModel>()));
         services.AddSingleton<IChatLaunchWorkflow>(sp =>
             new ChatLaunchWorkflow(
                 sp.GetRequiredService<IChatLaunchWorkflowChatFacade>(),

@@ -16,4 +16,8 @@ public sealed record SetConnectionAuthenticationStateAction(
     bool IsRequired,
     string? HintMessage) : ChatConnectionAction;
 
+public sealed record SetNewSessionDraftAction(NewSessionDraftState? Draft) : ChatConnectionAction;
+
+public sealed record ClearNewSessionDraftAction : ChatConnectionAction;
+
 public sealed record ResetConnectionStateAction : ChatConnectionAction;

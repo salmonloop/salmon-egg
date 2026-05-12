@@ -11,7 +11,6 @@ public sealed record ChatComposerPresentationState(
     bool ShowVoiceStartButton,
     bool ShowVoiceStopButton,
     bool CanStopVoiceInput,
-    bool ShowPromptInFlightStatus,
     bool ShowVoiceListeningStatus)
 {
     public bool IsInputEnabled => IsTextInputEnabled;

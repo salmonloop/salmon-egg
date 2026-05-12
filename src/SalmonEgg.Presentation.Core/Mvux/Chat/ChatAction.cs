@@ -85,7 +85,7 @@ public sealed record ClearTurnAction(string ConversationId) : ChatAction;
 /// <summary>
 /// Dispatched when a text delta is received for the active streaming message.
 /// </summary>
-public sealed record AppendTextDeltaAction(string? ConversationId, string Delta) : ChatAction;
+public sealed record AppendTextDeltaAction(string? ConversationId, string Delta, string? ProtocolMessageId = null) : ChatAction;
 
 public sealed record HydrateConversationAction(
     string? ConversationId,

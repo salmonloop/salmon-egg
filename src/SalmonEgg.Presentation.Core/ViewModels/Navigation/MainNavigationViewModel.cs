@@ -327,6 +327,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         return _projectPreferences.TryGetProjectRootPath(projectId);
     }
 
+    public string? PeekPendingProjectIdForNewSession() => _pendingProjectIdForNewSession;
+
     public async Task ShowAllSessionsForProjectAsync(string projectId)
     {
         if (string.IsNullOrWhiteSpace(projectId))

@@ -100,7 +100,7 @@ public partial class ChatViewModel
             if (e.Update is AgentMessageUpdate messageUpdate && messageUpdate.Content != null)
             {
                 await AdvanceActiveTurnPhaseAsync(activeTurn, ChatTurnPhase.Responding).ConfigureAwait(true);
-                await HandleAgentContentChunkAsync(targetConversationId, messageUpdate.Content).ConfigureAwait(true);
+                await HandleAgentContentChunkAsync(targetConversationId, messageUpdate).ConfigureAwait(true);
                 RecordTranscriptProjectionObservation(e.SessionId);
                 if (!isActiveTarget)
                 {
@@ -599,13 +599,19 @@ public partial class ChatViewModel
         await UpsertTranscriptSnapshotAsync(conversationId, reconciled).ConfigureAwait(false);
     }
 
-    private async Task HandleAgentContentChunkAsync(string? conversationId, ContentBlock content)
+    private async Task HandleAgentContentChunkAsync(string? conversationId, AgentMessageUpdate update)
     {
+        var content = update.Content;
+        if (content is null)
+        {
+            return;
+        }
+
         // ACP streams response content as an array of blocks. We coalesce adjacent text blocks
-        // into a single UI element to mimic a natural typing effect.
+        // into a single UI element only when they belong to the same authoritative messageId.
         if (content is TextContentBlock text)
         {
-            await AppendAgentTextChunkAsync(conversationId, text.Text ?? string.Empty).ConfigureAwait(true);
+            await AppendAgentTextChunkAsync(conversationId, text.Text ?? string.Empty, update.MessageId).ConfigureAwait(true);
             return;
         }
 
@@ -647,14 +653,14 @@ public partial class ChatViewModel
         await attentionStore.Dispatch(new RemoveConversationAttentionAction(conversationId)).ConfigureAwait(false);
     }
 
-    private async Task AppendAgentTextChunkAsync(string? conversationId, string chunk)
+    private async Task AppendAgentTextChunkAsync(string? conversationId, string chunk, string? protocolMessageId)
     {
         if (string.IsNullOrWhiteSpace(chunk) || string.IsNullOrWhiteSpace(conversationId))
         {
             return;
         }
 
-        await _chatStore.Dispatch(new AppendTextDeltaAction(conversationId, chunk)).ConfigureAwait(false);
+        await _chatStore.Dispatch(new AppendTextDeltaAction(conversationId, chunk, protocolMessageId)).ConfigureAwait(false);
     }
 
     private Task<bool> ActivateConversationAsync(string sessionId, CancellationToken cancellationToken = default)

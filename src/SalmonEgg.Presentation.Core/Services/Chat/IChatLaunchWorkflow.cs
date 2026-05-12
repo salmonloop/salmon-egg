@@ -9,5 +9,8 @@ namespace SalmonEgg.Presentation.Core.Services.Chat;
 /// </summary>
 public interface IChatLaunchWorkflow
 {
-    Task StartSessionAndSendAsync(string promptText, CancellationToken cancellationToken = default);
+    Task StartSessionAndSendAsync(
+        string promptText,
+        string? projectId,
+        CancellationToken cancellationToken = default);
 }

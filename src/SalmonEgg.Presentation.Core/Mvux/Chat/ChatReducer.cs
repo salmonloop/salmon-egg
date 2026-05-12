@@ -182,7 +182,8 @@ public static class ChatReducer
                         current.ResolveContentSlice(appendDelta.ConversationId),
                         transcript: AppendTranscriptDelta(
                             ResolveTranscript(current, appendDelta.ConversationId),
-                            appendDelta.Delta)))
+                            appendDelta.Delta,
+                            appendDelta.ProtocolMessageId)))
             }),
             SetAgentIdentityAction identity => Mutate(current, current with
             {
@@ -488,19 +489,18 @@ public static class ChatReducer
 
     private static IImmutableList<ConversationMessageSnapshot> AppendTranscriptDelta(
         IImmutableList<ConversationMessageSnapshot>? transcript,
-        string delta)
+        string delta,
+        string? protocolMessageId)
     {
         var current = transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty;
-        if (current.Count > 0)
+        var existingIndex = FindAppendableAssistantTextMessageIndex(current, protocolMessageId);
+        if (existingIndex >= 0)
         {
-            var last = current[^1];
-            if (!last.IsOutgoing && string.Equals(last.ContentType, "text", StringComparison.Ordinal))
-            {
-                return current.SetItem(current.Count - 1, CloneMessage(
-                    last,
-                    textContent: (last.TextContent ?? string.Empty) + delta,
-                    timestamp: DateTime.UtcNow));
-            }
+            var existing = current[existingIndex];
+            return current.SetItem(existingIndex, CloneMessage(
+                existing,
+                textContent: (existing.TextContent ?? string.Empty) + delta,
+                timestamp: DateTime.UtcNow));
         }
 
         return current.Add(new ConversationMessageSnapshot
@@ -509,8 +509,42 @@ public static class ChatReducer
             Timestamp = DateTime.UtcNow,
             IsOutgoing = false,
             ContentType = "text",
-            TextContent = delta
+            TextContent = delta,
+            ProtocolMessageId = protocolMessageId
         });
+    }
+
+    private static int FindAppendableAssistantTextMessageIndex(
+        IImmutableList<ConversationMessageSnapshot> transcript,
+        string? protocolMessageId)
+    {
+        if (!string.IsNullOrWhiteSpace(protocolMessageId))
+        {
+            for (var index = transcript.Count - 1; index >= 0; index--)
+            {
+                var message = transcript[index];
+                if (!message.IsOutgoing
+                    && string.Equals(message.ContentType, "text", StringComparison.Ordinal)
+                    && string.Equals(message.ProtocolMessageId, protocolMessageId, StringComparison.Ordinal))
+                {
+                    return index;
+                }
+            }
+
+            return -1;
+        }
+
+        if (transcript.Count <= 0)
+        {
+            return -1;
+        }
+
+        var last = transcript[^1];
+        return !last.IsOutgoing
+               && string.Equals(last.ContentType, "text", StringComparison.Ordinal)
+               && string.IsNullOrWhiteSpace(last.ProtocolMessageId)
+            ? transcript.Count - 1
+            : -1;
     }
 
     private static ConversationMessageSnapshot ToSnapshot(ChatMessage message)

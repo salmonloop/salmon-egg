@@ -20,6 +20,11 @@ public static class ChatConnectionReducer
                     ConnectionPhase.Disconnected or ConnectionPhase.Error => null,
                     _ => current.ForegroundTransportProfileId
                 },
+                NewSessionDraft = setPhase.Phase switch
+                {
+                    ConnectionPhase.Disconnected or ConnectionPhase.Error => null,
+                    _ => current.NewSessionDraft
+                },
                 Generation = nextGeneration
             },
             SetSettingsSelectedProfileAction setSettings => current with
@@ -30,17 +35,33 @@ public static class ChatConnectionReducer
             SetForegroundTransportProfileAction setForeground => current with
             {
                 ForegroundTransportProfileId = setForeground.ProfileId,
+                NewSessionDraft = string.Equals(current.ForegroundTransportProfileId, setForeground.ProfileId, StringComparison.Ordinal)
+                    ? current.NewSessionDraft
+                    : null,
                 Generation = nextGeneration
             },
             SetConnectionInstanceIdAction setConnectionInstanceId => current with
             {
                 ConnectionInstanceId = setConnectionInstanceId.ConnectionInstanceId,
+                NewSessionDraft = string.Equals(current.ConnectionInstanceId, setConnectionInstanceId.ConnectionInstanceId, StringComparison.Ordinal)
+                    ? current.NewSessionDraft
+                    : null,
                 Generation = nextGeneration
             },
             SetConnectionAuthenticationStateAction setAuth => current with
             {
                 IsAuthenticationRequired = setAuth.IsRequired,
                 AuthenticationHintMessage = setAuth.HintMessage,
+                Generation = nextGeneration
+            },
+            SetNewSessionDraftAction setDraft => current with
+            {
+                NewSessionDraft = setDraft.Draft,
+                Generation = nextGeneration
+            },
+            ClearNewSessionDraftAction => current with
+            {
+                NewSessionDraft = null,
                 Generation = nextGeneration
             },
             ResetConnectionStateAction => ChatConnectionState.Empty with

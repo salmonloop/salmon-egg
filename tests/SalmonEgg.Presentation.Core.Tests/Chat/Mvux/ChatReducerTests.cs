@@ -160,6 +160,68 @@ public class ChatReducerTests
     }
 
     [Fact]
+    public void GivenConnectionStateWithNewSessionDraft_WhenConnectionIdentityChanges_ThenDraftIsCleared()
+    {
+        var draft = new NewSessionDraftState(
+            ProfileId: "profile-1",
+            Cwd: @"C:\Repo\App",
+            RemoteSessionId: "remote-draft",
+            ConnectionInstanceId: "conn-old",
+            Phase: NewSessionDraftPhase.Ready,
+            Version: 1,
+            AvailableModes: ImmutableList<ConversationModeOptionSnapshot>.Empty,
+            SelectedModeId: null,
+            ConfigOptions: ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+            ShowConfigOptionsPanel: false,
+            AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+            SessionInfo: null);
+        var initialState = ChatConnectionState.Empty with
+        {
+            Phase = ConnectionPhase.Connected,
+            ConnectionInstanceId = "conn-old",
+            ForegroundTransportProfileId = "profile-1",
+            NewSessionDraft = draft,
+            Generation = 3
+        };
+
+        var next = ChatConnectionReducer.Reduce(initialState, new SetConnectionInstanceIdAction("conn-new"));
+
+        Assert.Null(next.NewSessionDraft);
+        Assert.Equal("conn-new", next.ConnectionInstanceId);
+        Assert.Equal(4, next.Generation);
+    }
+
+    [Fact]
+    public void GivenConnectionState_WhenNewSessionDraftIsSet_ThenItBecomesSingleConnectionDraft()
+    {
+        var draft = new NewSessionDraftState(
+            ProfileId: "profile-1",
+            Cwd: @"C:\Repo\App",
+            RemoteSessionId: "remote-draft",
+            ConnectionInstanceId: "conn-1",
+            Phase: NewSessionDraftPhase.Ready,
+            Version: 2,
+            AvailableModes: ImmutableList.Create(new ConversationModeOptionSnapshot
+            {
+                ModeId = "code",
+                ModeName = "Code"
+            }),
+            SelectedModeId: "code",
+            ConfigOptions: ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+            ShowConfigOptionsPanel: false,
+            AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+            SessionInfo: null);
+
+        var next = ChatConnectionReducer.Reduce(
+            ChatConnectionState.Empty with { Generation = 9 },
+            new SetNewSessionDraftAction(draft));
+
+        Assert.Same(draft, next.NewSessionDraft);
+        Assert.Equal("remote-draft", next.NewSessionDraft?.RemoteSessionId);
+        Assert.Equal(10, next.Generation);
+    }
+
+    [Fact]
     public void GivenConnectionState_WhenDisconnected_ThenConnectionInstanceIdIsPreservedAndGenerationIncrements()
     {
         var connectedState = ChatConnectionState.Empty with

@@ -49,7 +49,7 @@ public sealed class ChatLaunchWorkflowTests
             () => @"C:\repo\demo",
             logger.Object);
 
-        await workflow.StartSessionAndSendAsync("hello");
+        await workflow.StartSessionAndSendAsync("hello", "project-1");
 
         sessionManager.Verify(s => s.CreateSessionAsync(It.IsAny<string>(), @"C:\repo\demo"), Times.Once);
         Assert.Equal(1, navigation.ActivateSessionCount);
@@ -85,7 +85,7 @@ public sealed class ChatLaunchWorkflowTests
             () => @"C:\repo\demo",
             logger.Object);
 
-        await workflow.StartSessionAndSendAsync("hello");
+        await workflow.StartSessionAndSendAsync("hello", null);
 
         Assert.Equal(1, navigation.ActivateSessionCount);
         Assert.Equal(0, chat.AutoConnectCallCount);
@@ -125,7 +125,7 @@ public sealed class ChatLaunchWorkflowTests
             () => @"C:\repo\demo",
             logger.Object);
 
-        await workflow.StartSessionAndSendAsync("hello");
+        await workflow.StartSessionAndSendAsync("hello", null);
 
         Assert.Equal(1, chat.AutoConnectCallCount);
         Assert.Equal(0, navigation.ActivateSettingsCount);
@@ -165,7 +165,7 @@ public sealed class ChatLaunchWorkflowTests
             () => @"C:\repo\demo",
             logger.Object);
 
-        await workflow.StartSessionAndSendAsync("hello");
+        await workflow.StartSessionAndSendAsync("hello", null);
 
         Assert.Equal(1, chat.AutoConnectCallCount);
         Assert.Equal(1, navigation.ActivateSettingsCount);
@@ -215,7 +215,7 @@ public sealed class ChatLaunchWorkflowTests
             logger.Object,
             catalogFacade);
 
-        await workflow.StartSessionAndSendAsync("hello");
+        await workflow.StartSessionAndSendAsync("hello", null);
 
         Assert.Single(workspace.GetKnownConversationIds());
         Assert.Equal(1, workspace.ConversationListVersion);
@@ -257,7 +257,7 @@ public sealed class ChatLaunchWorkflowTests
             () => @"C:\repo\demo",
             catalogFacade: catalogFacade);
 
-        await workflow.StartSessionAndSendAsync("hello");
+        await workflow.StartSessionAndSendAsync("hello", null);
 
         var saved = await store.WaitForSaveAsync();
 
@@ -291,10 +291,42 @@ public sealed class ChatLaunchWorkflowTests
             () => @"C:\repo\demo");
 
         using var cts = new CancellationTokenSource();
-        await workflow.StartSessionAndSendAsync("hello", cts.Token);
+        await workflow.StartSessionAndSendAsync("hello", null, cts.Token);
 
         Assert.Equal(cts.Token, chat.LastAutoConnectToken);
         Assert.Equal(1, chat.AutoConnectCallCount);
+    }
+
+    [Fact]
+    public async Task StartSessionAndSendAsync_PromotesDraftBeforeSendingPrompt()
+    {
+        var sessionManager = new Mock<ISessionManager>();
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .ReturnsAsync((string id, string? cwd) => new Session { SessionId = id, Cwd = cwd });
+
+        var preferences = CreatePreferences();
+        var chat = new FakeChatLaunchWorkflowChatFacade
+        {
+            IsConnected = true
+        };
+        var navigation = new RecordingNavigationCoordinator(chat)
+        {
+            ApplyActivatedSessionToChat = true
+        };
+
+        var workflow = new ChatLaunchWorkflow(
+            chat,
+            sessionManager.Object,
+            preferences,
+            navigation,
+            () => @"C:\repo\demo");
+
+        await workflow.StartSessionAndSendAsync("hello", "project-2", CancellationToken.None);
+
+        Assert.Equal(1, chat.PromoteDraftCallCount);
+        Assert.True(chat.PromoteDraftObservedActivatedSession);
+        Assert.Equal(1, chat.SendPromptCount);
+        Assert.Equal("project-2", navigation.LastActivatedProjectId);
     }
 
     private static AppPreferencesViewModel CreatePreferences(string? lastSelectedProjectId = null)
@@ -350,6 +382,10 @@ public sealed class ChatLaunchWorkflowTests
 
         public string? PreparedPrompt { get; private set; }
 
+        public int PromoteDraftCallCount { get; private set; }
+
+        public bool PromoteDraftObservedActivatedSession { get; private set; }
+
         public Action<FakeChatLaunchWorkflowChatFacade>? AutoConnectAction { get; set; }
 
         public CancellationToken LastAutoConnectToken { get; private set; }
@@ -384,6 +420,13 @@ public sealed class ChatLaunchWorkflowTests
         public void PrepareDraftForLaunch(string promptText)
         {
             PreparedPrompt = promptText;
+        }
+
+        public Task PromoteNewSessionDraftForLaunchAsync(CancellationToken cancellationToken = default)
+        {
+            PromoteDraftCallCount++;
+            PromoteDraftObservedActivatedSession = !string.IsNullOrWhiteSpace(CurrentSessionId);
+            return Task.CompletedTask;
         }
 
         public void ApplyActivatedSession(string sessionId)

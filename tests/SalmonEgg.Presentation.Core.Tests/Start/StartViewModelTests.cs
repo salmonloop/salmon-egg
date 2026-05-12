@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Immutable;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -14,6 +15,7 @@ using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
+using SalmonEgg.Presentation.Core.Services.Input;
 using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Chat;
@@ -52,7 +54,7 @@ public sealed class StartViewModelTests
 
             await startViewModel.StartSessionAndSendCommand.ExecuteAsync(null);
 
-            workflow.Verify(w => w.StartSessionAndSendAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            workflow.Verify(w => w.StartSessionAndSendAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
         }
         finally
         {
@@ -79,7 +81,7 @@ public sealed class StartViewModelTests
 
             await startViewModel.StartSessionAndSendCommand.ExecuteAsync(null);
 
-            workflow.Verify(w => w.StartSessionAndSendAsync("hello", It.IsAny<CancellationToken>()), Times.Once);
+            workflow.Verify(w => w.StartSessionAndSendAsync("hello", NavigationProjectIds.Unclassified, It.IsAny<CancellationToken>()), Times.Once);
         }
         finally
         {
@@ -98,7 +100,7 @@ public sealed class StartViewModelTests
             var preferences = CreatePreferences();
             using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
-            workflow.Setup(w => w.StartSessionAndSendAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            workflow.Setup(w => w.StartSessionAndSendAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
                 .ThrowsAsync(new InvalidOperationException("boom"));
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
@@ -142,7 +144,7 @@ public sealed class StartViewModelTests
             Assert.Equal(suggestion.Prompt, startViewModel.StartPrompt);
             Assert.Equal(StartComposerStage.ExpandedIdle, startViewModel.ComposerStage);
             Assert.True(startViewModel.IsComposerExpanded);
-            workflow.Verify(w => w.StartSessionAndSendAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            workflow.Verify(w => w.StartSessionAndSendAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
         }
         finally
         {
@@ -381,6 +383,213 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
+    public async Task StartProjectSelection_WhenStartWasPreparedFromExplicitProject_DefaultsToThatProject()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            preferences.Projects.Add(new ProjectDefinition { ProjectId = "project-a", Name = "Alpha", RootPath = @"C:\Repo\Alpha" });
+
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            var navigationCoordinator = new Mock<INavigationCoordinator>();
+            navigationCoordinator.Setup(x => x.ActivateStartAsync("project-a")).ReturnsAsync(true);
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences, navigationCoordinator.Object);
+            await nav.PrepareStartForProjectAsync("project-a");
+            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+
+            Assert.Equal("project-a", startViewModel.SelectedStartProjectId);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public void StartProjectSelection_WhenRecentConversationHasProject_DefaultsToRecentConversationProject()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            preferences.Projects.Add(new ProjectDefinition { ProjectId = "project-a", Name = "Alpha", RootPath = @"C:\Repo\Alpha" });
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var conversationCatalog = new FakeConversationCatalogReadModel(
+                new[]
+                {
+                    new ConversationCatalogItem(
+                        "conv-1",
+                        "Recent",
+                        @"C:\Repo\Alpha",
+                        DateTime.UtcNow.AddDays(-1),
+                        DateTime.UtcNow,
+                        DateTime.UtcNow,
+                        ProjectAffinityOverrideProjectId: "project-a")
+                });
+
+            var startViewModel = CreateStartViewModel(
+                chat.ViewModel,
+                preferences,
+                nav,
+                workflow.Object,
+                conversationCatalog: conversationCatalog);
+
+            Assert.Equal("project-a", startViewModel.SelectedStartProjectId);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task StartModeOptions_ProjectFromChatNewSessionDraft()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(
+                chat.ViewModel,
+                preferences,
+                nav,
+                workflow.Object);
+
+            await chat.DispatchConnectionAsync(new SetNewSessionDraftAction(CreateReadyDraft("code")));
+            await WaitForConditionAsync(() => startViewModel.StartModeOptions.Count == 2);
+
+            Assert.True(startViewModel.IsStartModeSelectorVisible);
+            Assert.Equal("code", startViewModel.SelectedStartMode?.ModeId);
+            Assert.Collection(
+                startViewModel.StartModeOptions,
+                first => Assert.Equal("plan", first.ModeId),
+                second => Assert.Equal("code", second.ModeId));
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task StartVoiceInput_WhenVoiceStartDoesNotEnterListening_RestoresChatDraft()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            var voiceInput = new FakeVoiceInputService
+            {
+                IsSupported = true,
+                PermissionResult = new VoiceInputPermissionResult(VoiceInputPermissionStatus.Denied, "Denied")
+            };
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>(), voiceInput);
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+
+            chat.ViewModel.CurrentPrompt = "chat draft";
+            startViewModel.StartPrompt = "start draft";
+
+            Assert.True(startViewModel.CanStartVoiceInput);
+
+            await startViewModel.StartVoiceInputCommand.ExecuteAsync(null);
+
+            Assert.Equal("chat draft", chat.ViewModel.CurrentPrompt);
+            Assert.Equal("start draft", startViewModel.StartPrompt);
+            Assert.False(chat.ViewModel.IsVoiceInputListening);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task ComposerUnloaded_DiscardsProjectedNewSessionDraft()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(
+                chat.ViewModel,
+                preferences,
+                nav,
+                workflow.Object);
+
+            await chat.DispatchConnectionAsync(new SetNewSessionDraftAction(CreateReadyDraft("plan")));
+            await WaitForConditionAsync(() => startViewModel.StartModeOptions.Count == 2);
+
+            startViewModel.OnComposerUnloaded();
+
+            await WaitForConditionAsync(() => startViewModel.StartModeOptions.Count == 0);
+            Assert.False(startViewModel.IsStartModeSelectorVisible);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public void ProfileChange_WhileComposerIsNotLoaded_DoesNotStartLaunchWorkflow()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration { Id = "profile-1", Name = "Agent 1", Transport = TransportType.HttpSse, ServerUrl = "https://example-1.test" });
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration { Id = "profile-2", Name = "Agent 2", Transport = TransportType.HttpSse, ServerUrl = "https://example-2.test" });
+            chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[0];
+
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            _ = CreateStartViewModel(
+                chat.ViewModel,
+                preferences,
+                nav,
+                workflow.Object);
+
+            chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[1];
+
+            workflow.Verify(x => x.StartSessionAndSendAsync(
+                It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()), Times.Never);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public void StartProjectSelection_SelectingProject_ProjectsToGlobalPreferences()
     {
         var originalContext = SynchronizationContext.Current;
@@ -483,7 +692,7 @@ public sealed class StartViewModelTests
             var workflowStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
             var workflowCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
             var workflow = new Mock<IChatLaunchWorkflow>();
-            workflow.Setup(w => w.StartSessionAndSendAsync("launch", It.IsAny<CancellationToken>()))
+            workflow.Setup(w => w.StartSessionAndSendAsync("launch", It.IsAny<string?>(), It.IsAny<CancellationToken>()))
                 .Returns(() =>
                 {
                     workflowStarted.TrySetResult(null);
@@ -530,7 +739,7 @@ public sealed class StartViewModelTests
             using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
             var exception = new InvalidOperationException("boom");
-            workflow.Setup(w => w.StartSessionAndSendAsync("launch", It.IsAny<CancellationToken>()))
+            workflow.Setup(w => w.StartSessionAndSendAsync("launch", It.IsAny<string?>(), It.IsAny<CancellationToken>()))
                 .ThrowsAsync(exception);
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
@@ -566,7 +775,8 @@ public sealed class StartViewModelTests
     private static ChatViewModelHarness CreateChatViewModel(
         SynchronizationContext syncContext,
         AppPreferencesViewModel preferences,
-        ISessionManager sessionManager)
+        ISessionManager sessionManager,
+        IVoiceInputService? voiceInputService = null)
     {
         var state = State.Value(new object(), () => ChatState.Empty);
         var connectionState = State.Value(new object(), () => ChatConnectionState.Empty);
@@ -632,9 +842,10 @@ public sealed class StartViewModelTests
                 new ImmediateUiDispatcher(),
                 Mock.Of<IConversationPreviewStore>(),
                 vmLogger.Object,
+                voiceInputService: voiceInputService,
                 conversationCatalogFacade: conversationCatalogFacade);
             conversationCatalogFacade.SetPanelCleanup(viewModel);
-            return new ChatViewModelHarness(viewModel, state, connectionState, conversationCatalogPresenter, workspace);
+            return new ChatViewModelHarness(viewModel, state, connectionState, connectionStore, conversationCatalogPresenter, workspace);
         }
         finally
         {
@@ -666,13 +877,14 @@ public sealed class StartViewModelTests
     private static MainNavigationViewModel CreateNavigationViewModel(
         ChatViewModelHarness chat,
         ISessionManager sessionManager,
-        AppPreferencesViewModel preferences)
+        AppPreferencesViewModel preferences,
+        INavigationCoordinator? navigationCoordinator = null)
     {
         var ui = new Mock<IUiInteractionService>();
         var navLogger = new Mock<ILogger<MainNavigationViewModel>>();
         var navState = new FakeNavigationPaneState();
         var metricsSink = new Mock<IShellLayoutMetricsSink>();
-        var navigationCoordinator = Mock.Of<INavigationCoordinator>();
+        var effectiveNavigationCoordinator = navigationCoordinator ?? Mock.Of<INavigationCoordinator>();
 
         var conversationCatalog = new ConversationCatalogFacade(
             chat.Workspace,
@@ -685,9 +897,9 @@ public sealed class StartViewModelTests
 
         return new MainNavigationViewModel(
             conversationCatalog,
-            new NavigationProjectPreferencesAdapter(preferences),
-            ui.Object,
-            navigationCoordinator,
+                new NavigationProjectPreferencesAdapter(preferences),
+                ui.Object,
+                effectiveNavigationCoordinator,
             navLogger.Object,
             navState,
             metricsSink.Object,
@@ -705,7 +917,8 @@ public sealed class StartViewModelTests
         AppPreferencesViewModel preferences,
         MainNavigationViewModel nav,
         IChatLaunchWorkflow workflow,
-        ILogger<StartViewModel>? logger = null)
+        ILogger<StartViewModel>? logger = null,
+        IConversationCatalogReadModel? conversationCatalog = null)
     {
         return new StartViewModel(
             chatViewModel: chatViewModel,
@@ -716,7 +929,47 @@ public sealed class StartViewModelTests
             navigationCoordinator: Mock.Of<INavigationCoordinator>(),
             nav: nav,
             logger: logger ?? Mock.Of<ILogger<StartViewModel>>(),
-            chatLaunchWorkflow: workflow);
+            chatLaunchWorkflow: workflow,
+            conversationCatalog: conversationCatalog);
+    }
+
+    private static NewSessionDraftState CreateReadyDraft(string selectedModeId)
+        => new(
+            ProfileId: "profile-1",
+            Cwd: @"C:\Repo\App",
+            RemoteSessionId: "remote-draft",
+            ConnectionInstanceId: "conn-1",
+            Phase: NewSessionDraftPhase.Ready,
+            Version: 1,
+            AvailableModes: ImmutableList.Create(
+                new ConversationModeOptionSnapshot
+                {
+                    ModeId = "plan",
+                    ModeName = "Plan"
+                },
+                new ConversationModeOptionSnapshot
+                {
+                    ModeId = "code",
+                    ModeName = "Code"
+                }),
+            SelectedModeId: selectedModeId,
+            ConfigOptions: ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+            ShowConfigOptionsPanel: false,
+            AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+            SessionInfo: null);
+
+    private static async Task WaitForConditionAsync(Func<bool> predicate, int timeoutMilliseconds = 2000, int pollDelayMilliseconds = 20)
+    {
+        var started = DateTime.UtcNow;
+        while (!predicate())
+        {
+            if ((DateTime.UtcNow - started).TotalMilliseconds >= timeoutMilliseconds)
+            {
+                throw new TimeoutException("Timed out waiting for expected asynchronous condition.");
+            }
+
+            await Task.Delay(pollDelayMilliseconds);
+        }
     }
 
     private sealed class FakeNavigationPaneState : INavigationPaneState
@@ -741,10 +994,87 @@ public sealed class StartViewModelTests
         public override void Post(SendOrPostCallback d, object? state) => d(state);
     }
 
+    private sealed class FakeConversationCatalogReadModel : IConversationCatalogReadModel
+    {
+        public FakeConversationCatalogReadModel(IReadOnlyList<ConversationCatalogItem> snapshot)
+        {
+            Snapshot = snapshot;
+        }
+
+        public bool IsConversationListLoading => false;
+
+        public int ConversationListVersion => 1;
+
+        public IReadOnlyList<ConversationCatalogItem> Snapshot { get; }
+
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged
+        {
+            add { }
+            remove { }
+        }
+    }
+
+    private sealed class FakeVoiceInputService : IVoiceInputService
+    {
+        public bool IsSupported { get; set; }
+
+        public bool IsListening { get; private set; }
+
+        public VoiceInputPermissionResult PermissionResult { get; set; } =
+            new(VoiceInputPermissionStatus.Unsupported, "Not configured");
+
+        public event EventHandler<VoiceInputPartialResult>? PartialResultReceived
+        {
+            add { }
+            remove { }
+        }
+
+        public event EventHandler<VoiceInputFinalResult>? FinalResultReceived
+        {
+            add { }
+            remove { }
+        }
+
+        public event EventHandler<VoiceInputSessionEndedResult>? SessionEnded
+        {
+            add { }
+            remove { }
+        }
+
+        public event EventHandler<VoiceInputErrorResult>? ErrorOccurred
+        {
+            add { }
+            remove { }
+        }
+
+        public Task<VoiceInputPermissionResult> EnsurePermissionAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(PermissionResult);
+
+        public Task<bool> TryRequestAuthorizationHelpAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(true);
+
+        public Task StartAsync(VoiceInputSessionOptions options, CancellationToken cancellationToken = default)
+        {
+            IsListening = true;
+            return Task.CompletedTask;
+        }
+
+        public Task StopAsync(CancellationToken cancellationToken = default)
+        {
+            IsListening = false;
+            return Task.CompletedTask;
+        }
+
+        public void Dispose()
+        {
+        }
+    }
+
     private sealed class ChatViewModelHarness : IDisposable
     {
         private readonly IState<ChatState> _state;
         private readonly IState<ChatConnectionState> _connectionState;
+        private readonly IChatConnectionStore _connectionStore;
         public ConversationCatalogPresenter Presenter { get; }
         public ChatViewModel ViewModel { get; }
         public ChatConversationWorkspace Workspace { get; }
@@ -753,15 +1083,20 @@ public sealed class StartViewModelTests
             ChatViewModel viewModel,
             IState<ChatState> state,
             IState<ChatConnectionState> connectionState,
+            IChatConnectionStore connectionStore,
             ConversationCatalogPresenter presenter,
             ChatConversationWorkspace workspace)
         {
             ViewModel = viewModel;
             _state = state;
             _connectionState = connectionState;
+            _connectionStore = connectionStore;
             Presenter = presenter;
             Workspace = workspace;
         }
+
+        public ValueTask DispatchConnectionAsync(ChatConnectionAction action)
+            => _connectionStore.Dispatch(action);
 
         public void Dispose()
         {

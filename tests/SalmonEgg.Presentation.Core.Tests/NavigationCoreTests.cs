@@ -415,6 +415,19 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
+    public void StartViewXaml_ExposesModeSelectorAndVoiceButtons_ForNewSessionLaunch()
+    {
+        var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Start\StartView.xaml");
+
+        Assert.Contains("x:Name=\"ModeSelectorRow\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"StartView.ModeSelector\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ItemsSource=\"{x:Bind ViewModel.StartModeOptions, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("SelectedItem=\"{x:Bind ViewModel.SelectedStartMode, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind ViewModel.StartVoiceInputCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind ViewModel.StopVoiceInputCommand}\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ChatViewXaml_ExposesStableAutomationIds_ForGuiTesting()
     {
         var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml");

@@ -73,19 +73,11 @@
                         CornerRadius="20"
                         Padding="16,12">
                     <Grid RowDefinitions="Auto,*,Auto" RowSpacing="12">
-                        <Grid Grid.Row="0"
-                              RowDefinitions="Auto,Auto"
-                              RowSpacing="4">
-                            <TextBlock x:Uid="ChatComposerPromptInFlightStatus"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                       FontSize="12"
-                                       Visibility="{x:Bind ViewModel.IsPromptInFlight, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                            <TextBlock Grid.Row="1"
-                                       x:Uid="ChatComposerVoiceListeningStatus"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                       FontSize="12"
-                                       Visibility="{x:Bind ViewModel.IsVoiceInputListening, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                        </Grid>
+                        <TextBlock Grid.Row="0"
+                                   x:Uid="ChatComposerVoiceListeningStatus"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   FontSize="12"
+                                   Visibility="{x:Bind ViewModel.IsVoiceInputListening, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
 
                         <!-- TextBox Area -->
                         <Grid Grid.Row="1">

@@ -17,7 +17,6 @@ public sealed class ChatInputStatePresenter
                 ShowVoiceStartButton: false,
                 ShowVoiceStopButton: true,
                 CanStopVoiceInput: true,
-                ShowPromptInFlightStatus: false,
                 ShowVoiceListeningStatus: true);
         }
 
@@ -25,16 +24,15 @@ public sealed class ChatInputStatePresenter
         {
             return new ChatComposerPresentationState(
                 Mode: ChatComposerMode.PromptInFlight,
-                IsTextInputEnabled: false,
-                AreComposerToolsEnabled: false,
+                IsTextInputEnabled: true,
+                AreComposerToolsEnabled: true,
                 CanSendPrompt: false,
                 ShowCancelButton: true,
                 CanCancelPrompt: true,
                 CanStartVoiceInput: false,
-                ShowVoiceStartButton: false,
+                ShowVoiceStartButton: input.IsVoiceInputSupported,
                 ShowVoiceStopButton: false,
                 CanStopVoiceInput: false,
-                ShowPromptInFlightStatus: true,
                 ShowVoiceListeningStatus: false);
         }
 
@@ -67,7 +65,6 @@ public sealed class ChatInputStatePresenter
             ShowVoiceStartButton: input.IsVoiceInputSupported,
             ShowVoiceStopButton: false,
             CanStopVoiceInput: false,
-            ShowPromptInFlightStatus: false,
             ShowVoiceListeningStatus: false);
     }
 }

@@ -20,6 +20,8 @@ public interface IChatLaunchWorkflowChatFacade
 
     Task<ChatLaunchConnectionOutcome> EnsureConnectedForLaunchAsync(CancellationToken cancellationToken = default);
 
+    Task PromoteNewSessionDraftForLaunchAsync(CancellationToken cancellationToken = default);
+
     void PrepareDraftForLaunch(string promptText);
 
     bool TrySendPromptForLaunch();
@@ -60,7 +62,10 @@ public sealed class ChatLaunchWorkflow : IChatLaunchWorkflow
         _catalogFacade = catalogFacade;
     }
 
-    public async Task StartSessionAndSendAsync(string promptText, CancellationToken cancellationToken = default)
+    public async Task StartSessionAndSendAsync(
+        string promptText,
+        string? projectId,
+        CancellationToken cancellationToken = default)
     {
         var normalizedPrompt = (promptText ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(normalizedPrompt))
@@ -89,7 +94,7 @@ public sealed class ChatLaunchWorkflow : IChatLaunchWorkflow
         // Navigation owns the session switch for the Start path.
         // Calling Chat.TrySwitchToSessionAsync here would reintroduce the current double-owner bug.
         var activated = await _navigationCoordinator
-            .ActivateSessionAsync(sessionId, _preferences.LastSelectedProjectId)
+            .ActivateSessionAsync(sessionId, projectId)
             .ConfigureAwait(true);
         if (!activated)
         {
@@ -117,6 +122,7 @@ public sealed class ChatLaunchWorkflow : IChatLaunchWorkflow
         }
 
         _chat.PrepareDraftForLaunch(normalizedPrompt);
+        await _chat.PromoteNewSessionDraftForLaunchAsync(cancellationToken).ConfigureAwait(true);
         if (_chat.TrySendPromptForLaunch())
         {
             return;
@@ -173,6 +179,9 @@ public sealed class ChatLaunchWorkflowChatFacadeAdapter : IChatLaunchWorkflowCha
             ? ChatLaunchConnectionOutcome.InProgress
             : ChatLaunchConnectionOutcome.RequiresConfiguration;
     }
+
+    public Task PromoteNewSessionDraftForLaunchAsync(CancellationToken cancellationToken = default)
+        => _chatViewModel.PromoteNewSessionDraftForLaunchAsync(cancellationToken);
 
     public bool TrySendPromptForLaunch()
     {
