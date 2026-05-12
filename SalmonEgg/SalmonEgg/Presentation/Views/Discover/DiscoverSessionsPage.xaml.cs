@@ -50,23 +50,6 @@ public sealed partial class DiscoverSessionsPage : Page
         }
     }
 
-    private void OnLoadSessionClick(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
-    {
-        if (sender is not Button button)
-        {
-            return;
-        }
-
-        var session = button.CommandParameter as DiscoverSessionItemViewModel
-            ?? button.DataContext as DiscoverSessionItemViewModel;
-        if (session == null || !ViewModel.LoadSessionCommand.CanExecute(session))
-        {
-            return;
-        }
-
-        ViewModel.LoadSessionCommand.Execute(session);
-    }
-
     private void OnUnloaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {
         SkeletonPulse?.Stop();

@@ -474,6 +474,7 @@
                                         </StackPanel>
 
                                         <!-- Action -->
+                                        <!-- Binding is required here because the DataTemplate item scope cannot compiled-bind to the page command across Uno targets. -->
                                         <Button
                                             x:Name="ActionBtn"
                                             AutomationProperties.AutomationId="DiscoverSessions.ImportButton"
@@ -481,7 +482,7 @@
                                             x:Uid="DiscoverSessionsImportButton"
                                             Style="{StaticResource AccentButtonStyle}"
                                             VerticalAlignment="Center"
-                                            Click="OnLoadSessionClick"
+                                            Command="{Binding DataContext.LoadSessionCommand, ElementName=RootPage}"
                                             CommandParameter="{x:Bind}" />
                                     </Grid>
                                 </Border>

@@ -95,6 +95,18 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void ToolCallPill_UsesNativeExpanderBehavior()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Controls\ToolCallPill.xaml");
+
+        Assert.Contains("<Expander", xaml);
+        Assert.Contains("IsExpanded=\"{x:Bind IsExpanded, Mode=TwoWay}\"", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"ToolCallPill.RootButton\"", xaml);
+        Assert.DoesNotContain("<ToggleButton", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ToggleButtonBackgroundChecked", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MainPage_SearchUsesNativeAutoSuggestEvents()
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");

@@ -37,10 +37,6 @@ public sealed partial class ChatView : Page
         private readonly PointerEventHandler _messagesListHandledPointerPressedHandler;
         private readonly PointerEventHandler _messagesListHandledPointerWheelChangedHandler;
         private ITranscriptViewportHost? _transcriptViewportHost;
-        private bool _isSessionHeaderLayoutHooked;
-        private const double SessionHeaderMediumWidthThreshold = 720;
-        private const double SessionHeaderWideWidthThreshold = 1080;
-
         public ChatView()
         {
             ShellViewModel = App.ServiceProvider.GetRequiredService<ChatShellViewModel>();
@@ -81,7 +77,6 @@ public sealed partial class ChatView : Page
             BeginLayoutLoadingIfPendingMessages();
             TryIssueTranscriptScrollRequestIfAttached();
             UpdateTranscriptViewportAutomationState();
-            HookSessionHeaderLayoutState();
             try
             {
                 await ViewModel.EnsureAcpProfilesLoadedAsync();
@@ -101,7 +96,6 @@ public sealed partial class ChatView : Page
             _resumeViewportCoordinatorAfterOverlayPending = false;
             DisposeTranscriptViewportHost();
             ClearPendingProjectionRestore();
-            UnhookSessionHeaderLayoutState();
             UpdateTranscriptViewportAutomationState();
             if (_isTrackingMessages)
             {
@@ -908,94 +902,6 @@ public sealed partial class ChatView : Page
                     SessionNameEditor.SelectAll();
                 });
             }
-        }
-
-        private void OnSessionHeaderRootLoaded(object sender, RoutedEventArgs e)
-            => HookSessionHeaderLayoutState();
-
-        private void OnSessionHeaderRootUnloaded(object sender, RoutedEventArgs e)
-            => UnhookSessionHeaderLayoutState();
-
-        private void OnSessionHeaderRootSizeChanged(object sender, SizeChangedEventArgs e)
-            => UpdateSessionHeaderLayoutState(e.NewSize.Width);
-
-        private void HookSessionHeaderLayoutState()
-        {
-            if (_isSessionHeaderLayoutHooked || SessionHeaderRoot is null)
-            {
-                return;
-            }
-
-            SessionHeaderRoot.SizeChanged += OnSessionHeaderRootSizeChanged;
-            _isSessionHeaderLayoutHooked = true;
-            UpdateSessionHeaderLayoutState(SessionHeaderRoot.ActualWidth);
-        }
-
-        private void UnhookSessionHeaderLayoutState()
-        {
-            if (!_isSessionHeaderLayoutHooked || SessionHeaderRoot is null)
-            {
-                return;
-            }
-
-            SessionHeaderRoot.SizeChanged -= OnSessionHeaderRootSizeChanged;
-            _isSessionHeaderLayoutHooked = false;
-        }
-
-        private void UpdateSessionHeaderLayoutState(double availableWidth)
-        {
-            if (availableWidth <= 0)
-            {
-                return;
-            }
-
-            if (availableWidth >= SessionHeaderWideWidthThreshold)
-            {
-                ApplyWideSessionHeaderLayout();
-                return;
-            }
-
-            if (availableWidth >= SessionHeaderMediumWidthThreshold)
-            {
-                ApplyMediumSessionHeaderLayout();
-                return;
-            }
-
-            ApplyNarrowSessionHeaderLayout();
-        }
-
-        private void ApplyNarrowSessionHeaderLayout()
-        {
-            SessionHeaderMetaGrid.ColumnSpacing = 8;
-            SessionHeaderMetaGrid.RowSpacing = 4;
-            SessionHeaderAgentColumn.Width = new GridLength(0);
-            SessionHeaderAgentRow.Height = GridLength.Auto;
-            Grid.SetRow(SessionHeaderAgentDisplay, 1);
-            Grid.SetColumn(SessionHeaderAgentDisplay, 0);
-            Grid.SetColumnSpan(SessionHeaderAgentDisplay, 2);
-            SessionHeaderAgentDisplay.HorizontalAlignment = HorizontalAlignment.Right;
-            SessionHeaderAgentDisplay.Margin = new Thickness(0);
-            SessionHeaderAgentDisplay.MaxWidth = 320;
-        }
-
-        private void ApplyMediumSessionHeaderLayout()
-        {
-            SessionHeaderMetaGrid.ColumnSpacing = 12;
-            SessionHeaderMetaGrid.RowSpacing = 0;
-            SessionHeaderAgentColumn.Width = GridLength.Auto;
-            SessionHeaderAgentRow.Height = new GridLength(0);
-            Grid.SetRow(SessionHeaderAgentDisplay, 0);
-            Grid.SetColumn(SessionHeaderAgentDisplay, 1);
-            Grid.SetColumnSpan(SessionHeaderAgentDisplay, 1);
-            SessionHeaderAgentDisplay.HorizontalAlignment = HorizontalAlignment.Right;
-            SessionHeaderAgentDisplay.Margin = new Thickness(0);
-            SessionHeaderAgentDisplay.MaxWidth = 180;
-        }
-
-        private void ApplyWideSessionHeaderLayout()
-        {
-            ApplyMediumSessionHeaderLayout();
-            SessionHeaderAgentDisplay.MaxWidth = 240;
         }
 
         private void OnSessionNameEditorLostFocus(object sender, RoutedEventArgs e)

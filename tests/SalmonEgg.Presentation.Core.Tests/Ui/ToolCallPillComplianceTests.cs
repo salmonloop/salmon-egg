@@ -51,6 +51,20 @@ public sealed class ToolCallPillComplianceTests
             StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ToolCallPill_UsesExpanderAsSingleExpansionOwner()
+    {
+        var xaml = File.ReadAllText(GetRepoPath(@"SalmonEgg\SalmonEgg\Controls\ToolCallPill.xaml"));
+        var code = File.ReadAllText(GetRepoPath(@"SalmonEgg\SalmonEgg\Controls\ToolCallPill.xaml.cs"));
+
+        Assert.Contains("<Expander", xaml, StringComparison.Ordinal);
+        Assert.Contains("IsExpanded=\"{x:Bind IsExpanded, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<ToggleButton", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("RootButton_Checked", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("RootButton_Unchecked", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("_isSynchronizingRootButton", code, StringComparison.Ordinal);
+    }
+
     private static string GetRepoPath(string relativePath)
         => Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory,

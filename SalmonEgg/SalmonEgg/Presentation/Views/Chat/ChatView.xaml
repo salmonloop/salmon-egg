@@ -2,6 +2,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:chatVm="using:SalmonEgg.Presentation.ViewModels.Chat"
+    xmlns:utils="using:SalmonEgg.Presentation.Utilities"
     xmlns:converters="using:SalmonEgg.Presentation.Converters"
     xmlns:controls="using:SalmonEgg.Controls"
     xmlns:models="using:SalmonEgg.Presentation.Models"
@@ -59,8 +60,59 @@
                     Padding="16,8"
                     Visibility="{x:Bind ViewModel.ShouldShowSessionHeader, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                 <Grid x:Name="SessionHeaderRoot"
-                      Loaded="OnSessionHeaderRootLoaded"
-                      Unloaded="OnSessionHeaderRootUnloaded">
+                      >
+                    <VisualStateManager.VisualStateGroups>
+                        <VisualStateGroup x:Name="SessionHeaderWidthStates">
+                            <VisualState x:Name="SessionHeaderNarrow">
+                                <VisualState.Setters>
+                                    <Setter Target="SessionHeaderMetaGrid.ColumnSpacing" Value="8" />
+                                    <Setter Target="SessionHeaderMetaGrid.RowSpacing" Value="4" />
+                                    <Setter Target="SessionHeaderAgentColumn.Width" Value="0" />
+                                    <Setter Target="SessionHeaderAgentRow.Height" Value="Auto" />
+                                    <Setter Target="SessionHeaderAgentDisplay.(Grid.Row)" Value="1" />
+                                    <Setter Target="SessionHeaderAgentDisplay.(Grid.Column)" Value="0" />
+                                    <Setter Target="SessionHeaderAgentDisplay.(Grid.ColumnSpan)" Value="2" />
+                                    <Setter Target="SessionHeaderAgentDisplay.HorizontalAlignment" Value="Right" />
+                                    <Setter Target="SessionHeaderAgentDisplay.Margin" Value="0" />
+                                    <Setter Target="SessionHeaderAgentDisplay.MaxWidth" Value="320" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="SessionHeaderMedium">
+                                <VisualState.StateTriggers>
+                                    <utils:MinActualWidthTrigger TargetElement="{x:Bind SessionHeaderRoot}" MinWidth="720" />
+                                </VisualState.StateTriggers>
+                                <VisualState.Setters>
+                                    <Setter Target="SessionHeaderMetaGrid.ColumnSpacing" Value="12" />
+                                    <Setter Target="SessionHeaderMetaGrid.RowSpacing" Value="0" />
+                                    <Setter Target="SessionHeaderAgentColumn.Width" Value="Auto" />
+                                    <Setter Target="SessionHeaderAgentRow.Height" Value="0" />
+                                    <Setter Target="SessionHeaderAgentDisplay.(Grid.Row)" Value="0" />
+                                    <Setter Target="SessionHeaderAgentDisplay.(Grid.Column)" Value="1" />
+                                    <Setter Target="SessionHeaderAgentDisplay.(Grid.ColumnSpan)" Value="1" />
+                                    <Setter Target="SessionHeaderAgentDisplay.HorizontalAlignment" Value="Right" />
+                                    <Setter Target="SessionHeaderAgentDisplay.Margin" Value="0" />
+                                    <Setter Target="SessionHeaderAgentDisplay.MaxWidth" Value="180" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="SessionHeaderWide">
+                                <VisualState.StateTriggers>
+                                    <utils:MinActualWidthTrigger TargetElement="{x:Bind SessionHeaderRoot}" MinWidth="1080" />
+                                </VisualState.StateTriggers>
+                                <VisualState.Setters>
+                                    <Setter Target="SessionHeaderMetaGrid.ColumnSpacing" Value="12" />
+                                    <Setter Target="SessionHeaderMetaGrid.RowSpacing" Value="0" />
+                                    <Setter Target="SessionHeaderAgentColumn.Width" Value="Auto" />
+                                    <Setter Target="SessionHeaderAgentRow.Height" Value="0" />
+                                    <Setter Target="SessionHeaderAgentDisplay.(Grid.Row)" Value="0" />
+                                    <Setter Target="SessionHeaderAgentDisplay.(Grid.Column)" Value="1" />
+                                    <Setter Target="SessionHeaderAgentDisplay.(Grid.ColumnSpan)" Value="1" />
+                                    <Setter Target="SessionHeaderAgentDisplay.HorizontalAlignment" Value="Right" />
+                                    <Setter Target="SessionHeaderAgentDisplay.Margin" Value="0" />
+                                    <Setter Target="SessionHeaderAgentDisplay.MaxWidth" Value="240" />
+                                </VisualState.Setters>
+                            </VisualState>
+                        </VisualStateGroup>
+                    </VisualStateManager.VisualStateGroups>
                     <Grid x:Name="SessionHeaderMetaGrid" ColumnSpacing="12" RowSpacing="0">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />

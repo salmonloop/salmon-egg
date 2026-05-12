@@ -108,27 +108,27 @@ public sealed class ChatViewXamlTests
 
         Assert.DoesNotContain("<AdaptiveTrigger MinWindowWidth=\"720\" />", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("<AdaptiveTrigger MinWindowWidth=\"1080\" />", xaml, StringComparison.Ordinal);
-        Assert.Contains("Loaded=\"OnSessionHeaderRootLoaded\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Unloaded=\"OnSessionHeaderRootUnloaded\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("SessionHeaderRoot.SizeChanged += OnSessionHeaderRootSizeChanged;", codeBehind, StringComparison.Ordinal);
-        Assert.Contains("SessionHeaderRoot.SizeChanged -= OnSessionHeaderRootSizeChanged;", codeBehind, StringComparison.Ordinal);
-        Assert.Contains("UpdateSessionHeaderLayoutState(SessionHeaderRoot.ActualWidth);", codeBehind, StringComparison.Ordinal);
-        Assert.DoesNotContain("useTransitions", codeBehind, StringComparison.Ordinal);
-        Assert.Contains("ApplyNarrowSessionHeaderLayout();", codeBehind, StringComparison.Ordinal);
-        Assert.Contains("ApplyMediumSessionHeaderLayout();", codeBehind, StringComparison.Ordinal);
-        Assert.Contains("ApplyWideSessionHeaderLayout();", codeBehind, StringComparison.Ordinal);
+        Assert.Contains("<utils:MinActualWidthTrigger TargetElement=\"{x:Bind SessionHeaderRoot}\" MinWidth=\"720\" />", xaml, StringComparison.Ordinal);
+        Assert.Contains("<utils:MinActualWidthTrigger TargetElement=\"{x:Bind SessionHeaderRoot}\" MinWidth=\"1080\" />", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("OnSessionHeaderRootLoaded", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("OnSessionHeaderRootUnloaded", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("SizeChanged += OnSessionHeaderRootSizeChanged;", codeBehind, StringComparison.Ordinal);
+        Assert.DoesNotContain("SizeChanged -= OnSessionHeaderRootSizeChanged;", codeBehind, StringComparison.Ordinal);
+        Assert.DoesNotContain("ApplyNarrowSessionHeaderLayout", codeBehind, StringComparison.Ordinal);
+        Assert.DoesNotContain("ApplyMediumSessionHeaderLayout", codeBehind, StringComparison.Ordinal);
+        Assert.DoesNotContain("ApplyWideSessionHeaderLayout", codeBehind, StringComparison.Ordinal);
     }
 
     [Fact]
     public void ChatViewSessionHeader_NarrowLayout_KeepsAgentRowRightAligned()
     {
-        var codeBehind = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
+        var xaml = LoadChatViewXaml();
 
-        Assert.Contains("Grid.SetRow(SessionHeaderAgentDisplay, 1);", codeBehind, StringComparison.Ordinal);
-        Assert.Contains("Grid.SetColumnSpan(SessionHeaderAgentDisplay, 2);", codeBehind, StringComparison.Ordinal);
-        Assert.Contains("SessionHeaderAgentDisplay.HorizontalAlignment = HorizontalAlignment.Right;", codeBehind, StringComparison.Ordinal);
-        Assert.DoesNotContain("SessionHeaderAgentDisplay.HorizontalAlignment = HorizontalAlignment.Left;", codeBehind, StringComparison.Ordinal);
-        Assert.DoesNotContain("SessionHeaderAgentDisplay.Margin = new Thickness(28, 0, 0, 0);", codeBehind, StringComparison.Ordinal);
+        Assert.Contains("<Setter Target=\"SessionHeaderAgentDisplay.(Grid.Row)\" Value=\"1\" />", xaml, StringComparison.Ordinal);
+        Assert.Contains("<Setter Target=\"SessionHeaderAgentDisplay.(Grid.ColumnSpan)\" Value=\"2\" />", xaml, StringComparison.Ordinal);
+        Assert.Contains("<Setter Target=\"SessionHeaderAgentDisplay.HorizontalAlignment\" Value=\"Right\" />", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("HorizontalAlignment\" Value=\"Left\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Value=\"28,0,0,0\"", xaml, StringComparison.Ordinal);
     }
 
     [Fact]
