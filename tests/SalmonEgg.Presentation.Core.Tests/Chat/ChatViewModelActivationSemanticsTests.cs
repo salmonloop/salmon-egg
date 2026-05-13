@@ -690,7 +690,7 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
-    public async Task ReplaceChatServiceAsync_WhenRemoteLoadIsInFlight_CancelsOldRecoveryAndUsesReplacementService()
+    public async Task ReplaceChatServiceAsync_WhenRemoteLoadIsInFlightWithoutConnectionInstance_CancelsOldRecoveryAndUsesReplacementService()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
@@ -782,8 +782,7 @@ public partial class ChatViewModelTests
             ShowPlanPanel: false,
             PlanTitle: null,
             CreatedAt: new DateTime(2026, 5, 14, 0, 0, 1, DateTimeKind.Utc),
-            LastUpdatedAt: new DateTime(2026, 5, 14, 0, 0, 1, DateTimeKind.Utc),
-            ConnectionInstanceId: "conn-1"),
+            LastUpdatedAt: new DateTime(2026, 5, 14, 0, 0, 1, DateTimeKind.Utc)),
             ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
         await fixture.UpdateStateAsync(state => state with
         {
@@ -792,7 +791,6 @@ public partial class ChatViewModelTests
                 .Add("conv-remote", new ConversationBindingSlice("conv-remote", "remote-1", "profile-1"))
         });
         await DispatchConnectedAsync(fixture, "profile-1");
-        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
 
         var firstRemoteSwitch = fixture.ViewModel.SwitchConversationAsync("conv-remote");
         await oldLoadStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -812,7 +810,7 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
-    public void RemoteSessionRecoveryRequestCleanup_CancelsRequestsBeforeClearingRegistry()
+    public void RemoteSessionRecoveryRequestRegistry_DoesNotCallExternalWorkWhileHoldingRegistryLock()
     {
         var source = File.ReadAllText(FindRepoFile(
             "src",
@@ -820,16 +818,54 @@ public partial class ChatViewModelTests
             "ViewModels",
             "Chat",
             "ChatViewModel.RemoteConversationLifecycle.cs"));
-        var methodBody = ExtractMethodBody(source, "private void CancelAndClearRemoteSessionRecoveryRequests");
+        var getOrStartBody = ExtractMethodBody(source, "private Task<AcpSessionRecoveryProjection> GetOrStartRemoteSessionRecoveryProjectionAsync");
+        var cleanupBody = ExtractMethodBody(source, "private void CancelAndClearRemoteSessionRecoveryRequests");
+        var supersedeBody = ExtractMethodBody(source, "private List<RemoteSessionRecoveryRequest> RemoveSupersededRemoteSessionRecoveryRequests");
 
-        var cancelIndex = methodBody.IndexOf(".Cancel();", StringComparison.Ordinal);
-        var clearIndex = methodBody.IndexOf("_remoteSessionRecoveryRequests.Clear();", StringComparison.Ordinal);
+        Assert.DoesNotContain("RunRemoteSessionRecoveryProjectionAsync", ExtractFirstLockBlock(getOrStartBody), StringComparison.Ordinal);
+        Assert.DoesNotContain(".Cancel();", ExtractFirstLockBlock(cleanupBody), StringComparison.Ordinal);
+        Assert.DoesNotContain(".Cancel();", supersedeBody, StringComparison.Ordinal);
+    }
 
-        Assert.True(cancelIndex >= 0, "Recovery cleanup must cancel removed requests.");
-        Assert.True(clearIndex >= 0, "Recovery cleanup must clear the registry after cancellation.");
-        Assert.True(
-            cancelIndex < clearIndex,
-            "Recovery cleanup must not clear the registry before cancellation; completion cleanup could dispose the CTS before replacement cancels it.");
+    [Fact]
+    public void RemoteSessionRecoveryTransportTasks_AreObservedAfterWaiterCancellation()
+    {
+        var source = File.ReadAllText(FindRepoFile(
+            "src",
+            "SalmonEgg.Presentation.Core",
+            "ViewModels",
+            "Chat",
+            "ChatViewModel.RemoteConversationLifecycle.cs"));
+        var runBody = ExtractMethodBody(source, "private async Task<AcpSessionRecoveryProjection> RunRemoteSessionRecoveryProjectionAsync");
+
+        Assert.Contains("ObserveRemoteSessionRecoveryTransportTaskAsync(loadTask", runBody, StringComparison.Ordinal);
+        Assert.Contains("ObserveRemoteSessionRecoveryTransportTaskAsync(resumeTask", runBody, StringComparison.Ordinal);
+    }
+
+    private static string ExtractFirstLockBlock(string source)
+    {
+        var lockStart = source.IndexOf("lock (_remoteSessionRecoveryRequestsSync)", StringComparison.Ordinal);
+        Assert.True(lockStart >= 0, "Could not find remote session recovery registry lock.");
+        var bodyStart = source.IndexOf('{', lockStart);
+        Assert.True(bodyStart >= 0, "Could not find lock body.");
+        var depth = 0;
+        for (var index = bodyStart; index < source.Length; index++)
+        {
+            if (source[index] == '{')
+            {
+                depth++;
+            }
+            else if (source[index] == '}')
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    return source.Substring(bodyStart, index - bodyStart + 1);
+                }
+            }
+        }
+
+        throw new InvalidOperationException("Could not extract lock body.");
     }
 
     private static string ExtractMethodBody(string source, string methodSignature)

@@ -187,6 +187,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly Dictionary<string, long> _remoteHydrationSessionUpdateBaselineCounts = new(StringComparer.Ordinal);
     private readonly object _remoteSessionRecoveryRequestsSync = new();
     private readonly Dictionary<RemoteSessionRecoveryRequestKey, RemoteSessionRecoveryRequest> _remoteSessionRecoveryRequests = new();
+    private int _foregroundChatServiceGeneration;
     private readonly object _pendingInlinePermissionRequestsSync = new();
     private readonly Dictionary<string, PermissionRequestViewModel> _pendingInlinePermissionRequestsByToolCallId = new(StringComparer.Ordinal);
     private HydrationOverlayPhase _hydrationOverlayPhase = HydrationOverlayPhase.None;
@@ -217,9 +218,70 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         string RemoteSessionId,
         string Cwd);
 
-    private sealed record RemoteSessionRecoveryRequest(
-        Task<AcpSessionRecoveryProjection> Task,
-        CancellationTokenSource CancellationTokenSource);
+    private sealed class RemoteSessionRecoveryRequest : IDisposable
+    {
+        private readonly object _sync = new();
+        private readonly CancellationTokenSource _cancellationTokenSource;
+        private readonly TaskCompletionSource<AcpSessionRecoveryProjection> _completion =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private bool _disposed;
+
+        public RemoteSessionRecoveryRequest(CancellationTokenSource cancellationTokenSource)
+            => _cancellationTokenSource = cancellationTokenSource;
+
+        public Task<AcpSessionRecoveryProjection> Task => _completion.Task;
+
+        public CancellationToken Token => _cancellationTokenSource.Token;
+
+        public void Start(Func<CancellationToken, Task<AcpSessionRecoveryProjection>> operation)
+        {
+            ArgumentNullException.ThrowIfNull(operation);
+            _ = RunAsync(operation);
+        }
+
+        public void Cancel()
+        {
+            lock (_sync)
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+
+                _cancellationTokenSource.Cancel();
+            }
+        }
+
+        public void Dispose()
+        {
+            lock (_sync)
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+
+                _disposed = true;
+                _cancellationTokenSource.Dispose();
+            }
+        }
+
+        private async Task RunAsync(Func<CancellationToken, Task<AcpSessionRecoveryProjection>> operation)
+        {
+            try
+            {
+                _completion.TrySetResult(await operation(Token).ConfigureAwait(false));
+            }
+            catch (OperationCanceledException ex) when (Token.IsCancellationRequested)
+            {
+                _completion.TrySetCanceled(Token);
+            }
+            catch (Exception ex)
+            {
+                _completion.TrySetException(ex);
+            }
+        }
+    }
 
     /// <summary>
     /// Local conversation binding connects a stable UI ConversationId to a transient ACP RemoteSessionId.

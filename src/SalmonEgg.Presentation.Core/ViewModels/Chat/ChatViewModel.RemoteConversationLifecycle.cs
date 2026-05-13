@@ -489,9 +489,12 @@ public partial class ChatViewModel
                     connectionInstanceId: resolvedConnection.ConnectionInstanceId)
                 .ConfigureAwait(false);
             var metadataRefreshToken = _disposeCts.Token;
+            var metadataRefreshGeneration = _foregroundChatServiceGeneration;
             _ = ApplyRemoteSessionInfoSnapshotWhenReadyAsync(
                 conversationId,
                 binding,
+                resolvedConnection.ConnectionInstanceId,
+                metadataRefreshGeneration,
                 LoadRemoteSessionInfoSnapshotFromSsotAsync(
                     conversationId,
                     binding,
@@ -934,6 +937,11 @@ public partial class ChatViewModel
 
         if (intent == ServiceReplaceIntent.ForegroundOwner)
         {
+            unchecked
+            {
+                _foregroundChatServiceGeneration++;
+            }
+
             CancelAndClearRemoteSessionRecoveryRequests("ForegroundChatServiceReplacement");
             _ = _chatStore.Dispatch(new ResetConversationRuntimeStatesAction());
             _remoteHydrationSessionUpdateBaselineCounts.Clear();
@@ -966,6 +974,11 @@ public partial class ChatViewModel
 
         if (intent == ServiceReplaceIntent.ForegroundOwner)
         {
+            unchecked
+            {
+                _foregroundChatServiceGeneration++;
+            }
+
             CancelAndClearRemoteSessionRecoveryRequests("ForegroundChatServiceReplacement");
             await _chatStore.Dispatch(new ResetConversationRuntimeStatesAction()).ConfigureAwait(false);
         }
@@ -1630,6 +1643,8 @@ public partial class ChatViewModel
             binding.RemoteSessionId!,
             cwd);
 
+        List<RemoteSessionRecoveryRequest> requestsToCancel;
+        RemoteSessionRecoveryRequest requestToStart;
         lock (_remoteSessionRecoveryRequestsSync)
         {
             if (_remoteSessionRecoveryRequests.TryGetValue(key, out var existing))
@@ -1643,18 +1658,25 @@ public partial class ChatViewModel
                 return existing.Task;
             }
 
-            CancelSupersededRemoteSessionRecoveryRequests(key);
-            var requestCts = CancellationTokenSource.CreateLinkedTokenSource(_disposeCts.Token);
-            var task = RunRemoteSessionRecoveryProjectionAsync(
-                chatService,
-                recoveryMode,
-                binding.RemoteSessionId!,
-                cwd,
-                requestCts);
-            _remoteSessionRecoveryRequests[key] = new RemoteSessionRecoveryRequest(task, requestCts);
-            _ = RemoveRemoteSessionRecoveryRequestWhenCompleteAsync(key, task, requestCts);
-            return task;
+            requestsToCancel = RemoveSupersededRemoteSessionRecoveryRequests(key);
+            requestToStart = new RemoteSessionRecoveryRequest(
+                CancellationTokenSource.CreateLinkedTokenSource(_disposeCts.Token));
+            _remoteSessionRecoveryRequests[key] = requestToStart;
         }
+
+        foreach (var request in requestsToCancel)
+        {
+            request.Cancel();
+        }
+
+        _ = RemoveRemoteSessionRecoveryRequestWhenCompleteAsync(key, requestToStart);
+        requestToStart.Start(token => RunRemoteSessionRecoveryProjectionAsync(
+            chatService,
+            recoveryMode,
+            binding.RemoteSessionId!,
+            cwd,
+            requestToStart));
+        return requestToStart.Task;
     }
 
     private async Task<AcpSessionRecoveryProjection> RunRemoteSessionRecoveryProjectionAsync(
@@ -1662,14 +1684,15 @@ public partial class ChatViewModel
         AcpSessionRecoveryMode recoveryMode,
         string remoteSessionId,
         string cwd,
-        CancellationTokenSource requestCts)
+        RemoteSessionRecoveryRequest request)
     {
-        var requestToken = requestCts.Token;
+        var requestToken = request.Token;
         if (recoveryMode == AcpSessionRecoveryMode.Load)
         {
             var loadTask = chatService.LoadSessionAsync(
                 new SessionLoadParams(remoteSessionId, cwd),
                 requestToken);
+            _ = ObserveRemoteSessionRecoveryTransportTaskAsync(loadTask, recoveryMode, remoteSessionId);
             try
             {
                 return AcpSessionRecoveryProjection.FromLoad(
@@ -1679,7 +1702,7 @@ public partial class ChatViewModel
             }
             catch (TimeoutException)
             {
-                requestCts.Cancel();
+                request.Cancel();
                 throw;
             }
         }
@@ -1687,6 +1710,7 @@ public partial class ChatViewModel
         var resumeTask = chatService.ResumeSessionAsync(
             new SessionResumeParams(remoteSessionId, cwd),
             requestToken);
+        _ = ObserveRemoteSessionRecoveryTransportTaskAsync(resumeTask, recoveryMode, remoteSessionId);
         try
         {
             return AcpSessionRecoveryProjection.FromResume(
@@ -1696,13 +1720,36 @@ public partial class ChatViewModel
         }
         catch (TimeoutException)
         {
-            requestCts.Cancel();
+            request.Cancel();
             throw;
         }
     }
 
-    private void CancelSupersededRemoteSessionRecoveryRequests(RemoteSessionRecoveryRequestKey key)
+    private async Task ObserveRemoteSessionRecoveryTransportTaskAsync<TResponse>(
+        Task<TResponse> transportTask,
+        AcpSessionRecoveryMode recoveryMode,
+        string remoteSessionId)
     {
+        try
+        {
+            await transportTask.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(
+                ex,
+                "Remote session recovery transport task faulted after the activation waiter stopped observing it. RecoveryMode={RecoveryMode} RemoteSessionId={RemoteSessionId}",
+                recoveryMode,
+                remoteSessionId);
+        }
+    }
+
+    private List<RemoteSessionRecoveryRequest> RemoveSupersededRemoteSessionRecoveryRequests(RemoteSessionRecoveryRequestKey key)
+    {
+        List<RemoteSessionRecoveryRequest>? requestsToCancel = null;
         foreach (var (candidateKey, candidateRequest) in _remoteSessionRecoveryRequests.ToArray())
         {
             if (candidateKey.RecoveryMode == key.RecoveryMode
@@ -1710,14 +1757,17 @@ public partial class ChatViewModel
                 && string.Equals(candidateKey.ConnectionInstanceId, key.ConnectionInstanceId, StringComparison.Ordinal)
                 && !string.Equals(candidateKey.RemoteSessionId, key.RemoteSessionId, StringComparison.Ordinal))
             {
-                candidateRequest.CancellationTokenSource.Cancel();
+                _remoteSessionRecoveryRequests.Remove(candidateKey);
+                (requestsToCancel ??= []).Add(candidateRequest);
             }
         }
+
+        return requestsToCancel ?? [];
     }
 
     private void CancelAndClearRemoteSessionRecoveryRequests(string reason)
     {
-        var canceledCount = 0;
+        List<RemoteSessionRecoveryRequest> requestsToCancel;
         lock (_remoteSessionRecoveryRequestsSync)
         {
             if (_remoteSessionRecoveryRequests.Count == 0)
@@ -1725,29 +1775,28 @@ public partial class ChatViewModel
                 return;
             }
 
-            foreach (var request in _remoteSessionRecoveryRequests.Values)
-            {
-                request.CancellationTokenSource.Cancel();
-                canceledCount++;
-            }
-
+            requestsToCancel = _remoteSessionRecoveryRequests.Values.ToList();
             _remoteSessionRecoveryRequests.Clear();
+        }
+
+        foreach (var request in requestsToCancel)
+        {
+            request.Cancel();
         }
 
         Logger.LogInformation(
             "Canceling in-flight remote session recovery requests. Count={Count} Reason={Reason}",
-            canceledCount,
+            requestsToCancel.Count,
             reason);
     }
 
     private async Task RemoveRemoteSessionRecoveryRequestWhenCompleteAsync(
         RemoteSessionRecoveryRequestKey key,
-        Task<AcpSessionRecoveryProjection> task,
-        CancellationTokenSource requestCts)
+        RemoteSessionRecoveryRequest request)
     {
         try
         {
-            await task.ConfigureAwait(false);
+            await request.Task.ConfigureAwait(false);
         }
         catch
         {
@@ -1757,13 +1806,13 @@ public partial class ChatViewModel
             lock (_remoteSessionRecoveryRequestsSync)
             {
                 if (_remoteSessionRecoveryRequests.TryGetValue(key, out var current)
-                    && ReferenceEquals(current.Task, task))
+                    && ReferenceEquals(current, request))
                 {
                     _remoteSessionRecoveryRequests.Remove(key);
                 }
             }
 
-            requestCts.Dispose();
+            request.Dispose();
         }
     }
 
@@ -2044,6 +2093,8 @@ public partial class ChatViewModel
     private async Task ApplyRemoteSessionInfoSnapshotWhenReadyAsync(
         string conversationId,
         ConversationBindingSlice expectedBinding,
+        string? expectedConnectionInstanceId,
+        int expectedChatServiceGeneration,
         Task<ConversationSessionInfoSnapshot?> sessionInfoTask,
         CancellationToken cancellationToken)
     {
@@ -2083,6 +2134,21 @@ public partial class ChatViewModel
                 conversationId,
                 expectedBinding.RemoteSessionId,
                 currentBinding?.RemoteSessionId);
+            return;
+        }
+
+        var currentConnectionState = await _chatConnectionStore.State ?? ChatConnectionState.Empty;
+        var currentConnectionInstanceId = !string.IsNullOrWhiteSpace(currentConnectionState.ConnectionInstanceId)
+            ? currentConnectionState.ConnectionInstanceId
+            : ConnectionInstanceId;
+        if (expectedChatServiceGeneration != _foregroundChatServiceGeneration
+            || !string.Equals(currentConnectionInstanceId, expectedConnectionInstanceId, StringComparison.Ordinal))
+        {
+            Logger.LogDebug(
+                "Discarding asynchronous remote session metadata refresh because connection identity changed. ConversationId={ConversationId} ExpectedConnectionInstanceId={ExpectedConnectionInstanceId} CurrentConnectionInstanceId={CurrentConnectionInstanceId}",
+                conversationId,
+                expectedConnectionInstanceId,
+                currentConnectionInstanceId);
             return;
         }
 

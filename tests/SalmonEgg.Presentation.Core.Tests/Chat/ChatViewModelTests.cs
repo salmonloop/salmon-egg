@@ -6665,6 +6665,106 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task HydrateActiveConversationAsync_WhenMetadataRefreshReturnsAfterServiceReplacement_DiscardsStaleSessionInfo()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
+        var sessionManager = new Mock<ISessionManager>();
+        sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.TryGetValue(id, out var session) ? session : null);
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .Returns<string, string?>((id, cwd) =>
+            {
+                var session = new Session(id, cwd);
+                sessions[id] = session;
+                return Task.FromResult(session);
+            });
+        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
+            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
+            {
+                if (!sessions.TryGetValue(id, out var session))
+                {
+                    return false;
+                }
+
+                update(session);
+                if (updateActivity)
+                {
+                    session.UpdateActivity();
+                }
+
+                return true;
+            });
+        sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.Remove(id));
+
+        await sessionManager.Object.CreateSessionAsync("conv-1", @"C:\repo\stale");
+
+        var releaseOldSessionList = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var oldSessionListReturned = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var oldService = CreateConnectedChatService();
+        oldService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(
+            loadSession: true,
+            sessionCapabilities: new SessionCapabilities
+            {
+                List = new SessionListCapabilities()
+            }));
+        oldService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(SessionLoadResponse.Completed);
+        oldService.Setup(service => service.ListSessionsAsync(It.IsAny<SessionListParams>(), It.IsAny<CancellationToken>()))
+            .Returns<SessionListParams, CancellationToken>(async (_, cancellationToken) =>
+            {
+                await releaseOldSessionList.Task.WaitAsync(cancellationToken);
+                oldSessionListReturned.TrySetResult(null);
+                return new SessionListResponse
+                {
+                    Sessions =
+                    [
+                        new AgentSessionInfo
+                        {
+                            SessionId = "remote-1",
+                            Cwd = @"C:\repo\old",
+                            Title = "Old service title",
+                            UpdatedAt = "2026-05-14T00:00:00Z"
+                        }
+                    ]
+                };
+            });
+
+        var replacementService = CreateConnectedChatService();
+        replacementService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
+
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(oldService.Object));
+        await DispatchConnectedAsync(fixture, "profile-1");
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+        });
+        SetCurrentSessionId(fixture.ViewModel, "conv-1");
+        SetCurrentRemoteSessionId(fixture.ViewModel, "remote-1");
+
+        Assert.True(await fixture.ViewModel.HydrateActiveConversationAsync(), fixture.ViewModel.ErrorMessage);
+
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(replacementService.Object));
+        await DispatchConnectedAsync(fixture, "profile-1");
+        releaseOldSessionList.TrySetResult(null);
+        await oldSessionListReturned.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(100);
+
+        var finalState = await fixture.GetStateAsync();
+        Assert.NotEqual(
+            "Old service title",
+            finalState.ResolveSessionStateSlice("conv-1")?.SessionInfo?.Title);
+        Assert.NotEqual(
+            "Old service title",
+            fixture.Workspace.GetConversationSnapshot("conv-1")?.SessionInfo?.Title);
+    }
+
+    [Fact]
     public async Task HydrateActiveConversationAsync_WhenSessionListCapabilityIsMissing_DoesNotCallSessionList()
     {
         var syncContext = new ImmediateSynchronizationContext();
