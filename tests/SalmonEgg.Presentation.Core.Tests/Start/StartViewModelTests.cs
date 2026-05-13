@@ -451,6 +451,56 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
+    public void StartProjectSelection_WhenCatalogRefreshArrivesOffUiThread_UpdatesOnlyAfterDispatcherDrain()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            preferences.Projects.Add(new ProjectDefinition { ProjectId = "project-a", Name = "Alpha", RootPath = @"C:\Repo\Alpha" });
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var dispatcher = new QueueingUiDispatcher();
+            var conversationCatalog = new ConversationCatalogPresenter(dispatcher);
+
+            var startViewModel = CreateStartViewModel(
+                chat.ViewModel,
+                preferences,
+                nav,
+                workflow.Object,
+                conversationCatalog: conversationCatalog);
+
+            Assert.Equal(NavigationProjectIds.Unclassified, startViewModel.SelectedStartProjectId);
+
+            conversationCatalog.Refresh(
+                new[]
+                {
+                    new ConversationCatalogItem(
+                        "conv-1",
+                        "Recent",
+                        @"C:\Repo\Alpha",
+                        DateTime.UtcNow.AddDays(-1),
+                        DateTime.UtcNow,
+                        DateTime.UtcNow,
+                        ProjectAffinityOverrideProjectId: "project-a")
+                });
+
+            Assert.Equal(NavigationProjectIds.Unclassified, startViewModel.SelectedStartProjectId);
+
+            dispatcher.RunAll();
+
+            Assert.Equal("project-a", startViewModel.SelectedStartProjectId);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public async Task StartModeOptions_ProjectFromChatNewSessionDraft()
     {
         var originalContext = SynchronizationContext.Current;

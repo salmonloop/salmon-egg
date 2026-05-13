@@ -245,7 +245,8 @@ public static class DependencyInjection
 
         // New Chat ViewModel (refactored)
         // Must be singleton so connection/session state survives navigation and is shared between Settings and Chat pages.
-        services.AddSingleton<ConversationCatalogPresenter>();
+        services.AddSingleton(sp =>
+            new ConversationCatalogPresenter(sp.GetRequiredService<IUiDispatcher>()));
         services.AddSingleton<IConversationCatalogReadModel>(sp =>
             sp.GetRequiredService<ConversationCatalogPresenter>());
         services.AddSingleton<IState<ConversationAttentionState>>(sp => State.Value(sp, () => ConversationAttentionState.Empty));
