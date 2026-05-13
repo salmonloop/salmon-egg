@@ -186,7 +186,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly Dictionary<string, DateTime> _remoteHydrationKnownTranscriptGrowthGraceDeadlineUtc = new(StringComparer.Ordinal);
     private readonly Dictionary<string, long> _remoteHydrationSessionUpdateBaselineCounts = new(StringComparer.Ordinal);
     private readonly object _remoteSessionRecoveryRequestsSync = new();
-    private readonly Dictionary<RemoteSessionRecoveryRequestKey, RemoteSessionRecoveryRequest> _remoteSessionRecoveryRequests = new();
+    private readonly Dictionary<RemoteSessionRecoveryLeaseKey, RemoteSessionRecoveryRequest> _remoteSessionRecoveryRequests = new();
     private int _foregroundChatServiceGeneration;
     private readonly object _pendingInlinePermissionRequestsSync = new();
     private readonly Dictionary<string, PermissionRequestViewModel> _pendingInlinePermissionRequestsByToolCallId = new(StringComparer.Ordinal);
@@ -210,13 +210,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private ChatUiProjection? _pendingUiProjection;
     private int _pendingUiProjectionSequence;
     private bool _uiProjectionDrainScheduled;
-
-    private readonly record struct RemoteSessionRecoveryRequestKey(
-        AcpSessionRecoveryMode RecoveryMode,
-        string? ProfileId,
-        string? ConnectionInstanceId,
-        string RemoteSessionId,
-        string Cwd);
 
     private sealed class RemoteSessionRecoveryRequest : IDisposable
     {

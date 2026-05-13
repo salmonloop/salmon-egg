@@ -1636,7 +1636,7 @@ public partial class ChatViewModel
                 new InvalidOperationException("Cannot recover a remote session without a remote session id."));
         }
 
-        var key = new RemoteSessionRecoveryRequestKey(
+        var key = new RemoteSessionRecoveryLeaseKey(
             recoveryMode,
             binding.ProfileId,
             connectionInstanceId,
@@ -1747,18 +1747,21 @@ public partial class ChatViewModel
         }
     }
 
-    private List<RemoteSessionRecoveryRequest> RemoveConflictingRemoteSessionRecoveryRequests(RemoteSessionRecoveryRequestKey key)
+    private List<RemoteSessionRecoveryRequest> RemoveConflictingRemoteSessionRecoveryRequests(RemoteSessionRecoveryLeaseKey key)
     {
-        List<RemoteSessionRecoveryRequest>? requestsToCancel = null;
-        foreach (var (candidateKey, candidateRequest) in _remoteSessionRecoveryRequests.ToArray())
+        var decision = RemoteSessionRecoveryLeasePolicy.Decide(
+            key,
+            _remoteSessionRecoveryRequests.Keys.ToArray());
+        if (decision.ConflictingLeasesToCancel.Count == 0)
         {
-            if (string.Equals(candidateKey.ProfileId, key.ProfileId, StringComparison.Ordinal)
-                && string.Equals(candidateKey.ConnectionInstanceId, key.ConnectionInstanceId, StringComparison.Ordinal)
-                && string.Equals(candidateKey.RemoteSessionId, key.RemoteSessionId, StringComparison.Ordinal)
-                && (candidateKey.RecoveryMode != key.RecoveryMode
-                    || !string.Equals(candidateKey.Cwd, key.Cwd, StringComparison.Ordinal)))
+            return [];
+        }
+
+        List<RemoteSessionRecoveryRequest>? requestsToCancel = null;
+        foreach (var candidateKey in decision.ConflictingLeasesToCancel)
+        {
+            if (_remoteSessionRecoveryRequests.Remove(candidateKey, out var candidateRequest))
             {
-                _remoteSessionRecoveryRequests.Remove(candidateKey);
                 (requestsToCancel ??= []).Add(candidateRequest);
             }
         }
@@ -1792,7 +1795,7 @@ public partial class ChatViewModel
     }
 
     private async Task RemoveRemoteSessionRecoveryRequestWhenCompleteAsync(
-        RemoteSessionRecoveryRequestKey key,
+        RemoteSessionRecoveryLeaseKey key,
         RemoteSessionRecoveryRequest request)
     {
         try
