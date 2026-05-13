@@ -119,8 +119,6 @@ public sealed partial class StartViewModel : ObservableObject
 
     public StartSessionModeStage StartModeStage => _startSessionModeSnapshot.Stage;
 
-    public bool IsStartModeSelectorVisible => _startSessionModeSnapshot.IsVisible;
-
     public bool IsStartModeSelectorEnabled => _startSessionModeSnapshot.IsEnabled;
 
     public bool IsVoiceInputSupported => Chat.IsVoiceInputSupported;
@@ -660,11 +658,6 @@ public sealed partial class StartViewModel : ObservableObject
         if (previousSnapshot.Stage != nextSnapshot.Stage)
         {
             OnPropertyChanged(nameof(StartModeStage));
-        }
-
-        if (previousSnapshot.IsVisible != nextSnapshot.IsVisible)
-        {
-            OnPropertyChanged(nameof(IsStartModeSelectorVisible));
         }
 
         if (previousSnapshot.IsEnabled != nextSnapshot.IsEnabled)

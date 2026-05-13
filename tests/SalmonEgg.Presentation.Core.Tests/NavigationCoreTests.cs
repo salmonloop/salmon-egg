@@ -390,6 +390,7 @@ public sealed class NavigationCoreTests
         var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Start\StartView.xaml");
 
         Assert.Contains("AutomationProperties.AutomationId=\"StartView.Title\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"StartView.PromptBox\"", xaml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -426,7 +427,7 @@ public sealed class NavigationCoreTests
         Assert.True(modeSelectorIndex > agentSelectorIndex);
         Assert.True(projectSelectorIndex > modeSelectorIndex);
         Assert.Contains("AutomationProperties.AutomationId=\"StartView.ModeSelector\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("x:Load=\"{x:Bind ViewModel.IsStartModeSelectorVisible, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsStartModeSelectorVisible", xaml, StringComparison.Ordinal);
         Assert.Contains("ItemsSource=\"{x:Bind ViewModel.StartModeOptions, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("SelectedItem=\"{x:Bind ViewModel.SelectedStartMode, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("IsEnabled=\"{x:Bind ViewModel.IsStartModeSelectorEnabled, Mode=OneWay}\"", xaml, StringComparison.Ordinal);

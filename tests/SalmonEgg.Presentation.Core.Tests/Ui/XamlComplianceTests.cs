@@ -426,6 +426,23 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void StartView_ModeSelector_IsResidentWithinExpandedComposer()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Start\StartView.xaml");
+        var selector = FindElementByName(@"SalmonEgg\SalmonEgg\Presentation\Views\Start\StartView.xaml", "StartModeSelector");
+
+        Assert.Contains("x:Name=\"ExpandedAgentRow\"", xaml);
+        Assert.Contains("x:Load=\"{x:Bind ViewModel.IsComposerExpanded, Mode=OneWay}\"", xaml);
+        Assert.False(
+            HasAttributeByLocalName(selector, "Load"),
+            "StartModeSelector must be resident whenever the expanded composer row is loaded; readiness is represented by IsEnabled, not nested x:Load.");
+        Assert.False(
+            HasAttributeByLocalName(selector, "Visibility"),
+            "StartModeSelector must share the expanded-row visibility lifecycle with the agent and project selectors.");
+        Assert.Equal("{x:Bind ViewModel.IsStartModeSelectorEnabled, Mode=OneWay}", GetAttributeByLocalName(selector, "IsEnabled"));
+    }
+
+    [Fact]
     public void ChatStyles_XBindTemplate_UsesCompiledResourceDictionary()
     {
         var appXaml = LoadXaml(@"SalmonEgg\SalmonEgg\App.xaml");

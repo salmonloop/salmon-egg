@@ -18,7 +18,6 @@ public sealed class StartSessionModePolicyTests
             ModeCount: 0));
 
         Assert.Equal(StartSessionModeStage.Collapsed, snapshot.Stage);
-        Assert.False(snapshot.IsVisible);
         Assert.False(snapshot.IsEnabled);
     }
 
@@ -35,7 +34,6 @@ public sealed class StartSessionModePolicyTests
             ModeCount: 0));
 
         Assert.Equal(StartSessionModeStage.Loading, snapshot.Stage);
-        Assert.True(snapshot.IsVisible);
         Assert.False(snapshot.IsEnabled);
     }
 
@@ -52,7 +50,6 @@ public sealed class StartSessionModePolicyTests
             ModeCount: 2));
 
         Assert.Equal(StartSessionModeStage.Ready, snapshot.Stage);
-        Assert.True(snapshot.IsVisible);
         Assert.True(snapshot.IsEnabled);
     }
 
@@ -69,7 +66,6 @@ public sealed class StartSessionModePolicyTests
             ModeCount: 2));
 
         Assert.Equal(StartSessionModeStage.Loading, snapshot.Stage);
-        Assert.True(snapshot.IsVisible);
         Assert.False(snapshot.IsEnabled);
     }
 
@@ -86,7 +82,6 @@ public sealed class StartSessionModePolicyTests
             ModeCount: 2));
 
         Assert.Equal(StartSessionModeStage.Unavailable, snapshot.Stage);
-        Assert.True(snapshot.IsVisible);
         Assert.False(snapshot.IsEnabled);
     }
 }

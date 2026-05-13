@@ -192,6 +192,72 @@ public class ChatReducerTests
     }
 
     [Fact]
+    public void GivenConnectionStateWithNewSessionDraft_WhenSettingsSelectedProfileChanges_ThenDraftIsRetainedForLifecycleCleanup()
+    {
+        var draft = new NewSessionDraftState(
+            ProfileId: "profile-1",
+            Cwd: @"C:\Repo\App",
+            RemoteSessionId: "remote-draft",
+            ConnectionInstanceId: "conn-1",
+            Phase: NewSessionDraftPhase.Ready,
+            Version: 1,
+            AvailableModes: ImmutableList<ConversationModeOptionSnapshot>.Empty,
+            SelectedModeId: null,
+            ConfigOptions: ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+            ShowConfigOptionsPanel: false,
+            AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+            SessionInfo: null);
+        var initialState = ChatConnectionState.Empty with
+        {
+            Phase = ConnectionPhase.Connected,
+            SettingsSelectedProfileId = "profile-1",
+            ConnectionInstanceId = "conn-1",
+            ForegroundTransportProfileId = "profile-1",
+            NewSessionDraft = draft,
+            Generation = 4
+        };
+
+        var next = ChatConnectionReducer.Reduce(initialState, new SetSettingsSelectedProfileAction("profile-2"));
+
+        Assert.Equal("profile-2", next.SettingsSelectedProfileId);
+        Assert.Same(draft, next.NewSessionDraft);
+        Assert.Equal(5, next.Generation);
+    }
+
+    [Fact]
+    public void GivenConnectionStateWithNewSessionDraft_WhenSettingsSelectedProfileMatches_ThenDraftIsRetained()
+    {
+        var draft = new NewSessionDraftState(
+            ProfileId: "profile-1",
+            Cwd: @"C:\Repo\App",
+            RemoteSessionId: "remote-draft",
+            ConnectionInstanceId: "conn-1",
+            Phase: NewSessionDraftPhase.Ready,
+            Version: 1,
+            AvailableModes: ImmutableList<ConversationModeOptionSnapshot>.Empty,
+            SelectedModeId: null,
+            ConfigOptions: ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+            ShowConfigOptionsPanel: false,
+            AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+            SessionInfo: null);
+        var initialState = ChatConnectionState.Empty with
+        {
+            Phase = ConnectionPhase.Connected,
+            SettingsSelectedProfileId = "profile-1",
+            ConnectionInstanceId = "conn-1",
+            ForegroundTransportProfileId = "profile-1",
+            NewSessionDraft = draft,
+            Generation = 4
+        };
+
+        var next = ChatConnectionReducer.Reduce(initialState, new SetSettingsSelectedProfileAction("profile-1"));
+
+        Assert.Equal("profile-1", next.SettingsSelectedProfileId);
+        Assert.Same(draft, next.NewSessionDraft);
+        Assert.Equal(5, next.Generation);
+    }
+
+    [Fact]
     public void GivenConnectionState_WhenNewSessionDraftIsSet_ThenItBecomesSingleConnectionDraft()
     {
         var draft = new NewSessionDraftState(

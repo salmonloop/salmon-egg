@@ -3400,12 +3400,24 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
-    public async Task EnsureNewSessionDraftAsync_WhenSessionCloseUnsupported_DoesNotCreateDisposableDraft()
+    public async Task EnsureNewSessionDraftAsync_WhenSessionCloseUnsupported_CreatesDraftOnCurrentConnection()
     {
         await using var fixture = CreateViewModel();
         var chatService = CreateConnectedChatService();
         chatService.SetupGet(service => service.AgentCapabilities)
             .Returns(new AgentCapabilities(sessionCapabilities: new SessionCapabilities()));
+        chatService.Setup(service => service.CreateSessionAsync(It.Is<SessionNewParams>(p => p.Cwd == @"C:\Repo\App")))
+            .ReturnsAsync(new SessionNewResponse(
+                "remote-draft",
+                new SessionModesState
+                {
+                    CurrentModeId = "code",
+                    AvailableModes =
+                    [
+                        new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "plan", Name = "Plan" },
+                        new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "code", Name = "Code" }
+                    ]
+                }));
 
         await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object);
         await fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
@@ -3415,9 +3427,15 @@ public partial class ChatViewModelTests
         await fixture.ViewModel.EnsureNewSessionDraftAsync(@"C:\Repo\App");
 
         var connectionState = await fixture.GetConnectionStateAsync();
-        Assert.Null(connectionState.NewSessionDraft);
-        Assert.Empty(fixture.ViewModel.NewSessionDraftModeOptions);
-        chatService.Verify(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()), Times.Never);
+        Assert.NotNull(connectionState.NewSessionDraft);
+        Assert.Equal("remote-draft", connectionState.NewSessionDraft!.RemoteSessionId);
+        Assert.Equal("profile-1", connectionState.NewSessionDraft.ProfileId);
+        Assert.Equal("conn-1", connectionState.NewSessionDraft.ConnectionInstanceId);
+        Assert.Equal("code", fixture.ViewModel.SelectedNewSessionDraftMode?.ModeId);
+        chatService.Verify(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()), Times.Once);
+        chatService.Verify(service => service.CloseSessionAsync(
+            It.IsAny<SessionCloseParams>(),
+            It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -3601,6 +3619,83 @@ public partial class ChatViewModelTests
         Assert.Equal("remote-draft", binding!.RemoteSessionId);
         Assert.Equal("profile-1", binding.ProfileId);
         Assert.Equal("code", state.ResolveSessionStateSlice("conv-1")?.SelectedModeId);
+        Assert.Null((await fixture.GetConnectionStateAsync()).NewSessionDraft);
+    }
+
+    [Fact]
+    public async Task PromoteNewSessionDraftForLaunchAsync_WhenConnectionIdentityDiffers_ClearsDraftWithoutBindingConversation()
+    {
+        await using var fixture = CreateViewModel();
+        await fixture.DispatchAsync(new SelectConversationAction("conv-1"));
+        await WaitForConditionAsync(() => Task.FromResult(
+            string.Equals(fixture.ViewModel.CurrentSessionId, "conv-1", StringComparison.Ordinal)));
+        var draft = new NewSessionDraftState(
+            ProfileId: "profile-1",
+            Cwd: @"C:\Repo\App",
+            RemoteSessionId: "remote-draft",
+            ConnectionInstanceId: "conn-old",
+            Phase: NewSessionDraftPhase.Ready,
+            Version: 1,
+            AvailableModes: ImmutableList.Create(new ConversationModeOptionSnapshot
+            {
+                ModeId = "code",
+                ModeName = "Code"
+            }),
+            SelectedModeId: "code",
+            ConfigOptions: ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+            ShowConfigOptionsPanel: false,
+            AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+            SessionInfo: null);
+
+        await fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+        await fixture.DispatchConnectionAsync(new SetNewSessionDraftAction(draft));
+
+        await fixture.ViewModel.PromoteNewSessionDraftForLaunchAsync();
+
+        var state = await fixture.GetStateAsync();
+        Assert.Null(state.ResolveBinding("conv-1"));
+        Assert.Null(state.ResolveSessionStateSlice("conv-1"));
+        Assert.Null((await fixture.GetConnectionStateAsync()).NewSessionDraft);
+    }
+
+    [Fact]
+    public async Task PromoteNewSessionDraftForLaunchAsync_WhenSelectedProfileIntentDiffers_ClearsDraftWithoutBindingConversation()
+    {
+        await using var fixture = CreateViewModel();
+        await fixture.DispatchAsync(new SelectConversationAction("conv-1"));
+        await WaitForConditionAsync(() => Task.FromResult(
+            string.Equals(fixture.ViewModel.CurrentSessionId, "conv-1", StringComparison.Ordinal)));
+        var draft = new NewSessionDraftState(
+            ProfileId: "profile-1",
+            Cwd: @"C:\Repo\App",
+            RemoteSessionId: "remote-draft",
+            ConnectionInstanceId: "conn-1",
+            Phase: NewSessionDraftPhase.Ready,
+            Version: 1,
+            AvailableModes: ImmutableList.Create(new ConversationModeOptionSnapshot
+            {
+                ModeId = "code",
+                ModeName = "Code"
+            }),
+            SelectedModeId: "code",
+            ConfigOptions: ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+            ShowConfigOptionsPanel: false,
+            AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+            SessionInfo: null);
+
+        await fixture.DispatchConnectionAsync(new SetSettingsSelectedProfileAction("profile-2"));
+        await fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+        await fixture.DispatchConnectionAsync(new SetNewSessionDraftAction(draft));
+
+        await fixture.ViewModel.PromoteNewSessionDraftForLaunchAsync();
+
+        var state = await fixture.GetStateAsync();
+        Assert.Null(state.ResolveBinding("conv-1"));
+        Assert.Null(state.ResolveSessionStateSlice("conv-1"));
         Assert.Null((await fixture.GetConnectionStateAsync()).NewSessionDraft);
     }
 

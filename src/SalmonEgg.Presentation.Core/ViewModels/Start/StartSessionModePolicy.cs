@@ -5,10 +5,9 @@ public static class StartSessionModePolicy
     public static StartSessionModeSnapshot Compute(StartSessionModeState state)
     {
         var stage = ResolveStage(state);
-        var isVisible = stage != StartSessionModeStage.Collapsed;
         var isEnabled = stage == StartSessionModeStage.Ready;
 
-        return new StartSessionModeSnapshot(stage, isVisible, isEnabled);
+        return new StartSessionModeSnapshot(stage, isEnabled);
     }
 
     private static StartSessionModeStage ResolveStage(StartSessionModeState state)

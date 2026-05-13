@@ -477,7 +477,6 @@ public sealed class StartViewModelTests
             await chat.DispatchConnectionAsync(new SetNewSessionDraftAction(CreateReadyDraft("code")));
             await WaitForConditionAsync(() => startViewModel.StartModeOptions.Count == 2);
 
-            Assert.True(startViewModel.IsStartModeSelectorVisible);
             Assert.True(startViewModel.IsStartModeSelectorEnabled);
             Assert.Equal("code", startViewModel.SelectedStartMode?.ModeId);
             Assert.Collection(
@@ -492,7 +491,7 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
-    public void StartModeSelector_WhenComposerExpandsBeforeDraftReady_IsVisibleButDisabled()
+    public void StartModeSelector_WhenComposerExpandsBeforeDraftReady_IsDisabled()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -514,7 +513,6 @@ public sealed class StartViewModelTests
             startViewModel.OnComposerFocusEntered();
 
             Assert.True(startViewModel.IsComposerExpanded);
-            Assert.True(startViewModel.IsStartModeSelectorVisible);
             Assert.False(startViewModel.IsStartModeSelectorEnabled);
             Assert.Empty(startViewModel.StartModeOptions);
         }
@@ -556,8 +554,48 @@ public sealed class StartViewModelTests
             chat.ViewModel.AcpProfileList.Add(new ServerConfiguration { Id = "profile-2", Name = "Agent 2", Transport = TransportType.HttpSse, ServerUrl = "https://example-2.test" });
             chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[1];
 
-            Assert.True(startViewModel.IsStartModeSelectorVisible);
             Assert.False(startViewModel.IsStartModeSelectorEnabled);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task StartModeSelector_WhenSelectedProfileIntentChanges_ClearsExistingModeProjection()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(
+                chat.ViewModel,
+                preferences,
+                nav,
+                workflow.Object);
+            startViewModel.OnComposerLoaded();
+            startViewModel.OnComposerFocusEntered();
+
+            await chat.DispatchConnectionAsync(new SetSettingsSelectedProfileAction("profile-1"));
+            await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
+            await chat.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+            await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+            await chat.DispatchConnectionAsync(new SetNewSessionDraftAction(CreateReadyDraft("plan")));
+            await WaitForConditionAsync(() => startViewModel.StartModeOptions.Count == 2);
+            Assert.True(startViewModel.IsStartModeSelectorEnabled);
+
+            await chat.DispatchConnectionAsync(new SetSettingsSelectedProfileAction("profile-2"));
+
+            await WaitForConditionAsync(() => startViewModel.StartModeOptions.Count == 0);
+            Assert.False(startViewModel.IsStartModeSelectorEnabled);
+            Assert.Null(startViewModel.SelectedStartMode);
         }
         finally
         {
@@ -626,7 +664,7 @@ public sealed class StartViewModelTests
             startViewModel.OnComposerUnloaded();
 
             await WaitForConditionAsync(() => startViewModel.StartModeOptions.Count == 0);
-            Assert.False(startViewModel.IsStartModeSelectorVisible);
+            Assert.False(startViewModel.IsStartModeSelectorEnabled);
         }
         finally
         {

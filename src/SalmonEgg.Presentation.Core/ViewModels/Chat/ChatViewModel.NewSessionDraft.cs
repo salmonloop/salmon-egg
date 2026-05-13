@@ -66,12 +66,6 @@ public partial class ChatViewModel
                 return;
             }
 
-            if (chatService.AgentCapabilities?.SupportsSessionClose != true)
-            {
-                await ClearNewSessionDraftStateAsync().ConfigureAwait(false);
-                return;
-            }
-
             var existingDraft = connectionState.NewSessionDraft;
             if (IsReusableNewSessionDraft(existingDraft, profileId!, connectionInstanceId!, normalizedCwd))
             {
@@ -349,7 +343,7 @@ public partial class ChatViewModel
 
     private async Task ApplyNewSessionDraftProjectionAsync(ChatConnectionState connectionState)
     {
-        var draft = connectionState.NewSessionDraft;
+        var draft = ResolveEffectiveNewSessionDraft(connectionState);
         await PostToUiAsync(() =>
         {
             IsNewSessionDraftLoading = draft?.Phase is NewSessionDraftPhase.Creating or NewSessionDraftPhase.Promoting or NewSessionDraftPhase.Closing;
@@ -443,7 +437,26 @@ public partial class ChatViewModel
 
     private bool IsCurrentNewSessionDraft(ChatConnectionState connectionState, NewSessionDraftState draft)
         => string.Equals(connectionState.ForegroundTransportProfileId, draft.ProfileId, StringComparison.Ordinal)
+            && (string.IsNullOrWhiteSpace(connectionState.SettingsSelectedProfileId)
+                || string.Equals(connectionState.SettingsSelectedProfileId, draft.ProfileId, StringComparison.Ordinal))
             && string.Equals(connectionState.ConnectionInstanceId, draft.ConnectionInstanceId, StringComparison.Ordinal);
+
+    private static NewSessionDraftState? ResolveEffectiveNewSessionDraft(ChatConnectionState connectionState)
+    {
+        var draft = connectionState.NewSessionDraft;
+        if (draft is null)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(connectionState.SettingsSelectedProfileId)
+            && !string.Equals(connectionState.SettingsSelectedProfileId, draft.ProfileId, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return draft;
+    }
 
     private static bool IsReusableNewSessionDraft(
         NewSessionDraftState? draft,

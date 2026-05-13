@@ -244,6 +244,7 @@
                       XYFocusKeyboardNavigation="Enabled">
                     <TextBox x:Name="StartPromptBox"
                              x:Uid="ChatInputBox"
+                             AutomationProperties.AutomationId="StartView.PromptBox"
                              Text="{x:Bind ViewModel.StartPrompt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              AcceptsReturn="True"
                              TextWrapping="Wrap"
@@ -317,7 +318,6 @@
                     <ComboBox x:Name="StartModeSelector"
                               Grid.Column="1"
                               x:Uid="StartModeSelector"
-                              x:Load="{x:Bind ViewModel.IsStartModeSelectorVisible, Mode=OneWay}"
                               AutomationProperties.AutomationId="StartView.ModeSelector"
                               ItemsSource="{x:Bind ViewModel.StartModeOptions, Mode=OneWay}"
                               SelectedItem="{x:Bind ViewModel.SelectedStartMode, Mode=TwoWay}"

@@ -41,6 +41,36 @@ public sealed class NavigationSmokeTests
     }
 
     [SkippableFact]
+    public void StartComposerExpanded_ShowsAgentModeAndProjectSelectorsTogether()
+    {
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var promptBox = session.FindByAutomationId("StartView.PromptBox");
+        session.ClickElement(promptBox);
+
+        Assert.True(
+            session.WaitUntilOnscreen("StartView.AgentSelector", TimeSpan.FromSeconds(6)),
+            $"Expected agent selector to be onscreen after start composer expands.{Environment.NewLine}{appData.ReadBootLogTail()}");
+        Assert.True(
+            session.WaitUntilOnscreen("StartView.ModeSelector", TimeSpan.FromSeconds(6)),
+            $"Expected mode selector to share the expanded composer row lifecycle with agent/project selectors.{Environment.NewLine}{appData.ReadBootLogTail()}");
+        Assert.True(
+            session.WaitUntilOnscreen("StartView.ProjectSelector", TimeSpan.FromSeconds(6)),
+            $"Expected project selector to be onscreen after start composer expands.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var agentSelector = session.FindByAutomationId("StartView.AgentSelector");
+        var modeSelector = session.FindByAutomationId("StartView.ModeSelector");
+        var projectSelector = session.FindByAutomationId("StartView.ProjectSelector");
+
+        Assert.False(modeSelector.IsOffscreen);
+        Assert.True(
+            agentSelector.BoundingRectangle.Left < modeSelector.BoundingRectangle.Left
+            && modeSelector.BoundingRectangle.Left < projectSelector.BoundingRectangle.Left,
+            $"Expected selector order agent -> mode -> project. agent={agentSelector.BoundingRectangle}; mode={modeSelector.BoundingRectangle}; project={projectSelector.BoundingRectangle}");
+    }
+
+    [SkippableFact]
     public void ProjectInvoke_DoesNotChangeSelectionOrContent()
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
