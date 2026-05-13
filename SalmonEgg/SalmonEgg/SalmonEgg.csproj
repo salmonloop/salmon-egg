@@ -25,6 +25,10 @@
   <ItemGroup>
     <!-- Use the repository's custom black-and-white artwork as the single Uno.Resizetizer app icon source. -->
     <UnoIcon Include="Assets\Icons\icon.png" />
+    <!-- Use the repository splash artwork as the single Uno.Resizetizer splash screen source. -->
+    <UnoSplashScreen Include="Assets\Splash\splash_screen.png"
+                     BaseSize="300,300"
+                     Color="#FFFFFF" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' != 'net10.0-windows10.0.26100.0'">
