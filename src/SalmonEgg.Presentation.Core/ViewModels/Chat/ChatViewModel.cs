@@ -1107,7 +1107,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             }
 
             await RefreshProjectionAsync(state, token, ct).ConfigureAwait(false);
-            _ = ApplyNewSessionDraftProjectionAsync(connectionState ?? ChatConnectionState.Empty);
+            await ApplyNewSessionDraftProjectionAsync(connectionState ?? ChatConnectionState.Empty).ConfigureAwait(false);
         }, out _connectionStateSubscription);
     }
 

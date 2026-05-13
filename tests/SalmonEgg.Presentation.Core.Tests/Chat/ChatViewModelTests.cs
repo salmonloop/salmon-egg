@@ -9845,13 +9845,16 @@ public partial class ChatViewModelTests
                     UpdatedAtUtc: new DateTime(2026, 5, 13, 0, 0, 2, DateTimeKind.Utc)))
         });
 
-        await fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
-        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
-        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
-        await fixture.DispatchConnectionAsync(new SetSettingsSelectedProfileAction("profile-2"));
-        syncContext.RunAll();
-        await WaitForConditionAsync(() => Task.FromResult(
-            string.Equals(fixture.ViewModel.SelectedAcpProfile?.Id, "profile-2", StringComparison.Ordinal)));
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected)).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetSettingsSelectedProfileAction("profile-2")).AsTask());
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(
+                string.Equals(fixture.ViewModel.SelectedAcpProfile?.Id, "profile-2", StringComparison.Ordinal));
+        });
 
         var workflow = new Mock<IChatLaunchWorkflow>();
         using var nav = CreateStartNavigationViewModel(fixture);
@@ -12663,5 +12666,47 @@ public partial class ChatViewModelTests
         Assert.Single(fixture.ViewModel.MessageHistory);
         Assert.Equal("message-19", fixture.ViewModel.MessageHistory[0].Id);
         Assert.Equal("Message 19", fixture.ViewModel.MessageHistory[0].TextContent);
+    }
+
+    [Fact]
+    public async Task ConnectionStoreProjection_AppliesNewSessionDraftProjectionFromConnectionState()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        var draft = new NewSessionDraftState(
+            ProfileId: "profile-1",
+            Cwd: @"C:\Repo\App",
+            RemoteSessionId: "remote-draft",
+            ConnectionInstanceId: "conn-1",
+            Phase: NewSessionDraftPhase.Ready,
+            Version: 1,
+            AvailableModes: ImmutableList.Create(new ConversationModeOptionSnapshot
+            {
+                ModeId = "code",
+                ModeName = "Code"
+            }),
+            SelectedModeId: "code",
+            ConfigOptions: ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+            ShowConfigOptionsPanel: false,
+            AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+            SessionInfo: null);
+
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetSettingsSelectedProfileAction("profile-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected)).AsTask());
+
+        await fixture.DispatchConnectionAsync(new SetNewSessionDraftAction(draft));
+        Assert.Empty(fixture.ViewModel.NewSessionDraftModeOptions);
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(fixture.ViewModel.NewSessionDraftModeOptions.Count == 1);
+        });
+
+        var mode = Assert.Single(fixture.ViewModel.NewSessionDraftModeOptions);
+        Assert.Equal("code", mode.ModeId);
+        Assert.Equal("code", fixture.ViewModel.SelectedNewSessionDraftMode?.ModeId);
     }
 }
