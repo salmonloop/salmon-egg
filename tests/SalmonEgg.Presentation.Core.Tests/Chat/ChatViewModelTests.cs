@@ -11488,7 +11488,7 @@ public partial class ChatViewModelTests
         await sessionManager.Object.CreateSessionAsync("conv-remote-2", @"C:\repo\remote2");
 
         var remote1Started = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var remote1Canceled = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowRemote1Replay = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         ReplayLoadChatService? innerChatService = null;
         innerChatService = new ReplayLoadChatService
@@ -11499,19 +11499,12 @@ public partial class ChatViewModelTests
                 if (string.Equals(parameters.SessionId, "remote-1", StringComparison.Ordinal))
                 {
                     remote1Started.TrySetResult(null);
-                    try
-                    {
-                        await Task.Delay(Timeout.Infinite, cancellationToken);
-                    }
-                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                    {
-                        remote1Canceled.TrySetResult(null);
-                        innerChatService!.RaiseSessionUpdate(new SessionUpdateEventArgs(
-                            "remote-1",
-                            new AgentMessageUpdate(new TextContentBlock("stale remote-1 replay"))));
-                        await Task.Yield();
-                        throw;
-                    }
+                    await allowRemote1Replay.Task.WaitAsync(cancellationToken);
+                    innerChatService!.RaiseSessionUpdate(new SessionUpdateEventArgs(
+                        "remote-1",
+                        new AgentMessageUpdate(new TextContentBlock("stale remote-1 replay"))));
+                    await Task.Yield();
+                    return SessionLoadResponse.Completed;
                 }
 
                 Assert.Equal("remote-2", parameters.SessionId);
@@ -11593,13 +11586,10 @@ public partial class ChatViewModelTests
         syncContext.RunAll();
         Assert.Equal("conv-remote-2", fixture.ViewModel.CurrentSessionId);
 
-        await WaitForConditionAsync(() =>
-        {
-            syncContext.RunAll();
-            return Task.FromResult(remote1Canceled.Task.IsCompleted);
-        }, timeoutMilliseconds: 8000);
+        allowRemote1Replay.TrySetResult(null);
         await syncContext.RunUntilCompletedAsync(firstRemoteSwitchTask);
         Assert.False(await firstRemoteSwitchTask);
+        syncContext.RunAll();
 
         var finalState = await fixture.GetStateAsync();
         Assert.Equal("conv-remote-2", finalState.HydratedConversationId);

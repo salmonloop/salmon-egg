@@ -690,6 +690,133 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task SwitchConversationAsync_WhenTogglingBetweenTwoRemoteLoads_ReusesEachInFlightSessionLoad()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
+        var sessionManager = new Mock<ISessionManager>();
+        sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.TryGetValue(id, out var session) ? session : null);
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .Returns<string, string?>((id, cwd) =>
+            {
+                var session = new Session(id, cwd);
+                sessions[id] = session;
+                return Task.FromResult(session);
+            });
+        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
+            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
+            {
+                if (!sessions.TryGetValue(id, out var session))
+                {
+                    return false;
+                }
+
+                update(session);
+                if (updateActivity)
+                {
+                    session.UpdateActivity();
+                }
+
+                return true;
+            });
+        sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.Remove(id));
+
+        await sessionManager.Object.CreateSessionAsync("conv-a", @"C:\repo\a");
+        await sessionManager.Object.CreateSessionAsync("conv-b", @"C:\repo\b");
+
+        var aStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var bStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowACompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowBCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var aLoadCount = 0;
+        var bLoadCount = 0;
+        var chatService = CreateConnectedChatService();
+        chatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
+        chatService.Setup(service => service.LoadSessionAsync(
+                It.IsAny<SessionLoadParams>(),
+                It.IsAny<CancellationToken>()))
+            .Returns<SessionLoadParams, CancellationToken>(async (parameters, cancellationToken) =>
+            {
+                if (string.Equals(parameters.SessionId, "remote-a", StringComparison.Ordinal))
+                {
+                    Interlocked.Increment(ref aLoadCount);
+                    aStarted.TrySetResult(null);
+                    await allowACompletion.Task.WaitAsync(cancellationToken);
+                    return SessionLoadResponse.Completed;
+                }
+
+                if (string.Equals(parameters.SessionId, "remote-b", StringComparison.Ordinal))
+                {
+                    Interlocked.Increment(ref bLoadCount);
+                    bStarted.TrySetResult(null);
+                    await allowBCompletion.Task.WaitAsync(cancellationToken);
+                    return SessionLoadResponse.Completed;
+                }
+
+                throw new InvalidOperationException($"Unexpected remote session id: {parameters.SessionId}");
+            });
+
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-a",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 5, 14, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 5, 14, 0, 0, 0, DateTimeKind.Utc),
+            ConnectionInstanceId: "conn-1"),
+            ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-b",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 5, 14, 0, 0, 1, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 5, 14, 0, 0, 1, DateTimeKind.Utc),
+            ConnectionInstanceId: "conn-1"),
+            ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-a",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-a", new ConversationBindingSlice("conv-a", "remote-a", "profile-1"))
+                .Add("conv-b", new ConversationBindingSlice("conv-b", "remote-b", "profile-1"))
+        });
+        await DispatchConnectedAsync(fixture, "profile-1");
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+
+        var firstASwitch = fixture.ViewModel.SwitchConversationAsync("conv-a");
+        await aStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var bSwitch = fixture.ViewModel.SwitchConversationAsync("conv-b");
+        await bStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var secondASwitch = fixture.ViewModel.SwitchConversationAsync("conv-a");
+        await WaitForConditionAsync(() =>
+        {
+            return Task.FromResult(
+                string.Equals(fixture.ViewModel.CurrentSessionId, "conv-a", StringComparison.Ordinal)
+                && fixture.ViewModel.IsRemoteHydrationPending);
+        }, timeoutMilliseconds: 2000);
+
+        Assert.Equal(1, Volatile.Read(ref aLoadCount));
+        Assert.Equal(1, Volatile.Read(ref bLoadCount));
+
+        allowACompletion.TrySetResult(null);
+        Assert.True(await secondASwitch);
+
+        allowBCompletion.TrySetResult(null);
+        await firstASwitch;
+        await bSwitch;
+    }
+
+    [Fact]
     public async Task ReplaceChatServiceAsync_WhenRemoteLoadIsInFlightWithoutConnectionInstance_CancelsOldRecoveryAndUsesReplacementService()
     {
         var syncContext = new ImmediateSynchronizationContext();
@@ -812,19 +939,29 @@ public partial class ChatViewModelTests
     [Fact]
     public void RemoteSessionRecoveryRequestRegistry_DoesNotCallExternalWorkWhileHoldingRegistryLock()
     {
-        var source = File.ReadAllText(FindRepoFile(
+        var lifecycleSource = File.ReadAllText(FindRepoFile(
             "src",
             "SalmonEgg.Presentation.Core",
             "ViewModels",
             "Chat",
             "ChatViewModel.RemoteConversationLifecycle.cs"));
-        var getOrStartBody = ExtractMethodBody(source, "private Task<AcpSessionRecoveryProjection> GetOrStartRemoteSessionRecoveryProjectionAsync");
-        var cleanupBody = ExtractMethodBody(source, "private void CancelAndClearRemoteSessionRecoveryRequests");
-        var supersedeBody = ExtractMethodBody(source, "private List<RemoteSessionRecoveryRequest> RemoveSupersededRemoteSessionRecoveryRequests");
+        var requestSource = File.ReadAllText(FindRepoFile(
+            "src",
+            "SalmonEgg.Presentation.Core",
+            "ViewModels",
+            "Chat",
+            "ChatViewModel.cs"));
+        var getOrStartBody = ExtractMethodBody(lifecycleSource, "private Task<AcpSessionRecoveryProjection> GetOrStartRemoteSessionRecoveryProjectionAsync");
+        var cleanupBody = ExtractMethodBody(lifecycleSource, "private void CancelAndClearRemoteSessionRecoveryRequests");
+        var supersedeBody = ExtractMethodBody(lifecycleSource, "private List<RemoteSessionRecoveryRequest> RemoveConflictingRemoteSessionRecoveryRequests");
+        var cancelBody = ExtractMethodBody(requestSource, "public void Cancel()");
+        var cancelTransportBody = ExtractMethodBody(requestSource, "public void CancelTransport()");
 
         Assert.DoesNotContain("RunRemoteSessionRecoveryProjectionAsync", ExtractFirstLockBlock(getOrStartBody), StringComparison.Ordinal);
         Assert.DoesNotContain(".Cancel();", ExtractFirstLockBlock(cleanupBody), StringComparison.Ordinal);
         Assert.DoesNotContain(".Cancel();", supersedeBody, StringComparison.Ordinal);
+        Assert.DoesNotContain(".Cancel();", ExtractFirstLockBlockOrEmpty(cancelBody, "lock (_sync)"), StringComparison.Ordinal);
+        Assert.DoesNotContain(".Cancel();", ExtractFirstLockBlockOrEmpty(cancelTransportBody, "lock (_sync)"), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -842,11 +979,39 @@ public partial class ChatViewModelTests
         Assert.Contains("ObserveRemoteSessionRecoveryTransportTaskAsync(resumeTask", runBody, StringComparison.Ordinal);
     }
 
-    private static string ExtractFirstLockBlock(string source)
+    [Fact]
+    public void RemoteSessionRecoveryRequestCleanup_WaitsForExecutionBeforeDisposingCancellationSource()
     {
-        var lockStart = source.IndexOf("lock (_remoteSessionRecoveryRequestsSync)", StringComparison.Ordinal);
-        Assert.True(lockStart >= 0, "Could not find remote session recovery registry lock.");
-        var bodyStart = source.IndexOf('{', lockStart);
+        var source = File.ReadAllText(FindRepoFile(
+            "src",
+            "SalmonEgg.Presentation.Core",
+            "ViewModels",
+            "Chat",
+            "ChatViewModel.RemoteConversationLifecycle.cs"));
+        var cleanupBody = ExtractMethodBody(source, "private async Task RemoveRemoteSessionRecoveryRequestWhenCompleteAsync");
+
+        var executionAwaitIndex = cleanupBody.IndexOf("await request.ExecutionTask.ConfigureAwait(false)", StringComparison.Ordinal);
+        var disposeIndex = cleanupBody.IndexOf("request.Dispose();", StringComparison.Ordinal);
+        Assert.True(executionAwaitIndex >= 0, "Cleanup must wait for the recovery request execution to unwind.");
+        Assert.True(disposeIndex > executionAwaitIndex, "Cleanup must not dispose the request before execution unwinds.");
+    }
+
+    private static string ExtractFirstLockBlock(string source, string lockPattern = "lock (_remoteSessionRecoveryRequestsSync)")
+    {
+        var lockStart = source.IndexOf(lockPattern, StringComparison.Ordinal);
+        Assert.True(lockStart >= 0, $"Could not find lock block: {lockPattern}");
+        return ExtractBlockAt(source, lockStart);
+    }
+
+    private static string ExtractFirstLockBlockOrEmpty(string source, string lockPattern)
+    {
+        var lockStart = source.IndexOf(lockPattern, StringComparison.Ordinal);
+        return lockStart < 0 ? string.Empty : ExtractBlockAt(source, lockStart);
+    }
+
+    private static string ExtractBlockAt(string source, int blockOwnerStart)
+    {
+        var bodyStart = source.IndexOf('{', blockOwnerStart);
         Assert.True(bodyStart >= 0, "Could not find lock body.");
         var depth = 0;
         for (var index = bodyStart; index < source.Length; index++)

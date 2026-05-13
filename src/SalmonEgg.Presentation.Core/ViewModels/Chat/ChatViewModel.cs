@@ -222,62 +222,77 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     {
         private readonly object _sync = new();
         private readonly CancellationTokenSource _cancellationTokenSource;
+        private readonly CancellationToken _token;
         private readonly TaskCompletionSource<AcpSessionRecoveryProjection> _completion =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private Task? _executionTask;
         private bool _disposed;
 
         public RemoteSessionRecoveryRequest(CancellationTokenSource cancellationTokenSource)
-            => _cancellationTokenSource = cancellationTokenSource;
+        {
+            _cancellationTokenSource = cancellationTokenSource;
+            _token = cancellationTokenSource.Token;
+        }
 
         public Task<AcpSessionRecoveryProjection> Task => _completion.Task;
 
-        public CancellationToken Token => _cancellationTokenSource.Token;
+        public Task ExecutionTask => Volatile.Read(ref _executionTask) ?? System.Threading.Tasks.Task.CompletedTask;
+
+        public CancellationToken Token => _token;
 
         public void Start(Func<CancellationToken, Task<AcpSessionRecoveryProjection>> operation)
         {
             ArgumentNullException.ThrowIfNull(operation);
-            _ = RunAsync(operation);
+            Volatile.Write(ref _executionTask, RunAsync(operation));
         }
 
         public void Cancel()
         {
-            lock (_sync)
+            if (TryRequestCancellation())
             {
-                if (_disposed)
-                {
-                    return;
-                }
-
-                _cancellationTokenSource.Cancel();
-                _completion.TrySetCanceled(_cancellationTokenSource.Token);
+                _completion.TrySetCanceled(_token);
             }
         }
 
         public void CancelTransport()
-        {
-            lock (_sync)
-            {
-                if (_disposed)
-                {
-                    return;
-                }
-
-                _cancellationTokenSource.Cancel();
-            }
-        }
+            => TryRequestCancellation();
 
         public void Dispose()
         {
+            var shouldDispose = false;
             lock (_sync)
             {
-                if (_disposed)
+                if (!_disposed)
                 {
-                    return;
+                    _disposed = true;
+                    shouldDispose = true;
                 }
+            }
 
-                _disposed = true;
+            if (shouldDispose)
+            {
                 _cancellationTokenSource.Dispose();
             }
+        }
+
+        private bool TryRequestCancellation()
+        {
+            var shouldCancel = false;
+            lock (_sync)
+            {
+                if (!_disposed && !_token.IsCancellationRequested)
+                {
+                    shouldCancel = true;
+                }
+            }
+
+            if (!shouldCancel)
+            {
+                return false;
+            }
+
+            _cancellationTokenSource.Cancel();
+            return true;
         }
 
         private async Task RunAsync(Func<CancellationToken, Task<AcpSessionRecoveryProjection>> operation)

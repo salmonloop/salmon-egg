@@ -1658,7 +1658,7 @@ public partial class ChatViewModel
                 return existing.Task;
             }
 
-            requestsToCancel = RemoveSupersededRemoteSessionRecoveryRequests(key);
+            requestsToCancel = RemoveConflictingRemoteSessionRecoveryRequests(key);
             requestToStart = new RemoteSessionRecoveryRequest(
                 CancellationTokenSource.CreateLinkedTokenSource(_disposeCts.Token));
             _remoteSessionRecoveryRequests[key] = requestToStart;
@@ -1747,15 +1747,16 @@ public partial class ChatViewModel
         }
     }
 
-    private List<RemoteSessionRecoveryRequest> RemoveSupersededRemoteSessionRecoveryRequests(RemoteSessionRecoveryRequestKey key)
+    private List<RemoteSessionRecoveryRequest> RemoveConflictingRemoteSessionRecoveryRequests(RemoteSessionRecoveryRequestKey key)
     {
         List<RemoteSessionRecoveryRequest>? requestsToCancel = null;
         foreach (var (candidateKey, candidateRequest) in _remoteSessionRecoveryRequests.ToArray())
         {
-            if (candidateKey.RecoveryMode == key.RecoveryMode
-                && string.Equals(candidateKey.ProfileId, key.ProfileId, StringComparison.Ordinal)
+            if (string.Equals(candidateKey.ProfileId, key.ProfileId, StringComparison.Ordinal)
                 && string.Equals(candidateKey.ConnectionInstanceId, key.ConnectionInstanceId, StringComparison.Ordinal)
-                && !string.Equals(candidateKey.RemoteSessionId, key.RemoteSessionId, StringComparison.Ordinal))
+                && string.Equals(candidateKey.RemoteSessionId, key.RemoteSessionId, StringComparison.Ordinal)
+                && (candidateKey.RecoveryMode != key.RecoveryMode
+                    || !string.Equals(candidateKey.Cwd, key.Cwd, StringComparison.Ordinal)))
             {
                 _remoteSessionRecoveryRequests.Remove(candidateKey);
                 (requestsToCancel ??= []).Add(candidateRequest);
@@ -1803,6 +1804,14 @@ public partial class ChatViewModel
         }
         finally
         {
+            try
+            {
+                await request.ExecutionTask.ConfigureAwait(false);
+            }
+            catch
+            {
+            }
+
             lock (_remoteSessionRecoveryRequestsSync)
             {
                 if (_remoteSessionRecoveryRequests.TryGetValue(key, out var current)
