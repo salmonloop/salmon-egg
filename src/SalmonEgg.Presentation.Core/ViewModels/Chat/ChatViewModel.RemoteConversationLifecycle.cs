@@ -376,13 +376,14 @@ public partial class ChatViewModel
                         activationVersion,
                         HydrationOverlayPhase.RequestingSessionLoad)
                     .ConfigureAwait(false);
-                var sessionLoadTask = chatService.LoadSessionAsync(
-                    new SessionLoadParams(binding.RemoteSessionId!, GetSessionCwdOrDefault(conversationId)),
-                    cancellationToken);
-                recoveryProjection = AcpSessionRecoveryProjection.FromLoad(
-                    await sessionLoadTask
-                        .WaitAsync(RemoteSessionLoadTimeout, cancellationToken)
-                        .ConfigureAwait(false));
+                recoveryProjection = await GetOrStartRemoteSessionRecoveryProjectionAsync(
+                        chatService,
+                        recoveryMode,
+                        binding,
+                        resolvedConnection.ConnectionInstanceId,
+                        GetSessionCwdOrDefault(conversationId))
+                    .WaitAsync(cancellationToken)
+                    .ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
                 if (adapter != null && hydrationAttemptId.HasValue)
                 {
@@ -410,13 +411,14 @@ public partial class ChatViewModel
                         activationVersion,
                         HydrationOverlayPhase.RequestingSessionLoad)
                     .ConfigureAwait(false);
-                var sessionResumeTask = chatService.ResumeSessionAsync(
-                    new SessionResumeParams(binding.RemoteSessionId!, GetSessionCwdOrDefault(conversationId)),
-                    cancellationToken);
-                recoveryProjection = AcpSessionRecoveryProjection.FromResume(
-                    await sessionResumeTask
-                        .WaitAsync(RemoteSessionLoadTimeout, cancellationToken)
-                        .ConfigureAwait(false));
+                recoveryProjection = await GetOrStartRemoteSessionRecoveryProjectionAsync(
+                        chatService,
+                        recoveryMode,
+                        binding,
+                        resolvedConnection.ConnectionInstanceId,
+                        GetSessionCwdOrDefault(conversationId))
+                    .WaitAsync(cancellationToken)
+                    .ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
             }
             await ApplySessionLoadResponseAsync(conversationId, recoveryProjection.SessionLoadResponse).ConfigureAwait(true);
@@ -932,6 +934,7 @@ public partial class ChatViewModel
 
         if (intent == ServiceReplaceIntent.ForegroundOwner)
         {
+            CancelAndClearRemoteSessionRecoveryRequests("ForegroundChatServiceReplacement");
             _ = _chatStore.Dispatch(new ResetConversationRuntimeStatesAction());
             _remoteHydrationSessionUpdateBaselineCounts.Clear();
             _remoteHydrationKnownTranscriptBaselineCounts.Clear();
@@ -963,6 +966,7 @@ public partial class ChatViewModel
 
         if (intent == ServiceReplaceIntent.ForegroundOwner)
         {
+            CancelAndClearRemoteSessionRecoveryRequests("ForegroundChatServiceReplacement");
             await _chatStore.Dispatch(new ResetConversationRuntimeStatesAction()).ConfigureAwait(false);
         }
 
@@ -1605,6 +1609,162 @@ public partial class ChatViewModel
 
     private bool HasReusableWarmSelectionProjection(ChatState state, string conversationId)
         => HasReusableWarmProjection(state, conversationId);
+
+    private Task<AcpSessionRecoveryProjection> GetOrStartRemoteSessionRecoveryProjectionAsync(
+        IChatService chatService,
+        AcpSessionRecoveryMode recoveryMode,
+        ConversationBindingSlice binding,
+        string? connectionInstanceId,
+        string cwd)
+    {
+        if (string.IsNullOrWhiteSpace(binding.RemoteSessionId))
+        {
+            return Task.FromException<AcpSessionRecoveryProjection>(
+                new InvalidOperationException("Cannot recover a remote session without a remote session id."));
+        }
+
+        var key = new RemoteSessionRecoveryRequestKey(
+            recoveryMode,
+            binding.ProfileId,
+            connectionInstanceId,
+            binding.RemoteSessionId!,
+            cwd);
+
+        lock (_remoteSessionRecoveryRequestsSync)
+        {
+            if (_remoteSessionRecoveryRequests.TryGetValue(key, out var existing))
+            {
+                Logger.LogInformation(
+                    "Reusing in-flight remote session recovery request. RecoveryMode={RecoveryMode} RemoteSessionId={RemoteSessionId} ProfileId={ProfileId} ConnectionInstanceId={ConnectionInstanceId}",
+                    recoveryMode,
+                    binding.RemoteSessionId,
+                    binding.ProfileId,
+                    connectionInstanceId);
+                return existing.Task;
+            }
+
+            CancelSupersededRemoteSessionRecoveryRequests(key);
+            var requestCts = CancellationTokenSource.CreateLinkedTokenSource(_disposeCts.Token);
+            var task = RunRemoteSessionRecoveryProjectionAsync(
+                chatService,
+                recoveryMode,
+                binding.RemoteSessionId!,
+                cwd,
+                requestCts);
+            _remoteSessionRecoveryRequests[key] = new RemoteSessionRecoveryRequest(task, requestCts);
+            _ = RemoveRemoteSessionRecoveryRequestWhenCompleteAsync(key, task, requestCts);
+            return task;
+        }
+    }
+
+    private async Task<AcpSessionRecoveryProjection> RunRemoteSessionRecoveryProjectionAsync(
+        IChatService chatService,
+        AcpSessionRecoveryMode recoveryMode,
+        string remoteSessionId,
+        string cwd,
+        CancellationTokenSource requestCts)
+    {
+        var requestToken = requestCts.Token;
+        if (recoveryMode == AcpSessionRecoveryMode.Load)
+        {
+            var loadTask = chatService.LoadSessionAsync(
+                new SessionLoadParams(remoteSessionId, cwd),
+                requestToken);
+            try
+            {
+                return AcpSessionRecoveryProjection.FromLoad(
+                    await loadTask
+                        .WaitAsync(RemoteSessionLoadTimeout, requestToken)
+                        .ConfigureAwait(false));
+            }
+            catch (TimeoutException)
+            {
+                requestCts.Cancel();
+                throw;
+            }
+        }
+
+        var resumeTask = chatService.ResumeSessionAsync(
+            new SessionResumeParams(remoteSessionId, cwd),
+            requestToken);
+        try
+        {
+            return AcpSessionRecoveryProjection.FromResume(
+                await resumeTask
+                    .WaitAsync(RemoteSessionLoadTimeout, requestToken)
+                    .ConfigureAwait(false));
+        }
+        catch (TimeoutException)
+        {
+            requestCts.Cancel();
+            throw;
+        }
+    }
+
+    private void CancelSupersededRemoteSessionRecoveryRequests(RemoteSessionRecoveryRequestKey key)
+    {
+        foreach (var (candidateKey, candidateRequest) in _remoteSessionRecoveryRequests.ToArray())
+        {
+            if (candidateKey.RecoveryMode == key.RecoveryMode
+                && string.Equals(candidateKey.ProfileId, key.ProfileId, StringComparison.Ordinal)
+                && string.Equals(candidateKey.ConnectionInstanceId, key.ConnectionInstanceId, StringComparison.Ordinal)
+                && !string.Equals(candidateKey.RemoteSessionId, key.RemoteSessionId, StringComparison.Ordinal))
+            {
+                candidateRequest.CancellationTokenSource.Cancel();
+            }
+        }
+    }
+
+    private void CancelAndClearRemoteSessionRecoveryRequests(string reason)
+    {
+        List<RemoteSessionRecoveryRequest>? requestsToCancel = null;
+        lock (_remoteSessionRecoveryRequestsSync)
+        {
+            if (_remoteSessionRecoveryRequests.Count == 0)
+            {
+                return;
+            }
+
+            requestsToCancel = _remoteSessionRecoveryRequests.Values.ToList();
+            _remoteSessionRecoveryRequests.Clear();
+        }
+
+        Logger.LogInformation(
+            "Canceling in-flight remote session recovery requests. Count={Count} Reason={Reason}",
+            requestsToCancel.Count,
+            reason);
+        foreach (var request in requestsToCancel)
+        {
+            request.CancellationTokenSource.Cancel();
+        }
+    }
+
+    private async Task RemoveRemoteSessionRecoveryRequestWhenCompleteAsync(
+        RemoteSessionRecoveryRequestKey key,
+        Task<AcpSessionRecoveryProjection> task,
+        CancellationTokenSource requestCts)
+    {
+        try
+        {
+            await task.ConfigureAwait(false);
+        }
+        catch
+        {
+        }
+        finally
+        {
+            lock (_remoteSessionRecoveryRequestsSync)
+            {
+                if (_remoteSessionRecoveryRequests.TryGetValue(key, out var current)
+                    && ReferenceEquals(current.Task, task))
+                {
+                    _remoteSessionRecoveryRequests.Remove(key);
+                }
+            }
+
+            requestCts.Dispose();
+        }
+    }
 
     private ConversationWorkspaceSnapshot? ResolveReusableWarmProjectionSnapshot(ChatState state, string conversationId)
     {

@@ -11224,7 +11224,7 @@ public partial class ChatViewModelTests
         await sessionManager.Object.CreateSessionAsync("conv-remote", @"C:\repo\remote");
 
         var firstLoadStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var firstLoadCanceled = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowFirstLoadCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
         var loadInvocationCount = 0;
 
         ReplayLoadChatService? innerChatService = null;
@@ -11237,19 +11237,12 @@ public partial class ChatViewModelTests
                 if (invocation == 1)
                 {
                     firstLoadStarted.TrySetResult(null);
-                    try
-                    {
-                        await Task.Delay(Timeout.Infinite, cancellationToken);
-                    }
-                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                    {
-                        firstLoadCanceled.TrySetResult(null);
-                        innerChatService!.RaiseSessionUpdate(new SessionUpdateEventArgs(
-                            "remote-1",
-                            new AgentMessageUpdate(new TextContentBlock("stale replay after cancel"))));
-                        await Task.Yield();
-                        throw;
-                    }
+                    await allowFirstLoadCompletion.Task;
+                    innerChatService!.RaiseSessionUpdate(new SessionUpdateEventArgs(
+                        "remote-1",
+                        new AgentMessageUpdate(new TextContentBlock("fresh replay after reused load"))));
+                    await Task.Yield();
+                    return SessionLoadResponse.Completed;
                 }
 
                 Assert.Equal(2, invocation);
@@ -11318,23 +11311,31 @@ public partial class ChatViewModelTests
 
         var localSwitchTask = fixture.ViewModel.SwitchConversationAsync("conv-local");
         await syncContext.RunUntilCompletedAsync(localSwitchTask);
-        await WaitForConditionAsync(() =>
-        {
-            syncContext.RunAll();
-            return Task.FromResult(firstLoadCanceled.Task.IsCompleted);
-        }, timeoutMilliseconds: 2000);
 
         Assert.True(await localSwitchTask);
         await syncContext.RunUntilCompletedAsync(firstRemoteSwitchTask);
         Assert.False(await firstRemoteSwitchTask);
+        syncContext.RunAll();
+        innerChatService.RaiseSessionUpdate(new SessionUpdateEventArgs(
+            "remote-1",
+            new AgentMessageUpdate(new TextContentBlock("stale replay after cancel"))));
         syncContext.RunAll();
         Assert.DoesNotContain(
             fixture.ViewModel.MessageHistory,
             message => message.TextContent?.Contains("stale replay after cancel", StringComparison.Ordinal) == true);
 
         var secondRemoteSwitchTask = fixture.ViewModel.SwitchConversationAsync("conv-remote");
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(
+                string.Equals(fixture.ViewModel.CurrentSessionId, "conv-remote", StringComparison.Ordinal)
+                && fixture.ViewModel.IsRemoteHydrationPending);
+        }, timeoutMilliseconds: 2000);
+        Assert.Equal(1, Volatile.Read(ref loadInvocationCount));
+        allowFirstLoadCompletion.TrySetResult(null);
         await syncContext.RunUntilCompletedAsync(secondRemoteSwitchTask);
-        Assert.True(await secondRemoteSwitchTask);
+        Assert.True(await secondRemoteSwitchTask, fixture.ViewModel.ErrorMessage ?? "<no error>");
 
         Assert.Equal("conv-remote", fixture.ViewModel.CurrentSessionId);
         var finalState = await fixture.GetStateAsync();
@@ -11342,7 +11343,7 @@ public partial class ChatViewModelTests
             ?? ImmutableList<ConversationMessageSnapshot>.Empty;
         Assert.Contains(
             finalTranscript,
-            message => message.TextContent?.Contains("fresh replay after restart", StringComparison.Ordinal) == true);
+            message => message.TextContent?.Contains("fresh replay after", StringComparison.Ordinal) == true);
         Assert.DoesNotContain(
             finalTranscript,
             message => message.TextContent?.Contains("stale replay after cancel", StringComparison.Ordinal) == true);

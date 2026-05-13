@@ -578,4 +578,235 @@ public partial class ChatViewModelTests
             || string.Equals(fixture.ViewModel.CurrentSessionId, "conv-target", StringComparison.Ordinal));
         Assert.Equal(0, Volatile.Read(ref targetLoadCount));
     }
+
+    [Fact]
+    public async Task SwitchConversationAsync_WhenReturningToSameRemoteWhileLoadIsInFlight_ReusesExistingSessionLoad()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
+        var sessionManager = new Mock<ISessionManager>();
+        sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.TryGetValue(id, out var session) ? session : null);
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .Returns<string, string?>((id, cwd) =>
+            {
+                var session = new Session(id, cwd);
+                sessions[id] = session;
+                return Task.FromResult(session);
+            });
+        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
+            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
+            {
+                if (!sessions.TryGetValue(id, out var session))
+                {
+                    return false;
+                }
+
+                update(session);
+                if (updateActivity)
+                {
+                    session.UpdateActivity();
+                }
+
+                return true;
+            });
+        sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.Remove(id));
+
+        await sessionManager.Object.CreateSessionAsync("conv-local", @"C:\repo\local");
+        await sessionManager.Object.CreateSessionAsync("conv-remote", @"C:\repo\remote");
+
+        var loadStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowLoadCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var loadCount = 0;
+        var chatService = CreateConnectedChatService();
+        chatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
+        chatService.Setup(service => service.LoadSessionAsync(
+                It.Is<SessionLoadParams>(parameters =>
+                    string.Equals(parameters.SessionId, "remote-1", StringComparison.Ordinal)),
+                It.IsAny<CancellationToken>()))
+            .Returns<SessionLoadParams, CancellationToken>(async (_, _) =>
+            {
+                Interlocked.Increment(ref loadCount);
+                loadStarted.TrySetResult(null);
+                await allowLoadCompletion.Task;
+                return SessionLoadResponse.Completed;
+            });
+
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-local",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 5, 14, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 5, 14, 0, 0, 0, DateTimeKind.Utc)));
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-remote",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 5, 14, 0, 0, 1, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 5, 14, 0, 0, 1, DateTimeKind.Utc),
+            ConnectionInstanceId: "conn-1"),
+            ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-local",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-remote", new ConversationBindingSlice("conv-remote", "remote-1", "profile-1"))
+        });
+        await DispatchConnectedAsync(fixture, "profile-1");
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+
+        var firstRemoteSwitch = fixture.ViewModel.SwitchConversationAsync("conv-remote");
+        await loadStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var localSwitch = await fixture.ViewModel.SwitchConversationAsync("conv-local");
+        Assert.True(localSwitch);
+
+        var secondRemoteSwitch = fixture.ViewModel.SwitchConversationAsync("conv-remote");
+        await WaitForConditionAsync(() =>
+        {
+            return Task.FromResult(
+                string.Equals(fixture.ViewModel.CurrentSessionId, "conv-remote", StringComparison.Ordinal)
+                && fixture.ViewModel.IsRemoteHydrationPending);
+        }, timeoutMilliseconds: 2000);
+
+        Assert.Equal(1, Volatile.Read(ref loadCount));
+
+        allowLoadCompletion.TrySetResult(null);
+        Assert.True(await secondRemoteSwitch);
+        await firstRemoteSwitch;
+
+        var finalState = await fixture.GetStateAsync();
+        Assert.Equal("conv-remote", finalState.HydratedConversationId);
+        Assert.Equal(ConversationRuntimePhase.Warm, finalState.ResolveRuntimeState("conv-remote")?.Phase);
+    }
+
+    [Fact]
+    public async Task ReplaceChatServiceAsync_WhenRemoteLoadIsInFlight_CancelsOldRecoveryAndUsesReplacementService()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
+        var sessionManager = new Mock<ISessionManager>();
+        sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.TryGetValue(id, out var session) ? session : null);
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .Returns<string, string?>((id, cwd) =>
+            {
+                var session = new Session(id, cwd);
+                sessions[id] = session;
+                return Task.FromResult(session);
+            });
+        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
+            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
+            {
+                if (!sessions.TryGetValue(id, out var session))
+                {
+                    return false;
+                }
+
+                update(session);
+                if (updateActivity)
+                {
+                    session.UpdateActivity();
+                }
+
+                return true;
+            });
+        sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.Remove(id));
+
+        await sessionManager.Object.CreateSessionAsync("conv-local", @"C:\repo\local");
+        await sessionManager.Object.CreateSessionAsync("conv-remote", @"C:\repo\remote");
+
+        var oldLoadStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var oldLoadCanceled = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var oldService = CreateConnectedChatService();
+        oldService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
+        oldService.Setup(service => service.LoadSessionAsync(
+                It.Is<SessionLoadParams>(parameters =>
+                    string.Equals(parameters.SessionId, "remote-1", StringComparison.Ordinal)),
+                It.IsAny<CancellationToken>()))
+            .Returns<SessionLoadParams, CancellationToken>(async (_, cancellationToken) =>
+            {
+                oldLoadStarted.TrySetResult(null);
+                try
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                    return SessionLoadResponse.Completed;
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    oldLoadCanceled.TrySetResult(null);
+                    throw;
+                }
+            });
+
+        var newLoadStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var newLoadCount = 0;
+        var replacementService = CreateConnectedChatService();
+        replacementService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
+        replacementService.Setup(service => service.LoadSessionAsync(
+                It.Is<SessionLoadParams>(parameters =>
+                    string.Equals(parameters.SessionId, "remote-1", StringComparison.Ordinal)),
+                It.IsAny<CancellationToken>()))
+            .Returns<SessionLoadParams, CancellationToken>((_, _) =>
+            {
+                Interlocked.Increment(ref newLoadCount);
+                newLoadStarted.TrySetResult(null);
+                return Task.FromResult(SessionLoadResponse.Completed);
+            });
+
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(oldService.Object));
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-local",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 5, 14, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 5, 14, 0, 0, 0, DateTimeKind.Utc)));
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-remote",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 5, 14, 0, 0, 1, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 5, 14, 0, 0, 1, DateTimeKind.Utc),
+            ConnectionInstanceId: "conn-1"),
+            ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-local",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-remote", new ConversationBindingSlice("conv-remote", "remote-1", "profile-1"))
+        });
+        await DispatchConnectedAsync(fixture, "profile-1");
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+
+        var firstRemoteSwitch = fixture.ViewModel.SwitchConversationAsync("conv-remote");
+        await oldLoadStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var localSwitch = await fixture.ViewModel.SwitchConversationAsync("conv-local");
+        Assert.True(localSwitch);
+        Assert.False(await firstRemoteSwitch);
+
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(replacementService.Object));
+        await WaitForConditionAsync(() => Task.FromResult(oldLoadCanceled.Task.IsCompleted), timeoutMilliseconds: 2000);
+
+        var secondRemoteSwitch = fixture.ViewModel.SwitchConversationAsync("conv-remote");
+        await newLoadStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(1, Volatile.Read(ref newLoadCount));
+        Assert.True(await secondRemoteSwitch);
+    }
 }

@@ -185,6 +185,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly Dictionary<string, int> _remoteHydrationKnownTranscriptBaselineCounts = new(StringComparer.Ordinal);
     private readonly Dictionary<string, DateTime> _remoteHydrationKnownTranscriptGrowthGraceDeadlineUtc = new(StringComparer.Ordinal);
     private readonly Dictionary<string, long> _remoteHydrationSessionUpdateBaselineCounts = new(StringComparer.Ordinal);
+    private readonly object _remoteSessionRecoveryRequestsSync = new();
+    private readonly Dictionary<RemoteSessionRecoveryRequestKey, RemoteSessionRecoveryRequest> _remoteSessionRecoveryRequests = new();
     private readonly object _pendingInlinePermissionRequestsSync = new();
     private readonly Dictionary<string, PermissionRequestViewModel> _pendingInlinePermissionRequestsByToolCallId = new(StringComparer.Ordinal);
     private HydrationOverlayPhase _hydrationOverlayPhase = HydrationOverlayPhase.None;
@@ -207,6 +209,17 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private ChatUiProjection? _pendingUiProjection;
     private int _pendingUiProjectionSequence;
     private bool _uiProjectionDrainScheduled;
+
+    private readonly record struct RemoteSessionRecoveryRequestKey(
+        AcpSessionRecoveryMode RecoveryMode,
+        string? ProfileId,
+        string? ConnectionInstanceId,
+        string RemoteSessionId,
+        string Cwd);
+
+    private sealed record RemoteSessionRecoveryRequest(
+        Task<AcpSessionRecoveryProjection> Task,
+        CancellationTokenSource CancellationTokenSource);
 
     /// <summary>
     /// Local conversation binding connects a stable UI ConversationId to a transient ACP RemoteSessionId.
