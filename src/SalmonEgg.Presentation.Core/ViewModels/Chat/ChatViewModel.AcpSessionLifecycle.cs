@@ -1417,7 +1417,7 @@ public partial class ChatViewModel
                     request.ConversationId,
                     context.ActivationVersion)
                 .ConfigureAwait(false);
-            NotifyConversationListChanged();
+            await ApplyConversationListProjectionAsync().ConfigureAwait(false);
         }
 
         ScheduleSessionSwitchOverlayDismissal(context.ActivationVersion, request.ConversationId);

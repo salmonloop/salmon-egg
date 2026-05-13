@@ -1049,18 +1049,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         switch (e.PropertyName)
         {
             case nameof(ChatConversationWorkspace.IsConversationListLoading):
-                IsConversationListLoading = _conversationWorkspace.IsConversationListLoading;
-                _conversationCatalogPresenter.SetLoading(IsConversationListLoading);
-                RefreshMiniWindowSessions();
+                QueueConversationListProjection();
                 break;
 
             case nameof(ChatConversationWorkspace.ConversationListVersion):
-                ConversationListVersion = _conversationWorkspace.ConversationListVersion;
-                var refreshedCatalog = _conversationWorkspace.GetCatalog();
-                _conversationCatalogPresenter.Refresh(refreshedCatalog);
-                OnPropertyChanged(nameof(GetKnownConversationIds));
-                RefreshMiniWindowSessions();
-                RefreshProjectAffinityCorrectionState();
+                QueueConversationListProjection();
                 break;
         }
     }
@@ -1765,12 +1758,38 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         await _chatConnectionStore.Dispatch(new SetSettingsSelectedProfileAction(binding.BoundProfileId)).ConfigureAwait(false);
     }
 
-    private void NotifyConversationListChanged()
+    private void QueueConversationListProjection()
     {
-        ConversationListVersion = _conversationWorkspace.ConversationListVersion;
-        _conversationCatalogPresenter.Refresh(_conversationWorkspace.GetCatalog());
-        OnPropertyChanged(nameof(GetKnownConversationIds));
-        RefreshMiniWindowSessions();
+        var task = ApplyConversationListProjectionAsync();
+        _ = task.ContinueWith(
+            completedTask =>
+            {
+                Logger.LogError(
+                    completedTask.Exception,
+                    "Failed to apply conversation list projection on the UI dispatcher.");
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+    }
+
+    private Task ApplyConversationListProjectionAsync()
+    {
+        return PostToUiAsync(() =>
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            IsConversationListLoading = _conversationWorkspace.IsConversationListLoading;
+            ConversationListVersion = _conversationWorkspace.ConversationListVersion;
+            _conversationCatalogPresenter.SetLoading(IsConversationListLoading);
+            _conversationCatalogPresenter.Refresh(_conversationWorkspace.GetCatalog());
+            OnPropertyChanged(nameof(GetKnownConversationIds));
+            RefreshMiniWindowSessions();
+            RefreshProjectAffinityCorrectionState();
+        });
     }
 
     private void RefreshMiniWindowSessions()

@@ -427,7 +427,8 @@ public sealed class NavigationCoreTests
         Assert.Contains("ModeSelectorAutomationId=\"StartView.ModeSelector\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("IsStartModeSelectorVisible", xaml, StringComparison.Ordinal);
         Assert.Contains("ModeItemsSource=\"{x:Bind ViewModel.StartModeOptions, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("SelectedMode=\"{x:Bind ViewModel.SelectedStartMode, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("SelectedMode=\"{x:Bind ViewModel.SelectedStartMode, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ModeSelectionCommand=\"{x:Bind ViewModel.SelectStartModeCommand}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("IsModeSelectorEnabled=\"{x:Bind ViewModel.IsStartModeSelectorEnabled, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ViewModel=\"{x:Bind ViewModel.Chat, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
     }

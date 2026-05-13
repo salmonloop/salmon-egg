@@ -486,6 +486,7 @@ public partial class ChatViewModel
                     cancellationToken,
                     connectionInstanceId: resolvedConnection.ConnectionInstanceId)
                 .ConfigureAwait(false);
+            var metadataRefreshToken = _disposeCts.Token;
             _ = ApplyRemoteSessionInfoSnapshotWhenReadyAsync(
                 conversationId,
                 binding,
@@ -493,8 +494,8 @@ public partial class ChatViewModel
                     conversationId,
                     binding,
                     chatService,
-                    cancellationToken),
-                cancellationToken);
+                    metadataRefreshToken),
+                metadataRefreshToken);
             Logger.LogInformation(
                 "Conversation hydration completed. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId} ElapsedMs={ElapsedMs}",
                 conversationId,

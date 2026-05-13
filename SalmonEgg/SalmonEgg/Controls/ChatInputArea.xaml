@@ -161,7 +161,8 @@
                                           HorizontalAlignment="Left"
                                           IsEnabled="{x:Bind IsModeSelectorEnabled, Mode=OneWay}"
                                           ItemsSource="{x:Bind ModeItemsSource, Mode=OneWay}"
-                                          SelectedItem="{x:Bind SelectedMode, Mode=TwoWay}"
+                                          SelectedItem="{x:Bind SelectedMode, Mode=OneWay}"
+                                          SelectionChanged="OnModeSelectorSelectionChanged"
                                           DropDownOpened="OnSelectorDropDownOpened"
                                           DropDownClosed="OnSelectorDropDownClosed">
                                     <ComboBox.ItemTemplate>

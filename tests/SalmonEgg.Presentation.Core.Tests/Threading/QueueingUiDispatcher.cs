@@ -24,14 +24,38 @@ public sealed class QueueingUiDispatcher : IUiDispatcher
 
     public Task EnqueueAsync(Action action)
     {
-        _callbacks.Enqueue(action);
-        return Task.CompletedTask;
+        var tcs = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _callbacks.Enqueue(() =>
+        {
+            try
+            {
+                action();
+                tcs.TrySetResult(null);
+            }
+            catch (Exception ex)
+            {
+                tcs.TrySetException(ex);
+            }
+        });
+        return tcs.Task;
     }
 
     public Task EnqueueAsync(Func<Task> function)
     {
-        _callbacks.Enqueue(() => function().GetAwaiter().GetResult());
-        return Task.CompletedTask;
+        var tcs = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _callbacks.Enqueue(() =>
+        {
+            try
+            {
+                function().GetAwaiter().GetResult();
+                tcs.TrySetResult(null);
+            }
+            catch (Exception ex)
+            {
+                tcs.TrySetException(ex);
+            }
+        });
+        return tcs.Task;
     }
 
     /// <summary>

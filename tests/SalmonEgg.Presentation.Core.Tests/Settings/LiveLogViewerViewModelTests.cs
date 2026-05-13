@@ -160,11 +160,12 @@ public sealed class LiveLogViewerViewModelTests
 
         await viewModel.StartStreamingAsync();
         await service.Started.Task;
-        await service.EmitAsync(new LiveLogStreamUpdate("C:/logs/app.log", "tick\n", hasFileSwitched: false));
+        var emitTask = service.EmitAsync(new LiveLogStreamUpdate("C:/logs/app.log", "tick\n", hasFileSwitched: false));
 
         Assert.Equal(string.Empty, viewModel.VisibleLogText);
 
         dispatcher.RunAll();
+        await emitTask;
 
         Assert.Equal("tick\n", viewModel.VisibleLogText);
     }

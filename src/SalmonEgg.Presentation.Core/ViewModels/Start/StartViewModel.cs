@@ -40,10 +40,14 @@ public sealed partial class StartViewModel : ObservableObject
         ModeCount: 0));
     private string? _selectedStartProjectIdOverride;
     private CancellationTokenSource? _newSessionDraftCts;
+    private Task _composerUnloadCleanupTask = Task.CompletedTask;
+    private Task _composerUnloadCleanupObservationTask = Task.CompletedTask;
     private bool _isNewSessionDraftRefreshPending;
     private bool _isComposerLoaded;
 
     public ChatViewModel Chat { get; }
+
+    internal Task ComposerUnloadCleanupTask => _composerUnloadCleanupTask;
 
     private bool _isStarting;
 
@@ -102,6 +106,8 @@ public sealed partial class StartViewModel : ObservableObject
     public ReadOnlyObservableCollection<SessionModeViewModel> StartModeOptions => Chat.NewSessionDraftModeOptions;
 
     public IRelayCommand<QuickSuggestionViewModel> ExecuteSuggestionCommand { get; }
+
+    public IRelayCommand<SessionModeViewModel?> SelectStartModeCommand { get; }
 
     public bool IsInputEnabled => !IsStarting;
 
@@ -182,6 +188,7 @@ public sealed partial class StartViewModel : ObservableObject
 
         StartSessionAndSendCommand = new AsyncRelayCommand(StartSessionAndSendAsync, CanStartSessionAndSend);
         ExecuteSuggestionCommand = new RelayCommand<QuickSuggestionViewModel>(ExecuteSuggestion);
+        SelectStartModeCommand = new RelayCommand<SessionModeViewModel?>(SelectStartMode);
         StartVoiceInputCommand = new AsyncRelayCommand(StartVoiceInputAsync, () => CanStartVoiceInput);
         StopVoiceInputCommand = new AsyncRelayCommand(StopVoiceInputAsync, () => CanStopVoiceInput);
 
@@ -208,6 +215,14 @@ public sealed partial class StartViewModel : ObservableObject
         StartPrompt = suggestion.Prompt;
     }
 
+    private void SelectStartMode(SessionModeViewModel? mode)
+    {
+        if (mode != null)
+        {
+            SelectedStartMode = mode;
+        }
+    }
+
     public void OnComposerLoaded()
     {
         _isComposerLoaded = true;
@@ -221,8 +236,25 @@ public sealed partial class StartViewModel : ObservableObject
     {
         _isComposerLoaded = false;
         CancelNewSessionDraftRefresh();
-        _ = Chat.DiscardNewSessionDraftAsync();
+        TrackComposerUnloadCleanup(Chat.DiscardNewSessionDraftAsync());
         DispatchComposerAction(new Unloaded());
+    }
+
+    private void TrackComposerUnloadCleanup(Task cleanupTask)
+    {
+        _composerUnloadCleanupTask = cleanupTask;
+        _composerUnloadCleanupObservationTask = cleanupTask.ContinueWith(
+            static (task, state) =>
+            {
+                var logger = (ILogger<StartViewModel>)state!;
+                logger.LogWarning(
+                    task.Exception,
+                    "Failed to discard ACP new-session draft when the start composer unloaded.");
+            },
+            _logger,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 
     public void OnComposerActivated() => DispatchComposerAction(new Activated());

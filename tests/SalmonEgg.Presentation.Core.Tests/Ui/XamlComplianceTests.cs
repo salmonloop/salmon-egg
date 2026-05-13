@@ -465,6 +465,26 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void SharedComposer_ModeSelectionUsesExplicitCommandInsteadOfTwoWaySelectedMode()
+    {
+        var chatInputXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml");
+        var chatViewXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml");
+        var startViewXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Start\StartView.xaml");
+
+        Assert.Contains("SelectedItem=\"{x:Bind SelectedMode, Mode=OneWay}\"", chatInputXaml);
+        Assert.Contains("SelectionChanged=\"OnModeSelectorSelectionChanged\"", chatInputXaml);
+        Assert.DoesNotContain("SelectedItem=\"{x:Bind SelectedMode, Mode=TwoWay}\"", chatInputXaml, StringComparison.Ordinal);
+
+        Assert.Contains("SelectedMode=\"{x:Bind ViewModel.SelectedMode, Mode=OneWay}\"", chatViewXaml);
+        Assert.Contains("ModeSelectionCommand=\"{x:Bind ViewModel.SetModeCommand}\"", chatViewXaml);
+        Assert.DoesNotContain("SelectedMode=\"{x:Bind ViewModel.SelectedMode, Mode=TwoWay}\"", chatViewXaml, StringComparison.Ordinal);
+
+        Assert.Contains("SelectedMode=\"{x:Bind ViewModel.SelectedStartMode, Mode=OneWay}\"", startViewXaml);
+        Assert.Contains("ModeSelectionCommand=\"{x:Bind ViewModel.SelectStartModeCommand}\"", startViewXaml);
+        Assert.DoesNotContain("SelectedMode=\"{x:Bind ViewModel.SelectedStartMode, Mode=TwoWay}\"", startViewXaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ChatStyles_XBindTemplate_UsesCompiledResourceDictionary()
     {
         var appXaml = LoadXaml(@"SalmonEgg\SalmonEgg\App.xaml");

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Windows.Input;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
@@ -84,6 +85,13 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
             typeof(ChatInputArea),
             new PropertyMetadata(null));
 
+    public static readonly DependencyProperty ModeSelectionCommandProperty =
+        DependencyProperty.Register(
+            nameof(ModeSelectionCommand),
+            typeof(ICommand),
+            typeof(ChatInputArea),
+            new PropertyMetadata(null));
+
     public static readonly DependencyProperty IsModeSelectorEnabledProperty =
         DependencyProperty.Register(
             nameof(IsModeSelectorEnabled),
@@ -134,7 +142,6 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
             new PropertyMetadata("ChatInputArea.ProjectSelector"));
 
     private bool _isImeComposing;
-
     public event EventHandler? SelectorDropDownOpened;
 
     public event EventHandler? SelectorDropDownClosed;
@@ -197,6 +204,12 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
     {
         get => (SessionModeViewModel?)GetValue(SelectedModeProperty);
         set => SetValue(SelectedModeProperty, value);
+    }
+
+    public ICommand? ModeSelectionCommand
+    {
+        get => (ICommand?)GetValue(ModeSelectionCommandProperty);
+        set => SetValue(ModeSelectionCommandProperty, value);
     }
 
     public bool IsModeSelectorEnabled
@@ -428,6 +441,26 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
         }
 
         SlashCommandsList.ScrollIntoView(SlashCommandsList.SelectedItem);
+    }
+
+    private void OnModeSelectorSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        var selectedMode = e.AddedItems.OfType<SessionModeViewModel>().FirstOrDefault();
+        if (selectedMode == null)
+        {
+            return;
+        }
+
+        if (Equals(selectedMode, SelectedMode))
+        {
+            return;
+        }
+
+        var command = ModeSelectionCommand;
+        if (command?.CanExecute(selectedMode) == true)
+        {
+            command.Execute(selectedMode);
+        }
     }
 
     private void OnSelectorDropDownOpened(object sender, object e)

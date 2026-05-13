@@ -761,6 +761,54 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
+    public async Task ComposerUnloaded_TracksDraftDiscardCleanupUntilProjectionCompletes()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var uiDispatcher = new QueueingUiDispatcher();
+            var preferences = CreatePreferences();
+            using var chat = CreateChatViewModel(
+                syncContext,
+                preferences,
+                Mock.Of<ISessionManager>(),
+                uiDispatcher: uiDispatcher);
+
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(
+                chat.ViewModel,
+                preferences,
+                nav,
+                workflow.Object);
+
+            await chat.DispatchConnectionAsync(new SetNewSessionDraftAction(CreateReadyDraft("plan")));
+            await WaitForConditionAsync(() =>
+            {
+                uiDispatcher.RunAll();
+                return startViewModel.StartModeOptions.Count == 2;
+            });
+
+            startViewModel.OnComposerUnloaded();
+
+            var cleanupTask = startViewModel.ComposerUnloadCleanupTask;
+            Assert.False(cleanupTask.IsCompleted);
+
+            uiDispatcher.RunAll();
+            await cleanupTask;
+
+            Assert.Empty(startViewModel.StartModeOptions);
+            Assert.False(startViewModel.IsStartModeSelectorEnabled);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public void ProfileChange_WhileComposerIsNotLoaded_DoesNotStartLaunchWorkflow()
     {
         var originalContext = SynchronizationContext.Current;
@@ -982,7 +1030,8 @@ public sealed class StartViewModelTests
         SynchronizationContext syncContext,
         AppPreferencesViewModel preferences,
         ISessionManager sessionManager,
-        IVoiceInputService? voiceInputService = null)
+        IVoiceInputService? voiceInputService = null,
+        IUiDispatcher? uiDispatcher = null)
     {
         var state = State.Value(new object(), () => ChatState.Empty);
         var connectionState = State.Value(new object(), () => ChatConnectionState.Empty);
@@ -1010,12 +1059,13 @@ public sealed class StartViewModelTests
         conversationStore.Setup(s => s.LoadAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new ConversationDocument());
 
         var miniWindow = new Mock<IMiniWindowCoordinator>();
+        var effectiveUiDispatcher = uiDispatcher ?? new ImmediateUiDispatcher();
         var workspace = new ChatConversationWorkspace(
             sessionManager,
             conversationStore.Object,
             new AppPreferencesConversationWorkspacePreferences(preferences),
             Mock.Of<ILogger<ChatConversationWorkspace>>(),
-            new ImmediateUiDispatcher());
+            effectiveUiDispatcher);
         var conversationCatalogPresenter = new ConversationCatalogPresenter();
         var conversationCatalogFacade = new ConversationCatalogFacade(
             workspace,
@@ -1045,7 +1095,7 @@ public sealed class StartViewModelTests
                 chatStateProjector,
                 null,
                 connectionStore,
-                new ImmediateUiDispatcher(),
+                effectiveUiDispatcher,
                 Mock.Of<IConversationPreviewStore>(),
                 vmLogger.Object,
                 voiceInputService: voiceInputService,

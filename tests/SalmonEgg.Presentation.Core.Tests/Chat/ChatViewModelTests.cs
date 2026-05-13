@@ -6055,6 +6055,35 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task ConversationWorkspaceChange_FromBackgroundThread_DefersConversationListProjectionToUiDispatcher()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        syncContext.RunAll();
+
+        await Task.Run(() =>
+            fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+                ConversationId: "conv-background",
+                Transcript: [],
+                Plan: [],
+                ShowPlanPanel: false,
+                PlanTitle: null,
+                CreatedAt: new DateTime(2026, 5, 13, 0, 0, 0, DateTimeKind.Utc),
+                LastUpdatedAt: new DateTime(2026, 5, 13, 0, 0, 1, DateTimeKind.Utc))));
+
+        Assert.DoesNotContain(
+            fixture.ViewModel.MiniWindowSessions,
+            item => string.Equals(item.ConversationId, "conv-background", StringComparison.Ordinal));
+
+        syncContext.RunAll();
+
+        var projected = Assert.Single(
+            fixture.ViewModel.MiniWindowSessions,
+            item => string.Equals(item.ConversationId, "conv-background", StringComparison.Ordinal));
+        Assert.Equal("conv-background", projected.ConversationId);
+    }
+
+    [Fact]
     public async Task RefreshMiniWindowSessions_PreservesWholeGraphemeClustersWhenCompactDisplayNameTrims()
     {
         var syncContext = new ImmediateSynchronizationContext();
@@ -6588,6 +6617,7 @@ public partial class ChatViewModelTests
 
         await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
         await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
+        await DispatchConnectedAsync(fixture, "profile-1");
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -6597,10 +6627,15 @@ public partial class ChatViewModelTests
         });
         SetCurrentSessionId(fixture.ViewModel, "conv-1");
         SetCurrentRemoteSessionId(fixture.ViewModel, "remote-1");
-        await DispatchConnectedAsync(fixture, "profile-1");
 
         var hydrationTask = fixture.ViewModel.HydrateActiveConversationAsync();
-        await WaitForConditionAsync(() => Task.FromResult(loadStarted.Task.IsCompleted), timeoutMilliseconds: 30000);
+        var loadOrHydrationCompletion = await Task.WhenAny(
+            loadStarted.Task,
+            hydrationTask,
+            Task.Delay(TimeSpan.FromSeconds(30)));
+        Assert.True(
+            ReferenceEquals(loadStarted.Task, loadOrHydrationCompletion),
+            $"session/load did not start before hydration completed. HydrationStatus={hydrationTask.Status} Error={fixture.ViewModel.ErrorMessage ?? "<none>"}");
         var capturedParams = await loadStarted.Task;
 
         Assert.NotNull(capturedParams);
