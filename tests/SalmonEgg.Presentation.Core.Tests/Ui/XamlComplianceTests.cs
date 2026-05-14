@@ -141,6 +141,21 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void AppResources_DefineNativeSettingsPageLayoutStyles()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\App.xaml");
+
+        Assert.Contains("x:Key=\"SettingsPageTitleTextStyle\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"SettingsPageSummaryTextStyle\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"SettingsSectionTitleTextStyle\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"SettingsRowTitleTextStyle\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"SettingsRowDescriptionTextStyle\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"SettingsSectionContainerStyle\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"SettingsRowGridStyle\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Key=\"SettingsRowControlTemplate\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TitleBarButtons_UseSharedIconTemplates()
     {
         var mainPageXaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");
