@@ -80,6 +80,7 @@
    - 会话切换 UI 响应性 smoke（远程首进 + 快速切换）。
 3. 若变更涉及代码、可执行资源、XAML、构建脚本或运行行为，合并前必须通过：
    - `dotnet build`（Core / Desktop / Wasm 验证）；
+   - `scripts/gates/verify-wasm-static-assets.sh <deployment-url>`（WASM/Vercel 静态资源与 PWA 入口验证）；
    - Windows 原生包使用 `build.bat msix` 或等价的 `.tools/run-winui3-msix.ps1 -SkipInstall`，禁止把 `dotnet build -f net10.0-windows10.0.26100.0` 当作唯一门禁；
    - 目标测试集；
    - GUI smoke。

@@ -20,15 +20,20 @@ public class TransportFactory : ITransportFactory
 {
    private readonly ILogger _logger;
    private readonly ITransportSupportPolicy _transportSupportPolicy;
+   private readonly IStdioTransportFactory _stdioTransportFactory;
 
    /// <summary>
    /// 创建 <see cref="TransportFactory"/> 的新实例。
    /// </summary>
    /// <param name="logger">日志记录器实例</param>
-   public TransportFactory(ILogger logger, ITransportSupportPolicy transportSupportPolicy)
+   public TransportFactory(
+       ILogger logger,
+       ITransportSupportPolicy transportSupportPolicy,
+       IStdioTransportFactory stdioTransportFactory)
    {
        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
        _transportSupportPolicy = transportSupportPolicy ?? throw new ArgumentNullException(nameof(transportSupportPolicy));
+       _stdioTransportFactory = stdioTransportFactory ?? throw new ArgumentNullException(nameof(stdioTransportFactory));
    }
 
    /// <summary>
@@ -84,7 +89,7 @@ public class TransportFactory : ITransportFactory
        // Stdio remains a subprocess transport even when the subprocess is a bridge such as ssh.
        var argsArray = ParseCommandLineArguments(args);
 
-       return new StdioTransport(command.Trim(), argsArray, System.Text.Encoding.UTF8);
+       return _stdioTransportFactory.Create(command.Trim(), argsArray, Encoding.UTF8);
    }
 
    private static string[] ParseCommandLineArguments(string? args)

@@ -179,13 +179,29 @@ public static class DependencyInjection
         services.AddSingleton<IAppLanguageService, AppLanguageService>();
         services.AddSingleton<IConfigurationService, ConfigurationManager>();
         services.AddSingleton<IValidator<ServerConfiguration>, ServerConfigurationValidator>();
+#if __WASM__ || __ANDROID__ || __IOS__
+        services.AddSingleton<IStdioTransportFactory, UnsupportedStdioTransportFactory>();
+#else
+        services.AddSingleton<IStdioTransportFactory>(sp =>
+            sp.GetRequiredService<IPlatformCapabilityService>().SupportsStdioTransport
+                ? new DesktopStdioTransportFactory()
+                : new UnsupportedStdioTransportFactory());
+#endif
         services.AddSingleton<SalmonEgg.Domain.Interfaces.ITransportFactory>(sp =>
             new TransportFactory(
                 sp.GetRequiredService<Serilog.ILogger>(),
-                sp.GetRequiredService<ITransportSupportPolicy>()));
+                sp.GetRequiredService<ITransportSupportPolicy>(),
+                sp.GetRequiredService<IStdioTransportFactory>()));
         services.AddSingleton<IDiagnosticsBundleService, SalmonEgg.Infrastructure.Services.DiagnosticsBundleService>();
         services.AddSingleton<ILiveLogStreamService, SalmonEgg.Infrastructure.Services.LiveLogStreamService>();
-        services.AddSingleton<IPlatformShellService, SalmonEgg.Infrastructure.Services.PlatformShellService>();
+#if __WASM__ || __ANDROID__ || __IOS__
+        services.AddSingleton<IPlatformShellService, UnsupportedPlatformShellService>();
+#else
+        services.AddSingleton<IPlatformShellService>(sp =>
+            sp.GetRequiredService<IPlatformCapabilityService>().SupportsExternalFileOpen
+                ? new PlatformShellService(sp.GetRequiredService<IPlatformCapabilityService>())
+                : new UnsupportedPlatformShellService());
+#endif
         services.AddSingleton<IStorageLocationService, SalmonEgg.Infrastructure.Services.StorageLocationService>();
         services.AddSingleton<IConversationPreviewStore, ConversationPreviewStore>();
         services.AddSingleton<ISessionExportService, SalmonEgg.Infrastructure.Services.SessionExportService>();
@@ -247,10 +263,14 @@ public static class DependencyInjection
         services.AddSingleton<IMessageService, MessageService>();
 
         var chatServiceDecorator = CreateChatServiceDecorator();
+#if __WASM__ || __ANDROID__ || __IOS__
+        services.AddSingleton<ITerminalSessionManager, UnsupportedTerminalSessionManager>();
+#else
         services.AddSingleton<ITerminalSessionManager>(sp =>
             sp.GetRequiredService<IPlatformCapabilityService>().SupportsLocalTerminal
                 ? new TerminalSessionManager()
                 : new UnsupportedTerminalSessionManager());
+#endif
         services.AddSingleton<IAcpClientFactory, AcpClientFactory>();
         services.AddSingleton<ChatServiceFactory>(sp =>
         {

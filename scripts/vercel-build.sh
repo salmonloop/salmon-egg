@@ -23,3 +23,5 @@ dotnet publish "${repo_root}/SalmonEgg/SalmonEgg/SalmonEgg.csproj" \
   --configuration Release \
   --framework net10.0-browserwasm \
   --output "${publish_dir}"
+
+find "${publish_dir}" -type d -name .vercel -prune -exec rm -rf {} +

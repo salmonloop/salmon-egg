@@ -31,8 +31,89 @@ public sealed class WasmStartupAssetsTests
         Assert.False(File.Exists(RepoPath(@"SalmonEgg\SalmonEgg\Assets\Splash\splash_screen.svg")));
     }
 
+    [Fact]
+    public void Project_KeepsWasmCulturesCanonical()
+    {
+        var browserWasmPropertyGroup = LoadBrowserWasmPropertyGroup();
+
+        var languages = browserWasmPropertyGroup.Element("SatelliteResourceLanguages")?.Value;
+
+        Assert.Equal("en;en-US;zh-Hans", languages);
+        Assert.DoesNotContain("zh-CN", languages, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Project_EnablesIndexedDbBackedWasmFileSystem()
+    {
+        var browserWasmPropertyGroup = LoadBrowserWasmPropertyGroup();
+
+        Assert.Equal("true", browserWasmPropertyGroup.Element("WasmShellEnableIDBFS")?.Value);
+    }
+
+    [Fact]
+    public void BrowserWasmBuild_RemovesDesktopProcessDependenciesFromInfrastructureGraph()
+    {
+        var appProject = XDocument.Parse(LoadFile(@"SalmonEgg\SalmonEgg\SalmonEgg.csproj"));
+        var infrastructureProject = XDocument.Parse(LoadFile(@"src\SalmonEgg.Infrastructure\SalmonEgg.Infrastructure.csproj"));
+
+        var browserWasmPropertyGroup = LoadBrowserWasmPropertyGroup();
+        var infrastructureReference = appProject
+            .Descendants("ProjectReference")
+            .Single(element => ((string?)element.Attribute("Include"))?.Contains("SalmonEgg.Infrastructure.csproj", StringComparison.Ordinal) == true);
+        var desktopInfrastructureReferences = appProject
+            .Descendants("ProjectReference")
+            .Where(element => ((string?)element.Attribute("Include"))?.Contains("SalmonEgg.Infrastructure.Desktop.csproj", StringComparison.Ordinal) == true)
+            .ToArray();
+
+        Assert.Equal("BrowserWasm", browserWasmPropertyGroup.Element("SalmonEggPlatform")?.Value);
+        Assert.Equal("false", browserWasmPropertyGroup.Element("SalmonEggSupportsDesktopProcessHost")?.Value);
+        Assert.Contains("SalmonEggPlatform=$(SalmonEggPlatform)", (string?)infrastructureReference.Attribute("AdditionalProperties"), StringComparison.Ordinal);
+        Assert.Contains("SalmonEggSupportsDesktopProcessHost=$(SalmonEggSupportsDesktopProcessHost)", (string?)infrastructureReference.Attribute("AdditionalProperties"), StringComparison.Ordinal);
+        Assert.DoesNotContain(infrastructureProject.Descendants("PackageReference"), element => (string?)element.Attribute("Include") == "Porta.Pty");
+        var desktopReference = Assert.Single(desktopInfrastructureReferences);
+        Assert.Equal("'$(SalmonEggSupportsDesktopProcessHost)' != 'false'", (string?)desktopReference.Attribute("Condition"));
+    }
+
+    [Fact]
+    public void DependencyInjection_RegistersUnsupportedTerminalManagerForBrowserWasm()
+    {
+        var code = LoadFile(@"SalmonEgg\SalmonEgg\DependencyInjection.cs");
+
+        Assert.Contains("#if __WASM__ || __ANDROID__ || __IOS__", code, StringComparison.Ordinal);
+        Assert.Contains("services.AddSingleton<ITerminalSessionManager, UnsupportedTerminalSessionManager>();", code, StringComparison.Ordinal);
+        Assert.Contains("services.AddSingleton<IStdioTransportFactory, UnsupportedStdioTransportFactory>();", code, StringComparison.Ordinal);
+        Assert.Contains("services.AddSingleton<IPlatformShellService, UnsupportedPlatformShellService>();", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void VercelConfig_DeploysPublishedWwwrootAsStaticOutput()
+    {
+        var config = LoadFile("vercel.json");
+
+        Assert.Contains("\"buildCommand\": \"bash scripts/vercel-build.sh\"", config, StringComparison.Ordinal);
+        Assert.Contains("\"outputDirectory\": \"publish/vercel-wasm/wwwroot\"", config, StringComparison.Ordinal);
+        Assert.Contains("\"source\": \"/manifest.webmanifest\"", config, StringComparison.Ordinal);
+        Assert.Contains("\"source\": \"/service-worker.js\"", config, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void VercelBuildScript_RemovesVercelMetadataFromStaticOutput()
+    {
+        var script = LoadFile(@"scripts\vercel-build.sh");
+
+        Assert.Contains("find \"${publish_dir}\" -type d -name .vercel -prune -exec rm -rf {} +", script, StringComparison.Ordinal);
+    }
+
     private static string LoadFile(string relativePath)
         => File.ReadAllText(RepoPath(relativePath));
+
+    private static XElement LoadBrowserWasmPropertyGroup()
+    {
+        var project = XDocument.Parse(LoadFile(@"SalmonEgg\SalmonEgg\SalmonEgg.csproj"));
+        return project
+            .Descendants("PropertyGroup")
+            .First(element => (string?)element.Attribute("Condition") == "'$(TargetFramework)' == 'net10.0-browserwasm'");
+    }
 
     private static string RepoPath(string relativePath)
         => Path.Combine(FindRepoRoot(), NormalizeRelativePath(relativePath));

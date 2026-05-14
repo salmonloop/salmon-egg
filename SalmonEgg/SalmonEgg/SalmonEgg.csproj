@@ -1,4 +1,25 @@
 <Project Sdk="Uno.Sdk">
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-browserwasm'">
+    <SalmonEggPlatform>BrowserWasm</SalmonEggPlatform>
+    <SalmonEggSupportsDesktopProcessHost>false</SalmonEggSupportsDesktopProcessHost>
+    <RuntimeIdentifier>browser-wasm</RuntimeIdentifier>
+    <PlatformTarget></PlatformTarget>
+    <!-- Override Uno's net10 default (10.0.2) to the latest patched Windows compatibility stack. -->
+    <WindowsCompatibilityVersion>10.0.6</WindowsCompatibilityVersion>
+    <!-- Reduce hash-mismatch startup failures caused by stale browser/service-worker caches. -->
+    <StaticWebAssetFingerprintingEnabled>false</StaticWebAssetFingerprintingEnabled>
+    <StaticWebAssetsFingerprintContent>false</StaticWebAssetsFingerprintContent>
+    <!-- Browser app data uses /local/SalmonEgg; enable Uno's IndexedDB-backed filesystem explicitly. -->
+    <WasmShellEnableIDBFS>true</WasmShellEnableIDBFS>
+    <!-- Keep only shipped UI cultures to reduce wasm satellite payload size. -->
+    <SatelliteResourceLanguages>en;en-US;zh-Hans</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="$([System.String]::Copy('$(TargetFramework)').StartsWith('net10.0-android')) OR $([System.String]::Copy('$(TargetFramework)').StartsWith('net10.0-ios'))">
+    <SalmonEggPlatform>Mobile</SalmonEggPlatform>
+    <SalmonEggSupportsDesktopProcessHost>false</SalmonEggSupportsDesktopProcessHost>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\src\SalmonEgg.Domain\SalmonEgg.Domain.csproj"
                       SetTargetFramework="TargetFramework=net10.0"
@@ -8,7 +29,12 @@
                       SkipGetTargetFrameworkProperties="true" />
     <ProjectReference Include="..\..\src\SalmonEgg.Infrastructure\SalmonEgg.Infrastructure.csproj"
                       SetTargetFramework="TargetFramework=net10.0"
+                      AdditionalProperties="SalmonEggPlatform=$(SalmonEggPlatform);SalmonEggSupportsDesktopProcessHost=$(SalmonEggSupportsDesktopProcessHost)"
                       SkipGetTargetFrameworkProperties="true" />
+    <ProjectReference Include="..\..\src\SalmonEgg.Infrastructure.Desktop\SalmonEgg.Infrastructure.Desktop.csproj"
+                      SetTargetFramework="TargetFramework=net10.0"
+                      SkipGetTargetFrameworkProperties="true"
+                      Condition="'$(SalmonEggSupportsDesktopProcessHost)' != 'false'" />
     <ProjectReference Include="..\..\src\SalmonEgg.Presentation.Core\SalmonEgg.Presentation.Core.csproj" />
   </ItemGroup>
 
@@ -115,18 +141,6 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
-
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-browserwasm'">
-    <RuntimeIdentifier>browser-wasm</RuntimeIdentifier>
-    <PlatformTarget></PlatformTarget>
-    <!-- Override Uno's net10 default (10.0.2) to the latest patched Windows compatibility stack. -->
-    <WindowsCompatibilityVersion>10.0.6</WindowsCompatibilityVersion>
-    <!-- Reduce hash-mismatch startup failures caused by stale browser/service-worker caches. -->
-    <StaticWebAssetFingerprintingEnabled>false</StaticWebAssetFingerprintingEnabled>
-    <StaticWebAssetsFingerprintContent>false</StaticWebAssetsFingerprintContent>
-    <!-- Keep only shipped UI cultures to reduce wasm satellite payload size. -->
-    <SatelliteResourceLanguages>en;en-US;zh-Hans</SatelliteResourceLanguages>
-  </PropertyGroup>
 
   <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.26100.0'">
     <UseWinUI>true</UseWinUI>
