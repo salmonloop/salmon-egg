@@ -13,7 +13,8 @@ public sealed record ShellLayoutState(
     double NavOpenPaneLength,
     double NavCompactPaneLength,
     bool? UserNavOpenIntent,
-    bool IsMinimalPaneOpen)
+    bool IsMinimalPaneOpen,
+    bool SupportsLocalTerminal = true)
 {
     public static ShellLayoutState Default => new(
         new WindowMetrics(1280, 720, 1280, 720),

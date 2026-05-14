@@ -880,6 +880,35 @@ public sealed class XamlComplianceTests
         Assert.DoesNotContain("InputBox.IsEnabled && ViewModel.IsInputEnabled", code, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ShortcutRecorder_TracksModifiersWithoutPlatformKeyStateFallback()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Controls\ShortcutRecorder.xaml");
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Controls\ShortcutRecorder.xaml.cs");
+
+        Assert.Contains("PreviewKeyDown=\"OnRecorderButtonPreviewKeyDown\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("KeyUp=\"OnRecorderButtonKeyUp\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("_pressedModifiers", code, StringComparison.Ordinal);
+        Assert.Contains("UpdatePressedModifier(e.Key, isDown: true)", code, StringComparison.Ordinal);
+        Assert.Contains("UpdatePressedModifier(e.Key, isDown: false)", code, StringComparison.Ordinal);
+        Assert.Contains("_pressedModifiers = AppShortcutModifiers.None;", code, StringComparison.Ordinal);
+
+        var modifierLookup = ExtractSection(code, "private AppShortcutModifiers GetCurrentModifiers()", "private static bool IsKeyCurrentlyDown");
+        Assert.Contains("return _pressedModifiers;", modifierLookup, StringComparison.Ordinal);
+        Assert.DoesNotContain("return false;", modifierLookup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WindowsDpapiSecureStorage_DoesNotOverwriteUndecryptableCiphertextAsLegacyText()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Platforms\Windows\WindowsDpapiSecureStorage.cs");
+
+        Assert.Contains("TryDecodeLegacyPlainText", code, StringComparison.Ordinal);
+        Assert.Contains("throwOnInvalidBytes: true", code, StringComparison.Ordinal);
+        Assert.Contains("IsPlausibleLegacySecret", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("var legacyValue = Encoding.UTF8.GetString(bytes);", code, StringComparison.Ordinal);
+    }
+
 
     private static string LoadXaml(string relativePath)
     {

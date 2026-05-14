@@ -141,6 +141,8 @@ public partial class ChatViewModelTests
         startupService.SetupGet(s => s.IsSupported).Returns(false);
         var languageService = new Mock<IAppLanguageService>();
         var capabilities = new Mock<IPlatformCapabilityService>();
+        capabilities.SetupGet(c => c.SupportsStdioTransport).Returns(true);
+        capabilities.SetupGet(c => c.SupportsLocalTerminal).Returns(true);
         var uiRuntime = new Mock<IUiRuntimeService>();
         var prefsLogger = new Mock<ILogger<AppPreferencesViewModel>>();
         var uiDispatcher = syncContext as IUiDispatcher ?? new ImmediateUiDispatcher();
@@ -2825,6 +2827,8 @@ public partial class ChatViewModelTests
         var startupService = new Mock<IAppStartupService>();
         var languageService = new Mock<IAppLanguageService>();
         var capabilities = new Mock<IPlatformCapabilityService>();
+        capabilities.SetupGet(c => c.SupportsStdioTransport).Returns(true);
+        capabilities.SetupGet(c => c.SupportsLocalTerminal).Returns(true);
         var uiRuntime = new Mock<IUiRuntimeService>();
         var prefsLogger = new Mock<ILogger<AppPreferencesViewModel>>();
         var uiDispatcher = (IUiDispatcher)syncContext;
@@ -2926,6 +2930,8 @@ public partial class ChatViewModelTests
         var startupService = new Mock<IAppStartupService>();
         var languageService = new Mock<IAppLanguageService>();
         var capabilities = new Mock<IPlatformCapabilityService>();
+        capabilities.SetupGet(c => c.SupportsStdioTransport).Returns(true);
+        capabilities.SetupGet(c => c.SupportsLocalTerminal).Returns(true);
         var uiRuntime = new Mock<IUiRuntimeService>();
         var prefsLogger = new Mock<ILogger<AppPreferencesViewModel>>();
         var uiDispatcher = (IUiDispatcher)syncContext;
@@ -3051,6 +3057,8 @@ public partial class ChatViewModelTests
         startupService.SetupGet(s => s.IsSupported).Returns(false);
         var languageService = new Mock<IAppLanguageService>();
         var capabilities = new Mock<IPlatformCapabilityService>();
+        capabilities.SetupGet(c => c.SupportsStdioTransport).Returns(true);
+        capabilities.SetupGet(c => c.SupportsLocalTerminal).Returns(true);
         var uiRuntime = new Mock<IUiRuntimeService>();
         var prefsLogger = new Mock<ILogger<AppPreferencesViewModel>>();
         var uiDispatcher = (IUiDispatcher)syncContext;

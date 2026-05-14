@@ -20,10 +20,12 @@ namespace SalmonEgg.Presentation.ViewModels;
 public partial class ConfigurationEditorViewModel(
     IValidator<ServerConfiguration> validator,
     IConfigurationService configurationService,
+    IPlatformCapabilityService capabilities,
     ILogger<ConfigurationEditorViewModel> logger) : ViewModelBase(logger)
 {
     private readonly IValidator<ServerConfiguration> _validator = validator ?? throw new ArgumentNullException(nameof(validator));
     private readonly IConfigurationService _configurationService = configurationService ?? throw new ArgumentNullException(nameof(configurationService));
+    private readonly IPlatformCapabilityService _capabilities = capabilities ?? throw new ArgumentNullException(nameof(capabilities));
 
     [ObservableProperty]
     private string _name = string.Empty;
@@ -42,12 +44,8 @@ public partial class ConfigurationEditorViewModel(
     [NotifyPropertyChangedFor(nameof(IsRemote))]
     private TransportType _transport;
 
-    public ObservableCollection<TransportOption> TransportOptions { get; } = new()
-    {
-        new TransportOption(TransportType.Stdio, "Stdio（子进程）"),
-        new TransportOption(TransportType.WebSocket, "WebSocket"),
-        new TransportOption(TransportType.HttpSse, "HTTP SSE"),
-    };
+    public ObservableCollection<TransportOption> TransportOptions { get; } =
+        CreateTransportOptions(capabilities);
 
     [ObservableProperty]
     private TransportOption? _selectedTransportOption;
@@ -76,12 +74,13 @@ public partial class ConfigurationEditorViewModel(
 
     public void LoadBlankConfiguration()
     {
+        var defaultTransport = ResolveDefaultTransportType();
         IsEditing = false;
         Configuration = new ServerConfiguration
         {
             Id = Guid.NewGuid().ToString(),
             Name = string.Empty,
-            Transport = TransportType.Stdio,
+            Transport = defaultTransport,
             ServerUrl = string.Empty,
             StdioCommand = string.Empty,
             StdioArgs = string.Empty,
@@ -121,11 +120,12 @@ public partial class ConfigurationEditorViewModel(
     {
         IsEditing = true;
         Configuration = config ?? new ServerConfiguration();
+        var transport = ResolveSupportedTransportType(Configuration.Transport);
         Name = Configuration.Name;
         ServerUrl = Configuration.ServerUrl;
         StdioCommand = Configuration.StdioCommand;
         StdioArgs = Configuration.StdioArgs;
-        Transport = Configuration.Transport;
+        Transport = transport;
         Token = Configuration.Authentication?.Token ?? string.Empty;
         ApiKey = Configuration.Authentication?.ApiKey ?? string.Empty;
         ConnectionTimeout = Configuration.ConnectionTimeout;
@@ -170,15 +170,16 @@ public partial class ConfigurationEditorViewModel(
             return;
         }
 
+        var transport = ResolveSupportedTransportType(transportConfig.SelectedTransportType);
         IsEditing = false;
         Configuration = new ServerConfiguration
         {
             Id = Guid.NewGuid().ToString(),
             Name = string.IsNullOrWhiteSpace(name) ? "New Configuration" : name.Trim(),
-            Transport = transportConfig.SelectedTransportType,
-            ServerUrl = transportConfig.SelectedTransportType == TransportType.Stdio ? string.Empty : (transportConfig.RemoteUrl ?? string.Empty),
-            StdioCommand = transportConfig.SelectedTransportType == TransportType.Stdio ? (transportConfig.StdioCommand ?? string.Empty) : string.Empty,
-            StdioArgs = transportConfig.SelectedTransportType == TransportType.Stdio ? (transportConfig.StdioArgs ?? string.Empty) : string.Empty,
+            Transport = transport,
+            ServerUrl = transport == TransportType.Stdio ? string.Empty : (transportConfig.RemoteUrl ?? string.Empty),
+            StdioCommand = transport == TransportType.Stdio ? (transportConfig.StdioCommand ?? string.Empty) : string.Empty,
+            StdioArgs = transport == TransportType.Stdio ? (transportConfig.StdioArgs ?? string.Empty) : string.Empty,
             ConnectionTimeout = 10
         };
 
@@ -258,6 +259,29 @@ public partial class ConfigurationEditorViewModel(
     public void Cancel()
     {
     }
+
+    private static ObservableCollection<TransportOption> CreateTransportOptions(IPlatformCapabilityService capabilities)
+    {
+        ArgumentNullException.ThrowIfNull(capabilities);
+
+        var options = new ObservableCollection<TransportOption>();
+        if (capabilities.SupportsStdioTransport)
+        {
+            options.Add(new TransportOption(TransportType.Stdio, "Stdio（子进程）"));
+        }
+
+        options.Add(new TransportOption(TransportType.WebSocket, "WebSocket"));
+        options.Add(new TransportOption(TransportType.HttpSse, "HTTP SSE"));
+        return options;
+    }
+
+    private TransportType ResolveDefaultTransportType()
+        => TransportOptions.FirstOrDefault()?.Type ?? TransportType.WebSocket;
+
+    private TransportType ResolveSupportedTransportType(TransportType transport)
+        => TransportOptions.Any(option => option.Type == transport)
+            ? transport
+            : ResolveDefaultTransportType();
 }
 
 public sealed class TransportOption

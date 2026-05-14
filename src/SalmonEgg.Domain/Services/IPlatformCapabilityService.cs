@@ -6,4 +6,6 @@ public interface IPlatformCapabilityService
     bool SupportsTray { get; }
     bool SupportsLanguageOverride { get; }
     bool SupportsMiniWindow { get; }
+    bool SupportsStdioTransport { get; }
+    bool SupportsLocalTerminal { get; }
 }

@@ -5,6 +5,7 @@ using Serilog;
 using SalmonEgg.Domain.Interfaces;
 using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.Domain.Services;
 using SalmonEgg.Infrastructure.Network;
 using SalmonEgg.Infrastructure.Transport;
 
@@ -18,14 +19,16 @@ namespace SalmonEgg.Infrastructure.Client;
 public class TransportFactory : ITransportFactory
 {
    private readonly ILogger _logger;
+   private readonly IPlatformCapabilityService? _capabilities;
 
    /// <summary>
    /// 创建 <see cref="TransportFactory"/> 的新实例。
    /// </summary>
    /// <param name="logger">日志记录器实例</param>
-   public TransportFactory(ILogger logger)
+   public TransportFactory(ILogger logger, IPlatformCapabilityService? capabilities = null)
    {
        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+       _capabilities = capabilities;
    }
 
    /// <summary>
@@ -61,6 +64,11 @@ public class TransportFactory : ITransportFactory
    /// <returns>默认的 <see cref="ITransport"/> 实例</returns>
    public SalmonEgg.Domain.Interfaces.Transport.ITransport CreateDefaultTransport()
    {
+       if (_capabilities?.SupportsStdioTransport == false)
+       {
+           throw new NotSupportedException("Stdio transport is not supported on this platform.");
+       }
+
        _logger.Information("创建默认传输实例：Stdio");
        // 默认使用 Stdio 传输，参数为空的命令
        return new StdioTransport("agent-command", Array.Empty<string>(), System.Text.Encoding.UTF8);
@@ -75,6 +83,11 @@ public class TransportFactory : ITransportFactory
    /// <exception cref="ArgumentException">当命令为空时抛出</exception>
    private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateStdioTransport(string? command, string? args)
    {
+       if (_capabilities?.SupportsStdioTransport == false)
+       {
+           throw new NotSupportedException("Stdio transport is not supported on this platform.");
+       }
+
        if (string.IsNullOrWhiteSpace(command))
        {
            throw new ArgumentException("Stdio 传输必须指定命令", nameof(command));

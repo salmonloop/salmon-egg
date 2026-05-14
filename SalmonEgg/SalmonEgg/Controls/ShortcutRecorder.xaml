@@ -9,6 +9,7 @@
     <Button x:Name="RecorderButton"
             Click="OnRecorderButtonClick"
             PreviewKeyDown="OnRecorderButtonPreviewKeyDown"
+            KeyUp="OnRecorderButtonKeyUp"
             LostFocus="OnRecorderButtonLostFocus"
             HorizontalAlignment="Stretch"
             HorizontalContentAlignment="Left"

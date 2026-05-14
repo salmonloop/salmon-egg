@@ -28,6 +28,7 @@ public static class ShellLayoutReducer
                     ? state.LastAuxiliaryPanelArea
                     : AuxiliaryPanelArea.Right
             },
+            ToggleBottomPanelRequested when !state.SupportsLocalTerminal => state,
             ToggleBottomPanelRequested => state with
             {
                 DesiredBottomPanelMode = state.DesiredBottomPanelMode == BottomPanelMode.None

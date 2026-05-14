@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using Moq;
 using Serilog;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.Domain.Services;
 using SalmonEgg.Infrastructure.Client;
 using SalmonEgg.Infrastructure.Transport;
 using Xunit;
@@ -37,7 +38,7 @@ public sealed class TransportFactoryTests
     [Fact]
     public void CreateTransport_Stdio_Should_Return_StdioTransport()
     {
-        var factory = new TransportFactory(_logger);
+        var factory = new TransportFactory(_logger, CreateCapabilities(supportsStdioTransport: true).Object);
 
         var transport = factory.CreateTransport(TransportType.Stdio, command: "agent", args: "--mode test");
 
@@ -47,7 +48,7 @@ public sealed class TransportFactoryTests
     [Fact]
     public void CreateTransport_Stdio_WithSshBridgeCommand_Should_Return_StdioTransport()
     {
-        var factory = new TransportFactory(_logger);
+        var factory = new TransportFactory(_logger, CreateCapabilities(supportsStdioTransport: true).Object);
 
         var transport = factory.CreateTransport(
             TransportType.Stdio,
@@ -65,7 +66,7 @@ public sealed class TransportFactoryTests
             return;
         }
 
-        var factory = new TransportFactory(_logger);
+        var factory = new TransportFactory(_logger, CreateCapabilities(supportsStdioTransport: true).Object);
         var tempDir = Path.Combine(Path.GetTempPath(), $"salmonegg-stdio-test-{Guid.NewGuid():N}", "with space");
         Directory.CreateDirectory(tempDir);
         var scriptPath = Path.Combine(tempDir, "slow agent.ps1");
@@ -100,10 +101,19 @@ public sealed class TransportFactoryTests
     [Fact]
     public void CreateTransport_Stdio_Should_Throw_When_Command_Missing()
     {
-        var factory = new TransportFactory(_logger);
+        var factory = new TransportFactory(_logger, CreateCapabilities(supportsStdioTransport: true).Object);
 
         Assert.Throws<ArgumentException>(() =>
             factory.CreateTransport(TransportType.Stdio, command: null, args: null));
+    }
+
+    [Fact]
+    public void CreateTransport_Stdio_Should_Throw_When_SubprocessTransportUnsupported()
+    {
+        var factory = new TransportFactory(_logger, CreateCapabilities(supportsStdioTransport: false).Object);
+
+        Assert.Throws<NotSupportedException>(() =>
+            factory.CreateTransport(TransportType.Stdio, command: "agent", args: "--stdio"));
     }
 
     [Fact]
@@ -136,10 +146,26 @@ public sealed class TransportFactoryTests
     [Fact]
     public void CreateDefaultTransport_Should_Return_StdioTransport()
     {
-        var factory = new TransportFactory(_logger);
+        var factory = new TransportFactory(_logger, CreateCapabilities(supportsStdioTransport: true).Object);
 
         var transport = factory.CreateDefaultTransport();
 
         Assert.IsType<StdioTransport>(transport);
+    }
+
+    [Fact]
+    public void CreateDefaultTransport_Should_Throw_When_SubprocessTransportUnsupported()
+    {
+        var factory = new TransportFactory(_logger, CreateCapabilities(supportsStdioTransport: false).Object);
+
+        Assert.Throws<NotSupportedException>(() => factory.CreateDefaultTransport());
+    }
+
+    private static Mock<IPlatformCapabilityService> CreateCapabilities(bool supportsStdioTransport)
+    {
+        var capabilities = new Mock<IPlatformCapabilityService>();
+        capabilities.SetupGet(c => c.SupportsStdioTransport).Returns(supportsStdioTransport);
+        capabilities.SetupGet(c => c.SupportsLocalTerminal).Returns(true);
+        return capabilities;
     }
 }

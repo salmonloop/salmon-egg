@@ -19,13 +19,15 @@ public sealed class WasmStartupAssetsTests
     public void Project_DeclaresSingleUnoSplashScreenSource()
     {
         var project = XDocument.Parse(LoadFile(@"SalmonEgg\SalmonEgg\SalmonEgg.csproj"));
-        var splashScreens = project.Descendants("UnoSplashScreen").ToArray();
+        var splashScreenFile = project.Descendants("UnoSplashScreenFile").Single();
+        var splashScreenBaseSize = project.Descendants("UnoSplashScreenBaseSize").Single();
+        var splashScreenColor = project.Descendants("UnoSplashScreenColor").Single();
 
-        var splashScreen = Assert.Single(splashScreens);
-        Assert.Equal(@"Assets\Splash\splash_screen.png", (string?)splashScreen.Attribute("Include"));
-        Assert.Equal("300,300", (string?)splashScreen.Attribute("BaseSize"));
-        Assert.Equal("#FFFFFF", (string?)splashScreen.Attribute("Color"));
-        Assert.True(File.Exists(RepoPath(@"SalmonEgg\SalmonEgg\Assets\Splash\splash_screen.png")));
+        Assert.Empty(project.Descendants("UnoSplashScreen"));
+        Assert.Equal(@"Assets\Icons\splash_screen.png", splashScreenFile.Value);
+        Assert.Equal("256,256", splashScreenBaseSize.Value);
+        Assert.Equal("#FFFFFF", splashScreenColor.Value);
+        Assert.True(File.Exists(RepoPath(@"SalmonEgg\SalmonEgg\Assets\Icons\splash_screen.png")));
         Assert.False(File.Exists(RepoPath(@"SalmonEgg\SalmonEgg\Assets\Splash\splash_screen.svg")));
     }
 

@@ -333,6 +333,23 @@ public class ShellLayoutPolicyTests
     }
 
     [Fact]
+    public void Policy_DisablesBottomPanel_WhenLocalTerminalUnsupported()
+    {
+        var state = ShellLayoutState.Default with
+        {
+            SupportsLocalTerminal = false,
+            DesiredBottomPanelMode = BottomPanelMode.Dock,
+            WindowMetrics = new WindowMetrics(1280, 900, 1280, 900)
+        };
+
+        var snapshot = ShellLayoutPolicy.Compute(state);
+
+        Assert.False(snapshot.CanToggleBottomPanel);
+        Assert.False(snapshot.BottomPanelVisible);
+        Assert.Equal(BottomPanelMode.None, snapshot.BottomPanelMode);
+    }
+
+    [Fact]
     public void Policy_ReactivatesSuppressedRightPanel_WhenBottomMinSizeFailsAfterDualConflict()
     {
         var state = ShellLayoutState.Default with
@@ -373,6 +390,23 @@ public class ShellLayoutReducerBehaviorTests
         Assert.False(reduced.Snapshot.RightPanelVisible);
         Assert.Equal(BottomPanelMode.Dock, reduced.Snapshot.BottomPanelMode);
         Assert.Equal(RightPanelMode.None, reduced.Snapshot.RightPanelMode);
+    }
+
+    [Fact]
+    public void ToggleBottomPanel_DoesNotOpen_WhenLocalTerminalUnsupported()
+    {
+        var state = ShellLayoutState.Default with
+        {
+            SupportsLocalTerminal = false,
+            WindowMetrics = new WindowMetrics(1280, 900, 1280, 900)
+        };
+
+        var reduced = ShellLayoutReducer.Reduce(state, new ToggleBottomPanelRequested());
+
+        Assert.Equal(BottomPanelMode.None, reduced.State.DesiredBottomPanelMode);
+        Assert.Equal(AuxiliaryPanelArea.None, reduced.State.LastAuxiliaryPanelArea);
+        Assert.False(reduced.Snapshot.CanToggleBottomPanel);
+        Assert.False(reduced.Snapshot.BottomPanelVisible);
     }
 
     [Fact]

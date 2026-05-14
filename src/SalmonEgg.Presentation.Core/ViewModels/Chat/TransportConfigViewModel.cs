@@ -9,6 +9,16 @@ namespace SalmonEgg.Presentation.ViewModels.Chat;
 /// </summary>
 public partial class TransportConfigViewModel : ObservableObject, IAcpTransportConfiguration
 {
+    public TransportConfigViewModel()
+        : this(TransportType.Stdio)
+    {
+    }
+
+    public TransportConfigViewModel(TransportType defaultTransportType)
+    {
+        _selectedTransportType = defaultTransportType;
+    }
+
     /// <summary>
     /// 当前选择的传输类型
     /// </summary>
@@ -16,7 +26,7 @@ public partial class TransportConfigViewModel : ObservableObject, IAcpTransportC
     [NotifyPropertyChangedFor(nameof(IsStdio))]
     [NotifyPropertyChangedFor(nameof(IsWebSocket))]
     [NotifyPropertyChangedFor(nameof(IsHttpSse))]
-    private TransportType _selectedTransportType = TransportType.Stdio;
+    private TransportType _selectedTransportType;
 
     /// <summary>
     /// 是否为 Stdio 传输
@@ -104,8 +114,11 @@ public partial class TransportConfigViewModel : ObservableObject, IAcpTransportC
     /// 重置为默认配置
     /// </summary>
     public void Reset()
+        => ResetToDefault(TransportType.Stdio);
+
+    public void ResetToDefault(TransportType defaultTransportType)
     {
-        SelectedTransportType = TransportType.Stdio;
+        SelectedTransportType = defaultTransportType;
         StdioCommand = string.Empty;
         StdioArgs = string.Empty;
         RemoteUrl = string.Empty;

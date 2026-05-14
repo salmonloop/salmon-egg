@@ -45,6 +45,7 @@ public sealed partial class ShortcutRecorder : UserControl, INotifyPropertyChang
             new PropertyMetadata(string.Empty, OnVisualPropertyChanged));
 
     private bool _isRecording;
+    private AppShortcutModifiers _pressedModifiers;
 #if WINDOWS
     private InputKeyboardSource? _keyboardSource;
 #endif
@@ -122,14 +123,27 @@ public sealed partial class ShortcutRecorder : UserControl, INotifyPropertyChang
             return;
         }
 
+        UpdatePressedModifier(e.Key, isDown: true);
+
         if (TryHandleVirtualKey(e.Key, out var handled))
         {
             e.Handled = handled;
         }
     }
 
+    private void OnRecorderButtonKeyUp(object sender, KeyRoutedEventArgs e)
+    {
+        if (!_isRecording)
+        {
+            return;
+        }
+
+        UpdatePressedModifier(e.Key, isDown: false);
+    }
+
     private void StartRecording()
     {
+        _pressedModifiers = AppShortcutModifiers.None;
         _isRecording = true;
         OnPropertyChanged(nameof(DisplayText));
         OnPropertyChanged(nameof(AutomationName));
@@ -146,6 +160,7 @@ public sealed partial class ShortcutRecorder : UserControl, INotifyPropertyChang
 
         _isRecording = false;
         DetachSystemKeyCapture();
+        _pressedModifiers = AppShortcutModifiers.None;
         OnPropertyChanged(nameof(DisplayText));
         OnPropertyChanged(nameof(AutomationName));
     }
@@ -184,6 +199,8 @@ public sealed partial class ShortcutRecorder : UserControl, INotifyPropertyChang
         {
             return;
         }
+
+        UpdatePressedModifier(args.VirtualKey, isDown: true);
 
         if (TryHandleVirtualKey(args.VirtualKey, out var handled))
         {
@@ -266,7 +283,7 @@ public sealed partial class ShortcutRecorder : UserControl, INotifyPropertyChang
             || TryGetKeyToken(key, out _);
     }
 
-    private static bool TryBuildGestureText(VirtualKey key, out string gestureText)
+    private bool TryBuildGestureText(VirtualKey key, out string gestureText)
     {
         gestureText = string.Empty;
         if (!TryGetKeyToken(key, out var keyToken))
@@ -274,22 +291,7 @@ public sealed partial class ShortcutRecorder : UserControl, INotifyPropertyChang
             return false;
         }
 
-        var modifiers = AppShortcutModifiers.None;
-        if (IsKeyCurrentlyDown(VirtualKey.Control))
-        {
-            modifiers |= AppShortcutModifiers.Control;
-        }
-
-        if (IsKeyCurrentlyDown(VirtualKey.Menu))
-        {
-            modifiers |= AppShortcutModifiers.Alt;
-        }
-
-        if (IsKeyCurrentlyDown(VirtualKey.Shift))
-        {
-            modifiers |= AppShortcutModifiers.Shift;
-        }
-
+        var modifiers = GetCurrentModifiers();
         if (modifiers == AppShortcutModifiers.None)
         {
             return false;
@@ -350,6 +352,31 @@ public sealed partial class ShortcutRecorder : UserControl, INotifyPropertyChang
         return false;
     }
 
+    private AppShortcutModifiers GetCurrentModifiers()
+    {
+#if WINDOWS
+        var modifiers = AppShortcutModifiers.None;
+        if (IsKeyCurrentlyDown(VirtualKey.Control))
+        {
+            modifiers |= AppShortcutModifiers.Control;
+        }
+
+        if (IsKeyCurrentlyDown(VirtualKey.Menu))
+        {
+            modifiers |= AppShortcutModifiers.Alt;
+        }
+
+        if (IsKeyCurrentlyDown(VirtualKey.Shift))
+        {
+            modifiers |= AppShortcutModifiers.Shift;
+        }
+
+        return modifiers;
+#else
+        return _pressedModifiers;
+#endif
+    }
+
     private static bool IsKeyCurrentlyDown(VirtualKey key)
     {
 #if WINDOWS
@@ -358,6 +385,26 @@ public sealed partial class ShortcutRecorder : UserControl, INotifyPropertyChang
 #else
         return false;
 #endif
+    }
+
+    private void UpdatePressedModifier(VirtualKey key, bool isDown)
+    {
+        var modifier = key switch
+        {
+            VirtualKey.Control or VirtualKey.LeftControl or VirtualKey.RightControl => AppShortcutModifiers.Control,
+            VirtualKey.Menu or VirtualKey.LeftMenu or VirtualKey.RightMenu => AppShortcutModifiers.Alt,
+            VirtualKey.Shift or VirtualKey.LeftShift or VirtualKey.RightShift => AppShortcutModifiers.Shift,
+            _ => AppShortcutModifiers.None
+        };
+
+        if (modifier == AppShortcutModifiers.None)
+        {
+            return;
+        }
+
+        _pressedModifiers = isDown
+            ? _pressedModifiers | modifier
+            : _pressedModifiers & ~modifier;
     }
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)

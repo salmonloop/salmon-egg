@@ -20,6 +20,7 @@
     <PackageVersion Include="Microsoft.WindowsAppSDK" Version="1.8.260317003" />
     <PackageVersion Include="Microsoft.WindowsAppSDK.WinUI" Version="1.8.260224000" />
     <PackageVersion Include="Serilog.Extensions.Logging" Version="10.0.0" />
+    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.6" />
     <PackageVersion Include="System.Security.Permissions" Version="10.0.6" />
     <PackageVersion Include="Uno.WinUI.Lottie" Version="6.5.153" />
     <PackageVersion Include="Uno.Extensions.Reactive" Version="7.1.1" />

@@ -164,6 +164,7 @@
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.26100.0'">
     <PackageReference Include="CommunityToolkit.Labs.WinUI.Controls.MarkdownTextBlock" />
     <PackageReference Include="Microsoft.WindowsAppSDK" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" />
   </ItemGroup>
 
   <!-- WinUI target uses Microsoft.UI.Xaml; do not inject Uno assemblies into XamlCompiler references. -->

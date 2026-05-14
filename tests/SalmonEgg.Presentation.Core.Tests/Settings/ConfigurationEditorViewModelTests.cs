@@ -16,9 +16,86 @@ public sealed class ConfigurationEditorViewModelTests
     {
         var validator = new ServerConfigurationValidator();
         var configurationService = new Mock<IConfigurationService>();
+        var capabilities = CreateCapabilities(supportsStdioTransport: true);
         var logger = new Mock<ILogger<ConfigurationEditorViewModel>>();
-        var viewModel = new ConfigurationEditorViewModel(validator, configurationService.Object, logger.Object);
+        var viewModel = new ConfigurationEditorViewModel(
+            validator,
+            configurationService.Object,
+            capabilities.Object,
+            logger.Object);
 
         Assert.Equal("Stdio（子进程）", viewModel.TransportOptions[0].Name);
+    }
+
+    [Fact]
+    public void TransportOptions_Should_HideStdio_WhenSubprocessTransportUnsupported()
+    {
+        var validator = new ServerConfigurationValidator();
+        var configurationService = new Mock<IConfigurationService>();
+        var capabilities = CreateCapabilities(supportsStdioTransport: false);
+        var logger = new Mock<ILogger<ConfigurationEditorViewModel>>();
+        var viewModel = new ConfigurationEditorViewModel(
+            validator,
+            configurationService.Object,
+            capabilities.Object,
+            logger.Object);
+
+        Assert.DoesNotContain(viewModel.TransportOptions, option => option.Type == TransportType.Stdio);
+        Assert.Equal(TransportType.WebSocket, viewModel.TransportOptions[0].Type);
+    }
+
+    [Fact]
+    public void LoadBlankConfiguration_Should_DefaultToWebSocket_WhenStdioUnsupported()
+    {
+        var validator = new ServerConfigurationValidator();
+        var configurationService = new Mock<IConfigurationService>();
+        var capabilities = CreateCapabilities(supportsStdioTransport: false);
+        var logger = new Mock<ILogger<ConfigurationEditorViewModel>>();
+        var viewModel = new ConfigurationEditorViewModel(
+            validator,
+            configurationService.Object,
+            capabilities.Object,
+            logger.Object);
+
+        viewModel.LoadBlankConfiguration();
+
+        Assert.Equal(TransportType.WebSocket, viewModel.Transport);
+        Assert.Equal(TransportType.WebSocket, viewModel.Configuration.Transport);
+        Assert.False(viewModel.IsStdio);
+    }
+
+    [Fact]
+    public void LoadConfiguration_Should_CoerceStdioToWebSocket_WhenStdioUnsupported()
+    {
+        var validator = new ServerConfigurationValidator();
+        var configurationService = new Mock<IConfigurationService>();
+        var capabilities = CreateCapabilities(supportsStdioTransport: false);
+        var logger = new Mock<ILogger<ConfigurationEditorViewModel>>();
+        var viewModel = new ConfigurationEditorViewModel(
+            validator,
+            configurationService.Object,
+            capabilities.Object,
+            logger.Object);
+
+        viewModel.LoadConfiguration(new ServerConfiguration
+        {
+            Id = "profile-1",
+            Name = "Local Agent",
+            Transport = TransportType.Stdio,
+            StdioCommand = "agent",
+            StdioArgs = "--stdio"
+        });
+
+        Assert.Equal(TransportType.WebSocket, viewModel.Transport);
+        Assert.Equal(TransportType.WebSocket, viewModel.SelectedTransportOption?.Type);
+        Assert.False(viewModel.IsStdio);
+    }
+
+    private static Mock<IPlatformCapabilityService> CreateCapabilities(bool supportsStdioTransport)
+    {
+        var capabilities = new Mock<IPlatformCapabilityService>();
+        capabilities.SetupGet(c => c.SupportsStdioTransport).Returns(supportsStdioTransport);
+        capabilities.SetupGet(c => c.SupportsLocalTerminal).Returns(true);
+        return capabilities;
     }
 }

@@ -94,6 +94,12 @@ public partial class AppPreferencesViewModel : ObservableObject
 
     public bool IsMiniWindowSupported => _capabilities.SupportsMiniWindow;
 
+    public bool IsStdioTransportSupported => _capabilities.SupportsStdioTransport;
+
+    public bool IsLocalTerminalSupported => _capabilities.SupportsLocalTerminal;
+
+    internal IPlatformCapabilityService PlatformCapabilities => _capabilities;
+
     public AppPreferencesViewModel(
         IAppSettingsService appSettingsService,
         IAppStartupService startupService,

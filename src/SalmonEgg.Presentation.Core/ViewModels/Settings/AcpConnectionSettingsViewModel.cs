@@ -10,6 +10,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.ProjectAffinity;
+using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.ViewModels.Chat;
@@ -22,6 +23,7 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
     private readonly AppPreferencesViewModel _preferences;
     private readonly ISettingsAcpConnectionCommands _connectionCommands;
     private readonly ISettingsAcpTransportConfiguration _transportConfig;
+    private readonly IPlatformCapabilityService _capabilities;
     private readonly IUiDispatcher _uiDispatcher;
     private bool _suppressPathMappingProjection;
     private bool _disposed;
@@ -29,12 +31,7 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
     public ISettingsChatConnection Chat { get; }
     public AcpProfilesViewModel Profiles { get; }
 
-    public ObservableCollection<TransportOptionViewModel> TransportOptions { get; } = new()
-    {
-        new TransportOptionViewModel(TransportType.Stdio, "Stdio（子进程）"),
-        new TransportOptionViewModel(TransportType.WebSocket, "WebSocket"),
-        new TransportOptionViewModel(TransportType.HttpSse, "HTTP SSE"),
-    };
+    public ObservableCollection<TransportOptionViewModel> TransportOptions { get; }
 
     public ObservableCollection<AcpPathMappingRowViewModel> PathMappingRows { get; } = new();
     public ObservableCollection<HydrationCompletionModeOptionViewModel> HydrationCompletionModeOptions { get; } = new()
@@ -118,12 +115,18 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         _transportConfig = transportConfig ?? throw new ArgumentNullException(nameof(transportConfig));
         Profiles = profiles ?? throw new ArgumentNullException(nameof(profiles));
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
+        _capabilities = _preferences.PlatformCapabilities;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _uiDispatcher = uiDispatcher ?? InlineUiDispatcher.Instance;
         Chat = chatFacade ?? new CompositeSettingsChatConnection(connectionState, _connectionCommands, _transportConfig);
+        TransportOptions = CreateTransportOptions(_capabilities);
 
         SelectedTransport = TransportOptions.FirstOrDefault(o => o.Type == _transportConfig.SelectedTransportType)
-                            ?? TransportOptions.First();
+                            ?? TransportOptions.FirstOrDefault();
+        if (SelectedTransport != null && _transportConfig.SelectedTransportType != SelectedTransport.Type)
+        {
+            _transportConfig.SelectedTransportType = SelectedTransport.Type;
+        }
 
         _transportConfig.PropertyChanged += OnTransportConfigPropertyChanged;
         Profiles.PropertyChanged += OnProfilesPropertyChanged;
@@ -190,7 +193,14 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         {
             if (e.PropertyName == nameof(ISettingsAcpTransportConfiguration.SelectedTransportType))
             {
-                var current = TransportOptions.FirstOrDefault(o => o.Type == _transportConfig.SelectedTransportType);
+                var supportedType = ResolveSupportedTransportType(_transportConfig.SelectedTransportType);
+                if (_transportConfig.SelectedTransportType != supportedType)
+                {
+                    _transportConfig.SelectedTransportType = supportedType;
+                    return;
+                }
+
+                var current = TransportOptions.FirstOrDefault(o => o.Type == supportedType);
                 if (current != null && SelectedTransport?.Type != current.Type)
                 {
                     SelectedTransport = current;
@@ -215,6 +225,25 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         {
             _logger.LogWarning(ex, "Failed to change transport type");
         }
+    }
+
+    private TransportType ResolveSupportedTransportType(TransportType transportType)
+        => TransportOptions.Any(option => option.Type == transportType)
+            ? transportType
+            : TransportOptions.FirstOrDefault()?.Type ?? TransportType.WebSocket;
+
+    private static ObservableCollection<TransportOptionViewModel> CreateTransportOptions(
+        IPlatformCapabilityService capabilities)
+    {
+        var options = new ObservableCollection<TransportOptionViewModel>();
+        if (capabilities.SupportsStdioTransport)
+        {
+            options.Add(new TransportOptionViewModel(TransportType.Stdio, "Stdio（子进程）"));
+        }
+
+        options.Add(new TransportOptionViewModel(TransportType.WebSocket, "WebSocket"));
+        options.Add(new TransportOptionViewModel(TransportType.HttpSse, "HTTP SSE"));
+        return options;
     }
 
     partial void OnSelectedHydrationCompletionModeChanged(HydrationCompletionModeOptionViewModel? value)

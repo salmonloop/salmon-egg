@@ -68,7 +68,7 @@ public sealed class AcpConnectionSettingsViewModelTests
     [Fact]
     public async Task TransportOptions_Should_PresentStdioAsSubprocessTransport()
     {
-        var preferences = await CreatePreferencesAsync();
+        var preferences = await CreatePreferencesAsync(supportsStdioTransport: true);
         var profiles = CreateProfiles(preferences);
         var chat = new TestSettingsChatConnection();
         var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
@@ -76,6 +76,37 @@ public sealed class AcpConnectionSettingsViewModelTests
         using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, logger.Object);
 
         Assert.Equal("Stdio（子进程）", viewModel.TransportOptions[0].Name);
+    }
+
+    [Fact]
+    public async Task Constructor_Should_CoerceStdioSelection_WhenSubprocessTransportUnsupported()
+    {
+        var preferences = await CreatePreferencesAsync(supportsStdioTransport: false);
+        var profiles = CreateProfiles(preferences);
+        var chat = new TestSettingsChatConnection();
+        var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
+
+        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, logger.Object);
+
+        Assert.DoesNotContain(viewModel.TransportOptions, option => option.Type == TransportType.Stdio);
+        Assert.Equal(TransportType.WebSocket, viewModel.SelectedTransport?.Type);
+        Assert.Equal(TransportType.WebSocket, chat.TransportConfig.SelectedTransportType);
+    }
+
+    [Fact]
+    public async Task TransportConfigChange_Should_CoerceUnsupportedStdioSelection()
+    {
+        var preferences = await CreatePreferencesAsync(supportsStdioTransport: false);
+        var profiles = CreateProfiles(preferences);
+        var chat = new TestSettingsChatConnection();
+        var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
+
+        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, logger.Object);
+
+        chat.TransportConfig.SelectedTransportType = TransportType.Stdio;
+
+        Assert.Equal(TransportType.WebSocket, chat.TransportConfig.SelectedTransportType);
+        Assert.Equal(TransportType.WebSocket, viewModel.SelectedTransport?.Type);
     }
 
     [Fact]
@@ -287,7 +318,9 @@ public sealed class AcpConnectionSettingsViewModelTests
         Assert.Empty(preferences.ProjectPathMappings);
     }
 
-    private static async Task<AppPreferencesViewModel> CreatePreferencesAsync()
+    private static async Task<AppPreferencesViewModel> CreatePreferencesAsync(
+        bool supportsStdioTransport = true,
+        bool supportsLocalTerminal = true)
     {
         var appSettingsService = new Mock<IAppSettingsService>();
         appSettingsService.Setup(s => s.LoadAsync()).ReturnsAsync(new AppSettings());
@@ -297,6 +330,8 @@ public sealed class AcpConnectionSettingsViewModelTests
 
         var languageService = new Mock<IAppLanguageService>();
         var capabilities = new Mock<IPlatformCapabilityService>();
+        capabilities.SetupGet(c => c.SupportsStdioTransport).Returns(supportsStdioTransport);
+        capabilities.SetupGet(c => c.SupportsLocalTerminal).Returns(supportsLocalTerminal);
         var uiRuntime = new Mock<IUiRuntimeService>();
         var logger = new Mock<ILogger<AppPreferencesViewModel>>();
 

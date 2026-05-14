@@ -40,6 +40,7 @@ using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Services.Input;
 using SalmonEgg.Presentation.Core.Resources;
 #if WINDOWS
+using SalmonEgg.Platforms.Windows;
 #endif
 
 namespace SalmonEgg;
@@ -147,7 +148,13 @@ public static class DependencyInjection
         services.AddSingleton<IGamepadNavigationDispatcher, MainShellGamepadNavigationDispatcher>();
 
         // Secure Storage
+#if WINDOWS
+        services.AddSingleton<ISecureStorage, WindowsDpapiSecureStorage>();
+#elif __WASM__ || __ANDROID__ || __IOS__
+        services.AddSingleton<ISecureStorage, VolatileSecureStorage>();
+#else
         services.AddSingleton<ISecureStorage, SecureStorage>();
+#endif
 
         // App settings (config/app.yaml)
         services.AddSingleton<IAppSettingsService, AppSettingsService>();
@@ -206,7 +213,10 @@ public static class DependencyInjection
 
         services.AddSingleton<IShellLayoutStore>(sp =>
         {
-            var initialState = ShellLayoutState.Default;
+            var initialState = ShellLayoutState.Default with
+            {
+                SupportsLocalTerminal = sp.GetRequiredService<IPlatformCapabilityService>().SupportsLocalTerminal
+            };
             var initialSnapshot = ShellLayoutPolicy.Compute(initialState);
             var state = State.Value(sp, () => initialState);
             var snapshot = State.Value(sp, () => initialSnapshot);
@@ -255,9 +265,11 @@ public static class DependencyInjection
         services.AddSingleton<IConversationCatalogDisplayReadModel>(sp =>
             sp.GetRequiredService<ConversationCatalogDisplayPresenter>());
         services.AddSingleton<IProjectAffinityResolver, ProjectAffinityResolver>();
+#if !__WASM__ && !__ANDROID__ && !__IOS__
         services.AddSingleton<ILocalTerminalCwdResolver, LocalTerminalCwdResolver>();
         services.AddSingleton<ILocalTerminalSessionManager, LocalTerminalSessionManager>();
         services.AddSingleton<LocalTerminalPanelCoordinator>();
+#endif
         services.AddSingleton<INavigationProjectPreferences>(sp =>
             new NavigationProjectPreferencesAdapter(sp.GetRequiredService<AppPreferencesViewModel>()));
         services.AddSingleton<INavigationProjectSelectionStore>(sp =>
