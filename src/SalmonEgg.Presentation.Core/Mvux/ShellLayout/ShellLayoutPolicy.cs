@@ -136,6 +136,7 @@ public static class ShellLayoutPolicy
             canToggleRightPanels,
             canToggleBottomPanel,
             showAuxiliaryTitleBarButtons,
-            titleBarInteractiveRegionToken);
+            titleBarInteractiveRegionToken,
+            state.SupportsLocalTerminal);
     }
 }

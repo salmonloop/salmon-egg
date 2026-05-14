@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using System.Text;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -49,7 +48,7 @@ public sealed partial class AboutViewModel : ObservableObject
     private async Task OpenReleaseNotesAsync()
     {
         var path = _documents.GetReleaseNotesPath();
-        if (!File.Exists(path))
+        if (!await _documents.ExistsAsync(path).ConfigureAwait(false))
         {
             await NotifyMissingDocAsync(path, "更新日志").ConfigureAwait(true);
             return;
@@ -62,7 +61,7 @@ public sealed partial class AboutViewModel : ObservableObject
     private async Task OpenPrivacyPolicyAsync()
     {
         var path = _documents.GetPrivacyPolicyPath();
-        if (!File.Exists(path))
+        if (!await _documents.ExistsAsync(path).ConfigureAwait(false))
         {
             await NotifyMissingDocAsync(path, "隐私政策").ConfigureAwait(true);
             return;
@@ -87,7 +86,7 @@ public sealed partial class AboutViewModel : ObservableObject
 
     private async Task NotifyMissingDocAsync(string path, string title)
     {
-        var folder = Path.GetDirectoryName(path);
+        var folder = System.IO.Path.GetDirectoryName(path);
         var message = folder == null
             ? $"未找到{title}文件。"
             : $"未找到{title}文件。\n请在以下目录创建对应的 Markdown 文件：\n{folder}";

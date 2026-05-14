@@ -521,9 +521,7 @@ public sealed partial class MainPage : Page
             RightPanelColumn.Visibility = Visibility.Collapsed;
             RightPanelColumn.Opacity = 1;
             RightPanelTranslate.X = 0;
-            BottomPanelHost.Visibility = Visibility.Collapsed;
-            BottomPanelHost.Opacity = 1;
-            BottomPanelTranslate.Y = 0;
+            ApplyBottomPanelVisualState(false, 1, 0);
             _suppressPanelAnimations = true;
         }
 
@@ -1173,22 +1171,21 @@ public sealed partial class MainPage : Page
             case AuxiliaryPanelAnimationAction.None:
                 return;
             case AuxiliaryPanelAnimationAction.Show:
-                BottomPanelHost.Visibility = Visibility.Visible;
-                BottomPanelHost.Opacity = 1;
-                BottomPanelTranslate.Y = 0;
+                ApplyBottomPanelVisualState(true, 1, 0);
                 _bottomPanelAnimation.SnapTo(true, LayoutVM.BottomPanelHeight);
                 return;
             case AuxiliaryPanelAnimationAction.Hide:
-                BottomPanelHost.Visibility = Visibility.Collapsed;
-                BottomPanelHost.Opacity = 1;
-                BottomPanelTranslate.Y = 0;
+                ApplyBottomPanelVisualState(false, 1, 0);
                 _bottomPanelAnimation.SnapTo(false, 0);
                 return;
             case AuxiliaryPanelAnimationAction.StartOpening:
             {
-                BottomPanelTranslate.Y = request.TravelDistance;
-                BottomPanelHost.Opacity = 0;
-                BottomPanelHost.Visibility = Visibility.Visible;
+                if (!TryApplyBottomPanelVisualState(true, 0, request.TravelDistance))
+                {
+                    _bottomPanelAnimation.SnapTo(false, 0);
+                    return;
+                }
+
                 var storyboard = (Storyboard)Resources["BottomPanelSlideUp"];
                 DetachBottomPanelStoryboardHandlers();
                 storyboard.Completed += OnBottomPanelStoryboardCompleted;
@@ -1197,8 +1194,12 @@ public sealed partial class MainPage : Page
             }
             case AuxiliaryPanelAnimationAction.StartClosing:
             {
-                BottomPanelHost.Visibility = Visibility.Visible;
-                BottomPanelHost.Opacity = 1;
+                if (!TryApplyBottomPanelVisualState(true, 1, null))
+                {
+                    _bottomPanelAnimation.SnapTo(false, 0);
+                    return;
+                }
+
                 var storyboard = (Storyboard)Resources["BottomPanelSlideDown"];
                 var translateAnim = (DoubleAnimation)storyboard.Children[0];
                 translateAnim.To = request.TravelDistance;
@@ -1249,6 +1250,29 @@ public sealed partial class MainPage : Page
     private static bool IsTransitioning(AuxiliaryPanelAnimationPhase phase)
         => phase is AuxiliaryPanelAnimationPhase.Opening or AuxiliaryPanelAnimationPhase.Closing;
 
+    private void ApplyBottomPanelVisualState(bool visible, double opacity, double translateY)
+    {
+        _ = TryApplyBottomPanelVisualState(visible, opacity, translateY);
+    }
+
+    private bool TryApplyBottomPanelVisualState(bool visible, double opacity, double? translateY)
+    {
+        if (BottomPanelHost is not { } bottomPanelHost)
+        {
+            return false;
+        }
+
+        bottomPanelHost.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        bottomPanelHost.Opacity = opacity;
+
+        if (translateY.HasValue && BottomPanelTranslate is not null)
+        {
+            BottomPanelTranslate.Y = translateY.Value;
+        }
+
+        return true;
+    }
+
     private void OnLayoutViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (!DispatcherQueue.HasThreadAccess)
@@ -1271,11 +1295,7 @@ public sealed partial class MainPage : Page
 
             if (e.PropertyName == nameof(ShellLayoutViewModel.BottomPanelVisible))
             {
-                BottomPanelHost.Visibility = LayoutVM.BottomPanelVisible
-                    ? Visibility.Visible
-                    : Visibility.Collapsed;
-                BottomPanelHost.Opacity = 1;
-                BottomPanelTranslate.Y = 0;
+                ApplyBottomPanelVisualState(LayoutVM.BottomPanelVisible, 1, 0);
                 _bottomPanelAnimation.SnapTo(LayoutVM.BottomPanelVisible, LayoutVM.BottomPanelHeight);
             }
 

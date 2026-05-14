@@ -141,6 +141,7 @@ public partial class ChatViewModelTests
         var capabilities = new Mock<IPlatformCapabilityService>();
         capabilities.SetupGet(c => c.SupportsStdioTransport).Returns(true);
         capabilities.SetupGet(c => c.SupportsLocalTerminal).Returns(true);
+        capabilities.SetupGet(c => c.SupportsInteractiveTerminalSurface).Returns(true);
         var uiRuntime = new Mock<IUiRuntimeService>();
         var prefsLogger = new Mock<ILogger<AppPreferencesViewModel>>();
         var uiDispatcher = syncContext as IUiDispatcher ?? new ImmediateUiDispatcher();
@@ -2825,6 +2826,7 @@ public partial class ChatViewModelTests
         var capabilities = new Mock<IPlatformCapabilityService>();
         capabilities.SetupGet(c => c.SupportsStdioTransport).Returns(true);
         capabilities.SetupGet(c => c.SupportsLocalTerminal).Returns(true);
+        capabilities.SetupGet(c => c.SupportsInteractiveTerminalSurface).Returns(true);
         var uiRuntime = new Mock<IUiRuntimeService>();
         var prefsLogger = new Mock<ILogger<AppPreferencesViewModel>>();
         var uiDispatcher = (IUiDispatcher)syncContext;
@@ -2927,6 +2929,7 @@ public partial class ChatViewModelTests
         var capabilities = new Mock<IPlatformCapabilityService>();
         capabilities.SetupGet(c => c.SupportsStdioTransport).Returns(true);
         capabilities.SetupGet(c => c.SupportsLocalTerminal).Returns(true);
+        capabilities.SetupGet(c => c.SupportsInteractiveTerminalSurface).Returns(true);
         var uiRuntime = new Mock<IUiRuntimeService>();
         var prefsLogger = new Mock<ILogger<AppPreferencesViewModel>>();
         var uiDispatcher = (IUiDispatcher)syncContext;
@@ -3053,6 +3056,7 @@ public partial class ChatViewModelTests
         var capabilities = new Mock<IPlatformCapabilityService>();
         capabilities.SetupGet(c => c.SupportsStdioTransport).Returns(true);
         capabilities.SetupGet(c => c.SupportsLocalTerminal).Returns(true);
+        capabilities.SetupGet(c => c.SupportsInteractiveTerminalSurface).Returns(true);
         var uiRuntime = new Mock<IUiRuntimeService>();
         var prefsLogger = new Mock<ILogger<AppPreferencesViewModel>>();
         var uiDispatcher = (IUiDispatcher)syncContext;

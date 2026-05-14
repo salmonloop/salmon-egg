@@ -166,6 +166,7 @@ public static class DependencyInjection
 #endif
 
         // App settings (config/app.yaml)
+        services.AddSingleton<IAppFileStore, FileSystemAppFileStore>();
         services.AddSingleton<IAppSettingsService, AppSettingsService>();
         services.AddSingleton<IAppDataService, AppDataService>();
         services.AddSingleton<IAppMaintenanceService, AppMaintenanceService>();
@@ -186,6 +187,8 @@ public static class DependencyInjection
         services.AddSingleton<ILiveLogStreamService, SalmonEgg.Infrastructure.Services.LiveLogStreamService>();
         services.AddSingleton<IPlatformShellService, SalmonEgg.Infrastructure.Services.PlatformShellService>();
         services.AddSingleton<IConversationPreviewStore, ConversationPreviewStore>();
+        services.AddSingleton<ISessionExportService, SalmonEgg.Infrastructure.Services.SessionExportService>();
+        services.AddSingleton<ILogFileCatalog, SalmonEgg.Infrastructure.Services.LogFileCatalog>();
 
         services.AddSingleton<IState<ChatState>>(sp => State.Value(sp, () => ChatState.Empty));
         services.AddSingleton<IChatStore, ChatStore>();

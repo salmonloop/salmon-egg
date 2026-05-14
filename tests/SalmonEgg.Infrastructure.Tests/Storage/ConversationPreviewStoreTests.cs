@@ -99,6 +99,14 @@ public sealed class ConversationPreviewStoreTests : IDisposable
         Assert.Equal(second.Entries, loaded.Entries);
     }
 
+    [Fact]
+    public void Constructor_DoesNotTouchPreviewDirectory()
+    {
+        _ = CreateStore();
+
+        Assert.False(Directory.Exists(Path.Combine(_root, "conversation-previews")));
+    }
+
     private ConversationPreviewStore CreateStore()
         => new(new TestAppDataService(_root), NullLogger<ConversationPreviewStore>.Instance);
 

@@ -21,13 +21,16 @@ public sealed class ConfigurationManager : IConfigurationService
     private const int CurrentSchemaVersion = 1;
 
     private readonly ISecureStorage _secureStorage;
+    private readonly IAppFileStore _fileStore;
     private readonly string _serversDirectory;
 
-    public ConfigurationManager(ISecureStorage secureStorage)
+    public ConfigurationManager(ISecureStorage secureStorage, IAppFileStore fileStore, IAppDataService appData)
     {
         _secureStorage = secureStorage ?? throw new ArgumentNullException(nameof(secureStorage));
-        _serversDirectory = SalmonEggPaths.GetServersDirectoryPath();
-        Directory.CreateDirectory(_serversDirectory);
+        _fileStore = fileStore ?? throw new ArgumentNullException(nameof(fileStore));
+        if (appData is null) throw new ArgumentNullException(nameof(appData));
+
+        _serversDirectory = System.IO.Path.Combine(appData.ConfigRootPath, "servers");
     }
 
     public async Task SaveConfigurationAsync(ServerConfiguration config)
@@ -36,14 +39,14 @@ public sealed class ConfigurationManager : IConfigurationService
         if (string.IsNullOrWhiteSpace(config.Id)) throw new ArgumentException("Configuration ID cannot be empty", nameof(config));
 
         var serverPath = GetServerYamlPath(config.Id);
-        EnsureWritableSchema(serverPath);
+        await EnsureWritableSchemaAsync(serverPath).ConfigureAwait(false);
 
         var mode = GetAuthenticationMode(config.Authentication);
         await PersistSecretsAsync(config.Id, mode, config.Authentication).ConfigureAwait(false);
 
         var yamlModel = ToYaml(config, mode);
         var yaml = YamlSerialization.CreateSerializer().Serialize(yamlModel);
-        await AtomicFile.WriteUtf8AtomicAsync(serverPath, yaml).ConfigureAwait(false);
+        await _fileStore.WriteAllTextAsync(serverPath, yaml).ConfigureAwait(false);
     }
 
     public async Task<ServerConfiguration?> LoadConfigurationAsync(string id)
@@ -51,7 +54,8 @@ public sealed class ConfigurationManager : IConfigurationService
         if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Configuration ID cannot be empty", nameof(id));
 
         var path = GetServerYamlPath(id);
-        if (!File.Exists(path))
+        var yaml = await _fileStore.ReadAllTextAsync(path).ConfigureAwait(false);
+        if (yaml is null)
         {
             return null;
         }
@@ -59,7 +63,6 @@ public sealed class ConfigurationManager : IConfigurationService
         ServerConfigurationYamlV1 yamlModel;
         try
         {
-            var yaml = await File.ReadAllTextAsync(path).ConfigureAwait(false);
             yamlModel = YamlSerialization.CreateDeserializer().Deserialize<ServerConfigurationYamlV1>(yaml);
         }
         catch (YamlException)
@@ -98,19 +101,19 @@ public sealed class ConfigurationManager : IConfigurationService
 
     public async Task<IEnumerable<ServerConfiguration>> ListConfigurationsAsync()
     {
-        if (!Directory.Exists(_serversDirectory))
-        {
-            return Array.Empty<ServerConfiguration>();
-        }
-
         var result = new List<ServerConfiguration>();
         var deserializer = YamlSerialization.CreateDeserializer();
 
-        foreach (var path in Directory.EnumerateFiles(_serversDirectory, "*.yaml", SearchOption.TopDirectoryOnly))
+        await foreach (var path in _fileStore.EnumerateFilesAsync(_serversDirectory, "*.yaml").ConfigureAwait(false))
         {
             try
             {
-                var yaml = await File.ReadAllTextAsync(path).ConfigureAwait(false);
+                var yaml = await _fileStore.ReadAllTextAsync(path).ConfigureAwait(false);
+                if (yaml is null)
+                {
+                    continue;
+                }
+
                 var yamlModel = deserializer.Deserialize<ServerConfigurationYamlV1>(yaml);
                 if (yamlModel.SchemaVersion <= 0)
                 {
@@ -133,7 +136,7 @@ public sealed class ConfigurationManager : IConfigurationService
                     continue;
                 }
 
-                var config = FromYaml(yamlModel, fallbackId: Path.GetFileNameWithoutExtension(path));
+                var config = FromYaml(yamlModel, fallbackId: System.IO.Path.GetFileNameWithoutExtension(path));
                 result.Add(config);
             }
             catch (Exception)
@@ -155,10 +158,7 @@ public sealed class ConfigurationManager : IConfigurationService
         var path = GetServerYamlPath(id);
         try
         {
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
+            await _fileStore.DeleteAsync(path).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -313,7 +313,7 @@ public sealed class ConfigurationManager : IConfigurationService
     private string GetServerYamlPath(string id)
     {
         var fileName = GetServerFileName(id);
-        return Path.Combine(_serversDirectory, fileName + ".yaml");
+        return System.IO.Path.Combine(_serversDirectory, fileName + ".yaml");
     }
 
     private static string GetServerFileName(string id)
@@ -346,16 +346,16 @@ public sealed class ConfigurationManager : IConfigurationService
 
     private static string GetApiKeyKey(string serverId) => $"salmonegg/config/{serverId}/apiKey";
 
-    private static void EnsureWritableSchema(string serverPath)
+    private async Task EnsureWritableSchemaAsync(string serverPath)
     {
-        if (!File.Exists(serverPath))
+        var yaml = await _fileStore.ReadAllTextAsync(serverPath).ConfigureAwait(false);
+        if (yaml is null)
         {
             return;
         }
 
         try
         {
-            var yaml = File.ReadAllText(serverPath);
             var existing = YamlSerialization.CreateDeserializer().Deserialize<ServerConfigurationYamlV1>(yaml);
             if (existing.SchemaVersion > CurrentSchemaVersion)
             {

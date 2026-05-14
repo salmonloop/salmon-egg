@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using SalmonEgg.Domain.Services;
 
 namespace SalmonEgg.Infrastructure.Storage;
@@ -15,12 +17,7 @@ public sealed class AppDocumentService : IAppDocumentService
 
     public string DocsRootPath
     {
-        get
-        {
-            var path = Path.Combine(_paths.AppDataRootPath, "docs");
-            Directory.CreateDirectory(path);
-            return path;
-        }
+        get => Path.Combine(_paths.AppDataRootPath, "docs");
     }
 
     public string GetPrivacyPolicyPath()
@@ -31,5 +28,11 @@ public sealed class AppDocumentService : IAppDocumentService
     public string GetReleaseNotesPath()
     {
         return Path.Combine(DocsRootPath, "release-notes.md");
+    }
+
+    public Task<bool> ExistsAsync(string path, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(File.Exists(path));
     }
 }

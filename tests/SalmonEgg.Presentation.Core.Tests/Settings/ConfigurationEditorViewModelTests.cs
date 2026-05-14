@@ -96,6 +96,7 @@ public sealed class ConfigurationEditorViewModelTests
         var capabilities = new Mock<IPlatformCapabilityService>();
         capabilities.SetupGet(c => c.SupportsStdioTransport).Returns(supportsStdioTransport);
         capabilities.SetupGet(c => c.SupportsLocalTerminal).Returns(true);
+        capabilities.SetupGet(c => c.SupportsInteractiveTerminalSurface).Returns(true);
         return capabilities;
     }
 

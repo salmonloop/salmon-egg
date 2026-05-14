@@ -21,7 +21,7 @@ public sealed class ConfigurationManagerTests : IDisposable
         Environment.SetEnvironmentVariable("SALMONEGG_APPDATA_ROOT", Path.Combine(_testDirectory, "SalmonEgg"), EnvironmentVariableTarget.Process);
 
         _secureStorage = new SecureStorage();
-        _configManager = new ConfigurationManager(_secureStorage);
+        _configManager = new ConfigurationManager(_secureStorage, new FileSystemAppFileStore(), new AppDataService());
     }
 
     public void Dispose()
@@ -209,6 +209,14 @@ public sealed class ConfigurationManagerTests : IDisposable
     public async Task DeleteConfigurationAsync_EmptyId_ThrowsArgumentException()
     {
         await Assert.ThrowsAsync<ArgumentException>(() => _configManager.DeleteConfigurationAsync(""));
+    }
+
+    [Fact]
+    public void Constructor_DoesNotCreateServersDirectory()
+    {
+        var serversDirectory = Path.Combine(_testDirectory, "SalmonEgg", "config", "servers");
+
+        Assert.False(Directory.Exists(serversDirectory));
     }
 
     private string GetServerYamlPath(string id) =>

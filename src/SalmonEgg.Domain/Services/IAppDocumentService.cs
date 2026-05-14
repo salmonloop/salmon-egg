@@ -1,3 +1,6 @@
+using System.Threading;
+using System.Threading.Tasks;
+
 namespace SalmonEgg.Domain.Services;
 
 public interface IAppDocumentService
@@ -7,4 +10,6 @@ public interface IAppDocumentService
     string GetPrivacyPolicyPath();
 
     string GetReleaseNotesPath();
+
+    Task<bool> ExistsAsync(string path, CancellationToken cancellationToken = default);
 }

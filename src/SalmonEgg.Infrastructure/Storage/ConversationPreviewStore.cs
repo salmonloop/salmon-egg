@@ -19,6 +19,7 @@ public class ConversationPreviewStore : IConversationPreviewStore
     private readonly ILogger<ConversationPreviewStore> _logger;
     private readonly string _previewsDirectory;
     private readonly ConcurrentDictionary<string, PreviewSaveCoordinator> _saveCoordinators = new(StringComparer.Ordinal);
+    private int _migrationState;
     private const string PreviewsDirectoryName = "conversation-previews";
 
     public ConversationPreviewStore(IAppDataService appDataService, ILogger<ConversationPreviewStore> logger)
@@ -26,23 +27,13 @@ public class ConversationPreviewStore : IConversationPreviewStore
         _appDataService = appDataService ?? throw new ArgumentNullException(nameof(appDataService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _previewsDirectory = Path.Combine(_appDataService.AppDataRootPath, PreviewsDirectoryName);
-
-        // One-time migration: delete orphaned cache files from the old naming scheme.
-        // Old files lack the "XXXXXXXX-" hash prefix; new files always start with it.
-        try
-        {
-            MigrateOldNamingScheme();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to clean up old-format preview cache files.");
-        }
     }
 
     public async Task<ConversationPreviewSnapshot?> LoadAsync(string conversationId, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(conversationId)) return null;
 
+        EnsureMigrated();
         var filePath = GetFilePath(conversationId);
         if (!File.Exists(filePath)) return null;
 
@@ -63,6 +54,7 @@ public class ConversationPreviewStore : IConversationPreviewStore
         if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
         if (string.IsNullOrWhiteSpace(snapshot.ConversationId)) throw new ArgumentException("ConversationId cannot be empty", nameof(snapshot));
 
+        EnsureMigrated();
         var filePath = GetFilePath(snapshot.ConversationId);
         var dir = Path.GetDirectoryName(filePath);
         if (dir != null && !Directory.Exists(dir))
@@ -111,6 +103,7 @@ public class ConversationPreviewStore : IConversationPreviewStore
     {
         if (string.IsNullOrWhiteSpace(conversationId)) return Task.CompletedTask;
 
+        EnsureMigrated();
         var filePath = GetFilePath(conversationId);
         try
         {
@@ -162,6 +155,23 @@ public class ConversationPreviewStore : IConversationPreviewStore
             return false;
         // Keep alphanumerics, dashes, underscores, and common Unicode
         return char.IsLetterOrDigit(c) || c == '-' || c == '_';
+    }
+
+    private void EnsureMigrated()
+    {
+        if (Interlocked.Exchange(ref _migrationState, 1) == 1)
+        {
+            return;
+        }
+
+        try
+        {
+            MigrateOldNamingScheme();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to clean up old-format preview cache files.");
+        }
     }
 
     private void MigrateOldNamingScheme()

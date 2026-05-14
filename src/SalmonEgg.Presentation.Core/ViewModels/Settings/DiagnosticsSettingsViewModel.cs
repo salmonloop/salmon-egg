@@ -1,8 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -19,6 +16,7 @@ public sealed partial class DiagnosticsSettingsViewModel : ObservableObject
     private readonly IAppDataService _paths;
     private readonly IDiagnosticsBundleService _bundle;
     private readonly IPlatformShellService _shell;
+    private readonly ILogFileCatalog _logFileCatalog;
     private readonly ILogger<DiagnosticsSettingsViewModel> _logger;
 
     public ChatViewModel Chat { get; }
@@ -47,6 +45,7 @@ public sealed partial class DiagnosticsSettingsViewModel : ObservableObject
         IAppDataService paths,
         IDiagnosticsBundleService bundle,
         IPlatformShellService shell,
+        ILogFileCatalog logFileCatalog,
         LiveLogViewerViewModel liveLogViewer,
         ILogger<DiagnosticsSettingsViewModel> logger)
     {
@@ -54,29 +53,17 @@ public sealed partial class DiagnosticsSettingsViewModel : ObservableObject
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         _bundle = bundle ?? throw new ArgumentNullException(nameof(bundle));
         _shell = shell ?? throw new ArgumentNullException(nameof(shell));
+        _logFileCatalog = logFileCatalog ?? throw new ArgumentNullException(nameof(logFileCatalog));
         LiveLogViewer = liveLogViewer ?? throw new ArgumentNullException(nameof(liveLogViewer));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-
-        RefreshLatestLogFile();
     }
 
     [RelayCommand]
-    private void RefreshLatestLogFile()
+    private async Task RefreshLatestLogFileAsync()
     {
         try
         {
-            if (!Directory.Exists(_paths.LogsDirectoryPath))
-            {
-                LatestLogFilePath = null;
-                return;
-            }
-
-            var latest = Directory.EnumerateFiles(_paths.LogsDirectoryPath, "*.log", SearchOption.TopDirectoryOnly)
-                .Select(p => new FileInfo(p))
-                .OrderByDescending(f => f.LastWriteTimeUtc)
-                .FirstOrDefault();
-
-            LatestLogFilePath = latest?.FullName;
+            LatestLogFilePath = (await _logFileCatalog.GetLatestAsync(_paths.LogsDirectoryPath).ConfigureAwait(false))?.Path;
         }
         catch
         {
@@ -95,14 +82,20 @@ public sealed partial class DiagnosticsSettingsViewModel : ObservableObject
     {
         try
         {
-            RefreshLatestLogFile();
-            if (string.IsNullOrWhiteSpace(LatestLogFilePath) || !File.Exists(LatestLogFilePath))
+            await RefreshLatestLogFileAsync().ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(LatestLogFilePath))
             {
                 _ = await _shell.CopyToClipboardAsync("No log file found.").ConfigureAwait(false);
                 return;
             }
 
-            var text = await ReadTailAsync(LatestLogFilePath, 8000).ConfigureAwait(false);
+            var text = await _logFileCatalog.ReadTailAsync(LatestLogFilePath, 8000).ConfigureAwait(false);
+            if (text is null)
+            {
+                _ = await _shell.CopyToClipboardAsync("No log file found.").ConfigureAwait(false);
+                return;
+            }
+
             var copied = await _shell.CopyToClipboardAsync(text).ConfigureAwait(false);
             if (!copied)
             {
@@ -143,16 +136,4 @@ public sealed partial class DiagnosticsSettingsViewModel : ObservableObject
             _logger.LogError(ex, "CreateDiagnosticsBundle failed");
         }
     }
-
-    private static async Task<string> ReadTailAsync(string filePath, int maxChars)
-    {
-        var text = await File.ReadAllTextAsync(filePath, Encoding.UTF8).ConfigureAwait(false);
-        if (text.Length <= maxChars)
-        {
-            return text;
-        }
-
-        return text.Substring(text.Length - maxChars, maxChars);
-    }
 }
-

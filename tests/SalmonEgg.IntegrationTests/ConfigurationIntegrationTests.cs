@@ -24,7 +24,7 @@ public sealed class ConfigurationIntegrationTests : IDisposable
         Environment.SetEnvironmentVariable("SALMONEGG_APPDATA_ROOT", Path.Combine(_testDirectory, "SalmonEgg"), EnvironmentVariableTarget.Process);
 
         _secureStorage = new SecureStorage();
-        _configManager = new ConfigurationManager(_secureStorage);
+        _configManager = new ConfigurationManager(_secureStorage, new FileSystemAppFileStore(), new AppDataService());
     }
 
     public void Dispose()

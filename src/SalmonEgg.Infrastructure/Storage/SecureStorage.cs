@@ -25,9 +25,6 @@ namespace SalmonEgg.Infrastructure.Storage
             // 使用应用数据目录
             var appDataRoot = SalmonEggPaths.GetAppDataRootPath();
             _storageDirectory = Path.Combine(appDataRoot, "SecureStorage");
-            
-            if (!Directory.Exists(_storageDirectory))
-                Directory.CreateDirectory(_storageDirectory);
         }
 
         public virtual async Task SaveAsync(string key, string value)
@@ -44,6 +41,7 @@ namespace SalmonEgg.Infrastructure.Storage
                     // 简单的 Base64 编码（注意：这不是真正的加密）
                     var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(value));
                     var filePath = GetFilePath(key);
+                    Directory.CreateDirectory(_storageDirectory);
                     File.WriteAllText(filePath, encoded);
                     
                     // 同时缓存到内存

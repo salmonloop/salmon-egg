@@ -38,7 +38,7 @@ public sealed class AppSettingsServiceTests : IDisposable
     [Fact]
     public async Task SaveThenLoad_RoundTripsToAppYaml()
     {
-        var service = new AppSettingsService();
+        var service = CreateService();
         var settings = new AppSettings
         {
             Theme = "Dark",
@@ -58,7 +58,7 @@ public sealed class AppSettingsServiceTests : IDisposable
     [Fact]
     public async Task SaveThenLoad_RoundTripsProjectPathMappings()
     {
-        var service = new AppSettingsService();
+        var service = CreateService();
         var settings = new AppSettings
         {
             ProjectPathMappings = new List<ProjectPathMapping>
@@ -101,7 +101,7 @@ public sealed class AppSettingsServiceTests : IDisposable
     [Fact]
     public async Task SaveThenLoad_RoundTripsAcpConnectionGovernanceOptions()
     {
-        var service = new AppSettingsService();
+        var service = CreateService();
         var settings = new AppSettings
         {
             AcpEnableConnectionEviction = true,
@@ -122,7 +122,7 @@ public sealed class AppSettingsServiceTests : IDisposable
     [Fact]
     public async Task SaveThenLoad_RoundTripsAcpHydrationCompletionMode()
     {
-        var service = new AppSettingsService();
+        var service = CreateService();
         var settings = new AppSettings
         {
             AcpHydrationCompletionMode = "LoadResponse"
@@ -137,7 +137,7 @@ public sealed class AppSettingsServiceTests : IDisposable
     [Fact]
     public async Task SaveThenLoad_DoesNotPersistRemovedStorageKeys_AndKeepsLastSelectedProjectId()
     {
-        var service = new AppSettingsService();
+        var service = CreateService();
         var settings = new AppSettings
         {
             Theme = "Dark",
@@ -172,7 +172,7 @@ public sealed class AppSettingsServiceTests : IDisposable
             last_selected_project_id: project-123
             """);
 
-        var service = new AppSettingsService();
+        var service = CreateService();
 
         var loaded = await service.LoadAsync();
 
@@ -194,5 +194,15 @@ public sealed class AppSettingsServiceTests : IDisposable
         Assert.Null(yamlModelType!.GetProperty("HistoryRetentionDays"));
         Assert.Null(yamlModelType.GetProperty("RememberRecentProjectPaths"));
     }
-}
 
+    [Fact]
+    public void Constructor_DoesNotCreateConfigDirectory()
+    {
+        _ = CreateService();
+
+        Assert.False(Directory.Exists(Path.Combine(_testDirectory, "SalmonEgg", "config")));
+    }
+
+    private AppSettingsService CreateService()
+        => new(new FileSystemAppFileStore(), new AppDataService());
+}

@@ -20,6 +20,7 @@ public sealed class DiagnosticsSettingsViewModelTests
         paths.SetupGet(p => p.LogsDirectoryPath).Returns("C:/app/logs");
         var bundle = new Mock<IDiagnosticsBundleService>();
         var shell = new Mock<IPlatformShellService>();
+        var logFileCatalog = new Mock<ILogFileCatalog>();
         var service = new Mock<ILiveLogStreamService>();
         var liveLogger = new Mock<ILogger<LiveLogViewerViewModel>>();
         var diagnosticsLogger = new Mock<ILogger<DiagnosticsSettingsViewModel>>();
@@ -34,6 +35,7 @@ public sealed class DiagnosticsSettingsViewModelTests
             paths.Object,
             bundle.Object,
             shell.Object,
+            logFileCatalog.Object,
             liveLogViewer,
             diagnosticsLogger.Object);
 

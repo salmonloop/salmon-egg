@@ -16,7 +16,9 @@ public sealed class PlatformCapabilityService : IPlatformCapabilityService
 
     public bool SupportsStdioTransport => IsDesktopProcessHost;
 
-    public bool SupportsLocalTerminal => IsDesktopProcessHost;
+    public bool SupportsInteractiveTerminalSurface => IsDesktopProcessHost;
+
+    public bool SupportsLocalTerminal => SupportsStdioTransport && SupportsInteractiveTerminalSurface;
 
     private static bool IsDesktopProcessHost
     {

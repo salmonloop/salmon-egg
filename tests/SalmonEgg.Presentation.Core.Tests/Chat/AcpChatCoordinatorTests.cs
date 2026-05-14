@@ -2144,6 +2144,8 @@ public sealed class AcpChatCoordinatorTests
 
         public bool SupportsStdioTransport { get; }
 
+        public bool SupportsInteractiveTerminalSurface => SupportsStdioTransport;
+
         public bool SupportsLocalTerminal => SupportsStdioTransport;
     }
 }

@@ -1,10 +1,5 @@
 using System;
-using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -22,6 +17,7 @@ public partial class DataStorageSettingsViewModel : ObservableObject
     private readonly IAppMaintenanceService _maintenance;
     private readonly IDiagnosticsBundleService _diagnostics;
     private readonly IPlatformShellService _shell;
+    private readonly ISessionExportService _sessionExport;
     private readonly ILogger<DataStorageSettingsViewModel> _logger;
 
     public AppPreferencesViewModel Preferences { get; }
@@ -39,6 +35,7 @@ public partial class DataStorageSettingsViewModel : ObservableObject
         IAppMaintenanceService maintenance,
         IDiagnosticsBundleService diagnostics,
         IPlatformShellService shell,
+        ISessionExportService sessionExport,
         ILogger<DataStorageSettingsViewModel> logger)
     {
         Preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
@@ -47,6 +44,7 @@ public partial class DataStorageSettingsViewModel : ObservableObject
         _maintenance = maintenance ?? throw new ArgumentNullException(nameof(maintenance));
         _diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
         _shell = shell ?? throw new ArgumentNullException(nameof(shell));
+        _sessionExport = sessionExport ?? throw new ArgumentNullException(nameof(sessionExport));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -54,21 +52,13 @@ public partial class DataStorageSettingsViewModel : ObservableObject
     private Task OpenAppDataFolderAsync() => _shell.OpenFolderAsync(_paths.AppDataRootPath);
 
     [RelayCommand]
-    private Task OpenCacheFolderAsync()
-    {
-        Directory.CreateDirectory(_paths.CacheRootPath);
-        return _shell.OpenFolderAsync(_paths.CacheRootPath);
-    }
+    private Task OpenCacheFolderAsync() => _shell.OpenFolderAsync(_paths.CacheRootPath);
 
     [RelayCommand]
     private Task OpenLogsFolderAsync() => _shell.OpenFolderAsync(_paths.LogsDirectoryPath);
 
     [RelayCommand]
-    private Task OpenExportsFolderAsync()
-    {
-        Directory.CreateDirectory(_paths.ExportsDirectoryPath);
-        return _shell.OpenFolderAsync(_paths.ExportsDirectoryPath);
-    }
+    private Task OpenExportsFolderAsync() => _shell.OpenFolderAsync(_paths.ExportsDirectoryPath);
 
     [RelayCommand]
     private async Task ExportCurrentSessionMarkdownAsync()
@@ -86,64 +76,21 @@ public partial class DataStorageSettingsViewModel : ObservableObject
     {
         try
         {
-            Directory.CreateDirectory(_paths.ExportsDirectoryPath);
-            var sessionId = Chat.CurrentSessionId ?? "no-session";
-            var timestamp = DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss");
-            var fileName = $"session-{sessionId}-{timestamp}.{format}";
-            fileName = SanitizeFileName(fileName);
-            var path = Path.Combine(_paths.ExportsDirectoryPath, fileName);
             var transcript = await Chat.GetCurrentSessionTranscriptSnapshotAsync().ConfigureAwait(false);
+            var request = new SessionExportRequest(
+                format,
+                Chat.CurrentSessionId,
+                Chat.AgentName,
+                Chat.AgentVersion,
+                transcript.Select(m => new SessionExportMessage(
+                    m.Id,
+                    ToExportTimestamp(m.Timestamp),
+                    m.IsOutgoing,
+                    m.ContentType,
+                    m.Title,
+                    m.TextContent)).ToList());
 
-            if (string.Equals(format, "json", StringComparison.OrdinalIgnoreCase))
-            {
-                var payload = new ExportPayload(
-                    Chat.CurrentSessionId,
-                    Chat.AgentName,
-                    Chat.AgentVersion,
-                    DateTimeOffset.UtcNow,
-                    transcript.Select(m => new ExportMessage(
-                        m.Id,
-                        ToExportTimestamp(m.Timestamp),
-                        m.IsOutgoing,
-                        m.ContentType,
-                        m.Title,
-                        m.TextContent)).ToList());
-
-                var json = JsonSerializer.Serialize(payload, ExportPayloadJsonContext.Default.ExportPayload);
-                await File.WriteAllTextAsync(path, json, Encoding.UTF8).ConfigureAwait(false);
-            }
-            else
-            {
-                var sb = new StringBuilder();
-                sb.AppendLine($"# Session Export");
-                sb.AppendLine();
-                sb.AppendLine($"- SessionId: `{Chat.CurrentSessionId}`");
-                sb.AppendLine($"- Agent: `{Chat.AgentName}` `{Chat.AgentVersion}`");
-                sb.AppendLine($"- ExportedAt(UTC): `{DateTimeOffset.UtcNow:O}`");
-                sb.AppendLine();
-
-                foreach (var m in transcript)
-                {
-                    var who = m.IsOutgoing ? "User" : "Agent";
-                    sb.AppendLine($"## {who} · {ToExportTimestamp(m.Timestamp):O}");
-                    if (!string.IsNullOrWhiteSpace(m.Title))
-                    {
-                        sb.AppendLine();
-                        sb.AppendLine($"**{m.Title}**");
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(m.TextContent))
-                    {
-                        sb.AppendLine();
-                        sb.AppendLine(m.TextContent);
-                    }
-
-                    sb.AppendLine();
-                }
-
-                await File.WriteAllTextAsync(path, sb.ToString(), Encoding.UTF8).ConfigureAwait(false);
-            }
-
+            var path = await _sessionExport.ExportAsync(request).ConfigureAwait(false);
             await _shell.OpenFileAsync(path).ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -196,15 +143,6 @@ public partial class DataStorageSettingsViewModel : ObservableObject
         await _maintenance.ClearAllLocalDataAsync().ConfigureAwait(false);
     }
 
-    private static string SanitizeFileName(string name)
-    {
-        foreach (var c in Path.GetInvalidFileNameChars())
-        {
-            name = name.Replace(c, '_');
-        }
-        return name;
-    }
-
     private static DateTimeOffset ToExportTimestamp(DateTime timestamp)
     {
         var utc = timestamp.Kind == DateTimeKind.Unspecified
@@ -212,25 +150,4 @@ public partial class DataStorageSettingsViewModel : ObservableObject
             : timestamp.ToUniversalTime();
         return new DateTimeOffset(utc);
     }
-}
-
-internal sealed partial record ExportMessage(
-    string Id,
-    DateTimeOffset Timestamp,
-    bool IsOutgoing,
-    string? ContentType,
-    string? Title,
-    string? Text);
-
-internal sealed record ExportPayload(
-    string? SessionId,
-    string? AgentName,
-    string? AgentVersion,
-    DateTimeOffset ExportedAtUtc,
-    List<ExportMessage> Messages);
-
-[JsonSourceGenerationOptions(WriteIndented = true)]
-[JsonSerializable(typeof(ExportPayload))]
-internal partial class ExportPayloadJsonContext : JsonSerializerContext
-{
 }

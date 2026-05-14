@@ -63,6 +63,8 @@ public sealed class DiscoverSessionsConnectionFacadeTests
 
         public bool SupportsStdioTransport { get; }
 
+        public bool SupportsInteractiveTerminalSurface => SupportsStdioTransport;
+
         public bool SupportsLocalTerminal => SupportsStdioTransport;
     }
 }

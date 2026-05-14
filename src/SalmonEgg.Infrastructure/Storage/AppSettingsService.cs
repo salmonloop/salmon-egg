@@ -14,24 +14,27 @@ public sealed class AppSettingsService : IAppSettingsService
 {
     private const int CurrentSchemaVersion = 1;
 
+    private readonly IAppFileStore _fileStore;
     private readonly string _appYamlPath;
 
-    public AppSettingsService()
+    public AppSettingsService(IAppFileStore fileStore, IAppDataService appData)
     {
-        _appYamlPath = SalmonEggPaths.GetAppYamlPath();
-        Directory.CreateDirectory(Path.GetDirectoryName(_appYamlPath)!);
+        _fileStore = fileStore ?? throw new ArgumentNullException(nameof(fileStore));
+        if (appData is null) throw new ArgumentNullException(nameof(appData));
+
+        _appYamlPath = System.IO.Path.Combine(appData.ConfigRootPath, "app.yaml");
     }
 
     public async Task<AppSettings> LoadAsync()
     {
-        if (!File.Exists(_appYamlPath))
+        var yaml = await _fileStore.ReadAllTextAsync(_appYamlPath).ConfigureAwait(false);
+        if (yaml is null)
         {
             return new AppSettings();
         }
 
         try
         {
-            var yaml = await File.ReadAllTextAsync(_appYamlPath).ConfigureAwait(false);
             var model = YamlSerialization.CreateDeserializer().Deserialize<AppSettingsYamlV1>(yaml);
             if (model.SchemaVersion <= 0)
             {
@@ -76,7 +79,7 @@ public sealed class AppSettingsService : IAppSettingsService
     {
         if (settings is null) throw new ArgumentNullException(nameof(settings));
 
-        EnsureWritableSchema(_appYamlPath);
+        await EnsureWritableSchemaAsync(_appYamlPath).ConfigureAwait(false);
 
         var model = new AppSettingsYamlV1
         {
@@ -105,19 +108,19 @@ public sealed class AppSettingsService : IAppSettingsService
         };
 
         var yaml = YamlSerialization.CreateSerializer().Serialize(model);
-        await AtomicFile.WriteUtf8AtomicAsync(_appYamlPath, yaml).ConfigureAwait(false);
+        await _fileStore.WriteAllTextAsync(_appYamlPath, yaml).ConfigureAwait(false);
     }
 
-    private static void EnsureWritableSchema(string appYamlPath)
+    private async Task EnsureWritableSchemaAsync(string appYamlPath)
     {
-        if (!File.Exists(appYamlPath))
+        var yaml = await _fileStore.ReadAllTextAsync(appYamlPath).ConfigureAwait(false);
+        if (yaml is null)
         {
             return;
         }
 
         try
         {
-            var yaml = File.ReadAllText(appYamlPath);
             var existing = YamlSerialization.CreateDeserializer().Deserialize<AppSettingsYamlV1>(yaml);
             if (existing.SchemaVersion > CurrentSchemaVersion)
             {
@@ -161,4 +164,3 @@ public sealed class AppSettingsService : IAppSettingsService
         return clone;
     }
 }
-

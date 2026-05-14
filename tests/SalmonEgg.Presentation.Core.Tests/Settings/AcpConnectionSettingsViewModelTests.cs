@@ -336,6 +336,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         var capabilities = new Mock<IPlatformCapabilityService>();
         capabilities.SetupGet(c => c.SupportsStdioTransport).Returns(supportsStdioTransport);
         capabilities.SetupGet(c => c.SupportsLocalTerminal).Returns(supportsLocalTerminal);
+        capabilities.SetupGet(c => c.SupportsInteractiveTerminalSurface).Returns(true);
         var uiRuntime = new Mock<IUiRuntimeService>();
         var logger = new Mock<ILogger<AppPreferencesViewModel>>();
 

@@ -592,6 +592,7 @@
 
                         <chatViews:BottomPanelHost x:Name="BottomPanelHost"
                                                    Grid.Row="1"
+                                                   x:Load="{x:Bind LayoutVM.SupportsLocalTerminal, Mode=OneWay}"
                                                    LocalTerminalSession="{x:Bind ChatVM.ActiveLocalTerminalSession, Mode=OneWay}">
                             <chatViews:BottomPanelHost.RenderTransform>
                                 <TranslateTransform x:Name="BottomPanelTranslate" />
@@ -713,4 +714,3 @@
         </Grid>
     </Grid>
 </Page>
-

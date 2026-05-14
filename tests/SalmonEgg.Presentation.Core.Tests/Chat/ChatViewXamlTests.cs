@@ -277,6 +277,18 @@ public sealed class ChatViewXamlTests
     }
 
     [Fact]
+    public void MainPageXaml_LoadsBottomPanelHostOnlyWhenLocalTerminalIsSupported()
+    {
+        var root = FindRepoRoot();
+        var xaml = File.ReadAllText(Path.Combine(root, "SalmonEgg", "SalmonEgg", "MainPage.xaml"));
+        var codeBehind = File.ReadAllText(Path.Combine(root, "SalmonEgg", "SalmonEgg", "MainPage.xaml.cs"));
+
+        Assert.Contains("x:Load=\"{x:Bind LayoutVM.SupportsLocalTerminal, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ApplyBottomPanelVisualState", codeBehind, StringComparison.Ordinal);
+        Assert.DoesNotContain("BottomPanelHost.Visibility =", codeBehind, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BottomPanelHostXaml_UsesXtermTerminalViewForTerminalTab()
     {
         var root = FindRepoRoot();
