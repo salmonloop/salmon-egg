@@ -84,6 +84,7 @@ public partial class AppPreferencesViewModel : ObservableObject
     private bool _isLoaded;
 
     public ObservableCollection<KeyBindingPairViewModel> KeyBindings { get; } = new();
+    public ObservableCollection<AppLanguageOptionViewModel> LanguageOptions { get; } = CreateLanguageOptions();
     public event EventHandler? ShortcutBindingsChanged;
 
     public bool IsLaunchOnStartupSupported => _capabilities.SupportsLaunchOnStartup;
@@ -153,7 +154,7 @@ public partial class AppPreferencesViewModel : ObservableObject
                 Backdrop = settings.Backdrop;
                 LaunchOnStartup = launchOnStartup;
                 MinimizeToTray = settings.MinimizeToTray;
-                Language = settings.Language;
+                Language = AppLanguageCatalog.NormalizeTag(settings.Language);
                 LastSelectedServerId = settings.LastSelectedServerId;
                 SaveLocalHistory = settings.SaveLocalHistory;
                 CacheRetentionDays = settings.CacheRetentionDays;
@@ -208,7 +209,7 @@ public partial class AppPreferencesViewModel : ObservableObject
                 }
             });
 
-            _ = _languageService.ApplyLanguageOverrideAsync(settings.Language);
+            _ = _languageService.ApplyLanguageOverrideAsync(AppLanguageCatalog.NormalizeTag(settings.Language));
         }
         catch (Exception ex)
         {
@@ -245,13 +246,20 @@ public partial class AppPreferencesViewModel : ObservableObject
     partial void OnMinimizeToTrayChanged(bool value) => ScheduleSave();
     partial void OnLanguageChanged(string value)
     {
+        var normalized = AppLanguageCatalog.NormalizeTag(value);
+        if (!string.Equals(value, normalized, StringComparison.Ordinal))
+        {
+            Language = normalized;
+            return;
+        }
+
         if (_suppressSave)
         {
             return;
         }
 
         ScheduleSave();
-        _ = _languageService.ApplyLanguageOverrideAsync(value);
+        _ = _languageService.ApplyLanguageOverrideAsync(normalized);
         _uiRuntime.ReloadShell();
     }
     partial void OnLastSelectedServerIdChanged(string? value) => ScheduleSave();
@@ -395,7 +403,7 @@ public partial class AppPreferencesViewModel : ObservableObject
                     Backdrop = Backdrop,
                     LaunchOnStartup = LaunchOnStartup,
                     MinimizeToTray = MinimizeToTray,
-                    Language = Language,
+                    Language = AppLanguageCatalog.NormalizeTag(Language),
                     LastSelectedServerId = LastSelectedServerId,
                     SaveLocalHistory = SaveLocalHistory,
                     CacheRetentionDays = CacheRetentionDays,
@@ -492,4 +500,10 @@ public partial class AppPreferencesViewModel : ObservableObject
 
         return normalized;
     }
+
+    private static ObservableCollection<AppLanguageOptionViewModel> CreateLanguageOptions()
+        => new(AppLanguageCatalog.SupportedOptions.Select(option =>
+            new AppLanguageOptionViewModel(
+                option.Tag,
+                option.DisplayNameResourceKey)));
 }

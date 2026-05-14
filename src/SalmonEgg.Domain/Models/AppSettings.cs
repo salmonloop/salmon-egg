@@ -17,7 +17,7 @@ public sealed class AppSettings
     public bool MinimizeToTray { get; set; } = true;
 
     /// <summary>
-    /// Language tag, e.g. "System", "zh-CN", "en-US".
+    /// Canonical UI language tag from <see cref="AppLanguageCatalog"/>, e.g. "System", "zh-Hans", "en-US".
     /// </summary>
     public string Language { get; set; } = "System";
 

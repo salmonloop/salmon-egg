@@ -134,6 +134,46 @@ public sealed class AppSettingsServiceTests : IDisposable
         Assert.Equal("LoadResponse", loaded.AcpHydrationCompletionMode);
     }
 
+    [Theory]
+    [InlineData("zh", "zh-Hans")]
+    [InlineData("zh-CN", "zh-Hans")]
+    [InlineData("zh-Hans", "zh-Hans")]
+    [InlineData("en", "en-US")]
+    [InlineData("en-US", "en-US")]
+    [InlineData("fr-FR", "System")]
+    public async Task LoadAsync_NormalizesLanguageTags(string persistedTag, string expectedTag)
+    {
+        var appYamlPath = Path.Combine(_testDirectory, "SalmonEgg", "config", "app.yaml");
+        Directory.CreateDirectory(Path.GetDirectoryName(appYamlPath)!);
+
+        await File.WriteAllTextAsync(
+            appYamlPath,
+            $"""
+            schema_version: 1
+            language: {persistedTag}
+            """);
+
+        var service = CreateService();
+
+        var loaded = await service.LoadAsync();
+
+        Assert.Equal(expectedTag, loaded.Language);
+    }
+
+    [Fact]
+    public async Task SaveAsync_PersistsCanonicalLanguageTag()
+    {
+        var service = CreateService();
+
+        await service.SaveAsync(new AppSettings { Language = "zh-CN" });
+
+        var appYamlPath = Path.Combine(_testDirectory, "SalmonEgg", "config", "app.yaml");
+        var yaml = await File.ReadAllTextAsync(appYamlPath);
+
+        Assert.Contains("language: zh-Hans", yaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("zh-CN", yaml, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task SaveThenLoad_DoesNotPersistRemovedStorageKeys_AndKeepsLastSelectedProjectId()
     {

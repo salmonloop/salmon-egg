@@ -609,6 +609,19 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void GeneralSettings_LanguageOptionsAreBoundToViewModelCatalog()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\GeneralSettingsPage.xaml");
+
+        Assert.Contains("ItemsSource=\"{x:Bind ViewModel.Preferences.LanguageOptions, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("SelectedValue=\"{x:Bind ViewModel.Preferences.Language, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:DataType=\"settings:AppLanguageOptionViewModel\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind DisplayNameResourceKey, Mode=OneWay, Converter={StaticResource ResourceStringConverter}}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Tag=\"zh-CN\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<ComboBoxItem x:Uid=\"General_LanguageZhCn\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MiniChatView_TextsAreLocalized()
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml");

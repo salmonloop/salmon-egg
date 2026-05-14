@@ -63,6 +63,72 @@ public class AppPreferencesViewModelTests
     }
 
     [Fact]
+    public async Task LoadAsync_NormalizesLegacyLanguageTagBeforeApplyingOverride()
+    {
+        var appSettingsService = new Mock<IAppSettingsService>();
+        appSettingsService.Setup(s => s.LoadAsync()).ReturnsAsync(new AppSettings
+        {
+            Language = "zh-CN"
+        });
+
+        var startupService = new Mock<IAppStartupService>();
+        var languageService = new Mock<IAppLanguageService>();
+        var capabilities = new Mock<IPlatformCapabilityService>();
+        var uiRuntime = new Mock<IUiRuntimeService>();
+
+        var vm = new AppPreferencesViewModel(
+            appSettingsService.Object,
+            startupService.Object,
+            languageService.Object,
+            capabilities.Object,
+            uiRuntime.Object,
+            Mock.Of<ILogger<AppPreferencesViewModel>>(),
+            new ImmediateUiDispatcher());
+
+        await Task.Delay(100);
+
+        Assert.Equal("zh-Hans", vm.Language);
+        languageService.Verify(service => service.ApplyLanguageOverrideAsync("zh-Hans"), Times.Once);
+    }
+
+    [Fact]
+    public async Task LanguageChanged_NormalizesBeforeSavingAndReloadingShell()
+    {
+        var appSettingsService = new Mock<IAppSettingsService>();
+        appSettingsService.Setup(s => s.LoadAsync()).ReturnsAsync(new AppSettings());
+        appSettingsService.Setup(s => s.SaveAsync(It.IsAny<AppSettings>())).Returns(Task.CompletedTask);
+
+        var startupService = new Mock<IAppStartupService>();
+        var languageService = new Mock<IAppLanguageService>();
+        var capabilities = new Mock<IPlatformCapabilityService>();
+        var uiRuntime = new Mock<IUiRuntimeService>();
+
+        var vm = new AppPreferencesViewModel(
+            appSettingsService.Object,
+            startupService.Object,
+            languageService.Object,
+            capabilities.Object,
+            uiRuntime.Object,
+            Mock.Of<ILogger<AppPreferencesViewModel>>(),
+            new ImmediateUiDispatcher());
+
+        await Task.Delay(100);
+        languageService.Invocations.Clear();
+        uiRuntime.Invocations.Clear();
+
+        vm.Language = "zh-CN";
+
+        await Task.Delay(1200);
+
+        Assert.Equal("zh-Hans", vm.Language);
+        languageService.Verify(service => service.ApplyLanguageOverrideAsync("zh-Hans"), Times.Once);
+        uiRuntime.Verify(service => service.ReloadShell(), Times.Once);
+        appSettingsService.Verify(
+            service => service.SaveAsync(It.Is<AppSettings>(settings => settings.Language == "zh-Hans")),
+            Times.AtLeastOnce);
+    }
+
+    [Fact]
     public async Task LoadAsync_RestoresProjectPathMappings()
     {
         var appSettings = new AppSettings
