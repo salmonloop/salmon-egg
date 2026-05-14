@@ -209,18 +209,27 @@ public sealed partial class MainPage : Page
 
     public void NavigateToChat()
     {
-        EnsureChatContent();
+        _ = EnsureChatContentAsync();
     }
+
+    public ValueTask<ShellNavigationResult> NavigateToChatAsync()
+        => EnsureChatContentAsync();
 
     public void NavigateToStart()
     {
-        EnsureStartContent();
+        _ = EnsureStartContentAsync();
     }
+
+    public ValueTask<ShellNavigationResult> NavigateToStartAsync()
+        => EnsureStartContentAsync();
 
     public void NavigateToDiscoverSessions()
     {
-        EnsureDiscoverSessionsContent();
+        _ = EnsureDiscoverSessionsContentAsync();
     }
+
+    public ValueTask<ShellNavigationResult> NavigateToDiscoverSessionsAsync()
+        => EnsureDiscoverSessionsContentAsync();
 
     public void NavigateToSettingsSubPage(string key)
     {
@@ -229,7 +238,17 @@ public sealed partial class MainPage : Page
             key = "General";
         }
 
-        EnsureSettingsContent(key);
+        _ = EnsureSettingsContentAsync(key);
+    }
+
+    public ValueTask<ShellNavigationResult> NavigateToSettingsSubPageAsync(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            key = "General";
+        }
+
+        return EnsureSettingsContentAsync(key);
     }
 
     private static Type GetSettingsShellPageType() => typeof(SalmonEgg.Presentation.Views.SettingsShellPage);
@@ -482,13 +501,11 @@ public sealed partial class MainPage : Page
         });
     }
 
-    private void EnsureChatContent()
+    private async ValueTask<ShellNavigationResult> EnsureChatContentAsync()
     {
-        if (ContentFrame?.CurrentSourcePageType != typeof(ChatView))
-        {
-            NavigateTo(typeof(ChatView));
-        }
+        var result = await NavigateToContentAsync(typeof(ChatView)).ConfigureAwait(true);
         _titleBarAdapter.UpdateBackButtonState();
+        return result;
     }
 
     private void ResetChatAuxiliaryPanelsOnChatExit()
@@ -526,38 +543,110 @@ public sealed partial class MainPage : Page
         _metricsSink.ReportClearAuxiliaryPanels();
     }
 
-    private void EnsureDiscoverSessionsContent()
+    private async ValueTask<ShellNavigationResult> EnsureDiscoverSessionsContentAsync()
     {
         var pageType = typeof(SalmonEgg.Presentation.Views.Discover.DiscoverSessionsPage);
-        if (ContentFrame?.CurrentSourcePageType != pageType)
-        {
-            NavigateTo(pageType);
-        }
+        var result = await NavigateToContentAsync(pageType).ConfigureAwait(true);
         _titleBarAdapter.UpdateBackButtonState();
+        return result;
     }
 
-    private void EnsureStartContent()
+    private async ValueTask<ShellNavigationResult> EnsureStartContentAsync()
     {
-        if (ContentFrame?.CurrentSourcePageType != typeof(StartView))
-        {
-            NavigateTo(typeof(StartView));
-        }
+        var result = await NavigateToContentAsync(typeof(StartView)).ConfigureAwait(true);
         _titleBarAdapter.UpdateBackButtonState();
+        return result;
     }
 
-    private void EnsureSettingsContent(string key)
+    private async ValueTask<ShellNavigationResult> EnsureSettingsContentAsync(string key)
     {
         var pageType = GetSettingsShellPageType();
-        if (ContentFrame?.CurrentSourcePageType != pageType)
+        if (IsContentFrameDisplaying(pageType))
         {
-            NavigateTo(pageType, key);
-        }
-        else
-        {
-            // SettingsShellPage is already loaded; ask it to switch section without resetting the shell.
             (ContentFrame.Content as SalmonEgg.Presentation.Views.SettingsShellPage)?.NavigateToSection(key);
+            _titleBarAdapter.UpdateBackButtonState();
+            return ShellNavigationResult.Success();
         }
+
+        var result = await NavigateToContentAsync(pageType, key).ConfigureAwait(true);
         _titleBarAdapter.UpdateBackButtonState();
+        return result;
+    }
+
+    private bool IsContentFrameDisplaying(Type pageType)
+        => ContentFrame?.CurrentSourcePageType == pageType
+           && ContentFrame.Content is not null
+           && pageType.IsInstanceOfType(ContentFrame.Content);
+
+    private ValueTask<ShellNavigationResult> NavigateToContentAsync(Type pageType, object? parameter = null)
+    {
+        if (ContentFrame is null)
+        {
+            return ValueTask.FromResult(ShellNavigationResult.Failed("ContentFrameUnavailable"));
+        }
+
+        if (IsContentFrameDisplaying(pageType))
+        {
+            return ValueTask.FromResult(ShellNavigationResult.Success());
+        }
+
+        var completion = new TaskCompletionSource<ShellNavigationResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        void DetachHandlers()
+        {
+            ContentFrame.Navigated -= OnNavigated;
+            ContentFrame.NavigationFailed -= OnNavigationFailed;
+        }
+
+        void OnNavigated(object sender, NavigationEventArgs e)
+        {
+            if (e.SourcePageType != pageType)
+            {
+                return;
+            }
+
+            DetachHandlers();
+            var result = IsContentFrameDisplaying(pageType)
+                ? ShellNavigationResult.Success()
+                : ShellNavigationResult.Failed("ContentNotProjected");
+            completion.TrySetResult(result);
+        }
+
+        void OnNavigationFailed(object sender, NavigationFailedEventArgs e)
+        {
+            if (e.SourcePageType != pageType)
+            {
+                return;
+            }
+
+            DetachHandlers();
+            completion.TrySetResult(ShellNavigationResult.Failed(e.Exception?.GetType().Name ?? "NavigationFailed"));
+        }
+
+        ContentFrame.Navigated += OnNavigated;
+        ContentFrame.NavigationFailed += OnNavigationFailed;
+
+        var navigated = false;
+        try
+        {
+            var transition = UiMotion.Current.IsAnimationEnabled
+                ? (NavigationTransitionInfo)new EntranceNavigationTransitionInfo()
+                : new SuppressNavigationTransitionInfo();
+            navigated = ContentFrame.Navigate(pageType, parameter, transition);
+        }
+        catch (Exception ex)
+        {
+            DetachHandlers();
+            completion.TrySetResult(ShellNavigationResult.Failed(ex.GetType().Name));
+        }
+
+        if (!navigated)
+        {
+            DetachHandlers();
+            completion.TrySetResult(ShellNavigationResult.Failed("NavigateReturnedFalse"));
+        }
+
+        return new ValueTask<ShellNavigationResult>(completion.Task);
     }
 
     private string GetRightPanelTitle(RightPanelMode mode, string? planTitle)

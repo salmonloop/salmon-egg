@@ -13,8 +13,7 @@ public sealed class ShellNavigationService : IShellNavigationService, IActivatio
             return ValueTask.FromResult(ShellNavigationResult.Failed("ShellUnavailable"));
         }
 
-        shell.NavigateToSettingsSubPage(key);
-        return ValueTask.FromResult(ShellNavigationResult.Success());
+        return shell.NavigateToSettingsSubPageAsync(key);
     }
 
     public ValueTask<ShellNavigationResult> NavigateToSettings(string key, long activationToken)
@@ -28,8 +27,7 @@ public sealed class ShellNavigationService : IShellNavigationService, IActivatio
             return ValueTask.FromResult(ShellNavigationResult.Failed("ShellUnavailable"));
         }
 
-        shell.NavigateToChat();
-        return ValueTask.FromResult(ShellNavigationResult.Success());
+        return shell.NavigateToChatAsync();
     }
 
     public ValueTask<ShellNavigationResult> NavigateToChat(long activationToken)
@@ -43,8 +41,7 @@ public sealed class ShellNavigationService : IShellNavigationService, IActivatio
             return ValueTask.FromResult(ShellNavigationResult.Failed("ShellUnavailable"));
         }
 
-        shell.NavigateToStart();
-        return ValueTask.FromResult(ShellNavigationResult.Success());
+        return shell.NavigateToStartAsync();
     }
 
     public ValueTask<ShellNavigationResult> NavigateToStart(long activationToken)
@@ -58,8 +55,7 @@ public sealed class ShellNavigationService : IShellNavigationService, IActivatio
             return ValueTask.FromResult(ShellNavigationResult.Failed("ShellUnavailable"));
         }
 
-        shell.NavigateToDiscoverSessions();
-        return ValueTask.FromResult(ShellNavigationResult.Success());
+        return shell.NavigateToDiscoverSessionsAsync();
     }
 
     public ValueTask<ShellNavigationResult> NavigateToDiscoverSessions(long activationToken)

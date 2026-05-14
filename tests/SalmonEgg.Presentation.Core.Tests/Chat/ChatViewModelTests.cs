@@ -181,6 +181,7 @@ public partial class ChatViewModelTests
             new Lazy<INavigationCoordinator>(() => Mock.Of<INavigationCoordinator>()),
             conversationCatalogPresenter,
             NullLogger<ConversationCatalogFacade>.Instance);
+        acpConnectionCommands ??= Mock.Of<IAcpConnectionCommands>();
         var vmLogger = new Mock<ILogger<ChatViewModel>>();
 
         var originalContext = SynchronizationContext.Current;
@@ -8919,7 +8920,7 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
-    public async Task ShellOverlayProjection_WhenPreviewIsPrimedBeforeChatShellNavigation_BecomesVisibleEvenWhileShellContentIsStart()
+    public async Task ShellOverlayProjection_WhenPreviewIsPrimedBeforeChatShellNavigation_RemainsHiddenWhileShellContentIsStart()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var runtimeState = new ShellNavigationRuntimeStateStore
@@ -8950,6 +8951,44 @@ public partial class ChatViewModelTests
         fixture.ViewModel.PrimeSessionSwitchPreview("conv-2");
 
         Assert.Equal(ShellNavigationContent.Start, runtimeState.CurrentShellContent);
+        Assert.True(fixture.ViewModel.IsActivationOverlayVisible);
+        Assert.False(shellOverlay.IsOverlayVisible);
+        Assert.False(shellOverlay.ShowsBlockingMask);
+        Assert.False(shellOverlay.ShowsPresenter);
+        Assert.Equal(string.Empty, shellOverlay.StatusText);
+    }
+
+    [Fact]
+    public async Task ShellOverlayProjection_WhenPreviewIsPrimedAndShellContentIsChat_ProjectsChatOverlay()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var runtimeState = new ShellNavigationRuntimeStateStore
+        {
+            CurrentShellContent = ShellNavigationContent.Chat
+        };
+        await using var fixture = CreateViewModel(syncContext, shellNavigationRuntimeState: runtimeState);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync());
+
+        var shellOverlay = new ShellSessionActivationOverlayViewModel(fixture.ViewModel, runtimeState);
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Transcript =
+            [
+                new ConversationMessageSnapshot
+                {
+                    Id = "message-1",
+                    Timestamp = new DateTime(2026, 3, 25, 0, 0, 0, DateTimeKind.Utc),
+                    IsOutgoing = false,
+                    ContentType = "text",
+                    TextContent = "stale transcript"
+                }
+            ]
+        });
+
+        fixture.ViewModel.PrimeSessionSwitchPreview("conv-2");
+
         Assert.True(shellOverlay.IsOverlayVisible);
         Assert.True(shellOverlay.ShowsBlockingMask);
         Assert.True(shellOverlay.ShowsPresenter);

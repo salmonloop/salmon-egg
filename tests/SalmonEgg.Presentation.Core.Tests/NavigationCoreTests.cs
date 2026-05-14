@@ -136,7 +136,7 @@ public sealed class NavigationCoreTests
         var constructorSection = ExtractSection(code, "public MainPage()", "private async void OnAutomationArchiveSelectedClick");
         var loadedSection = ExtractSection(code, "private async void OnMainPageLoaded", "private void AttachGamepadInput");
 
-        Assert.DoesNotContain("EnsureStartContent();", constructorSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("EnsureStartContent", constructorSection, StringComparison.Ordinal);
         Assert.Contains("await _startupNavigation.ActivateInitialContentAsync().ConfigureAwait(true);", loadedSection, StringComparison.Ordinal);
         Assert.DoesNotContain("_navigationCoordinator.ActivateStartAsync", code, StringComparison.Ordinal);
     }
@@ -352,6 +352,25 @@ public sealed class NavigationCoreTests
         Assert.Contains("NavVM.TreeRebuilt += OnNavigationTreeRebuilt;", code, StringComparison.Ordinal);
         Assert.DoesNotContain("MainNavView.SelectedItem =", code, StringComparison.Ordinal);
         Assert.Contains("UpdateMainNavAutomationSelectionState();", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MainPage_NavigationCompletionReliesOnFrameEventsAndProjectedContent()
+    {
+        var code = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
+        var navigationSection = ExtractSection(
+            code,
+            "private ValueTask<ShellNavigationResult> NavigateToContentAsync",
+            "private string GetRightPanelTitle");
+
+        Assert.Contains("ContentFrame.Navigated += OnNavigated;", navigationSection, StringComparison.Ordinal);
+        Assert.Contains("ContentFrame.NavigationFailed += OnNavigationFailed;", navigationSection, StringComparison.Ordinal);
+        Assert.Contains("ShellNavigationResult.Failed(\"ContentNotProjected\")", navigationSection, StringComparison.Ordinal);
+        Assert.Contains("pageType.IsInstanceOfType(ContentFrame.Content)", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("private void EnsureStartContent(", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("private void EnsureChatContent(", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("private void EnsureDiscoverSessionsContent(", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("private void EnsureSettingsContent(", code, StringComparison.Ordinal);
     }
 
     [Fact]

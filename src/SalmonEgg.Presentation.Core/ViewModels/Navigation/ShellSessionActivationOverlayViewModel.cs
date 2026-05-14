@@ -49,15 +49,19 @@ public sealed class ShellSessionActivationOverlayViewModel : ObservableObject, I
         _runtimeState.PropertyChanged += OnRuntimeStatePropertyChanged;
     }
 
-    public bool IsOverlayVisible => _chatViewModel.IsActivationOverlayVisible;
+    public bool IsOverlayVisible => ShouldProjectChatOverlay && _chatViewModel.IsActivationOverlayVisible;
 
-    public bool ShowsBlockingMask => _chatViewModel.ShouldShowBlockingLoadingMask;
+    public bool ShowsBlockingMask => ShouldProjectChatOverlay && _chatViewModel.ShouldShowBlockingLoadingMask;
 
-    public bool ShowsStatusPill => _chatViewModel.ShouldShowLoadingOverlayStatusPill;
+    public bool ShowsStatusPill => ShouldProjectChatOverlay && _chatViewModel.ShouldShowLoadingOverlayStatusPill;
 
-    public bool ShowsPresenter => _chatViewModel.ShouldShowLoadingOverlayPresenter;
+    public bool ShowsPresenter => ShouldProjectChatOverlay && _chatViewModel.ShouldShowLoadingOverlayPresenter;
 
-    public string StatusText => _chatViewModel.OverlayStatusText;
+    public string StatusText => ShouldProjectChatOverlay ? _chatViewModel.OverlayStatusText : string.Empty;
+
+    private bool ShouldProjectChatOverlay
+        => _runtimeState.CurrentShellContent == Models.Navigation.ShellNavigationContent.Chat
+           || _runtimeState.IsSessionActivationInProgress;
 
     public void Dispose()
     {
