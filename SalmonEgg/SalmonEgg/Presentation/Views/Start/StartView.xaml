@@ -34,7 +34,6 @@
           RowDefinitions="*,Auto"
           Background="Transparent"
           Padding="24,20,24,24"
-          PointerPressed="OnRootPointerPressed"
           Transitions="{x:Bind Motion.PageTransitions, Mode=OneWay}">
 
         <Grid x:Name="HeroLayer"
@@ -52,7 +51,6 @@
                         HorizontalAlignment="Center"
                         Spacing="28">
                 <StackPanel x:Name="HeroChromeHost"
-                            x:Load="{x:Bind ViewModel.ShowHeroChrome, Mode=OneWay}"
                             HorizontalAlignment="Center"
                             Spacing="12">
                     <TextBlock x:Uid="Start_Title"
@@ -131,25 +129,20 @@
                                 SubmitCommand="{x:Bind ViewModel.StartSessionAndSendCommand}"
                                 IsSubmitButtonEnabled="{x:Bind ViewModel.CanStartSessionAndSendUi, Mode=OneWay}"
                                 InputBoxAutomationId="StartView.PromptBox"
-                                ShowAgentSelector="{x:Bind ViewModel.IsComposerExpanded, Mode=OneWay}"
+                                ShowAgentSelector="True"
                                 AgentItemsSource="{x:Bind ViewModel.Chat.AcpProfileList, Mode=OneWay}"
                                 SelectedAgent="{x:Bind ViewModel.Chat.SelectedAcpProfile, Mode=TwoWay}"
                                 AgentSelectorAutomationId="StartView.AgentSelector"
-                                ShowModeSelector="{x:Bind ViewModel.IsComposerExpanded, Mode=OneWay}"
+                                ShowModeSelector="True"
                                 ModeItemsSource="{x:Bind ViewModel.StartModeOptions, Mode=OneWay}"
                                 SelectedMode="{x:Bind ViewModel.SelectedStartMode, Mode=OneWay}"
                                 ModeSelectionCommand="{x:Bind ViewModel.SelectStartModeCommand}"
                                 IsModeSelectorEnabled="{x:Bind ViewModel.IsStartModeSelectorEnabled, Mode=OneWay}"
                                 ModeSelectorAutomationId="StartView.ModeSelector"
-                                ShowProjectSelector="{x:Bind ViewModel.IsComposerExpanded, Mode=OneWay}"
+                                ShowProjectSelector="True"
                                 ProjectItemsSource="{x:Bind ViewModel.StartProjectOptions, Mode=OneWay}"
                                 SelectedProjectId="{x:Bind ViewModel.SelectedStartProjectId, Mode=TwoWay}"
-                                ProjectSelectorAutomationId="StartView.ProjectSelector"
-                                PointerPressed="OnComposerShellPointerPressed"
-                                GotFocus="OnComposerInteractiveElementGotFocus"
-                                LostFocus="OnComposerInteractiveElementLostFocus"
-                                SelectorDropDownOpened="OnComposerSelectorDropDownOpened"
-                                SelectorDropDownClosed="OnComposerSelectorDropDownClosed" />
+                                ProjectSelectorAutomationId="StartView.ProjectSelector" />
 
         <Grid Grid.RowSpan="2"
               Background="{ThemeResource AppOverlayScrimBrush}"

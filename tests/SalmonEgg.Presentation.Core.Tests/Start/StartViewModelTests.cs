@@ -142,8 +142,6 @@ public sealed class StartViewModelTests
 
             Assert.Equal(suggestion.Prompt, chat.ViewModel.CurrentPrompt);
             Assert.Equal(suggestion.Prompt, startViewModel.StartPrompt);
-            Assert.Equal(StartComposerStage.ExpandedIdle, startViewModel.ComposerStage);
-            Assert.True(startViewModel.IsComposerExpanded);
             workflow.Verify(w => w.StartSessionAndSendAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
         }
         finally
@@ -153,65 +151,7 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
-    public void ComposerLoaded_ProjectsCollapsedState()
-    {
-        var originalContext = SynchronizationContext.Current;
-        var syncContext = new ImmediateSynchronizationContext();
-        SynchronizationContext.SetSynchronizationContext(syncContext);
-        try
-        {
-            var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
-            var workflow = new Mock<IChatLaunchWorkflow>();
-            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
-
-            startViewModel.OnComposerActivated();
-            startViewModel.OnComposerLoaded();
-
-            Assert.Equal(StartComposerStage.Collapsed, startViewModel.ComposerStage);
-            Assert.False(startViewModel.IsComposerExpanded);
-            Assert.True(startViewModel.ShowHeroSuggestions);
-            Assert.False(startViewModel.ShowPreflightSuggestions);
-            Assert.True(startViewModel.ShowHeroChrome);
-            Assert.False(startViewModel.FreezeComposerInteractions);
-        }
-        finally
-        {
-            SynchronizationContext.SetSynchronizationContext(originalContext);
-        }
-    }
-
-    [Fact]
-    public void ComposerLoaded_WithExistingDraft_ProjectsExpandedIdle()
-    {
-        var originalContext = SynchronizationContext.Current;
-        var syncContext = new ImmediateSynchronizationContext();
-        SynchronizationContext.SetSynchronizationContext(syncContext);
-        try
-        {
-            var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
-            var workflow = new Mock<IChatLaunchWorkflow>();
-            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
-
-            startViewModel.StartPrompt = "persisted draft";
-            startViewModel.OnComposerLoaded();
-
-            Assert.Equal(StartComposerStage.ExpandedIdle, startViewModel.ComposerStage);
-            Assert.True(startViewModel.IsComposerExpanded);
-            Assert.False(startViewModel.ShowHeroSuggestions);
-            Assert.True(startViewModel.ShowPreflightSuggestions);
-        }
-        finally
-        {
-            SynchronizationContext.SetSynchronizationContext(originalContext);
-        }
-    }
-
-    [Fact]
-    public void StartPromptChanged_ProjectsExpandedIdleDraftState()
+    public void StartPromptChanged_UpdatesSharedChatPromptDraft()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -227,128 +167,8 @@ public sealed class StartViewModelTests
             startViewModel.OnComposerLoaded();
             startViewModel.StartPrompt = "prefilled draft";
 
-            Assert.Equal(StartComposerStage.ExpandedIdle, startViewModel.ComposerStage);
-            Assert.True(startViewModel.IsComposerExpanded);
-            Assert.False(startViewModel.ShowHeroSuggestions);
-            Assert.True(startViewModel.ShowPreflightSuggestions);
-        }
-        finally
-        {
-            SynchronizationContext.SetSynchronizationContext(originalContext);
-        }
-    }
-
-    [Fact]
-    public void PopupOpened_KeepsComposerExpanded()
-    {
-        var originalContext = SynchronizationContext.Current;
-        var syncContext = new ImmediateSynchronizationContext();
-        SynchronizationContext.SetSynchronizationContext(syncContext);
-        try
-        {
-            var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
-            var workflow = new Mock<IChatLaunchWorkflow>();
-            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
-
-            startViewModel.OnComposerLoaded();
-            startViewModel.OnComposerPopupOpened();
-            startViewModel.OnComposerFocusExited();
-
-            Assert.Equal(StartComposerStage.PopupEngaged, startViewModel.ComposerStage);
-            Assert.True(startViewModel.IsComposerExpanded);
-        }
-        finally
-        {
-            SynchronizationContext.SetSynchronizationContext(originalContext);
-        }
-    }
-
-    [Fact]
-    public void PopupClosed_AfterFocusLeavesWithoutDraft_CollapsesComposer()
-    {
-        var originalContext = SynchronizationContext.Current;
-        var syncContext = new ImmediateSynchronizationContext();
-        SynchronizationContext.SetSynchronizationContext(syncContext);
-        try
-        {
-            var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
-            var workflow = new Mock<IChatLaunchWorkflow>();
-            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
-
-            startViewModel.OnComposerLoaded();
-            startViewModel.OnComposerFocusEntered();
-            startViewModel.OnComposerPopupOpened();
-            startViewModel.OnComposerFocusExited();
-            startViewModel.OnComposerPopupClosed();
-
-            Assert.Equal(StartComposerStage.Collapsed, startViewModel.ComposerStage);
-            Assert.False(startViewModel.IsComposerExpanded);
-            Assert.True(startViewModel.ShowHeroSuggestions);
-        }
-        finally
-        {
-            SynchronizationContext.SetSynchronizationContext(originalContext);
-        }
-    }
-
-    [Fact]
-    public void PopupClosed_WithFocusStillWithinComposer_KeepsPrimedStage()
-    {
-        var originalContext = SynchronizationContext.Current;
-        var syncContext = new ImmediateSynchronizationContext();
-        SynchronizationContext.SetSynchronizationContext(syncContext);
-        try
-        {
-            var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
-            var workflow = new Mock<IChatLaunchWorkflow>();
-            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
-
-            startViewModel.OnComposerLoaded();
-            startViewModel.OnComposerFocusEntered();
-            startViewModel.OnComposerPopupOpened();
-
-            startViewModel.OnComposerPopupClosedWithFocusState(true);
-
-            Assert.Equal(StartComposerStage.Primed, startViewModel.ComposerStage);
-            Assert.True(startViewModel.IsComposerExpanded);
-            Assert.False(startViewModel.ShowHeroSuggestions);
-        }
-        finally
-        {
-            SynchronizationContext.SetSynchronizationContext(originalContext);
-        }
-    }
-
-    [Fact]
-    public void ComposerUnloaded_PreservesDraftButClearsTransientInteraction()
-    {
-        var originalContext = SynchronizationContext.Current;
-        var syncContext = new ImmediateSynchronizationContext();
-        SynchronizationContext.SetSynchronizationContext(syncContext);
-        try
-        {
-            var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
-            var workflow = new Mock<IChatLaunchWorkflow>();
-            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
-
-            startViewModel.OnComposerLoaded();
-            startViewModel.OnComposerFocusEntered();
-            startViewModel.StartPrompt = "hangar";
-            startViewModel.OnComposerPopupOpened();
-            startViewModel.OnComposerUnloaded();
-
-            Assert.Equal("hangar", startViewModel.StartPrompt);
-            Assert.Equal(StartComposerStage.ExpandedIdle, startViewModel.ComposerStage);
-            Assert.True(startViewModel.IsComposerExpanded);
-            Assert.False(startViewModel.FreezeComposerInteractions);
+            Assert.Equal("prefilled draft", chat.ViewModel.CurrentPrompt);
+            Assert.Equal("prefilled draft", startViewModel.StartPrompt);
         }
         finally
         {
@@ -519,7 +339,6 @@ public sealed class StartViewModelTests
                 nav,
                 workflow.Object);
             startViewModel.OnComposerLoaded();
-            startViewModel.OnComposerFocusEntered();
 
             await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
             await chat.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
@@ -541,7 +360,7 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
-    public void StartModeSelector_WhenComposerExpandsBeforeDraftReady_IsDisabled()
+    public void StartModeSelector_BeforeDraftReady_IsDisabled()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -560,9 +379,7 @@ public sealed class StartViewModelTests
                 workflow.Object);
 
             startViewModel.OnComposerLoaded();
-            startViewModel.OnComposerFocusEntered();
 
-            Assert.True(startViewModel.IsComposerExpanded);
             Assert.False(startViewModel.IsStartModeSelectorEnabled);
             Assert.Empty(startViewModel.StartModeOptions);
         }
@@ -591,7 +408,6 @@ public sealed class StartViewModelTests
                 nav,
                 workflow.Object);
             startViewModel.OnComposerLoaded();
-            startViewModel.OnComposerFocusEntered();
 
             await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
             await chat.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
@@ -631,7 +447,6 @@ public sealed class StartViewModelTests
                 nav,
                 workflow.Object);
             startViewModel.OnComposerLoaded();
-            startViewModel.OnComposerFocusEntered();
 
             await chat.DispatchConnectionAsync(new SetSettingsSelectedProfileAction("profile-1"));
             await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
@@ -962,8 +777,6 @@ public sealed class StartViewModelTests
             await workflowStarted.Task;
 
             Assert.True(startViewModel.IsStarting);
-            Assert.Equal(StartComposerStage.Submitting, startViewModel.ComposerStage);
-            Assert.True(startViewModel.FreezeComposerInteractions);
             Assert.False(startViewModel.StartSessionAndSendCommand.CanExecute(null));
 
             workflowCompletion.TrySetResult(null);
@@ -971,8 +784,6 @@ public sealed class StartViewModelTests
 
             Assert.False(startViewModel.IsStarting);
             Assert.Equal(string.Empty, startViewModel.StartPrompt);
-            Assert.Equal(StartComposerStage.Collapsed, startViewModel.ComposerStage);
-            Assert.False(startViewModel.FreezeComposerInteractions);
             Assert.False(startViewModel.StartSessionAndSendCommand.CanExecute(null));
         }
         finally
@@ -982,7 +793,7 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
-    public async Task StartSessionAndSendAsync_FailedWorkflow_PreservesDraftAndReturnsExpandedIdle()
+    public async Task StartSessionAndSendAsync_FailedWorkflow_PreservesDraft()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -1015,9 +826,6 @@ public sealed class StartViewModelTests
 
             Assert.False(startViewModel.IsStarting);
             Assert.Equal("launch", startViewModel.StartPrompt);
-            Assert.Equal(StartComposerStage.ExpandedIdle, startViewModel.ComposerStage);
-            Assert.True(startViewModel.IsComposerExpanded);
-            Assert.False(startViewModel.FreezeComposerInteractions);
             Assert.True(startViewModel.StartSessionAndSendCommand.CanExecute(null));
         }
         finally

@@ -12,11 +12,6 @@ public static class StartSessionModePolicy
 
     private static StartSessionModeStage ResolveStage(StartSessionModeState state)
     {
-        if (!state.IsComposerExpanded)
-        {
-            return StartSessionModeStage.Collapsed;
-        }
-
         if (state.IsStarting)
         {
             return StartSessionModeStage.Submitting;

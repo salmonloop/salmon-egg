@@ -6,10 +6,9 @@ namespace SalmonEgg.Presentation.Core.Tests.Start;
 public sealed class StartSessionModePolicyTests
 {
     [Fact]
-    public void Compute_WhenComposerIsCollapsed_HidesSelector()
+    public void Compute_WhenDraftIsNotReady_DisablesVisibleSelector()
     {
         var snapshot = StartSessionModePolicy.Compute(new StartSessionModeState(
-            IsComposerExpanded: false,
             IsStarting: false,
             IsConnectionReady: false,
             IsDraftRefreshPending: false,
@@ -17,15 +16,14 @@ public sealed class StartSessionModePolicyTests
             IsDraftReady: false,
             ModeCount: 0));
 
-        Assert.Equal(StartSessionModeStage.Collapsed, snapshot.Stage);
+        Assert.Equal(StartSessionModeStage.Unavailable, snapshot.Stage);
         Assert.False(snapshot.IsEnabled);
     }
 
     [Fact]
-    public void Compute_WhenComposerIsExpandedBeforeRealModesArrive_ShowsDisabledSelector()
+    public void Compute_WhenRealModesAreLoading_ShowsDisabledSelector()
     {
         var snapshot = StartSessionModePolicy.Compute(new StartSessionModeState(
-            IsComposerExpanded: true,
             IsStarting: false,
             IsConnectionReady: false,
             IsDraftRefreshPending: true,
@@ -41,7 +39,6 @@ public sealed class StartSessionModePolicyTests
     public void Compute_WhenReadyWithModes_EnablesSelector()
     {
         var snapshot = StartSessionModePolicy.Compute(new StartSessionModeState(
-            IsComposerExpanded: true,
             IsStarting: false,
             IsConnectionReady: true,
             IsDraftRefreshPending: false,
@@ -57,7 +54,6 @@ public sealed class StartSessionModePolicyTests
     public void Compute_WhenRefreshStartsAfterExistingModes_DisablesStaleSelector()
     {
         var snapshot = StartSessionModePolicy.Compute(new StartSessionModeState(
-            IsComposerExpanded: true,
             IsStarting: false,
             IsConnectionReady: true,
             IsDraftRefreshPending: true,
@@ -73,7 +69,6 @@ public sealed class StartSessionModePolicyTests
     public void Compute_WhenConnectionIsNotReadyWithProjectedModes_DisablesSelector()
     {
         var snapshot = StartSessionModePolicy.Compute(new StartSessionModeState(
-            IsComposerExpanded: true,
             IsStarting: false,
             IsConnectionReady: false,
             IsDraftRefreshPending: false,

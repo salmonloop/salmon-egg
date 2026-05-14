@@ -28,10 +28,7 @@ public sealed partial class StartViewModel : ObservableObject
     private readonly IConversationCatalogReadModel _conversationCatalog;
     private readonly ILogger<StartViewModel> _logger;
     private readonly ObservableCollection<StartProjectOptionViewModel> _startProjectOptions = new();
-    private StartComposerState _composerState = StartComposerState.Default;
-    private StartComposerSnapshot _composerSnapshot = StartComposerPolicy.Compute(StartComposerState.Default);
     private StartSessionModeSnapshot _startSessionModeSnapshot = StartSessionModePolicy.Compute(new StartSessionModeState(
-        IsComposerExpanded: false,
         IsStarting: false,
         IsConnectionReady: false,
         IsDraftRefreshPending: false,
@@ -82,18 +79,6 @@ public sealed partial class StartViewModel : ObservableObject
             RefreshStartPromptProjection(next);
         }
     }
-
-    public StartComposerStage ComposerStage => _composerSnapshot.Stage;
-
-    public bool IsComposerExpanded => _composerSnapshot.IsExpanded;
-
-    public bool ShowHeroSuggestions => _composerSnapshot.ShowHeroSuggestions;
-
-    public bool ShowPreflightSuggestions => _composerSnapshot.ShowPreflightSuggestions;
-
-    public bool ShowHeroChrome => _composerSnapshot.ShowHeroChrome;
-
-    public bool FreezeComposerInteractions => _composerSnapshot.FreezeComposerInteractions;
 
     public IAsyncRelayCommand StartSessionAndSendCommand { get; }
 
@@ -211,7 +196,6 @@ public sealed partial class StartViewModel : ObservableObject
     private void ExecuteSuggestion(QuickSuggestionViewModel? suggestion)
     {
         if (suggestion == null) return;
-        OnComposerSuggestionApplied();
         StartPrompt = suggestion.Prompt;
     }
 
@@ -226,8 +210,6 @@ public sealed partial class StartViewModel : ObservableObject
     public void OnComposerLoaded()
     {
         _isComposerLoaded = true;
-        DispatchComposerAction(new Loaded());
-        DispatchComposerAction(new DraftChanged(!string.IsNullOrWhiteSpace(StartPrompt)));
         OnPropertyChanged(nameof(SelectedStartProjectId));
         QueueEnsureNewSessionDraft();
     }
@@ -237,7 +219,6 @@ public sealed partial class StartViewModel : ObservableObject
         _isComposerLoaded = false;
         CancelNewSessionDraftRefresh();
         TrackComposerUnloadCleanup(Chat.DiscardNewSessionDraftAsync());
-        DispatchComposerAction(new Unloaded());
     }
 
     private void TrackComposerUnloadCleanup(Task cleanupTask)
@@ -257,26 +238,6 @@ public sealed partial class StartViewModel : ObservableObject
             TaskScheduler.Default);
     }
 
-    public void OnComposerActivated() => DispatchComposerAction(new Activated());
-
-    public void OnComposerFocusEntered() => DispatchComposerAction(new FocusEntered());
-
-    public void OnComposerFocusExited() => DispatchComposerAction(new FocusExited());
-
-    public void OnComposerPopupOpened() => DispatchComposerAction(new PopupOpened());
-
-    public void OnComposerPopupClosed() => DispatchComposerAction(new PopupClosed());
-
-    public void OnComposerPopupClosedWithFocusState(bool focusWithinComposer)
-    {
-        DispatchComposerAction(new PopupClosed());
-        DispatchComposerAction(focusWithinComposer ? new FocusEntered() : new FocusExited());
-    }
-
-    public void OnComposerOutsidePointerPressed() => DispatchComposerAction(new OutsidePointerPressed());
-
-    public void OnComposerSuggestionApplied() => DispatchComposerAction(new SuggestionApplied());
-
     private async Task StartSessionAndSendAsync()
     {
         var promptText = (StartPrompt ?? string.Empty).Trim();
@@ -285,7 +246,6 @@ public sealed partial class StartViewModel : ObservableObject
             return;
         }
 
-        DispatchComposerAction(new SubmitStarted());
         IsStarting = true;
         StartSessionAndSendCommand.NotifyCanExecuteChanged();
         var submitSucceeded = false;
@@ -310,7 +270,6 @@ public sealed partial class StartViewModel : ObservableObject
             }
 
             IsStarting = false;
-            DispatchComposerAction(new SubmitCompleted());
             StartSessionAndSendCommand.NotifyCanExecuteChanged();
         }
     }
@@ -318,7 +277,6 @@ public sealed partial class StartViewModel : ObservableObject
     private void RefreshStartPromptProjection(string value)
     {
         OnPropertyChanged(nameof(StartPrompt));
-        DispatchComposerAction(new DraftChanged(!string.IsNullOrWhiteSpace(value)));
         StartSessionAndSendCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(CanStartSessionAndSendUi));
     }
@@ -614,7 +572,6 @@ public sealed partial class StartViewModel : ObservableObject
     private void RefreshStartModeState()
     {
         var nextSnapshot = StartSessionModePolicy.Compute(new StartSessionModeState(
-            IsComposerExpanded: IsComposerExpanded,
             IsStarting: IsStarting,
             IsConnectionReady: Chat.IsConnected && !Chat.IsConnecting && !Chat.IsInitializing,
             IsDraftRefreshPending: _isNewSessionDraftRefreshPending,
@@ -642,61 +599,6 @@ public sealed partial class StartViewModel : ObservableObject
 
     private string? ResolvePreviewCwd()
         => _projectPreferences.TryGetProjectRootPath(SelectedStartProjectId);
-
-    private void DispatchComposerAction(StartComposerAction action)
-    {
-        var nextState = StartComposerReducer.Reduce(_composerState, action);
-        if (nextState == _composerState)
-        {
-            return;
-        }
-
-        _composerState = nextState;
-        UpdateComposerSnapshot();
-    }
-
-    private void UpdateComposerSnapshot()
-    {
-        var nextSnapshot = StartComposerPolicy.Compute(_composerState);
-        if (nextSnapshot == _composerSnapshot)
-        {
-            return;
-        }
-
-        var previousSnapshot = _composerSnapshot;
-        _composerSnapshot = nextSnapshot;
-
-        if (previousSnapshot.Stage != nextSnapshot.Stage)
-        {
-            OnPropertyChanged(nameof(ComposerStage));
-        }
-
-        if (previousSnapshot.IsExpanded != nextSnapshot.IsExpanded)
-        {
-            OnPropertyChanged(nameof(IsComposerExpanded));
-            RefreshStartModeState();
-        }
-
-        if (previousSnapshot.ShowHeroSuggestions != nextSnapshot.ShowHeroSuggestions)
-        {
-            OnPropertyChanged(nameof(ShowHeroSuggestions));
-        }
-
-        if (previousSnapshot.ShowPreflightSuggestions != nextSnapshot.ShowPreflightSuggestions)
-        {
-            OnPropertyChanged(nameof(ShowPreflightSuggestions));
-        }
-
-        if (previousSnapshot.ShowHeroChrome != nextSnapshot.ShowHeroChrome)
-        {
-            OnPropertyChanged(nameof(ShowHeroChrome));
-        }
-
-        if (previousSnapshot.FreezeComposerInteractions != nextSnapshot.FreezeComposerInteractions)
-        {
-            OnPropertyChanged(nameof(FreezeComposerInteractions));
-        }
-    }
 
     private sealed class NoOpConversationCatalogReadModel : IConversationCatalogReadModel
     {

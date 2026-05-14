@@ -444,10 +444,13 @@ public sealed class XamlComplianceTests
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Start\StartView.xaml");
 
         Assert.Contains("<controls:ChatInputArea x:Name=\"ComposerShell\"", xaml);
-        Assert.Contains("ShowAgentSelector=\"{x:Bind ViewModel.IsComposerExpanded, Mode=OneWay}\"", xaml);
-        Assert.Contains("ShowModeSelector=\"{x:Bind ViewModel.IsComposerExpanded, Mode=OneWay}\"", xaml);
-        Assert.Contains("ShowProjectSelector=\"{x:Bind ViewModel.IsComposerExpanded, Mode=OneWay}\"", xaml);
+        Assert.Contains("ShowAgentSelector=\"True\"", xaml);
+        Assert.Contains("ShowModeSelector=\"True\"", xaml);
+        Assert.Contains("ShowProjectSelector=\"True\"", xaml);
         Assert.Contains("ModeItemsSource=\"{x:Bind ViewModel.StartModeOptions, Mode=OneWay}\"", xaml);
+        Assert.DoesNotContain("IsComposerExpanded", xaml);
+        Assert.DoesNotContain("OnComposerInteractiveElementGotFocus", xaml);
+        Assert.DoesNotContain("OnComposerSelectorDropDownOpened", xaml);
         Assert.DoesNotContain("x:Name=\"StartPromptBox\"", xaml);
         Assert.DoesNotContain("x:Name=\"StartAgentSelector\"", xaml);
         Assert.DoesNotContain("x:Name=\"StartModeSelector\"", xaml);
