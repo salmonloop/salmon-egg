@@ -1045,10 +1045,9 @@ public sealed class StartViewModelTests
 
         var chatServiceFactory = new ChatServiceFactory(
             transportFactory.Object,
-            messageParser.Object,
-            messageValidator.Object,
             errorLogger.Object,
             sessionManager,
+            Mock.Of<IAcpClientFactory>(),
             serilog.Object);
 
         var configService = new Mock<IConfigurationService>();
@@ -1084,7 +1083,6 @@ public sealed class StartViewModelTests
             var chatStateProjector = new ChatStateProjector();
             var viewModel = new ChatViewModel(
                 chatStore,
-                chatServiceFactory,
                 configService.Object,
                 preferences,
                 profiles,
@@ -1099,7 +1097,8 @@ public sealed class StartViewModelTests
                 Mock.Of<IConversationPreviewStore>(),
                 vmLogger.Object,
                 voiceInputService: voiceInputService,
-                conversationCatalogFacade: conversationCatalogFacade);
+                conversationCatalogFacade: conversationCatalogFacade,
+                acpConnectionCommands: Mock.Of<IAcpConnectionCommands>());
             conversationCatalogFacade.SetPanelCleanup(viewModel);
             return new ChatViewModelHarness(viewModel, state, connectionState, connectionStore, conversationCatalogPresenter, workspace);
         }

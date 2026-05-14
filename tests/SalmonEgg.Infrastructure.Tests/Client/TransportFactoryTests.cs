@@ -18,7 +18,7 @@ public sealed class TransportFactoryTests
     [Fact]
     public void CreateTransport_WebSocket_Should_Return_NetworkTransportAdapter()
     {
-        var factory = new TransportFactory(_logger);
+        var factory = new TransportFactory(_logger, CreateTransportSupportPolicy());
 
         var transport = factory.CreateTransport(TransportType.WebSocket, url: "wss://example.com/socket");
 
@@ -28,7 +28,7 @@ public sealed class TransportFactoryTests
     [Fact]
     public void CreateTransport_HttpSse_Should_Return_NetworkTransportAdapter()
     {
-        var factory = new TransportFactory(_logger);
+        var factory = new TransportFactory(_logger, CreateTransportSupportPolicy());
 
         var transport = factory.CreateTransport(TransportType.HttpSse, url: "https://example.com/events");
 
@@ -38,7 +38,7 @@ public sealed class TransportFactoryTests
     [Fact]
     public void CreateTransport_Stdio_Should_Return_StdioTransport()
     {
-        var factory = new TransportFactory(_logger, CreateCapabilities(supportsStdioTransport: true).Object);
+        var factory = new TransportFactory(_logger, CreateTransportSupportPolicy(supportsStdioTransport: true));
 
         var transport = factory.CreateTransport(TransportType.Stdio, command: "agent", args: "--mode test");
 
@@ -48,7 +48,7 @@ public sealed class TransportFactoryTests
     [Fact]
     public void CreateTransport_Stdio_WithSshBridgeCommand_Should_Return_StdioTransport()
     {
-        var factory = new TransportFactory(_logger, CreateCapabilities(supportsStdioTransport: true).Object);
+        var factory = new TransportFactory(_logger, CreateTransportSupportPolicy(supportsStdioTransport: true));
 
         var transport = factory.CreateTransport(
             TransportType.Stdio,
@@ -66,7 +66,7 @@ public sealed class TransportFactoryTests
             return;
         }
 
-        var factory = new TransportFactory(_logger, CreateCapabilities(supportsStdioTransport: true).Object);
+        var factory = new TransportFactory(_logger, CreateTransportSupportPolicy(supportsStdioTransport: true));
         var tempDir = Path.Combine(Path.GetTempPath(), $"salmonegg-stdio-test-{Guid.NewGuid():N}", "with space");
         Directory.CreateDirectory(tempDir);
         var scriptPath = Path.Combine(tempDir, "slow agent.ps1");
@@ -101,7 +101,7 @@ public sealed class TransportFactoryTests
     [Fact]
     public void CreateTransport_Stdio_Should_Throw_When_Command_Missing()
     {
-        var factory = new TransportFactory(_logger, CreateCapabilities(supportsStdioTransport: true).Object);
+        var factory = new TransportFactory(_logger, CreateTransportSupportPolicy(supportsStdioTransport: true));
 
         Assert.Throws<ArgumentException>(() =>
             factory.CreateTransport(TransportType.Stdio, command: null, args: null));
@@ -110,7 +110,7 @@ public sealed class TransportFactoryTests
     [Fact]
     public void CreateTransport_Stdio_Should_Throw_When_SubprocessTransportUnsupported()
     {
-        var factory = new TransportFactory(_logger, CreateCapabilities(supportsStdioTransport: false).Object);
+        var factory = new TransportFactory(_logger, CreateTransportSupportPolicy(supportsStdioTransport: false));
 
         Assert.Throws<NotSupportedException>(() =>
             factory.CreateTransport(TransportType.Stdio, command: "agent", args: "--stdio"));
@@ -119,7 +119,7 @@ public sealed class TransportFactoryTests
     [Fact]
     public void CreateTransport_WebSocket_Should_Throw_When_Url_Invalid()
     {
-        var factory = new TransportFactory(_logger);
+        var factory = new TransportFactory(_logger, CreateTransportSupportPolicy());
 
         Assert.Throws<ArgumentException>(() =>
             factory.CreateTransport(TransportType.WebSocket, url: "not-a-url"));
@@ -128,7 +128,7 @@ public sealed class TransportFactoryTests
     [Fact]
     public void CreateTransport_HttpSse_Should_Throw_When_Url_Empty()
     {
-        var factory = new TransportFactory(_logger);
+        var factory = new TransportFactory(_logger, CreateTransportSupportPolicy());
 
         Assert.Throws<ArgumentException>(() =>
             factory.CreateTransport(TransportType.HttpSse, url: " "));
@@ -137,29 +137,14 @@ public sealed class TransportFactoryTests
     [Fact]
     public void CreateTransport_Should_Throw_When_Type_Unsupported()
     {
-        var factory = new TransportFactory(_logger);
+        var factory = new TransportFactory(_logger, CreateTransportSupportPolicy());
 
         Assert.Throws<NotSupportedException>(() =>
             factory.CreateTransport((TransportType)999));
     }
 
-    [Fact]
-    public void CreateDefaultTransport_Should_Return_StdioTransport()
-    {
-        var factory = new TransportFactory(_logger, CreateCapabilities(supportsStdioTransport: true).Object);
-
-        var transport = factory.CreateDefaultTransport();
-
-        Assert.IsType<StdioTransport>(transport);
-    }
-
-    [Fact]
-    public void CreateDefaultTransport_Should_Throw_When_SubprocessTransportUnsupported()
-    {
-        var factory = new TransportFactory(_logger, CreateCapabilities(supportsStdioTransport: false).Object);
-
-        Assert.Throws<NotSupportedException>(() => factory.CreateDefaultTransport());
-    }
+    private static ITransportSupportPolicy CreateTransportSupportPolicy(bool supportsStdioTransport = true)
+        => new TransportSupportPolicy(CreateCapabilities(supportsStdioTransport).Object);
 
     private static Mock<IPlatformCapabilityService> CreateCapabilities(bool supportsStdioTransport)
     {

@@ -89,7 +89,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private static readonly TimeSpan RemoteReplayDrainTimeout = TimeSpan.FromSeconds(10);
     private const int RemoteReplayPollDelayMilliseconds = 50;
     private AcpHydrationCompletionMode _hydrationCompletionMode = AcpHydrationCompletionMode.StrictReplay;
-    private readonly ChatServiceFactory _chatServiceFactory;
     private readonly ChatConversationWorkspace _conversationWorkspace;
     private readonly IConversationActivationCoordinator _conversationActivationCoordinator;
     private readonly IConversationActivationOrchestrator _conversationActivationOrchestrator;
@@ -970,26 +969,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly IChatStore _chatStore;
     private readonly IAuthoritativeRemoteSessionRouter _authoritativeRemoteSessionRouter;
 
-    private sealed class ChatServiceFactoryAdapter : IAcpChatServiceFactory
-    {
-        private readonly ChatServiceFactory _inner;
-
-        public ChatServiceFactoryAdapter(ChatServiceFactory inner)
-        {
-            _inner = inner ?? throw new ArgumentNullException(nameof(inner));
-        }
-
-        public IChatService CreateChatService(
-            TransportType transportType,
-            string? command = null,
-            string? args = null,
-            string? url = null)
-            => _inner.CreateChatService(transportType, command, args, url);
-    }
-
     public ChatViewModel(
         IChatStore chatStore,
-        ChatServiceFactory chatServiceFactory,
         IConfigurationService configurationService,
         AppPreferencesViewModel preferences,
         AcpProfilesViewModel acpProfiles,
@@ -1023,7 +1004,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     {
         _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
         _authoritativeRemoteSessionRouter = authoritativeRemoteSessionRouter ?? new AuthoritativeRemoteSessionRouter(chatStore);
-        _chatServiceFactory = chatServiceFactory ?? throw new ArgumentNullException(nameof(chatServiceFactory));
         _configurationService = configurationService ?? throw new ArgumentNullException(nameof(configurationService));
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
         _acpProfiles = acpProfiles ?? throw new ArgumentNullException(nameof(acpProfiles));
@@ -1115,10 +1095,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _localTerminalPanelCoordinator = localTerminalPanelCoordinator;
         ApplyProjectAffinityOverrideCommand = new RelayCommand(ApplyProjectAffinityOverride, () => CanApplyProjectAffinityOverride);
         ClearProjectAffinityOverrideCommand = new RelayCommand(ClearProjectAffinityOverride, () => CanClearProjectAffinityOverride);
-        _acpConnectionCommands = acpConnectionCommands
-            ?? new AcpChatCoordinator(
-                new ChatServiceFactoryAdapter(chatServiceFactory),
-                NullLogger<AcpChatCoordinator>.Instance);
+        _acpConnectionCommands = acpConnectionCommands ?? throw new ArgumentNullException(nameof(acpConnectionCommands));
         _voiceInputService.PartialResultReceived += OnVoiceInputPartialResultReceived;
         _voiceInputService.FinalResultReceived += OnVoiceInputFinalResultReceived;
         _voiceInputService.SessionEnded += OnVoiceInputSessionEnded;

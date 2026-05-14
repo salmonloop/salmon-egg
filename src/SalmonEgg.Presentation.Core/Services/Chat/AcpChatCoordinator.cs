@@ -9,6 +9,7 @@ using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Content;
 using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Domain.Services;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 
@@ -26,6 +27,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
     private readonly IAcpConnectionPoolManager _connectionPoolManager;
     private readonly IAcpConnectionDependencySnapshotProvider _connectionDependencySnapshotProvider;
     private readonly IAcpSessionCommandOrchestrator _sessionCommandOrchestrator;
+    private readonly ITransportSupportPolicy _transportSupportPolicy;
     private readonly ILogger<AcpChatCoordinator> _logger;
     private readonly int _sessionUpdateBufferLimit;
     private AcpChatServiceAdapter? _activeChatServiceAdapter;
@@ -35,6 +37,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
     public AcpChatCoordinator(
         IAcpChatServiceFactory chatServiceFactory,
         ILogger<AcpChatCoordinator> logger,
+        ITransportSupportPolicy transportSupportPolicy,
         IAcpConnectionCoordinator? connectionCoordinator = null,
         IAcpConnectionSessionRegistry? sessionRegistry = null,
         IAcpConnectionSessionCleaner? sessionCleaner = null,
@@ -67,6 +70,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             ?? NoopAcpConnectionDependencySnapshotProvider.Instance;
         _sessionCommandOrchestrator = sessionCommandOrchestrator ?? new AcpSessionCommandOrchestrator(
             NullLogger<AcpSessionCommandOrchestrator>.Instance);
+        _transportSupportPolicy = transportSupportPolicy ?? throw new ArgumentNullException(nameof(transportSupportPolicy));
         _sessionUpdateBufferLimit = sessionUpdateBufferLimit;
     }
 
@@ -100,6 +104,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         ArgumentNullException.ThrowIfNull(transportConfiguration);
         ArgumentNullException.ThrowIfNull(sink);
 
+        EnsureTransportSupported(profile.Transport);
         await sink.SelectProfileAsync(profile, cancellationToken).ConfigureAwait(false);
         ApplyProfileToTransportConfiguration(profile, transportConfiguration);
 
@@ -130,6 +135,8 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         ArgumentNullException.ThrowIfNull(transportConfiguration);
         ArgumentNullException.ThrowIfNull(sink);
         cancellationToken.ThrowIfCancellationRequested();
+
+        EnsureTransportSupported(transportConfiguration.SelectedTransportType);
 
         var (isValid, errorMessage) = transportConfiguration.Validate();
         if (!isValid)
@@ -452,6 +459,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         ArgumentNullException.ThrowIfNull(transportConfiguration);
         cancellationToken.ThrowIfCancellationRequested();
 
+        EnsureTransportSupported(profile.Transport);
         ApplyProfileToTransportConfiguration(profile, transportConfiguration);
         var reuseKey = BuildConnectionReuseKey(transportConfiguration);
 
@@ -758,6 +766,18 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
 
     private static AcpConnectionReuseKey BuildConnectionReuseKey(IAcpTransportConfiguration transportConfiguration)
         => AcpConnectionReuseKey.FromTransportConfiguration(transportConfiguration);
+
+    private void EnsureTransportSupported(TransportType transport)
+    {
+        if (_transportSupportPolicy.IsSupported(transport))
+        {
+            return;
+        }
+
+        throw new NotSupportedException(
+            _transportSupportPolicy.GetUnsupportedReason(transport)
+            ?? $"Unsupported transport type: {transport}.");
+    }
 
     private static string CreateConnectionInstanceId()
         => Guid.NewGuid().ToString("N");

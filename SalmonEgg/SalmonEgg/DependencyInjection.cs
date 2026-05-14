@@ -163,12 +163,16 @@ public static class DependencyInjection
         services.AddSingleton<IAppDocumentService, AppDocumentService>();
         services.AddSingleton<IConversationStore, ConversationStore>();
         services.AddSingleton<IPlatformCapabilityService, PlatformCapabilityService>();
+        services.AddSingleton<ITransportSupportPolicy, TransportSupportPolicy>();
         services.AddSingleton<IPlatformIconService, PlatformIconService>();
         services.AddSingleton<IAppStartupService, AppStartupService>();
         services.AddSingleton<IAppLanguageService, AppLanguageService>();
         services.AddSingleton<IConfigurationService, ConfigurationManager>();
         services.AddSingleton<IValidator<ServerConfiguration>, ServerConfigurationValidator>();
-        services.AddSingleton<SalmonEgg.Domain.Interfaces.ITransportFactory, TransportFactory>();
+        services.AddSingleton<SalmonEgg.Domain.Interfaces.ITransportFactory>(sp =>
+            new TransportFactory(
+                sp.GetRequiredService<Serilog.ILogger>(),
+                sp.GetRequiredService<ITransportSupportPolicy>()));
         services.AddSingleton<IDiagnosticsBundleService, SalmonEgg.Infrastructure.Services.DiagnosticsBundleService>();
         services.AddSingleton<ILiveLogStreamService, SalmonEgg.Infrastructure.Services.LiveLogStreamService>();
         services.AddSingleton<IPlatformShellService, SalmonEgg.Infrastructure.Services.PlatformShellService>();
@@ -230,20 +234,23 @@ public static class DependencyInjection
         services.AddSingleton<IMessageService, MessageService>();
 
         var chatServiceDecorator = CreateChatServiceDecorator();
+        services.AddSingleton<ITerminalSessionManager>(sp =>
+            sp.GetRequiredService<IPlatformCapabilityService>().SupportsLocalTerminal
+                ? new TerminalSessionManager()
+                : new UnsupportedTerminalSessionManager());
+        services.AddSingleton<IAcpClientFactory, AcpClientFactory>();
         services.AddSingleton<ChatServiceFactory>(sp =>
         {
             var transportFactory = sp.GetRequiredService<ITransportFactory>();
-            var parser = sp.GetRequiredService<IMessageParser>();
-            var validator = sp.GetRequiredService<IMessageValidator>();
             var errorLogger = sp.GetRequiredService<IErrorLogger>();
             var sessionManager = sp.GetRequiredService<ISessionManager>();
+            var acpClientFactory = sp.GetRequiredService<IAcpClientFactory>();
             var logger = sp.GetRequiredService<Serilog.ILogger>();
             return new ChatServiceFactory(
                 transportFactory,
-                parser,
-                validator,
                 errorLogger,
                 sessionManager,
+                acpClientFactory,
                 logger,
                 chatServiceDecorator);
         });
@@ -277,13 +284,14 @@ public static class DependencyInjection
         // ACP chat service factory — adapts ChatServiceFactory to the IAcpChatServiceFactory seam
         // used by AcpChatCoordinator.
         services.AddSingleton<IAcpChatServiceFactory>(sp =>
-            new AcpChatServiceFactoryAdapter(sp.GetRequiredService<ChatServiceFactory>()));
+            new ChatServiceFactoryAdapter(sp.GetRequiredService<ChatServiceFactory>()));
         services.AddSingleton<IAcpConnectionCommands>(sp =>
         {
             _ = sp.GetRequiredService<AcpConnectionEvictionOptionsBridge>();
             return new AcpChatCoordinator(
                 sp.GetRequiredService<IAcpChatServiceFactory>(),
                 sp.GetRequiredService<ILogger<AcpChatCoordinator>>(),
+                sp.GetRequiredService<ITransportSupportPolicy>(),
                 sp.GetRequiredService<IAcpConnectionCoordinator>(),
                 sp.GetRequiredService<IAcpConnectionSessionRegistry>(),
                 sp.GetRequiredService<IAcpConnectionSessionCleaner>(),
@@ -291,17 +299,14 @@ public static class DependencyInjection
                 sp.GetRequiredService<IAcpConnectionDependencySnapshotProvider>(),
                 sp.GetRequiredService<IAcpSessionCommandOrchestrator>());
         });
-        services.AddSingleton<IChatService>(sp =>
-        {
-            var factory = sp.GetRequiredService<ChatServiceFactory>();
-            return factory.CreateDefaultChatService();
-        });
         services.AddSingleton<IErrorRecoveryService>(sp =>
         {
-            var chatService = sp.GetRequiredService<IChatService>();
             var pathValidator = sp.GetRequiredService<IPathValidator>();
             var errorLogger = sp.GetRequiredService<IErrorLogger>();
-            return new ErrorRecoveryService(chatService, pathValidator, errorLogger);
+            return new ErrorRecoveryService(
+                () => sp.GetRequiredService<ChatViewModel>().CurrentChatService,
+                pathValidator,
+                errorLogger);
         });
 
         services.AddSingleton(sp =>
@@ -336,6 +341,7 @@ public static class DependencyInjection
         services.AddSingleton<IDiscoverSessionsConnectionFacade>(sp =>
             new DiscoverSessionsConnectionFacade(
                 sp.GetRequiredService<IAcpChatServiceFactory>(),
+                sp.GetRequiredService<ITransportSupportPolicy>(),
                 sp.GetRequiredService<ILogger<DiscoverSessionsConnectionFacade>>()));
         services.AddSingleton<ISettingsChatConnection>(sp =>
             new SettingsChatConnectionAdapter(
@@ -497,6 +503,7 @@ public static class DependencyInjection
                 sp.GetRequiredService<ISettingsChatConnection>(),
                 sp.GetRequiredService<AcpProfilesViewModel>(),
                 sp.GetRequiredService<AppPreferencesViewModel>(),
+                sp.GetRequiredService<ITransportSupportPolicy>(),
                 sp.GetRequiredService<ILogger<AcpConnectionSettingsViewModel>>(),
                 sp.GetRequiredService<IUiDispatcher>()));
 
@@ -582,23 +589,6 @@ public static class DependencyInjection
 
         var delay = TimeSpan.FromMilliseconds(delayMs);
         return inner => new DelayedLoadChatService(inner, delay);
-    }
-
-    private sealed class AcpChatServiceFactoryAdapter : IAcpChatServiceFactory
-    {
-        private readonly ChatServiceFactory _chatServiceFactory;
-
-        public AcpChatServiceFactoryAdapter(ChatServiceFactory chatServiceFactory)
-        {
-            _chatServiceFactory = chatServiceFactory ?? throw new ArgumentNullException(nameof(chatServiceFactory));
-        }
-
-        public IChatService CreateChatService(
-            TransportType transportType,
-            string? command = null,
-            string? args = null,
-            string? url = null)
-            => _chatServiceFactory.CreateChatService(transportType, command, args, url);
     }
 
 }

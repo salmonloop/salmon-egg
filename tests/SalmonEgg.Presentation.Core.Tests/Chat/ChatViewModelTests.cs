@@ -87,7 +87,6 @@ public partial class ChatViewModelTests
                 It.IsAny<string?>(),
                 It.IsAny<string?>()))
             .Returns(transport.Object);
-        transportFactory.Setup(factory => factory.CreateDefaultTransport()).Returns(transport.Object);
         var messageParser = new Mock<IMessageParser>();
         var messageValidator = new Mock<IMessageValidator>();
         var errorLogger = new Mock<IErrorLogger>();
@@ -128,10 +127,9 @@ public partial class ChatViewModelTests
 
         var chatServiceFactory = new ChatServiceFactory(
             transportFactory.Object,
-            messageParser.Object,
-            messageValidator.Object,
             errorLogger.Object,
             sessionManager.Object,
+            Mock.Of<IAcpClientFactory>(),
             serilog.Object);
 
         configurationService ??= new Mock<IConfigurationService>();
@@ -192,7 +190,6 @@ public partial class ChatViewModelTests
 
             var viewModel = new ChatViewModel(
                 chatStore,
-                chatServiceFactory,
                 configurationService.Object,
                 preferences,
                 profiles,
@@ -2815,10 +2812,9 @@ public partial class ChatViewModelTests
 
         var chatServiceFactory = new ChatServiceFactory(
             transportFactory.Object,
-            messageParser.Object,
-            messageValidator.Object,
             errorLogger.Object,
             sessionManager.Object,
+            Mock.Of<IAcpClientFactory>(),
             serilog.Object);
 
         var configService = new Mock<IConfigurationService>();
@@ -2870,7 +2866,6 @@ public partial class ChatViewModelTests
 
         using var viewModel = new ChatViewModel(
             chatStore.Object,
-            chatServiceFactory,
             configService.Object,
             preferences,
             profiles,
@@ -2884,7 +2879,8 @@ public partial class ChatViewModelTests
             uiDispatcher,
             Mock.Of<IConversationPreviewStore>(),
             vmLogger.Object,
-            conversationCatalogFacade: conversationCatalogFacade);
+            conversationCatalogFacade: conversationCatalogFacade,
+                acpConnectionCommands: Mock.Of<IAcpConnectionCommands>());
 
         syncContext.RunAll();
         Assert.False(viewModel.IsTurnStatusVisible);
@@ -2918,10 +2914,9 @@ public partial class ChatViewModelTests
 
         var chatServiceFactory = new ChatServiceFactory(
             transportFactory.Object,
-            messageParser.Object,
-            messageValidator.Object,
             errorLogger.Object,
             sessionManager.Object,
+            Mock.Of<IAcpClientFactory>(),
             serilog.Object);
 
         var configService = new Mock<IConfigurationService>();
@@ -2971,7 +2966,6 @@ public partial class ChatViewModelTests
 
         using var viewModel = new ChatViewModel(
             chatStore.Object,
-            chatServiceFactory,
             configService.Object,
             preferences,
             profiles,
@@ -2985,7 +2979,8 @@ public partial class ChatViewModelTests
             uiDispatcher,
             Mock.Of<IConversationPreviewStore>(),
             vmLogger.Object,
-            conversationCatalogFacade: conversationCatalogFacade);
+            conversationCatalogFacade: conversationCatalogFacade,
+                acpConnectionCommands: Mock.Of<IAcpConnectionCommands>());
 
         syncContext.RunAll();
         Assert.False(viewModel.IsTurnStatusVisible);
@@ -3044,10 +3039,9 @@ public partial class ChatViewModelTests
 
         var chatServiceFactory = new ChatServiceFactory(
             transportFactory.Object,
-            messageParser.Object,
-            messageValidator.Object,
             errorLogger.Object,
             sessionManager.Object,
+            Mock.Of<IAcpClientFactory>(),
             serilog.Object);
 
         var configService = new Mock<IConfigurationService>();
@@ -3104,7 +3098,6 @@ public partial class ChatViewModelTests
             SynchronizationContext.SetSynchronizationContext(syncContext);
             using var viewModel = new ChatViewModel(
                 chatStore.Object,
-                chatServiceFactory,
                 configService.Object,
                 preferences,
                 profiles,
@@ -3118,7 +3111,8 @@ public partial class ChatViewModelTests
                 uiDispatcher,
                 Mock.Of<IConversationPreviewStore>(),
                 vmLogger.Object,
-                conversationCatalogFacade: conversationCatalogFacade);
+                conversationCatalogFacade: conversationCatalogFacade,
+                acpConnectionCommands: Mock.Of<IAcpConnectionCommands>());
 
             viewModel.Dispose();
 

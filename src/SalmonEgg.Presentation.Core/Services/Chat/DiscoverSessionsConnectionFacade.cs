@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.Domain.Services;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 
@@ -26,6 +27,7 @@ public interface IDiscoverSessionsConnectionFacade : INotifyPropertyChanged
 public sealed class DiscoverSessionsConnectionFacade : IDiscoverSessionsConnectionFacade, IDisposable
 {
     private readonly IAcpChatServiceFactory _chatServiceFactory;
+    private readonly ITransportSupportPolicy _transportSupportPolicy;
     private readonly ILogger<DiscoverSessionsConnectionFacade> _logger;
     private readonly object _connectSync = new();
     private CancellationTokenSource? _connectCts;
@@ -41,9 +43,11 @@ public sealed class DiscoverSessionsConnectionFacade : IDiscoverSessionsConnecti
 
     public DiscoverSessionsConnectionFacade(
         IAcpChatServiceFactory chatServiceFactory,
+        ITransportSupportPolicy transportSupportPolicy,
         ILogger<DiscoverSessionsConnectionFacade> logger)
     {
         _chatServiceFactory = chatServiceFactory ?? throw new ArgumentNullException(nameof(chatServiceFactory));
+        _transportSupportPolicy = transportSupportPolicy ?? throw new ArgumentNullException(nameof(transportSupportPolicy));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -88,6 +92,20 @@ public sealed class DiscoverSessionsConnectionFacade : IDiscoverSessionsConnecti
         if (TryReuseConnectedService(profile.Id, target))
         {
             return;
+        }
+
+        if (!_transportSupportPolicy.IsSupported(profile.Transport))
+        {
+            var message = _transportSupportPolicy.GetUnsupportedReason(profile.Transport)
+                ?? $"Unsupported transport type: {profile.Transport}.";
+            UpdateConnectedTarget(null, DiscoverConnectionTarget.None);
+            UpdateConnectionState(
+                isConnecting: false,
+                isInitializing: false,
+                isConnected: false,
+                errorMessage: message,
+                currentChatService: null);
+            throw new NotSupportedException(message);
         }
 
         var (requestVersion, cancellationToken) = BeginConnectRequest();

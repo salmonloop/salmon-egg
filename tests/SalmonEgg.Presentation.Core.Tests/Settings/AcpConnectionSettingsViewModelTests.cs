@@ -36,6 +36,7 @@ public sealed class AcpConnectionSettingsViewModelTests
             transport,
             profiles,
             preferences,
+            CreateTransportSupportPolicy(preferences),
             logger.Object);
 
         Assert.IsAssignableFrom<ISettingsChatConnection>(viewModel.Chat);
@@ -56,7 +57,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
 
         // Act
-        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, logger.Object);
+        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, CreateTransportSupportPolicy(preferences), logger.Object);
 
         // Assert
         Assert.IsAssignableFrom<ISettingsChatConnection>(viewModel.Chat);
@@ -73,7 +74,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         var chat = new TestSettingsChatConnection();
         var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
 
-        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, logger.Object);
+        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, CreateTransportSupportPolicy(preferences), logger.Object);
 
         Assert.Equal("Stdio（子进程）", viewModel.TransportOptions[0].Name);
     }
@@ -86,7 +87,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         var chat = new TestSettingsChatConnection();
         var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
 
-        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, logger.Object);
+        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, CreateTransportSupportPolicy(preferences), logger.Object);
 
         Assert.DoesNotContain(viewModel.TransportOptions, option => option.Type == TransportType.Stdio);
         Assert.Equal(TransportType.WebSocket, viewModel.SelectedTransport?.Type);
@@ -101,7 +102,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         var chat = new TestSettingsChatConnection();
         var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
 
-        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, logger.Object);
+        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, CreateTransportSupportPolicy(preferences), logger.Object);
 
         chat.TransportConfig.SelectedTransportType = TransportType.Stdio;
 
@@ -117,7 +118,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         var profiles = CreateProfiles(preferences);
         var chat = new TestSettingsChatConnection();
         var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
-        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, logger.Object);
+        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, CreateTransportSupportPolicy(preferences), logger.Object);
 
         // Act
         viewModel.SelectedTransport = viewModel.TransportOptions[1];
@@ -135,7 +136,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         var profiles = CreateProfiles(preferences);
         var chat = new TestSettingsChatConnection();
         var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
-        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, logger.Object);
+        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, CreateTransportSupportPolicy(preferences), logger.Object);
         var profile = new ServerConfiguration { Id = "profile-42", Name = "Selected Profile" };
 
         // Act
@@ -163,6 +164,7 @@ public sealed class AcpConnectionSettingsViewModelTests
             new TestTransportConfiguration(),
             profiles,
             preferences,
+            CreateTransportSupportPolicy(preferences),
             logger.Object);
 
         await viewModel.HandleConnectionToggleAsync(true);
@@ -189,6 +191,7 @@ public sealed class AcpConnectionSettingsViewModelTests
             new TestTransportConfiguration(),
             profiles,
             preferences,
+            CreateTransportSupportPolicy(preferences),
             logger.Object);
 
         await viewModel.HandleConnectionToggleAsync(false);
@@ -213,6 +216,7 @@ public sealed class AcpConnectionSettingsViewModelTests
             new TestTransportConfiguration(),
             profiles,
             preferences,
+            CreateTransportSupportPolicy(preferences),
             logger.Object);
 
         await viewModel.HandleConnectionToggleAsync(true);
@@ -255,7 +259,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
 
         // Act
-        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, logger.Object);
+        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, CreateTransportSupportPolicy(preferences), logger.Object);
         var profileARows = viewModel.PathMappingRows.ToArray();
         profiles.SelectedProfile = profiles.Profiles[1];
         var profileBRows = viewModel.PathMappingRows.ToArray();
@@ -280,7 +284,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
 
         // Act
-        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, logger.Object);
+        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, CreateTransportSupportPolicy(preferences), logger.Object);
         viewModel.AddPathMappingCommand.Execute(null);
         var row = Assert.Single(viewModel.PathMappingRows);
         row.RemoteRootPath = " /remote/workspace ";
@@ -308,7 +312,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
 
         // Act
-        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, logger.Object);
+        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, CreateTransportSupportPolicy(preferences), logger.Object);
         var canExecute = viewModel.AddPathMappingCommand.CanExecute(null);
         viewModel.AddPathMappingCommand.Execute(null);
 
@@ -354,6 +358,9 @@ public sealed class AcpConnectionSettingsViewModelTests
         var logger = new Mock<ILogger<AcpProfilesViewModel>>();
         return new AcpProfilesViewModel(configurationService.Object, preferences, logger.Object, new ImmediateUiDispatcher());
     }
+
+    private static ITransportSupportPolicy CreateTransportSupportPolicy(AppPreferencesViewModel preferences)
+        => new TransportSupportPolicy(preferences.PlatformCapabilities);
 
     private sealed class TestSettingsChatConnection : ISettingsChatConnection
     {

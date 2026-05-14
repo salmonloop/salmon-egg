@@ -318,8 +318,7 @@ public sealed class ChatServiceSessionTests
         var transportFactory = new Mock<ITransportFactory>(MockBehavior.Strict);
         var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
         var sessionManager = new SessionManager();
-        var parser = new MessageParser();
-        var validator = new MessageValidator();
+        var acpClient = new ScriptedAcpClient(sessionManager);
 
         transportFactory
             .Setup(factory => factory.CreateTransport(TransportType.Stdio, "agent", null, null))
@@ -327,10 +326,9 @@ public sealed class ChatServiceSessionTests
 
         var sut = new ChatServiceFactory(
             transportFactory.Object,
-            parser,
-            validator,
             errorLogger.Object,
             sessionManager,
+            new StubAcpClientFactory(acpClient),
             new LoggerConfiguration().CreateLogger());
 
         var chatService = sut.CreateChatService(TransportType.Stdio, "agent");
@@ -342,7 +340,102 @@ public sealed class ChatServiceSessionTests
 
         Assert.Equal(StopReason.EndTurn, promptResponse.StopReason);
         Assert.NotNull(sessionManager.GetSession("remote-1"));
-        Assert.Contains(transport.SentMessages, message => message.Contains("\"method\":\"session/prompt\"", StringComparison.Ordinal));
+        Assert.Same(transport, acpClient.CreatedForTransport);
+    }
+
+    private sealed class StubAcpClientFactory(ScriptedAcpClient client) : IAcpClientFactory
+    {
+        public IAcpClient CreateClient(ITransport transport)
+        {
+            client.CreatedForTransport = transport;
+            return client;
+        }
+    }
+
+    private sealed class ScriptedAcpClient(SessionManager sessionManager) : IAcpClient
+    {
+        public event EventHandler<InitializeResponse>? Initialized;
+        public event EventHandler<SessionUpdateEventArgs>? SessionUpdateReceived;
+        public event EventHandler<PermissionRequestEventArgs>? PermissionRequestReceived;
+        public event EventHandler<FileSystemRequestEventArgs>? FileSystemRequestReceived;
+        public event EventHandler<TerminalRequestEventArgs>? TerminalRequestReceived;
+        public event EventHandler<TerminalStateChangedEventArgs>? TerminalStateChangedReceived;
+        public event EventHandler<AskUserRequestEventArgs>? AskUserRequestReceived;
+        public event EventHandler<string>? ErrorOccurred;
+
+        public bool IsInitialized { get; private set; }
+        public bool IsConnected => true;
+        public AgentInfo? AgentInfo { get; private set; }
+        public AgentCapabilities? AgentCapabilities { get; private set; }
+        public ITransport? CreatedForTransport { get; set; }
+
+        public Task<InitializeResponse> InitializeAsync(InitializeParams @params, CancellationToken cancellationToken = default)
+        {
+            IsInitialized = true;
+            AgentInfo = new AgentInfo("TestAgent", "1.0.0");
+            AgentCapabilities = new AgentCapabilities(loadSession: true);
+            var response = new InitializeResponse(1, AgentInfo, AgentCapabilities);
+            Initialized?.Invoke(this, response);
+            return Task.FromResult(response);
+        }
+
+        public Task<SessionNewResponse> CreateSessionAsync(SessionNewParams @params, CancellationToken cancellationToken = default)
+            => Task.FromResult(new SessionNewResponse { SessionId = "remote-1" });
+
+        public async Task<SessionLoadResponse> LoadSessionAsync(SessionLoadParams @params, CancellationToken cancellationToken = default)
+        {
+            if (sessionManager.GetSession(@params.SessionId) == null)
+            {
+                await sessionManager.CreateSessionAsync(@params.SessionId, @params.Cwd).ConfigureAwait(false);
+            }
+
+            return SessionLoadResponse.Completed;
+        }
+
+        public Task<SessionResumeResponse> ResumeSessionAsync(SessionResumeParams @params, CancellationToken cancellationToken = default)
+            => Task.FromResult(new SessionResumeResponse());
+
+        public Task<SessionCloseResponse> CloseSessionAsync(SessionCloseParams @params, CancellationToken cancellationToken = default)
+            => Task.FromResult(new SessionCloseResponse());
+
+        public Task<SessionListResponse> ListSessionsAsync(SessionListParams @params, CancellationToken cancellationToken = default)
+            => Task.FromResult(new SessionListResponse());
+
+        public Task<SessionPromptResponse> SendPromptAsync(SessionPromptParams @params, CancellationToken cancellationToken = default)
+            => Task.FromResult(new SessionPromptResponse(StopReason.EndTurn));
+
+        public Task<SessionSetModeResponse> SetSessionModeAsync(SessionSetModeParams @params, CancellationToken cancellationToken = default)
+            => Task.FromResult(new SessionSetModeResponse());
+
+        public Task<SessionSetConfigOptionResponse> SetSessionConfigOptionAsync(SessionSetConfigOptionParams @params, CancellationToken cancellationToken = default)
+            => Task.FromResult(new SessionSetConfigOptionResponse());
+
+        public Task<SessionCancelResponse> CancelSessionAsync(SessionCancelParams @params, CancellationToken cancellationToken = default)
+            => Task.FromResult(new SessionCancelResponse());
+
+        public Task<AuthenticateResponse> AuthenticateAsync(AuthenticateParams @params, CancellationToken cancellationToken = default)
+            => Task.FromResult(new AuthenticateResponse(true));
+
+        public Task<bool> RespondToPermissionRequestAsync(object messageId, string outcome, string? optionId = null)
+            => Task.FromResult(true);
+
+        public Task<bool> RespondToFileSystemRequestAsync(object messageId, bool success, string? content = null, string? message = null)
+            => Task.FromResult(true);
+
+        public Task<bool> RespondToAskUserRequestAsync(object messageId, IReadOnlyDictionary<string, string> answers)
+            => Task.FromResult(true);
+
+        public Task<bool> DisconnectAsync()
+        {
+            _ = SessionUpdateReceived;
+            _ = PermissionRequestReceived;
+            _ = FileSystemRequestReceived;
+            _ = TerminalRequestReceived;
+            _ = TerminalStateChangedReceived;
+            _ = AskUserRequestReceived;
+            _ = ErrorOccurred;
+            return Task.FromResult(true);
+        }
     }
 
     private sealed class ScriptedTransport : ITransport

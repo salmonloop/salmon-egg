@@ -137,14 +137,15 @@ namespace SalmonEgg.Infrastructure.Client
             IMessageParser? parser = null,
             IMessageValidator? validator = null,
             IErrorLogger? errorLogger = null,
-            ISessionManager? sessionManager = null)
+            ISessionManager? sessionManager = null,
+            ITerminalSessionManager? terminalSessionManager = null)
         {
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
             _parser = parser ?? new MessageParser();
             _validator = validator ?? new MessageValidator();
             _sessionManager = sessionManager ?? new Services.SessionManager();
             _pathValidator = new Services.Security.PathValidator();
-            _terminalSessionManager = new Services.TerminalSessionManager();
+            _terminalSessionManager = terminalSessionManager ?? new Services.UnsupportedTerminalSessionManager();
             _errorLogger = errorLogger ?? new Logging.ErrorLogger();
 
             // 注册传输层事件
@@ -164,8 +165,9 @@ namespace SalmonEgg.Infrastructure.Client
             IMessageValidator? validator,
             IErrorLogger? errorLogger,
             AcpRequestTimeouts timeouts,
-            ISessionManager? sessionManager = null)
-            : this(transport, parser, validator, errorLogger, sessionManager)
+            ISessionManager? sessionManager = null,
+            ITerminalSessionManager? terminalSessionManager = null)
+            : this(transport, parser, validator, errorLogger, sessionManager, terminalSessionManager)
         {
             _timeouts = timeouts ?? throw new ArgumentNullException(nameof(timeouts));
         }
@@ -1421,6 +1423,13 @@ namespace SalmonEgg.Infrastructure.Client
             {
                 RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
                 await SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams(ex.Message))).ConfigureAwait(false);
+            }
+            catch (NotSupportedException ex)
+            {
+                RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+                await SendResponseAsync(new JsonRpcResponse(
+                    request.Id,
+                    new JsonRpcError(JsonRpcErrorCode.CapabilityNotSupported, ex.Message))).ConfigureAwait(false);
             }
             catch (Exception ex)
             {

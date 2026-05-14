@@ -23,7 +23,7 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
     private readonly AppPreferencesViewModel _preferences;
     private readonly ISettingsAcpConnectionCommands _connectionCommands;
     private readonly ISettingsAcpTransportConfiguration _transportConfig;
-    private readonly IPlatformCapabilityService _capabilities;
+    private readonly ITransportSupportPolicy _transportSupportPolicy;
     private readonly IUiDispatcher _uiDispatcher;
     private bool _suppressPathMappingProjection;
     private bool _disposed;
@@ -56,9 +56,10 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         IAcpConnectionCommands connectionCommands,
         AcpProfilesViewModel profiles,
         AppPreferencesViewModel preferences,
+        ITransportSupportPolicy transportSupportPolicy,
         ILogger<AcpConnectionSettingsViewModel> logger,
         IUiDispatcher? uiDispatcher = null)
-        : this(new SettingsChatConnectionAdapter(chatViewModel, connectionCommands), profiles, preferences, logger, uiDispatcher)
+        : this(new SettingsChatConnectionAdapter(chatViewModel, connectionCommands), profiles, preferences, transportSupportPolicy, logger, uiDispatcher)
     {
     }
 
@@ -66,6 +67,7 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         ISettingsChatConnection chat,
         AcpProfilesViewModel profiles,
         AppPreferencesViewModel preferences,
+        ITransportSupportPolicy transportSupportPolicy,
         ILogger<AcpConnectionSettingsViewModel> logger,
         IUiDispatcher? uiDispatcher = null)
         : this(
@@ -74,6 +76,7 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
             chat.TransportConfig,
             profiles,
             preferences,
+            transportSupportPolicy,
             logger,
             chat,
             uiDispatcher)
@@ -86,6 +89,7 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         ISettingsAcpTransportConfiguration transportConfig,
         AcpProfilesViewModel profiles,
         AppPreferencesViewModel preferences,
+        ITransportSupportPolicy transportSupportPolicy,
         ILogger<AcpConnectionSettingsViewModel> logger,
         IUiDispatcher? uiDispatcher = null)
         : this(
@@ -94,6 +98,7 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
             transportConfig,
             profiles,
             preferences,
+            transportSupportPolicy,
             logger,
             chatFacade: null,
             uiDispatcher)
@@ -106,6 +111,7 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         ISettingsAcpTransportConfiguration transportConfig,
         AcpProfilesViewModel profiles,
         AppPreferencesViewModel preferences,
+        ITransportSupportPolicy transportSupportPolicy,
         ILogger<AcpConnectionSettingsViewModel> logger,
         ISettingsChatConnection? chatFacade,
         IUiDispatcher? uiDispatcher)
@@ -115,11 +121,11 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         _transportConfig = transportConfig ?? throw new ArgumentNullException(nameof(transportConfig));
         Profiles = profiles ?? throw new ArgumentNullException(nameof(profiles));
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
-        _capabilities = _preferences.PlatformCapabilities;
+        _transportSupportPolicy = transportSupportPolicy ?? throw new ArgumentNullException(nameof(transportSupportPolicy));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _uiDispatcher = uiDispatcher ?? InlineUiDispatcher.Instance;
         Chat = chatFacade ?? new CompositeSettingsChatConnection(connectionState, _connectionCommands, _transportConfig);
-        TransportOptions = CreateTransportOptions(_capabilities);
+        TransportOptions = CreateTransportOptions(_transportSupportPolicy);
 
         SelectedTransport = TransportOptions.FirstOrDefault(o => o.Type == _transportConfig.SelectedTransportType)
                             ?? TransportOptions.FirstOrDefault();
@@ -228,15 +234,13 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
     }
 
     private TransportType ResolveSupportedTransportType(TransportType transportType)
-        => TransportOptions.Any(option => option.Type == transportType)
-            ? transportType
-            : TransportOptions.FirstOrDefault()?.Type ?? TransportType.WebSocket;
+        => _transportSupportPolicy.Coerce(transportType);
 
     private static ObservableCollection<TransportOptionViewModel> CreateTransportOptions(
-        IPlatformCapabilityService capabilities)
+        ITransportSupportPolicy transportSupportPolicy)
     {
         var options = new ObservableCollection<TransportOptionViewModel>();
-        if (capabilities.SupportsStdioTransport)
+        if (transportSupportPolicy.IsSupported(TransportType.Stdio))
         {
             options.Add(new TransportOptionViewModel(TransportType.Stdio, "Stdio（子进程）"));
         }

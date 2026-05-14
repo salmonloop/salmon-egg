@@ -22,7 +22,7 @@ public sealed class ErrorRecoveryServiceTests
         _mockErrorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
 
         _service = new ErrorRecoveryService(
-            _mockChatService.Object,
+            () => _mockChatService.Object,
             _mockPathValidator.Object,
             _mockErrorLogger.Object);
     }

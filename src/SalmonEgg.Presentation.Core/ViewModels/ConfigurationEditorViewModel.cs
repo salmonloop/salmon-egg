@@ -20,12 +20,12 @@ namespace SalmonEgg.Presentation.ViewModels;
 public partial class ConfigurationEditorViewModel(
     IValidator<ServerConfiguration> validator,
     IConfigurationService configurationService,
-    IPlatformCapabilityService capabilities,
+    ITransportSupportPolicy transportSupportPolicy,
     ILogger<ConfigurationEditorViewModel> logger) : ViewModelBase(logger)
 {
     private readonly IValidator<ServerConfiguration> _validator = validator ?? throw new ArgumentNullException(nameof(validator));
     private readonly IConfigurationService _configurationService = configurationService ?? throw new ArgumentNullException(nameof(configurationService));
-    private readonly IPlatformCapabilityService _capabilities = capabilities ?? throw new ArgumentNullException(nameof(capabilities));
+    private readonly ITransportSupportPolicy _transportSupportPolicy = transportSupportPolicy ?? throw new ArgumentNullException(nameof(transportSupportPolicy));
 
     [ObservableProperty]
     private string _name = string.Empty;
@@ -45,7 +45,7 @@ public partial class ConfigurationEditorViewModel(
     private TransportType _transport;
 
     public ObservableCollection<TransportOption> TransportOptions { get; } =
-        CreateTransportOptions(capabilities);
+        CreateTransportOptions(transportSupportPolicy);
 
     [ObservableProperty]
     private TransportOption? _selectedTransportOption;
@@ -74,7 +74,7 @@ public partial class ConfigurationEditorViewModel(
 
     public void LoadBlankConfiguration()
     {
-        var defaultTransport = ResolveDefaultTransportType();
+        var defaultTransport = _transportSupportPolicy.DefaultTransport;
         IsEditing = false;
         Configuration = new ServerConfiguration
         {
@@ -147,7 +147,7 @@ public partial class ConfigurationEditorViewModel(
             Id = Guid.NewGuid().ToString(),
             Name = "New Configuration",
             ServerUrl = "ws://localhost:8080",
-            Transport = TransportType.WebSocket,
+            Transport = _transportSupportPolicy.DefaultTransport,
             ConnectionTimeout = 10
         };
         Name = Configuration.Name;
@@ -260,12 +260,12 @@ public partial class ConfigurationEditorViewModel(
     {
     }
 
-    private static ObservableCollection<TransportOption> CreateTransportOptions(IPlatformCapabilityService capabilities)
+    private static ObservableCollection<TransportOption> CreateTransportOptions(ITransportSupportPolicy transportSupportPolicy)
     {
-        ArgumentNullException.ThrowIfNull(capabilities);
+        ArgumentNullException.ThrowIfNull(transportSupportPolicy);
 
         var options = new ObservableCollection<TransportOption>();
-        if (capabilities.SupportsStdioTransport)
+        if (transportSupportPolicy.IsSupported(TransportType.Stdio))
         {
             options.Add(new TransportOption(TransportType.Stdio, "Stdio（子进程）"));
         }
@@ -276,12 +276,10 @@ public partial class ConfigurationEditorViewModel(
     }
 
     private TransportType ResolveDefaultTransportType()
-        => TransportOptions.FirstOrDefault()?.Type ?? TransportType.WebSocket;
+        => _transportSupportPolicy.DefaultTransport;
 
     private TransportType ResolveSupportedTransportType(TransportType transport)
-        => TransportOptions.Any(option => option.Type == transport)
-            ? transport
-            : ResolveDefaultTransportType();
+        => _transportSupportPolicy.Coerce(transport);
 }
 
 public sealed class TransportOption

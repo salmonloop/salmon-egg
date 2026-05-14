@@ -41,7 +41,8 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         private async Task<AcpClient> CreateInitializedClientAsync(
             AcpClient.AcpRequestTimeouts? timeouts = null,
             AgentCapabilities? capabilities = null,
-            ClientCapabilities? clientCapabilities = null)
+            ClientCapabilities? clientCapabilities = null,
+            ITerminalSessionManager? terminalSessionManager = null)
         {
             var parser = new MessageParser(); // Use real parser for serialization
             
@@ -51,7 +52,13 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 SessionPromptTimeout: TimeSpan.FromSeconds(5),
                 SessionLoadTimeout: TimeSpan.FromSeconds(5));
 
-            var client = new AcpClient(_transportMock.Object, parser, null, _errorLoggerMock.Object, initTimeouts);
+            var client = new AcpClient(
+                _transportMock.Object,
+                parser,
+                null,
+                _errorLoggerMock.Object,
+                initTimeouts,
+                terminalSessionManager: terminalSessionManager);
 
             // Mock InitializeAsync response
             var initResponse = new InitializeResponse(
@@ -943,8 +950,17 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         public async Task TerminalRequests_WhenClientAdvertisedTerminal_ExecuteAndRespond()
         {
             var parser = new MessageParser();
+            var terminalSessionManager = new Mock<ITerminalSessionManager>(MockBehavior.Strict);
+            terminalSessionManager
+                .Setup(x => x.CreateAsync(
+                    It.Is<TerminalCreateRequest>(request =>
+                        request.SessionId == "session-1"
+                        && request.Command == "dotnet"),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new TerminalCreateResponse { TerminalId = "terminal-1" });
             var client = await CreateInitializedClientAsync(
-                clientCapabilities: new ClientCapabilities(terminal: true));
+                clientCapabilities: new ClientCapabilities(terminal: true),
+                terminalSessionManager: terminalSessionManager.Object);
             var sentMessages = new ConcurrentQueue<string>();
             var terminalStates = new ConcurrentQueue<TerminalStateChangedEventArgs>();
             client.TerminalStateChangedReceived += (_, args) => terminalStates.Enqueue(args);
@@ -977,12 +993,49 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 createResponse.Result!.Value.GetRawText(),
                 parser.Options);
             Assert.NotNull(createResult);
-            Assert.False(string.IsNullOrWhiteSpace(createResult!.TerminalId));
+            Assert.Equal("terminal-1", createResult!.TerminalId);
             Assert.Contains(
                 terminalStates,
                 state => state.SessionId == "session-1"
                     && state.TerminalId == createResult.TerminalId
                     && state.Method == "terminal/create");
+            terminalSessionManager.VerifyAll();
+        }
+
+        [Fact]
+        public async Task TerminalRequests_WhenTerminalAdvertisedWithoutInjectedManager_ReturnCapabilityNotSupported()
+        {
+            var parser = new MessageParser();
+            var client = await CreateInitializedClientAsync(
+                clientCapabilities: new ClientCapabilities(terminal: true));
+            var sentMessages = new ConcurrentQueue<string>();
+
+            _transportMock
+                .Setup(t => t.SendMessageAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .Callback<string, CancellationToken>((message, _) => sentMessages.Enqueue(message))
+                .ReturnsAsync(true);
+
+            var createRequest = new JsonRpcRequest(
+                99,
+                "terminal/create",
+                JsonSerializer.SerializeToElement(
+                    new TerminalCreateRequest
+                    {
+                        SessionId = "session-1",
+                        Command = "dotnet",
+                        Args = new List<string> { "--version" },
+                        OutputByteLimit = 4096
+                    },
+                    parser.Options));
+
+            _transportMock.Raise(
+                t => t.MessageReceived += null,
+                new MessageReceivedEventArgs(parser.SerializeMessage(createRequest)));
+
+            var createResponse = await WaitForResponseAsync(parser, sentMessages, responseId: 99);
+            Assert.True(createResponse.IsError);
+            Assert.Equal(JsonRpcErrorCode.CapabilityNotSupported, createResponse.Error!.Code);
+            Assert.Contains("desktop process host", createResponse.Error.Message, StringComparison.Ordinal);
         }
 
         [Fact]

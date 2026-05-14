@@ -16,12 +16,12 @@ public sealed class ConfigurationEditorViewModelTests
     {
         var validator = new ServerConfigurationValidator();
         var configurationService = new Mock<IConfigurationService>();
-        var capabilities = CreateCapabilities(supportsStdioTransport: true);
+        var transportSupportPolicy = CreateTransportSupportPolicy(supportsStdioTransport: true);
         var logger = new Mock<ILogger<ConfigurationEditorViewModel>>();
         var viewModel = new ConfigurationEditorViewModel(
             validator,
             configurationService.Object,
-            capabilities.Object,
+            transportSupportPolicy,
             logger.Object);
 
         Assert.Equal("Stdio（子进程）", viewModel.TransportOptions[0].Name);
@@ -32,12 +32,12 @@ public sealed class ConfigurationEditorViewModelTests
     {
         var validator = new ServerConfigurationValidator();
         var configurationService = new Mock<IConfigurationService>();
-        var capabilities = CreateCapabilities(supportsStdioTransport: false);
+        var transportSupportPolicy = CreateTransportSupportPolicy(supportsStdioTransport: false);
         var logger = new Mock<ILogger<ConfigurationEditorViewModel>>();
         var viewModel = new ConfigurationEditorViewModel(
             validator,
             configurationService.Object,
-            capabilities.Object,
+            transportSupportPolicy,
             logger.Object);
 
         Assert.DoesNotContain(viewModel.TransportOptions, option => option.Type == TransportType.Stdio);
@@ -49,12 +49,12 @@ public sealed class ConfigurationEditorViewModelTests
     {
         var validator = new ServerConfigurationValidator();
         var configurationService = new Mock<IConfigurationService>();
-        var capabilities = CreateCapabilities(supportsStdioTransport: false);
+        var transportSupportPolicy = CreateTransportSupportPolicy(supportsStdioTransport: false);
         var logger = new Mock<ILogger<ConfigurationEditorViewModel>>();
         var viewModel = new ConfigurationEditorViewModel(
             validator,
             configurationService.Object,
-            capabilities.Object,
+            transportSupportPolicy,
             logger.Object);
 
         viewModel.LoadBlankConfiguration();
@@ -69,12 +69,12 @@ public sealed class ConfigurationEditorViewModelTests
     {
         var validator = new ServerConfigurationValidator();
         var configurationService = new Mock<IConfigurationService>();
-        var capabilities = CreateCapabilities(supportsStdioTransport: false);
+        var transportSupportPolicy = CreateTransportSupportPolicy(supportsStdioTransport: false);
         var logger = new Mock<ILogger<ConfigurationEditorViewModel>>();
         var viewModel = new ConfigurationEditorViewModel(
             validator,
             configurationService.Object,
-            capabilities.Object,
+            transportSupportPolicy,
             logger.Object);
 
         viewModel.LoadConfiguration(new ServerConfiguration
@@ -98,4 +98,7 @@ public sealed class ConfigurationEditorViewModelTests
         capabilities.SetupGet(c => c.SupportsLocalTerminal).Returns(true);
         return capabilities;
     }
+
+    private static ITransportSupportPolicy CreateTransportSupportPolicy(bool supportsStdioTransport)
+        => new TransportSupportPolicy(CreateCapabilities(supportsStdioTransport).Object);
 }

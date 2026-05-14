@@ -19,16 +19,16 @@ namespace SalmonEgg.Infrastructure.Client;
 public class TransportFactory : ITransportFactory
 {
    private readonly ILogger _logger;
-   private readonly IPlatformCapabilityService? _capabilities;
+   private readonly ITransportSupportPolicy _transportSupportPolicy;
 
    /// <summary>
    /// 创建 <see cref="TransportFactory"/> 的新实例。
    /// </summary>
    /// <param name="logger">日志记录器实例</param>
-   public TransportFactory(ILogger logger, IPlatformCapabilityService? capabilities = null)
+   public TransportFactory(ILogger logger, ITransportSupportPolicy transportSupportPolicy)
    {
        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-       _capabilities = capabilities;
+       _transportSupportPolicy = transportSupportPolicy ?? throw new ArgumentNullException(nameof(transportSupportPolicy));
    }
 
    /// <summary>
@@ -59,22 +59,6 @@ public class TransportFactory : ITransportFactory
    }
 
    /// <summary>
-   /// 创建默认传输实例（Stdio）。
-   /// </summary>
-   /// <returns>默认的 <see cref="ITransport"/> 实例</returns>
-   public SalmonEgg.Domain.Interfaces.Transport.ITransport CreateDefaultTransport()
-   {
-       if (_capabilities?.SupportsStdioTransport == false)
-       {
-           throw new NotSupportedException("Stdio transport is not supported on this platform.");
-       }
-
-       _logger.Information("创建默认传输实例：Stdio");
-       // 默认使用 Stdio 传输，参数为空的命令
-       return new StdioTransport("agent-command", Array.Empty<string>(), System.Text.Encoding.UTF8);
-   }
-
-   /// <summary>
    /// 创建 Stdio 传输实例。
    /// </summary>
    /// <param name="command">命令</param>
@@ -83,9 +67,11 @@ public class TransportFactory : ITransportFactory
    /// <exception cref="ArgumentException">当命令为空时抛出</exception>
    private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateStdioTransport(string? command, string? args)
    {
-       if (_capabilities?.SupportsStdioTransport == false)
+       if (!_transportSupportPolicy.IsSupported(TransportType.Stdio))
        {
-           throw new NotSupportedException("Stdio transport is not supported on this platform.");
+           throw new NotSupportedException(
+               _transportSupportPolicy.GetUnsupportedReason(TransportType.Stdio)
+               ?? "Stdio transport is not supported on this platform.");
        }
 
        if (string.IsNullOrWhiteSpace(command))

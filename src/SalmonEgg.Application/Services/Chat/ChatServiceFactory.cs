@@ -1,10 +1,8 @@
 using System;
 using Serilog;
 using SalmonEgg.Domain.Interfaces;
-using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
-using SalmonEgg.Infrastructure.Client;
 namespace SalmonEgg.Application.Services.Chat;
 
 /// <summary>
@@ -15,10 +13,9 @@ namespace SalmonEgg.Application.Services.Chat;
 public class ChatServiceFactory
 {
     private readonly ITransportFactory _transportFactory;
-    private readonly IMessageParser _messageParser;
-    private readonly IMessageValidator _messageValidator;
     private readonly IErrorLogger _errorLogger;
     private readonly ISessionManager _sessionManager;
+    private readonly IAcpClientFactory _acpClientFactory;
     private readonly ILogger _logger;
     private readonly Func<IChatService, IChatService> _decorateChatService;
 
@@ -26,24 +23,20 @@ public class ChatServiceFactory
     /// 创建 <see cref="ChatServiceFactory"/> 的新实例。
     /// </summary>
     /// <param name="transportFactory">传输层工厂</param>
-    /// <param name="messageParser">消息解析器</param>
-    /// <param name="messageValidator">消息验证器</param>
     /// <param name="errorLogger">错误日志器</param>
     /// <param name="logger">日志记录器</param>
     public ChatServiceFactory(
         ITransportFactory transportFactory,
-        IMessageParser messageParser,
-        IMessageValidator messageValidator,
         IErrorLogger errorLogger,
         ISessionManager sessionManager,
+        IAcpClientFactory acpClientFactory,
         ILogger logger,
         Func<IChatService, IChatService>? decorateChatService = null)
     {
         _transportFactory = transportFactory ?? throw new ArgumentNullException(nameof(transportFactory));
-        _messageParser = messageParser ?? throw new ArgumentNullException(nameof(messageParser));
-        _messageValidator = messageValidator ?? throw new ArgumentNullException(nameof(messageValidator));
         _errorLogger = errorLogger ?? throw new ArgumentNullException(nameof(errorLogger));
         _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
+        _acpClientFactory = acpClientFactory ?? throw new ArgumentNullException(nameof(acpClientFactory));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _decorateChatService = decorateChatService ?? (service => service);
     }
@@ -69,24 +62,9 @@ public class ChatServiceFactory
         var transport = _transportFactory.CreateTransport(transportType, command, args, url);
 
         // 2. 创建 ACP 客户端
-        var acpClient = new AcpClient(
-            transport,
-            _messageParser,
-            _messageValidator,
-            _errorLogger,
-            _sessionManager);
+        var acpClient = _acpClientFactory.CreateClient(transport);
 
         // 3. 创建 Chat 服务
         return _decorateChatService(new ChatService(acpClient, _errorLogger, _sessionManager));
-    }
-
-    /// <summary>
-    /// 创建默认的 <see cref="IChatService"/> 实例（使用 Stdio 传输）。
-    /// </summary>
-    /// <returns>默认的 <see cref="IChatService"/> 实例</returns>
-    public IChatService CreateDefaultChatService()
-    {
-        _logger?.Information("创建默认 ChatService 实例：Stdio 传输");
-        return CreateChatService(TransportType.Stdio, "agent-command", null, null);
     }
 }

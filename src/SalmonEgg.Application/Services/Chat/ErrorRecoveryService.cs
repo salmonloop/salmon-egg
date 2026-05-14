@@ -13,7 +13,7 @@ namespace SalmonEgg.Application.Services.Chat
 {
     public class ErrorRecoveryService : IErrorRecoveryService
     {
-        private readonly IChatService _chatService;
+        private readonly Func<IChatService?> _chatServiceAccessor;
         private readonly IPathValidator _pathValidator;
         private readonly IErrorLogger _errorLogger;
         private readonly ErrorRecoveryConfig _config;
@@ -24,11 +24,11 @@ namespace SalmonEgg.Application.Services.Chat
         private readonly SemaphoreSlim _lock = new SemaphoreSlim(1, 1);
 
         public ErrorRecoveryService(
-            IChatService chatService,
+            Func<IChatService?> chatServiceAccessor,
             IPathValidator pathValidator,
             IErrorLogger errorLogger)
         {
-            _chatService = chatService ?? throw new ArgumentNullException(nameof(chatService));
+            _chatServiceAccessor = chatServiceAccessor ?? throw new ArgumentNullException(nameof(chatServiceAccessor));
             _pathValidator = pathValidator ?? throw new ArgumentNullException(nameof(pathValidator));
             _errorLogger = errorLogger ?? throw new ArgumentNullException(nameof(errorLogger));
             _config = new ErrorRecoveryConfig();
@@ -138,7 +138,13 @@ namespace SalmonEgg.Application.Services.Chat
                         McpServers = new List<McpServer>()
                     };
 
-                    var response = await _chatService.CreateSessionAsync(newSessionParams);
+                    var chatService = _chatServiceAccessor();
+                    if (chatService == null)
+                    {
+                        return Result<string>.Failure("No active chat service is available for session recovery");
+                    }
+
+                    var response = await chatService.CreateSessionAsync(newSessionParams);
 
                     var recoveredEntry = new ErrorLogEntry(
                         "SessionRecovered",

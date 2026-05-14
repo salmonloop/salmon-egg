@@ -1,5 +1,4 @@
 using System;
-using System.Threading.Tasks;
 using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Domain.Models;
 
@@ -27,10 +26,4 @@ public interface ITransportFactory
         string? command = null,
         string? args = null,
         string? url = null);
-
-    /// <summary>
-    /// 创建默认传输实例（通常为 Stdio）。
-    /// </summary>
-    /// <returns>默认的 <see cref="ITransport"/> 实例</returns>
-    ITransport CreateDefaultTransport();
 }

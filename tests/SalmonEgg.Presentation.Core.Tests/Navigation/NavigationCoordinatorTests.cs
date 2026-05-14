@@ -1562,10 +1562,9 @@ public sealed class NavigationCoordinatorTests
 
         var chatServiceFactory = new ChatServiceFactory(
             transportFactory.Object,
-            messageParser.Object,
-            messageValidator.Object,
             errorLogger.Object,
             sessionManager,
+            Mock.Of<IAcpClientFactory>(),
             serilog.Object);
 
         var configService = new Mock<IConfigurationService>();
@@ -1613,7 +1612,6 @@ public sealed class NavigationCoordinatorTests
         {
             var viewModel = new ChatViewModel(
                 chatStore.Object,
-                chatServiceFactory,
                 configService.Object,
                 preferences,
                 profiles,
@@ -1628,7 +1626,8 @@ public sealed class NavigationCoordinatorTests
                 Mock.Of<IConversationPreviewStore>(),
                 vmLogger.Object,
                 shellNavigationRuntimeState: runtimeState,
-                conversationCatalogFacade: conversationCatalogFacade);
+                conversationCatalogFacade: conversationCatalogFacade,
+                acpConnectionCommands: Mock.Of<IAcpConnectionCommands>());
             conversationCatalogFacade.SetPanelCleanup(viewModel);
             return new ChatViewModelHarness(
                 viewModel,

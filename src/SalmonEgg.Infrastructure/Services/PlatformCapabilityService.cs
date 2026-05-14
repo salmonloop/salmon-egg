@@ -18,8 +18,17 @@ public sealed class PlatformCapabilityService : IPlatformCapabilityService
 
     public bool SupportsLocalTerminal => IsDesktopProcessHost;
 
-    private static bool IsDesktopProcessHost =>
-        RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-        || RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
-        || RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
+    private static bool IsDesktopProcessHost
+    {
+        get
+        {
+#if __WASM__ || __ANDROID__ || __IOS__
+            return false;
+#else
+            return RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                || RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+                || RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
+#endif
+        }
+    }
 }
