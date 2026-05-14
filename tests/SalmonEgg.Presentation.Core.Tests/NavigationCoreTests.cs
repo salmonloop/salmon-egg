@@ -358,15 +358,15 @@ public sealed class NavigationCoreTests
     public void MainPage_NavigationCompletionReliesOnFrameEventsAndProjectedContent()
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
-        var navigationSection = ExtractSection(
-            code,
-            "private ValueTask<ShellNavigationResult> NavigateToContentAsync",
-            "private string GetRightPanelTitle");
+        var adapter = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Navigation\ContentFrameNavigationAdapter.cs");
 
-        Assert.Contains("ContentFrame.Navigated += OnNavigated;", navigationSection, StringComparison.Ordinal);
-        Assert.Contains("ContentFrame.NavigationFailed += OnNavigationFailed;", navigationSection, StringComparison.Ordinal);
-        Assert.Contains("ShellNavigationResult.Failed(\"ContentNotProjected\")", navigationSection, StringComparison.Ordinal);
-        Assert.Contains("pageType.IsInstanceOfType(ContentFrame.Content)", code, StringComparison.Ordinal);
+        Assert.Contains("new ContentFrameNavigationAdapter(ContentFrame)", code, StringComparison.Ordinal);
+        Assert.Contains("_contentNavigation.NavigateAsync(pageType, parameter)", code, StringComparison.Ordinal);
+        Assert.Contains("_frame.Navigated += OnNavigated;", adapter, StringComparison.Ordinal);
+        Assert.Contains("_frame.NavigationFailed += OnNavigationFailed;", adapter, StringComparison.Ordinal);
+        Assert.Contains("ShellNavigationResult.Failed(\"ContentNotProjected\")", adapter, StringComparison.Ordinal);
+        Assert.Contains("pageType.IsInstanceOfType(_frame.Content)", adapter, StringComparison.Ordinal);
+        Assert.DoesNotContain("ContentFrame.Navigated += OnNavigated;", code, StringComparison.Ordinal);
         Assert.DoesNotContain("private void EnsureStartContent(", code, StringComparison.Ordinal);
         Assert.DoesNotContain("private void EnsureChatContent(", code, StringComparison.Ordinal);
         Assert.DoesNotContain("private void EnsureDiscoverSessionsContent(", code, StringComparison.Ordinal);

@@ -97,6 +97,7 @@ public sealed partial class MainPage : Page
     private readonly IGamepadInputService _gamepadInputService;
     private readonly IGamepadNavigationDispatcher _gamepadNavigationDispatcher;
     private readonly IShellStartupNavigationService _startupNavigation;
+    private readonly ContentFrameNavigationAdapter _contentNavigation;
     private bool _isGamepadInputAttached;
 
     public MainPage()
@@ -124,6 +125,7 @@ public sealed partial class MainPage : Page
             StringComparison.Ordinal);
 
         this.InitializeComponent();
+        _contentNavigation = new ContentFrameNavigationAdapter(ContentFrame);
         InitializeAuxiliaryPanelVisualState();
         _mainNavigationViewAdapter = new MainNavigationViewAdapter(NavVM, navigationCoordinator);
         _titleBarAdapter = new MainWindowTitleBarAdapter(
@@ -378,27 +380,6 @@ public sealed partial class MainPage : Page
 #endif
     }
 
-    private void NavigateTo(Type pageType, object? parameter = null)
-    {
-        var transition = UiMotion.Current.IsAnimationEnabled
-            ? (NavigationTransitionInfo)new EntranceNavigationTransitionInfo()
-            : new SuppressNavigationTransitionInfo();
-
-        try
-        {
-            var navigated = ContentFrame.Navigate(pageType, parameter, transition);
-            if (!navigated)
-            {
-                BootLogDebug($"ContentFrame Navigate returned false: target={pageType?.Name ?? "<null>"}");
-            }
-        }
-        catch (Exception ex)
-        {
-            BootLogDebug($"ContentFrame Navigate exception: target={pageType?.Name ?? "<null>"} exception={ex}");
-            throw;
-        }
-    }
-
     private async void OnMainNavItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
     {
         var rawInvokedType = args.InvokedItem?.GetType().Name ?? "null";
@@ -574,80 +555,10 @@ public sealed partial class MainPage : Page
     }
 
     private bool IsContentFrameDisplaying(Type pageType)
-        => ContentFrame?.CurrentSourcePageType == pageType
-           && ContentFrame.Content is not null
-           && pageType.IsInstanceOfType(ContentFrame.Content);
+        => _contentNavigation.IsDisplaying(pageType);
 
     private ValueTask<ShellNavigationResult> NavigateToContentAsync(Type pageType, object? parameter = null)
-    {
-        if (ContentFrame is null)
-        {
-            return ValueTask.FromResult(ShellNavigationResult.Failed("ContentFrameUnavailable"));
-        }
-
-        if (IsContentFrameDisplaying(pageType))
-        {
-            return ValueTask.FromResult(ShellNavigationResult.Success());
-        }
-
-        var completion = new TaskCompletionSource<ShellNavigationResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        void DetachHandlers()
-        {
-            ContentFrame.Navigated -= OnNavigated;
-            ContentFrame.NavigationFailed -= OnNavigationFailed;
-        }
-
-        void OnNavigated(object sender, NavigationEventArgs e)
-        {
-            if (e.SourcePageType != pageType)
-            {
-                return;
-            }
-
-            DetachHandlers();
-            var result = IsContentFrameDisplaying(pageType)
-                ? ShellNavigationResult.Success()
-                : ShellNavigationResult.Failed("ContentNotProjected");
-            completion.TrySetResult(result);
-        }
-
-        void OnNavigationFailed(object sender, NavigationFailedEventArgs e)
-        {
-            if (e.SourcePageType != pageType)
-            {
-                return;
-            }
-
-            DetachHandlers();
-            completion.TrySetResult(ShellNavigationResult.Failed(e.Exception?.GetType().Name ?? "NavigationFailed"));
-        }
-
-        ContentFrame.Navigated += OnNavigated;
-        ContentFrame.NavigationFailed += OnNavigationFailed;
-
-        var navigated = false;
-        try
-        {
-            var transition = UiMotion.Current.IsAnimationEnabled
-                ? (NavigationTransitionInfo)new EntranceNavigationTransitionInfo()
-                : new SuppressNavigationTransitionInfo();
-            navigated = ContentFrame.Navigate(pageType, parameter, transition);
-        }
-        catch (Exception ex)
-        {
-            DetachHandlers();
-            completion.TrySetResult(ShellNavigationResult.Failed(ex.GetType().Name));
-        }
-
-        if (!navigated)
-        {
-            DetachHandlers();
-            completion.TrySetResult(ShellNavigationResult.Failed("NavigateReturnedFalse"));
-        }
-
-        return new ValueTask<ShellNavigationResult>(completion.Task);
-    }
+        => _contentNavigation.NavigateAsync(pageType, parameter);
 
     private string GetRightPanelTitle(RightPanelMode mode, string? planTitle)
     {
