@@ -17,6 +17,10 @@ if ! command -v dotnet >/dev/null 2>&1 || ! dotnet --list-sdks | grep -q "^${dot
   bash "${dotnet_dir}/dotnet-install.sh" --version "${dotnet_version}" --install-dir "${dotnet_dir}" --no-path
 fi
 
+if ! dotnet workload list | grep -q "^wasm-tools[[:space:]]"; then
+  dotnet workload install wasm-tools --skip-manifest-update
+fi
+
 rm -rf "${publish_dir}"
 
 dotnet publish "${repo_root}/SalmonEgg/SalmonEgg/SalmonEgg.csproj" \

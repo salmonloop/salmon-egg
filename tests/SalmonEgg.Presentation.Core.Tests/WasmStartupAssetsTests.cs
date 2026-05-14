@@ -112,6 +112,15 @@ public sealed class WasmStartupAssetsTests
         Assert.Contains("-p:BuildInParallel=false", script, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void VercelBuildScript_InstallsWasmToolsWorkload()
+    {
+        var script = LoadFile(@"scripts\vercel-build.sh");
+
+        Assert.Contains("dotnet workload list", script, StringComparison.Ordinal);
+        Assert.Contains("dotnet workload install wasm-tools --skip-manifest-update", script, StringComparison.Ordinal);
+    }
+
     private static string LoadFile(string relativePath)
         => File.ReadAllText(RepoPath(relativePath));
 
