@@ -15,87 +15,123 @@
                   HorizontalScrollBarVisibility="Disabled">
         <controls:ResponsiveSettingsHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
             <controls:ResponsiveSettingsHost.Child>
-                <StackPanel Spacing="24">
-            <StackPanel Spacing="12">
-                <TextBlock x:Uid="Appearance_ThemeTitle" Text="界面主题" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}"/>
-
-                <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="16">
-                    <StackPanel Spacing="16">
-                        <TextBlock x:Uid="Appearance_ThemeDescription" Text="选择您偏好的应用主题颜色" FontSize="14"/>
-                        <ComboBox SelectedValue="{x:Bind Preferences.Theme, Mode=TwoWay}"
-                                  SelectedValuePath="Tag"
-                                  MinWidth="240">
-                            <ComboBoxItem x:Uid="Appearance_ThemeSystem" Content="跟随系统" Tag="System" />
-                            <ComboBoxItem x:Uid="Appearance_ThemeLight" Content="浅色" Tag="Light" />
-                            <ComboBoxItem x:Uid="Appearance_ThemeDark" Content="深色" Tag="Dark" />
-                        </ComboBox>
+                <StackPanel Spacing="28">
+                    <StackPanel Spacing="8">
+                        <TextBlock x:Uid="Appearance_PageTitle"
+                                   Text="外观"
+                                   Style="{StaticResource SettingsPageTitleTextStyle}"/>
+                        <TextBlock x:Uid="Appearance_PageSummary"
+                                   Text="调整主题、过渡动画和窗口背景材质。"
+                                   Style="{StaticResource SettingsPageSummaryTextStyle}"/>
                     </StackPanel>
-                </Border>
-            </StackPanel>
 
-            <StackPanel Spacing="12">
-                <TextBlock x:Uid="Appearance_MotionTitle" Text="交互体验" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}"/>
+                    <InfoBar x:Uid="Appearance_Notice"
+                             Title="提示"
+                             Message="主题、动画和材质设置会立即生效（部分平台可能需要重启）。"
+                             IsOpen="True"
+                             IsClosable="False"
+                             Severity="Informational" />
 
-                <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="16">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <StackPanel VerticalAlignment="Center" Spacing="2">
-                            <TextBlock x:Uid="Appearance_MotionToggleTitle" Text="全局过渡动画" FontWeight="Medium"/>
-                            <TextBlock x:Uid="Appearance_MotionToggleDescription" Text="开启后，页面切换将使用平滑过渡效果"
-                                       FontSize="12"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                       TextWrapping="Wrap"/>
-                        </StackPanel>
-                        <ToggleSwitch Grid.Column="1"
-                                      IsOn="{x:Bind Preferences.IsAnimationEnabled, Mode=TwoWay}"
-                                      x:Uid="Appearance_MotionToggle"
-                                      OnContent="已开启"
-                                      OffContent="已禁用"
-                                      MinWidth="0"
-                                      VerticalAlignment="Center"/>
-                    </Grid>
-                </Border>
-            </StackPanel>
-
-            <StackPanel Spacing="12">
-                <TextBlock x:Uid="Appearance_BackdropTitle" Text="背景材质" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}"/>
-
-                <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="16">
                     <StackPanel Spacing="12">
-                        <TextBlock x:Uid="Appearance_BackdropDescription" Text="选择窗口背景效果（不同系统版本会自动降级）" FontSize="14" TextWrapping="Wrap"/>
-                        <ComboBox SelectedValue="{x:Bind Preferences.Backdrop, Mode=TwoWay}"
-                                  SelectedValuePath="Tag"
-                                  MinWidth="240">
-                            <ComboBoxItem x:Uid="Appearance_BackdropSystem" Content="自动（系统推荐）" Tag="System" />
-                            <ComboBoxItem Content="Mica" Tag="Mica" />
-                            <ComboBoxItem Content="Acrylic" Tag="Acrylic" />
-                            <ComboBoxItem x:Uid="Appearance_BackdropSolid" Content="纯色" Tag="Solid" />
-                        </ComboBox>
-                    </StackPanel>
-                </Border>
-            </StackPanel>
+                        <TextBlock x:Uid="Appearance_ThemeTitle"
+                                   Text="界面主题"
+                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
 
-            <InfoBar x:Uid="Appearance_Notice"
-                     Title="提示"
-                     Message="主题、动画和材质设置会立即生效（部分平台可能需要重启）。"
-                     IsOpen="True"
-                     IsClosable="False"
-                     Severity="Informational" />
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel VerticalAlignment="Center" Spacing="4">
+                                    <TextBlock x:Uid="Appearance_ThemeLabel"
+                                               Text="应用主题"
+                                               Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                    <TextBlock x:Uid="Appearance_ThemeDescription"
+                                               Text="选择您偏好的应用主题颜色"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                </StackPanel>
+
+                                <ComboBox Grid.Column="1"
+                                          SelectedValue="{x:Bind Preferences.Theme, Mode=TwoWay}"
+                                          SelectedValuePath="Tag"
+                                          MinWidth="240"
+                                          VerticalAlignment="Center">
+                                    <ComboBoxItem x:Uid="Appearance_ThemeSystem" Content="跟随系统" Tag="System" />
+                                    <ComboBoxItem x:Uid="Appearance_ThemeLight" Content="浅色" Tag="Light" />
+                                    <ComboBoxItem x:Uid="Appearance_ThemeDark" Content="深色" Tag="Dark" />
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel Spacing="12">
+                        <TextBlock x:Uid="Appearance_MotionTitle"
+                                   Text="交互体验"
+                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel VerticalAlignment="Center" Spacing="4">
+                                    <TextBlock x:Uid="Appearance_MotionToggleTitle"
+                                               Text="全局过渡动画"
+                                               Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                    <TextBlock x:Uid="Appearance_MotionToggleDescription"
+                                               Text="开启后，页面切换将使用平滑过渡效果"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                </StackPanel>
+
+                                <ToggleSwitch Grid.Column="1"
+                                              IsOn="{x:Bind Preferences.IsAnimationEnabled, Mode=TwoWay}"
+                                              x:Uid="Appearance_MotionToggle"
+                                              OnContent="已开启"
+                                              OffContent="已禁用"
+                                              MinWidth="0"
+                                              VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel Spacing="12">
+                        <TextBlock x:Uid="Appearance_BackdropTitle"
+                                   Text="背景材质"
+                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel VerticalAlignment="Center" Spacing="4">
+                                    <TextBlock x:Uid="Appearance_BackdropLabel"
+                                               Text="窗口背景"
+                                               Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                    <TextBlock x:Uid="Appearance_BackdropDescription"
+                                               Text="选择窗口背景效果（不同系统版本会自动降级）"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                </StackPanel>
+
+                                <ComboBox Grid.Column="1"
+                                          SelectedValue="{x:Bind Preferences.Backdrop, Mode=TwoWay}"
+                                          SelectedValuePath="Tag"
+                                          MinWidth="240"
+                                          VerticalAlignment="Center">
+                                    <ComboBoxItem x:Uid="Appearance_BackdropSystem" Content="自动（系统推荐）" Tag="System" />
+                                    <ComboBoxItem Content="Mica" Tag="Mica" />
+                                    <ComboBoxItem Content="Acrylic" Tag="Acrylic" />
+                                    <ComboBoxItem x:Uid="Appearance_BackdropSolid" Content="纯色" Tag="Solid" />
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
                 </StackPanel>
             </controls:ResponsiveSettingsHost.Child>
         </controls:ResponsiveSettingsHost>

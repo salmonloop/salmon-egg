@@ -871,6 +871,25 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void GeneralAndAppearanceSettingsPages_UseNativeSettingsRows()
+    {
+        var general = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\GeneralSettingsPage.xaml");
+        var appearance = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AppearanceSettingsPage.xaml");
+
+        Assert.Contains("x:Uid=\"General_PageTitle\"", general, StringComparison.Ordinal);
+        Assert.Contains("x:Uid=\"General_PageSummary\"", general, StringComparison.Ordinal);
+        Assert.Contains("Style=\"{StaticResource SettingsRowGridStyle}\"", general, StringComparison.Ordinal);
+        Assert.Contains("<ToggleSwitch", general, StringComparison.Ordinal);
+        Assert.Contains("<ComboBox", general, StringComparison.Ordinal);
+
+        Assert.Contains("x:Uid=\"Appearance_PageTitle\"", appearance, StringComparison.Ordinal);
+        Assert.Contains("x:Uid=\"Appearance_PageSummary\"", appearance, StringComparison.Ordinal);
+        Assert.Contains("Style=\"{StaticResource SettingsRowGridStyle}\"", appearance, StringComparison.Ordinal);
+        Assert.Contains("<ToggleSwitch", appearance, StringComparison.Ordinal);
+        Assert.Contains("<ComboBox", appearance, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SettingsShell_KeepsSectionNavigationAtTheTop()
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\SettingsShellPage.xaml");

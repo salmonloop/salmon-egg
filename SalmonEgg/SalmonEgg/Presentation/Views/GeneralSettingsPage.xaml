@@ -19,83 +19,121 @@
 
     <ScrollViewer Padding="0"
                   HorizontalScrollBarVisibility="Disabled">
-            <controls:ResponsiveSettingsHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
+        <controls:ResponsiveSettingsHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
             <controls:ResponsiveSettingsHost.Child>
-                <StackPanel Spacing="32">
-            <!-- 基础选项组 -->
-            <StackPanel Spacing="12">
-                <TextBlock x:Uid="General_StartupTitle" Text="启动与窗口" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}"/>
-
-                <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="16">
-                    <StackPanel Spacing="16">
-                        <ToggleSwitch x:Uid="General_AutoStart"
-                                      Header="开机自动启动"
-                                      IsOn="{x:Bind ViewModel.Preferences.LaunchOnStartup, Mode=TwoWay}"
-                                      IsEnabled="{x:Bind ViewModel.Preferences.IsLaunchOnStartupSupported, Mode=OneWay}"
-                                      OnContent="开启"
-                                      OffContent="关闭"/>
-                        <TextBlock x:Uid="General_AutoStartUnsupported"
-                                   Text="当前平台不支持开机自动启动"
-                                   FontSize="12"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   Visibility="{x:Bind ViewModel.Preferences.IsLaunchOnStartupSupported, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}"/>
-
-                        <MenuFlyoutSeparator Margin="-16,0" Visibility="Visible"/>
-
-                        <ToggleSwitch x:Uid="General_MinimizeToTray"
-                                      Header="最小化到系统托盘"
-                                      IsOn="{x:Bind ViewModel.Preferences.MinimizeToTray, Mode=TwoWay}"
-                                      IsEnabled="{x:Bind ViewModel.Preferences.IsMinimizeToTraySupported, Mode=OneWay}"
-                                      OnContent="开启"
-                                      OffContent="关闭"/>
-                        <TextBlock x:Uid="General_TrayUnsupported"
-                                   Text="当前平台暂未集成系统托盘支持"
-                                   FontSize="12"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   Visibility="{x:Bind ViewModel.Preferences.IsMinimizeToTraySupported, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}"/>
-                    </StackPanel>
-                </Border>
-            </StackPanel>
-
-            <!-- 语言偏好组 -->
-            <StackPanel Spacing="12">
-                <TextBlock x:Uid="General_LanguageTitle" Text="语言与地区" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}"/>
-
-                <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="16">
+                <StackPanel Spacing="28">
                     <StackPanel Spacing="8">
-                        <TextBlock x:Uid="General_LanguageLabel" Text="选择界面语言" FontWeight="Medium" Margin="0,0,0,4"/>
-                        <ComboBox ItemsSource="{x:Bind ViewModel.Preferences.LanguageOptions, Mode=OneWay}"
-                                  SelectedValue="{x:Bind ViewModel.Preferences.Language, Mode=TwoWay}"
-                                  SelectedValuePath="Tag"
-                                  Width="240"
-                                  IsEnabled="{x:Bind ViewModel.Preferences.IsLanguageOverrideSupported, Mode=OneWay}">
-                            <ComboBox.ItemTemplate>
-                                <DataTemplate x:DataType="settings:AppLanguageOptionViewModel">
-                                    <TextBlock Text="{x:Bind DisplayNameResourceKey, Mode=OneWay, Converter={StaticResource ResourceStringConverter}}" />
-                                </DataTemplate>
-                            </ComboBox.ItemTemplate>
-                        </ComboBox>
-                        <TextBlock x:Uid="General_LanguageUnsupported"
-                                   Text="当前平台不支持语言覆盖"
-                                   FontSize="12"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   Visibility="{x:Bind ViewModel.Preferences.IsLanguageOverrideSupported, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}"/>
-                        <TextBlock x:Uid="General_LanguageRestartHint"
-                                   Text="部分设置在重新启动应用后生效"
-                                   FontSize="12"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   Margin="0,4,0,0"/>
+                        <TextBlock x:Uid="General_PageTitle"
+                                   Text="常规"
+                                   Style="{StaticResource SettingsPageTitleTextStyle}"/>
+                        <TextBlock x:Uid="General_PageSummary"
+                                   Text="管理启动、窗口行为和界面语言。"
+                                   Style="{StaticResource SettingsPageSummaryTextStyle}"/>
                     </StackPanel>
-                </Border>
-            </StackPanel>
+
+                    <StackPanel Spacing="12">
+                        <TextBlock x:Uid="General_StartupTitle"
+                                   Text="启动与窗口"
+                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <StackPanel>
+                                <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel VerticalAlignment="Center" Spacing="4">
+                                        <TextBlock x:Uid="General_AutoStartTitle"
+                                                   Text="开机自动启动"
+                                                   Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                        <TextBlock x:Uid="General_AutoStartUnsupported"
+                                                   Text="当前平台不支持开机自动启动"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                   Visibility="{x:Bind ViewModel.Preferences.IsLaunchOnStartupSupported, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}"/>
+                                    </StackPanel>
+
+                                    <ToggleSwitch Grid.Column="1"
+                                                  x:Uid="General_AutoStart"
+                                                  IsOn="{x:Bind ViewModel.Preferences.LaunchOnStartup, Mode=TwoWay}"
+                                                  IsEnabled="{x:Bind ViewModel.Preferences.IsLaunchOnStartupSupported, Mode=OneWay}"
+                                                  OnContent="开启"
+                                                  OffContent="关闭"
+                                                  VerticalAlignment="Center"/>
+                                </Grid>
+
+                                <MenuFlyoutSeparator Margin="-16,0" Visibility="Visible"/>
+
+                                <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel VerticalAlignment="Center" Spacing="4">
+                                        <TextBlock x:Uid="General_MinimizeToTrayTitle"
+                                                   Text="最小化到系统托盘"
+                                                   Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                        <TextBlock x:Uid="General_TrayUnsupported"
+                                                   Text="当前平台暂未集成系统托盘支持"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                   Visibility="{x:Bind ViewModel.Preferences.IsMinimizeToTraySupported, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}"/>
+                                    </StackPanel>
+
+                                    <ToggleSwitch Grid.Column="1"
+                                                  x:Uid="General_MinimizeToTray"
+                                                  IsOn="{x:Bind ViewModel.Preferences.MinimizeToTray, Mode=TwoWay}"
+                                                  IsEnabled="{x:Bind ViewModel.Preferences.IsMinimizeToTraySupported, Mode=OneWay}"
+                                                  OnContent="开启"
+                                                  OffContent="关闭"
+                                                  VerticalAlignment="Center"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel Spacing="12">
+                        <TextBlock x:Uid="General_LanguageTitle"
+                                   Text="语言与地区"
+                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel VerticalAlignment="Center" Spacing="4">
+                                    <TextBlock x:Uid="General_LanguageLabel"
+                                               Text="选择界面语言"
+                                               Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                    <TextBlock x:Uid="General_LanguageRestartHint"
+                                               Text="部分设置在重新启动应用后生效"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                    <TextBlock x:Uid="General_LanguageUnsupported"
+                                               Text="当前平台不支持语言覆盖"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                               Visibility="{x:Bind ViewModel.Preferences.IsLanguageOverrideSupported, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}"/>
+                                </StackPanel>
+
+                                <ComboBox Grid.Column="1"
+                                          ItemsSource="{x:Bind ViewModel.Preferences.LanguageOptions, Mode=OneWay}"
+                                          SelectedValue="{x:Bind ViewModel.Preferences.Language, Mode=TwoWay}"
+                                          SelectedValuePath="Tag"
+                                          MinWidth="240"
+                                          IsEnabled="{x:Bind ViewModel.Preferences.IsLanguageOverrideSupported, Mode=OneWay}"
+                                          VerticalAlignment="Center">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="settings:AppLanguageOptionViewModel">
+                                            <TextBlock Text="{x:Bind DisplayNameResourceKey, Mode=OneWay, Converter={StaticResource ResourceStringConverter}}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
                 </StackPanel>
             </controls:ResponsiveSettingsHost.Child>
         </controls:ResponsiveSettingsHost>
