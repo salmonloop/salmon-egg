@@ -655,6 +655,7 @@ public sealed class ConversationActivationCoordinatorTests
             selectionStore,
             new ShellNavigationRuntimeStateStore(),
             new ControlledConversationSessionSwitcher(activationGate.Task),
+            Mock.Of<IDiscoverSessionsConnectionFacade>(),
             projectSelectionStore,
             new StubShellNavigationService(ShellNavigationResult.Success()));
 

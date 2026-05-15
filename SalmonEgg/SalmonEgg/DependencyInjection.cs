@@ -441,8 +441,10 @@ public static class DependencyInjection
                 sp.GetRequiredService<IShellSelectionMutationSink>(),
                 sp.GetRequiredService<IShellNavigationRuntimeState>(),
                 sp.GetRequiredService<IConversationSessionSwitcher>(),
+                sp.GetRequiredService<IDiscoverSessionsConnectionFacade>(),
                 sp.GetRequiredService<INavigationProjectSelectionStore>(),
-                sp.GetRequiredService<IShellNavigationService>()));
+                sp.GetRequiredService<IShellNavigationService>(),
+                sp.GetRequiredService<ILogger<NavigationCoordinator>>()));
         services.AddTransient<IShellStartupNavigationService>(sp =>
             new ShellStartupNavigationService(
                 sp.GetRequiredService<INavigationCoordinator>(),

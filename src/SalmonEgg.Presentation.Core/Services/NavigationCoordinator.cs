@@ -26,24 +26,6 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         IShellSelectionMutationSink selectionSink,
         IShellNavigationRuntimeState runtimeState,
         IConversationSessionSwitcher conversationSessionSwitcher,
-        INavigationProjectSelectionStore projectSelectionStore,
-        IShellNavigationService shellNavigationService,
-        ILogger<NavigationCoordinator>? logger = null)
-        : this(
-            selectionSink,
-            runtimeState,
-            conversationSessionSwitcher,
-            NoOpDiscoverSessionsConnectionFacade.Instance,
-            projectSelectionStore,
-            shellNavigationService,
-            logger)
-    {
-    }
-
-    public NavigationCoordinator(
-        IShellSelectionMutationSink selectionSink,
-        IShellNavigationRuntimeState runtimeState,
-        IConversationSessionSwitcher conversationSessionSwitcher,
         IDiscoverSessionsConnectionFacade discoverConnectionFacade,
         INavigationProjectSelectionStore projectSelectionStore,
         IShellNavigationService shellNavigationService,
@@ -622,23 +604,6 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         public const string SupersededBeforeConversationSelection = "SupersededBeforeConversationSelection";
     }
 
-    private sealed class NoOpDiscoverSessionsConnectionFacade : IDiscoverSessionsConnectionFacade
-    {
-        public static NoOpDiscoverSessionsConnectionFacade Instance { get; } = new();
-
-        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged
-        {
-            add { }
-            remove { }
-        }
-
-        public bool IsConnecting => false;
-        public bool IsInitializing => false;
-        public bool IsConnected => false;
-        public string? ConnectionErrorMessage => null;
-        public Application.Services.Chat.IChatService? CurrentChatService => null;
-        public Task ConnectToProfileAsync(Domain.Models.ServerConfiguration profile) => Task.CompletedTask;
-    }
 }
 
 public interface IActivationTokenShellNavigationService

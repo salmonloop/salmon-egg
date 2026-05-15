@@ -37,6 +37,7 @@ public sealed class ThreadingComplianceTests
             selectionStore,
             new ShellNavigationRuntimeStateStore(),
             switcher.Object,
+            Mock.Of<IDiscoverSessionsConnectionFacade>(),
             Mock.Of<INavigationProjectSelectionStore>(),
             shellNavigation.Object,
             Mock.Of<ILogger<NavigationCoordinator>>());

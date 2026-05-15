@@ -155,6 +155,20 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
+    public void DependencyInjection_NavigationCoordinator_UsesDiscoverConnectionFacade()
+    {
+        var dependencyInjection = LoadFile(@"SalmonEgg\SalmonEgg\DependencyInjection.cs");
+        var navigationCoordinator = LoadFile(@"src\SalmonEgg.Presentation.Core\Services\NavigationCoordinator.cs");
+        var section = ExtractSection(
+            dependencyInjection,
+            "services.AddSingleton<INavigationCoordinator>",
+            "services.AddTransient<IShellStartupNavigationService>");
+
+        Assert.Contains("sp.GetRequiredService<IDiscoverSessionsConnectionFacade>()", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("NoOpDiscoverSessionsConnectionFacade", navigationCoordinator, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MainPage_DoesNotBackWriteSelectionFromFrameNavigation()
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
