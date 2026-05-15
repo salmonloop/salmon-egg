@@ -735,6 +735,78 @@
   <data name="General_LanguageRestartHint.Text" xml:space="preserve">
     <value>Some settings take effect after restarting the app.</value>
   </data>
+  <data name="DataStorage_PageTitle.Text" xml:space="preserve">
+    <value>Data and storage</value>
+  </data>
+  <data name="DataStorage_PageSummary.Text" xml:space="preserve">
+    <value>Manage local history, cache retention, exports, and high-risk cleanup actions.</value>
+  </data>
+  <data name="DataStorage_PrivacyTitle.Text" xml:space="preserve">
+    <value>Privacy</value>
+  </data>
+  <data name="DataStorage_SaveLocalHistoryTitle.Text" xml:space="preserve">
+    <value>Save local history</value>
+  </data>
+  <data name="DataStorage_SaveLocalHistoryDescription.Text" xml:space="preserve">
+    <value>Allow the app to keep conversation history on this device for restore and continuation.</value>
+  </data>
+  <data name="DataStorage_SaveLocalHistorySwitch.OnContent" xml:space="preserve">
+    <value>On</value>
+  </data>
+  <data name="DataStorage_SaveLocalHistorySwitch.OffContent" xml:space="preserve">
+    <value>Off</value>
+  </data>
+  <data name="DataStorage_CacheTitle.Text" xml:space="preserve">
+    <value>Cache</value>
+  </data>
+  <data name="DataStorage_CacheRetentionLabel.Text" xml:space="preserve">
+    <value>Cache retention (days)</value>
+  </data>
+  <data name="DataStorage_CacheRetentionDescription.Text" xml:space="preserve">
+    <value>Controls the maximum number of days local cache files are retained.</value>
+  </data>
+  <data name="DataStorage_CacheActionsTitle.Text" xml:space="preserve">
+    <value>Cache maintenance</value>
+  </data>
+  <data name="DataStorage_CacheActionsDescription.Text" xml:space="preserve">
+    <value>Clear the current cache, or view the cache folder in the system file manager.</value>
+  </data>
+  <data name="DataStorage_ClearCache.Content" xml:space="preserve">
+    <value>Clear cache</value>
+  </data>
+  <data name="DataStorage_OpenCacheFolder.Content" xml:space="preserve">
+    <value>Open cache folder</value>
+  </data>
+  <data name="DataStorage_ExportTitle.Text" xml:space="preserve">
+    <value>Export</value>
+  </data>
+  <data name="DataStorage_ExportDescription.Text" xml:space="preserve">
+    <value>Export sessions (current session/messages) and diagnostics to the exports folder.</value>
+  </data>
+  <data name="DataStorage_DiagnosticsExportTitle.Text" xml:space="preserve">
+    <value>Diagnostics and exports folder</value>
+  </data>
+  <data name="DataStorage_DiagnosticsExportDescription.Text" xml:space="preserve">
+    <value>Create a diagnostics bundle, or open the local exports folder to view exported files.</value>
+  </data>
+  <data name="DataStorage_ExportMarkdown.Content" xml:space="preserve">
+    <value>Export session (Markdown)</value>
+  </data>
+  <data name="DataStorage_ExportJson.Content" xml:space="preserve">
+    <value>Export session (JSON)</value>
+  </data>
+  <data name="DataStorage_ExportDiagnostics.Content" xml:space="preserve">
+    <value>Export diagnostics (ZIP)</value>
+  </data>
+  <data name="DataStorage_OpenExports.Content" xml:space="preserve">
+    <value>Open exports folder</value>
+  </data>
+  <data name="DataStorage_ResetDefaults.Content" xml:space="preserve">
+    <value>Restore defaults</value>
+  </data>
+  <data name="DataStorage_ClearAllData.Content" xml:space="preserve">
+    <value>Clear all local data</value>
+  </data>
   <data name="DataStorage_DangerTitle.Text" xml:space="preserve">
     <value>Danger zone</value>
   </data>

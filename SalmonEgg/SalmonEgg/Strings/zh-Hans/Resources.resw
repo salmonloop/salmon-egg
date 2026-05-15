@@ -181,16 +181,25 @@
     <value>清理</value>
   </data>
 
+  <data name="DataStorage_PageTitle.Text" xml:space="preserve">
+    <value>数据与存储</value>
+  </data>
+  <data name="DataStorage_PageSummary.Text" xml:space="preserve">
+    <value>管理本地历史、缓存保留、导出和高风险清理操作。</value>
+  </data>
   <data name="DataStorage_PrivacyTitle.Text" xml:space="preserve">
     <value>隐私</value>
   </data>
-  <data name="DataStorage_SaveLocalHistory.Header" xml:space="preserve">
+  <data name="DataStorage_SaveLocalHistoryTitle.Text" xml:space="preserve">
     <value>保存本地历史</value>
   </data>
-  <data name="DataStorage_SaveLocalHistory.OnContent" xml:space="preserve">
+  <data name="DataStorage_SaveLocalHistoryDescription.Text" xml:space="preserve">
+    <value>允许应用在本机保留会话历史，用于恢复和继续工作。</value>
+  </data>
+  <data name="DataStorage_SaveLocalHistorySwitch.OnContent" xml:space="preserve">
     <value>开启</value>
   </data>
-  <data name="DataStorage_SaveLocalHistory.OffContent" xml:space="preserve">
+  <data name="DataStorage_SaveLocalHistorySwitch.OffContent" xml:space="preserve">
     <value>关闭</value>
   </data>
   <data name="DataStorage_CacheTitle.Text" xml:space="preserve">
@@ -198,6 +207,15 @@
   </data>
   <data name="DataStorage_CacheRetentionLabel.Text" xml:space="preserve">
     <value>缓存保留天数</value>
+  </data>
+  <data name="DataStorage_CacheRetentionDescription.Text" xml:space="preserve">
+    <value>控制本地缓存自动保留的最长天数。</value>
+  </data>
+  <data name="DataStorage_CacheActionsTitle.Text" xml:space="preserve">
+    <value>缓存维护</value>
+  </data>
+  <data name="DataStorage_CacheActionsDescription.Text" xml:space="preserve">
+    <value>清理当前缓存，或在系统文件管理器中查看缓存目录。</value>
   </data>
   <data name="DataStorage_ClearCache.Content" xml:space="preserve">
     <value>清理缓存</value>
@@ -210,6 +228,12 @@
   </data>
   <data name="DataStorage_ExportDescription.Text" xml:space="preserve">
     <value>导出会话（当前会话/当前消息列表）与诊断包到 exports 目录</value>
+  </data>
+  <data name="DataStorage_DiagnosticsExportTitle.Text" xml:space="preserve">
+    <value>诊断与导出目录</value>
+  </data>
+  <data name="DataStorage_DiagnosticsExportDescription.Text" xml:space="preserve">
+    <value>创建诊断包，或打开本地 exports 目录查看已导出的文件。</value>
   </data>
   <data name="DataStorage_ExportMarkdown.Content" xml:space="preserve">
     <value>导出会话（Markdown）</value>

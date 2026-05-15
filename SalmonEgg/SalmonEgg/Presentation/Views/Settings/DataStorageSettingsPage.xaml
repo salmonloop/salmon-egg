@@ -17,125 +17,245 @@
 
     <ScrollViewer Padding="0"
                   HorizontalScrollBarVisibility="Disabled">
-            <controls:ResponsiveSettingsHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
+        <controls:ResponsiveSettingsHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
             <controls:ResponsiveSettingsHost.Child>
                 <StackPanel Spacing="28">
-            <StackPanel Spacing="12">
-                <TextBlock x:Uid="DataStorage_PrivacyTitle" Text="隐私" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}"/>
-                <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="16">
-                    <StackPanel Spacing="12">
-                        <ToggleSwitch x:Uid="DataStorage_SaveLocalHistory"
-                                      Header="保存本地历史"
-                                      IsOn="{x:Bind ViewModel.Preferences.SaveLocalHistory, Mode=TwoWay}"
-                                      OnContent="开启"
-                                      OffContent="关闭" />
+                    <StackPanel Spacing="8">
+                        <TextBlock x:Uid="DataStorage_PageTitle"
+                                   Text="数据与存储"
+                                   Style="{StaticResource SettingsPageTitleTextStyle}"/>
+                        <TextBlock x:Uid="DataStorage_PageSummary"
+                                   Text="管理本地历史、缓存保留、导出和高风险清理操作。"
+                                   Style="{StaticResource SettingsPageSummaryTextStyle}"/>
                     </StackPanel>
-                </Border>
-            </StackPanel>
 
-            <StackPanel Spacing="12">
-                <TextBlock x:Uid="DataStorage_CacheTitle" Text="缓存" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}"/>
-                <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="16">
                     <StackPanel Spacing="12">
-                        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                            <TextBlock x:Uid="DataStorage_CacheRetentionLabel" Text="缓存保留天数" VerticalAlignment="Center" />
-                            <NumberBox Value="{x:Bind ViewModel.Preferences.CacheRetentionDays, Mode=TwoWay}"
-                                       Minimum="1"
-                                       Maximum="60"
-                                       SmallChange="1"
-                                       SpinButtonPlacementMode="Inline"
-                                       Width="140" />
-                        </StackPanel>
+                        <TextBlock x:Uid="DataStorage_PrivacyTitle"
+                                   Text="隐私"
+                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
 
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button x:Uid="DataStorage_ClearCache"
-                                    Content="清理缓存"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Click="OnClearCacheClick" />
-                            <Button x:Uid="DataStorage_OpenCacheFolder"
-                                    Content="打开缓存目录"
-                                    Command="{x:Bind ViewModel.OpenCacheFolderCommand}"
-                                    IsEnabled="{x:Bind ViewModel.CanOpenExternalFiles, Mode=OneWay}" />
-                        </StackPanel>
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel VerticalAlignment="Center" Spacing="4">
+                                    <TextBlock x:Uid="DataStorage_SaveLocalHistoryTitle"
+                                               Text="保存本地历史"
+                                               Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                    <TextBlock x:Uid="DataStorage_SaveLocalHistoryDescription"
+                                               Text="允许应用在本机保留会话历史，用于恢复和继续工作。"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                </StackPanel>
+
+                                <ToggleSwitch Grid.Column="1"
+                                              x:Uid="DataStorage_SaveLocalHistorySwitch"
+                                              IsOn="{x:Bind ViewModel.Preferences.SaveLocalHistory, Mode=TwoWay}"
+                                              OnContent="开启"
+                                              OffContent="关闭"
+                                              VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
                     </StackPanel>
-                </Border>
-            </StackPanel>
 
-            <StackPanel Spacing="12">
-                <TextBlock x:Uid="DataStorage_ExportTitle" Text="导出" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}"/>
-                <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="16">
                     <StackPanel Spacing="12">
-                        <TextBlock x:Uid="DataStorage_ExportDescription" Text="导出会话（当前会话/当前消息列表）与诊断包到 exports 目录" Opacity="0.7" TextWrapping="Wrap"/>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button x:Uid="DataStorage_ExportMarkdown"
-                                    Content="导出会话（Markdown）"
-                                    Command="{x:Bind ViewModel.ExportCurrentSessionMarkdownCommand}"
-                                    IsEnabled="{x:Bind ViewModel.CanExportLocalFiles, Mode=OneWay}" />
-                            <Button x:Uid="DataStorage_ExportJson"
-                                    Content="导出会话（JSON）"
-                                    Command="{x:Bind ViewModel.ExportCurrentSessionJsonCommand}"
-                                    IsEnabled="{x:Bind ViewModel.CanExportLocalFiles, Mode=OneWay}" />
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button x:Uid="DataStorage_ExportDiagnostics"
-                                    Content="导出诊断包（ZIP）"
-                                    Command="{x:Bind ViewModel.CreateDiagnosticsBundleCommand}"
-                                    IsEnabled="{x:Bind ViewModel.CanExportLocalFiles, Mode=OneWay}" />
-                            <Button x:Uid="DataStorage_OpenExports"
-                                    Content="打开导出目录"
-                                    Command="{x:Bind ViewModel.OpenExportsFolderCommand}"
-                                    IsEnabled="{x:Bind ViewModel.CanOpenExternalFiles, Mode=OneWay}" />
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-            </StackPanel>
+                        <TextBlock x:Uid="DataStorage_CacheTitle"
+                                   Text="缓存"
+                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
 
-            <StackPanel Spacing="12">
-                <TextBlock x:Uid="DataStorage_DangerTitle" Text="危险操作" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
-                <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="16">
-                    <StackPanel Spacing="12">
-                        <TextBlock x:Uid="DataStorage_DangerWarning" Text="以下操作会影响偏好设置或删除本地文件，请确认当前会话已保存。"
-                                   FontSize="12"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   TextWrapping="Wrap" />
-                        <StackPanel Spacing="4">
-                            <Button x:Uid="DataStorage_ResetDefaults"
-                                    Content="恢复默认设置"
-                                    Click="OnResetPreferencesClick" />
-                            <TextBlock x:Uid="DataStorage_ResetDefaultsHint" Text="仅恢复常规、外观、数据与存储、快捷键等偏好，不删除日志或会话导出。"
-                                       FontSize="12"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                       TextWrapping="Wrap" />
-                        </StackPanel>
-                        <StackPanel Spacing="4">
-                            <Button x:Uid="DataStorage_ClearAllData"
-                                    Content="清空所有本地数据"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Click="OnClearAllLocalDataClick" />
-                            <TextBlock x:Uid="DataStorage_ClearAllDataHint" Text="删除配置、日志、缓存、导出等文件。此操作不可撤销。"
-                                       FontSize="12"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                       TextWrapping="Wrap" />
-                        </StackPanel>
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <StackPanel>
+                                <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel VerticalAlignment="Center" Spacing="4">
+                                        <TextBlock x:Uid="DataStorage_CacheRetentionLabel"
+                                                   Text="缓存保留天数"
+                                                   Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                        <TextBlock x:Uid="DataStorage_CacheRetentionDescription"
+                                                   Text="控制本地缓存自动保留的最长天数。"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                    </StackPanel>
+
+                                    <NumberBox Grid.Column="1"
+                                               Value="{x:Bind ViewModel.Preferences.CacheRetentionDays, Mode=TwoWay}"
+                                               Minimum="1"
+                                               Maximum="60"
+                                               SmallChange="1"
+                                               SpinButtonPlacementMode="Inline"
+                                               Width="140"
+                                               VerticalAlignment="Center"/>
+                                </Grid>
+
+                                <MenuFlyoutSeparator Margin="16,0" Visibility="Visible"/>
+
+                                <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel VerticalAlignment="Center" Spacing="4">
+                                        <TextBlock x:Uid="DataStorage_CacheActionsTitle"
+                                                   Text="缓存维护"
+                                                   Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                        <TextBlock x:Uid="DataStorage_CacheActionsDescription"
+                                                   Text="清理当前缓存，或在系统文件管理器中查看缓存目录。"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="1"
+                                                Orientation="Horizontal"
+                                                Spacing="8"
+                                                VerticalAlignment="Center">
+                                        <Button x:Uid="DataStorage_ClearCache"
+                                                Content="清理缓存"
+                                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                Click="OnClearCacheClick"/>
+                                        <Button x:Uid="DataStorage_OpenCacheFolder"
+                                                Content="打开缓存目录"
+                                                Command="{x:Bind ViewModel.OpenCacheFolderCommand}"
+                                                IsEnabled="{x:Bind ViewModel.CanOpenExternalFiles, Mode=OneWay}"/>
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
-                </Border>
-            </StackPanel>
+
+                    <StackPanel Spacing="12">
+                        <TextBlock x:Uid="DataStorage_ExportTitle"
+                                   Text="导出"
+                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <StackPanel>
+                                <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel VerticalAlignment="Center" Spacing="4">
+                                        <TextBlock x:Uid="DataStorage_ExportDescription"
+                                                   Text="导出会话（当前会话/当前消息列表）与诊断包到 exports 目录"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="1"
+                                                Orientation="Horizontal"
+                                                Spacing="8"
+                                                VerticalAlignment="Center">
+                                        <Button x:Uid="DataStorage_ExportMarkdown"
+                                                Content="导出会话（Markdown）"
+                                                Command="{x:Bind ViewModel.ExportCurrentSessionMarkdownCommand}"
+                                                IsEnabled="{x:Bind ViewModel.CanExportLocalFiles, Mode=OneWay}"/>
+                                        <Button x:Uid="DataStorage_ExportJson"
+                                                Content="导出会话（JSON）"
+                                                Command="{x:Bind ViewModel.ExportCurrentSessionJsonCommand}"
+                                                IsEnabled="{x:Bind ViewModel.CanExportLocalFiles, Mode=OneWay}"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <MenuFlyoutSeparator Margin="16,0" Visibility="Visible"/>
+
+                                <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel VerticalAlignment="Center" Spacing="4">
+                                        <TextBlock x:Uid="DataStorage_DiagnosticsExportTitle"
+                                                   Text="诊断与导出目录"
+                                                   Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                        <TextBlock x:Uid="DataStorage_DiagnosticsExportDescription"
+                                                   Text="创建诊断包，或打开本地 exports 目录查看已导出的文件。"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="1"
+                                                Orientation="Horizontal"
+                                                Spacing="8"
+                                                VerticalAlignment="Center">
+                                        <Button x:Uid="DataStorage_ExportDiagnostics"
+                                                Content="导出诊断包（ZIP）"
+                                                Command="{x:Bind ViewModel.CreateDiagnosticsBundleCommand}"
+                                                IsEnabled="{x:Bind ViewModel.CanExportLocalFiles, Mode=OneWay}"/>
+                                        <Button x:Uid="DataStorage_OpenExports"
+                                                Content="打开导出目录"
+                                                Command="{x:Bind ViewModel.OpenExportsFolderCommand}"
+                                                IsEnabled="{x:Bind ViewModel.CanOpenExternalFiles, Mode=OneWay}"/>
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <Expander IsExpanded="False">
+                        <Expander.Header>
+                            <TextBlock x:Uid="DataStorage_DangerTitle"
+                                       Text="危险操作"
+                                       Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                       Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+                        </Expander.Header>
+
+                        <StackPanel>
+                            <TextBlock x:Uid="DataStorage_DangerWarning"
+                                       Text="以下操作会影响偏好设置或删除本地文件，请确认当前会话已保存。"
+                                       Margin="16,4,16,8"
+                                       Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+
+                            <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                                <StackPanel>
+                                    <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel VerticalAlignment="Center" Spacing="4">
+                                            <TextBlock x:Uid="DataStorage_ResetDefaultsHint"
+                                                       Text="仅恢复常规、外观、数据与存储、快捷键等偏好，不删除日志或会话导出。"
+                                                       Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                        </StackPanel>
+
+                                        <Button Grid.Column="1"
+                                                x:Uid="DataStorage_ResetDefaults"
+                                                Content="恢复默认设置"
+                                                Click="OnResetPreferencesClick"
+                                                VerticalAlignment="Center"/>
+                                    </Grid>
+
+                                    <MenuFlyoutSeparator Margin="16,0" Visibility="Visible"/>
+
+                                    <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel VerticalAlignment="Center" Spacing="4">
+                                            <TextBlock x:Uid="DataStorage_ClearAllDataHint"
+                                                       Text="删除配置、日志、缓存、导出等文件。此操作不可撤销。"
+                                                       Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                        </StackPanel>
+
+                                        <Button Grid.Column="1"
+                                                x:Uid="DataStorage_ClearAllData"
+                                                Content="清空所有本地数据"
+                                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                Click="OnClearAllLocalDataClick"
+                                                VerticalAlignment="Center"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Expander>
                 </StackPanel>
             </controls:ResponsiveSettingsHost.Child>
         </controls:ResponsiveSettingsHost>

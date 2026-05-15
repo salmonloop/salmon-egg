@@ -962,10 +962,13 @@ public sealed class XamlComplianceTests
     public void DataStorageSettingsPage_SeparatesRoutineStorageAndDangerActions()
     {
         var document = XDocument.Parse(LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DataStorageSettingsPage.xaml"));
+        var xaml = document.ToString(SaveOptions.DisableFormatting);
         var resetDefaults = FindElementByUid(document, "DataStorage_ResetDefaults");
         var clearAllData = FindElementByUid(document, "DataStorage_ClearAllData");
-        var xaml = document.ToString(SaveOptions.DisableFormatting);
 
+        Assert.Contains("x:Uid=\"DataStorage_PageTitle\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Uid=\"DataStorage_PageSummary\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("<Expander", xaml, StringComparison.Ordinal);
         Assert.Contains("DataStorage_DangerTitle", xaml, StringComparison.Ordinal);
         Assert.Contains("DataStorage_DangerWarning", xaml, StringComparison.Ordinal);
         Assert.NotSame(resetDefaults.Parent, clearAllData.Parent);
