@@ -963,6 +963,8 @@ public sealed class XamlComplianceTests
     {
         var document = XDocument.Parse(LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DataStorageSettingsPage.xaml"));
         var xaml = document.ToString(SaveOptions.DisableFormatting);
+        var resetDefaultsTitle = FindElementByUid(document, "DataStorage_ResetDefaultsTitle");
+        var clearAllDataTitle = FindElementByUid(document, "DataStorage_ClearAllDataTitle");
         var resetDefaults = FindElementByUid(document, "DataStorage_ResetDefaults");
         var clearAllData = FindElementByUid(document, "DataStorage_ClearAllData");
 
@@ -971,7 +973,25 @@ public sealed class XamlComplianceTests
         Assert.Contains("<Expander", xaml, StringComparison.Ordinal);
         Assert.Contains("DataStorage_DangerTitle", xaml, StringComparison.Ordinal);
         Assert.Contains("DataStorage_DangerWarning", xaml, StringComparison.Ordinal);
+        Assert.Equal("{StaticResource SettingsRowTitleTextStyle}", GetAttributeByLocalName(resetDefaultsTitle, "Style"));
+        Assert.Equal("{StaticResource SettingsRowTitleTextStyle}", GetAttributeByLocalName(clearAllDataTitle, "Style"));
         Assert.NotSame(resetDefaults.Parent, clearAllData.Parent);
+
+        string[] resourceFiles =
+        [
+            @"SalmonEgg\SalmonEgg\Strings\zh-Hans\Resources.resw",
+            @"SalmonEgg\SalmonEgg\Strings\en\Resources.resw",
+            @"SalmonEgg\SalmonEgg\Strings\en-US\Resources.resw"
+        ];
+        foreach (var resourceFile in resourceFiles)
+        {
+            var resources = LoadText(resourceFile);
+
+            Assert.Contains("DataStorage_ResetDefaultsTitle.Text", resources, StringComparison.Ordinal);
+            Assert.Contains("DataStorage_ClearAllDataTitle.Text", resources, StringComparison.Ordinal);
+            Assert.DoesNotContain("DataStorage_ResetTitle.Text", resources, StringComparison.Ordinal);
+            Assert.DoesNotContain("DataStorage_ResetWarning.Text", resources, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

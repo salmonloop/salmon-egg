@@ -813,8 +813,14 @@
   <data name="DataStorage_DangerWarning.Text" xml:space="preserve">
     <value>These actions affect preferences or delete local files. Make sure the current session is saved.</value>
   </data>
+  <data name="DataStorage_ResetDefaultsTitle.Text" xml:space="preserve">
+    <value>Restore defaults</value>
+  </data>
   <data name="DataStorage_ResetDefaultsHint.Text" xml:space="preserve">
     <value>Restores General, Appearance, Data &amp; Storage, and Shortcuts preferences without deleting logs or exports.</value>
+  </data>
+  <data name="DataStorage_ClearAllDataTitle.Text" xml:space="preserve">
+    <value>Clear all local data</value>
   </data>
   <data name="DataStorage_ClearAllDataHint.Text" xml:space="preserve">
     <value>Deletes configuration, logs, caches, exports, and other local files. This cannot be undone.</value>

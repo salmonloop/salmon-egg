@@ -219,6 +219,9 @@
                                         </Grid.ColumnDefinitions>
 
                                         <StackPanel VerticalAlignment="Center" Spacing="4">
+                                            <TextBlock x:Uid="DataStorage_ResetDefaultsTitle"
+                                                       Text="恢复默认设置"
+                                                       Style="{StaticResource SettingsRowTitleTextStyle}"/>
                                             <TextBlock x:Uid="DataStorage_ResetDefaultsHint"
                                                        Text="仅恢复常规、外观、数据与存储、快捷键等偏好，不删除日志或会话导出。"
                                                        Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
@@ -240,6 +243,9 @@
                                         </Grid.ColumnDefinitions>
 
                                         <StackPanel VerticalAlignment="Center" Spacing="4">
+                                            <TextBlock x:Uid="DataStorage_ClearAllDataTitle"
+                                                       Text="清空所有本地数据"
+                                                       Style="{StaticResource SettingsRowTitleTextStyle}"/>
                                             <TextBlock x:Uid="DataStorage_ClearAllDataHint"
                                                        Text="删除配置、日志、缓存、导出等文件。此操作不可撤销。"
                                                        Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
