@@ -95,10 +95,10 @@
                                 <MenuFlyoutSeparator Margin="16,0" Visibility="Visible"/>
 
                                 <Grid Style="{StaticResource SettingsRowGridStyle}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
 
                                     <StackPanel VerticalAlignment="Center" Spacing="4">
                                         <TextBlock x:Uid="DataStorage_CacheActionsTitle"
@@ -109,18 +109,20 @@
                                                    Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                     </StackPanel>
 
-                                    <StackPanel Grid.Column="1"
-                                                Orientation="Horizontal"
+                                    <StackPanel Grid.Row="1"
                                                 Spacing="8"
-                                                VerticalAlignment="Center">
+                                                Margin="0,12,0,0"
+                                                HorizontalAlignment="Stretch">
                                         <Button x:Uid="DataStorage_ClearCache"
                                                 Content="清理缓存"
                                                 Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                                Click="OnClearCacheClick"/>
+                                                Click="OnClearCacheClick"
+                                                HorizontalAlignment="Stretch"/>
                                         <Button x:Uid="DataStorage_OpenCacheFolder"
                                                 Content="打开缓存目录"
                                                 Command="{x:Bind ViewModel.OpenCacheFolderCommand}"
-                                                IsEnabled="{x:Bind ViewModel.CanOpenExternalFiles, Mode=OneWay}"/>
+                                                IsEnabled="{x:Bind ViewModel.CanOpenExternalFiles, Mode=OneWay}"
+                                                HorizontalAlignment="Stretch"/>
                                     </StackPanel>
                                 </Grid>
                             </StackPanel>
@@ -135,10 +137,10 @@
                         <Border Style="{StaticResource SettingsSectionContainerStyle}">
                             <StackPanel>
                                 <Grid Style="{StaticResource SettingsRowGridStyle}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
 
                                     <StackPanel VerticalAlignment="Center" Spacing="4">
                                         <TextBlock x:Uid="DataStorage_ExportDescription"
@@ -146,28 +148,30 @@
                                                    Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                     </StackPanel>
 
-                                    <StackPanel Grid.Column="1"
-                                                Orientation="Horizontal"
+                                    <StackPanel Grid.Row="1"
                                                 Spacing="8"
-                                                VerticalAlignment="Center">
+                                                Margin="0,12,0,0"
+                                                HorizontalAlignment="Stretch">
                                         <Button x:Uid="DataStorage_ExportMarkdown"
                                                 Content="导出会话（Markdown）"
                                                 Command="{x:Bind ViewModel.ExportCurrentSessionMarkdownCommand}"
-                                                IsEnabled="{x:Bind ViewModel.CanExportLocalFiles, Mode=OneWay}"/>
+                                                IsEnabled="{x:Bind ViewModel.CanExportLocalFiles, Mode=OneWay}"
+                                                HorizontalAlignment="Stretch"/>
                                         <Button x:Uid="DataStorage_ExportJson"
                                                 Content="导出会话（JSON）"
                                                 Command="{x:Bind ViewModel.ExportCurrentSessionJsonCommand}"
-                                                IsEnabled="{x:Bind ViewModel.CanExportLocalFiles, Mode=OneWay}"/>
+                                                IsEnabled="{x:Bind ViewModel.CanExportLocalFiles, Mode=OneWay}"
+                                                HorizontalAlignment="Stretch"/>
                                     </StackPanel>
                                 </Grid>
 
                                 <MenuFlyoutSeparator Margin="16,0" Visibility="Visible"/>
 
                                 <Grid Style="{StaticResource SettingsRowGridStyle}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
 
                                     <StackPanel VerticalAlignment="Center" Spacing="4">
                                         <TextBlock x:Uid="DataStorage_DiagnosticsExportTitle"
@@ -178,18 +182,20 @@
                                                    Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                     </StackPanel>
 
-                                    <StackPanel Grid.Column="1"
-                                                Orientation="Horizontal"
+                                    <StackPanel Grid.Row="1"
                                                 Spacing="8"
-                                                VerticalAlignment="Center">
+                                                Margin="0,12,0,0"
+                                                HorizontalAlignment="Stretch">
                                         <Button x:Uid="DataStorage_ExportDiagnostics"
                                                 Content="导出诊断包（ZIP）"
                                                 Command="{x:Bind ViewModel.CreateDiagnosticsBundleCommand}"
-                                                IsEnabled="{x:Bind ViewModel.CanExportLocalFiles, Mode=OneWay}"/>
+                                                IsEnabled="{x:Bind ViewModel.CanExportLocalFiles, Mode=OneWay}"
+                                                HorizontalAlignment="Stretch"/>
                                         <Button x:Uid="DataStorage_OpenExports"
                                                 Content="打开导出目录"
                                                 Command="{x:Bind ViewModel.OpenExportsFolderCommand}"
-                                                IsEnabled="{x:Bind ViewModel.CanOpenExternalFiles, Mode=OneWay}"/>
+                                                IsEnabled="{x:Bind ViewModel.CanOpenExternalFiles, Mode=OneWay}"
+                                                HorizontalAlignment="Stretch"/>
                                     </StackPanel>
                                 </Grid>
                             </StackPanel>

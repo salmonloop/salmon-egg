@@ -967,6 +967,14 @@ public sealed class XamlComplianceTests
         var clearAllDataTitle = FindElementByUid(document, "DataStorage_ClearAllDataTitle");
         var resetDefaults = FindElementByUid(document, "DataStorage_ResetDefaults");
         var clearAllData = FindElementByUid(document, "DataStorage_ClearAllData");
+        var dangerTitle = FindElementByUid(document, "DataStorage_DangerTitle");
+        var dangerExpander = Assert.Single(dangerTitle.Ancestors().Where(element => element.Name.LocalName == "Expander"));
+        var resetDefaultsRow = Assert.Single(resetDefaults.Ancestors()
+            .Where(element => element.Name.LocalName == "Grid"
+                && string.Equals(GetAttributeByLocalName(element, "Style"), "{StaticResource SettingsRowGridStyle}", StringComparison.Ordinal)));
+        var clearAllDataRow = Assert.Single(clearAllData.Ancestors()
+            .Where(element => element.Name.LocalName == "Grid"
+                && string.Equals(GetAttributeByLocalName(element, "Style"), "{StaticResource SettingsRowGridStyle}", StringComparison.Ordinal)));
 
         Assert.Contains("x:Uid=\"DataStorage_PageTitle\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Uid=\"DataStorage_PageSummary\"", xaml, StringComparison.Ordinal);
@@ -976,6 +984,9 @@ public sealed class XamlComplianceTests
         Assert.Equal("{StaticResource SettingsRowTitleTextStyle}", GetAttributeByLocalName(resetDefaultsTitle, "Style"));
         Assert.Equal("{StaticResource SettingsRowTitleTextStyle}", GetAttributeByLocalName(clearAllDataTitle, "Style"));
         Assert.NotSame(resetDefaults.Parent, clearAllData.Parent);
+        Assert.NotSame(resetDefaultsRow, clearAllDataRow);
+        Assert.Contains(resetDefaultsRow, dangerExpander.Descendants());
+        Assert.Contains(clearAllDataRow, dangerExpander.Descendants());
 
         string[] resourceFiles =
         [
