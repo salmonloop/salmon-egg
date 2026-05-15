@@ -894,6 +894,21 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void ShortcutsSettingsPage_RestoreAllRowKeepsDescriptionBesideAction()
+    {
+        var document = XDocument.Parse(LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\ShortcutsSettingsPage.xaml"));
+        var restoreAllDescription = FindElementByUid(document, "Shortcuts_RestoreAllDescription");
+        var restoreAllButton = FindElementByUid(document, "Shortcuts_RestoreAll");
+        var restoreAllRow = Assert.Single(restoreAllButton.Ancestors()
+            .Where(element => element.Name.LocalName == "Grid"
+                && string.Equals(GetAttributeByLocalName(element, "Style"), "{StaticResource SettingsRowGridStyle}", StringComparison.Ordinal)));
+
+        Assert.Equal("{StaticResource SettingsRowDescriptionTextStyle}", GetAttributeByLocalName(restoreAllDescription, "Style"));
+        Assert.Contains(restoreAllDescription, restoreAllRow.Descendants());
+        Assert.Contains(restoreAllButton, restoreAllRow.Descendants());
+    }
+
+    [Fact]
     public void GeneralAndAppearanceSettingsPages_HaveLocalizedVisibleTextResources()
     {
         string[] resourceFiles =

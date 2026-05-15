@@ -93,10 +93,21 @@
                                 <MenuFlyoutSeparator Margin="16,0" Visibility="Visible"/>
 
                                 <Grid Style="{StaticResource SettingsRowGridStyle}">
-                                    <Button x:Uid="Shortcuts_RestoreAll"
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock x:Uid="Shortcuts_RestoreAllDescription"
+                                               Text="将所有快捷键恢复为默认设置。"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                               VerticalAlignment="Center"/>
+
+                                    <Button Grid.Column="1"
+                                            x:Uid="Shortcuts_RestoreAll"
                                             Content="全部恢复默认"
                                             Command="{x:Bind ViewModel.RestoreDefaultsCommand}"
-                                            HorizontalAlignment="Stretch"/>
+                                            VerticalAlignment="Center"/>
                                 </Grid>
                             </StackPanel>
                         </Border>

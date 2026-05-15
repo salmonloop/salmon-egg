@@ -840,6 +840,9 @@
   <data name="Shortcuts_PageSummary.Text" xml:space="preserve">
     <value>Customize shortcuts available while the SalmonEgg foreground window is active.</value>
   </data>
+  <data name="Shortcuts_RestoreAllDescription.Text" xml:space="preserve">
+    <value>Restore every shortcut to its default setting.</value>
+  </data>
   <data name="About_PageTitle.Text" xml:space="preserve">
     <value>About</value>
   </data>

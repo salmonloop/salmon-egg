@@ -384,6 +384,9 @@
   <data name="Shortcuts_RestoreSingle.Content" xml:space="preserve">
     <value>恢复</value>
   </data>
+  <data name="Shortcuts_RestoreAllDescription.Text" xml:space="preserve">
+    <value>将所有快捷键恢复为默认设置。</value>
+  </data>
   <data name="Shortcuts_RestoreAll.Content" xml:space="preserve">
     <value>全部恢复默认</value>
   </data>
