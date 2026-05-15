@@ -519,6 +519,15 @@
   <data name="DiscoverSessionsImportButton.Content" xml:space="preserve">
     <value>Import session</value>
   </data>
+  <data name="Acp_PageTitle.Text" xml:space="preserve">
+    <value>ACP Agent</value>
+  </data>
+  <data name="Acp_PageSummary.Text" xml:space="preserve">
+    <value>Manage ACP connection profiles, path mappings, and session loading policy.</value>
+  </data>
+  <data name="Acp_AdvancedExpander.Header" xml:space="preserve">
+    <value>Advanced loading policy</value>
+  </data>
   <data name="Acp_HydrationCompletionTitle.Text" xml:space="preserve">
     <value>Session Load Completion Policy</value>
   </data>

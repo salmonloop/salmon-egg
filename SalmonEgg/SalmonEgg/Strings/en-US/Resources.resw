@@ -576,6 +576,15 @@
   <data name="Acp_EndpointLabel.Text" xml:space="preserve">
     <value>Endpoint</value>
   </data>
+  <data name="Acp_PageTitle.Text" xml:space="preserve">
+    <value>ACP Agent</value>
+  </data>
+  <data name="Acp_PageSummary.Text" xml:space="preserve">
+    <value>Manage ACP connection profiles, path mappings, and session loading policy.</value>
+  </data>
+  <data name="Acp_AdvancedExpander.Header" xml:space="preserve">
+    <value>Advanced loading policy</value>
+  </data>
   <data name="Acp_IntegrationTitle.Text" xml:space="preserve">
     <value>SalmonEgg integration settings</value>
   </data>

@@ -5,6 +5,30 @@ namespace SalmonEgg.Presentation.Core.Tests.Settings;
 public sealed class AcpConnectionSettingsXamlTests
 {
     [Fact]
+    public void AcpConnectionSettingsPage_ExposesPageTitleSummaryAndAdvancedHydrationDisclosure()
+    {
+        var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AcpConnectionSettingsPage.xaml");
+
+        Assert.Contains("x:Uid=\"Acp_PageTitle\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Uid=\"Acp_PageSummary\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Style=\"{StaticResource SettingsPageTitleTextStyle}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Style=\"{StaticResource SettingsPageSummaryTextStyle}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("<Expander", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Uid=\"Acp_AdvancedExpander\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AcpConnectionSettingsPage_ProfileCommandsStayInSectionHeader()
+    {
+        var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AcpConnectionSettingsPage.xaml");
+
+        Assert.Contains("x:Uid=\"Acp_ProfilesTitle\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind ViewModel.Profiles.RefreshCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"OnAddProfileClick\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ItemsSource=\"{x:Bind ViewModel.Profiles.ProfileItems, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AcpConnectionSettingsPage_PathMappingsEditor_UsesViewModelDrivenBindings()
     {
         // Arrange
