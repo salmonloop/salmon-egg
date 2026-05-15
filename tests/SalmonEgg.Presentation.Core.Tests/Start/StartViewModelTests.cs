@@ -230,6 +230,139 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
+    public async Task StartProjectSelection_WhenStartWasPreparedForUnclassifiedBeforeViewConstruction_DoesNotFallbackToRecentProject()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            preferences.Projects.Add(new ProjectDefinition { ProjectId = "project-a", Name = "Alpha", RootPath = @"C:\Repo\Alpha" });
+
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            var navigationCoordinator = new Mock<INavigationCoordinator>();
+            navigationCoordinator.Setup(x => x.ActivateStartAsync(null)).ReturnsAsync(true);
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences, navigationCoordinator.Object);
+            await nav.PrepareStartForProjectAsync(NavigationProjectIds.Unclassified);
+            var conversationCatalog = new FakeConversationCatalogReadModel(
+                new[]
+                {
+                    new ConversationCatalogItem(
+                        "conv-1",
+                        "Recent",
+                        @"C:\Repo\Alpha",
+                        DateTime.UtcNow.AddDays(-1),
+                        DateTime.UtcNow,
+                        DateTime.UtcNow,
+                        ProjectAffinityOverrideProjectId: "project-a")
+                });
+
+            var startViewModel = CreateStartViewModel(
+                chat.ViewModel,
+                preferences,
+                nav,
+                workflow.Object,
+                conversationCatalog: conversationCatalog);
+
+            Assert.Equal(NavigationProjectIds.Unclassified, startViewModel.SelectedStartProjectId);
+            navigationCoordinator.Verify(x => x.ActivateStartAsync(null), Times.Once);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task StartProjectSelection_WhenExistingStartViewReceivesProjectIntent_NotifiesSelectorRefresh()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            preferences.Projects.Add(new ProjectDefinition { ProjectId = "project-a", Name = "Alpha", RootPath = @"C:\Repo\Alpha" });
+
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            var navigationCoordinator = new Mock<INavigationCoordinator>();
+            navigationCoordinator.Setup(x => x.ActivateStartAsync("project-a")).ReturnsAsync(true);
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences, navigationCoordinator.Object);
+            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+            var observedSelectionRefresh = false;
+            startViewModel.PropertyChanged += (_, e) =>
+            {
+                if (string.Equals(e.PropertyName, nameof(StartViewModel.SelectedStartProjectId), StringComparison.Ordinal))
+                {
+                    observedSelectionRefresh = true;
+                }
+            };
+
+            Assert.Equal(NavigationProjectIds.Unclassified, startViewModel.SelectedStartProjectId);
+
+            await nav.PrepareStartForProjectAsync("project-a");
+
+            Assert.True(observedSelectionRefresh);
+            Assert.Equal("project-a", startViewModel.SelectedStartProjectId);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task StartProjectSelection_WhenExistingStartViewReceivesUnclassifiedIntent_DoesNotFallbackToRecentProject()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            preferences.Projects.Add(new ProjectDefinition { ProjectId = "project-a", Name = "Alpha", RootPath = @"C:\Repo\Alpha" });
+
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            var navigationCoordinator = new Mock<INavigationCoordinator>();
+            navigationCoordinator.Setup(x => x.ActivateStartAsync(null)).ReturnsAsync(true);
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences, navigationCoordinator.Object);
+            var conversationCatalog = new FakeConversationCatalogReadModel(
+                new[]
+                {
+                    new ConversationCatalogItem(
+                        "conv-1",
+                        "Recent",
+                        @"C:\Repo\Alpha",
+                        DateTime.UtcNow.AddDays(-1),
+                        DateTime.UtcNow,
+                        DateTime.UtcNow,
+                        ProjectAffinityOverrideProjectId: "project-a")
+                });
+            var startViewModel = CreateStartViewModel(
+                chat.ViewModel,
+                preferences,
+                nav,
+                workflow.Object,
+                conversationCatalog: conversationCatalog);
+
+            Assert.Equal("project-a", startViewModel.SelectedStartProjectId);
+
+            await nav.PrepareStartForProjectAsync(NavigationProjectIds.Unclassified);
+
+            Assert.Equal(NavigationProjectIds.Unclassified, startViewModel.SelectedStartProjectId);
+            navigationCoordinator.Verify(x => x.ActivateStartAsync(null), Times.Once);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public void StartProjectSelection_WhenRecentConversationHasProject_DefaultsToRecentConversationProject()
     {
         var originalContext = SynchronizationContext.Current;

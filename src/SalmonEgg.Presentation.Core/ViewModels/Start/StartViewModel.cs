@@ -110,6 +110,7 @@ public sealed partial class StartViewModel : ObservableObject
 
             _projectSelectionStore.RememberSelectedProject(normalizedSelection);
             _selectedStartProjectIdOverride = normalizedSelection;
+            _nav.ClearPendingProjectForNewSession();
             OnPropertyChanged(nameof(SelectedStartProjectId));
             QueueEnsureNewSessionDraft();
         }
@@ -180,10 +181,12 @@ public sealed partial class StartViewModel : ObservableObject
         InitializeSuggestions();
         RefreshStartProjectOptions();
         _preferences.PropertyChanged += OnPreferencesPropertyChanged;
+        _nav.PropertyChanged += OnNavigationPropertyChanged;
         ((INotifyCollectionChanged)_projectPreferences.Projects).CollectionChanged += OnProjectPreferencesChanged;
         _conversationCatalog.PropertyChanged += OnConversationCatalogPropertyChanged;
         Chat.PropertyChanged += OnChatPropertyChanged;
         ((INotifyCollectionChanged)Chat.NewSessionDraftModeOptions).CollectionChanged += OnStartModeOptionsChanged;
+        ApplyPendingProjectIntent();
     }
 
     private void InitializeSuggestions()
@@ -290,6 +293,27 @@ public sealed partial class StartViewModel : ObservableObject
         {
             OnPropertyChanged(nameof(SelectedStartProjectId));
         }
+    }
+
+    private void OnNavigationPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (!string.Equals(e.PropertyName, nameof(MainNavigationViewModel.PendingProjectIdForNewSession), StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        ApplyPendingProjectIntent();
+    }
+
+    private void ApplyPendingProjectIntent()
+    {
+        var pendingProjectId = _nav.PeekPendingProjectIdForNewSession();
+        if (string.IsNullOrWhiteSpace(pendingProjectId))
+        {
+            return;
+        }
+
+        SelectedStartProjectId = pendingProjectId;
     }
 
     private void OnProjectPreferencesChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)

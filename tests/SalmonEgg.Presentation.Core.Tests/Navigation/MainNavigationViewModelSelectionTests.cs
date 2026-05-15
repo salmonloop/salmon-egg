@@ -1329,6 +1329,63 @@ public sealed class MainNavigationViewModelSelectionTests
     }
 
     [Fact]
+    public async Task PrepareStartForProjectAsync_WhenOlderRequestFailsAfterNewerSuccess_PreservesLatestPendingProject()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var preferences = CreatePreferencesWithProject();
+            preferences.Projects.Add(new ProjectDefinition
+            {
+                ProjectId = "project-2",
+                Name = "Second",
+                RootPath = @"C:\repo\second"
+            });
+            var chatCatalog = CreateChatSessionCatalog();
+            var firstActivation = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var navigationCoordinator = new Mock<INavigationCoordinator>();
+            navigationCoordinator
+                .Setup(coordinator => coordinator.ActivateStartAsync("project-1"))
+                .Returns(firstActivation.Task);
+            navigationCoordinator
+                .Setup(coordinator => coordinator.ActivateStartAsync("project-2"))
+                .ReturnsAsync(true);
+
+            using var navVm = new MainNavigationViewModel(
+                chatCatalog,
+                CreateProjectPreferences(preferences),
+                new Mock<IUiInteractionService>().Object,
+                navigationCoordinator.Object,
+                new Mock<ILogger<MainNavigationViewModel>>().Object,
+                navState,
+                new Mock<IShellLayoutMetricsSink>().Object,
+                new NavigationSelectionProjector(),
+                new ShellSelectionStateStore(),
+                new ShellNavigationRuntimeStateStore(),
+                CreatePresenter(chatCatalog),
+                new ProjectAffinityResolver(),
+                new ImmediateUiDispatcher(),
+                Mock.Of<IStringLocalizer<CoreStrings>>());
+
+            var staleTask = navVm.PrepareStartForProjectAsync("project-1");
+            var latestTask = navVm.PrepareStartForProjectAsync("project-2");
+
+            await latestTask;
+            firstActivation.SetResult(false);
+            await staleTask;
+
+            Assert.Equal(@"C:\repo\second", navVm.ConsumePendingProjectRootPath());
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public void Rebuild_WhenDisplaySnapshotContainsUnread_ProjectsUnreadToSessionRow()
     {
         var originalContext = SynchronizationContext.Current;

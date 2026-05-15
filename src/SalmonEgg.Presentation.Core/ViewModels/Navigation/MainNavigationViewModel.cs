@@ -55,6 +55,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     private readonly Dictionary<string, ProjectNavItemViewModel> _projectVms = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ConversationCatalogDisplayItem> _conversationCatalogIndex = new(StringComparer.Ordinal);
     private string? _pendingProjectIdForNewSession;
+    private long _pendingProjectIntentVersion;
     private int _rebuildPending;
     private int _rebuildScheduled;
 
@@ -80,6 +81,12 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     public bool IsPaneOpen => _navigationState.IsPaneOpen;
 
     public MainNavItemViewModel? ProjectedControlSelectedItem => _projection.ControlSelectedItem;
+
+    public string? PendingProjectIdForNewSession
+    {
+        get => _pendingProjectIdForNewSession;
+        private set => SetProperty(ref _pendingProjectIdForNewSession, value);
+    }
 
     private void OnServicePaneStateChanged(object? sender, EventArgs e)
     {
@@ -295,31 +302,49 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     public async Task PrepareStartForProjectAsync(string projectId)
     {
-        var normalizedId = string.Equals(projectId, UnclassifiedProjectId, StringComparison.Ordinal)
+        var intentVersion = Interlocked.Increment(ref _pendingProjectIntentVersion);
+        var requestedProjectId = NormalizeNewSessionProjectIntent(projectId);
+        var coordinatorProjectId = string.Equals(requestedProjectId, UnclassifiedProjectId, StringComparison.Ordinal)
             ? null
-            : projectId;
+            : requestedProjectId;
 
         try
         {
-            var activated = await _navigationCoordinator.ActivateStartAsync(normalizedId).ConfigureAwait(true);
-            if (!activated)
+            var activated = await _navigationCoordinator.ActivateStartAsync(coordinatorProjectId).ConfigureAwait(true);
+            if (!IsLatestPendingProjectIntent(intentVersion))
             {
                 return;
             }
 
-            _pendingProjectIdForNewSession = normalizedId;
+            if (!activated)
+            {
+                PendingProjectIdForNewSession = null;
+                return;
+            }
+
+            PendingProjectIdForNewSession = requestedProjectId;
         }
         catch
         {
+            if (IsLatestPendingProjectIntent(intentVersion))
+            {
+                PendingProjectIdForNewSession = null;
+            }
         }
+    }
+
+    public void ClearPendingProjectForNewSession()
+    {
+        PendingProjectIdForNewSession = null;
     }
 
     public string? ConsumePendingProjectRootPath()
     {
-        var projectId = _pendingProjectIdForNewSession;
-        _pendingProjectIdForNewSession = null;
+        var projectId = PendingProjectIdForNewSession;
+        PendingProjectIdForNewSession = null;
 
-        if (string.IsNullOrWhiteSpace(projectId))
+        if (string.IsNullOrWhiteSpace(projectId)
+            || string.Equals(projectId, UnclassifiedProjectId, StringComparison.Ordinal))
         {
             return null;
         }
@@ -327,7 +352,17 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         return _projectPreferences.TryGetProjectRootPath(projectId);
     }
 
-    public string? PeekPendingProjectIdForNewSession() => _pendingProjectIdForNewSession;
+    public string? PeekPendingProjectIdForNewSession() => PendingProjectIdForNewSession;
+
+    private static string NormalizeNewSessionProjectIntent(string? projectId)
+        => string.IsNullOrWhiteSpace(projectId)
+            ? UnclassifiedProjectId
+            : string.Equals(projectId, UnclassifiedProjectId, StringComparison.Ordinal)
+                ? UnclassifiedProjectId
+                : projectId;
+
+    private bool IsLatestPendingProjectIntent(long intentVersion)
+        => Interlocked.Read(ref _pendingProjectIntentVersion) == intentVersion;
 
     public async Task ShowAllSessionsForProjectAsync(string projectId)
     {
