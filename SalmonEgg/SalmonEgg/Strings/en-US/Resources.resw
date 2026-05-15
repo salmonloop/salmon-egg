@@ -401,9 +401,6 @@
   <data name="Diagnostics_LogActionsTitle.Text" xml:space="preserve">
     <value>Log actions</value>
   </data>
-  <data name="Diagnostics_OpenLiveLog.Content" xml:space="preserve">
-    <value>View live logs</value>
-  </data>
   <data name="Diagnostics_LiveLogHeader.Text" xml:space="preserve">
     <value>Live logs</value>
   </data>
@@ -418,9 +415,6 @@
   </data>
   <data name="Diagnostics_LiveLogClear.Content" xml:space="preserve">
     <value>Clear view</value>
-  </data>
-  <data name="Diagnostics_LiveLogCollapse.Content" xml:space="preserve">
-    <value>Collapse</value>
   </data>
   <data name="Diagnostics_LiveLogHint.Text" xml:space="preserve">
     <value>Live streaming stops automatically when you leave this page.</value>

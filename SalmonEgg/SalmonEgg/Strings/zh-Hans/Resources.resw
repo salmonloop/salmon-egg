@@ -314,9 +314,6 @@
   <data name="Diagnostics_LogActionsTitle.Text" xml:space="preserve">
     <value>日志操作</value>
   </data>
-  <data name="Diagnostics_OpenLiveLog.Content" xml:space="preserve">
-    <value>查看实时日志</value>
-  </data>
   <data name="Diagnostics_LiveLogHeader.Text" xml:space="preserve">
     <value>实时日志</value>
   </data>
@@ -331,9 +328,6 @@
   </data>
   <data name="Diagnostics_LiveLogClear.Content" xml:space="preserve">
     <value>清空视图</value>
-  </data>
-  <data name="Diagnostics_LiveLogCollapse.Content" xml:space="preserve">
-    <value>收起</value>
   </data>
   <data name="Diagnostics_LiveLogHint.Text" xml:space="preserve">
     <value>离开页面后会自动停止实时打印。</value>

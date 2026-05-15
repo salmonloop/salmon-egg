@@ -7,6 +7,25 @@ namespace SalmonEgg.Presentation.Core.Tests.Settings;
 public sealed class DiagnosticsSettingsPageXamlTests
 {
     [Fact]
+    public void DiagnosticsSettingsPage_Resources_DoNotKeepRemovedLiveLogActionKeys()
+    {
+        string[] resourceFiles =
+        [
+            @"SalmonEgg\SalmonEgg\Strings\zh-Hans\Resources.resw",
+            @"SalmonEgg\SalmonEgg\Strings\en\Resources.resw",
+            @"SalmonEgg\SalmonEgg\Strings\en-US\Resources.resw"
+        ];
+
+        foreach (var resourceFile in resourceFiles)
+        {
+            var resources = LoadFile(resourceFile);
+
+            Assert.DoesNotContain("Diagnostics_OpenLiveLog.Content", resources, StringComparison.Ordinal);
+            Assert.DoesNotContain("Diagnostics_LiveLogCollapse.Content", resources, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public void DiagnosticsSettingsPage_LiveLogViewer_RemainsBehindNativeExpander()
     {
         var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DiagnosticsSettingsPage.xaml");
