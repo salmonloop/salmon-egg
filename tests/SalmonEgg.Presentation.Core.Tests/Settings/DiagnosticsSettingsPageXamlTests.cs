@@ -7,6 +7,16 @@ namespace SalmonEgg.Presentation.Core.Tests.Settings;
 public sealed class DiagnosticsSettingsPageXamlTests
 {
     [Fact]
+    public void DiagnosticsSettingsPage_LiveLogViewer_RemainsBehindNativeExpander()
+    {
+        var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DiagnosticsSettingsPage.xaml");
+
+        Assert.Contains("<Expander", xaml, StringComparison.Ordinal);
+        Assert.Contains("IsExpanded=\"{x:Bind ViewModel.LiveLogViewer.IsExpanded, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("TextChanged=\"OnLiveLogTextChanged\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DiagnosticsSettingsPage_CodeBehind_UnloadCleanupUsesGuardedAsyncHelper()
     {
         var codeBehind = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DiagnosticsSettingsPage.xaml.cs");

@@ -15,69 +15,163 @@
                   HorizontalScrollBarVisibility="Disabled">
         <controls:ResponsiveSettingsHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
             <controls:ResponsiveSettingsHost.Child>
-                <StackPanel Spacing="24">
-            <StackPanel Spacing="12">
-                <TextBlock x:Uid="About_AppInfoTitle" Text="应用信息" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}"/>
-                <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="16">
+                <StackPanel Spacing="24"
+                            Padding="{StaticResource SettingsPageVerticalPadding}">
                     <StackPanel Spacing="8">
-                        <TextBlock Text="{x:Bind ViewModel.AppName, Mode=OneWay}" FontWeight="SemiBold" FontSize="16"/>
-                        <TextBlock x:Uid="About_VersionLabel" Text="版本：" FontWeight="SemiBold" Margin="0,8,0,0"/>
-                        <TextBlock Text="{x:Bind ViewModel.AppVersion, Mode=OneWay}" Opacity="0.7"/>
-                        <TextBlock x:Uid="About_ProtocolLabel" Text="协议版本：" FontWeight="SemiBold" Margin="0,8,0,0"/>
-                        <TextBlock Text="{x:Bind ViewModel.ProtocolVersion, Mode=OneWay}" Opacity="0.7"/>
+                        <TextBlock x:Uid="About_PageTitle"
+                                   Text="关于"
+                                   Style="{StaticResource SettingsPageTitleTextStyle}"/>
+                        <TextBlock x:Uid="About_PageSummary"
+                                   Text="查看版本、支持入口和开源鸣谢。"
+                                   Style="{StaticResource SettingsPageSummaryTextStyle}"/>
                     </StackPanel>
-                </Border>
-            </StackPanel>
 
-            <StackPanel Spacing="12">
-                <TextBlock x:Uid="About_SupportTitle" Text="支持" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}"/>
-                <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="16">
                     <StackPanel Spacing="12">
-                        <Button x:Uid="About_OpenAppData"
-                                Content="打开应用数据目录"
-                                Command="{x:Bind ViewModel.OpenAppDataFolderCommand}"
-                                IsEnabled="{x:Bind ViewModel.CanOpenExternalFiles, Mode=OneWay}" />
-                        <StackPanel Spacing="8">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Button x:Uid="About_OpenReleaseNotes"
-                                        Content="打开更新日志"
-                                        Command="{x:Bind ViewModel.OpenReleaseNotesCommand}"
-                                        IsEnabled="{x:Bind ViewModel.CanOpenExternalFiles, Mode=OneWay}" />
-                                <Button x:Uid="About_OpenPrivacyPolicy"
-                                        Content="打开隐私政策"
-                                        Command="{x:Bind ViewModel.OpenPrivacyPolicyCommand}"
-                                        IsEnabled="{x:Bind ViewModel.CanOpenExternalFiles, Mode=OneWay}" />
+                        <TextBlock x:Uid="About_AppInfoTitle"
+                                   Text="应用信息"
+                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <StackPanel>
+                                <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="220"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock x:Uid="About_AppNameLabel"
+                                               Text="应用："
+                                               Style="{StaticResource SettingsRowTitleTextStyle}"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1"
+                                               Text="{x:Bind ViewModel.AppName, Mode=OneWay}"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                </Grid>
+
+                                <MenuFlyoutSeparator Margin="16,0" Visibility="Visible"/>
+
+                                <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="220"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock x:Uid="About_VersionLabel"
+                                               Text="版本："
+                                               Style="{StaticResource SettingsRowTitleTextStyle}"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1"
+                                               Text="{x:Bind ViewModel.AppVersion, Mode=OneWay}"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                </Grid>
+
+                                <MenuFlyoutSeparator Margin="16,0" Visibility="Visible"/>
+
+                                <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="220"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock x:Uid="About_ProtocolLabel"
+                                               Text="协议版本："
+                                               Style="{StaticResource SettingsRowTitleTextStyle}"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1"
+                                               Text="{x:Bind ViewModel.ProtocolVersion, Mode=OneWay}"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                </Grid>
                             </StackPanel>
-                            <Button x:Uid="About_CopyVersionInfo" Content="复制版本信息" Command="{x:Bind ViewModel.CopyVersionInfoCommand}" />
-                        </StackPanel>
-                        <TextBlock x:Uid="About_DocsFolderLabel" Text="文档目录：" FontWeight="SemiBold"/>
-                        <TextBlock Text="{x:Bind ViewModel.DocsRootPath, Mode=OneWay}" Opacity="0.7" TextWrapping="Wrap"/>
-                        <TextBlock x:Uid="About_DocsHint" Text="将 release-notes.md 与 privacy-policy.md 放入该目录后即可一键打开。"
-                                   Opacity="0.7"
-                                   TextWrapping="Wrap"/>
+                        </Border>
                     </StackPanel>
-                </Border>
-            </StackPanel>
 
-            <StackPanel Spacing="12">
-                <TextBlock x:Uid="About_OpenSourceTitle" Text="开源鸣谢" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}"/>
-                <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="16">
                     <StackPanel Spacing="12">
-                        <TextBlock x:Uid="About_OpenSourceDescription" Text="构建时根据 PackageReference 自动生成。"
-                                   Opacity="0.7"
-                                   TextWrapping="Wrap"/>
+                        <TextBlock x:Uid="About_SupportTitle"
+                                   Text="支持"
+                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <StackPanel>
+                                <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock x:Uid="About_SupportActionsTitle"
+                                               Text="支持入口"
+                                               Style="{StaticResource SettingsRowTitleTextStyle}"/>
+
+                                    <StackPanel Grid.Row="1"
+                                                Spacing="8"
+                                                Margin="0,12,0,0"
+                                                HorizontalAlignment="Stretch">
+                                        <Button x:Uid="About_OpenAppData"
+                                                Content="打开应用数据目录"
+                                                Command="{x:Bind ViewModel.OpenAppDataFolderCommand}"
+                                                IsEnabled="{x:Bind ViewModel.CanOpenExternalFiles, Mode=OneWay}"
+                                                HorizontalAlignment="Stretch"/>
+                                        <Button x:Uid="About_OpenReleaseNotes"
+                                                Content="打开更新日志"
+                                                Command="{x:Bind ViewModel.OpenReleaseNotesCommand}"
+                                                IsEnabled="{x:Bind ViewModel.CanOpenExternalFiles, Mode=OneWay}"
+                                                HorizontalAlignment="Stretch"/>
+                                        <Button x:Uid="About_OpenPrivacyPolicy"
+                                                Content="打开隐私政策"
+                                                Command="{x:Bind ViewModel.OpenPrivacyPolicyCommand}"
+                                                IsEnabled="{x:Bind ViewModel.CanOpenExternalFiles, Mode=OneWay}"
+                                                HorizontalAlignment="Stretch"/>
+                                        <Button x:Uid="About_CopyVersionInfo"
+                                                Content="复制版本信息"
+                                                Command="{x:Bind ViewModel.CopyVersionInfoCommand}"
+                                                HorizontalAlignment="Stretch"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <MenuFlyoutSeparator Margin="16,0" Visibility="Visible"/>
+
+                                <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="220"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock x:Uid="About_DocsFolderLabel"
+                                               Text="文档目录："
+                                               Style="{StaticResource SettingsRowTitleTextStyle}"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1"
+                                               Text="{x:Bind ViewModel.DocsRootPath, Mode=OneWay}"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                    <TextBlock Grid.Column="1"
+                                               Grid.Row="1"
+                                               x:Uid="About_DocsHint"
+                                               Text="将 release-notes.md 与 privacy-policy.md 放入该目录后即可一键打开。"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel Spacing="12">
+                        <TextBlock x:Uid="About_OpenSourceTitle"
+                                   Text="开源鸣谢"
+                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <StackPanel>
+                                <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                    <TextBlock x:Uid="About_OpenSourceDescription"
+                                               Text="构建时根据 PackageReference 自动生成。"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                </Grid>
+
+                                <MenuFlyoutSeparator Margin="16,0" Visibility="Visible"/>
+
                         <ListView ItemsSource="{x:Bind ViewModel.OpenSourceAcknowledgements, Mode=OneWay}"
                                   SelectionMode="None"
                                   MaxHeight="360"
@@ -115,9 +209,9 @@
                                 </DataTemplate>
                             </ListView.ItemTemplate>
                         </ListView>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
-                </Border>
-            </StackPanel>
                 </StackPanel>
             </controls:ResponsiveSettingsHost.Child>
         </controls:ResponsiveSettingsHost>

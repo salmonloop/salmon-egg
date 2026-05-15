@@ -359,8 +359,20 @@
     <value>Deletes configuration, logs, caches, exports, and other local files. This cannot be undone.</value>
   </data>
 
+  <data name="Diagnostics_PageTitle.Text" xml:space="preserve">
+    <value>Diagnostics and logs</value>
+  </data>
+  <data name="Diagnostics_PageSummary.Text" xml:space="preserve">
+    <value>Review the runtime environment, logs, connection state, and generate diagnostics bundles.</value>
+  </data>
   <data name="Diagnostics_EnvironmentTitle.Text" xml:space="preserve">
     <value>Environment</value>
+  </data>
+  <data name="Diagnostics_OsLabel.Text" xml:space="preserve">
+    <value>Operating system</value>
+  </data>
+  <data name="Diagnostics_FrameworkLabel.Text" xml:space="preserve">
+    <value>.NET</value>
   </data>
   <data name="Diagnostics_AppVersionLabel.Text" xml:space="preserve">
     <value>App version:</value>
@@ -385,6 +397,9 @@
   </data>
   <data name="Diagnostics_RefreshLogs.Content" xml:space="preserve">
     <value>Refresh</value>
+  </data>
+  <data name="Diagnostics_LogActionsTitle.Text" xml:space="preserve">
+    <value>Log actions</value>
   </data>
   <data name="Diagnostics_OpenLiveLog.Content" xml:space="preserve">
     <value>View live logs</value>
@@ -432,6 +447,12 @@
     <value>Generate diagnostics (ZIP)</value>
   </data>
 
+  <data name="Shortcuts_PageTitle.Text" xml:space="preserve">
+    <value>Shortcuts</value>
+  </data>
+  <data name="Shortcuts_PageSummary.Text" xml:space="preserve">
+    <value>Customize shortcuts available while the SalmonEgg foreground window is active.</value>
+  </data>
   <data name="Shortcuts_ConflictInfo.Title" xml:space="preserve">
     <value>Shortcut conflicts</value>
   </data>
@@ -460,8 +481,17 @@
     <value>Restore all defaults</value>
   </data>
 
+  <data name="About_PageTitle.Text" xml:space="preserve">
+    <value>About</value>
+  </data>
+  <data name="About_PageSummary.Text" xml:space="preserve">
+    <value>Review version details, support entry points, and open source acknowledgements.</value>
+  </data>
   <data name="About_AppInfoTitle.Text" xml:space="preserve">
     <value>App info</value>
+  </data>
+  <data name="About_AppNameLabel.Text" xml:space="preserve">
+    <value>App:</value>
   </data>
   <data name="About_VersionLabel.Text" xml:space="preserve">
     <value>Version:</value>
@@ -471,6 +501,9 @@
   </data>
   <data name="About_SupportTitle.Text" xml:space="preserve">
     <value>Support</value>
+  </data>
+  <data name="About_SupportActionsTitle.Text" xml:space="preserve">
+    <value>Support links</value>
   </data>
   <data name="About_OpenAppData.Content" xml:space="preserve">
     <value>Open app data folder</value>

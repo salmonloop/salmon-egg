@@ -13,75 +13,94 @@
 
     <ScrollViewer Padding="0"
                   HorizontalScrollBarVisibility="Disabled">
-            <controls:ResponsiveSettingsHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
+        <controls:ResponsiveSettingsHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
             <controls:ResponsiveSettingsHost.Child>
-                <StackPanel Spacing="24">
-            <InfoBar x:Uid="Shortcuts_ConflictInfo"
-                     IsOpen="{x:Bind ViewModel.HasConflicts, Mode=OneWay}"
-                     Title="快捷键冲突"
-                     Message="{x:Bind ViewModel.ConflictMessage, Mode=OneWay}"
-                     Severity="Warning"
-                     IsClosable="False"/>
-
-            <InfoBar x:Uid="Shortcuts_InvalidInfo"
-                     IsOpen="{x:Bind ViewModel.HasInvalid, Mode=OneWay}"
-                     Title="快捷键格式无效"
-                     Message="请输入如 Ctrl+K、Ctrl+Shift+N 的格式。"
-                     Severity="Error"
-                     IsClosable="False"/>
-
-            <StackPanel Spacing="12">
-                <TextBlock x:Uid="Shortcuts_CustomTitle" Text="自定义" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}"/>
-                <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="16">
-                    <StackPanel Spacing="12">
-                        <TextBlock x:Uid="Shortcuts_AppOnlyHint"
-                                   Text="这些快捷键仅在 SalmonEgg 窗口处于前台时生效，不会注册系统级热键，也不会覆盖输入框内的原生编辑行为。"
-                                   Opacity="0.75"
-                                   TextWrapping="Wrap"/>
-                        <ListView ItemsSource="{x:Bind ViewModel.Shortcuts, Mode=OneWay}"
-                                  SelectionMode="None">
-                            <ListView.ItemTemplate>
-                                <DataTemplate x:DataType="vm:ShortcutEntryViewModel">
-                                    <Grid Padding="0,8">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="220"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-
-                                        <StackPanel Grid.Column="0" Spacing="2">
-                                            <TextBlock Text="{x:Bind Name, Mode=OneWay}" FontWeight="SemiBold"/>
-                                            <TextBlock Text="{x:Bind DefaultGesture, Mode=OneWay}" FontSize="12" Opacity="0.65"/>
-                                        </StackPanel>
-
-                                        <controls:ShortcutRecorder Grid.Column="1"
-                                                                   Gesture="{x:Bind Gesture, Mode=TwoWay}"
-                                                                   RecorderAutomationId="{x:Bind RecorderAutomationId, Mode=OneWay}"
-                                                                   x:Uid="Shortcuts_GestureRecorder"
-                                                                   HorizontalAlignment="Stretch" />
-
-                                        <Button Grid.Column="2"
-                                                x:Uid="Shortcuts_RestoreSingle"
-                                                Content="恢复"
-                                                Margin="12,0,0,0"
-                                                Command="{x:Bind RestoreDefaultCommand}" />
-                                    </Grid>
-                                </DataTemplate>
-                            </ListView.ItemTemplate>
-                        </ListView>
-
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button x:Uid="Shortcuts_RestoreAll"
-                                    Content="全部恢复默认"
-                                    Command="{x:Bind ViewModel.RestoreDefaultsCommand}" />
-                        </StackPanel>
+                <StackPanel Spacing="24"
+                            Padding="{StaticResource SettingsPageVerticalPadding}">
+                    <StackPanel Spacing="8">
+                        <TextBlock x:Uid="Shortcuts_PageTitle"
+                                   Text="快捷键"
+                                   Style="{StaticResource SettingsPageTitleTextStyle}"/>
+                        <TextBlock x:Uid="Shortcuts_PageSummary"
+                                   Text="自定义 SalmonEgg 前台窗口内可用的快捷键。"
+                                   Style="{StaticResource SettingsPageSummaryTextStyle}"/>
                     </StackPanel>
-                </Border>
-            </StackPanel>
+
+                    <InfoBar x:Uid="Shortcuts_ConflictInfo"
+                             IsOpen="{x:Bind ViewModel.HasConflicts, Mode=OneWay}"
+                             Title="快捷键冲突"
+                             Message="{x:Bind ViewModel.ConflictMessage, Mode=OneWay}"
+                             Severity="Warning"
+                             IsClosable="False"/>
+
+                    <InfoBar x:Uid="Shortcuts_InvalidInfo"
+                             IsOpen="{x:Bind ViewModel.HasInvalid, Mode=OneWay}"
+                             Title="快捷键格式无效"
+                             Message="请输入如 Ctrl+K、Ctrl+Shift+N 的格式。"
+                             Severity="Error"
+                             IsClosable="False"/>
+
+                    <StackPanel Spacing="12">
+                        <TextBlock x:Uid="Shortcuts_CustomTitle"
+                                   Text="自定义"
+                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <StackPanel>
+                                <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                    <TextBlock x:Uid="Shortcuts_AppOnlyHint"
+                                               Text="这些快捷键仅在 SalmonEgg 窗口处于前台时生效，不会注册系统级热键，也不会覆盖输入框内的原生编辑行为。"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                </Grid>
+
+                                <MenuFlyoutSeparator Margin="16,0" Visibility="Visible"/>
+
+                                <ListView ItemsSource="{x:Bind ViewModel.Shortcuts, Mode=OneWay}"
+                                          SelectionMode="None">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:ShortcutEntryViewModel">
+                                            <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="220"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <StackPanel VerticalAlignment="Center" Spacing="4">
+                                                    <TextBlock Text="{x:Bind Name, Mode=OneWay}"
+                                                               Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                                    <TextBlock Text="{x:Bind DefaultGesture, Mode=OneWay}"
+                                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                                </StackPanel>
+
+                                                <controls:ShortcutRecorder Grid.Column="1"
+                                                                           x:Uid="Shortcuts_GestureRecorder"
+                                                                           Gesture="{x:Bind Gesture, Mode=TwoWay}"
+                                                                           RecorderAutomationId="{x:Bind RecorderAutomationId, Mode=OneWay}"
+                                                                           HorizontalAlignment="Stretch"
+                                                                           VerticalAlignment="Center"/>
+
+                                                <Button Grid.Column="2"
+                                                        x:Uid="Shortcuts_RestoreSingle"
+                                                        Content="恢复"
+                                                        Command="{x:Bind RestoreDefaultCommand}"
+                                                        VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+
+                                <MenuFlyoutSeparator Margin="16,0" Visibility="Visible"/>
+
+                                <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                    <Button x:Uid="Shortcuts_RestoreAll"
+                                            Content="全部恢复默认"
+                                            Command="{x:Bind ViewModel.RestoreDefaultsCommand}"
+                                            HorizontalAlignment="Stretch"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
                 </StackPanel>
             </controls:ResponsiveSettingsHost.Child>
         </controls:ResponsiveSettingsHost>

@@ -18,48 +18,167 @@
 
     <ScrollViewer Padding="0"
                   HorizontalScrollBarVisibility="Disabled">
-            <controls:ResponsiveSettingsHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
+        <controls:ResponsiveSettingsHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
             <controls:ResponsiveSettingsHost.Child>
-                <StackPanel Spacing="28">
-            <StackPanel Spacing="12">
-                <TextBlock x:Uid="Diagnostics_EnvironmentTitle" Text="运行环境" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}"/>
-                <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="16">
-                    <StackPanel Spacing="8">
-                        <TextBlock Text="{x:Bind ViewModel.OsDescription, Mode=OneWay}" />
-                        <TextBlock Text="{x:Bind ViewModel.FrameworkDescription, Mode=OneWay}" Opacity="0.7"/>
-                        <TextBlock x:Uid="Diagnostics_AppVersionLabel" Text="应用版本：" FontWeight="SemiBold" Margin="0,8,0,0"/>
-                        <TextBlock Text="{x:Bind ViewModel.AppVersion, Mode=OneWay}" Opacity="0.7"/>
-                        <TextBlock x:Uid="Diagnostics_ProtocolVersionLabel" Text="协议版本：" FontWeight="SemiBold" Margin="0,8,0,0"/>
-                        <TextBlock Text="{x:Bind ViewModel.ProtocolVersion, Mode=OneWay}" Opacity="0.7"/>
+                <StackPanel Spacing="28"
+                            Padding="{StaticResource SettingsPageVerticalPadding}">
+                    <StackPanel Spacing="4">
+                        <TextBlock x:Uid="Diagnostics_PageTitle"
+                                   Text="诊断与日志"
+                                   Style="{StaticResource SettingsPageTitleTextStyle}" />
+                        <TextBlock x:Uid="Diagnostics_PageSummary"
+                                   Text="查看运行环境、日志、连接状态并生成诊断包。"
+                                   Style="{StaticResource SettingsPageSummaryTextStyle}" />
                     </StackPanel>
-                </Border>
-            </StackPanel>
 
-            <StackPanel Spacing="12">
-                <TextBlock x:Uid="Diagnostics_LogsTitle" Text="日志" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}"/>
-                <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="16">
                     <StackPanel Spacing="12">
-                        <TextBlock x:Uid="Diagnostics_LogsFolderLabel" Text="日志目录：" FontWeight="SemiBold"/>
-                        <TextBlock Text="{x:Bind ViewModel.LogsDirectoryPath, Mode=OneWay}" Opacity="0.7" TextWrapping="Wrap"/>
-                        <TextBlock x:Uid="Diagnostics_LatestLogLabel" Text="最新日志文件：" FontWeight="SemiBold"/>
-                        <TextBlock Text="{x:Bind ViewModel.LatestLogFilePath, Mode=OneWay}" Opacity="0.7" TextWrapping="Wrap"/>
+                        <TextBlock x:Uid="Diagnostics_EnvironmentTitle"
+                                   Text="运行环境"
+                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
 
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button x:Uid="Diagnostics_OpenLogs"
-                                    Content="打开日志目录"
-                                    Command="{x:Bind ViewModel.OpenLogsFolderCommand}"
-                                    IsEnabled="{x:Bind ViewModel.CanOpenExternalFiles, Mode=OneWay}" />
-                            <Button x:Uid="Diagnostics_CopyLogSnippet" Content="复制最近日志片段" Command="{x:Bind ViewModel.CopyRecentLogSnippetCommand}" />
-                            <Button x:Uid="Diagnostics_RefreshLogs" Content="刷新" Command="{x:Bind ViewModel.RefreshLatestLogFileCommand}" />
-                        </StackPanel>
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <StackPanel>
+                                <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="220"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock x:Uid="Diagnostics_OsLabel"
+                                               Text="OS"
+                                               Style="{StaticResource SettingsRowTitleTextStyle}"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1"
+                                               Text="{x:Bind ViewModel.OsDescription, Mode=OneWay}"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                </Grid>
+
+                                <MenuFlyoutSeparator Margin="16,0" Visibility="Visible"/>
+
+                                <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="220"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock x:Uid="Diagnostics_FrameworkLabel"
+                                               Text=".NET"
+                                               Style="{StaticResource SettingsRowTitleTextStyle}"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1"
+                                               Text="{x:Bind ViewModel.FrameworkDescription, Mode=OneWay}"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                </Grid>
+
+                                <MenuFlyoutSeparator Margin="16,0" Visibility="Visible"/>
+
+                                <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="220"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock x:Uid="Diagnostics_AppVersionLabel"
+                                               Text="应用版本："
+                                               Style="{StaticResource SettingsRowTitleTextStyle}"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1"
+                                               Text="{x:Bind ViewModel.AppVersion, Mode=OneWay}"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                </Grid>
+
+                                <MenuFlyoutSeparator Margin="16,0" Visibility="Visible"/>
+
+                                <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="220"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock x:Uid="Diagnostics_ProtocolVersionLabel"
+                                               Text="协议版本："
+                                               Style="{StaticResource SettingsRowTitleTextStyle}"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1"
+                                               Text="{x:Bind ViewModel.ProtocolVersion, Mode=OneWay}"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel Spacing="12">
+                        <TextBlock x:Uid="Diagnostics_LogsTitle"
+                                   Text="日志"
+                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <StackPanel>
+                                <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="220"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock x:Uid="Diagnostics_LogsFolderLabel"
+                                               Text="日志目录："
+                                               Style="{StaticResource SettingsRowTitleTextStyle}"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1"
+                                               Text="{x:Bind ViewModel.LogsDirectoryPath, Mode=OneWay}"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                </Grid>
+
+                                <MenuFlyoutSeparator Margin="16,0" Visibility="Visible"/>
+
+                                <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="220"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock x:Uid="Diagnostics_LatestLogLabel"
+                                               Text="最新日志文件："
+                                               Style="{StaticResource SettingsRowTitleTextStyle}"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1"
+                                               Text="{x:Bind ViewModel.LatestLogFilePath, Mode=OneWay}"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                </Grid>
+
+                                <MenuFlyoutSeparator Margin="16,0" Visibility="Visible"/>
+
+                                <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock x:Uid="Diagnostics_LogActionsTitle"
+                                               Text="日志操作"
+                                               Style="{StaticResource SettingsRowTitleTextStyle}"/>
+
+                                    <StackPanel Grid.Row="1"
+                                                Spacing="8"
+                                                Margin="0,12,0,0"
+                                                HorizontalAlignment="Stretch">
+                                        <Button x:Uid="Diagnostics_OpenLogs"
+                                                Content="打开日志目录"
+                                                Command="{x:Bind ViewModel.OpenLogsFolderCommand}"
+                                                IsEnabled="{x:Bind ViewModel.CanOpenExternalFiles, Mode=OneWay}"
+                                                HorizontalAlignment="Stretch"/>
+                                        <Button x:Uid="Diagnostics_CopyLogSnippet"
+                                                Content="复制最近日志片段"
+                                                Command="{x:Bind ViewModel.CopyRecentLogSnippetCommand}"
+                                                HorizontalAlignment="Stretch"/>
+                                        <Button x:Uid="Diagnostics_RefreshLogs"
+                                                Content="刷新"
+                                                Command="{x:Bind ViewModel.RefreshLatestLogFileCommand}"
+                                                HorizontalAlignment="Stretch"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <MenuFlyoutSeparator Margin="16,0" Visibility="Visible"/>
 
                         <Expander IsExpanded="{x:Bind ViewModel.LiveLogViewer.IsExpanded, Mode=TwoWay}"
                                   Background="Transparent"
@@ -81,22 +200,26 @@
                                            Opacity="0.7"
                                            TextWrapping="Wrap" />
 
-                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                <StackPanel Spacing="8">
                                     <Button x:Uid="Diagnostics_LiveLogStart"
                                             Content="启动"
                                             Command="{x:Bind ViewModel.LiveLogViewer.OpenViewerCommand}"
-                                            Visibility="{x:Bind ViewModel.LiveLogViewer.CanStartStreaming, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                            Visibility="{x:Bind ViewModel.LiveLogViewer.CanStartStreaming, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                            HorizontalAlignment="Stretch" />
                                     <Button x:Uid="Diagnostics_LiveLogPause"
                                             Content="暂停"
                                             Command="{x:Bind ViewModel.LiveLogViewer.TogglePauseCommand}"
-                                            Visibility="{x:Bind ViewModel.LiveLogViewer.CanPauseStreaming, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                            Visibility="{x:Bind ViewModel.LiveLogViewer.CanPauseStreaming, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                            HorizontalAlignment="Stretch" />
                                     <Button x:Uid="Diagnostics_LiveLogResume"
                                             Content="继续"
                                             Command="{x:Bind ViewModel.LiveLogViewer.TogglePauseCommand}"
-                                            Visibility="{x:Bind ViewModel.LiveLogViewer.CanResumeStreaming, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                            Visibility="{x:Bind ViewModel.LiveLogViewer.CanResumeStreaming, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                            HorizontalAlignment="Stretch" />
                                     <Button x:Uid="Diagnostics_LiveLogClear"
                                             Content="清空视图"
-                                            Command="{x:Bind ViewModel.LiveLogViewer.ClearVisibleLogCommand}" />
+                                            Command="{x:Bind ViewModel.LiveLogViewer.ClearVisibleLogCommand}"
+                                            HorizontalAlignment="Stretch" />
                                 </StackPanel>
 
                                 <TextBox x:Name="LiveLogTextBox"
@@ -114,45 +237,102 @@
                                            TextWrapping="Wrap" />
                             </StackPanel>
                         </Expander>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
-                </Border>
-            </StackPanel>
 
-            <StackPanel Spacing="12">
-                <TextBlock x:Uid="Diagnostics_ConnectionTitle" Text="连接诊断" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}"/>
-                <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="16">
-                    <StackPanel Spacing="8">
-                        <TextBlock x:Uid="Diagnostics_ConnectionStatusLabel" Text="当前状态：" FontWeight="SemiBold"/>
-                        <TextBlock Text="{x:Bind ViewModel.Chat.IsConnected, Mode=OneWay}" Opacity="0.7"/>
-                        <TextBlock x:Uid="Diagnostics_AgentLabel" Text="Agent：" FontWeight="SemiBold" Margin="0,8,0,0"/>
-                        <TextBlock Text="{x:Bind ViewModel.Chat.AgentName, Mode=OneWay}" Opacity="0.7"/>
-                        <TextBlock Text="{x:Bind ViewModel.Chat.AgentVersion, Mode=OneWay}" Opacity="0.7"/>
-                        <TextBlock x:Uid="Diagnostics_SessionLabel" Text="会话：" FontWeight="SemiBold" Margin="0,8,0,0"/>
-                        <TextBlock Text="{x:Bind ViewModel.Chat.CurrentSessionId, Mode=OneWay}" Opacity="0.7"/>
-                    </StackPanel>
-                </Border>
-            </StackPanel>
-
-            <StackPanel Spacing="12">
-                <TextBlock x:Uid="Diagnostics_BundleTitle" Text="诊断包" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}"/>
-                <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="16">
                     <StackPanel Spacing="12">
-                        <TextBlock x:Uid="Diagnostics_BundleDescription" Text="生成 ZIP 包，包含配置（不含密钥）、日志与环境快照。" Opacity="0.7" TextWrapping="Wrap"/>
-                        <Button x:Uid="Diagnostics_CreateBundle"
-                                Content="生成诊断包（ZIP）"
-                                Command="{x:Bind ViewModel.CreateDiagnosticsBundleCommand}"
-                                IsEnabled="{x:Bind ViewModel.CanExportLocalFiles, Mode=OneWay}" />
+                        <TextBlock x:Uid="Diagnostics_ConnectionTitle"
+                                   Text="连接诊断"
+                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <StackPanel>
+                                <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="220"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock x:Uid="Diagnostics_ConnectionStatusLabel"
+                                               Text="当前状态："
+                                               Style="{StaticResource SettingsRowTitleTextStyle}"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1"
+                                               Text="{x:Bind ViewModel.Chat.IsConnected, Mode=OneWay}"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                </Grid>
+
+                                <MenuFlyoutSeparator Margin="16,0" Visibility="Visible"/>
+
+                                <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="220"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock x:Uid="Diagnostics_AgentLabel"
+                                               Text="Agent："
+                                               Style="{StaticResource SettingsRowTitleTextStyle}"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1"
+                                               Text="{x:Bind ViewModel.Chat.AgentName, Mode=OneWay}"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                    <TextBlock Grid.Column="1"
+                                               Grid.Row="1"
+                                               Text="{x:Bind ViewModel.Chat.AgentVersion, Mode=OneWay}"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                </Grid>
+
+                                <MenuFlyoutSeparator Margin="16,0" Visibility="Visible"/>
+
+                                <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="220"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock x:Uid="Diagnostics_SessionLabel"
+                                               Text="会话："
+                                               Style="{StaticResource SettingsRowTitleTextStyle}"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1"
+                                               Text="{x:Bind ViewModel.Chat.CurrentSessionId, Mode=OneWay}"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
-                </Border>
-            </StackPanel>
+
+                    <StackPanel Spacing="12">
+                        <TextBlock x:Uid="Diagnostics_BundleTitle"
+                                   Text="诊断包"
+                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock x:Uid="Diagnostics_BundleDescription"
+                                           Text="生成 ZIP 包，包含配置（不含密钥）、日志与环境快照。"
+                                           Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                <Button Grid.Row="1"
+                                        x:Uid="Diagnostics_CreateBundle"
+                                        Content="生成诊断包（ZIP）"
+                                        Command="{x:Bind ViewModel.CreateDiagnosticsBundleCommand}"
+                                        IsEnabled="{x:Bind ViewModel.CanExportLocalFiles, Mode=OneWay}"
+                                        Margin="0,12,0,0"
+                                        HorizontalAlignment="Stretch"/>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
                 </StackPanel>
             </controls:ResponsiveSettingsHost.Child>
         </controls:ResponsiveSettingsHost>

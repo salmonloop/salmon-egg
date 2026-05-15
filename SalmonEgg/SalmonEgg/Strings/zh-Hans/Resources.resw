@@ -272,8 +272,20 @@
     <value>删除配置、日志、缓存、导出等文件。此操作不可撤销。</value>
   </data>
 
+  <data name="Diagnostics_PageTitle.Text" xml:space="preserve">
+    <value>诊断与日志</value>
+  </data>
+  <data name="Diagnostics_PageSummary.Text" xml:space="preserve">
+    <value>查看运行环境、日志、连接状态并生成诊断包。</value>
+  </data>
   <data name="Diagnostics_EnvironmentTitle.Text" xml:space="preserve">
     <value>运行环境</value>
+  </data>
+  <data name="Diagnostics_OsLabel.Text" xml:space="preserve">
+    <value>操作系统</value>
+  </data>
+  <data name="Diagnostics_FrameworkLabel.Text" xml:space="preserve">
+    <value>.NET</value>
   </data>
   <data name="Diagnostics_AppVersionLabel.Text" xml:space="preserve">
     <value>应用版本：</value>
@@ -298,6 +310,9 @@
   </data>
   <data name="Diagnostics_RefreshLogs.Content" xml:space="preserve">
     <value>刷新</value>
+  </data>
+  <data name="Diagnostics_LogActionsTitle.Text" xml:space="preserve">
+    <value>日志操作</value>
   </data>
   <data name="Diagnostics_OpenLiveLog.Content" xml:space="preserve">
     <value>查看实时日志</value>
@@ -345,6 +360,12 @@
     <value>生成诊断包（ZIP）</value>
   </data>
 
+  <data name="Shortcuts_PageTitle.Text" xml:space="preserve">
+    <value>快捷键</value>
+  </data>
+  <data name="Shortcuts_PageSummary.Text" xml:space="preserve">
+    <value>自定义 SalmonEgg 前台窗口内可用的快捷键。</value>
+  </data>
   <data name="Shortcuts_ConflictInfo.Title" xml:space="preserve">
     <value>快捷键冲突</value>
   </data>
@@ -373,8 +394,17 @@
     <value>全部恢复默认</value>
   </data>
 
+  <data name="About_PageTitle.Text" xml:space="preserve">
+    <value>关于</value>
+  </data>
+  <data name="About_PageSummary.Text" xml:space="preserve">
+    <value>查看版本、支持入口和开源鸣谢。</value>
+  </data>
   <data name="About_AppInfoTitle.Text" xml:space="preserve">
     <value>应用信息</value>
+  </data>
+  <data name="About_AppNameLabel.Text" xml:space="preserve">
+    <value>应用：</value>
   </data>
   <data name="About_VersionLabel.Text" xml:space="preserve">
     <value>版本：</value>
@@ -384,6 +414,9 @@
   </data>
   <data name="About_SupportTitle.Text" xml:space="preserve">
     <value>支持</value>
+  </data>
+  <data name="About_SupportActionsTitle.Text" xml:space="preserve">
+    <value>支持入口</value>
   </data>
   <data name="About_OpenAppData.Content" xml:space="preserve">
     <value>打开应用数据目录</value>
