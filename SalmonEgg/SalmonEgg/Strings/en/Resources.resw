@@ -237,11 +237,38 @@
   <data name="Diagnostics_PageSummary.Text" xml:space="preserve">
     <value>Review the runtime environment, logs, connection state, and generate diagnostics bundles.</value>
   </data>
+  <data name="Diagnostics_EnvironmentTitle.Text" xml:space="preserve">
+    <value>Environment</value>
+  </data>
   <data name="Diagnostics_OsLabel.Text" xml:space="preserve">
     <value>Operating system</value>
   </data>
   <data name="Diagnostics_FrameworkLabel.Text" xml:space="preserve">
     <value>.NET</value>
+  </data>
+  <data name="Diagnostics_AppVersionLabel.Text" xml:space="preserve">
+    <value>App version:</value>
+  </data>
+  <data name="Diagnostics_ProtocolVersionLabel.Text" xml:space="preserve">
+    <value>Protocol version:</value>
+  </data>
+  <data name="Diagnostics_LogsTitle.Text" xml:space="preserve">
+    <value>Logs</value>
+  </data>
+  <data name="Diagnostics_LogsFolderLabel.Text" xml:space="preserve">
+    <value>Logs folder:</value>
+  </data>
+  <data name="Diagnostics_LatestLogLabel.Text" xml:space="preserve">
+    <value>Latest log file:</value>
+  </data>
+  <data name="Diagnostics_OpenLogs.Content" xml:space="preserve">
+    <value>Open logs folder</value>
+  </data>
+  <data name="Diagnostics_CopyLogSnippet.Content" xml:space="preserve">
+    <value>Copy recent log snippet</value>
+  </data>
+  <data name="Diagnostics_RefreshLogs.Content" xml:space="preserve">
+    <value>Refresh</value>
   </data>
   <data name="Diagnostics_LogActionsTitle.Text" xml:space="preserve">
     <value>Log actions</value>
@@ -263,6 +290,27 @@
   </data>
   <data name="Diagnostics_LiveLogHint.Text" xml:space="preserve">
     <value>Live streaming stops automatically when you leave this page.</value>
+  </data>
+  <data name="Diagnostics_ConnectionTitle.Text" xml:space="preserve">
+    <value>Connection diagnostics</value>
+  </data>
+  <data name="Diagnostics_ConnectionStatusLabel.Text" xml:space="preserve">
+    <value>Status:</value>
+  </data>
+  <data name="Diagnostics_AgentLabel.Text" xml:space="preserve">
+    <value>Agent:</value>
+  </data>
+  <data name="Diagnostics_SessionLabel.Text" xml:space="preserve">
+    <value>Session:</value>
+  </data>
+  <data name="Diagnostics_BundleTitle.Text" xml:space="preserve">
+    <value>Diagnostics bundle</value>
+  </data>
+  <data name="Diagnostics_BundleDescription.Text" xml:space="preserve">
+    <value>Generate a ZIP with configuration (no secrets), logs, and environment snapshot.</value>
+  </data>
+  <data name="Diagnostics_CreateBundle.Content" xml:space="preserve">
+    <value>Generate diagnostics (ZIP)</value>
   </data>
   <data name="SettingsBreadcrumbRoot" xml:space="preserve">
     <value>Settings</value>
@@ -840,8 +888,35 @@
   <data name="Shortcuts_PageSummary.Text" xml:space="preserve">
     <value>Customize shortcuts available while the SalmonEgg foreground window is active.</value>
   </data>
+  <data name="Shortcuts_ConflictInfo.Title" xml:space="preserve">
+    <value>Shortcut conflicts</value>
+  </data>
+  <data name="Shortcuts_InvalidInfo.Title" xml:space="preserve">
+    <value>Invalid shortcut format</value>
+  </data>
+  <data name="Shortcuts_InvalidInfo.Message" xml:space="preserve">
+    <value>Enter formats like Ctrl+K or Ctrl+Shift+N. Native text editing shortcuts such as Ctrl+C and Ctrl+V cannot be assigned.</value>
+  </data>
+  <data name="Shortcuts_CustomTitle.Text" xml:space="preserve">
+    <value>Customize</value>
+  </data>
+  <data name="Shortcuts_AppOnlyHint.Text" xml:space="preserve">
+    <value>These shortcuts work only while the SalmonEgg window is active. They do not register system-wide hotkeys or override native text editing behaviors.</value>
+  </data>
+  <data name="Shortcuts_GestureRecorder.PlaceholderText" xml:space="preserve">
+    <value>Click to record shortcut</value>
+  </data>
+  <data name="Shortcuts_GestureRecorder.RecordingText" xml:space="preserve">
+    <value>Press shortcut</value>
+  </data>
+  <data name="Shortcuts_RestoreSingle.Content" xml:space="preserve">
+    <value>Restore</value>
+  </data>
   <data name="Shortcuts_RestoreAllDescription.Text" xml:space="preserve">
     <value>Restore every shortcut to its default setting.</value>
+  </data>
+  <data name="Shortcuts_RestoreAll.Content" xml:space="preserve">
+    <value>Restore all defaults</value>
   </data>
   <data name="About_PageTitle.Text" xml:space="preserve">
     <value>About</value>

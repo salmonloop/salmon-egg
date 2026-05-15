@@ -909,6 +909,72 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void Task6SettingsPages_HaveLocalizedVisibleTextResources()
+    {
+        string[] resourceFiles =
+        [
+            @"SalmonEgg\SalmonEgg\Strings\zh-Hans\Resources.resw",
+            @"SalmonEgg\SalmonEgg\Strings\en\Resources.resw",
+            @"SalmonEgg\SalmonEgg\Strings\en-US\Resources.resw"
+        ];
+        string[] requiredResources =
+        [
+            "Shortcuts_PageTitle.Text",
+            "Shortcuts_PageSummary.Text",
+            "Shortcuts_ConflictInfo.Title",
+            "Shortcuts_InvalidInfo.Title",
+            "Shortcuts_InvalidInfo.Message",
+            "Shortcuts_CustomTitle.Text",
+            "Shortcuts_AppOnlyHint.Text",
+            "Shortcuts_GestureRecorder.PlaceholderText",
+            "Shortcuts_GestureRecorder.RecordingText",
+            "Shortcuts_RestoreSingle.Content",
+            "Shortcuts_RestoreAllDescription.Text",
+            "Shortcuts_RestoreAll.Content",
+            "Diagnostics_PageTitle.Text",
+            "Diagnostics_PageSummary.Text",
+            "Diagnostics_EnvironmentTitle.Text",
+            "Diagnostics_OsLabel.Text",
+            "Diagnostics_FrameworkLabel.Text",
+            "Diagnostics_AppVersionLabel.Text",
+            "Diagnostics_ProtocolVersionLabel.Text",
+            "Diagnostics_LogsTitle.Text",
+            "Diagnostics_LogsFolderLabel.Text",
+            "Diagnostics_LatestLogLabel.Text",
+            "Diagnostics_OpenLogs.Content",
+            "Diagnostics_CopyLogSnippet.Content",
+            "Diagnostics_RefreshLogs.Content",
+            "Diagnostics_LogActionsTitle.Text",
+            "Diagnostics_LiveLogHeader.Text",
+            "Diagnostics_LiveLogStart.Content",
+            "Diagnostics_LiveLogPause.Content",
+            "Diagnostics_LiveLogResume.Content",
+            "Diagnostics_LiveLogClear.Content",
+            "Diagnostics_LiveLogHint.Text",
+            "Diagnostics_ConnectionTitle.Text",
+            "Diagnostics_ConnectionStatusLabel.Text",
+            "Diagnostics_AgentLabel.Text",
+            "Diagnostics_SessionLabel.Text",
+            "Diagnostics_BundleTitle.Text",
+            "Diagnostics_BundleDescription.Text",
+            "Diagnostics_CreateBundle.Content"
+        ];
+
+        foreach (var resourceFile in resourceFiles)
+        {
+            var resources = XDocument.Parse(LoadText(resourceFile));
+
+            foreach (var resourceName in requiredResources)
+            {
+                Assert.True(
+                    resources.Descendants("data")
+                        .Any(data => string.Equals((string?)data.Attribute("name"), resourceName, StringComparison.Ordinal)),
+                    $"{resourceFile} must define {resourceName}.");
+            }
+        }
+    }
+
+    [Fact]
     public void GeneralAndAppearanceSettingsPages_HaveLocalizedVisibleTextResources()
     {
         string[] resourceFiles =
