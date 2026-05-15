@@ -29,6 +29,23 @@ public sealed class AcpConnectionSettingsXamlTests
     }
 
     [Fact]
+    public void AcpConnectionSettingsPage_ProfileList_PreservesNativeSelectionAndActions()
+    {
+        var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AcpConnectionSettingsPage.xaml");
+
+        Assert.Contains("<ListView ItemsSource=\"{x:Bind ViewModel.Profiles.ProfileItems, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("SelectedItem=\"{x:Bind ViewModel.Profiles.SelectedProfileItem, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("SelectionMode=\"Single\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("<ToggleSwitch", xaml, StringComparison.Ordinal);
+        Assert.Contains("IsOn=\"{x:Bind IsConnected, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Toggled=\"OnProfileConnectionToggleToggled\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("<Button.Flyout>", xaml, StringComparison.Ordinal);
+        Assert.Contains("<MenuFlyout>", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"OnEditProfileMenuClick\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"OnDeleteProfileMenuClick\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AcpConnectionSettingsPage_PathMappingsEditor_UsesViewModelDrivenBindings()
     {
         // Arrange
