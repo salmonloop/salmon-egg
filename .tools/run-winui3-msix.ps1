@@ -595,6 +595,7 @@ $referenceProjects = @(
     (Join-Path $repoRoot 'src\SalmonEgg.Domain\SalmonEgg.Domain.csproj'),
     (Join-Path $repoRoot 'src\SalmonEgg.Application\SalmonEgg.Application.csproj'),
     (Join-Path $repoRoot 'src\SalmonEgg.Infrastructure\SalmonEgg.Infrastructure.csproj'),
+    (Join-Path $repoRoot 'src\SalmonEgg.Infrastructure.Desktop\SalmonEgg.Infrastructure.Desktop.csproj'),
     (Join-Path $repoRoot 'src\SalmonEgg.Presentation.Core\SalmonEgg.Presentation.Core.csproj')
 )
 $tfm = 'net10.0-windows10.0.26100.0'

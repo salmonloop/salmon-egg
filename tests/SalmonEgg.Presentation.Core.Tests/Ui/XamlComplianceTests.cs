@@ -9,6 +9,17 @@ namespace SalmonEgg.Presentation.Core.Tests.Ui;
 public sealed class XamlComplianceTests
 {
     [Fact]
+    public void WinUiMsixScript_RestoresAllReferenceProjectsUsedByApp()
+    {
+        var script = LoadText(@".tools\run-winui3-msix.ps1");
+
+        Assert.Contains(
+            "'src\\SalmonEgg.Infrastructure.Desktop\\SalmonEgg.Infrastructure.Desktop.csproj'",
+            script,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MainPage_DoesNotDisableFocusOnInteraction()
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");
