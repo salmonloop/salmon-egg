@@ -101,50 +101,12 @@ public sealed class ConfigurationManager : IConfigurationService
 
     public async Task<IEnumerable<ServerConfiguration>> ListConfigurationsAsync()
     {
-        var result = new List<ServerConfiguration>();
-        var deserializer = YamlSerialization.CreateDeserializer();
-
+        var paths = new List<string>();
         try
         {
             await foreach (var path in _fileStore.EnumerateFilesAsync(_serversDirectory, "*.yaml").ConfigureAwait(false))
             {
-                try
-                {
-                    var yaml = await _fileStore.ReadAllTextAsync(path).ConfigureAwait(false);
-                    if (yaml is null)
-                    {
-                        continue;
-                    }
-
-                    var yamlModel = deserializer.Deserialize<ServerConfigurationYamlV1>(yaml);
-                    if (yamlModel.SchemaVersion <= 0)
-                    {
-                        continue;
-                    }
-
-                    if (string.IsNullOrWhiteSpace(yamlModel.Name))
-                    {
-                        continue;
-                    }
-
-                    var transport = TransportFromString(yamlModel.Transport);
-                    if (transport != TransportType.Stdio && string.IsNullOrWhiteSpace(yamlModel.ServerUrl))
-                    {
-                        continue;
-                    }
-
-                    if (transport == TransportType.Stdio && string.IsNullOrWhiteSpace(yamlModel.StdioCommand))
-                    {
-                        continue;
-                    }
-
-                    var config = FromYaml(yamlModel, fallbackId: System.IO.Path.GetFileNameWithoutExtension(path));
-                    result.Add(config);
-                }
-                catch (Exception)
-                {
-                    // Ignore malformed or unreadable individual files.
-                }
+                paths.Add(path);
             }
         }
         catch (IOException)
@@ -152,7 +114,53 @@ public sealed class ConfigurationManager : IConfigurationService
             return Array.Empty<ServerConfiguration>();
         }
 
-        return result
+        var tasks = paths.Select(async path =>
+        {
+            try
+            {
+                var yaml = await _fileStore.ReadAllTextAsync(path).ConfigureAwait(false);
+                if (yaml is null)
+                {
+                    return null;
+                }
+
+                var localDeserializer = YamlSerialization.CreateDeserializer();
+                var yamlModel = localDeserializer.Deserialize<ServerConfigurationYamlV1>(yaml);
+                if (yamlModel.SchemaVersion <= 0)
+                {
+                    return null;
+                }
+
+                if (string.IsNullOrWhiteSpace(yamlModel.Name))
+                {
+                    return null;
+                }
+
+                var transport = TransportFromString(yamlModel.Transport);
+                if (transport != TransportType.Stdio && string.IsNullOrWhiteSpace(yamlModel.ServerUrl))
+                {
+                    return null;
+                }
+
+                if (transport == TransportType.Stdio && string.IsNullOrWhiteSpace(yamlModel.StdioCommand))
+                {
+                    return null;
+                }
+
+                return FromYaml(yamlModel, fallbackId: System.IO.Path.GetFileNameWithoutExtension(path));
+            }
+            catch (Exception)
+            {
+                // Ignore malformed or unreadable individual files.
+                return null;
+            }
+        });
+
+        var results = await Task.WhenAll(tasks).ConfigureAwait(false);
+
+        return results
+            .Where(x => x != null)
+            .Select(x => x!)
             .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
             .ToList();

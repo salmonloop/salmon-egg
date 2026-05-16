@@ -503,9 +503,9 @@
                                                 x:Uid="DiscoverSessionsImportButton"
                                                 Style="{StaticResource AccentButtonStyle}"
                                                 VerticalAlignment="Center"
-                                                Command="{Binding DataContext.LoadSessionCommand, ElementName=RootPage}"
+                                                Command="{Binding LoadSessionCommand}"
                                                 CommandParameter="{x:Bind}"
-                                                IsEnabled="{Binding DataContext.AreSessionActionsEnabled, ElementName=RootPage}" />
+                                                IsEnabled="{Binding AreSessionActionsEnabled}" />
                                         </Grid>
                                     </Border>
                                 </DataTemplate>
