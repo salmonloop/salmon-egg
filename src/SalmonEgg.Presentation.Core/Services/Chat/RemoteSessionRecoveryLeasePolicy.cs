@@ -8,12 +8,14 @@ namespace SalmonEgg.Presentation.Core.Services.Chat;
 /// Identifies one authoritative remote session recovery lease.
 /// </summary>
 /// <param name="RecoveryMode">The ACP recovery method used by the lease.</param>
+/// <param name="ConversationId">The local conversation that owns the recovery projection.</param>
 /// <param name="ProfileId">The profile that owns the remote session.</param>
 /// <param name="ConnectionInstanceId">The authoritative connection instance that owns the transport.</param>
 /// <param name="RemoteSessionId">The ACP remote session identifier.</param>
 /// <param name="Cwd">The working directory used for the recovery request.</param>
 public readonly record struct RemoteSessionRecoveryLeaseKey(
     AcpSessionRecoveryMode RecoveryMode,
+    string ConversationId,
     string? ProfileId,
     string? ConnectionInstanceId,
     string RemoteSessionId,
@@ -113,9 +115,12 @@ public static class RemoteSessionRecoveryLeasePolicy
     public static bool IsSameLease(
         RemoteSessionRecoveryLeaseKey candidate,
         RemoteSessionRecoveryLeaseKey requested)
-        => Same(candidate.ProfileId, requested.ProfileId)
+        => candidate.RecoveryMode == requested.RecoveryMode
+            && Same(candidate.ConversationId, requested.ConversationId)
+            && Same(candidate.ProfileId, requested.ProfileId)
             && Same(candidate.ConnectionInstanceId, requested.ConnectionInstanceId)
-            && Same(candidate.RemoteSessionId, requested.RemoteSessionId);
+            && Same(candidate.RemoteSessionId, requested.RemoteSessionId)
+            && Same(candidate.Cwd, requested.Cwd);
 
     /// <summary>
     /// Determines whether an active lease must be canceled before starting the requested lease.
@@ -132,7 +137,10 @@ public static class RemoteSessionRecoveryLeasePolicy
             return false;
         }
 
-        return !Same(candidate.ConnectionInstanceId, requested.ConnectionInstanceId);
+        return candidate.RecoveryMode != requested.RecoveryMode
+            || !Same(candidate.ConversationId, requested.ConversationId)
+            || !Same(candidate.ConnectionInstanceId, requested.ConnectionInstanceId)
+            || !Same(candidate.Cwd, requested.Cwd);
     }
 
     private static bool Same(string? left, string? right)

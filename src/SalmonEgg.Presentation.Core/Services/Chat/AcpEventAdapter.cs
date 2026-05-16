@@ -197,10 +197,6 @@ public sealed class AcpEventAdapter
                     }
                 }
             }
-            else if (_hydrationScopesBySessionId.Count > 0)
-            {
-                return;
-            }
             else
             {
                 if (_isSuppressing)
@@ -301,11 +297,16 @@ public sealed class AcpEventAdapter
                 else if (scope.Buffer.Count == 0)
                 {
                     RemoveHydrationScopeLocked(scope, null, markCompleted: true);
-                    RestoreSteadyStateWhenNoHydrationScopesLocked();
+                    scheduleGlobalDrain = RestoreSteadyStateWhenNoHydrationScopesLocked();
                 }
             }
             else
             {
+                if (IsCompletedHydrationAttemptLocked(hydrationAttemptId))
+                {
+                    return true;
+                }
+
                 if (hydrationAttemptId != _hydrationAttemptId)
                 {
                     return IsCompletedHydrationAttemptLocked(hydrationAttemptId);
@@ -524,6 +525,7 @@ public sealed class AcpEventAdapter
     {
         var droppedBufferedCount = 0;
         var drainIdles = new List<TaskCompletionSource<object?>>();
+        var scheduleGlobalDrain = false;
         lock (_gate)
         {
             if (_hydrationScopesByAttemptId.TryGetValue(hydrationAttemptId, out var scope))
@@ -535,12 +537,13 @@ public sealed class AcpEventAdapter
                 scope.IsSuppressing = true;
                 scope.ResyncRaised = false;
                 scope.LowTrustReleaseLogged = false;
-                RemoveHydrationScopeLocked(scope, drainIdles, markCompleted: false);
-                RestoreSteadyStateWhenNoHydrationScopesLocked();
+                RemoveHydrationScopeLocked(scope, drainIdles, markCompleted: true);
+                scheduleGlobalDrain = RestoreSteadyStateWhenNoHydrationScopesLocked();
             }
             else
             {
-                if (hydrationAttemptId != _hydrationAttemptId)
+                if (hydrationAttemptId != _hydrationAttemptId
+                    || IsCompletedHydrationAttemptLocked(hydrationAttemptId))
                 {
                     return;
                 }
@@ -565,6 +568,10 @@ public sealed class AcpEventAdapter
             droppedBufferedCount,
             string.IsNullOrWhiteSpace(reason) ? "Unknown" : reason);
         CompleteDrainIdles(drainIdles);
+        if (scheduleGlobalDrain)
+        {
+            PostDrain();
+        }
     }
 
     private (Func<string?, System.Threading.Tasks.Task>? Callback, string? SessionId) TriggerResyncLocked(
@@ -679,6 +686,7 @@ public sealed class AcpEventAdapter
     private void Drain(long hydrationAttemptId)
     {
         var drainedCount = 0;
+        var scheduleGlobalDrain = false;
         while (drainedCount < DefaultDrainBatchSize)
         {
             SessionUpdateEventArgs update;
@@ -699,7 +707,7 @@ public sealed class AcpEventAdapter
                     if (CanCompleteHydrationScopeLocked(scope))
                     {
                         RemoveHydrationScopeLocked(scope, null, markCompleted: true);
-                        RestoreSteadyStateWhenNoHydrationScopesLocked();
+                        scheduleGlobalDrain = RestoreSteadyStateWhenNoHydrationScopesLocked();
                     }
                 }
                 else
@@ -710,6 +718,10 @@ public sealed class AcpEventAdapter
             }
 
             drainIdle?.TrySetResult(null);
+            if (scheduleGlobalDrain)
+            {
+                PostDrain();
+            }
             return;
 
         HandleUpdate:
@@ -734,7 +746,7 @@ public sealed class AcpEventAdapter
                 if (CanCompleteHydrationScopeLocked(scope))
                 {
                     RemoveHydrationScopeLocked(scope, null, markCompleted: true);
-                    RestoreSteadyStateWhenNoHydrationScopesLocked();
+                    scheduleGlobalDrain = RestoreSteadyStateWhenNoHydrationScopesLocked();
                 }
             }
             else
@@ -744,6 +756,10 @@ public sealed class AcpEventAdapter
         }
 
         finalDrainIdle?.TrySetResult(null);
+        if (scheduleGlobalDrain)
+        {
+            PostDrain();
+        }
     }
 
     private static bool CanDrainBufferedUpdatesLocked(HydrationBufferScope scope)
@@ -806,11 +822,11 @@ public sealed class AcpEventAdapter
     private bool IsCompletedHydrationAttemptLocked(long hydrationAttemptId)
         => _completedHydrationAttemptIds.Contains(hydrationAttemptId);
 
-    private void RestoreSteadyStateWhenNoHydrationScopesLocked()
+    private bool RestoreSteadyStateWhenNoHydrationScopesLocked()
     {
         if (_hydrationScopesByAttemptId.Count != 0)
         {
-            return;
+            return false;
         }
 
         _isHydrated = true;
@@ -818,6 +834,13 @@ public sealed class AcpEventAdapter
         _isSuppressing = false;
         _resyncRaised = false;
         _lowTrustReleaseLogged = false;
+        if (_buffer.Count > 0 && !_drainScheduled)
+        {
+            _drainScheduled = true;
+            return true;
+        }
+
+        return false;
     }
 
     private void RememberCompletedHydrationAttemptLocked(long hydrationAttemptId, string sessionId)

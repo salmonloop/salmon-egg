@@ -1380,14 +1380,20 @@ public partial class ChatViewModel
             result = ConversationActivationOrchestratorResult.Failed();
         }
 
-        await _conversationActivationOrchestrator
-            .CompleteDeferredActivationAsync(
-                request,
-                context,
-                this,
-                result,
-                CancellationToken.None)
-            .ConfigureAwait(false);
+        try
+        {
+            await _conversationActivationOrchestrator
+                .CompleteDeferredActivationAsync(
+                    request,
+                    context,
+                    this,
+                    result,
+                    CancellationToken.None)
+                .ConfigureAwait(false);
+        }
+        catch (ObjectDisposedException) when (_disposed || _disposeCts.IsCancellationRequested)
+        {
+        }
     }
 
     private static ConversationRuntimeSlice? ResolveWarmReuseRuntimeState(

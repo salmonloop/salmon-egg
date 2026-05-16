@@ -284,6 +284,25 @@ public partial class ChatViewModel
             return false;
         }
 
+        var stateBeforeHydration = await _chatStore.State ?? ChatState.Empty;
+        var currentConnectionBeforeHydration = new ConversationWarmReuseConnectionIdentity(
+            resolvedConnection.ProfileId,
+            resolvedConnection.ConnectionInstanceId);
+        var warmReuseBeforeHydration = ConversationWarmReusePolicy.EvaluateRemoteWarmConversation(
+            stateBeforeHydration.ResolveRuntimeState(conversationId),
+            binding,
+            currentConnectionBeforeHydration,
+            HasReusableWarmProjection(stateBeforeHydration, conversationId));
+        if (warmReuseBeforeHydration.CanReuse)
+        {
+            Logger.LogInformation(
+                "Skipping remote hydration because runtime became warm before session recovery started. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId} ConnectionInstanceId={ConnectionInstanceId}",
+                conversationId,
+                binding.RemoteSessionId,
+                resolvedConnection.ConnectionInstanceId);
+            return true;
+        }
+
         await SetConversationRuntimeStateAsync(
                 conversationId,
                 ConversationRuntimePhase.RemoteHydrating,
@@ -374,6 +393,7 @@ public partial class ChatViewModel
                 var recoveryStart = GetOrStartRemoteSessionRecoveryProjection(
                         chatService,
                         recoveryMode,
+                        conversationId,
                         binding,
                         resolvedConnection.ConnectionInstanceId,
                         GetSessionCwdOrDefault(conversationId),
@@ -442,30 +462,13 @@ public partial class ChatViewModel
                     .WaitAsync(cancellationToken)
                     .ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
-                if (adapter != null && hydrationAttemptId.HasValue)
-                {
-                    if (!adapter.TryMarkHydrated(hydrationAttemptId.Value))
-                    {
-                        Logger.LogWarning(
-                            "Discarding remote hydration completion because buffering attempt is stale. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
-                            conversationId,
-                            binding.RemoteSessionId);
-                        await RecoverProjectionAfterStaleHydrationAttemptAsync(
-                                conversationId,
-                                activationVersion,
-                                binding,
-                                ConversationRuntimePhase.RemoteConnectionReady,
-                                cancellationToken)
-                            .ConfigureAwait(false);
-                        return false;
-                    }
-                }
             }
             else
             {
                 var recoveryStart = GetOrStartRemoteSessionRecoveryProjection(
                         chatService,
                         recoveryMode,
+                        conversationId,
                         binding,
                         resolvedConnection.ConnectionInstanceId,
                         GetSessionCwdOrDefault(conversationId),
@@ -492,8 +495,17 @@ public partial class ChatViewModel
                     .ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
             }
-            await ApplySessionLoadResponseAsync(conversationId, recoveryProjection.SessionLoadResponse).ConfigureAwait(true);
-            cancellationToken.ThrowIfCancellationRequested();
+            if (!recoveryProjection.WasPublished)
+            {
+                await RecoverProjectionAfterStaleHydrationAttemptAsync(
+                        conversationId,
+                        activationVersion,
+                        binding,
+                        ConversationRuntimePhase.RemoteConnectionReady,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                return false;
+            }
 
             if (shouldAwaitReplayProjection)
             {
@@ -516,25 +528,6 @@ public partial class ChatViewModel
                     .ConfigureAwait(false);
             }
 
-            if (recoveryMode == AcpSessionRecoveryMode.Load
-                && adapter != null
-                && hydrationAttemptId.HasValue
-                && !adapter.TryMarkHydrated(hydrationAttemptId.Value, reason: "PostDrainVerification"))
-            {
-                Logger.LogWarning(
-                    "Discarding remote hydration finalization because buffering attempt became stale after replay drain. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
-                    conversationId,
-                    binding.RemoteSessionId);
-                await RecoverProjectionAfterStaleHydrationAttemptAsync(
-                        conversationId,
-                        activationVersion,
-                        binding,
-                        ConversationRuntimePhase.RemoteConnectionReady,
-                        cancellationToken)
-                    .ConfigureAwait(false);
-                return false;
-            }
-
             if (shouldAwaitReplayProjection)
             {
                 await _hydrationCoordinator.AwaitKnownTranscriptGrowthRequirementAsync(
@@ -551,14 +544,6 @@ public partial class ChatViewModel
                     conversationId)
                 .ConfigureAwait(false);
             await ApplyCurrentStoreProjectionAsync(activationVersion).ConfigureAwait(false);
-            await SetConversationRuntimeStateAsync(
-                    conversationId,
-                    ConversationRuntimePhase.Warm,
-                    binding,
-                    reason: recoveryProjection.CompletedRuntimeReason,
-                    cancellationToken,
-                    connectionInstanceId: resolvedConnection.ConnectionInstanceId)
-                .ConfigureAwait(false);
             var metadataRefreshToken = _disposeCts.Token;
             var metadataRefreshGeneration = _foregroundChatServiceGeneration;
             _ = ApplyRemoteSessionInfoSnapshotWhenReadyAsync(
@@ -1710,6 +1695,7 @@ public partial class ChatViewModel
     private AcpSessionRecoveryStartResult GetOrStartRemoteSessionRecoveryProjection(
         IChatService chatService,
         AcpSessionRecoveryMode recoveryMode,
+        string conversationId,
         ConversationBindingSlice binding,
         string? connectionInstanceId,
         string cwd,
@@ -1728,6 +1714,7 @@ public partial class ChatViewModel
 
         var key = new RemoteSessionRecoveryLeaseKey(
             recoveryMode,
+            conversationId,
             binding.ProfileId,
             connectionInstanceId,
             binding.RemoteSessionId!,
@@ -1736,50 +1723,39 @@ public partial class ChatViewModel
         List<RemoteSessionRecoveryRequest> requestsToCancel;
         RemoteSessionRecoveryRequest requestToStart;
         AcpSessionRecoveryBufferScope resolvedBufferScope;
+        Task? conflictingRecoveryCompletion;
         lock (_remoteSessionRecoveryRequestsSync)
         {
             var decision = RemoteSessionRecoveryLeasePolicy.Decide(
                 key,
                 _remoteSessionRecoveryRequests.Keys.ToArray());
-            if (decision.Kind == RemoteSessionRecoveryLeaseDecisionKind.ReuseExisting
-                && decision.ExistingLeaseToReuse is { } existingLease
-                && _remoteSessionRecoveryRequests.TryGetValue(existingLease, out var existing))
-            {
-                Logger.LogInformation(
-                    "Reusing in-flight remote session recovery request. RecoveryMode={RecoveryMode} RemoteSessionId={RemoteSessionId} ProfileId={ProfileId} ConnectionInstanceId={ConnectionInstanceId}",
+            if (TryReuseRemoteSessionRecoveryRequest(
+                    decision,
+                    chatService,
                     recoveryMode,
-                    binding.RemoteSessionId,
-                    binding.ProfileId,
-                    connectionInstanceId);
-                resolvedBufferScope = new AcpSessionRecoveryBufferScope(
-                    existing.HydrationAttemptId,
-                    OwnsRecoveryLease: false,
-                    existing.Token);
-                if (adapter != null && existing.HydrationAttemptId.HasValue && existing.BufferingStarted)
-                {
-                    adapter.ReleaseBufferedUpdatesForReplayProjection(existing.HydrationAttemptId.Value);
-                }
-
-                return new AcpSessionRecoveryStartResult(existing.Task, resolvedBufferScope, null, existing, null);
+                    conversationId,
+                    binding,
+                    connectionInstanceId,
+                    cwd,
+                    adapter,
+                    out var reuseResult))
+            {
+                return reuseResult;
             }
 
-            requestsToCancel = RemoveConflictingRemoteSessionRecoveryRequests(decision);
+            requestsToCancel = RemoveConflictingRemoteSessionRecoveryRequestsLocked(decision);
             requestToStart = new RemoteSessionRecoveryRequest(
                 CancellationTokenSource.CreateLinkedTokenSource(_disposeCts.Token));
-            if (adapter != null && recoveryMode == AcpSessionRecoveryMode.Load)
-            {
-                EnsureRemoteSessionRecoveryBufferingScope(
-                    requestToStart,
-                    adapter,
-                    binding.RemoteSessionId!,
-                    recoveryMode);
-            }
-
-            _remoteSessionRecoveryRequests[key] = requestToStart;
-            resolvedBufferScope = new AcpSessionRecoveryBufferScope(
-                requestToStart.HydrationAttemptId,
-                OwnsRecoveryLease: true,
-                requestToStart.Token);
+            resolvedBufferScope = RegisterRemoteSessionRecoveryRequestLocked(
+                key,
+                requestToStart,
+                binding.RemoteSessionId!,
+                recoveryMode,
+                adapter);
+            conflictingRecoveryCompletion = requestsToCancel.Count == 0
+                ? null
+                : System.Threading.Tasks.Task.WhenAll(
+                    requestsToCancel.Select(static request => request.CompletionOrExecutionTask));
         }
 
         foreach (var request in requestsToCancel)
@@ -1787,29 +1763,121 @@ public partial class ChatViewModel
             request.Cancel();
         }
 
-        var conflictingRecoveryCompletion = requestsToCancel.Count == 0
-            ? null
-            : System.Threading.Tasks.Task.WhenAll(
-                requestsToCancel.Select(static request => request.ExecutionTask));
-
         _ = RemoveRemoteSessionRecoveryRequestWhenCompleteAsync(key, requestToStart);
-        return new AcpSessionRecoveryStartResult(
-            requestToStart.Task,
+        return CreateRemoteSessionRecoveryStartResult(
+            requestToStart,
             resolvedBufferScope,
             conflictingRecoveryCompletion,
-            requestToStart,
+            chatService,
+            recoveryMode,
+            conversationId,
+            binding,
+            connectionInstanceId,
+            cwd,
+            adapter);
+    }
+
+    private bool TryReuseRemoteSessionRecoveryRequest(
+        RemoteSessionRecoveryLeaseDecision decision,
+        IChatService chatService,
+        AcpSessionRecoveryMode recoveryMode,
+        string conversationId,
+        ConversationBindingSlice binding,
+        string? connectionInstanceId,
+        string cwd,
+        IAcpSessionUpdateBufferController? adapter,
+        out AcpSessionRecoveryStartResult startResult)
+    {
+        startResult = default;
+        if (decision.Kind != RemoteSessionRecoveryLeaseDecisionKind.ReuseExisting
+            || decision.ExistingLeaseToReuse is not { } existingLease
+            || !_remoteSessionRecoveryRequests.TryGetValue(existingLease, out var existing))
+        {
+            return false;
+        }
+
+        Logger.LogInformation(
+            "Reusing in-flight remote session recovery request. RecoveryMode={RecoveryMode} RemoteSessionId={RemoteSessionId} ProfileId={ProfileId} ConnectionInstanceId={ConnectionInstanceId}",
+            recoveryMode,
+            binding.RemoteSessionId,
+            binding.ProfileId,
+            connectionInstanceId);
+        if (adapter != null && existing.HydrationAttemptId.HasValue && existing.BufferingStarted)
+        {
+            adapter.ReleaseBufferedUpdatesForReplayProjection(existing.HydrationAttemptId.Value);
+        }
+
+        startResult = CreateRemoteSessionRecoveryStartResult(
+            existing,
+            new AcpSessionRecoveryBufferScope(
+                existing.HydrationAttemptId,
+                OwnsRecoveryLease: false,
+                existing.Token),
+            conflictingRecoveryCompletion: null,
+            chatService,
+            recoveryMode,
+            conversationId,
+            binding,
+            connectionInstanceId,
+            cwd,
+            adapter);
+        return true;
+    }
+
+    private AcpSessionRecoveryBufferScope RegisterRemoteSessionRecoveryRequestLocked(
+        RemoteSessionRecoveryLeaseKey key,
+        RemoteSessionRecoveryRequest request,
+        string remoteSessionId,
+        AcpSessionRecoveryMode recoveryMode,
+        IAcpSessionUpdateBufferController? adapter)
+    {
+        EnsureRemoteSessionRecoveryBufferingScope(
+            request,
+            adapter,
+            remoteSessionId,
+            recoveryMode);
+        _remoteSessionRecoveryRequests[key] = request;
+        return new AcpSessionRecoveryBufferScope(
+            request.HydrationAttemptId,
+            OwnsRecoveryLease: true,
+            request.Token);
+    }
+
+    private AcpSessionRecoveryStartResult CreateRemoteSessionRecoveryStartResult(
+        RemoteSessionRecoveryRequest request,
+        AcpSessionRecoveryBufferScope bufferScope,
+        Task? conflictingRecoveryCompletion,
+        IChatService chatService,
+        AcpSessionRecoveryMode recoveryMode,
+        string conversationId,
+        ConversationBindingSlice binding,
+        string? connectionInstanceId,
+        string cwd,
+        IAcpSessionUpdateBufferController? adapter)
+    {
+        return new AcpSessionRecoveryStartResult(
+            request.Task,
+            bufferScope,
+            conflictingRecoveryCompletion,
+            request,
             () => StartRemoteSessionRecoveryProjection(
                 chatService,
                 recoveryMode,
+                conversationId,
+                binding,
+                connectionInstanceId,
                 binding.RemoteSessionId!,
                 cwd,
-                requestToStart,
+                request,
                 adapter));
     }
 
     private void StartRemoteSessionRecoveryProjection(
         IChatService chatService,
         AcpSessionRecoveryMode recoveryMode,
+        string conversationId,
+        ConversationBindingSlice binding,
+        string? connectionInstanceId,
         string remoteSessionId,
         string cwd,
         RemoteSessionRecoveryRequest request,
@@ -1824,6 +1892,9 @@ public partial class ChatViewModel
         request.Start(_ => RunRemoteSessionRecoveryProjectionAsync(
             chatService,
             recoveryMode,
+            conversationId,
+            binding,
+            connectionInstanceId,
             remoteSessionId,
             cwd,
             request,
@@ -1851,6 +1922,64 @@ public partial class ChatViewModel
     private async Task<AcpSessionRecoveryProjection> RunRemoteSessionRecoveryProjectionAsync(
         IChatService chatService,
         AcpSessionRecoveryMode recoveryMode,
+        string conversationId,
+        ConversationBindingSlice binding,
+        string? connectionInstanceId,
+        string remoteSessionId,
+        string cwd,
+        RemoteSessionRecoveryRequest request,
+        IAcpSessionUpdateBufferController? adapter,
+        long? hydrationAttemptId)
+    {
+        if (recoveryMode == AcpSessionRecoveryMode.Load)
+        {
+            return await RunRemoteSessionLoadRecoveryProjectionAsync(
+                    chatService,
+                    conversationId,
+                    binding,
+                    connectionInstanceId,
+                    remoteSessionId,
+                    cwd,
+                    request,
+                    adapter,
+                    hydrationAttemptId)
+                .ConfigureAwait(false);
+        }
+
+        var requestToken = request.Token;
+        var resumeTask = chatService.ResumeSessionAsync(
+            CreateSessionResumeParams(remoteSessionId, cwd),
+            requestToken);
+        _ = ObserveRemoteSessionRecoveryTransportTaskAsync(resumeTask, recoveryMode, remoteSessionId);
+        try
+        {
+            var projection = AcpSessionRecoveryProjection.FromResume(
+                await resumeTask
+                    .WaitAsync(RemoteSessionLoadTimeout, requestToken)
+                    .ConfigureAwait(false));
+            var wasPublished = await PublishRemoteSessionRecoveryProjectionAsync(
+                    conversationId,
+                    binding,
+                    connectionInstanceId,
+                    projection,
+                    adapter: null,
+                    hydrationAttemptId: null,
+                    requestToken)
+                .ConfigureAwait(false);
+            return projection with { WasPublished = wasPublished };
+        }
+        catch (TimeoutException)
+        {
+            request.CancelTransport();
+            throw;
+        }
+    }
+
+    private async Task<AcpSessionRecoveryProjection> RunRemoteSessionLoadRecoveryProjectionAsync(
+        IChatService chatService,
+        string conversationId,
+        ConversationBindingSlice binding,
+        string? connectionInstanceId,
         string remoteSessionId,
         string cwd,
         RemoteSessionRecoveryRequest request,
@@ -1858,47 +1987,150 @@ public partial class ChatViewModel
         long? hydrationAttemptId)
     {
         var requestToken = request.Token;
-        if (recoveryMode == AcpSessionRecoveryMode.Load)
-        {
-            var loadTask = chatService.LoadSessionAsync(
-                new SessionLoadParams(remoteSessionId, cwd),
-                requestToken);
-            if (adapter != null && hydrationAttemptId.HasValue)
-            {
-                adapter.ReleaseBufferedUpdatesForReplayProjection(hydrationAttemptId.Value);
-            }
-
-            _ = ObserveRemoteSessionRecoveryTransportTaskAsync(loadTask, recoveryMode, remoteSessionId);
-            try
-            {
-                return AcpSessionRecoveryProjection.FromLoad(
-                    await loadTask
-                        .WaitAsync(RemoteSessionLoadTimeout, requestToken)
-                        .ConfigureAwait(false));
-            }
-            catch (TimeoutException)
-            {
-                request.CancelTransport();
-                throw;
-            }
-        }
-
-        var resumeTask = chatService.ResumeSessionAsync(
-            new SessionResumeParams(remoteSessionId, cwd),
+        var loadTask = chatService.LoadSessionAsync(
+            CreateSessionLoadParams(remoteSessionId, cwd),
             requestToken);
-        _ = ObserveRemoteSessionRecoveryTransportTaskAsync(resumeTask, recoveryMode, remoteSessionId);
+
+        _ = ObserveRemoteSessionRecoveryTransportTaskAsync(
+            loadTask,
+            AcpSessionRecoveryMode.Load,
+            remoteSessionId);
         try
         {
-            return AcpSessionRecoveryProjection.FromResume(
-                await resumeTask
+            var projection = AcpSessionRecoveryProjection.FromLoad(
+                await loadTask
                     .WaitAsync(RemoteSessionLoadTimeout, requestToken)
                     .ConfigureAwait(false));
+            var wasPublished = await PublishRemoteSessionRecoveryProjectionAsync(
+                    conversationId,
+                    binding,
+                    connectionInstanceId,
+                    projection,
+                    adapter,
+                    hydrationAttemptId,
+                    requestToken)
+                .ConfigureAwait(false);
+            return projection with { WasPublished = wasPublished };
         }
         catch (TimeoutException)
         {
             request.CancelTransport();
+            ReleaseBufferedUpdatesAfterInterruptedHydration(
+                adapter,
+                hydrationAttemptId,
+                ownsHydrationScope: true,
+                "RemoteSessionRecoveryTimeout");
             throw;
         }
+        catch (OperationCanceledException) when (requestToken.IsCancellationRequested)
+        {
+            ReleaseBufferedUpdatesAfterInterruptedHydration(
+                adapter,
+                hydrationAttemptId,
+                ownsHydrationScope: true,
+                "RemoteSessionRecoveryCanceled");
+            throw;
+        }
+        catch
+        {
+            ReleaseBufferedUpdatesAfterInterruptedHydration(
+                adapter,
+                hydrationAttemptId,
+                ownsHydrationScope: true,
+                "RemoteSessionRecoveryFailed");
+            throw;
+        }
+    }
+
+    private static SessionLoadParams CreateSessionLoadParams(string remoteSessionId, string cwd)
+        => new(remoteSessionId, cwd, new List<McpServer>());
+
+    private static SessionResumeParams CreateSessionResumeParams(string remoteSessionId, string cwd)
+        => new(remoteSessionId, cwd, new List<McpServer>());
+
+    private async Task<bool> PublishRemoteSessionRecoveryProjectionAsync(
+        string conversationId,
+        ConversationBindingSlice expectedBinding,
+        string? expectedConnectionInstanceId,
+        AcpSessionRecoveryProjection projection,
+        IAcpSessionUpdateBufferController? adapter,
+        long? hydrationAttemptId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(conversationId)
+            || string.IsNullOrWhiteSpace(expectedBinding.RemoteSessionId))
+        {
+            ReleaseBufferedUpdatesAfterInterruptedHydration(
+                adapter,
+                hydrationAttemptId,
+                ownsHydrationScope: true,
+                "RemoteSessionRecoveryIdentityMissing");
+            return false;
+        }
+
+        var currentBinding = await ResolveConversationBindingAsync(conversationId, cancellationToken).ConfigureAwait(false);
+        if (currentBinding is null
+            || !string.Equals(currentBinding.RemoteSessionId, expectedBinding.RemoteSessionId, StringComparison.Ordinal)
+            || !string.Equals(currentBinding.ProfileId, expectedBinding.ProfileId, StringComparison.Ordinal))
+        {
+            Logger.LogDebug(
+                "Discarding remote session recovery projection because binding changed. ConversationId={ConversationId} ExpectedRemoteSessionId={ExpectedRemoteSessionId} CurrentRemoteSessionId={CurrentRemoteSessionId}",
+                conversationId,
+                expectedBinding.RemoteSessionId,
+                currentBinding?.RemoteSessionId);
+            ReleaseBufferedUpdatesAfterInterruptedHydration(
+                adapter,
+                hydrationAttemptId,
+                ownsHydrationScope: true,
+                "RemoteSessionRecoveryBindingChanged");
+            return false;
+        }
+
+        var currentConnection = await ResolveAuthoritativeForegroundConnectionAsync(
+                expectedBinding.ProfileId,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (currentConnection is null
+            || !string.Equals(currentConnection.Value.ConnectionInstanceId, expectedConnectionInstanceId, StringComparison.Ordinal))
+        {
+            Logger.LogDebug(
+                "Discarding remote session recovery projection because connection identity changed. ConversationId={ConversationId} ExpectedConnectionInstanceId={ExpectedConnectionInstanceId} CurrentConnectionInstanceId={CurrentConnectionInstanceId}",
+                conversationId,
+                expectedConnectionInstanceId,
+                currentConnection?.ConnectionInstanceId);
+            ReleaseBufferedUpdatesAfterInterruptedHydration(
+                adapter,
+                hydrationAttemptId,
+                ownsHydrationScope: true,
+                "RemoteSessionRecoveryConnectionChanged");
+            return false;
+        }
+
+        var bufferingCompleted = CompleteRemoteSessionRecoveryBufferingScope(
+            adapter,
+            hydrationAttemptId,
+            "RemoteSessionRecoveryCompleted");
+        if (!bufferingCompleted)
+        {
+            Logger.LogWarning(
+                "Discarding remote session recovery projection because buffering attempt is stale. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
+                conversationId,
+                expectedBinding.RemoteSessionId);
+            return false;
+        }
+
+        await ApplySessionLoadResponseAsync(conversationId, projection.SessionLoadResponse).ConfigureAwait(true);
+        await AwaitBufferedSessionReplayProjectionAsync(cancellationToken, hydrationAttemptId).ConfigureAwait(false);
+        await SetConversationRuntimeStateAsync(
+                conversationId,
+                ConversationRuntimePhase.Warm,
+                currentBinding,
+                projection.CompletedRuntimeReason,
+                cancellationToken,
+                connectionInstanceId: expectedConnectionInstanceId)
+            .ConfigureAwait(false);
+        return true;
     }
 
     private async Task ObserveRemoteSessionRecoveryTransportTaskAsync<TResponse>(
@@ -1923,7 +2155,7 @@ public partial class ChatViewModel
         }
     }
 
-    private List<RemoteSessionRecoveryRequest> RemoveConflictingRemoteSessionRecoveryRequests(RemoteSessionRecoveryLeaseDecision decision)
+    private List<RemoteSessionRecoveryRequest> RemoveConflictingRemoteSessionRecoveryRequestsLocked(RemoteSessionRecoveryLeaseDecision decision)
     {
         if (decision.ConflictingLeasesToCancel.Count == 0)
         {
@@ -2057,6 +2289,19 @@ public partial class ChatViewModel
         }
 
         adapter.SuppressBufferedUpdates(hydrationAttemptId.Value, reason);
+    }
+
+    private static bool CompleteRemoteSessionRecoveryBufferingScope(
+        IAcpSessionUpdateBufferController? adapter,
+        long? hydrationAttemptId,
+        string reason)
+    {
+        if (adapter is null || !hydrationAttemptId.HasValue)
+        {
+            return true;
+        }
+
+        return adapter.TryMarkHydrated(hydrationAttemptId.Value, reason: reason);
     }
 
     private async Task<ServerConfiguration?> ResolveProfileConfigurationAsync(

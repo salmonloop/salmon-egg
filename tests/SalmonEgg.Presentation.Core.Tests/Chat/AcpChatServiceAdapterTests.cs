@@ -90,33 +90,35 @@ public sealed class AcpChatServiceAdapterTests
         var updates = new List<SessionUpdateEventArgs>();
         adapter.SessionUpdateReceived += (_, args) => updates.Add(args);
 
+        adapter.MarkHydrated();
         var attemptId = adapter.BeginHydrationBufferingScope("remote-1");
 
         var released = adapter.ReleaseBufferedUpdatesForReplayProjection(attemptId);
         inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-1", new PlanUpdate(title: "replay")));
+        inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-2", new PlanUpdate(title: "other")));
         while (dispatcher.RunNext())
         {
         }
 
         await adapter.WaitForBufferedUpdatesDrainedAsync(attemptId).WaitAsync(TimeSpan.FromSeconds(1));
         Assert.True(released);
-        Assert.Single(updates);
+        Assert.Equal(2, updates.Count);
         Assert.Equal("remote-1", updates[0].SessionId);
+        Assert.Equal("remote-2", updates[1].SessionId);
 
-        inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-2", new PlanUpdate(title: "other")));
         inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-1", new PlanUpdate(title: "late")));
         while (dispatcher.RunNext())
         {
         }
 
-        Assert.Equal(2, updates.Count);
-        Assert.Equal("late", Assert.IsType<PlanUpdate>(updates[1].Update).Title);
+        Assert.Equal(3, updates.Count);
+        Assert.Equal("late", Assert.IsType<PlanUpdate>(updates[2].Update).Title);
         Assert.True(adapter.TryMarkHydrated(attemptId));
         while (dispatcher.RunNext())
         {
         }
 
-        Assert.Equal(2, updates.Count);
+        Assert.Equal(3, updates.Count);
     }
 
     [Fact]
@@ -157,13 +159,15 @@ public sealed class AcpChatServiceAdapterTests
         inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-previous", new PlanUpdate(title: "stale")));
         inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-next", new PlanUpdate(title: "fresh")));
 
-        Assert.Single(updates);
+        Assert.Equal(2, updates.Count);
+        Assert.Equal("remote-previous", updates[1].SessionId);
+        Assert.Equal("stale", Assert.IsType<PlanUpdate>(updates[1].Update).Title);
 
         adapter.MarkHydrated(nextAttempt);
 
-        Assert.Equal(2, updates.Count);
-        Assert.Equal("remote-next", updates[1].SessionId);
-        Assert.Equal("fresh", Assert.IsType<PlanUpdate>(updates[1].Update).Title);
+        Assert.Equal(3, updates.Count);
+        Assert.Equal("remote-next", updates[2].SessionId);
+        Assert.Equal("fresh", Assert.IsType<PlanUpdate>(updates[2].Update).Title);
     }
 
     [Fact]
@@ -179,7 +183,7 @@ public sealed class AcpChatServiceAdapterTests
         inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-1", new PlanUpdate(title: "discard-me")));
 
         adapter.SuppressBufferedUpdates(firstAttempt);
-        adapter.MarkHydrated(firstAttempt);
+        Assert.True(adapter.MarkHydrated(firstAttempt));
         Assert.Empty(updates);
 
         var secondAttempt = adapter.BeginHydrationBufferingScope("remote-1");
@@ -227,6 +231,25 @@ public sealed class AcpChatServiceAdapterTests
 
         Assert.False(adapter.TryMarkHydrated(firstAttempt));
         Assert.True(adapter.TryMarkHydrated(secondAttempt));
+    }
+
+    [Fact]
+    public void SuppressBufferedUpdates_WhenAttemptAlreadyCompleted_DoesNotSuppressSteadyStateUpdates()
+    {
+        var uiDispatcher = new ImmediateUiDispatcher();
+        var inner = new FakeChatService();
+        using var adapter = BuildAdapter(inner, uiDispatcher);
+        var updates = new List<SessionUpdateEventArgs>();
+        adapter.SessionUpdateReceived += (_, args) => updates.Add(args);
+
+        var attemptId = adapter.BeginHydrationBufferingScope("remote-1");
+        Assert.True(adapter.TryMarkHydrated(attemptId));
+
+        adapter.SuppressBufferedUpdates(attemptId, "duplicate-terminal");
+        inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-2", new PlanUpdate(title: "steady-state")));
+
+        var update = Assert.Single(updates);
+        Assert.Equal("remote-2", update.SessionId);
     }
 
     [Fact]

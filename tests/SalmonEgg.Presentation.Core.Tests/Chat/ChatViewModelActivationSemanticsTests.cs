@@ -1069,7 +1069,7 @@ public partial class ChatViewModelTests
             "ChatViewModel.cs"));
         var getOrStartBody = ExtractMethodBody(lifecycleSource, "private AcpSessionRecoveryStartResult GetOrStartRemoteSessionRecoveryProjection");
         var cleanupBody = ExtractMethodBody(lifecycleSource, "private void CancelAndClearRemoteSessionRecoveryRequests");
-        var supersedeBody = ExtractMethodBody(lifecycleSource, "private List<RemoteSessionRecoveryRequest> RemoveConflictingRemoteSessionRecoveryRequests");
+        var supersedeBody = ExtractMethodBody(lifecycleSource, "private List<RemoteSessionRecoveryRequest> RemoveConflictingRemoteSessionRecoveryRequestsLocked");
         var cancelBody = ExtractMethodBody(requestSource, "public void Cancel()");
         var cancelTransportBody = ExtractMethodBody(requestSource, "public void CancelTransport()");
 
@@ -1090,9 +1090,10 @@ public partial class ChatViewModelTests
             "Chat",
             "ChatViewModel.RemoteConversationLifecycle.cs"));
         var runBody = ExtractMethodBody(source, "private async Task<AcpSessionRecoveryProjection> RunRemoteSessionRecoveryProjectionAsync");
+        var loadBody = ExtractMethodBody(source, "private async Task<AcpSessionRecoveryProjection> RunRemoteSessionLoadRecoveryProjectionAsync");
 
-        Assert.Contains("ObserveRemoteSessionRecoveryTransportTaskAsync(loadTask", runBody, StringComparison.Ordinal);
-        Assert.Contains("ObserveRemoteSessionRecoveryTransportTaskAsync(resumeTask", runBody, StringComparison.Ordinal);
+        Assert.Matches(@"ObserveRemoteSessionRecoveryTransportTaskAsync\s*\(\s*loadTask\b", loadBody);
+        Assert.Matches(@"ObserveRemoteSessionRecoveryTransportTaskAsync\s*\(\s*resumeTask\b", runBody);
     }
 
     [Fact]

@@ -221,6 +221,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         private Task? _executionTask;
         private bool _disposed;
         private bool _bufferingStarted;
+        private int _started;
 
         public RemoteSessionRecoveryRequest(CancellationTokenSource cancellationTokenSource)
         {
@@ -231,6 +232,17 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         public Task<AcpSessionRecoveryProjection> Task => _completion.Task;
 
         public Task ExecutionTask => Volatile.Read(ref _executionTask) ?? System.Threading.Tasks.Task.CompletedTask;
+
+        public Task CompletionOrExecutionTask
+        {
+            get
+            {
+                var executionTask = Volatile.Read(ref _executionTask);
+                return executionTask is null
+                    ? _completion.Task
+                    : System.Threading.Tasks.Task.WhenAll(_completion.Task, executionTask);
+            }
+        }
 
         public CancellationToken Token => _token;
 
@@ -247,15 +259,18 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         public void Start(Func<CancellationToken, Task<AcpSessionRecoveryProjection>> operation)
         {
             ArgumentNullException.ThrowIfNull(operation);
+            if (Interlocked.Exchange(ref _started, 1) == 1)
+            {
+                return;
+            }
+
             Volatile.Write(ref _executionTask, RunAsync(operation));
         }
 
         public void Cancel()
         {
-            if (TryRequestCancellation())
-            {
-                _completion.TrySetCanceled(_token);
-            }
+            TryRequestCancellation();
+            _completion.TrySetCanceled(_token);
         }
 
         public void CancelTransport()
@@ -2908,6 +2923,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
            _transientNotificationCts?.Cancel();
            _newSessionDraftModeSelectionCts?.Cancel();
            _disposeCts.Cancel();
+           CancelAndClearRemoteSessionRecoveryRequests("Dispose");
            try { _ = _voiceInputService.StopAsync(); } catch { }
            StopStoreProjection();
 

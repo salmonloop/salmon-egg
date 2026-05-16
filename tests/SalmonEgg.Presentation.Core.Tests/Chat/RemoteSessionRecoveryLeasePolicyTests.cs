@@ -38,7 +38,23 @@ public class RemoteSessionRecoveryLeasePolicyTests
     }
 
     [Fact]
-    public void Decide_WhenSameRemoteSessionUsesDifferentCwd_ReusesExistingLease()
+    public void Decide_WhenSameRemoteSessionUsesDifferentConversation_CancelsExistingLease()
+    {
+        var existing = Lease(conversationId: "conv-a", remoteSessionId: "remote-a");
+        var requested = Lease(conversationId: "conv-b", remoteSessionId: "remote-a");
+
+        var decision = RemoteSessionRecoveryLeasePolicy.Decide(
+            requested,
+            [existing]);
+
+        Assert.Equal(RemoteSessionRecoveryLeaseDecisionKind.StartNew, decision.Kind);
+        Assert.True(decision.ShouldStartNew);
+        Assert.Null(decision.ExistingLeaseToReuse);
+        Assert.Equal([existing], decision.ConflictingLeasesToCancel);
+    }
+
+    [Fact]
+    public void Decide_WhenSameRemoteSessionUsesDifferentCwd_CancelsExistingLease()
     {
         var existing = Lease(remoteSessionId: "remote-a", cwd: "C:\\repo-a");
         var requested = Lease(remoteSessionId: "remote-a", cwd: "C:\\repo-b");
@@ -47,14 +63,14 @@ public class RemoteSessionRecoveryLeasePolicyTests
             requested,
             [existing]);
 
-        Assert.Equal(RemoteSessionRecoveryLeaseDecisionKind.ReuseExisting, decision.Kind);
-        Assert.True(decision.ShouldReuseExisting);
-        Assert.Equal(existing, decision.ExistingLeaseToReuse);
-        Assert.Empty(decision.ConflictingLeasesToCancel);
+        Assert.Equal(RemoteSessionRecoveryLeaseDecisionKind.StartNew, decision.Kind);
+        Assert.True(decision.ShouldStartNew);
+        Assert.Null(decision.ExistingLeaseToReuse);
+        Assert.Equal([existing], decision.ConflictingLeasesToCancel);
     }
 
     [Fact]
-    public void Decide_WhenSameRemoteSessionUsesDifferentRecoveryMode_ReusesExistingLease()
+    public void Decide_WhenSameRemoteSessionUsesDifferentRecoveryMode_CancelsExistingLease()
     {
         var existing = Lease(remoteSessionId: "remote-a", recoveryMode: AcpSessionRecoveryMode.Load);
         var requested = Lease(remoteSessionId: "remote-a", recoveryMode: AcpSessionRecoveryMode.Resume);
@@ -63,10 +79,10 @@ public class RemoteSessionRecoveryLeasePolicyTests
             requested,
             [existing]);
 
-        Assert.Equal(RemoteSessionRecoveryLeaseDecisionKind.ReuseExisting, decision.Kind);
-        Assert.True(decision.ShouldReuseExisting);
-        Assert.Equal(existing, decision.ExistingLeaseToReuse);
-        Assert.Empty(decision.ConflictingLeasesToCancel);
+        Assert.Equal(RemoteSessionRecoveryLeaseDecisionKind.StartNew, decision.Kind);
+        Assert.True(decision.ShouldStartNew);
+        Assert.Null(decision.ExistingLeaseToReuse);
+        Assert.Equal([existing], decision.ConflictingLeasesToCancel);
     }
 
     [Fact]
@@ -116,12 +132,14 @@ public class RemoteSessionRecoveryLeasePolicyTests
 
     private static RemoteSessionRecoveryLeaseKey Lease(
         AcpSessionRecoveryMode recoveryMode = AcpSessionRecoveryMode.Load,
+        string conversationId = "conv-1",
         string? profileId = "profile-1",
         string? connectionInstanceId = "conn-1",
         string remoteSessionId = "remote-1",
         string cwd = "C:\\repo")
         => new(
             recoveryMode,
+            conversationId,
             profileId,
             connectionInstanceId,
             remoteSessionId,
