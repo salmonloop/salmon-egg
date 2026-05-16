@@ -45,7 +45,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             ITerminalSessionManager? terminalSessionManager = null)
         {
             var parser = new MessageParser(); // Use real parser for serialization
-            
+
             var initTimeouts = timeouts ?? new AcpClient.AcpRequestTimeouts(
                 DefaultTimeout: TimeSpan.FromSeconds(5),
                 SessionNewTimeout: TimeSpan.FromSeconds(5),
@@ -98,12 +98,13 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var client = await CreateInitializedClientAsync(
                 timeouts,
                 new AgentCapabilities(loadSession: true));
-            
+
             _transportMock.Setup(t => t.SendMessageAsync(It.IsRegex("session/new"), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(true);
 
             // Delay response for 200ms (exceeds default 50ms, but within session/new 500ms)
-            var responseTrigger = Task.Run(async () => {
+            var responseTrigger = Task.Run(async () =>
+            {
                 await Task.Delay(200);
                 var response = new JsonRpcResponse(2, JsonSerializer.SerializeToElement(new SessionNewResponse("session-123"), parser.Options));
                 _transportMock.Raise(t => t.MessageReceived += null, new MessageReceivedEventArgs(parser.SerializeMessage(response)));
@@ -273,7 +274,8 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 .ReturnsAsync(true);
 
             // Delay response beyond the default budget, but keep it safely within session/load timeout.
-            var responseTrigger = Task.Run(async () => {
+            var responseTrigger = Task.Run(async () =>
+            {
                 await Task.Delay(200);
                 var response = new JsonRpcResponse(2, JsonSerializer.SerializeToElement(new { }, parser.Options));
                 _transportMock.Raise(t => t.MessageReceived += null, new MessageReceivedEventArgs(parser.SerializeMessage(response)));
@@ -626,9 +628,9 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             );
 
             var client = await CreateInitializedClientAsync(timeouts);
-            
+
             var ex = await Assert.ThrowsAsync<TimeoutException>(() => client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null)));
-            
+
             Assert.Contains("method=session/new", ex.Message);
             Assert.Contains("timeout=", ex.Message);
             Assert.Contains("lastRx=", ex.Message);
@@ -648,7 +650,8 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             _transportMock.Setup(t => t.SendMessageAsync(It.IsRegex("session/prompt"), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(true);
 
-            var createResponseTrigger = Task.Run(async () => {
+            var createResponseTrigger = Task.Run(async () =>
+            {
                 await Task.Delay(10);
                 var response = new JsonRpcResponse(2, JsonSerializer.SerializeToElement(new SessionNewResponse("session-123"), parser.Options));
                 _transportMock.Raise(t => t.MessageReceived += null, new MessageReceivedEventArgs(parser.SerializeMessage(response)));
@@ -657,7 +660,8 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var createResult = await client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null));
             await createResponseTrigger;
 
-            var promptResponseTrigger = Task.Run(async () => {
+            var promptResponseTrigger = Task.Run(async () =>
+            {
                 await Task.Delay(10);
                 var response = new JsonRpcResponse(3, JsonSerializer.SerializeToElement(new SessionPromptResponse(expected), parser.Options));
                 _transportMock.Raise(t => t.MessageReceived += null, new MessageReceivedEventArgs(parser.SerializeMessage(response)));
