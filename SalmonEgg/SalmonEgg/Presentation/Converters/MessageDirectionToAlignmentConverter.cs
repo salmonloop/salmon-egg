@@ -1,9 +1,10 @@
+namespace SalmonEgg.Presentation.Converters;
 using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 
-namespace SalmonEgg.Presentation.Converters
-{
+
+
     /// <summary>
     /// 将消息方向转换为对齐方式
     /// Requirements: 4.2
@@ -24,4 +25,3 @@ namespace SalmonEgg.Presentation.Converters
             throw new NotImplementedException();
         }
     }
-}

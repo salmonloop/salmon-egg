@@ -1,10 +1,11 @@
+namespace SalmonEgg.Presentation.Converters;
 using System;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media;
 using SalmonEgg.Domain.Models;
 
-namespace SalmonEgg.Presentation.Converters
-{
+
+
     /// <summary>
     /// 将连接状态转换为颜色
     /// Requirements: 4.2
@@ -32,4 +33,3 @@ namespace SalmonEgg.Presentation.Converters
             throw new NotImplementedException();
         }
     }
-}

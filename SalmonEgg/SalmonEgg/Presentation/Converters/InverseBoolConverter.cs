@@ -1,9 +1,10 @@
+namespace SalmonEgg.Presentation.Converters;
 using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 
-namespace SalmonEgg.Presentation.Converters
-{
+
+
     /// <summary>
     /// 将布尔值取反后转换为 Visibility
     /// </summary>
@@ -27,4 +28,3 @@ namespace SalmonEgg.Presentation.Converters
             return true;
         }
     }
-}
