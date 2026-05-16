@@ -25,6 +25,15 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: Install uno.check
+        run: dotnet tool install -g uno.check
+
+      - name: Run uno.check to install workloads
+        run: uno-check --ci --non-interactive --fix
+
+      - name: Install wasm-tools workload
+        run: dotnet workload install wasm-tools
+
       - name: Restore dependencies
         run: dotnet restore SalmonEgg.sln
 
