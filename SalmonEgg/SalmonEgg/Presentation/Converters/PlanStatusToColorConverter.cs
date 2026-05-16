@@ -4,8 +4,7 @@ using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media;
 using SalmonEgg.Domain.Models.Plan;
 
-namespace SalmonEgg.Presentation.Converters
-{
+namespace SalmonEgg.Presentation.Converters;
     /// <summary>
     /// 将计划条目状态转换为对应的颜色
     /// </summary>
@@ -32,4 +31,3 @@ namespace SalmonEgg.Presentation.Converters
             throw new NotImplementedException();
         }
     }
-}
