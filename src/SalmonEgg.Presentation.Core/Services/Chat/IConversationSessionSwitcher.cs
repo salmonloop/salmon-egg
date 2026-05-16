@@ -13,7 +13,15 @@ public interface IConversationSessionSwitcher
 {
     Task<bool> SwitchConversationAsync(string conversationId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Registers a discovered remote session as a local conversation and records its remote binding.
+    /// Shell activation remains owned by the navigation coordinator activation path.
+    /// </summary>
     Task<DiscoverRemoteSessionOpenResult> OpenDiscoveredRemoteSessionAsync(
         DiscoverRemoteSessionOpenRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task DiscardDiscoveredRemoteSessionAsync(
+        string localConversationId,
         CancellationToken cancellationToken = default);
 }

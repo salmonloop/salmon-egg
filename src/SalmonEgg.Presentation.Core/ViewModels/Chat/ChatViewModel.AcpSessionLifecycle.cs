@@ -1097,49 +1097,52 @@ public partial class ChatViewModel
                 .ConfigureAwait(false);
             if (bindingResult.Status is not BindingUpdateStatus.Success)
             {
-                RollBackDiscoveredConversation(localConversationId);
+                await RollBackDiscoveredConversationAsync(localConversationId, CancellationToken.None).ConfigureAwait(false);
                 return new DiscoverRemoteSessionOpenResult(
                     false,
                     null,
                     bindingResult.ErrorMessage ?? $"BindingUpdateFailed:{bindingResult.Status}");
             }
 
-            var activated = await ActivateConversationCoreAsync(
-                    localConversationId,
-                    awaitRemoteHydration: true,
-                    cancellationToken)
-                .ConfigureAwait(false);
-            return activated
-                ? new DiscoverRemoteSessionOpenResult(true, localConversationId, null)
-                : new DiscoverRemoteSessionOpenResult(false, localConversationId, "加载会话并导入失败，请检查连接状态。");
+            return new DiscoverRemoteSessionOpenResult(true, localConversationId, null);
         }
         catch (OperationCanceledException)
         {
-            RollBackDiscoveredConversation(localConversationId);
+            await RollBackDiscoveredConversationAsync(localConversationId, CancellationToken.None).ConfigureAwait(false);
             throw;
         }
         catch (Exception ex)
         {
-            RollBackDiscoveredConversation(localConversationId);
+            await RollBackDiscoveredConversationAsync(localConversationId, CancellationToken.None).ConfigureAwait(false);
             Logger.LogError(ex, "Failed to open discovered remote session. remoteSessionId={RemoteSessionId}", request.RemoteSessionId);
             return new DiscoverRemoteSessionOpenResult(false, null, ex.Message);
         }
     }
 
-    private void RollBackDiscoveredConversation(string localConversationId)
+    Task IConversationSessionSwitcher.DiscardDiscoveredRemoteSessionAsync(
+        string localConversationId,
+        CancellationToken cancellationToken)
+        => RollBackDiscoveredConversationAsync(localConversationId, cancellationToken);
+
+    private async Task RollBackDiscoveredConversationAsync(
+        string localConversationId,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(localConversationId))
         {
             return;
         }
 
-        try
+        var result = await _conversationCatalogFacade
+            .DeleteConversationAsync(localConversationId, cancellationToken, CurrentSessionId)
+            .ConfigureAwait(false);
+        if (!result.Succeeded)
         {
-            _conversationWorkspace.DeleteConversation(localConversationId);
-        }
-        catch
-        {
-            _sessionManager.RemoveSession(localConversationId);
+            Logger.LogWarning(
+                "Failed to rollback discovered remote session. conversationId={ConversationId} reason={Reason}",
+                localConversationId,
+                result.FailureReason ?? "Unknown");
         }
     }
 

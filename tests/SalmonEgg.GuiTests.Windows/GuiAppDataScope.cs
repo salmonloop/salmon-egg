@@ -331,7 +331,7 @@ internal sealed class GuiAppDataScope : IDisposable
             throw new ArgumentOutOfRangeException(nameof(localMessageCount));
         }
 
-        if (remoteConversationCount <= 0)
+        if (remoteConversationCount < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(remoteConversationCount));
         }

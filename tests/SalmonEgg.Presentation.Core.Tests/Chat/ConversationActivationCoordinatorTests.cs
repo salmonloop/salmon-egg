@@ -1248,6 +1248,14 @@ public sealed class ConversationActivationCoordinatorTests
             DiscoverRemoteSessionOpenRequest request,
             CancellationToken cancellationToken = default)
             => Task.FromResult(new DiscoverRemoteSessionOpenResult(false, null, "NotUsedInThisTest"));
+
+        public Task DiscardDiscoveredRemoteSessionAsync(
+            string localConversationId,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class RecordingProjectSelectionStore : INavigationProjectSelectionStore

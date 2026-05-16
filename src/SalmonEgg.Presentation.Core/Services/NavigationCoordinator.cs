@@ -21,6 +21,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
     private readonly SemaphoreSlim _sessionActivationGate = new(1, 1);
     private readonly object _sessionActivationSync = new();
     private CancellationTokenSource? _sessionActivationCts;
+    private bool _sessionActivationCtsCanBeDisposedByCanceler;
 
     public NavigationCoordinator(
         IShellSelectionMutationSink selectionSink,
@@ -184,6 +185,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         }
 
         CancellationTokenSource? previousActivation;
+        bool previousActivationCanBeDisposed;
         SessionActivationRequest request;
         lock (_sessionActivationSync)
         {
@@ -202,12 +204,16 @@ public sealed class NavigationCoordinator : INavigationCoordinator
             }
 
             previousActivation = _sessionActivationCts;
+            previousActivationCanBeDisposed = _sessionActivationCtsCanBeDisposedByCanceler;
+            var cancellationTokenSource = new CancellationTokenSource();
             request = new SessionActivationRequest(
                 sessionId,
                 projectId,
                 BeginActivation(),
-                new CancellationTokenSource());
+                cancellationTokenSource,
+                cancellationTokenSource.Token);
             _sessionActivationCts = request.CancellationTokenSource;
+            _sessionActivationCtsCanBeDisposedByCanceler = false;
             _runtimeState.DesiredSessionId = sessionId;
             _runtimeState.ActiveSessionActivationVersion = request.Version;
             _runtimeState.IsSessionActivationInProgress = true;
@@ -218,19 +224,16 @@ public sealed class NavigationCoordinator : INavigationCoordinator
                 SessionActivationPhase.NavigatingToChatShell);
         }
 
-        try
+        if (TryCancelActivation(previousActivation))
         {
-            if (TryCancelActivation(previousActivation))
+            _logger.LogInformation(
+                "Navigation activation canceled previous request. sessionId={SessionId} version={Version}",
+                sessionId,
+                request.Version);
+            if (previousActivationCanBeDisposed)
             {
-                _logger.LogInformation(
-                    "Navigation activation canceled previous request. sessionId={SessionId} version={Version}",
-                    sessionId,
-                    request.Version);
+                previousActivation?.Dispose();
             }
-        }
-        finally
-        {
-            previousActivation?.Dispose();
         }
 
         _logger.LogInformation(
@@ -254,39 +257,90 @@ public sealed class NavigationCoordinator : INavigationCoordinator
             return new DiscoverRemoteSessionOpenResult(false, null, "ACP 连接尚未完成初始化。");
         }
 
-        var recoveryMode = AcpSessionRecoveryPolicy.Resolve(chatService.AgentCapabilities);
-        if (recoveryMode == AcpSessionRecoveryMode.None)
+        if (chatService.AgentCapabilities?.SupportsSessionLoading != true)
         {
-            return new DiscoverRemoteSessionOpenResult(false, null, "当前 Agent 未声明可恢复远程会话的 ACP 能力。");
+            return new DiscoverRemoteSessionOpenResult(false, null, "当前 Agent 未声明 ACP loadSession 能力，无法导入已发现的远程会话。");
         }
 
-        CancelInFlightSessionActivation();
-        var navigationToken = BeginActivation();
-        var navigationResult = await NavigateToChatAsync(navigationToken).ConfigureAwait(true);
-        if (!navigationResult.Succeeded || !IsLatestActivationToken(navigationToken))
+        var importRequest = BeginDiscoveredRemoteSessionImport(request.RemoteSessionId);
+        var importActivationToken = importRequest.Version;
+        DiscoverRemoteSessionOpenResult openResult;
+        try
         {
-            return new DiscoverRemoteSessionOpenResult(false, null, "加载会话并导入失败，请检查连接状态。");
+            openResult = await _conversationSessionSwitcher
+                .OpenDiscoveredRemoteSessionAsync(request, importRequest.CancellationToken)
+                .ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (
+            importRequest.CancellationToken.IsCancellationRequested
+            || !IsLatestActivationToken(importActivationToken))
+        {
+            EndDiscoveredRemoteSessionImport(importRequest);
+            return new DiscoverRemoteSessionOpenResult(false, null, "DiscoverSessionOpenSuperseded");
+        }
+        catch (Exception ex)
+        {
+            EndDiscoveredRemoteSessionImport(importRequest);
+            _logger.LogError(
+                ex,
+                "Discover remote session import failed. remoteSessionId={RemoteSessionId} activationVersion={ActivationVersion}",
+                request.RemoteSessionId,
+                importActivationToken);
+            return new DiscoverRemoteSessionOpenResult(false, null, ex.Message);
         }
 
-        var openResult = await _conversationSessionSwitcher
-            .OpenDiscoveredRemoteSessionAsync(request)
-            .ConfigureAwait(true);
         if (!openResult.Succeeded || string.IsNullOrWhiteSpace(openResult.LocalConversationId))
         {
+            EndDiscoveredRemoteSessionImport(importRequest);
             return openResult;
         }
 
-        if (!IsLatestActivationToken(navigationToken))
+        return await CompleteDiscoveredRemoteSessionImportAsync(
+                request,
+                openResult,
+                importRequest)
+            .ConfigureAwait(true);
+    }
+
+    private async Task<DiscoverRemoteSessionOpenResult> CompleteDiscoveredRemoteSessionImportAsync(
+        DiscoverRemoteSessionOpenRequest request,
+        DiscoverRemoteSessionOpenResult openResult,
+        DiscoveredRemoteSessionImportRequest importRequest)
+    {
+        var importActivationToken = importRequest.Version;
+        if (!IsLatestActivationToken(importActivationToken)
+            || importRequest.CancellationToken.IsCancellationRequested)
         {
             _logger.LogInformation(
                 "Discover remote session activation ignored stale completion. remoteSessionId={RemoteSessionId} activationVersion={ActivationVersion}",
                 request.RemoteSessionId,
-                navigationToken);
+                importActivationToken);
+            EndDiscoveredRemoteSessionImport(importRequest);
+            await DiscardSupersededDiscoveredRemoteSessionAsync(
+                    openResult.LocalConversationId!,
+                    request.RemoteSessionId,
+                    importActivationToken)
+                .ConfigureAwait(true);
             return new DiscoverRemoteSessionOpenResult(false, openResult.LocalConversationId, "DiscoverSessionOpenSuperseded");
         }
 
-        _runtimeState.CurrentShellContent = ShellNavigationContent.Chat;
-        _selectionSink.SetSelection(new NavigationSelectionState.Session(openResult.LocalConversationId!));
+        var activationRequest = PromoteDiscoveredRemoteSessionImport(
+            importRequest,
+            openResult.LocalConversationId!,
+            projectId: null);
+        var activated = await ActivateSessionCoreAsync(activationRequest).ConfigureAwait(true);
+        if (!activated)
+        {
+            await DiscardSupersededDiscoveredRemoteSessionAsync(
+                    openResult.LocalConversationId!,
+                    request.RemoteSessionId,
+                    importActivationToken)
+                .ConfigureAwait(true);
+            return new DiscoverRemoteSessionOpenResult(
+                false,
+                openResult.LocalConversationId,
+                "加载会话并导入失败，请检查连接状态。");
+        }
 
         return openResult;
     }
@@ -419,23 +473,134 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         }
     }
 
+    private DiscoveredRemoteSessionImportRequest BeginDiscoveredRemoteSessionImport(string remoteSessionId)
+    {
+        CancellationTokenSource? previousActivation;
+        bool previousActivationCanBeDisposed;
+        var cancellationTokenSource = new CancellationTokenSource();
+        long activationToken;
+        lock (_sessionActivationSync)
+        {
+            previousActivation = _sessionActivationCts;
+            previousActivationCanBeDisposed = _sessionActivationCtsCanBeDisposedByCanceler;
+            activationToken = _runtimeState.LatestActivationToken + 1;
+            _runtimeState.LatestActivationToken = activationToken;
+            _sessionActivationCts = cancellationTokenSource;
+            _sessionActivationCtsCanBeDisposedByCanceler = false;
+            _runtimeState.DesiredSessionId = null;
+            _runtimeState.IsSessionActivationInProgress = false;
+            _runtimeState.ActiveSessionActivationVersion = 0;
+            _runtimeState.ActiveSessionActivation = null;
+        }
+
+        if (TryCancelActivation(previousActivation))
+        {
+            _logger.LogInformation(
+                "Navigation activation canceled previous request before discover import. remoteSessionId={RemoteSessionId} version={Version}",
+                remoteSessionId,
+                activationToken);
+            if (previousActivationCanBeDisposed)
+            {
+                previousActivation?.Dispose();
+            }
+        }
+
+        return new DiscoveredRemoteSessionImportRequest(
+            activationToken,
+            cancellationTokenSource,
+            cancellationTokenSource.Token);
+    }
+
+    private SessionActivationRequest PromoteDiscoveredRemoteSessionImport(
+        DiscoveredRemoteSessionImportRequest importRequest,
+        string sessionId,
+        string? projectId)
+    {
+        lock (_sessionActivationSync)
+        {
+            _runtimeState.DesiredSessionId = sessionId;
+            _runtimeState.ActiveSessionActivationVersion = importRequest.Version;
+            _runtimeState.IsSessionActivationInProgress = true;
+            _runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
+                sessionId,
+                projectId,
+                importRequest.Version,
+                SessionActivationPhase.NavigatingToChatShell);
+        }
+
+        _logger.LogInformation(
+            "Navigation activation started. sessionId={SessionId} version={Version}",
+            sessionId,
+            importRequest.Version);
+        return new SessionActivationRequest(
+            sessionId,
+            projectId,
+            importRequest.Version,
+            importRequest.CancellationTokenSource,
+            importRequest.CancellationToken);
+    }
+
+    private void EndDiscoveredRemoteSessionImport(DiscoveredRemoteSessionImportRequest request)
+    {
+        lock (_sessionActivationSync)
+        {
+            if (ReferenceEquals(_sessionActivationCts, request.CancellationTokenSource))
+            {
+                _sessionActivationCts = null;
+                _sessionActivationCtsCanBeDisposedByCanceler = false;
+            }
+        }
+
+        request.CancellationTokenSource.Dispose();
+    }
+
+    private async Task DiscardSupersededDiscoveredRemoteSessionAsync(
+        string localConversationId,
+        string remoteSessionId,
+        long activationToken)
+    {
+        try
+        {
+            await _conversationSessionSwitcher
+                .DiscardDiscoveredRemoteSessionAsync(localConversationId, CancellationToken.None)
+                .ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to discard superseded discovered remote session import. localConversationId={LocalConversationId} remoteSessionId={RemoteSessionId} activationVersion={ActivationVersion}",
+                localConversationId,
+                remoteSessionId,
+                activationToken);
+        }
+    }
+
     private void EndSessionActivationRequest(SessionActivationRequest request, bool committed)
     {
         var shouldDisposeRequestCts = !committed;
         lock (_sessionActivationSync)
         {
-            if (ReferenceEquals(_sessionActivationCts, request.CancellationTokenSource)
-                && IsLatestActivationToken(request.Version))
+            if (!committed && ReferenceEquals(_sessionActivationCts, request.CancellationTokenSource))
+            {
+                _sessionActivationCts = null;
+                _sessionActivationCtsCanBeDisposedByCanceler = false;
+            }
+
+            if (IsLatestActivationToken(request.Version))
             {
                 if (committed)
                 {
                     _runtimeState.DesiredSessionId = null;
                     _runtimeState.CommittedSessionId = request.SessionId;
                     _runtimeState.CommittedSessionActivationVersion = request.Version;
+                    if (ReferenceEquals(_sessionActivationCts, request.CancellationTokenSource))
+                    {
+                        _sessionActivationCtsCanBeDisposedByCanceler = true;
+                    }
                 }
                 else
                 {
-                    _sessionActivationCts = null;
                     _runtimeState.IsSessionActivationInProgress = false;
                     _runtimeState.ActiveSessionActivationVersion = 0;
                 }
@@ -451,7 +616,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
     private void ClearPendingSessionPreviewState(long activationToken)
     {
         CancellationTokenSource? pendingActivation = null;
-        var shouldDisposePendingActivation = false;
+        var pendingActivationCanBeDisposed = false;
         lock (_sessionActivationSync)
         {
             if (!IsLatestActivationToken(activationToken))
@@ -460,17 +625,21 @@ public sealed class NavigationCoordinator : INavigationCoordinator
             }
 
             pendingActivation = _sessionActivationCts;
+            pendingActivationCanBeDisposed = _sessionActivationCtsCanBeDisposedByCanceler;
             _sessionActivationCts = null;
-            shouldDisposePendingActivation = pendingActivation is not null;
+            _sessionActivationCtsCanBeDisposedByCanceler = false;
             _runtimeState.DesiredSessionId = null;
             _runtimeState.IsSessionActivationInProgress = false;
             _runtimeState.ActiveSessionActivationVersion = 0;
             _runtimeState.ActiveSessionActivation = null;
         }
 
-        if (shouldDisposePendingActivation)
+        if (TryCancelActivation(pendingActivation))
         {
-            pendingActivation!.Dispose();
+            if (pendingActivationCanBeDisposed)
+            {
+                pendingActivation?.Dispose();
+            }
         }
     }
 
@@ -524,12 +693,22 @@ public sealed class NavigationCoordinator : INavigationCoordinator
     private void CancelInFlightSessionActivation()
     {
         CancellationTokenSource? pendingActivation = null;
+        var pendingActivationCanBeDisposed = false;
         lock (_sessionActivationSync)
         {
             pendingActivation = _sessionActivationCts;
+            pendingActivationCanBeDisposed = _sessionActivationCtsCanBeDisposedByCanceler;
+            _sessionActivationCts = null;
+            _sessionActivationCtsCanBeDisposedByCanceler = false;
         }
 
-        TryCancelActivation(pendingActivation);
+        if (TryCancelActivation(pendingActivation))
+        {
+            if (pendingActivationCanBeDisposed)
+            {
+                pendingActivation?.Dispose();
+            }
+        }
     }
 
     private static bool TryCancelActivation(CancellationTokenSource? activation)
@@ -582,10 +761,13 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         string SessionId,
         string? ProjectId,
         long Version,
-        CancellationTokenSource CancellationTokenSource)
-    {
-        public CancellationToken CancellationToken => CancellationTokenSource.Token;
-    }
+        CancellationTokenSource CancellationTokenSource,
+        CancellationToken CancellationToken);
+
+    private sealed record DiscoveredRemoteSessionImportRequest(
+        long Version,
+        CancellationTokenSource CancellationTokenSource,
+        CancellationToken CancellationToken);
 
     private static class ActivationFaultReasons
     {

@@ -82,6 +82,44 @@ public sealed class AcpChatServiceAdapterTests
     }
 
     [Fact]
+    public async Task ReleaseBufferedUpdatesForReplayProjectionAsync_WhenAttemptIsCurrent_PublishesTargetReplayBeforeFinalHydration()
+    {
+        var dispatcher = new QueueingUiDispatcher();
+        var inner = new FakeChatService();
+        using var adapter = BuildAdapter(inner, dispatcher);
+        var updates = new List<SessionUpdateEventArgs>();
+        adapter.SessionUpdateReceived += (_, args) => updates.Add(args);
+
+        var attemptId = adapter.BeginHydrationBufferingScope("remote-1");
+
+        var released = adapter.ReleaseBufferedUpdatesForReplayProjection(attemptId);
+        inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-1", new PlanUpdate(title: "replay")));
+        while (dispatcher.RunNext())
+        {
+        }
+
+        await adapter.WaitForBufferedUpdatesDrainedAsync(attemptId).WaitAsync(TimeSpan.FromSeconds(1));
+        Assert.True(released);
+        Assert.Single(updates);
+        Assert.Equal("remote-1", updates[0].SessionId);
+
+        inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-2", new PlanUpdate(title: "other")));
+        inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-1", new PlanUpdate(title: "late")));
+        while (dispatcher.RunNext())
+        {
+        }
+
+        Assert.Equal(2, updates.Count);
+        Assert.Equal("late", Assert.IsType<PlanUpdate>(updates[1].Update).Title);
+        Assert.True(adapter.TryMarkHydrated(attemptId));
+        while (dispatcher.RunNext())
+        {
+        }
+
+        Assert.Equal(2, updates.Count);
+    }
+
+    [Fact]
     public void MarkHydrated_WithLowTrust_ReleasesBufferedUpdates()
     {
         // Arrange
@@ -154,7 +192,45 @@ public sealed class AcpChatServiceAdapterTests
     }
 
     [Fact]
-    public void TryMarkHydrated_WhenAttemptIsStale_ReturnsFalseAndDoesNotDrainCurrentAttempt()
+    public void TryMarkHydrated_WhenSameSessionAttemptIsStale_ReturnsFalseAndDoesNotDrainCurrentAttempt()
+    {
+        var uiDispatcher = new ImmediateUiDispatcher();
+        var inner = new FakeChatService();
+        using var adapter = BuildAdapter(inner, uiDispatcher);
+        var updates = new List<SessionUpdateEventArgs>();
+        adapter.SessionUpdateReceived += (_, args) => updates.Add(args);
+
+        var firstAttempt = adapter.BeginHydrationBufferingScope("remote-1");
+        var secondAttempt = adapter.BeginHydrationBufferingScope("remote-1");
+        inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-1", new PlanUpdate(title: "fresh")));
+
+        var marked = adapter.TryMarkHydrated(firstAttempt);
+        Assert.False(marked);
+        Assert.Empty(updates);
+
+        Assert.True(adapter.TryMarkHydrated(secondAttempt));
+        var update = Assert.Single(updates);
+        Assert.Equal("remote-1", update.SessionId);
+    }
+
+    [Fact]
+    public void TryMarkHydrated_WhenCompletedSameSessionAttemptIsSuperseded_ReturnsFalse()
+    {
+        var uiDispatcher = new ImmediateUiDispatcher();
+        var inner = new FakeChatService();
+        using var adapter = BuildAdapter(inner, uiDispatcher);
+
+        var firstAttempt = adapter.BeginHydrationBufferingScope("remote-1");
+        Assert.True(adapter.TryMarkHydrated(firstAttempt));
+
+        var secondAttempt = adapter.BeginHydrationBufferingScope("remote-1");
+
+        Assert.False(adapter.TryMarkHydrated(firstAttempt));
+        Assert.True(adapter.TryMarkHydrated(secondAttempt));
+    }
+
+    [Fact]
+    public void ConcurrentRemoteHydration_DoesNotDropReplayForEarlierSession()
     {
         var uiDispatcher = new ImmediateUiDispatcher();
         var inner = new FakeChatService();
@@ -164,15 +240,121 @@ public sealed class AcpChatServiceAdapterTests
 
         var firstAttempt = adapter.BeginHydrationBufferingScope("remote-1");
         var secondAttempt = adapter.BeginHydrationBufferingScope("remote-2");
-        inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-2", new PlanUpdate(title: "fresh")));
 
-        var marked = adapter.TryMarkHydrated(firstAttempt);
-        Assert.False(marked);
-        Assert.Empty(updates);
+        inner.RaiseSessionUpdate(new SessionUpdateEventArgs(
+            "remote-1",
+            new AgentMessageUpdate(new TextContentBlock("first replay"))));
+        inner.RaiseSessionUpdate(new SessionUpdateEventArgs(
+            "remote-2",
+            new AgentMessageUpdate(new TextContentBlock("second replay"))));
 
+        Assert.True(adapter.TryMarkHydrated(firstAttempt));
         Assert.True(adapter.TryMarkHydrated(secondAttempt));
+
+        Assert.Collection(
+            updates,
+            first =>
+            {
+                Assert.Equal("remote-1", first.SessionId);
+                Assert.Equal("first replay", Assert.IsType<AgentMessageUpdate>(first.Update).Content is TextContentBlock text
+                    ? text.Text
+                    : null);
+            },
+            second =>
+            {
+                Assert.Equal("remote-2", second.SessionId);
+                Assert.Equal("second replay", Assert.IsType<AgentMessageUpdate>(second.Update).Content is TextContentBlock text
+                    ? text.Text
+                    : null);
+            });
+    }
+
+    [Fact]
+    public void TryMarkHydrated_WhenScopedReplayIsEmpty_ReleasesSessionFilterForSteadyStateUpdates()
+    {
+        var uiDispatcher = new ImmediateUiDispatcher();
+        var inner = new FakeChatService();
+        using var adapter = BuildAdapter(inner, uiDispatcher);
+        var updates = new List<SessionUpdateEventArgs>();
+        adapter.SessionUpdateReceived += (_, args) => updates.Add(args);
+
+        var attemptId = adapter.BeginHydrationBufferingScope("remote-1");
+
+        Assert.True(adapter.TryMarkHydrated(attemptId));
+        inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-2", new PlanUpdate(title: "steady-state")));
+
         var update = Assert.Single(updates);
         Assert.Equal("remote-2", update.SessionId);
+    }
+
+    [Fact]
+    public void SuppressBufferedUpdates_WhenLastScopedReplayIsDropped_ReleasesSessionFilterForSteadyStateUpdates()
+    {
+        var uiDispatcher = new ImmediateUiDispatcher();
+        var inner = new FakeChatService();
+        using var adapter = BuildAdapter(inner, uiDispatcher);
+        var updates = new List<SessionUpdateEventArgs>();
+        adapter.SessionUpdateReceived += (_, args) => updates.Add(args);
+
+        var attemptId = adapter.BeginHydrationBufferingScope("remote-1");
+        adapter.SuppressBufferedUpdates(attemptId, "test");
+        inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-2", new PlanUpdate(title: "steady-state")));
+
+        var update = Assert.Single(updates);
+        Assert.Equal("remote-2", update.SessionId);
+    }
+
+    [Fact]
+    public void SuppressBufferedUpdates_WhenReplayWasReleased_RemovesScopeAndRestoresSteadyState()
+    {
+        var uiDispatcher = new QueueingUiDispatcher();
+        var inner = new FakeChatService();
+        using var adapter = BuildAdapter(inner, uiDispatcher);
+        var updates = new List<SessionUpdateEventArgs>();
+        adapter.SessionUpdateReceived += (_, args) => updates.Add(args);
+
+        var attemptId = adapter.BeginHydrationBufferingScope("remote-1");
+        inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-1", new PlanUpdate(title: "released")));
+        Assert.True(adapter.ReleaseBufferedUpdatesForReplayProjection(attemptId));
+
+        adapter.SuppressBufferedUpdates(attemptId, "failed");
+        inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-2", new PlanUpdate(title: "steady-state")));
+        while (uiDispatcher.RunNext())
+        {
+        }
+
+        var update = Assert.Single(updates);
+        Assert.Equal("remote-2", update.SessionId);
+        Assert.Equal("steady-state", Assert.IsType<PlanUpdate>(update.Update).Title);
+    }
+
+    [Fact]
+    public void BeginHydrationBuffering_AfterSuppressingReplacementScope_DropsCapturedStaleReplay()
+    {
+        var uiDispatcher = new ImmediateUiDispatcher();
+        var inner = new FakeChatService();
+        using var adapter = BuildAdapter(inner, uiDispatcher);
+        var updates = new List<SessionUpdateEventArgs>();
+        adapter.SessionUpdateReceived += (_, args) => updates.Add(args);
+
+        _ = adapter.BeginHydrationBufferingScope("remote-1");
+        var replacementAttempt = adapter.BeginHydrationBufferingScope("remote-1");
+        inner.RaiseSessionUpdate(new SessionUpdateEventArgs(
+            "remote-1",
+            new AgentMessageUpdate(new TextContentBlock("stale"))));
+
+        adapter.SuppressBufferedUpdates(replacementAttempt, "conflict-complete");
+        var finalAttempt = adapter.BeginHydrationBufferingScope("remote-1");
+        inner.RaiseSessionUpdate(new SessionUpdateEventArgs(
+            "remote-1",
+            new AgentMessageUpdate(new TextContentBlock("fresh"))));
+        adapter.TryMarkHydrated(finalAttempt);
+
+        var update = Assert.Single(updates);
+        Assert.Equal("remote-1", update.SessionId);
+        Assert.Equal("fresh", Assert.IsType<AgentMessageUpdate>(update.Update).Content is TextContentBlock text
+            ? text.Text
+            : null);
     }
 
     [Fact]

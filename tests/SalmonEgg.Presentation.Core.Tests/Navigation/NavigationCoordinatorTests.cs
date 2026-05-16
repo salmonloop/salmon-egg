@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading;
@@ -249,7 +250,43 @@ public sealed class NavigationCoordinatorTests
             new DiscoverRemoteSessionOpenRequest("remote-1", "/repo", "profile-1", "Remote"));
 
         Assert.False(result.Succeeded);
-        Assert.Equal("当前 Agent 未声明可恢复远程会话的 ACP 能力。", result.ErrorMessage);
+        Assert.Equal("当前 Agent 未声明 ACP loadSession 能力，无法导入已发现的远程会话。", result.ErrorMessage);
+        Assert.Empty(switcher.ActivatedSessionIds);
+        Assert.Empty(switcher.OpenRequests);
+    }
+
+    [Fact]
+    public async Task ActivateDiscoveredRemoteSessionAsync_WhenOnlyResumeIsSupported_DoesNotImportOrSwitch()
+    {
+        var selectionStore = new ShellSelectionStateStore();
+        var preferences = CreatePreferencesWithProject();
+        var shellNavigation = CreateShellNavigationService();
+        var switcher = new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(true));
+        var discoverFacade = new FakeDiscoverSessionsConnectionFacade
+        {
+            CurrentChatService = new FakeDiscoverChatService
+            {
+                AgentCapabilities = new AgentCapabilities(
+                    loadSession: false,
+                    sessionCapabilities: new SessionCapabilities
+                    {
+                        Resume = new SessionResumeCapabilities()
+                    })
+            }
+        };
+
+        var coordinator = CreateCoordinator(
+            selectionStore,
+            switcher,
+            preferences,
+            shellNavigation.Object,
+            discoverConnectionFacade: discoverFacade);
+
+        var result = await coordinator.ActivateDiscoveredRemoteSessionAsync(
+            new DiscoverRemoteSessionOpenRequest("remote-1", "/repo", "profile-1", "Remote"));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("当前 Agent 未声明 ACP loadSession 能力，无法导入已发现的远程会话。", result.ErrorMessage);
         Assert.Empty(switcher.ActivatedSessionIds);
         Assert.Empty(switcher.OpenRequests);
     }
@@ -258,6 +295,7 @@ public sealed class NavigationCoordinatorTests
     public async Task ActivateDiscoveredRemoteSessionAsync_WhenOpenSucceeds_RunsThroughNavigationOwner()
     {
         var selectionStore = new ShellSelectionStateStore();
+        var runtimeState = new ShellNavigationRuntimeStateStore();
         var preferences = CreatePreferencesWithProject();
         var shellNavigation = CreateShellNavigationService();
         var expectedRequest = new DiscoverRemoteSessionOpenRequest("remote-1", "/repo", "profile-1", "Remote");
@@ -272,6 +310,7 @@ public sealed class NavigationCoordinatorTests
             switcher,
             preferences,
             shellNavigation.Object,
+            runtimeState,
             discoverConnectionFacade: discoverFacade.Object);
 
         var result = await coordinator.ActivateDiscoveredRemoteSessionAsync(
@@ -279,13 +318,15 @@ public sealed class NavigationCoordinatorTests
 
         Assert.True(result.Succeeded);
         Assert.Equal("local-1", result.LocalConversationId);
-        Assert.Empty(switcher.ActivatedSessionIds);
+        Assert.Equal(new[] { "local-1" }, switcher.ActivatedSessionIds);
         Assert.Equal(new[] { expectedRequest }, switcher.OpenRequests);
         Assert.Equal(new NavigationSelectionState.Session("local-1"), selectionStore.CurrentSelection);
+        Assert.Equal(ShellNavigationContent.Chat, runtimeState.CurrentShellContent);
+        Assert.Equal("local-1", runtimeState.CommittedSessionId);
     }
 
     [Fact]
-    public async Task ActivateDiscoveredRemoteSessionAsync_WhenSuperseded_DoesNotCommitStaleSelection()
+    public async Task ActivateDiscoveredRemoteSessionAsync_WhenSupersededAfterOpen_DisposesStaleImport()
     {
         var selectionStore = new ShellSelectionStateStore();
         var preferences = CreatePreferencesWithProject();
@@ -307,8 +348,6 @@ public sealed class NavigationCoordinatorTests
         var staleOpenTask = coordinator.ActivateDiscoveredRemoteSessionAsync(
             new DiscoverRemoteSessionOpenRequest("remote-1", "/repo", "profile-1", "Remote"));
 
-        await WaitForConditionAsync(() => shellNavigation.FirstToken.HasValue);
-        shellNavigation.CompleteFirst(ShellNavigationResult.Success());
         await WaitForConditionAsync(() => switcher.OpenRequests.Count == 1);
 
         await coordinator.ActivateStartAsync();
@@ -317,6 +356,112 @@ public sealed class NavigationCoordinatorTests
 
         Assert.False(result.Succeeded);
         Assert.Equal("DiscoverSessionOpenSuperseded", result.ErrorMessage);
+        Assert.Equal(new[] { "local-1" }, switcher.DiscardedDiscoveredSessionIds);
+        Assert.Empty(switcher.ActivatedSessionIds);
+        Assert.Equal(NavigationSelectionState.StartSelection, selectionStore.CurrentSelection);
+    }
+
+    [Fact]
+    public async Task ActivateDiscoveredRemoteSessionAsync_WhenOpenFails_AllowsNextNavigationIntent()
+    {
+        var selectionStore = new ShellSelectionStateStore();
+        var preferences = CreatePreferencesWithProject();
+        var shellNavigation = new TokenAwareShellNavigationService();
+        var switcher = new RecordingConversationSessionSwitcher(
+            (_, _) => Task.FromResult(true),
+            (_, _) => Task.FromException<DiscoverRemoteSessionOpenResult>(
+                new InvalidOperationException("open failed")));
+        var discoverFacade = new Mock<IDiscoverSessionsConnectionFacade>();
+        discoverFacade.SetupGet(x => x.CurrentChatService).Returns(new FakeDiscoverChatService());
+        var coordinator = CreateCoordinator(
+            selectionStore,
+            switcher,
+            preferences,
+            shellNavigation,
+            discoverConnectionFacade: discoverFacade.Object);
+
+        var result = await coordinator.ActivateDiscoveredRemoteSessionAsync(
+            new DiscoverRemoteSessionOpenRequest("remote-1", "/repo", "profile-1", "Remote"));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("open failed", result.ErrorMessage);
+        Assert.True(await coordinator.ActivateStartAsync());
+        Assert.Equal(NavigationSelectionState.StartSelection, selectionStore.CurrentSelection);
+    }
+
+    [Fact]
+    public async Task ActivateDiscoveredRemoteSessionAsync_WhenOpenFailsAfterCancelingSessionActivation_ClearsStaleActivationState()
+    {
+        var selectionStore = new ShellSelectionStateStore();
+        var runtimeState = new ShellNavigationRuntimeStateStore();
+        var preferences = CreatePreferencesWithProject();
+        var shellNavigation = CreateShellNavigationService();
+        var switchStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var switcher = new RecordingConversationSessionSwitcher(
+            async (_, cancellationToken) =>
+            {
+                switchStarted.TrySetResult(null);
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                return true;
+            },
+            (_, _) => Task.FromException<DiscoverRemoteSessionOpenResult>(
+                new InvalidOperationException("open failed")));
+        var discoverFacade = new Mock<IDiscoverSessionsConnectionFacade>();
+        discoverFacade.SetupGet(x => x.CurrentChatService).Returns(new FakeDiscoverChatService());
+        var coordinator = CreateCoordinator(
+            selectionStore,
+            switcher,
+            preferences,
+            shellNavigation.Object,
+            runtimeState,
+            discoverConnectionFacade: discoverFacade.Object);
+
+        var sessionActivation = coordinator.ActivateSessionAsync("session-1", "project-1");
+        await switchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        var result = await coordinator.ActivateDiscoveredRemoteSessionAsync(
+            new DiscoverRemoteSessionOpenRequest("remote-1", "/repo", "profile-1", "Remote"));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("open failed", result.ErrorMessage);
+        Assert.False(runtimeState.IsSessionActivationInProgress);
+        Assert.Null(runtimeState.ActiveSessionActivation);
+        Assert.Null(runtimeState.DesiredSessionId);
+        Assert.False(await sessionActivation);
+    }
+
+    [Fact]
+    public async Task ActivateDiscoveredRemoteSessionAsync_WhenActivationFallsOutOfLatestIntent_RollsBackImportedConversation()
+    {
+        var selectionStore = new ShellSelectionStateStore();
+        var preferences = CreatePreferencesWithProject();
+        var shellNavigation = CreateShellNavigationService();
+        NavigationCoordinator? coordinator = null;
+        var switcher = new RecordingConversationSessionSwitcher(
+            async (_, _) =>
+            {
+                Assert.NotNull(coordinator);
+                await coordinator!.ActivateStartAsync();
+                return true;
+            },
+            (_, _) => Task.FromResult(new DiscoverRemoteSessionOpenResult(true, "local-1", null)));
+        var discoverFacade = new Mock<IDiscoverSessionsConnectionFacade>();
+        discoverFacade.SetupGet(x => x.CurrentChatService).Returns(new FakeDiscoverChatService());
+
+        coordinator = CreateCoordinator(
+            selectionStore,
+            switcher,
+            preferences,
+            shellNavigation.Object,
+            discoverConnectionFacade: discoverFacade.Object);
+
+        var result = await coordinator.ActivateDiscoveredRemoteSessionAsync(
+            new DiscoverRemoteSessionOpenRequest("remote-1", "/repo", "profile-1", "Remote"));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("加载会话并导入失败，请检查连接状态。", result.ErrorMessage);
+        Assert.Equal(new[] { "local-1" }, switcher.ActivatedSessionIds);
+        Assert.Equal(new[] { "local-1" }, switcher.DiscardedDiscoveredSessionIds);
         Assert.Equal(NavigationSelectionState.StartSelection, selectionStore.CurrentSelection);
     }
 
@@ -1027,6 +1172,81 @@ public sealed class NavigationCoordinatorTests
     }
 
     [Fact]
+    public async Task ActivateStartAsync_AfterCommittedBackgroundRemoteActivation_KeepsLatestNavigationIntent()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var sessionManager = CreateSessionManager(
+                new Session("session-2", @"C:\repo\two") { DisplayName = "Imported Session" });
+            var preferences = CreatePreferencesWithProject();
+            var shellNavigation = CreateShellNavigationService();
+            var runtimeState = new ShellNavigationRuntimeStateStore();
+
+            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
+            await chat.ViewModel.RestoreAsync();
+            chat.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
+            await SetConnectedProfileAsync(chat, "profile-1", "conn-1");
+
+            chat.Workspace.UpdateRemoteBinding("session-2", "remote-2", "profile-1");
+            await chat.ChatStore.Dispatch(new SetBindingSliceAction(
+                new ConversationBindingSlice("session-2", "remote-2", "profile-1")));
+
+            var loadStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var allowLoadCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var chatService = new Mock<IChatService>();
+            chatService.SetupGet(service => service.IsConnected).Returns(true);
+            chatService.SetupGet(service => service.IsInitialized).Returns(true);
+            chatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
+            chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
+                .Returns<SessionLoadParams, CancellationToken>(async (_, _) =>
+                {
+                    loadStarted.TrySetResult(null);
+                    await allowLoadCompletion.Task;
+                    return SessionLoadResponse.Completed;
+                });
+            chat.ViewModel.ReplaceChatService(chatService.Object);
+
+            var selectionStore = new ShellSelectionStateStore();
+            var coordinator = CreateCoordinator(
+                selectionStore,
+                (IConversationSessionSwitcher)chat.ViewModel,
+                preferences,
+                shellNavigation.Object,
+                runtimeState);
+            using var navVm = CreateNavigationViewModel(
+                chat,
+                sessionManager.Object,
+                preferences,
+                navState,
+                selectionStore,
+                coordinator,
+                runtimeState: runtimeState);
+
+            navVm.RebuildTree();
+            Assert.True(await coordinator.ActivateSessionAsync("session-2", "project-1"));
+            await loadStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+            await coordinator.ActivateStartAsync();
+
+            Assert.Equal(NavigationSelectionState.StartSelection, navVm.CurrentSelection);
+            Assert.Equal(ShellNavigationContent.Start, runtimeState.CurrentShellContent);
+
+            allowLoadCompletion.TrySetResult(null);
+            await WaitForConditionAsync(() => !runtimeState.IsSessionActivationInProgress);
+            Assert.Equal(NavigationSelectionState.StartSelection, navVm.CurrentSelection);
+            Assert.Equal(ShellNavigationContent.Start, runtimeState.CurrentShellContent);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     [Trait("Suite", "Smoke")]
     public async Task ActivateSessionAsync_RemoteBoundConversation_ProjectsShellActivationThroughHydrationLifecycle()
     {
@@ -1704,6 +1924,7 @@ public sealed class NavigationCoordinatorTests
 
         public List<string> ActivatedSessionIds { get; } = new();
         public List<DiscoverRemoteSessionOpenRequest> OpenRequests { get; } = new();
+        public List<string> DiscardedDiscoveredSessionIds { get; } = new();
 
         public Task<bool> SwitchConversationAsync(string sessionId, CancellationToken cancellationToken = default)
         {
@@ -1717,6 +1938,15 @@ public sealed class NavigationCoordinatorTests
         {
             OpenRequests.Add(request);
             return _onOpen(request, cancellationToken);
+        }
+
+        public Task DiscardDiscoveredRemoteSessionAsync(
+            string localConversationId,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            DiscardedDiscoveredSessionIds.Add(localConversationId);
+            return Task.CompletedTask;
         }
     }
 

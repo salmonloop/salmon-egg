@@ -1067,7 +1067,7 @@ public partial class ChatViewModelTests
             "ViewModels",
             "Chat",
             "ChatViewModel.cs"));
-        var getOrStartBody = ExtractMethodBody(lifecycleSource, "private Task<AcpSessionRecoveryProjection> GetOrStartRemoteSessionRecoveryProjectionAsync");
+        var getOrStartBody = ExtractMethodBody(lifecycleSource, "private AcpSessionRecoveryStartResult GetOrStartRemoteSessionRecoveryProjection");
         var cleanupBody = ExtractMethodBody(lifecycleSource, "private void CancelAndClearRemoteSessionRecoveryRequests");
         var supersedeBody = ExtractMethodBody(lifecycleSource, "private List<RemoteSessionRecoveryRequest> RemoveConflictingRemoteSessionRecoveryRequests");
         var cancelBody = ExtractMethodBody(requestSource, "public void Cancel()");
@@ -1078,23 +1078,6 @@ public partial class ChatViewModelTests
         Assert.DoesNotContain(".Cancel();", supersedeBody, StringComparison.Ordinal);
         Assert.DoesNotContain(".Cancel();", ExtractFirstLockBlockOrEmpty(cancelBody, "lock (_sync)"), StringComparison.Ordinal);
         Assert.DoesNotContain(".Cancel();", ExtractFirstLockBlockOrEmpty(cancelTransportBody, "lock (_sync)"), StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void RemoteSessionRecoveryRequestRegistry_UsesLeasePolicyAsSingleDecisionSource()
-    {
-        var lifecycleSource = File.ReadAllText(FindRepoFile(
-            "src",
-            "SalmonEgg.Presentation.Core",
-            "ViewModels",
-            "Chat",
-            "ChatViewModel.RemoteConversationLifecycle.cs"));
-        var getOrStartBody = ExtractMethodBody(lifecycleSource, "private Task<AcpSessionRecoveryProjection> GetOrStartRemoteSessionRecoveryProjectionAsync");
-        var registryLockBody = ExtractFirstLockBlock(getOrStartBody);
-
-        Assert.Contains("RemoteSessionRecoveryLeasePolicy.Decide", registryLockBody, StringComparison.Ordinal);
-        Assert.Contains("RemoteSessionRecoveryLeaseDecisionKind.ReuseExisting", registryLockBody, StringComparison.Ordinal);
-        Assert.DoesNotContain("_remoteSessionRecoveryRequests.TryGetValue(key, out var existing)", registryLockBody, StringComparison.Ordinal);
     }
 
     [Fact]

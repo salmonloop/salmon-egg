@@ -2267,6 +2267,59 @@ public sealed class ChatSkeletonSmokeTests
     }
 
     [SkippableFact]
+    public void DiscoverImportRemoteSession_ActivatesAndHydratesImportedSession()
+    {
+        var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
+        Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", "1200");
+
+        try
+        {
+            using var appData = GuiAppDataScope.CreateDeterministicSlowRemoteReplayData(
+                cachedMessageCount: 0,
+                replayMessageCount: 24,
+                includeLocalConversation: true,
+                localMessageCount: 4,
+                remoteConversationCount: 0);
+            using var session = WindowsGuiAppSession.LaunchFresh();
+
+            var discoverItem = session.FindByAutomationId("MainNav.DiscoverSessions", TimeSpan.FromSeconds(10));
+            session.ActivateElement(discoverItem);
+
+            Assert.True(
+                session.WaitUntilVisible("DiscoverSessions.Title", TimeSpan.FromSeconds(10)),
+                "Discover sessions page did not become visible.");
+
+            var sessionsList = session.FindByAutomationId("DiscoverSessions.SessionsList", TimeSpan.FromSeconds(12));
+            var visibleTexts = session.GetVisibleTexts(sessionsList);
+            Assert.Contains(
+                visibleTexts,
+                text => text.Contains("GUI Remote Session 01", StringComparison.Ordinal));
+
+            var importButton = session.FindByAutomationId("DiscoverSessions.ImportButton", TimeSpan.FromSeconds(8));
+            session.ActivateElement(importButton);
+
+            Assert.True(
+                session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(18)),
+                $"Imported remote session did not finish hydration.{Environment.NewLine}{appData.ReadLatestAppLogTail()}");
+            AssertImportedRemoteSessionHydrated(session, appData, "discover-import-first-hydration");
+
+            var localItem = session.FindByAutomationId("MainNav.Session.gui-local-conversation-01", TimeSpan.FromSeconds(10));
+            session.ActivateElement(localItem);
+            WaitForSessionHeader(session, "GUI Local Session 01", "discover-import-local-detour", appData);
+
+            var importedSessionText = session.FindVisibleTextAnywhere("GUI Remote Session 01", TimeSpan.FromSeconds(8))
+                ?? throw new Xunit.Sdk.XunitException("Imported remote session item was not visible in navigation after local detour.");
+            session.ActivateElement(FindSelectableAncestor(importedSessionText));
+
+            AssertImportedRemoteSessionHydrated(session, appData, "discover-import-return");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", previousSlowLoadDelay);
+        }
+    }
+
+    [SkippableFact]
     public void ArchiveRemoteSession_DuringHydration_RemoteSessionUpdateDoesNotResurrectSessionItem()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
@@ -3061,6 +3114,30 @@ public sealed class ChatSkeletonSmokeTests
         Assert.True(
             session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(2)),
             "Loading overlay reappeared after markdown round-trip.");
+    }
+
+    private static void AssertImportedRemoteSessionHydrated(
+        WindowsGuiAppSession session,
+        GuiAppDataScope appData,
+        string scenario)
+    {
+        WaitForSessionHeader(session, "GUI Remote Session 01", scenario, appData);
+
+        var messagesList = session.FindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(10));
+        var latestReplayVisible = session.TryFindVisibleText(
+            "GUI Remote Session 01 replay 024",
+            messagesList,
+            TimeSpan.FromSeconds(10));
+        if (latestReplayVisible is not null)
+        {
+            return;
+        }
+
+        ThrowWithScreenshot(
+            session,
+            appData,
+            scenario,
+            $"Imported remote session transcript did not surface the latest replay message. Visible texts: [{string.Join(", ", session.GetVisibleTexts(messagesList))}].{Environment.NewLine}{appData.ReadLatestAppLogTail()}");
     }
 
     private static void WaitForLoadingOverlayBeforeRemoteHeaderOnWarmSwitch(

@@ -38,7 +38,7 @@ public class RemoteSessionRecoveryLeasePolicyTests
     }
 
     [Fact]
-    public void Decide_WhenSameRemoteSessionUsesDifferentCwd_CancelsExistingLease()
+    public void Decide_WhenSameRemoteSessionUsesDifferentCwd_ReusesExistingLease()
     {
         var existing = Lease(remoteSessionId: "remote-a", cwd: "C:\\repo-a");
         var requested = Lease(remoteSessionId: "remote-a", cwd: "C:\\repo-b");
@@ -47,13 +47,14 @@ public class RemoteSessionRecoveryLeasePolicyTests
             requested,
             [existing]);
 
-        Assert.Equal(RemoteSessionRecoveryLeaseDecisionKind.StartNew, decision.Kind);
-        Assert.True(decision.ShouldStartNew);
-        Assert.Equal([existing], decision.ConflictingLeasesToCancel);
+        Assert.Equal(RemoteSessionRecoveryLeaseDecisionKind.ReuseExisting, decision.Kind);
+        Assert.True(decision.ShouldReuseExisting);
+        Assert.Equal(existing, decision.ExistingLeaseToReuse);
+        Assert.Empty(decision.ConflictingLeasesToCancel);
     }
 
     [Fact]
-    public void Decide_WhenSameRemoteSessionUsesDifferentRecoveryMode_CancelsExistingLease()
+    public void Decide_WhenSameRemoteSessionUsesDifferentRecoveryMode_ReusesExistingLease()
     {
         var existing = Lease(remoteSessionId: "remote-a", recoveryMode: AcpSessionRecoveryMode.Load);
         var requested = Lease(remoteSessionId: "remote-a", recoveryMode: AcpSessionRecoveryMode.Resume);
@@ -62,9 +63,10 @@ public class RemoteSessionRecoveryLeasePolicyTests
             requested,
             [existing]);
 
-        Assert.Equal(RemoteSessionRecoveryLeaseDecisionKind.StartNew, decision.Kind);
-        Assert.True(decision.ShouldStartNew);
-        Assert.Equal([existing], decision.ConflictingLeasesToCancel);
+        Assert.Equal(RemoteSessionRecoveryLeaseDecisionKind.ReuseExisting, decision.Kind);
+        Assert.True(decision.ShouldReuseExisting);
+        Assert.Equal(existing, decision.ExistingLeaseToReuse);
+        Assert.Empty(decision.ConflictingLeasesToCancel);
     }
 
     [Fact]

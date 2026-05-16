@@ -14,6 +14,7 @@ public sealed class AcpEventAdapter
 {
     private const int DefaultBufferLimit = 256;
     private const int DefaultDrainBatchSize = 8;
+    private const int CompletedHydrationAttemptRetentionLimit = 128;
     internal const int DefaultHydrationReplayBufferLimit = 8192;
 
     private readonly Action<SessionUpdateEventArgs> _handler;
@@ -21,13 +22,21 @@ public sealed class AcpEventAdapter
     private readonly Func<string?, System.Threading.Tasks.Task>? _resyncRequired;
     private readonly ILogger<AcpEventAdapter>? _logger;
     private readonly Queue<SessionUpdateEventArgs> _buffer = new();
+    private readonly Dictionary<long, HydrationBufferScope> _hydrationScopesByAttemptId = new();
+    private readonly Dictionary<string, HydrationBufferScope> _hydrationScopesBySessionId =
+        new(StringComparer.Ordinal);
+    private readonly HashSet<long> _completedHydrationAttemptIds = new();
+    private readonly Queue<long> _completedHydrationAttemptOrder = new();
+    private readonly Dictionary<string, HashSet<long>> _completedHydrationAttemptsBySessionId =
+        new(StringComparer.Ordinal);
+    private readonly Dictionary<long, string> _completedHydrationSessionIdByAttemptId = new();
     private readonly object _gate = new();
     private readonly int _bufferLimit;
     private readonly int _hydrationReplayBufferLimit;
-    private string? _bufferingSessionId;
     private TaskCompletionSource<object?>? _drainIdleTcs;
     private long _hydrationAttemptId;
     private bool _isHydrated;
+    private bool _isReplayProjectionReleased;
     private bool _isSuppressing;
     private bool _resyncRaised;
     private bool _drainScheduled;
@@ -59,6 +68,35 @@ public sealed class AcpEventAdapter
         _hydrationReplayBufferLimit = hydrationReplayBufferLimit;
         _resyncRequired = resyncRequiredAsync;
         _logger = logger;
+    }
+
+    private sealed class HydrationBufferScope
+    {
+        public HydrationBufferScope(long attemptId, string sessionId)
+        {
+            AttemptId = attemptId;
+            SessionId = sessionId;
+        }
+
+        public long AttemptId { get; }
+
+        public string SessionId { get; }
+
+        public Queue<SessionUpdateEventArgs> Buffer { get; } = new();
+
+        public TaskCompletionSource<object?>? DrainIdleTcs { get; set; }
+
+        public bool IsHydrated { get; set; }
+
+        public bool IsReplayProjectionReleased { get; set; }
+
+        public bool IsSuppressing { get; set; }
+
+        public bool ResyncRaised { get; set; }
+
+        public bool DrainScheduled { get; set; }
+
+        public bool LowTrustReleaseLogged { get; set; }
     }
 
     public AcpEventAdapter(
@@ -126,39 +164,66 @@ public sealed class AcpEventAdapter
     {
         ArgumentNullException.ThrowIfNull(update);
 
-        var scheduleDrain = false;
+        long? drainAttemptId = null;
+        var scheduleGlobalDrain = false;
         Func<string?, System.Threading.Tasks.Task>? resync = null;
         string? resyncSessionId = null;
 
         lock (_gate)
         {
-            if (_isSuppressing)
+            if (!string.IsNullOrWhiteSpace(update.SessionId)
+                && _hydrationScopesBySessionId.TryGetValue(update.SessionId, out var scope))
+            {
+                if (scope.IsSuppressing)
+                {
+                    return;
+                }
+
+                if (scope.Buffer.Count >= _hydrationReplayBufferLimit)
+                {
+                    (resync, resyncSessionId) = TriggerResyncLocked(update, scope);
+                }
+                else if (!CanDrainBufferedUpdatesLocked(scope))
+                {
+                    scope.Buffer.Enqueue(update);
+                }
+                else
+                {
+                    scope.Buffer.Enqueue(update);
+                    if (!scope.DrainScheduled)
+                    {
+                        scope.DrainScheduled = true;
+                        drainAttemptId = scope.AttemptId;
+                    }
+                }
+            }
+            else if (_hydrationScopesBySessionId.Count > 0)
             {
                 return;
-            }
-
-            if (!_isHydrated
-                && !string.IsNullOrWhiteSpace(_bufferingSessionId)
-                && !string.Equals(_bufferingSessionId, update.SessionId, StringComparison.Ordinal))
-            {
-                return;
-            }
-
-            if (_buffer.Count >= ResolveEffectiveBufferLimitLocked())
-            {
-                (resync, resyncSessionId) = TriggerResyncLocked(update);
-            }
-            else if (!_isHydrated)
-            {
-                _buffer.Enqueue(update);
             }
             else
             {
-                _buffer.Enqueue(update);
-                if (!_drainScheduled)
+                if (_isSuppressing)
                 {
-                    _drainScheduled = true;
-                    scheduleDrain = true;
+                    return;
+                }
+
+                if (_buffer.Count >= _bufferLimit)
+                {
+                    (resync, resyncSessionId) = TriggerResyncLocked(update);
+                }
+                else if (!CanDrainBufferedUpdatesLocked())
+                {
+                    _buffer.Enqueue(update);
+                }
+                else
+                {
+                    _buffer.Enqueue(update);
+                    if (!_drainScheduled)
+                    {
+                        _drainScheduled = true;
+                        scheduleGlobalDrain = true;
+                    }
                 }
             }
         }
@@ -168,51 +233,105 @@ public sealed class AcpEventAdapter
             PostResyncRequired(resync, resyncSessionId);
         }
 
-        if (scheduleDrain)
+        if (drainAttemptId.HasValue)
+        {
+            PostDrain(drainAttemptId.Value);
+        }
+
+        if (scheduleGlobalDrain)
         {
             PostDrain();
         }
     }
 
     public bool MarkHydrated()
-        => MarkHydrated(_hydrationAttemptId, lowTrust: false);
+    {
+        long hydrationAttemptId;
+        lock (_gate)
+        {
+            hydrationAttemptId = _hydrationAttemptId;
+        }
+
+        return MarkHydrated(hydrationAttemptId, lowTrust: false);
+    }
 
     public bool MarkHydrated(bool lowTrust, string? reason = null)
-        => MarkHydrated(_hydrationAttemptId, lowTrust, reason);
+    {
+        long hydrationAttemptId;
+        lock (_gate)
+        {
+            hydrationAttemptId = _hydrationAttemptId;
+        }
+
+        return MarkHydrated(hydrationAttemptId, lowTrust, reason);
+    }
 
     public bool MarkHydrated(long hydrationAttemptId, bool lowTrust, string? reason = null)
     {
-        var scheduleDrain = false;
+        long? drainAttemptId = null;
+        var scheduleGlobalDrain = false;
         var bufferedCount = 0;
         var logLowTrustRelease = false;
 
         lock (_gate)
         {
-            if (hydrationAttemptId != _hydrationAttemptId)
+            if (_hydrationScopesByAttemptId.TryGetValue(hydrationAttemptId, out var scope))
             {
-                return false;
-            }
+                bufferedCount = scope.Buffer.Count;
+                scope.IsHydrated = true;
+                scope.IsReplayProjectionReleased = false;
+                scope.IsSuppressing = false;
+                scope.ResyncRaised = false;
 
-            bufferedCount = _buffer.Count;
-            _isHydrated = true;
-            _isSuppressing = false;
-            _resyncRaised = false;
-            _bufferingSessionId = null;
+                if (lowTrust && bufferedCount > 0 && !scope.LowTrustReleaseLogged)
+                {
+                    scope.LowTrustReleaseLogged = true;
+                    logLowTrustRelease = true;
+                }
+                else if (!lowTrust)
+                {
+                    scope.LowTrustReleaseLogged = false;
+                }
 
-            if (lowTrust && bufferedCount > 0 && !_lowTrustReleaseLogged)
-            {
-                _lowTrustReleaseLogged = true;
-                logLowTrustRelease = true;
+                if (scope.Buffer.Count > 0 && !scope.DrainScheduled)
+                {
+                    scope.DrainScheduled = true;
+                    drainAttemptId = scope.AttemptId;
+                }
+                else if (scope.Buffer.Count == 0)
+                {
+                    RemoveHydrationScopeLocked(scope, null, markCompleted: true);
+                    RestoreSteadyStateWhenNoHydrationScopesLocked();
+                }
             }
-            else if (!lowTrust)
+            else
             {
-                _lowTrustReleaseLogged = false;
-            }
+                if (hydrationAttemptId != _hydrationAttemptId)
+                {
+                    return IsCompletedHydrationAttemptLocked(hydrationAttemptId);
+                }
 
-            if (_buffer.Count > 0 && !_drainScheduled)
-            {
-                _drainScheduled = true;
-                scheduleDrain = true;
+                bufferedCount = _buffer.Count;
+                _isHydrated = true;
+                _isReplayProjectionReleased = false;
+                _isSuppressing = false;
+                _resyncRaised = false;
+
+                if (lowTrust && bufferedCount > 0 && !_lowTrustReleaseLogged)
+                {
+                    _lowTrustReleaseLogged = true;
+                    logLowTrustRelease = true;
+                }
+                else if (!lowTrust)
+                {
+                    _lowTrustReleaseLogged = false;
+                }
+
+                if (_buffer.Count > 0 && !_drainScheduled)
+                {
+                    _drainScheduled = true;
+                    scheduleGlobalDrain = true;
+                }
             }
         }
 
@@ -224,7 +343,12 @@ public sealed class AcpEventAdapter
                 string.IsNullOrWhiteSpace(reason) ? "Unknown" : reason);
         }
 
-        if (scheduleDrain)
+        if (drainAttemptId.HasValue)
+        {
+            PostDrain(drainAttemptId.Value);
+        }
+
+        if (scheduleGlobalDrain)
         {
             PostDrain();
         }
@@ -233,25 +357,46 @@ public sealed class AcpEventAdapter
     }
 
     public Task WaitForDrainIdleAsync(CancellationToken cancellationToken = default)
-        => WaitForDrainIdleAsync(_hydrationAttemptId, cancellationToken);
+    {
+        long hydrationAttemptId;
+        lock (_gate)
+        {
+            hydrationAttemptId = _hydrationAttemptId;
+        }
+
+        return WaitForDrainIdleAsync(hydrationAttemptId, cancellationToken);
+    }
 
     public Task WaitForDrainIdleAsync(long hydrationAttemptId, CancellationToken cancellationToken = default)
     {
         Task waitTask;
         lock (_gate)
         {
-            if (hydrationAttemptId != _hydrationAttemptId)
+            if (_hydrationScopesByAttemptId.TryGetValue(hydrationAttemptId, out var scope))
+            {
+                if (scope.Buffer.Count == 0 && !scope.DrainScheduled)
+                {
+                    return Task.CompletedTask;
+                }
+
+                scope.DrainIdleTcs ??= new TaskCompletionSource<object?>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+                waitTask = scope.DrainIdleTcs.Task;
+            }
+            else if (hydrationAttemptId != _hydrationAttemptId || IsCompletedHydrationAttemptLocked(hydrationAttemptId))
             {
                 return Task.CompletedTask;
             }
-
-            if (_buffer.Count == 0 && !_drainScheduled)
+            else if (_buffer.Count == 0 && !_drainScheduled)
             {
                 return Task.CompletedTask;
             }
-
-            _drainIdleTcs ??= new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            waitTask = _drainIdleTcs.Task;
+            else
+            {
+                _drainIdleTcs ??= new TaskCompletionSource<object?>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+                waitTask = _drainIdleTcs.Task;
+            }
         }
 
         return cancellationToken.CanBeCanceled
@@ -262,61 +407,156 @@ public sealed class AcpEventAdapter
     public long BeginHydrationBuffering(string? sessionId)
     {
         var droppedBufferedCount = 0;
-        TaskCompletionSource<object?>? drainIdle = null;
+        var drainIdles = new List<TaskCompletionSource<object?>>();
         long hydrationAttemptId;
+        var normalizedSessionId = string.IsNullOrWhiteSpace(sessionId) ? null : sessionId;
         lock (_gate)
         {
             hydrationAttemptId = unchecked(_hydrationAttemptId + 1);
             _hydrationAttemptId = hydrationAttemptId;
-            droppedBufferedCount = _buffer.Count;
-            _buffer.Clear();
-            _isHydrated = false;
-            _isSuppressing = false;
-            _resyncRaised = false;
-            _lowTrustReleaseLogged = false;
-            _drainScheduled = false;
-            _bufferingSessionId = string.IsNullOrWhiteSpace(sessionId) ? null : sessionId;
-            if (_buffer.Count == 0 && !_drainScheduled)
+
+            if (normalizedSessionId is null)
             {
-                drainIdle = _drainIdleTcs;
-                _drainIdleTcs = null;
+                droppedBufferedCount = _buffer.Count + CountScopedBufferedUpdatesLocked();
+                ClearAllHydrationScopesLocked(drainIdles, markCompleted: false);
+                _buffer.Clear();
+                _isHydrated = false;
+                _isReplayProjectionReleased = false;
+                _isSuppressing = false;
+                _resyncRaised = false;
+                _lowTrustReleaseLogged = false;
+                _drainScheduled = false;
+                if (_buffer.Count == 0 && !_drainScheduled)
+                {
+                    AddDrainIdleIfPresent(drainIdles, _drainIdleTcs);
+                    _drainIdleTcs = null;
+                }
+            }
+            else
+            {
+                if (_hydrationScopesBySessionId.TryGetValue(normalizedSessionId, out var existingScope))
+                {
+                    droppedBufferedCount = existingScope.Buffer.Count;
+                    RemoveHydrationScopeLocked(existingScope, drainIdles, markCompleted: false);
+                }
+
+                ForgetCompletedHydrationAttemptsForSessionLocked(normalizedSessionId);
+                var scope = new HydrationBufferScope(hydrationAttemptId, normalizedSessionId);
+                _hydrationScopesByAttemptId.Add(hydrationAttemptId, scope);
+                _hydrationScopesBySessionId[normalizedSessionId] = scope;
             }
         }
 
         _logger?.LogDebug(
             "ACP hydration buffering armed. attemptId={AttemptId} sessionId={SessionId} droppedBufferedCount={DroppedBufferedCount}",
             hydrationAttemptId,
-            _bufferingSessionId,
+            normalizedSessionId,
             droppedBufferedCount);
-        drainIdle?.TrySetResult(null);
+        CompleteDrainIdles(drainIdles);
         return hydrationAttemptId;
     }
 
+    public bool ReleaseBufferedUpdatesForReplayProjection(long hydrationAttemptId)
+    {
+        long? drainAttemptId = null;
+        var scheduleGlobalDrain = false;
+        lock (_gate)
+        {
+            if (_hydrationScopesByAttemptId.TryGetValue(hydrationAttemptId, out var scope))
+            {
+                if (scope.IsSuppressing)
+                {
+                    return false;
+                }
+
+                scope.IsReplayProjectionReleased = true;
+                scope.ResyncRaised = false;
+                scope.LowTrustReleaseLogged = false;
+                if (scope.Buffer.Count > 0 && !scope.DrainScheduled)
+                {
+                    scope.DrainScheduled = true;
+                    drainAttemptId = scope.AttemptId;
+                }
+            }
+            else
+            {
+                if (hydrationAttemptId != _hydrationAttemptId || _isSuppressing)
+                {
+                    return false;
+                }
+
+                _isReplayProjectionReleased = true;
+                _resyncRaised = false;
+                _lowTrustReleaseLogged = false;
+                if (_buffer.Count > 0 && !_drainScheduled)
+                {
+                    _drainScheduled = true;
+                    scheduleGlobalDrain = true;
+                }
+            }
+        }
+
+        if (drainAttemptId.HasValue)
+        {
+            PostDrain(drainAttemptId.Value);
+        }
+
+        if (scheduleGlobalDrain)
+        {
+            PostDrain();
+        }
+
+        return true;
+    }
+
     public void SuppressBufferedUpdates(string? reason = null)
-        => SuppressBufferedUpdates(_hydrationAttemptId, reason);
+    {
+        long hydrationAttemptId;
+        lock (_gate)
+        {
+            hydrationAttemptId = _hydrationAttemptId;
+        }
+
+        SuppressBufferedUpdates(hydrationAttemptId, reason);
+    }
 
     public void SuppressBufferedUpdates(long hydrationAttemptId, string? reason = null)
     {
         var droppedBufferedCount = 0;
-        TaskCompletionSource<object?>? drainIdle = null;
+        var drainIdles = new List<TaskCompletionSource<object?>>();
         lock (_gate)
         {
-            if (hydrationAttemptId != _hydrationAttemptId)
+            if (_hydrationScopesByAttemptId.TryGetValue(hydrationAttemptId, out var scope))
             {
-                return;
+                droppedBufferedCount = scope.Buffer.Count;
+                scope.Buffer.Clear();
+                scope.IsHydrated = false;
+                scope.IsReplayProjectionReleased = false;
+                scope.IsSuppressing = true;
+                scope.ResyncRaised = false;
+                scope.LowTrustReleaseLogged = false;
+                RemoveHydrationScopeLocked(scope, drainIdles, markCompleted: false);
+                RestoreSteadyStateWhenNoHydrationScopesLocked();
             }
-
-            droppedBufferedCount = _buffer.Count;
-            _buffer.Clear();
-            _isHydrated = false;
-            _isSuppressing = true;
-            _resyncRaised = false;
-            _lowTrustReleaseLogged = false;
-            _bufferingSessionId = null;
-            if (_buffer.Count == 0 && !_drainScheduled)
+            else
             {
-                drainIdle = _drainIdleTcs;
-                _drainIdleTcs = null;
+                if (hydrationAttemptId != _hydrationAttemptId)
+                {
+                    return;
+                }
+
+                droppedBufferedCount = _buffer.Count;
+                _buffer.Clear();
+                _isHydrated = false;
+                _isReplayProjectionReleased = false;
+                _isSuppressing = true;
+                _resyncRaised = false;
+                _lowTrustReleaseLogged = false;
+                if (_buffer.Count == 0 && !_drainScheduled)
+                {
+                    AddDrainIdleIfPresent(drainIdles, _drainIdleTcs);
+                    _drainIdleTcs = null;
+                }
             }
         }
 
@@ -324,7 +564,30 @@ public sealed class AcpEventAdapter
             "ACP buffered session updates suppressed. droppedBufferedCount={DroppedBufferedCount} reason={Reason}",
             droppedBufferedCount,
             string.IsNullOrWhiteSpace(reason) ? "Unknown" : reason);
-        drainIdle?.TrySetResult(null);
+        CompleteDrainIdles(drainIdles);
+    }
+
+    private (Func<string?, System.Threading.Tasks.Task>? Callback, string? SessionId) TriggerResyncLocked(
+        SessionUpdateEventArgs update,
+        HydrationBufferScope scope)
+    {
+        var bufferedCount = scope.Buffer.Count;
+        scope.Buffer.Clear();
+        scope.IsSuppressing = true;
+        scope.LowTrustReleaseLogged = false;
+
+        if (scope.ResyncRaised)
+        {
+            return (null, null);
+        }
+
+        scope.ResyncRaised = true;
+        _logger?.LogWarning(
+            "ACP session update replay buffer overflow detected; requesting resync. bufferLimit={BufferLimit} droppedUpdates={DroppedUpdates} sessionId={SessionId}",
+            _hydrationReplayBufferLimit,
+            bufferedCount,
+            scope.SessionId);
+        return (_resyncRequired, update.SessionId);
     }
 
     private (Func<string?, System.Threading.Tasks.Task>? Callback, string? SessionId) TriggerResyncLocked(SessionUpdateEventArgs update)
@@ -347,14 +610,14 @@ public sealed class AcpEventAdapter
         return (_resyncRequired, update.SessionId);
     }
 
-    private int ResolveEffectiveBufferLimitLocked()
-        => !_isHydrated && !string.IsNullOrWhiteSpace(_bufferingSessionId)
-            ? _hydrationReplayBufferLimit
-            : _bufferLimit;
-
     private void PostDrain()
     {
         _uiDispatcher.Enqueue(Drain);
+    }
+
+    private void PostDrain(long hydrationAttemptId)
+    {
+        _uiDispatcher.Enqueue(() => Drain(hydrationAttemptId));
     }
 
     private void PostResyncRequired(Func<string?, System.Threading.Tasks.Task> resyncRequired, string? sessionId)
@@ -371,7 +634,7 @@ public sealed class AcpEventAdapter
             TaskCompletionSource<object?>? drainIdle = null;
             lock (_gate)
             {
-                if (!_isHydrated || _isSuppressing || _buffer.Count == 0)
+                if (!CanDrainBufferedUpdatesLocked() || _isSuppressing || _buffer.Count == 0)
                 {
                     _drainScheduled = false;
                     drainIdle = _drainIdleTcs;
@@ -395,7 +658,7 @@ public sealed class AcpEventAdapter
         TaskCompletionSource<object?>? finalDrainIdle = null;
         lock (_gate)
         {
-            if (!_isHydrated || _isSuppressing || _buffer.Count == 0)
+            if (!CanDrainBufferedUpdatesLocked() || _isSuppressing || _buffer.Count == 0)
             {
                 _drainScheduled = false;
                 finalDrainIdle = _drainIdleTcs;
@@ -408,5 +671,222 @@ public sealed class AcpEventAdapter
         }
 
         finalDrainIdle?.TrySetResult(null);
+    }
+
+    private bool CanDrainBufferedUpdatesLocked()
+        => _isHydrated || _isReplayProjectionReleased;
+
+    private void Drain(long hydrationAttemptId)
+    {
+        var drainedCount = 0;
+        while (drainedCount < DefaultDrainBatchSize)
+        {
+            SessionUpdateEventArgs update;
+            TaskCompletionSource<object?>? drainIdle = null;
+            lock (_gate)
+            {
+                if (!_hydrationScopesByAttemptId.TryGetValue(hydrationAttemptId, out var scope))
+                {
+                    return;
+                }
+
+                if (!CanDrainBufferedUpdatesLocked(scope) || scope.IsSuppressing || scope.Buffer.Count == 0)
+                {
+                    scope.DrainScheduled = false;
+                    drainIdle = scope.DrainIdleTcs;
+                    scope.DrainIdleTcs = null;
+
+                    if (CanCompleteHydrationScopeLocked(scope))
+                    {
+                        RemoveHydrationScopeLocked(scope, null, markCompleted: true);
+                        RestoreSteadyStateWhenNoHydrationScopesLocked();
+                    }
+                }
+                else
+                {
+                    update = scope.Buffer.Dequeue();
+                    goto HandleUpdate;
+                }
+            }
+
+            drainIdle?.TrySetResult(null);
+            return;
+
+        HandleUpdate:
+            _handler(update);
+            drainedCount++;
+        }
+
+        TaskCompletionSource<object?>? finalDrainIdle = null;
+        lock (_gate)
+        {
+            if (!_hydrationScopesByAttemptId.TryGetValue(hydrationAttemptId, out var scope))
+            {
+                return;
+            }
+
+            if (!CanDrainBufferedUpdatesLocked(scope) || scope.IsSuppressing || scope.Buffer.Count == 0)
+            {
+                scope.DrainScheduled = false;
+                finalDrainIdle = scope.DrainIdleTcs;
+                scope.DrainIdleTcs = null;
+
+                if (CanCompleteHydrationScopeLocked(scope))
+                {
+                    RemoveHydrationScopeLocked(scope, null, markCompleted: true);
+                    RestoreSteadyStateWhenNoHydrationScopesLocked();
+                }
+            }
+            else
+            {
+                PostDrain(hydrationAttemptId);
+            }
+        }
+
+        finalDrainIdle?.TrySetResult(null);
+    }
+
+    private static bool CanDrainBufferedUpdatesLocked(HydrationBufferScope scope)
+        => scope.IsHydrated || scope.IsReplayProjectionReleased;
+
+    private static bool CanCompleteHydrationScopeLocked(HydrationBufferScope scope)
+        => scope.IsHydrated
+            && scope.Buffer.Count == 0
+            && !scope.DrainScheduled;
+
+    private int CountScopedBufferedUpdatesLocked()
+    {
+        var count = 0;
+        foreach (var scope in _hydrationScopesByAttemptId.Values)
+        {
+            count += scope.Buffer.Count;
+        }
+
+        return count;
+    }
+
+    private void ClearAllHydrationScopesLocked(
+        List<TaskCompletionSource<object?>> drainIdles,
+        bool markCompleted)
+    {
+        foreach (var scope in _hydrationScopesByAttemptId.Values)
+        {
+            AddDrainIdleIfPresent(drainIdles, scope.DrainIdleTcs);
+            if (markCompleted)
+            {
+                RememberCompletedHydrationAttemptLocked(scope.AttemptId, scope.SessionId);
+            }
+        }
+
+        _hydrationScopesByAttemptId.Clear();
+        _hydrationScopesBySessionId.Clear();
+    }
+
+    private void RemoveHydrationScopeLocked(
+        HydrationBufferScope scope,
+        List<TaskCompletionSource<object?>>? drainIdles,
+        bool markCompleted)
+    {
+        _hydrationScopesByAttemptId.Remove(scope.AttemptId);
+        if (_hydrationScopesBySessionId.TryGetValue(scope.SessionId, out var currentScope)
+            && ReferenceEquals(currentScope, scope))
+        {
+            _hydrationScopesBySessionId.Remove(scope.SessionId);
+        }
+
+        AddDrainIdleIfPresent(drainIdles, scope.DrainIdleTcs);
+        scope.DrainIdleTcs = null;
+
+        if (markCompleted)
+        {
+            RememberCompletedHydrationAttemptLocked(scope.AttemptId, scope.SessionId);
+        }
+    }
+
+    private bool IsCompletedHydrationAttemptLocked(long hydrationAttemptId)
+        => _completedHydrationAttemptIds.Contains(hydrationAttemptId);
+
+    private void RestoreSteadyStateWhenNoHydrationScopesLocked()
+    {
+        if (_hydrationScopesByAttemptId.Count != 0)
+        {
+            return;
+        }
+
+        _isHydrated = true;
+        _isReplayProjectionReleased = false;
+        _isSuppressing = false;
+        _resyncRaised = false;
+        _lowTrustReleaseLogged = false;
+    }
+
+    private void RememberCompletedHydrationAttemptLocked(long hydrationAttemptId, string sessionId)
+    {
+        if (!_completedHydrationAttemptIds.Add(hydrationAttemptId))
+        {
+            return;
+        }
+
+        _completedHydrationAttemptOrder.Enqueue(hydrationAttemptId);
+        _completedHydrationSessionIdByAttemptId[hydrationAttemptId] = sessionId;
+        if (!_completedHydrationAttemptsBySessionId.TryGetValue(sessionId, out var attemptIds))
+        {
+            attemptIds = new HashSet<long>();
+            _completedHydrationAttemptsBySessionId[sessionId] = attemptIds;
+        }
+
+        attemptIds.Add(hydrationAttemptId);
+        while (_completedHydrationAttemptOrder.Count > CompletedHydrationAttemptRetentionLimit)
+        {
+            RemoveCompletedHydrationAttemptLocked(_completedHydrationAttemptOrder.Dequeue());
+        }
+    }
+
+    private void ForgetCompletedHydrationAttemptsForSessionLocked(string sessionId)
+    {
+        if (!_completedHydrationAttemptsBySessionId.TryGetValue(sessionId, out var attemptIds))
+        {
+            return;
+        }
+
+        foreach (var attemptId in attemptIds)
+        {
+            _completedHydrationAttemptIds.Remove(attemptId);
+            _completedHydrationSessionIdByAttemptId.Remove(attemptId);
+        }
+
+        _completedHydrationAttemptsBySessionId.Remove(sessionId);
+    }
+
+    private void RemoveCompletedHydrationAttemptLocked(long hydrationAttemptId)
+    {
+        _completedHydrationAttemptIds.Remove(hydrationAttemptId);
+        if (_completedHydrationSessionIdByAttemptId.Remove(hydrationAttemptId, out var sessionId)
+            && _completedHydrationAttemptsBySessionId.TryGetValue(sessionId, out var attemptIds))
+        {
+            attemptIds.Remove(hydrationAttemptId);
+            if (attemptIds.Count == 0)
+            {
+                _completedHydrationAttemptsBySessionId.Remove(sessionId);
+            }
+        }
+    }
+
+    private static void AddDrainIdleIfPresent(
+        List<TaskCompletionSource<object?>>? drainIdles,
+        TaskCompletionSource<object?>? drainIdle)
+    {
+        if (drainIdles is not null && drainIdle is not null)
+        {
+            drainIdles.Add(drainIdle);
+        }
+    }
+
+    private static void CompleteDrainIdles(IEnumerable<TaskCompletionSource<object?>> drainIdles)
+    {
+        foreach (var drainIdle in drainIdles)
+        {
+            drainIdle.TrySetResult(null);
+        }
     }
 }

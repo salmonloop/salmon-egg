@@ -8092,6 +8092,69 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task HydrateActiveConversationAsync_WhenReplayArrivesBeforeLoadResponse_ProjectsReplayBeforeTransportCompletes()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+
+        var loadStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowLoadCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ReplayLoadChatService? innerChatService = null;
+        innerChatService = new ReplayLoadChatService
+        {
+            AgentCapabilities = new AgentCapabilities(loadSession: true),
+            OnLoadSessionAsync = async (_, cancellationToken) =>
+            {
+                loadStarted.TrySetResult(null);
+                innerChatService!.RaiseSessionUpdate(new SessionUpdateEventArgs(
+                    "remote-1",
+                    new AgentMessageUpdate(new TextContentBlock("authoritative replay before load response"))));
+                await allowLoadCompletion.Task.WaitAsync(cancellationToken);
+                return SessionLoadResponse.Completed;
+            }
+        };
+
+        AcpChatServiceAdapter? adapter = null;
+        var eventAdapter = new AcpEventAdapter(
+            update => adapter!.PublishBufferedUpdate(update),
+            syncContext);
+        adapter = new AcpChatServiceAdapter(innerChatService, eventAdapter);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(adapter));
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+        });
+        await DispatchConnectedAsync(fixture, "profile-1");
+        syncContext.RunAll();
+
+        var hydrationTask = fixture.ViewModel.HydrateActiveConversationAsync();
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(loadStarted.Task.IsCompleted);
+        }, timeoutMilliseconds: 2000);
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(fixture.ViewModel.MessageHistory.Any(message =>
+                string.Equals(
+                    message.TextContent,
+                    "authoritative replay before load response",
+                    StringComparison.Ordinal)));
+        });
+
+        Assert.False(hydrationTask.IsCompleted);
+
+        allowLoadCompletion.TrySetResult(null);
+        await syncContext.RunUntilCompletedAsync(hydrationTask);
+        Assert.True(await hydrationTask, fixture.ViewModel.ErrorMessage);
+    }
+
+    [Fact]
     public async Task HydrateActiveConversationAsync_WhenCompletionModeIsLoadResponseAndReplayIsEmpty_DismissesOverlayAfterLoadResponse()
     {
         var syncContext = new QueueingSynchronizationContext();
@@ -11364,7 +11427,7 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
-    public async Task ConversationSessionSwitcherContract_WhenCanceledHydrationEmitsLateReplay_StaleReplayIsDiscardedBeforeNextRemoteActivation()
+    public async Task ConversationSessionSwitcherContract_WhenCanceledForegroundHydrationCompletesFromReusedLease_ReplayIsPreserved()
     {
         var syncContext = new QueueingSynchronizationContext();
         var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
@@ -11493,14 +11556,6 @@ public partial class ChatViewModelTests
         await syncContext.RunUntilCompletedAsync(firstRemoteSwitchTask);
         Assert.False(await firstRemoteSwitchTask);
         syncContext.RunAll();
-        innerChatService.RaiseSessionUpdate(new SessionUpdateEventArgs(
-            "remote-1",
-            new AgentMessageUpdate(new TextContentBlock("stale replay after cancel"))));
-        syncContext.RunAll();
-        Assert.DoesNotContain(
-            fixture.ViewModel.MessageHistory,
-            message => message.TextContent?.Contains("stale replay after cancel", StringComparison.Ordinal) == true);
-
         var secondRemoteSwitchTask = fixture.ViewModel.SwitchConversationAsync("conv-remote");
         await WaitForConditionAsync(() =>
         {
@@ -11521,9 +11576,532 @@ public partial class ChatViewModelTests
         Assert.Contains(
             finalTranscript,
             message => message.TextContent?.Contains("fresh replay after", StringComparison.Ordinal) == true);
-        Assert.DoesNotContain(
+    }
+
+    [Fact]
+    public async Task ConversationSessionSwitcherContract_WhenSameRemoteSessionIsSelectedAgain_ReusesInFlightLoadAndDoesNotMixReplay()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
+        var sessionManager = new Mock<ISessionManager>();
+        sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.TryGetValue(id, out var session) ? session : null);
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .Returns<string, string?>((id, cwd) =>
+            {
+                var session = new Session(id, cwd);
+                sessions[id] = session;
+                return Task.FromResult(session);
+            });
+        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
+            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
+            {
+                if (!sessions.TryGetValue(id, out var session))
+                {
+                    return false;
+                }
+
+                update(session);
+                if (updateActivity)
+                {
+                    session.UpdateActivity();
+                }
+
+                return true;
+            });
+        sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.Remove(id));
+
+        await sessionManager.Object.CreateSessionAsync("conv-local", @"C:\repo\local");
+        await sessionManager.Object.CreateSessionAsync("conv-remote", @"C:\repo\remote");
+
+        var loadStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowReplay = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var loadInvocationCount = 0;
+
+        ReplayLoadChatService? innerChatService = null;
+        innerChatService = new ReplayLoadChatService
+        {
+            AgentCapabilities = new AgentCapabilities(loadSession: true),
+            OnLoadSessionAsync = async (parameters, cancellationToken) =>
+            {
+                Assert.Equal("remote-1", parameters.SessionId);
+                Interlocked.Increment(ref loadInvocationCount);
+                loadStarted.TrySetResult(null);
+                await allowReplay.Task.WaitAsync(cancellationToken);
+                innerChatService!.RaiseSessionUpdate(new SessionUpdateEventArgs(
+                    "remote-1",
+                    new AgentMessageUpdate(new TextContentBlock("reused replay"))));
+                await Task.Yield();
+                return SessionLoadResponse.Completed;
+            }
+        };
+
+        AcpChatServiceAdapter? adapter = null;
+        var eventAdapter = new AcpEventAdapter(
+            update => adapter!.PublishBufferedUpdate(update),
+            syncContext);
+        adapter = new AcpChatServiceAdapter(innerChatService, eventAdapter);
+
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
+        await syncContext.RunUntilCompletedAsync(fixture.ViewModel.RestoreAsync());
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-local",
+            Transcript:
+            [
+                new ConversationMessageSnapshot
+                {
+                    Id = "local-1",
+                    Timestamp = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                    IsOutgoing = true,
+                    ContentType = "text",
+                    TextContent = "local seed"
+                }
+            ],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-remote",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(adapter));
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-local",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-remote", new ConversationBindingSlice("conv-remote", "remote-1", "profile-1"))
+        });
+        await DispatchConnectedAsync(fixture, "profile-1");
+        syncContext.RunAll();
+
+        var firstRemoteSwitchTask = fixture.ViewModel.SwitchConversationAsync("conv-remote");
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(loadStarted.Task.IsCompleted);
+        }, timeoutMilliseconds: 2000);
+
+        var localSwitchTask = fixture.ViewModel.SwitchConversationAsync("conv-local");
+        await syncContext.RunUntilCompletedAsync(localSwitchTask);
+        Assert.True(await localSwitchTask);
+
+        var secondRemoteSwitchTask = fixture.ViewModel.SwitchConversationAsync("conv-remote");
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(
+                string.Equals(fixture.ViewModel.CurrentSessionId, "conv-remote", StringComparison.Ordinal)
+                && fixture.ViewModel.IsRemoteHydrationPending);
+        }, timeoutMilliseconds: 2000);
+
+        Assert.Equal(1, Volatile.Read(ref loadInvocationCount));
+        allowReplay.TrySetResult(null);
+
+        await syncContext.RunUntilCompletedAsync(secondRemoteSwitchTask);
+        Assert.True(await secondRemoteSwitchTask, fixture.ViewModel.ErrorMessage ?? "<no error>");
+        await syncContext.RunUntilCompletedAsync(firstRemoteSwitchTask);
+
+        Assert.Equal(1, Volatile.Read(ref loadInvocationCount));
+        var finalState = await fixture.GetStateAsync();
+        var finalTranscript = finalState.ResolveContentSlice("conv-remote")?.Transcript
+            ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+        Assert.Contains(
             finalTranscript,
-            message => message.TextContent?.Contains("stale replay after cancel", StringComparison.Ordinal) == true);
+            message => string.Equals(message.TextContent, "reused replay", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ConversationSessionSwitcherContract_WhenReusingInFlightLoad_PreservesReplayThatArrivedBeforeReturn()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
+        var sessionManager = new Mock<ISessionManager>();
+        sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.TryGetValue(id, out var session) ? session : null);
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .Returns<string, string?>((id, cwd) =>
+            {
+                var session = new Session(id, cwd);
+                sessions[id] = session;
+                return Task.FromResult(session);
+            });
+        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
+            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
+            {
+                if (!sessions.TryGetValue(id, out var session))
+                {
+                    return false;
+                }
+
+                update(session);
+                if (updateActivity)
+                {
+                    session.UpdateActivity();
+                }
+
+                return true;
+            });
+        sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.Remove(id));
+
+        await sessionManager.Object.CreateSessionAsync("conv-local", @"C:\repo\local");
+        await sessionManager.Object.CreateSessionAsync("conv-remote", @"C:\repo\remote");
+
+        var replayPublished = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowLoadCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var loadInvocationCount = 0;
+
+        ReplayLoadChatService? innerChatService = null;
+        innerChatService = new ReplayLoadChatService
+        {
+            AgentCapabilities = new AgentCapabilities(loadSession: true),
+            OnLoadSessionAsync = async (parameters, cancellationToken) =>
+            {
+                Assert.Equal("remote-1", parameters.SessionId);
+                Interlocked.Increment(ref loadInvocationCount);
+                innerChatService!.RaiseSessionUpdate(new SessionUpdateEventArgs(
+                    "remote-1",
+                    new AgentMessageUpdate(new TextContentBlock("early replay before return"))));
+                replayPublished.TrySetResult(null);
+                await allowLoadCompletion.Task.WaitAsync(cancellationToken);
+                return SessionLoadResponse.Completed;
+            }
+        };
+
+        AcpChatServiceAdapter? adapter = null;
+        var eventAdapter = new AcpEventAdapter(
+            update => adapter!.PublishBufferedUpdate(update),
+            syncContext);
+        adapter = new AcpChatServiceAdapter(innerChatService, eventAdapter);
+
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
+        await syncContext.RunUntilCompletedAsync(fixture.ViewModel.RestoreAsync());
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-local",
+            Transcript:
+            [
+                new ConversationMessageSnapshot
+                {
+                    Id = "local-1",
+                    Timestamp = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                    IsOutgoing = true,
+                    ContentType = "text",
+                    TextContent = "local seed"
+                }
+            ],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-remote",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(adapter));
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-local",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-remote", new ConversationBindingSlice("conv-remote", "remote-1", "profile-1"))
+        });
+        await DispatchConnectedAsync(fixture, "profile-1");
+        syncContext.RunAll();
+
+        var firstRemoteSwitchTask = fixture.ViewModel.SwitchConversationAsync("conv-remote");
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(replayPublished.Task.IsCompleted);
+        }, timeoutMilliseconds: 2000);
+
+        var localSwitchTask = fixture.ViewModel.SwitchConversationAsync("conv-local");
+        await syncContext.RunUntilCompletedAsync(localSwitchTask);
+        Assert.True(await localSwitchTask);
+
+        var secondRemoteSwitchTask = fixture.ViewModel.SwitchConversationAsync("conv-remote");
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(
+                string.Equals(fixture.ViewModel.CurrentSessionId, "conv-remote", StringComparison.Ordinal)
+                && fixture.ViewModel.IsRemoteHydrationPending);
+        }, timeoutMilliseconds: 2000);
+
+        Assert.Equal(1, Volatile.Read(ref loadInvocationCount));
+        allowLoadCompletion.TrySetResult(null);
+        await syncContext.RunUntilCompletedAsync(secondRemoteSwitchTask);
+        Assert.True(await secondRemoteSwitchTask, fixture.ViewModel.ErrorMessage ?? "<no error>");
+        await syncContext.RunUntilCompletedAsync(firstRemoteSwitchTask);
+
+        var finalState = await fixture.GetStateAsync();
+        var finalTranscript = finalState.ResolveContentSlice("conv-remote")?.Transcript
+            ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+        Assert.Contains(
+            finalTranscript,
+            message => string.Equals(message.TextContent, "early replay before return", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ConversationSessionSwitcherContract_WhenRecoveryLeaseIsCanceled_LateReplayIsDiscarded()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
+        var sessionManager = new Mock<ISessionManager>();
+        sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.TryGetValue(id, out var session) ? session : null);
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .Returns<string, string?>((id, cwd) =>
+            {
+                var session = new Session(id, cwd);
+                sessions[id] = session;
+                return Task.FromResult(session);
+            });
+        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
+            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
+            {
+                if (!sessions.TryGetValue(id, out var session))
+                {
+                    return false;
+                }
+
+                update(session);
+                if (updateActivity)
+                {
+                    session.UpdateActivity();
+                }
+
+                return true;
+            });
+        sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.Remove(id));
+
+        await sessionManager.Object.CreateSessionAsync("conv-local", @"C:\repo\local");
+        await sessionManager.Object.CreateSessionAsync("conv-remote", @"C:\repo\remote");
+
+        var oldLoadStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var oldLoadCanceled = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var newLoadStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowNewLoadCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        ReplayLoadChatService? oldInnerChatService = null;
+        oldInnerChatService = new ReplayLoadChatService
+        {
+            AgentCapabilities = new AgentCapabilities(loadSession: true),
+            OnLoadSessionAsync = async (parameters, cancellationToken) =>
+            {
+                Assert.Equal("remote-1", parameters.SessionId);
+                oldLoadStarted.TrySetResult(null);
+                try
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                    return SessionLoadResponse.Completed;
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    oldLoadCanceled.TrySetResult(null);
+                    oldInnerChatService!.RaiseSessionUpdate(new SessionUpdateEventArgs(
+                        "remote-1",
+                        new AgentMessageUpdate(new TextContentBlock("late canceled replay"))));
+                    throw;
+                }
+            }
+        };
+        AcpChatServiceAdapter? oldAdapter = null;
+        var oldEventAdapter = new AcpEventAdapter(
+            update => oldAdapter!.PublishBufferedUpdate(update),
+            syncContext);
+        oldAdapter = new AcpChatServiceAdapter(oldInnerChatService, oldEventAdapter);
+
+        ReplayLoadChatService? newInnerChatService = null;
+        newInnerChatService = new ReplayLoadChatService
+        {
+            AgentCapabilities = new AgentCapabilities(loadSession: true),
+            OnLoadSessionAsync = async (parameters, cancellationToken) =>
+            {
+                Assert.Equal("remote-1", parameters.SessionId);
+                newLoadStarted.TrySetResult(null);
+                newInnerChatService!.RaiseSessionUpdate(new SessionUpdateEventArgs(
+                    "remote-1",
+                    new AgentMessageUpdate(new TextContentBlock("new replay"))));
+                await allowNewLoadCompletion.Task.WaitAsync(cancellationToken);
+                return SessionLoadResponse.Completed;
+            }
+        };
+        AcpChatServiceAdapter? newAdapter = null;
+        var newEventAdapter = new AcpEventAdapter(
+            update => newAdapter!.PublishBufferedUpdate(update),
+            syncContext);
+        newAdapter = new AcpChatServiceAdapter(newInnerChatService, newEventAdapter);
+
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
+        await syncContext.RunUntilCompletedAsync(fixture.ViewModel.RestoreAsync());
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-local",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-remote",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+            ConnectionInstanceId: "conn-old"),
+            ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
+
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(oldAdapter));
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-local",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-remote", new ConversationBindingSlice("conv-remote", "remote-1", "profile-1"))
+        });
+        await DispatchConnectedAsync(fixture, "profile-1");
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-old"));
+        syncContext.RunAll();
+
+        var oldSwitchTask = fixture.ViewModel.SwitchConversationAsync("conv-remote");
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(oldLoadStarted.Task.IsCompleted);
+        }, timeoutMilliseconds: 2000);
+
+        var localSwitchTask = fixture.ViewModel.SwitchConversationAsync("conv-local");
+        await syncContext.RunUntilCompletedAsync(localSwitchTask);
+        Assert.True(await localSwitchTask);
+
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(newAdapter));
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-new"));
+        var newSwitchTask = fixture.ViewModel.SwitchConversationAsync("conv-remote");
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(newLoadStarted.Task.IsCompleted && oldLoadCanceled.Task.IsCompleted);
+        }, timeoutMilliseconds: 2000);
+
+        allowNewLoadCompletion.TrySetResult(null);
+        await syncContext.RunUntilCompletedAsync(newSwitchTask);
+        Assert.True(await newSwitchTask, fixture.ViewModel.ErrorMessage ?? "<no error>");
+        await syncContext.RunUntilCompletedAsync(oldSwitchTask);
+
+        var finalState = await fixture.GetStateAsync();
+        var finalTranscript = finalState.ResolveContentSlice("conv-remote")?.Transcript
+            ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+        var finalTexts = finalTranscript.Select(static message => message.TextContent).ToArray();
+        Assert.DoesNotContain(
+            "late canceled replay",
+            finalTexts);
+        Assert.Contains(
+            "new replay",
+            finalTexts);
+    }
+
+    [Fact]
+    public async Task ConversationSessionSwitcherContract_WhenOwnedLoadFails_ReleasesReplayScopeForOtherSessionUpdates()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
+        var sessionManager = new Mock<ISessionManager>();
+        sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.TryGetValue(id, out var session) ? session : null);
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .Returns<string, string?>((id, cwd) =>
+            {
+                var session = new Session(id, cwd);
+                sessions[id] = session;
+                return Task.FromResult(session);
+            });
+        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
+            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
+            {
+                if (!sessions.TryGetValue(id, out var session))
+                {
+                    return false;
+                }
+
+                update(session);
+                if (updateActivity)
+                {
+                    session.UpdateActivity();
+                }
+
+                return true;
+            });
+        sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.Remove(id));
+
+        await sessionManager.Object.CreateSessionAsync("conv-remote", @"C:\repo\remote");
+        await sessionManager.Object.CreateSessionAsync("conv-other", @"C:\repo\other");
+
+        ReplayLoadChatService? innerChatService = null;
+        innerChatService = new ReplayLoadChatService
+        {
+            AgentCapabilities = new AgentCapabilities(loadSession: true),
+            OnLoadSessionAsync = (parameters, _) =>
+            {
+                Assert.Equal("remote-1", parameters.SessionId);
+                innerChatService!.RaiseSessionUpdate(new SessionUpdateEventArgs(
+                    "remote-1",
+                    new AgentMessageUpdate(new TextContentBlock("released before failure"))));
+                return Task.FromException<SessionLoadResponse>(
+                    new InvalidOperationException("forced load failure"));
+            }
+        };
+        AcpChatServiceAdapter? adapter = null;
+        var eventAdapter = new AcpEventAdapter(
+            update => adapter!.PublishBufferedUpdate(update),
+            syncContext);
+        adapter = new AcpChatServiceAdapter(innerChatService, eventAdapter);
+
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
+        await syncContext.RunUntilCompletedAsync(fixture.ViewModel.RestoreAsync());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(adapter));
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-other",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-remote", new ConversationBindingSlice("conv-remote", "remote-1", "profile-1"))
+                .Add("conv-other", new ConversationBindingSlice("conv-other", "remote-2", "profile-1"))
+        });
+        await DispatchConnectedAsync(fixture, "profile-1");
+        syncContext.RunAll();
+
+        var switchTask = fixture.ViewModel.SwitchConversationAsync("conv-remote");
+        await syncContext.RunUntilCompletedAsync(switchTask);
+        var switched = await switchTask;
+        Assert.False(switched);
+
+        innerChatService.RaiseSessionUpdate(new SessionUpdateEventArgs(
+            "remote-2",
+            new AgentMessageUpdate(new TextContentBlock("other session update"))));
+        syncContext.RunAll();
+
+        var finalState = await fixture.GetStateAsync();
+        var otherTranscript = finalState.ResolveContentSlice("conv-other")?.Transcript
+            ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+        Assert.Contains(
+            otherTranscript,
+            message => string.Equals(message.TextContent, "other session update", StringComparison.Ordinal));
     }
 
     [Fact]

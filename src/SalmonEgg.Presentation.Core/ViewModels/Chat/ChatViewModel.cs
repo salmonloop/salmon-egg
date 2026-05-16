@@ -126,6 +126,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly IAcpSessionUpdateProjector _acpSessionUpdateProjector;
     private readonly ChatSessionUpdateRouter _sessionUpdateRouter;
     private readonly OutgoingUserMessageProjector _outgoingUserMessageProjector;
+    private readonly IConversationMutationPipeline _conversationMutationPipeline;
     private readonly IChatConnectionStore _chatConnectionStore;
     private readonly IConversationAttentionStore? _conversationAttentionStore;
     private readonly SerialAsyncWorkQueue _sessionUpdateWorkQueue;
@@ -219,6 +220,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         private Task? _executionTask;
         private bool _disposed;
+        private bool _bufferingStarted;
 
         public RemoteSessionRecoveryRequest(CancellationTokenSource cancellationTokenSource)
         {
@@ -231,6 +233,16 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         public Task ExecutionTask => Volatile.Read(ref _executionTask) ?? System.Threading.Tasks.Task.CompletedTask;
 
         public CancellationToken Token => _token;
+
+        public long? HydrationAttemptId { get; set; }
+
+        public bool BufferingStarted => _bufferingStarted;
+
+        public void MarkBufferingStarted()
+            => _bufferingStarted = true;
+
+        public void ResetBufferingStarted()
+            => _bufferingStarted = false;
 
         public void Start(Func<CancellationToken, Task<AcpSessionRecoveryProjection>> operation)
         {
@@ -309,6 +321,18 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             }
         }
     }
+
+    private readonly record struct AcpSessionRecoveryBufferScope(
+        long? HydrationAttemptId,
+        bool OwnsRecoveryLease,
+        CancellationToken RecoveryCancellationToken);
+
+    private readonly record struct AcpSessionRecoveryStartResult(
+        Task<AcpSessionRecoveryProjection> RecoveryTask,
+        AcpSessionRecoveryBufferScope BufferScope,
+        Task? ConflictingRecoveryCompletion,
+        RemoteSessionRecoveryRequest? RecoveryRequest,
+        Action? StartRecoveryTransport);
 
     /// <summary>
     /// Local conversation binding connects a stable UI ConversationId to a transient ACP RemoteSessionId.
@@ -999,7 +1023,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         SerialAsyncWorkQueue? sessionUpdateWorkQueue = null,
         IChatUiProjectionApplicationCoordinator? chatUiProjectionApplicationCoordinator = null,
         IConversationActivationOrchestrator? conversationActivationOrchestrator = null,
-        ISlashCommandSource? localSlashCommandSource = null)
+        ISlashCommandSource? localSlashCommandSource = null,
+        IConversationMutationPipeline? conversationMutationPipeline = null)
         : base(logger)
     {
         _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
@@ -1012,13 +1037,15 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _conversationWorkspace = conversationWorkspace ?? throw new ArgumentNullException(nameof(conversationWorkspace));
         _bindingCommands = bindingCommands ?? new BindingCoordinator(conversationWorkspace, chatStore);
         _acpConnectionCoordinator = acpConnectionCoordinator ?? NoopAcpConnectionCoordinator.Instance;
+        _conversationMutationPipeline = conversationMutationPipeline ?? new ConversationMutationPipeline();
         _conversationActivationCoordinator = conversationActivationCoordinator
             ?? new ConversationActivationCoordinator(
                 conversationWorkspace,
                 _bindingCommands,
                 chatStore,
                 chatConnectionStore,
-                NullLogger<ConversationActivationCoordinator>.Instance);
+                NullLogger<ConversationActivationCoordinator>.Instance,
+                _conversationMutationPipeline);
         _conversationActivationOrchestrator = conversationActivationOrchestrator
             ?? new ConversationActivationOrchestrator(NullLogger<ConversationActivationOrchestrator>.Instance);
         _conversationCatalogPresenter = conversationCatalogPresenter ?? throw new ArgumentNullException(nameof(conversationCatalogPresenter));

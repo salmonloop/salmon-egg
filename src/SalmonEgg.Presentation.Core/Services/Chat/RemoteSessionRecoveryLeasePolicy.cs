@@ -113,11 +113,9 @@ public static class RemoteSessionRecoveryLeasePolicy
     public static bool IsSameLease(
         RemoteSessionRecoveryLeaseKey candidate,
         RemoteSessionRecoveryLeaseKey requested)
-        => candidate.RecoveryMode == requested.RecoveryMode
-            && Same(candidate.ProfileId, requested.ProfileId)
+        => Same(candidate.ProfileId, requested.ProfileId)
             && Same(candidate.ConnectionInstanceId, requested.ConnectionInstanceId)
-            && Same(candidate.RemoteSessionId, requested.RemoteSessionId)
-            && Same(candidate.Cwd, requested.Cwd);
+            && Same(candidate.RemoteSessionId, requested.RemoteSessionId);
 
     /// <summary>
     /// Determines whether an active lease must be canceled before starting the requested lease.
@@ -134,13 +132,7 @@ public static class RemoteSessionRecoveryLeasePolicy
             return false;
         }
 
-        if (!Same(candidate.ConnectionInstanceId, requested.ConnectionInstanceId))
-        {
-            return true;
-        }
-
-        return candidate.RecoveryMode != requested.RecoveryMode
-            || !Same(candidate.Cwd, requested.Cwd);
+        return !Same(candidate.ConnectionInstanceId, requested.ConnectionInstanceId);
     }
 
     private static bool Same(string? left, string? right)
