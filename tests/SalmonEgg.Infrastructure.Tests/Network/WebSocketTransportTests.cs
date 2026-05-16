@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Net.Http;
 using System.Reactive.Subjects;
 using System.Threading;
 using System.Threading.Tasks;
@@ -11,11 +10,11 @@ using Xunit;
 
 namespace SalmonEgg.Infrastructure.Tests.Network
 {
-    public class TransportTests
+    public class WebSocketTransportTests
     {
         private readonly Mock<ILogger> _mockLogger;
 
-        public TransportTests()
+        public WebSocketTransportTests()
         {
             _mockLogger = new Mock<ILogger>();
             _mockLogger.Setup(x => x.Information(It.IsAny<string>(), It.IsAny<object[]>())).Verifiable();
@@ -25,10 +24,30 @@ namespace SalmonEgg.Infrastructure.Tests.Network
         }
 
         [Fact]
-        public async Task HttpSseTransport_ConnectAsync_ShouldThrowArgumentException_WhenUrlIsEmpty()
+        public void Constructor_ShouldThrowArgumentNullException_WhenLoggerIsNull()
+        {
+            // Act & Assert
+            var exception = Assert.Throws<ArgumentNullException>(() => new WebSocketTransport(null!));
+            Assert.Equal("logger", exception.ParamName);
+        }
+
+        [Fact]
+        public void Constructor_ShouldInitializeSuccessfully_WhenValidLoggerProvided()
+        {
+            // Act
+            var transport = new WebSocketTransport(_mockLogger.Object);
+
+            // Assert
+            Assert.NotNull(transport);
+            Assert.NotNull(transport.Messages);
+            Assert.NotNull(transport.StateChanges);
+        }
+
+        [Fact]
+        public async Task WebSocketTransport_ConnectAsync_ShouldThrowArgumentException_WhenUrlIsEmpty()
         {
             // Arrange
-            var transport = new HttpSseTransport(_mockLogger.Object);
+            var transport = new WebSocketTransport(_mockLogger.Object);
 
             // Act & Assert
             await Assert.ThrowsAsync<ArgumentException>(() =>
@@ -36,21 +55,21 @@ namespace SalmonEgg.Infrastructure.Tests.Network
         }
 
         [Fact]
-        public async Task HttpSseTransport_DisconnectAsync_ShouldNotThrow_WhenNotConnected()
+        public async Task WebSocketTransport_DisconnectAsync_ShouldNotThrow_WhenNotConnected()
         {
             // Arrange
-            var transport = new HttpSseTransport(_mockLogger.Object);
+            var transport = new WebSocketTransport(_mockLogger.Object);
 
             // Act & Assert
             await transport.DisconnectAsync();
-            _mockLogger.Verify(x => x.Warning("HTTP SSE is not connected"), Times.Once);
+            _mockLogger.Verify(x => x.Warning("WebSocket is not connected"), Times.Once);
         }
 
         [Fact]
-        public async Task HttpSseTransport_SendAsync_ShouldThrowInvalidOperationException_WhenNotConnected()
+        public async Task WebSocketTransport_SendAsync_ShouldThrowInvalidOperationException_WhenNotConnected()
         {
             // Arrange
-            var transport = new HttpSseTransport(_mockLogger.Object);
+            var transport = new WebSocketTransport(_mockLogger.Object);
 
             // Act & Assert
             await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -58,10 +77,10 @@ namespace SalmonEgg.Infrastructure.Tests.Network
         }
 
         [Fact]
-        public async Task HttpSseTransport_SendAsync_ShouldThrowArgumentException_WhenMessageIsEmpty()
+        public async Task WebSocketTransport_SendAsync_ShouldThrowArgumentException_WhenMessageIsEmpty()
         {
             // Arrange
-            var transport = new HttpSseTransport(_mockLogger.Object);
+            var transport = new WebSocketTransport(_mockLogger.Object);
 
             // Act & Assert
             await Assert.ThrowsAsync<ArgumentException>(() =>
@@ -69,40 +88,27 @@ namespace SalmonEgg.Infrastructure.Tests.Network
         }
 
         [Fact]
-        public void HttpSseTransport_Dispose_ShouldCleanupResources()
+        public void WebSocketTransport_Dispose_ShouldCleanupResources()
         {
             // Arrange
-            var transport = new HttpSseTransport(_mockLogger.Object);
+            var transport = new WebSocketTransport(_mockLogger.Object);
 
             // Act
             transport.Dispose();
 
             // Assert
             // Verify that dispose methods were called
-            _mockLogger.Verify(x => x.Debug("HttpSseTransport disposed"), Times.Once);
-        }
-
-        [Fact]
-        public async Task HttpSseTransport_ConnectAsync_ShouldHandleCancellation()
-        {
-            // Arrange
-            var transport = new HttpSseTransport(_mockLogger.Object);
-            var cts = new CancellationTokenSource();
-            cts.Cancel(); // Cancel immediately
-
-            // Act & Assert
-            await Assert.ThrowsAsync<TaskCanceledException>(() =>
-                transport.ConnectAsync("http://localhost:8080", cts.Token));
+            _mockLogger.Verify(x => x.Debug("WebSocketTransport disposed"), Times.Once);
         }
 
         /// <summary>
-        /// Tests HTTP SSE transport state changes
+        /// Tests WebSocket transport state changes
         /// </summary>
         [Fact]
-        public void HttpSseTransport_StateChanges_ShouldEmitCorrectStates()
+        public void WebSocketTransport_StateChanges_ShouldEmitCorrectStates()
         {
             // Arrange
-            var transport = new HttpSseTransport(_mockLogger.Object);
+            var transport = new WebSocketTransport(_mockLogger.Object);
             var stateChanges = new List<TransportState>();
             transport.StateChanges.Subscribe(state => stateChanges.Add(state));
 
@@ -111,13 +117,13 @@ namespace SalmonEgg.Infrastructure.Tests.Network
         }
 
         /// <summary>
-        /// Tests HTTP SSE transport message reception
+        /// Tests WebSocket transport message reception
         /// </summary>
         [Fact]
-        public void HttpSseTransport_Messages_ShouldEmitReceivedMessages()
+        public void WebSocketTransport_Messages_ShouldEmitReceivedMessages()
         {
             // Arrange
-            var transport = new HttpSseTransport(_mockLogger.Object);
+            var transport = new WebSocketTransport(_mockLogger.Object);
             var receivedMessages = new List<string>();
             transport.Messages.Subscribe(message => receivedMessages.Add(message));
 
