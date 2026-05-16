@@ -658,7 +658,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             if (sessionVm == null)
             {
                 // Look for it elsewhere in children to avoid full re-creation if it moved
-                    sessionVm = projectVm.Children.OfType<SessionNavItemViewModel>().FirstOrDefault(v => string.Equals(v.SessionId, session.ConversationId, StringComparison.Ordinal));
+                sessionVm = projectVm.Children.OfType<SessionNavItemViewModel>().FirstOrDefault(v => string.Equals(v.SessionId, session.ConversationId, StringComparison.Ordinal));
                 if (sessionVm != null)
                 {
                     // Note: We don't dispose here because we are re-inserting it at a new position

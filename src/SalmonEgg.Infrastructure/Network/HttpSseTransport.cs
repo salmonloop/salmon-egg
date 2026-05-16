@@ -78,12 +78,12 @@ namespace SalmonEgg.Infrastructure.Network
             {
                 _stateSubject.OnNext(TransportState.Error);
                 _logger.Error(ex, "Failed to connect to HTTP SSE server at {Url}", url);
-                
+
                 // Clean up on failure
                 _connectionCts?.Cancel();
                 _connectionCts?.Dispose();
                 _connectionCts = null;
-                
+
                 throw;
             }
         }

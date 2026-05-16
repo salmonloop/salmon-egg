@@ -18,7 +18,7 @@ public sealed partial class ConfigurationEditorDialog : ContentDialog
     {
         args.Cancel = true;
         await ViewModel.SaveConfigurationAsync();
-        
+
         if (!ViewModel.HasError)
         {
             args.Cancel = false;
