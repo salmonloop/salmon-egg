@@ -4,13 +4,13 @@ using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Presentation.Models.Navigation;
 using Windows.ApplicationModel.Resources;
 
-namespace SalmonEgg.Presentation.Views;;
+namespace SalmonEgg.Presentation.Views;
 
 /// <summary>
 /// Base class for Settings sub-pages providing a standard BreadcrumbBar model.
 /// </summary>
 public class SettingsPageBase : Page
-
+{
     private static readonly ResourceLoader ResourceLoader = ResourceLoader.GetForViewIndependentUse();
 
     public ObservableCollection<SettingsBreadcrumbItem> BreadcrumbItems { get; } = new();
@@ -41,3 +41,4 @@ public class SettingsPageBase : Page
         var value = ResourceLoader.GetString(resourceKey);
         return string.IsNullOrWhiteSpace(value) ? fallbackText : value;
     }
+}

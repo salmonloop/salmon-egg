@@ -1,10 +1,10 @@
 using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Presentation.ViewModels.Settings;
 
-namespace SalmonEgg.Presentation.Views;
-
+namespace SalmonEgg.Presentation.Views
+{
 public sealed partial class GeneralSettingsPage : SettingsPageBase
-
+{
     public GeneralSettingsViewModel ViewModel { get; }
 
     public GeneralSettingsPage()
@@ -13,4 +13,5 @@ public sealed partial class GeneralSettingsPage : SettingsPageBase
         this.InitializeComponent();
         SetSettingsBreadcrumbFromResource("SettingsNav_General.Content", "常规");
     }
+}
 }

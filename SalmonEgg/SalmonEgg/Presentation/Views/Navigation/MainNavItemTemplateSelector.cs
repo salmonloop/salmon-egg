@@ -2,10 +2,10 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 
-namespace SalmonEgg.Presentation.Views.Navigation;;
+namespace SalmonEgg.Presentation.Views.Navigation;
 
 public sealed class MainNavItemTemplateSelector : DataTemplateSelector
-
+{
     public DataTemplate? StartTemplate { get; set; }
     public DataTemplate? DiscoverSessionsTemplate { get; set; }
     public DataTemplate? SettingsTemplate { get; set; }
@@ -33,3 +33,4 @@ public sealed class MainNavItemTemplateSelector : DataTemplateSelector
 
     protected override DataTemplate SelectTemplateCore(object item, DependencyObject container)
         => SelectTemplateCore(item);
+}

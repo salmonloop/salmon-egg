@@ -11,10 +11,10 @@ using SalmonEgg.Presentation.Utilities;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.Core.ViewModels.ShellLayout;
 
-namespace SalmonEgg.Presentation.Views.Chat;;
+namespace SalmonEgg.Presentation.Views.Chat;
 
 public sealed partial class ChatView : Page
-
+{
         public ChatShellViewModel ShellViewModel { get; }
         public ChatViewModel ViewModel => ShellViewModel.Chat;
         public ListViewTranscriptItemsSource MessagesItemsSource { get; } = new();
@@ -943,3 +943,4 @@ public sealed partial class ChatView : Page
                     break;
             }
         }
+}

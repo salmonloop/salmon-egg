@@ -2,8 +2,8 @@ using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 
-namespace SalmonEgg.Presentation.Converters;
-
+namespace SalmonEgg.Presentation.Converters
+{
     /// <summary>
     /// 将消息方向转换为气泡的非对称圆角
     /// 用户发出(True)为右下直角，左下圆角
@@ -26,3 +26,4 @@ namespace SalmonEgg.Presentation.Converters;
             throw new NotImplementedException();
         }
     }
+}

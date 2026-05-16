@@ -4,10 +4,10 @@ using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.Views;
 
-namespace SalmonEgg.Presentation.Views.Settings;;
+namespace SalmonEgg.Presentation.Views.Settings;
 
 public sealed partial class AcpConnectionSettingsPage : SettingsPageBase
-
+{
     public AcpConnectionSettingsViewModel ViewModel { get; }
 
     public AcpConnectionSettingsPage()
@@ -73,3 +73,4 @@ public sealed partial class AcpConnectionSettingsPage : SettingsPageBase
 
         await item.ToggleConnectionCommand.ExecuteAsync(null);
     }
+}

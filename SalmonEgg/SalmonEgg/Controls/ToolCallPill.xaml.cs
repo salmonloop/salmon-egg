@@ -10,10 +10,10 @@ using SalmonEgg.Domain.Models.Tool;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using Windows.ApplicationModel.Resources;
 
-namespace SalmonEgg.Controls;;
+namespace SalmonEgg.Controls;
 
 public sealed partial class ToolCallPill : UserControl, INotifyPropertyChanged
-
+{
     private static readonly ResourceLoader ResourceLoader = ResourceLoader.GetForViewIndependentUse();
 
     private bool _isExpanded;
@@ -511,3 +511,4 @@ public sealed partial class ToolCallPill : UserControl, INotifyPropertyChanged
         OnPropertyChanged(nameof(IsExpanded));
         OnPropertyChanged(nameof(PreviewMaxHeight));
     }
+}

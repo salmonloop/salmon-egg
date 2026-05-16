@@ -1,14 +1,14 @@
 using System;
 using Microsoft.UI.Xaml.Data;
 
-namespace SalmonEgg.Presentation.Converters;;
+namespace SalmonEgg.Presentation.Converters;
 
 /// <summary>
 /// A converter that returns true if the value matches the parameter.
 /// Useful for binding Visibility or IsChecked to Enum values.
 /// </summary>
 public sealed class EnumToBooleanConverter : IValueConverter
-
+{
     public object Convert(object value, Type targetType, object parameter, string language)
     {
         if (value == null || parameter == null)

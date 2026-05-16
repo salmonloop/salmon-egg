@@ -7,10 +7,10 @@ using Microsoft.Extensions.Logging;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.Views;
 
-namespace SalmonEgg.Presentation.Views.Settings;;
+namespace SalmonEgg.Presentation.Views.Settings;
 
 public sealed partial class DiagnosticsSettingsPage : SettingsPageBase
-
+{
     private ScrollViewer? _liveLogScrollViewer;
     private readonly ILogger<DiagnosticsSettingsPage> _logger;
 
@@ -82,3 +82,4 @@ public sealed partial class DiagnosticsSettingsPage : SettingsPageBase
             _logger.LogError(ex, "Diagnostics page unload cleanup failed");
         }
     }
+}

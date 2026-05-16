@@ -3,10 +3,10 @@ using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Presentation.ViewModels.Discover;
 
-namespace SalmonEgg.Presentation.Views.Discover;;
+namespace SalmonEgg.Presentation.Views.Discover;
 
 public sealed partial class DiscoverSessionsPage : Page
-
+{
     public DiscoverSessionsViewModel ViewModel { get; }
 
     public DiscoverSessionsPage()
@@ -47,3 +47,4 @@ public sealed partial class DiscoverSessionsPage : Page
             ViewModel.OpenProfileDetailsCommand.Execute(null);
         }
     }
+}

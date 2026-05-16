@@ -2,10 +2,10 @@ using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 
-namespace SalmonEgg.Presentation.Converters;;
+namespace SalmonEgg.Presentation.Converters;
 
 public sealed class GridLengthConverter : IValueConverter
-
+{
     public object Convert(object value, Type targetType, object parameter, string language)
     {
         if (value is double d)
@@ -23,3 +23,4 @@ public sealed class GridLengthConverter : IValueConverter
         }
         return 0.0;
     }
+}

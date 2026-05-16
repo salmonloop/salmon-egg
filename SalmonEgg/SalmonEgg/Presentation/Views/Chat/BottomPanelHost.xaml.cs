@@ -4,10 +4,10 @@ using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using Windows.ApplicationModel.Resources;
 
-namespace SalmonEgg.Presentation.Views.Chat;;
+namespace SalmonEgg.Presentation.Views.Chat;
 
 public sealed partial class BottomPanelHost : UserControl
-
+{
     private static readonly ResourceLoader ResourceLoader = ResourceLoader.GetForViewIndependentUse();
 
     public BottomPanelHost()
@@ -52,3 +52,4 @@ public sealed partial class BottomPanelHost : UserControl
 
         return string.IsNullOrWhiteSpace(value) ? resourceKey : value;
     }
+}

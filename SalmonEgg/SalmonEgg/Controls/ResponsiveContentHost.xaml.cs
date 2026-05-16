@@ -3,10 +3,10 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Presentation.Models;
 
-namespace SalmonEgg.Controls;;
+namespace SalmonEgg.Controls;
 
 public sealed partial class ResponsiveContentHost : UserControl
-
+{
     private bool _isUpdatingColumns;
     private bool _isWide;
 
@@ -125,3 +125,4 @@ public sealed partial class ResponsiveContentHost : UserControl
             _isUpdatingColumns = false;
         }
     }
+}

@@ -2,10 +2,10 @@ using System;
 using Microsoft.UI.Xaml.Data;
 using Windows.ApplicationModel.Resources;
 
-namespace SalmonEgg.Presentation.Converters;;
+namespace SalmonEgg.Presentation.Converters;
 
 public sealed class ResourceStringConverter : IValueConverter
-
+{
     private static readonly ResourceLoader ResourceLoader = ResourceLoader.GetForViewIndependentUse();
 
     public object Convert(object value, Type targetType, object parameter, string language)
@@ -27,3 +27,4 @@ public sealed class ResourceStringConverter : IValueConverter
 
     public object ConvertBack(object value, Type targetType, object parameter, string language)
         => throw new NotSupportedException();
+}

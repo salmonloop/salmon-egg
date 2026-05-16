@@ -13,10 +13,10 @@ using MarkdownTextBlockControl = CommunityToolkit.WinUI.Controls.MarkdownTextBlo
 using MarkdownTextBlockControl = CommunityToolkit.WinUI.UI.Controls.MarkdownTextBlock;
 #endif
 
-namespace SalmonEgg.Controls;;
+namespace SalmonEgg.Controls;
 
 public sealed class MarkdownTextPresenter : Grid
-
+{
 #if WINDOWS
     private readonly MarkdownTextBlockControl _selectableMarkdown;
     private readonly MarkdownTextBlockControl _nonSelectableMarkdown;
@@ -578,3 +578,4 @@ public sealed class MarkdownTextPresenter : Grid
             // Keep chat rendering resilient when host platform cannot open the URI.
         }
     }
+}

@@ -11,10 +11,10 @@ using SalmonEgg.Presentation.Transcript;
 using SalmonEgg.Presentation.Utilities;
 using SalmonEgg.Presentation.ViewModels.Chat;
 
-namespace SalmonEgg.Presentation.Views.MiniWindow;;
+namespace SalmonEgg.Presentation.Views.MiniWindow;
 
 public sealed partial class MiniChatView : Page
-
+{
     public ChatShellViewModel ShellViewModel { get; }
     public ChatViewModel ViewModel => ShellViewModel.Chat;
     public ListViewTranscriptItemsSource MessagesItemsSource { get; } = new();
@@ -822,3 +822,4 @@ public sealed partial class MiniChatView : Page
         }
     }
 #endif
+}

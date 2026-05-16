@@ -5,7 +5,7 @@ using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Navigation;
 using SalmonEgg.Presentation.Models;
 
-namespace SalmonEgg.Presentation.Views;;
+namespace SalmonEgg.Presentation.Views;
 
 /// <summary>
 /// Settings shell page.
@@ -14,7 +14,7 @@ namespace SalmonEgg.Presentation.Views;;
 /// - Section content hosted in an inner Frame.
 /// </summary>
 public sealed partial class SettingsShellPage : Page
-
+{
     private bool _suppressSelection;
     private bool _isMotionSubscribed;
 
@@ -170,3 +170,4 @@ public sealed partial class SettingsShellPage : Page
         _ => typeof(GeneralSettingsPage)
     };
 
+}

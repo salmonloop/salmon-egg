@@ -4,10 +4,10 @@ using System.ComponentModel;
 using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Presentation.Core.Services.Chat;
 
-namespace SalmonEgg.Presentation.Views.Navigation;;
+namespace SalmonEgg.Presentation.Views.Navigation;
 
 public sealed partial class ConversationProjectPickerDialog : ContentDialog, INotifyPropertyChanged
-
+{
     private readonly IReadOnlyList<ConversationProjectTargetOption> _options;
     private string _dialogTitle = string.Empty;
     private string _sessionTitle = string.Empty;
@@ -102,3 +102,4 @@ public sealed partial class ConversationProjectPickerDialog : ContentDialog, INo
 
     private void OnPropertyChanged(string propertyName)
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+}

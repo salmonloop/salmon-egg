@@ -2,10 +2,10 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Controls;
 
-namespace SalmonEgg.Controls;;
+namespace SalmonEgg.Controls;
 
 public sealed partial class ResizeGrip : Control
-
+{
     public ResizeGrip()
     {
         ApplyPlatformCursor();
@@ -42,3 +42,4 @@ public sealed partial class ResizeGrip : Control
         base.OnPointerCaptureLost(e);
         VisualStateManager.GoToState(this, "Normal", true);
     }
+}

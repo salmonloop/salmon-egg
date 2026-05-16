@@ -3,10 +3,10 @@ using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.Views;
 using Windows.ApplicationModel.Resources;
 
-namespace SalmonEgg.Presentation.Views.Settings;;
+namespace SalmonEgg.Presentation.Views.Settings;
 
 public sealed partial class DataStorageSettingsPage : SettingsPageBase
-
+{
     private static readonly ResourceLoader ResourceLoader = ResourceLoader.GetForViewIndependentUse();
 
     public DataStorageSettingsViewModel ViewModel { get; }
@@ -80,3 +80,4 @@ public sealed partial class DataStorageSettingsPage : SettingsPageBase
         var value = ResourceLoader.GetString(resourceKey);
         return string.IsNullOrWhiteSpace(value) ? fallback : value;
     }
+}

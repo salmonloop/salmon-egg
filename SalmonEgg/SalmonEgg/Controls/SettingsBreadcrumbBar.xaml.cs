@@ -4,10 +4,10 @@ using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Services;
 
-namespace SalmonEgg.Controls;;
+namespace SalmonEgg.Controls;
 
 public sealed partial class SettingsBreadcrumbBar : UserControl
-
+{
     public static readonly DependencyProperty ItemsSourceProperty =
         DependencyProperty.Register(
             nameof(ItemsSource),
@@ -43,3 +43,4 @@ public sealed partial class SettingsBreadcrumbBar : UserControl
 
         _ = _shellNavigation.NavigateToSettings(item.SettingsKey);
     }
+}

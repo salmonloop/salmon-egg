@@ -5,10 +5,10 @@ using Microsoft.UI.Windowing;
 #endif
 using Microsoft.UI.Xaml;
 
-namespace SalmonEgg.Presentation.Views.MiniWindow;;
+namespace SalmonEgg.Presentation.Views.MiniWindow;
 
 public sealed class MiniChatWindow : Window
-
+{
     private readonly MiniChatView _view;
     private readonly Presentation.Services.WindowBackdropService? _windowBackdropService;
 
@@ -85,3 +85,4 @@ public sealed class MiniChatWindow : Window
         _appWindowTitleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
     }
 #endif
+}

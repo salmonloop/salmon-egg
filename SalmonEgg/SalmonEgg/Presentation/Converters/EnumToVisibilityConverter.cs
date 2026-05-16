@@ -2,14 +2,14 @@ using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 
-namespace SalmonEgg.Presentation.Converters;;
+namespace SalmonEgg.Presentation.Converters;
 
 /// <summary>
 /// A converter that returns Visibility.Visible if the value matches the parameter, 
 /// otherwise Visibility.Collapsed.
 /// </summary>
 public sealed class EnumToVisibilityConverter : IValueConverter
-
+{
     public object Convert(object value, Type targetType, object parameter, string language)
     {
         if (value == null || parameter == null)
@@ -36,3 +36,4 @@ public sealed class EnumToVisibilityConverter : IValueConverter
 
         return DependencyProperty.UnsetValue;
     }
+}

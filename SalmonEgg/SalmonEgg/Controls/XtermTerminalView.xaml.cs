@@ -10,10 +10,10 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.Web.WebView2.Core;
 using SalmonEgg.Domain.Services;
 
-namespace SalmonEgg.Controls;;
+namespace SalmonEgg.Controls;
 
 public sealed partial class XtermTerminalView : UserControl
-
+{
     private const string TerminalHostName = "salmon-terminal";
     private const string GuiLocalTerminalSmokeCommandEnvVar = "SALMONEGG_GUI_LOCAL_TERMINAL_SMOKE_COMMAND";
 
@@ -794,3 +794,4 @@ public sealed partial class XtermTerminalView : UserControl
 
         public int? Height { get; init; }
     }
+}

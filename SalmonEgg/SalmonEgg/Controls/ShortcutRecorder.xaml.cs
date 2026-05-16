@@ -12,10 +12,10 @@ using Microsoft.UI.Xaml.Input;
 using Windows.System;
 using SalmonEgg.Presentation.Core.Services.Shortcuts;
 
-namespace SalmonEgg.Controls;;
+namespace SalmonEgg.Controls;
 
 public sealed partial class ShortcutRecorder : UserControl, INotifyPropertyChanged
-
+{
     public static readonly DependencyProperty GestureProperty =
         DependencyProperty.Register(
             nameof(Gesture),
@@ -411,3 +411,4 @@ public sealed partial class ShortcutRecorder : UserControl, INotifyPropertyChang
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
+}

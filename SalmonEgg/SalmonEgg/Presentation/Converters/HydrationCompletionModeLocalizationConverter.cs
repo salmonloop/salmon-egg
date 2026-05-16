@@ -3,10 +3,10 @@ using Microsoft.UI.Xaml.Data;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using Windows.ApplicationModel.Resources;
 
-namespace SalmonEgg.Presentation.Converters;;
+namespace SalmonEgg.Presentation.Converters;
 
 public sealed class HydrationCompletionModeLocalizationConverter : IValueConverter
-
+{
     private static readonly ResourceLoader ResourceLoader = ResourceLoader.GetForViewIndependentUse();
 
     public object Convert(object value, Type targetType, object parameter, string language)
@@ -46,3 +46,4 @@ public sealed class HydrationCompletionModeLocalizationConverter : IValueConvert
 
     public object ConvertBack(object value, Type targetType, object parameter, string language)
         => throw new NotSupportedException();
+}

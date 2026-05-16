@@ -1,8 +1,8 @@
 using System;
 using Microsoft.UI.Xaml.Data;
 
-namespace SalmonEgg.Presentation.Converters;
-
+namespace SalmonEgg.Presentation.Converters
+{
     /// <summary>
     /// 将 DateTime 转换为时间字符串格式 (HH:mm:ss)
     /// </summary>
@@ -22,3 +22,4 @@ namespace SalmonEgg.Presentation.Converters;
             throw new NotImplementedException();
         }
     }
+}

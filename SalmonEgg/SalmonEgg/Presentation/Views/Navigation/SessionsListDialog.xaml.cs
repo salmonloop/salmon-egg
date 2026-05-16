@@ -7,10 +7,10 @@ using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 using Windows.ApplicationModel.Resources;
 
-namespace SalmonEgg.Presentation.Views.Navigation;;
+namespace SalmonEgg.Presentation.Views.Navigation;
 
 public sealed partial class SessionsListDialog : ContentDialog, INotifyPropertyChanged
-
+{
     private static readonly ResourceLoader ResourceLoader = ResourceLoader.GetForViewIndependentUse();
     private readonly IReadOnlyList<SessionNavItemViewModel> _allSessions;
     private string _filterText = string.Empty;
@@ -106,3 +106,4 @@ public sealed partial class SessionsListDialog : ContentDialog, INotifyPropertyC
         var value = ResourceLoader.GetString(resourceKey);
         return string.IsNullOrWhiteSpace(value) ? fallback : value;
     }
+}

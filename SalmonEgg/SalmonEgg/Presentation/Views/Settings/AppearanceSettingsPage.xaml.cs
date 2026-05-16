@@ -1,10 +1,10 @@
 using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Presentation.ViewModels.Settings;
 
-namespace SalmonEgg.Presentation.Views.Settings;;
+namespace SalmonEgg.Presentation.Views.Settings;
 
 public sealed partial class AppearanceSettingsPage : SalmonEgg.Presentation.Views.SettingsPageBase
-
+{
     public AppPreferencesViewModel Preferences { get; }
 
     public AppearanceSettingsPage()
@@ -13,3 +13,4 @@ public sealed partial class AppearanceSettingsPage : SalmonEgg.Presentation.View
         InitializeComponent();
         SetSettingsBreadcrumbFromResource("SettingsNav_Appearance.Content", "外观");
     }
+}

@@ -2,10 +2,10 @@ using System;
 using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Presentation.ViewModels;
 
-namespace SalmonEgg.Presentation.Views;;
+namespace SalmonEgg.Presentation.Views;
 
 public sealed partial class ConfigurationEditorDialog : ContentDialog
-
+{
     public ConfigurationEditorViewModel ViewModel { get; }
 
     public ConfigurationEditorDialog(ConfigurationEditorViewModel viewModel)
@@ -29,3 +29,4 @@ public sealed partial class ConfigurationEditorDialog : ContentDialog
     {
         ViewModel.Cancel();
     }
+}

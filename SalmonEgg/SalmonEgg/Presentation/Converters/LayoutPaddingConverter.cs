@@ -3,10 +3,10 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 using SalmonEgg.Presentation.Core.Mvux.ShellLayout;
 
-namespace SalmonEgg.Presentation.Converters;;
+namespace SalmonEgg.Presentation.Converters;
 
 public sealed class LayoutPaddingConverter : IValueConverter
-
+{
     public object Convert(object value, Type targetType, object parameter, string language)
     {
         if (value is LayoutPadding p)
@@ -20,3 +20,4 @@ public sealed class LayoutPaddingConverter : IValueConverter
     {
         throw new NotImplementedException();
     }
+}

@@ -8,10 +8,10 @@ using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.Views;
 
-namespace SalmonEgg.Presentation.Views.Settings;;
+namespace SalmonEgg.Presentation.Views.Settings;
 
 public sealed partial class AgentProfileEditorPage : SettingsPageBase
-
+{
     public ConfigurationEditorViewModel ViewModel { get; }
 
     public static readonly DependencyProperty PageTitleProperty =
@@ -114,3 +114,4 @@ public sealed partial class AgentProfileEditorPage : SettingsPageBase
 
         OnBackClick(sender, e);
     }
+}

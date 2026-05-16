@@ -11,10 +11,10 @@ using SalmonEgg.Presentation.Core.Services.Input;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using XamlFocusManager = Microsoft.UI.Xaml.Input.FocusManager;
 
-namespace SalmonEgg.Controls;;
+namespace SalmonEgg.Controls;
 
 public sealed partial class ChatInputArea : UserControl, INavigationIntentConsumer
-
+{
     public static readonly DependencyProperty ViewModelProperty =
         DependencyProperty.Register(
             nameof(ViewModel),
@@ -521,3 +521,4 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
 
         return default;
     }
+}

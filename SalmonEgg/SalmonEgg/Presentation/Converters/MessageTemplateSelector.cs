@@ -3,13 +3,13 @@ using Microsoft.UI.Xaml.Controls;
 using System;
 using SalmonEgg.Presentation.ViewModels.Chat;
 
-namespace SalmonEgg.Presentation.Converters;;
+namespace SalmonEgg.Presentation.Converters;
 
 /// <summary>
 /// 消息模板选择器，根据消息类型选择相应的模板
 /// </summary>
 public class MessageTemplateSelector : DataTemplateSelector
-
+{
     public DataTemplate? IncomingTemplate { get; set; }
     public DataTemplate? OutgoingTemplate { get; set; }
     public DataTemplate? TextMessageTemplate { get; set; }
@@ -58,3 +58,4 @@ public class MessageTemplateSelector : DataTemplateSelector
         };
     }
 
+}

@@ -2,13 +2,13 @@ using System;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media;
 
-namespace SalmonEgg.Presentation.Converters;;
+namespace SalmonEgg.Presentation.Converters;
 
 /// <summary>
 /// 将资源的 MIME 类型转换为对应的颜色，用于 UI 中资源类型的视觉区分。
 /// </summary>
 public class ResourceTypeIconConverter : IValueConverter
-
+{
     /// <summary>
     /// 将 MIME 类型转换为显示颜色
     /// </summary>
@@ -75,3 +75,4 @@ public class ResourceTypeIconConverter : IValueConverter
     {
         throw new NotImplementedException();
     }
+}
