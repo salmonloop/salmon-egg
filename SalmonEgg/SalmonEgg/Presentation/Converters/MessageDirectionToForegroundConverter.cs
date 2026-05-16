@@ -3,8 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media;
 
-namespace SalmonEgg.Presentation.Converters
-{
+namespace SalmonEgg.Presentation.Converters;
     /// <summary>
     /// 将消息方向转换为前景色（文本色）画刷
     /// 用户发出(True)返回 TextOnAccentFillColorPrimaryBrush
@@ -41,4 +40,3 @@ namespace SalmonEgg.Presentation.Converters
             throw new NotImplementedException();
         }
     }
-}
