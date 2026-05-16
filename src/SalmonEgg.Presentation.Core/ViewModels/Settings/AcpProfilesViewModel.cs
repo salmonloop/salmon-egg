@@ -156,7 +156,7 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
         try
         {
             await SetIsLoadingAsync(true).ConfigureAwait(false);
-            
+
             var configs = await _configurationService.ListConfigurationsAsync().ConfigureAwait(false);
             var ordered = configs.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase).ToArray();
 

@@ -9,6 +9,6 @@ public record ConversationPreviewSnapshot(
     DateTimeOffset GeneratedAt);
 
 public record PreviewEntry(
-    string Sender, 
-    string Text, 
+    string Sender,
+    string Text,
     DateTimeOffset Timestamp);

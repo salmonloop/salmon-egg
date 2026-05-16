@@ -30,7 +30,7 @@ jobs:
         run: dotnet restore SalmonEgg.sln
 
       - name: Build
-        run: dotnet build SalmonEgg.sln --configuration ${{ env.CONFIGURATION }} --no-restore
+        run: dotnet build SalmonEgg.sln --configuration ${{ env.CONFIGURATION }} --no-restore /p:EnableWindowsTargeting=true /p:WasmToolsWorkloadRequired=false
 
       - name: Test
         timeout-minutes: 20

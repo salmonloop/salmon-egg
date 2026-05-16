@@ -64,4 +64,4 @@ jobs:
           dotnet format SalmonEgg.sln --verify-no-changes --no-restore --include $files
 
       - name: Build with analyzers
-        run: dotnet build SalmonEgg.sln --configuration ${{ env.CONFIGURATION }} --no-restore /p:EnforceCodeStyleInBuild=true
+        run: dotnet build SalmonEgg.sln --configuration ${{ env.CONFIGURATION }} --no-restore /p:EnableWindowsTargeting=true /p:EnforceCodeStyleInBuild=true /p:WasmToolsWorkloadRequired=false

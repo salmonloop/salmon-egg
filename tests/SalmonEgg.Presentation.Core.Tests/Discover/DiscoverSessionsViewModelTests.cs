@@ -70,7 +70,7 @@ public sealed class DiscoverSessionsViewModelTests
             };
             using var viewModel = CreateViewModel(
                 profilesViewModel,
-                connectionFacade, 
+                connectionFacade,
                 new StubNavigationCoordinator());
 
             await viewModel.RefreshSessionsCommand.ExecuteAsync(null);
@@ -115,7 +115,7 @@ public sealed class DiscoverSessionsViewModelTests
             };
             using var viewModel = CreateViewModel(
                 profilesViewModel,
-                connectionFacade, 
+                connectionFacade,
                 new StubNavigationCoordinator());
 
             await viewModel.RefreshSessionsCommand.ExecuteAsync(null);
@@ -205,7 +205,7 @@ public sealed class DiscoverSessionsViewModelTests
             };
             using var viewModel = CreateViewModel(
                 profilesViewModel,
-                connectionFacade, 
+                connectionFacade,
                 new StubNavigationCoordinator());
 
             await viewModel.RefreshSessionsCommand.ExecuteAsync(null);
@@ -682,7 +682,7 @@ public sealed class DiscoverSessionsViewModelTests
         var profilesViewModel = CreateProfilesViewModel(profile);
         using var viewModel = CreateViewModel(
             profilesViewModel,
-            new FakeDiscoverSessionsConnectionFacade(), 
+            new FakeDiscoverSessionsConnectionFacade(),
             new StubNavigationCoordinator());
 
         viewModel.SetLayoutMode(DiscoverLayoutMode.Narrow);
@@ -701,7 +701,7 @@ public sealed class DiscoverSessionsViewModelTests
         var profilesViewModel = CreateProfilesViewModel(profile);
         using var viewModel = CreateViewModel(
             profilesViewModel,
-            new FakeDiscoverSessionsConnectionFacade(), 
+            new FakeDiscoverSessionsConnectionFacade(),
             new StubNavigationCoordinator());
 
         viewModel.SetLayoutMode(DiscoverLayoutMode.Narrow);
@@ -720,7 +720,7 @@ public sealed class DiscoverSessionsViewModelTests
         var profilesViewModel = CreateProfilesViewModel(profile);
         using var viewModel = CreateViewModel(
             profilesViewModel,
-            new FakeDiscoverSessionsConnectionFacade(), 
+            new FakeDiscoverSessionsConnectionFacade(),
             new StubNavigationCoordinator());
 
         viewModel.SetLayoutMode(DiscoverLayoutMode.Narrow);
@@ -739,7 +739,7 @@ public sealed class DiscoverSessionsViewModelTests
         var profilesViewModel = CreateProfilesViewModel(profile);
         using var viewModel = CreateViewModel(
             profilesViewModel,
-            new FakeDiscoverSessionsConnectionFacade(), 
+            new FakeDiscoverSessionsConnectionFacade(),
             new StubNavigationCoordinator());
         var changedProperties = new List<string>();
         viewModel.PropertyChanged += (_, e) => changedProperties.Add(e.PropertyName ?? string.Empty);
@@ -758,7 +758,7 @@ public sealed class DiscoverSessionsViewModelTests
         var profilesViewModel = CreateProfilesViewModel(profile);
         using var viewModel = CreateViewModel(
             profilesViewModel,
-            new FakeDiscoverSessionsConnectionFacade(), 
+            new FakeDiscoverSessionsConnectionFacade(),
             new StubNavigationCoordinator());
         viewModel.SetLayoutMode(DiscoverLayoutMode.Narrow);
         viewModel.OpenProfileDetailsCommand.Execute(null);
@@ -779,10 +779,10 @@ public sealed class DiscoverSessionsViewModelTests
         var profile2 = new ServerConfiguration { Id = "profile-2", Name = "Profile 2" };
         var profilesViewModel = CreateProfilesViewModel(profile1);
         profilesViewModel.Profiles.Add(profile2);
-        
+
         using var viewModel = CreateViewModel(
             profilesViewModel,
-            new FakeDiscoverSessionsConnectionFacade(), 
+            new FakeDiscoverSessionsConnectionFacade(),
             new StubNavigationCoordinator());
 
         viewModel.SetLayoutMode(DiscoverLayoutMode.Narrow);
@@ -800,7 +800,7 @@ public sealed class DiscoverSessionsViewModelTests
         var profilesViewModel = CreateProfilesViewModel(profile);
         using var viewModel = CreateViewModel(
             profilesViewModel,
-            new FakeDiscoverSessionsConnectionFacade(), 
+            new FakeDiscoverSessionsConnectionFacade(),
             new StubNavigationCoordinator());
 
         viewModel.SetLayoutMode(DiscoverLayoutMode.Narrow);
@@ -822,7 +822,7 @@ public sealed class DiscoverSessionsViewModelTests
 
         using var viewModel = CreateViewModel(
             profilesViewModel,
-            new FakeDiscoverSessionsConnectionFacade(), 
+            new FakeDiscoverSessionsConnectionFacade(),
             new StubNavigationCoordinator());
 
         viewModel.SelectedProfile = profile2;
@@ -842,12 +842,12 @@ public sealed class DiscoverSessionsViewModelTests
         var profilesViewModel = CreateProfilesViewModel(profile);
         using var viewModel = CreateViewModel(
             profilesViewModel,
-            new FakeDiscoverSessionsConnectionFacade(), 
+            new FakeDiscoverSessionsConnectionFacade(),
             new StubNavigationCoordinator());
 
         viewModel.SetLayoutMode(DiscoverLayoutMode.Narrow);
         viewModel.OpenProfileDetailsCommand.Execute(null);
-        
+
         // Act: switch back to wide
         viewModel.SetLayoutMode(DiscoverLayoutMode.Wide);
 
@@ -896,7 +896,7 @@ public sealed class DiscoverSessionsViewModelTests
 
             using var vm = CreateViewModel(
                 profilesViewModel,
-                connectionFacade, 
+                connectionFacade,
                 new StubNavigationCoordinator());
             viewModel = vm;
 
@@ -944,7 +944,7 @@ public sealed class DiscoverSessionsViewModelTests
             };
             using var viewModel = CreateViewModel(
                 profilesViewModel,
-                connectionFacade, 
+                connectionFacade,
                 new StubNavigationCoordinator());
 
             // Start refresh for profile 1 with a valid chat service so the test isolates stale facade
@@ -955,7 +955,7 @@ public sealed class DiscoverSessionsViewModelTests
 
             // Switch to profile 2
             viewModel.SelectedProfile = profile2;
-            
+
             // At this point, the connection gating generation has been incremented.
             // Simulate profile 1 connection error arriving late.
             // Real property changes from the facade happen on a background thread.
