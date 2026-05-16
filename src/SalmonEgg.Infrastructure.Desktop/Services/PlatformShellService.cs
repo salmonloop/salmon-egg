@@ -55,13 +55,27 @@ public sealed class PlatformShellService : IPlatformShellService
                 return Task.FromResult(true);
             }
 
+            var sanitizedPath = path.StartsWith("-") ? $"./{path}" : path;
+
             if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
-                Process.Start("open", path);
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "open",
+                    UseShellExecute = false
+                };
+                psi.ArgumentList.Add(sanitizedPath);
+                Process.Start(psi);
                 return Task.FromResult(true);
             }
 
-            Process.Start("xdg-open", path);
+            var linuxPsi = new ProcessStartInfo
+            {
+                FileName = "xdg-open",
+                UseShellExecute = false
+            };
+            linuxPsi.ArgumentList.Add(sanitizedPath);
+            Process.Start(linuxPsi);
             return Task.FromResult(true);
         }
         catch

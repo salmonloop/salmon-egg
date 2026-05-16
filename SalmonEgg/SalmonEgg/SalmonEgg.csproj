@@ -1,5 +1,6 @@
 <Project Sdk="Uno.Sdk">
   <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-browserwasm'">
+    <UnoSkipWasmToolsWorkloadValidation>true</UnoSkipWasmToolsWorkloadValidation>
     <SalmonEggPlatform>BrowserWasm</SalmonEggPlatform>
     <SalmonEggSupportsDesktopProcessHost>false</SalmonEggSupportsDesktopProcessHost>
     <RuntimeIdentifier>browser-wasm</RuntimeIdentifier>
