@@ -70,7 +70,7 @@ namespace SalmonEgg.Application.Tests.UseCases
 
             // Assert
             Assert.False(result.IsSuccess);
-            Assert.Contains("断开连接失败", result.Error);
+            Assert.Equal("断开连接失败：发生未预期的错误", result.Error);
 
             _mockLogger.Verify(x => x.Error(expectedException, "断开连接时发生未预期的错误"), Times.Once);
         }
