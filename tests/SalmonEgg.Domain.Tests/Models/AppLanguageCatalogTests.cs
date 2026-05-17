@@ -26,4 +26,40 @@ public sealed class AppLanguageCatalogTests
     {
         Assert.That(AppLanguageCatalog.ToPlatformOverrideTag(input), Is.EqualTo(expected));
     }
+
+    [Test]
+    public void SupportedResourceLanguageTags_DeclaresShippedCanonicalResourceCultures()
+    {
+        Assert.That(
+            AppLanguageCatalog.SupportedResourceLanguageTags,
+            Is.EqualTo(new[]
+            {
+                AppLanguageCatalog.EnglishNeutralTag,
+                AppLanguageCatalog.EnglishUnitedStatesTag,
+                AppLanguageCatalog.SimplifiedChineseTag
+            }));
+    }
+
+    [Test]
+    public void SupportedResourceLanguageTags_AreDerivedFromOptions()
+    {
+        var expected = AppLanguageCatalog.SupportedOptions
+            .SelectMany(option => option.ResourceLanguageTags)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.That(AppLanguageCatalog.SupportedResourceLanguageTags, Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void LegacyAliasTags_AreDerivedFromOptions()
+    {
+        var expected = AppLanguageCatalog.SupportedOptions
+            .SelectMany(option => option.Aliases)
+            .Except(AppLanguageCatalog.SupportedResourceLanguageTags, StringComparer.Ordinal)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.That(AppLanguageCatalog.LegacyAliasTags, Is.EqualTo(expected));
+    }
 }

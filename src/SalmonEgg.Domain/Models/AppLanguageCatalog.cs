@@ -7,17 +7,29 @@ namespace SalmonEgg.Domain.Models;
 public static class AppLanguageCatalog
 {
     public const string SystemTag = "System";
+    public const string EnglishNeutralTag = "en";
     public const string EnglishUnitedStatesTag = "en-US";
     public const string SimplifiedChineseTag = "zh-Hans";
 
     private static readonly AppLanguageOption[] Options =
     [
-        new(SystemTag, SystemTag, "General_LanguageSystem.Content", []),
-        new(EnglishUnitedStatesTag, EnglishUnitedStatesTag, "General_LanguageEn.Content", ["en"]),
+        new(SystemTag, SystemTag, "General_LanguageSystem.Content", [], []),
+        new(EnglishUnitedStatesTag, EnglishUnitedStatesTag, "General_LanguageEn.Content", [EnglishNeutralTag], [EnglishNeutralTag, EnglishUnitedStatesTag]),
         new(SimplifiedChineseTag, SimplifiedChineseTag, "General_LanguageZhCn.Content", ["zh", "zh-CN", "zh-SG", "zh-Hans-CN"])
     ];
 
     public static IReadOnlyList<AppLanguageOption> SupportedOptions => Options;
+
+    public static IReadOnlyList<string> SupportedResourceLanguageTags { get; } = Options
+        .SelectMany(option => option.ResourceLanguageTags)
+        .Distinct(StringComparer.Ordinal)
+        .ToArray();
+
+    public static IReadOnlyList<string> LegacyAliasTags { get; } = Options
+        .SelectMany(option => option.Aliases)
+        .Except(SupportedResourceLanguageTags, StringComparer.Ordinal)
+        .Distinct(StringComparer.Ordinal)
+        .ToArray();
 
     public static string NormalizeTag(string? languageTag)
     {
@@ -49,17 +61,23 @@ public sealed class AppLanguageOption
         string tag,
         string resourceLanguageTag,
         string displayNameResourceKey,
-        IReadOnlyList<string> aliases)
+        IReadOnlyList<string> aliases,
+        IReadOnlyList<string>? resourceLanguageTags = null)
     {
         Tag = tag;
         ResourceLanguageTag = resourceLanguageTag;
         DisplayNameResourceKey = displayNameResourceKey;
         Aliases = aliases;
+        ResourceLanguageTags = resourceLanguageTags is not null
+            ? resourceLanguageTags.Distinct(StringComparer.Ordinal).ToArray()
+            : [resourceLanguageTag];
     }
 
     public string Tag { get; }
 
     public string ResourceLanguageTag { get; }
+
+    public IReadOnlyList<string> ResourceLanguageTags { get; }
 
     public string DisplayNameResourceKey { get; }
 

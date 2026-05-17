@@ -1,4 +1,5 @@
 using System.Xml.Linq;
+using SalmonEgg.Domain.Models;
 
 namespace SalmonEgg.Presentation.Core.Tests;
 
@@ -37,8 +38,10 @@ public sealed class WasmStartupAssetsTests
         var browserWasmPropertyGroup = LoadBrowserWasmPropertyGroup();
 
         var languages = browserWasmPropertyGroup.Element("SatelliteResourceLanguages")?.Value;
+        var expectedLanguages = string.Join(';', AppLanguageCatalog.SupportedResourceLanguageTags);
 
-        Assert.Equal("en;en-US;zh-Hans", languages);
+        Assert.Equal(expectedLanguages, languages);
+        Assert.DoesNotContain(";zh;", languages, StringComparison.Ordinal);
         Assert.DoesNotContain("zh-CN", languages, StringComparison.Ordinal);
     }
 

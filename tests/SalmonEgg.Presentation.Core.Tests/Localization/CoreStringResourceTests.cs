@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Xml.Linq;
+using SalmonEgg.Domain.Models;
 using Xunit;
 
 namespace SalmonEgg.Presentation.Core.Tests.Localization;
@@ -24,15 +25,50 @@ public sealed class CoreStringResourceTests
         }
     }
 
+    [Fact]
+    public void CoreStringResources_IncludeEveryCanonicalResourceLanguage()
+    {
+        var expectedFileNames = AppLanguageCatalog.SupportedResourceLanguageTags
+            .Select(tag => $"CoreStrings.{tag}.resx")
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        var localizedFileNames = Directory
+            .EnumerateFiles(CoreStringResourceDirectory(), "CoreStrings.*.resx", SearchOption.TopDirectoryOnly)
+            .Select(Path.GetFileName)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(expectedFileNames, localizedFileNames);
+    }
+
+    [Fact]
+    public void CoreStringResources_DoNotUseLegacyChineseAliasResourceFiles()
+    {
+        var resourceFileNames = Directory
+            .EnumerateFiles(CoreStringResourceDirectory(), "CoreStrings.*.resx", SearchOption.TopDirectoryOnly)
+            .Select(Path.GetFileName)
+            .ToArray();
+
+        foreach (var legacyAliasTag in AppLanguageCatalog.LegacyAliasTags)
+        {
+            Assert.DoesNotContain($"CoreStrings.{legacyAliasTag}.resx", resourceFileNames);
+        }
+    }
+
     private static readonly string[] CoreStringResourcePaths =
     [
         @"src\SalmonEgg.Presentation.Core\Resources\CoreStrings.resx",
         @"src\SalmonEgg.Presentation.Core\Resources\CoreStrings.en.resx",
-        @"src\SalmonEgg.Presentation.Core\Resources\CoreStrings.en-US.resx"
+        @"src\SalmonEgg.Presentation.Core\Resources\CoreStrings.en-US.resx",
+        @"src\SalmonEgg.Presentation.Core\Resources\CoreStrings.zh-Hans.resx"
     ];
 
     private static string NormalizeRelativePath(string relativePath)
         => relativePath.Replace('\\', Path.DirectorySeparatorChar);
+
+    private static string CoreStringResourceDirectory()
+        => Path.Combine(FindRepoRoot(), NormalizeRelativePath(@"src\SalmonEgg.Presentation.Core\Resources"));
 
     private static string FindRepoRoot()
     {

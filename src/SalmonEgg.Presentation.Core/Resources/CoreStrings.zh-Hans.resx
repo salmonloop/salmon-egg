@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">text/microsoft-resx</resheader>
+  <resheader name="version">2.0</resheader>
+  <resheader name="reader">System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</resheader>
+  <resheader name="writer">System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</resheader>
+
+  <!-- Navigation -->
+  <data name="Nav_Sessions" xml:space="preserve">
+    <value>会话</value>
+  </data>
+  <data name="Nav_Settings" xml:space="preserve">
+    <value>设置</value>
+  </data>
+  <data name="Nav_Unclassified" xml:space="preserve">
+    <value>未归类</value>
+  </data>
+
+  <!-- Search section titles -->
+  <data name="Search_Sessions" xml:space="preserve">
+    <value>会话</value>
+  </data>
+  <data name="Search_Projects" xml:space="preserve">
+    <value>项目</value>
+  </data>
+  <data name="Search_Settings" xml:space="preserve">
+    <value>设置</value>
+  </data>
+  <data name="Search_Commands" xml:space="preserve">
+    <value>命令</value>
+  </data>
+
+  <!-- Search status messages -->
+  <data name="Search_Loading" xml:space="preserve">
+    <value>搜索中...</value>
+  </data>
+  <data name="Search_LoadingSubtitle" xml:space="preserve">
+    <value>正在更新结果</value>
+  </data>
+  <data name="Search_Empty" xml:space="preserve">
+    <value>未找到结果</value>
+  </data>
+  <data name="Search_EmptySubtitle" xml:space="preserve">
+    <value>尝试更换关键词</value>
+  </data>
+  <data name="Search_Error" xml:space="preserve">
+    <value>搜索失败</value>
+  </data>
+  <data name="Search_ErrorSubtitle" xml:space="preserve">
+    <value>稍后重试</value>
+  </data>
+  <data name="Search_History" xml:space="preserve">
+    <value>最近搜索</value>
+  </data>
+
+  <!-- Settings: About -->
+  <data name="About_ReleaseNotesTitle" xml:space="preserve">
+    <value>更新日志</value>
+  </data>
+  <data name="About_PrivacyPolicyTitle" xml:space="preserve">
+    <value>隐私政策</value>
+  </data>
+  <data name="About_VersionInfoAppLabel" xml:space="preserve">
+    <value>应用</value>
+  </data>
+  <data name="About_VersionInfoVersionLabel" xml:space="preserve">
+    <value>版本</value>
+  </data>
+  <data name="About_VersionInfoProtocolLabel" xml:space="preserve">
+    <value>协议</value>
+  </data>
+  <data name="About_VersionInfoCopied" xml:space="preserve">
+    <value>版本信息已复制到剪贴板。</value>
+  </data>
+  <data name="About_ClipboardUnsupported" xml:space="preserve">
+    <value>当前平台暂不支持剪贴板复制。</value>
+  </data>
+  <data name="Platform_ExternalOpenUnsupported" xml:space="preserve">
+    <value>当前平台暂不支持打开本地文件或目录。</value>
+  </data>
+  <data name="Platform_LocalFileExportUnsupported" xml:space="preserve">
+    <value>当前平台暂不支持导出本地文件。</value>
+  </data>
+  <data name="About_MissingDocumentMessage" xml:space="preserve">
+    <value>未找到{0}文件。</value>
+  </data>
+  <data name="About_MissingDocumentWithFolderMessage" xml:space="preserve">
+    <value>未找到{0}文件。
+请在以下目录创建对应的 Markdown 文件：
+{1}</value>
+  </data>
+
+  <!-- Settings: Diagnostics -->
+  <data name="Diagnostics_NoLogFileFound" xml:space="preserve">
+    <value>未找到日志文件。</value>
+  </data>
+  <data name="LiveLog_StatusNotStarted" xml:space="preserve">
+    <value>未启动</value>
+  </data>
+  <data name="LiveLog_StatusStreaming" xml:space="preserve">
+    <value>正在实时查看</value>
+  </data>
+  <data name="LiveLog_StatusStopped" xml:space="preserve">
+    <value>已停止</value>
+  </data>
+  <data name="LiveLog_StatusPaused" xml:space="preserve">
+    <value>已暂停</value>
+  </data>
+  <data name="LiveLog_StatusReadFailed" xml:space="preserve">
+    <value>读取失败，请稍后重试</value>
+  </data>
+  <data name="LiveLog_StatusNoLogFile" xml:space="preserve">
+    <value>未找到可用日志文件</value>
+  </data>
+  <data name="LiveLog_StatusSwitchedToLatest" xml:space="preserve">
+    <value>已切换到最新日志文件</value>
+  </data>
+
+  <!-- Settings: Shortcuts -->
+  <data name="Shortcuts_InvalidGestureMessage" xml:space="preserve">
+    <value>存在无效快捷键格式，请修正后保存。</value>
+  </data>
+  <data name="Shortcuts_ConflictMessage" xml:space="preserve">
+    <value>存在冲突：{0}</value>
+  </data>
+  <data name="Shortcuts_ConflictSeparator" xml:space="preserve">
+    <value>，</value>
+  </data>
+
+  <!-- Settings: ACP connection -->
+  <data name="AgentProfile_StatusConnecting" xml:space="preserve">
+    <value>连接中...</value>
+  </data>
+  <data name="AgentProfile_StatusConnected" xml:space="preserve">
+    <value>已连接</value>
+  </data>
+  <data name="AgentProfile_StatusDisconnected" xml:space="preserve">
+    <value>未连接</value>
+  </data>
+  <data name="AcpConnection_TransportStdio" xml:space="preserve">
+    <value>Stdio（子进程）</value>
+  </data>
+  <data name="AcpConnection_TransportWebSocket" xml:space="preserve">
+    <value>WebSocket</value>
+  </data>
+  <data name="AcpConnection_TransportHttpSse" xml:space="preserve">
+    <value>HTTP SSE</value>
+  </data>
+  <data name="AcpConnection_HydrationStrictReplayName" xml:space="preserve">
+    <value>严格回放</value>
+  </data>
+  <data name="AcpConnection_HydrationStrictReplayDescription" xml:space="preserve">
+    <value>回放投影进入稳定状态后完成 hydration。</value>
+  </data>
+  <data name="AcpConnection_HydrationLoadResponseName" xml:space="preserve">
+    <value>加载响应</value>
+  </data>
+  <data name="AcpConnection_HydrationLoadResponseDescription" xml:space="preserve">
+    <value>session/load 返回后立即完成 hydration，回放异步投影。</value>
+  </data>
+</root>
