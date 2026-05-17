@@ -227,8 +227,8 @@
                                     CornerRadius="22"
                                     Padding="0"
                                     Command="{x:Bind ViewModel.CancelPromptCommand}"
-                                    IsEnabled="{x:Bind ViewModel.IsPromptInFlight, Mode=OneWay}"
-                                    Visibility="{x:Bind ViewModel.IsPromptInFlight, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    IsEnabled="{x:Bind ViewModel.CanCancelPromptUi, Mode=OneWay}"
+                                    Visibility="{x:Bind ViewModel.ShowCancelPromptButton, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                                 <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE711;" FontSize="14" />
                             </Button>
                         </StackPanel>

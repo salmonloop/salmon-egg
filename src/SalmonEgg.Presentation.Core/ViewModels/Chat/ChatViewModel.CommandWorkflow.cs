@@ -102,7 +102,7 @@ public partial class ChatViewModel
             return;
         }
 
-        if (IsPromptInFlight)
+        if (IsPromptSubmitInFlight)
         {
             return;
         }
@@ -154,6 +154,7 @@ public partial class ChatViewModel
         {
             try { _sendPromptCts?.Dispose(); } catch { }
             _sendPromptCts = null;
+            await _chatStore.Dispatch(new SetPromptSubmitInFlightAction(false));
             await _chatStore.Dispatch(new SetPromptInFlightAction(false));
         }
     }
@@ -255,6 +256,7 @@ public partial class ChatViewModel
     {
         ClearError();
         await _chatStore.Dispatch(new SetPromptInFlightAction(true));
+        await _chatStore.Dispatch(new SetPromptSubmitInFlightAction(true));
         await _chatStore.Dispatch(new BeginTurnAction(
             context.ConversationId,
             context.TurnId,
@@ -290,6 +292,7 @@ public partial class ChatViewModel
             context.ConversationId,
             context.TurnId,
             ChatTurnPhase.WaitingForAgent));
+        await _chatStore.Dispatch(new SetPromptSubmitInFlightAction(false));
 
         var promptDispatchResult = await _acpConnectionCommands
             .DispatchPromptToRemoteSessionAsync(
@@ -320,6 +323,7 @@ public partial class ChatViewModel
         => _inputStatePresenter.Present(new ChatInputStateInput(
             IsBusy: IsBusy,
             IsPromptInFlight: IsPromptInFlight,
+            IsPromptSubmitInFlight: IsPromptSubmitInFlight,
             IsVoiceInputListening: IsVoiceInputListening,
             IsVoiceInputTransportBusy: IsVoiceInputTransportBusy,
             HasPendingAskUserRequest: PendingAskUserRequest is not null,
@@ -970,6 +974,12 @@ public partial class ChatViewModel
     }
 
     partial void OnIsPromptInFlightChanged(bool value)
+    {
+        SendPromptCommand.NotifyCanExecuteChanged();
+        NotifyComposerProjectionChanged();
+    }
+
+    partial void OnIsPromptSubmitInFlightChanged(bool value)
     {
         SendPromptCommand.NotifyCanExecuteChanged();
         NotifyComposerProjectionChanged();

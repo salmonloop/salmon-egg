@@ -143,6 +143,13 @@
                                 SelectedProjectId="{x:Bind ViewModel.SelectedStartProjectId, Mode=TwoWay}"
                                 ProjectSelectorAutomationId="StartView.ProjectSelector" />
 
+        <InfoBar Grid.Row="1"
+                 Margin="24,0,24,112"
+                 VerticalAlignment="Bottom"
+                 Severity="Error"
+                 IsOpen="{x:Bind ViewModel.HasStartSessionDraftError, Mode=OneWay}"
+                 Message="{x:Bind ViewModel.StartSessionDraftErrorMessage, Mode=OneWay}" />
+
         <Grid Grid.RowSpan="2"
               Background="{ThemeResource AppOverlayScrimBrush}"
               Visibility="{x:Bind ViewModel.IsStarting, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">

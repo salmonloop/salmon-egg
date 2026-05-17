@@ -67,6 +67,8 @@ public sealed record SetIsHydratingAction(bool IsHydrating) : ChatAction;
 /// </summary>
 public sealed record SetPromptInFlightAction(bool IsInFlight) : ChatAction;
 
+public sealed record SetPromptSubmitInFlightAction(bool IsInFlight) : ChatAction;
+
 public sealed record BeginTurnAction(
     string ConversationId,
     string TurnId,

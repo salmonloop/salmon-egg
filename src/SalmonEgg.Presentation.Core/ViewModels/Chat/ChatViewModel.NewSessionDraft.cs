@@ -348,6 +348,9 @@ public partial class ChatViewModel
         {
             IsNewSessionDraftLoading = draft?.Phase is NewSessionDraftPhase.Creating or NewSessionDraftPhase.Promoting or NewSessionDraftPhase.Closing;
             IsNewSessionDraftReady = draft?.Phase == NewSessionDraftPhase.Ready;
+            NewSessionDraftErrorMessage = draft?.Phase == NewSessionDraftPhase.Faulted
+                ? NormalizeNewSessionDraftError(draft.Error)
+                : string.Empty;
 
             var availableModes = draft?.AvailableModes ?? ImmutableList<ConversationModeOptionSnapshot>.Empty;
             var projection = _sessionOptionsPresenter.Present(
@@ -451,6 +454,18 @@ public partial class ChatViewModel
 
         if (!string.IsNullOrWhiteSpace(connectionState.SettingsSelectedProfileId)
             && !string.Equals(connectionState.SettingsSelectedProfileId, draft.ProfileId, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(connectionState.ForegroundTransportProfileId)
+            && !string.Equals(connectionState.ForegroundTransportProfileId, draft.ProfileId, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(connectionState.ConnectionInstanceId)
+            && !string.Equals(connectionState.ConnectionInstanceId, draft.ConnectionInstanceId, StringComparison.Ordinal))
         {
             return null;
         }
@@ -562,4 +577,9 @@ public partial class ChatViewModel
         => string.IsNullOrWhiteSpace(profileId)
             ? null
             : profileId.Trim();
+
+    private static string NormalizeNewSessionDraftError(string? error)
+        => string.IsNullOrWhiteSpace(error)
+            ? "Unable to load session configuration. Check the connection and try again."
+            : $"Unable to load session configuration: {error.Trim()}";
 }

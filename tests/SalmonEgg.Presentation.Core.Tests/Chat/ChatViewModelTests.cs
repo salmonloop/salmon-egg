@@ -855,10 +855,11 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
-    public async Task ComposerState_WhenPromptInFlight_DisablesComposerSurfaceAndShowsCancel()
+    public async Task ComposerState_WhenPromptSubmitInFlight_DisablesComposerSurfaceAndShowsCancel()
     {
         await using var fixture = CreateViewModel();
 
+        fixture.ViewModel.IsPromptSubmitInFlight = true;
         fixture.ViewModel.IsPromptInFlight = true;
 
         Assert.Equal(ChatComposerMode.PromptInFlight, fixture.ViewModel.ComposerState.Mode);
@@ -887,7 +888,7 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
-    public async Task ComposerState_WhenPromptInFlightChanges_RaisesComposerStateNotification()
+    public async Task ComposerState_WhenPromptSubmitInFlightChanges_RaisesComposerStateNotification()
     {
         await using var fixture = CreateViewModel();
         var raised = new List<string>();
@@ -899,23 +900,23 @@ public partial class ChatViewModelTests
             }
         };
 
-        fixture.ViewModel.IsPromptInFlight = true;
+        fixture.ViewModel.IsPromptSubmitInFlight = true;
 
         Assert.Contains(nameof(ChatViewModel.ComposerState), raised);
     }
 
     [Fact]
-    public async Task ShouldShowSlashCommandsUi_WhenPromptInFlight_HidesComposerToolsUntilDispatchSettles()
+    public async Task ShouldShowSlashCommandsUi_WhenPromptSubmitInFlight_HidesComposerToolsUntilDispatchSettles()
     {
         await using var fixture = CreateViewModel();
 
         fixture.ViewModel.ShowSlashCommands = true;
         Assert.True(fixture.ViewModel.ShouldShowSlashCommandsUi);
 
-        fixture.ViewModel.IsPromptInFlight = true;
+        fixture.ViewModel.IsPromptSubmitInFlight = true;
         Assert.False(fixture.ViewModel.ShouldShowSlashCommandsUi);
 
-        fixture.ViewModel.IsPromptInFlight = false;
+        fixture.ViewModel.IsPromptSubmitInFlight = false;
         Assert.True(fixture.ViewModel.ShouldShowSlashCommandsUi);
     }
 
@@ -4742,6 +4743,17 @@ public partial class ChatViewModelTests
 
         state = await fixture.GetStateAsync();
         Assert.Equal(ChatTurnPhase.WaitingForAgent, state.ActiveTurn!.Phase);
+        Assert.False(state.IsPromptSubmitInFlight);
+        Assert.True(state.IsPromptInFlight);
+        syncContext.RunAll();
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(!viewModel.IsPromptSubmitInFlight && viewModel.IsPromptInFlight);
+        });
+        Assert.True(viewModel.ComposerState.IsInteractiveSurfaceEnabled);
+        Assert.False(viewModel.CanSendPromptUi);
+        Assert.True(viewModel.ComposerState.ShowCancelButton);
 
         // Now complete the prompt dispatch
         tcsPrompt.SetResult(new AcpPromptDispatchResult("remote-1", new SessionPromptResponse(), false));
@@ -14251,5 +14263,43 @@ public partial class ChatViewModelTests
         var mode = Assert.Single(fixture.ViewModel.NewSessionDraftModeOptions);
         Assert.Equal("code", mode.ModeId);
         Assert.Equal("code", fixture.ViewModel.SelectedNewSessionDraftMode?.ModeId);
+    }
+
+    [Fact]
+    public async Task ConnectionStoreProjection_WhenNewSessionDraftFaults_ProjectsDraftError()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        var draft = new NewSessionDraftState(
+            ProfileId: "profile-1",
+            Cwd: @"C:\Repo\App",
+            RemoteSessionId: null,
+            ConnectionInstanceId: "conn-1",
+            Phase: NewSessionDraftPhase.Faulted,
+            Version: 1,
+            AvailableModes: ImmutableList<ConversationModeOptionSnapshot>.Empty,
+            SelectedModeId: null,
+            ConfigOptions: ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+            ShowConfigOptionsPanel: false,
+            AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+            SessionInfo: null,
+            Error: "session/new failed");
+
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetSettingsSelectedProfileAction("profile-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected)).AsTask());
+
+        await fixture.DispatchConnectionAsync(new SetNewSessionDraftAction(draft));
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(fixture.ViewModel.HasNewSessionDraftError);
+        });
+
+        Assert.Contains("session/new failed", fixture.ViewModel.NewSessionDraftErrorMessage, StringComparison.Ordinal);
+        Assert.False(fixture.ViewModel.IsNewSessionDraftReady);
+        Assert.False(fixture.ViewModel.IsNewSessionDraftLoading);
     }
 }

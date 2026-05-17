@@ -324,6 +324,7 @@ public partial class ChatViewModel
         IsHydrating = projection.IsHydrating;
         IsSessionActive = projection.IsSessionActive;
         IsPromptInFlight = projection.IsPromptInFlight;
+        IsPromptSubmitInFlight = projection.IsPromptSubmitInFlight;
         IsTurnStatusVisible = projection.IsTurnStatusVisible;
         TurnStatusText = projection.TurnStatusText;
         IsTurnStatusRunning = projection.IsTurnStatusRunning;

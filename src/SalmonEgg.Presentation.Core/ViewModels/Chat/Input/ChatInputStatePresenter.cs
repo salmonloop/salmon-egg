@@ -20,7 +20,7 @@ public sealed class ChatInputStatePresenter
                 ShowVoiceListeningStatus: true);
         }
 
-        if (input.IsPromptInFlight)
+        if (input.IsPromptSubmitInFlight)
         {
             return new ChatComposerPresentationState(
                 Mode: ChatComposerMode.PromptInFlight,
@@ -43,6 +43,7 @@ public sealed class ChatInputStatePresenter
 
         var canSendPrompt =
             !isSurfaceBlocked
+            && !input.IsPromptInFlight
             && input.IsSessionActive
             && input.HasChatService
             && input.IsInitialized
@@ -59,8 +60,8 @@ public sealed class ChatInputStatePresenter
             IsTextInputEnabled: !isSurfaceBlocked,
             AreComposerToolsEnabled: !isSurfaceBlocked,
             CanSendPrompt: canSendPrompt,
-            ShowCancelButton: false,
-            CanCancelPrompt: false,
+            ShowCancelButton: input.IsPromptInFlight,
+            CanCancelPrompt: input.IsPromptInFlight,
             CanStartVoiceInput: canStartVoiceInput,
             ShowVoiceStartButton: input.IsVoiceInputSupported,
             ShowVoiceStopButton: false,

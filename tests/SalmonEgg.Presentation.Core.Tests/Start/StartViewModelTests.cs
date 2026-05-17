@@ -542,7 +542,6 @@ public sealed class StartViewModelTests
                 nav,
                 workflow.Object);
 
-            startViewModel.OnComposerLoaded();
             startViewModel.StartPrompt = "draft";
 
             Assert.True(startViewModel.IsInputEnabled);
@@ -587,6 +586,44 @@ public sealed class StartViewModelTests
             Assert.True(startViewModel.IsInputEnabled);
             Assert.True(startViewModel.IsStartModeSelectorEnabled);
             Assert.True(startViewModel.StartSessionAndSendCommand.CanExecute(null));
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task StartSessionDraftError_WhenDraftFaults_DisablesSubmitButKeepsTextInputAvailable()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(
+                chat.ViewModel,
+                preferences,
+                nav,
+                workflow.Object);
+            var faultedDraft = CreateFaultedDraft("session/new failed");
+
+            startViewModel.OnComposerLoaded();
+            startViewModel.StartPrompt = "draft";
+            await chat.DispatchConnectionAsync(new SetSettingsSelectedProfileAction("profile-1"));
+            await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
+            await chat.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+            await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+            await chat.DispatchConnectionAsync(new SetNewSessionDraftAction(faultedDraft));
+
+            Assert.True(startViewModel.IsInputEnabled);
+            Assert.False(startViewModel.IsStartModeSelectorEnabled);
+            Assert.False(startViewModel.StartSessionAndSendCommand.CanExecute(null));
         }
         finally
         {
@@ -1225,6 +1262,22 @@ public sealed class StartViewModelTests
             ShowConfigOptionsPanel: false,
             AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
             SessionInfo: null);
+
+    private static NewSessionDraftState CreateFaultedDraft(string error)
+        => new(
+            ProfileId: "profile-1",
+            Cwd: @"C:\Repo\App",
+            RemoteSessionId: null,
+            ConnectionInstanceId: "conn-1",
+            Phase: NewSessionDraftPhase.Faulted,
+            Version: 1,
+            AvailableModes: ImmutableList<ConversationModeOptionSnapshot>.Empty,
+            SelectedModeId: null,
+            ConfigOptions: ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+            ShowConfigOptionsPanel: false,
+            AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+            SessionInfo: null,
+            Error: error);
 
     private static async Task MakeStartDraftReadyAsync(
         ChatViewModelHarness chat,

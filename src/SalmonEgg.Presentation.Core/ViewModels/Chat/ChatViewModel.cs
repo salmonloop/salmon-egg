@@ -459,6 +459,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     [NotifyPropertyChangedFor(nameof(IsInputEnabled))]
     [NotifyPropertyChangedFor(nameof(IsTextInputEnabled))]
     [NotifyPropertyChangedFor(nameof(AreComposerToolsEnabled))]
+    [NotifyPropertyChangedFor(nameof(CanSendPromptUi))]
+    private bool _isPromptSubmitInFlight;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ComposerState))]
+    [NotifyPropertyChangedFor(nameof(IsInputEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsTextInputEnabled))]
+    [NotifyPropertyChangedFor(nameof(AreComposerToolsEnabled))]
     [NotifyPropertyChangedFor(nameof(CanStartVoiceInput))]
     [NotifyPropertyChangedFor(nameof(CanStopVoiceInput))]
     private bool _isVoiceInputListening;
@@ -816,6 +824,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     public bool ShowVoiceInputStopButton => ResolveInputState().ShowVoiceStopButton;
 
+    public bool ShowCancelPromptButton => ResolveInputState().ShowCancelButton;
+
+    public bool CanCancelPromptUi => ResolveInputState().CanCancelPrompt;
+
     public bool ShouldShowSlashCommandsUi => ShowSlashCommands && ComposerState.AreComposerToolsEnabled;
 
     public bool HasPlanEntries => ResolvePlanPanelState().HasPlanEntries;
@@ -982,6 +994,23 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         get => _isNewSessionDraftReady;
         private set => SetProperty(ref _isNewSessionDraftReady, value);
     }
+
+    private string _newSessionDraftErrorMessage = string.Empty;
+
+    public string NewSessionDraftErrorMessage
+    {
+        get => _newSessionDraftErrorMessage;
+        private set
+        {
+            var normalized = value ?? string.Empty;
+            if (SetProperty(ref _newSessionDraftErrorMessage, normalized))
+            {
+                OnPropertyChanged(nameof(HasNewSessionDraftError));
+            }
+        }
+    }
+
+    public bool HasNewSessionDraftError => !string.IsNullOrWhiteSpace(NewSessionDraftErrorMessage);
 
     // Agent Configuration options (as defined by the protocol)
     [ObservableProperty]
@@ -1402,6 +1431,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         OnPropertyChanged(nameof(CanStopVoiceInput));
         OnPropertyChanged(nameof(ShowVoiceInputStartButton));
         OnPropertyChanged(nameof(ShowVoiceInputStopButton));
+        OnPropertyChanged(nameof(ShowCancelPromptButton));
+        OnPropertyChanged(nameof(CanCancelPromptUi));
         OnPropertyChanged(nameof(ShouldShowSlashCommandsUi));
     }
 

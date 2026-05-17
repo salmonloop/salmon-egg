@@ -14,6 +14,7 @@ public sealed class ChatInputStatePresenterTests
         var state = _sut.Present(new ChatInputStateInput(
             IsBusy: false,
             IsPromptInFlight: false,
+            IsPromptSubmitInFlight: false,
             IsVoiceInputListening: false,
             IsVoiceInputTransportBusy: false,
             HasPendingAskUserRequest: false,
@@ -35,11 +36,12 @@ public sealed class ChatInputStatePresenterTests
     }
 
     [Fact]
-    public void Present_WhenPromptInFlight_DisablesComposerSurfaceWhileKeepingCancelAvailable()
+    public void Present_WhenPromptSubmitInFlight_DisablesComposerSurfaceWhileKeepingCancelAvailable()
     {
         var state = _sut.Present(new ChatInputStateInput(
             IsBusy: false,
             IsPromptInFlight: true,
+            IsPromptSubmitInFlight: true,
             IsVoiceInputListening: false,
             IsVoiceInputTransportBusy: false,
             HasPendingAskUserRequest: false,
@@ -64,11 +66,37 @@ public sealed class ChatInputStatePresenterTests
     }
 
     [Fact]
+    public void Present_WhenPromptInFlightAfterSubmit_RestoresComposerSurfaceButKeepsCancelAvailable()
+    {
+        var state = _sut.Present(new ChatInputStateInput(
+            IsBusy: false,
+            IsPromptInFlight: true,
+            IsPromptSubmitInFlight: false,
+            IsVoiceInputListening: false,
+            IsVoiceInputTransportBusy: false,
+            HasPendingAskUserRequest: false,
+            ShouldShowLoadingOverlayPresenter: false,
+            IsSessionActive: true,
+            HasChatService: true,
+            IsInitialized: true,
+            HasCurrentSessionId: true,
+            HasPromptText: true,
+            IsVoiceInputSupported: true));
+
+        Assert.Equal(ChatComposerMode.Enabled, state.Mode);
+        Assert.True(state.IsInteractiveSurfaceEnabled);
+        Assert.False(state.CanSendPrompt);
+        Assert.True(state.ShowCancelButton);
+        Assert.True(state.CanCancelPrompt);
+    }
+
+    [Fact]
     public void Present_WhenVoiceListening_KeepsTextEditingAvailableButRestrictsConflictingActions()
     {
         var state = _sut.Present(new ChatInputStateInput(
             IsBusy: false,
             IsPromptInFlight: false,
+            IsPromptSubmitInFlight: false,
             IsVoiceInputListening: true,
             IsVoiceInputTransportBusy: false,
             HasPendingAskUserRequest: false,
@@ -97,6 +125,7 @@ public sealed class ChatInputStatePresenterTests
         var state = _sut.Present(new ChatInputStateInput(
             IsBusy: false,
             IsPromptInFlight: false,
+            IsPromptSubmitInFlight: false,
             IsVoiceInputListening: false,
             IsVoiceInputTransportBusy: false,
             HasPendingAskUserRequest: false,
@@ -120,6 +149,7 @@ public sealed class ChatInputStatePresenterTests
         var state = _sut.Present(new ChatInputStateInput(
             IsBusy: false,
             IsPromptInFlight: false,
+            IsPromptSubmitInFlight: false,
             IsVoiceInputListening: false,
             IsVoiceInputTransportBusy: false,
             HasPendingAskUserRequest: true,
@@ -144,6 +174,7 @@ public sealed class ChatInputStatePresenterTests
         var state = _sut.Present(new ChatInputStateInput(
             IsBusy: false,
             IsPromptInFlight: false,
+            IsPromptSubmitInFlight: false,
             IsVoiceInputListening: true,
             IsVoiceInputTransportBusy: false,
             HasPendingAskUserRequest: false,
@@ -166,6 +197,7 @@ public sealed class ChatInputStatePresenterTests
         var state = _sut.Present(new ChatInputStateInput(
             IsBusy: false,
             IsPromptInFlight: false,
+            IsPromptSubmitInFlight: false,
             IsVoiceInputListening: true,
             IsVoiceInputTransportBusy: true,
             HasPendingAskUserRequest: false,
@@ -188,6 +220,7 @@ public sealed class ChatInputStatePresenterTests
         var state = _sut.Present(new ChatInputStateInput(
             IsBusy: true,
             IsPromptInFlight: false,
+            IsPromptSubmitInFlight: false,
             IsVoiceInputListening: false,
             IsVoiceInputTransportBusy: false,
             HasPendingAskUserRequest: false,
@@ -212,6 +245,7 @@ public sealed class ChatInputStatePresenterTests
         var state = _sut.Present(new ChatInputStateInput(
             IsBusy: false,
             IsPromptInFlight: false,
+            IsPromptSubmitInFlight: false,
             IsVoiceInputListening: false,
             IsVoiceInputTransportBusy: false,
             HasPendingAskUserRequest: false,
@@ -236,6 +270,7 @@ public sealed class ChatInputStatePresenterTests
         var state = _sut.Present(new ChatInputStateInput(
             IsBusy: false,
             IsPromptInFlight: false,
+            IsPromptSubmitInFlight: false,
             IsVoiceInputListening: false,
             IsVoiceInputTransportBusy: true,
             HasPendingAskUserRequest: false,

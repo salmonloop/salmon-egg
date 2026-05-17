@@ -126,6 +126,10 @@ public sealed partial class StartViewModel : ObservableObject
 
     public bool IsStartModeSelectorEnabled => _startSessionModeSnapshot.IsEnabled;
 
+    public bool HasStartSessionDraftError => Chat.HasNewSessionDraftError;
+
+    public string StartSessionDraftErrorMessage => Chat.NewSessionDraftErrorMessage;
+
     public bool IsVoiceInputSupported => Chat.IsVoiceInputSupported;
 
     public bool CanStartVoiceInput => !IsStarting && Chat.CanStartVoiceInput;
@@ -447,6 +451,14 @@ public sealed partial class StartViewModel : ObservableObject
             || string.Equals(e.PropertyName, nameof(ChatViewModel.NewSessionDraftModeOptions), StringComparison.Ordinal))
         {
             RefreshStartModeProjection();
+            RefreshStartSessionDraftErrorProjection();
+            return;
+        }
+
+        if (string.Equals(e.PropertyName, nameof(ChatViewModel.HasNewSessionDraftError), StringComparison.Ordinal)
+            || string.Equals(e.PropertyName, nameof(ChatViewModel.NewSessionDraftErrorMessage), StringComparison.Ordinal))
+        {
+            RefreshStartSessionDraftErrorProjection();
             return;
         }
 
@@ -525,6 +537,12 @@ public sealed partial class StartViewModel : ObservableObject
         OnPropertyChanged(nameof(StartModeOptions));
         OnPropertyChanged(nameof(SelectedStartMode));
         RefreshStartModeState();
+    }
+
+    private void RefreshStartSessionDraftErrorProjection()
+    {
+        OnPropertyChanged(nameof(HasStartSessionDraftError));
+        OnPropertyChanged(nameof(StartSessionDraftErrorMessage));
     }
 
     private void QueueEnsureNewSessionDraft()
