@@ -2222,7 +2222,7 @@ public partial class ChatViewModel
         if (!sessionInfo.HasTitle
             && normalizedDescription is null
             && normalizedCwd is null
-            && normalizedUpdatedAt is null
+            && !sessionInfo.HasUpdatedAt
             && normalizedMeta is null)
         {
             return null;
@@ -2235,6 +2235,7 @@ public partial class ChatViewModel
             Description = normalizedDescription,
             Cwd = normalizedCwd,
             UpdatedAtUtc = AcpSessionTimestampPolicy.ParseUpdatedAtUtc(normalizedUpdatedAt),
+            HasUpdatedAt = sessionInfo.HasUpdatedAt,
             Meta = normalizedMeta
         };
     }

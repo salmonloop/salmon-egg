@@ -697,9 +697,11 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
         }
 
         return string.Equals(left.Title, right.Title, StringComparison.Ordinal)
+            && left.HasTitle == right.HasTitle
             && string.Equals(left.Description, right.Description, StringComparison.Ordinal)
             && string.Equals(left.Cwd, right.Cwd, StringComparison.Ordinal)
             && left.UpdatedAtUtc == right.UpdatedAtUtc
+            && left.HasUpdatedAt == right.HasUpdatedAt
             && MetadataEquals(left.Meta, right.Meta);
     }
 

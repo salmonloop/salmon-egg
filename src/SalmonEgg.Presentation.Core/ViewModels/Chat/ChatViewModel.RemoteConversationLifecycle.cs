@@ -2572,6 +2572,7 @@ public partial class ChatViewModel
             sessionInfo.Description,
             null,
             sessionInfo.UpdatedAt,
+            HasUpdatedAt: true,
             sessionInfo.Meta));
     }
 
@@ -2774,6 +2775,7 @@ public partial class ChatViewModel
             Description = sessionInfo.Description,
             Cwd = establishedCwd,
             UpdatedAtUtc = sessionInfo.UpdatedAtUtc,
+            HasUpdatedAt = sessionInfo.HasUpdatedAt,
             Meta = sessionInfo.Meta is null
                 ? null
                 : new Dictionary<string, object?>(sessionInfo.Meta, StringComparer.Ordinal)

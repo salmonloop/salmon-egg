@@ -113,7 +113,7 @@ public sealed partial class RealUserConfigSmokeTests
         var loadingVisible = session.WaitUntilVisible("ChatView.LoadingOverlayStatus", TimeSpan.FromSeconds(15));
         Assert.True(loadingVisible, $"Slow session/load never surfaced ChatView.LoadingOverlayStatus for conversation {conversationId}.");
 
-        var headerVisible = session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(30));
+        var headerVisible = session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(30));
         Assert.True(headerVisible, $"Conversation header did not appear while loading conversation {conversationId}.");
 
         var transcriptVisible = WaitUntil(
@@ -129,7 +129,7 @@ public sealed partial class RealUserConfigSmokeTests
         // during replay settlement still fail the smoke test.
         Thread.Sleep(8000);
 
-        var headerStillVisible = session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(4));
+        var headerStillVisible = session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(4));
         var overlayStillHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(4));
         Assert.True(
             headerStillVisible && overlayStillHidden,
@@ -154,13 +154,13 @@ public sealed partial class RealUserConfigSmokeTests
         var sourceItem = session.FindByAutomationId(SessionAutomationId(sourceConversationId!), TimeSpan.FromSeconds(10));
         session.ActivateElement(sourceItem);
         Assert.True(
-            session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(15)),
+            session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(15)),
             $"Source conversation header did not appear for {sourceConversationId}.");
 
         var targetItem = session.FindByAutomationId(SessionAutomationId(targetConversationId!), TimeSpan.FromSeconds(10));
         session.ActivateElement(targetItem);
 
-        var targetHeaderVisible = session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(30));
+        var targetHeaderVisible = session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(30));
         Assert.True(targetHeaderVisible, $"Target conversation header did not appear for {targetConversationId}.");
 
         var transcriptVisible = WaitUntil(
@@ -172,7 +172,7 @@ public sealed partial class RealUserConfigSmokeTests
         Thread.Sleep(8000);
 
         Assert.True(
-            session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(4)),
+            session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(4)),
             $"Target conversation {targetConversationId} stopped rendering stably after source-to-target activation.");
     }
 
@@ -247,7 +247,7 @@ public sealed partial class RealUserConfigSmokeTests
         sessionItem = session.FindByAutomationId(sessionId, TimeSpan.FromSeconds(10));
         session.ActivateElement(sessionItem);
 
-        var headerVisible = session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(8));
+        var headerVisible = session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(8));
         Assert.True(headerVisible, $"Conversation header did not recover promptly after discover round-trip for {candidate.ConversationId}.");
 
         var returnedOverlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(8));
@@ -298,7 +298,7 @@ public sealed partial class RealUserConfigSmokeTests
         sessionItem = session.FindByAutomationId(sessionId, TimeSpan.FromSeconds(10));
         session.ActivateElement(sessionItem);
 
-        var headerVisible = session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(8));
+        var headerVisible = session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(8));
         if (!headerVisible)
         {
             var captureRoot = Path.Combine(Path.GetTempPath(), "SalmonEgg.GuiTests");
@@ -382,7 +382,7 @@ public sealed partial class RealUserConfigSmokeTests
             remoteCandidate.ConversationId);
         session.ActivateElement(warmItem);
 
-        var warmHeaderVisible = session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(10));
+        var warmHeaderVisible = session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10));
         Assert.True(warmHeaderVisible, $"Warm-cache source conversation header did not appear for {warmConversationId}.");
 
         var warmOverlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(60));
@@ -411,7 +411,7 @@ public sealed partial class RealUserConfigSmokeTests
         {
             var blockingMaskVisible = session.TryFindByAutomationId("ChatView.LoadingOverlayMask", TimeSpan.FromMilliseconds(100)) is not null;
             var overlayStatusVisible = session.TryFindByAutomationId("ChatView.LoadingOverlayStatus", TimeSpan.FromMilliseconds(100)) is not null;
-            var header = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(100));
+            var header = session.TryFindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromMilliseconds(100));
             var headerName = header?.Name ?? "<missing>";
             var remoteHeaderVisible = header is not null && headerName.Contains(remoteVisibleName, StringComparison.Ordinal);
             var messagesList = session.TryFindByAutomationId("ChatView.MessagesList", TimeSpan.FromMilliseconds(100));
@@ -452,9 +452,9 @@ public sealed partial class RealUserConfigSmokeTests
         var overlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(120));
         Assert.True(overlayHidden, $"Remote conversation {remoteCandidate.ConversationId} remained stuck behind the loading overlay after mini-window activation.");
 
-        var remoteHeaderVisibleAfterHydration = session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(10));
+        var remoteHeaderVisibleAfterHydration = session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10));
         Assert.True(remoteHeaderVisibleAfterHydration, $"Remote conversation header did not become visible after mini-window activation for {remoteCandidate.ConversationId}.");
-        var finalHeader = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(2));
+        var finalHeader = session.TryFindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(2));
         Assert.True(
             finalHeader is not null && finalHeader.Name.Contains(remoteVisibleName, StringComparison.Ordinal),
             $"Final chat header did not settle to remote conversation '{remoteVisibleName}'. Actual='{finalHeader?.Name ?? "<missing>"}'");
@@ -508,7 +508,7 @@ public sealed partial class RealUserConfigSmokeTests
         {
             var statusVisible = session.TryFindByAutomationId("ChatView.LoadingOverlayStatus", TimeSpan.FromMilliseconds(100)) is not null;
             var overlayVisible = session.TryFindByAutomationId("ChatView.LoadingOverlay", TimeSpan.FromMilliseconds(100)) is not null;
-            var headerVisible = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(100)) is not null;
+            var headerVisible = session.TryFindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromMilliseconds(100)) is not null;
 
             if (statusVisible && statusVisibleAtMs is null)
             {
@@ -631,7 +631,7 @@ public sealed partial class RealUserConfigSmokeTests
         remoteItem = session.FindByAutomationId(sessionId, TimeSpan.FromSeconds(10));
         var returnStopwatch = Stopwatch.StartNew();
         session.ActivateElement(remoteItem);
-        var headerVisible = session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(1200));
+        var headerVisible = session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromMilliseconds(1200));
         returnStopwatch.Stop();
 
         Assert.True(
@@ -681,7 +681,7 @@ public sealed partial class RealUserConfigSmokeTests
             session.WaitUntilVisible("ChatView.LoadingOverlayStatus", TimeSpan.FromSeconds(15)),
             $"Initial cross-profile remote session A did not expose ChatView.LoadingOverlayStatus. Conversation={remoteA.ConversationId}");
         Assert.True(
-            session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(30)),
+            session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(30)),
             $"Conversation header did not appear while loading cross-profile remote session A. Conversation={remoteA.ConversationId}");
         Assert.True(
             WaitUntil(
@@ -701,7 +701,7 @@ public sealed partial class RealUserConfigSmokeTests
             session.WaitUntilVisible("ChatView.LoadingOverlayStatus", TimeSpan.FromSeconds(15)),
             $"Initial cross-profile remote session B did not expose ChatView.LoadingOverlayStatus. Conversation={remoteB.ConversationId}");
         Assert.True(
-            session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(30)),
+            session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(30)),
             $"Conversation header did not appear while loading cross-profile remote session B. Conversation={remoteB.ConversationId}");
         Assert.True(
             WaitUntil(
@@ -716,7 +716,7 @@ public sealed partial class RealUserConfigSmokeTests
         remoteAItem = session.FindByAutomationId(remoteAId, TimeSpan.FromSeconds(10));
         var returnStopwatch = Stopwatch.StartNew();
         session.ActivateElement(remoteAItem);
-        var headerVisible = session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(4));
+        var headerVisible = session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(4));
         returnStopwatch.Stop();
 
         Assert.True(
@@ -726,7 +726,7 @@ public sealed partial class RealUserConfigSmokeTests
             returnStopwatch.ElapsedMilliseconds <= 1500,
             $"Cross-profile hot-return to remote session A exceeded the responsiveness budget. Conversation={remoteA.ConversationId} elapsedMs={returnStopwatch.ElapsedMilliseconds} budgetMs=1500");
 
-        var returnedHeader = session.FindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(1));
+        var returnedHeader = session.FindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(1));
         Assert.Contains(remoteA.DisplayName, returnedHeader.Name, StringComparison.Ordinal);
 
         var hotOverlayTimeline = new List<string>();
@@ -735,7 +735,7 @@ public sealed partial class RealUserConfigSmokeTests
         {
             var hotOverlayMaskVisible = session.TryFindByAutomationId("ChatView.LoadingOverlayMask", TimeSpan.FromMilliseconds(100)) is not null;
             var hotOverlayStatusVisible = session.TryFindByAutomationId("ChatView.LoadingOverlayStatus", TimeSpan.FromMilliseconds(100)) is not null;
-            var hotHeaderName = session.TryGetElementName("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(100)) ?? "<missing>";
+            var hotHeaderName = session.TryGetElementName("ChatView.CurrentSessionTitle", TimeSpan.FromMilliseconds(100)) ?? "<missing>";
             var remoteASelected = session.TryGetIsSelected(remoteAId) == true;
 
             hotOverlayTimeline.Add(
@@ -965,7 +965,7 @@ public sealed partial class RealUserConfigSmokeTests
                 session.TryFindByAutomationId("ChatView.LoadingOverlayMask", TimeSpan.FromMilliseconds(100)) is not null
                 || session.TryFindByAutomationId("ChatView.LoadingOverlayStatus", TimeSpan.FromMilliseconds(100)) is not null
                 || session.TryFindByAutomationId("ChatView.LoadingOverlay", TimeSpan.FromMilliseconds(100)) is not null;
-            var header = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(100));
+            var header = session.TryFindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromMilliseconds(100));
             var headerName = header?.Name ?? "<missing>";
             var messagesVisible = session.TryFindByAutomationId("ChatView.MessagesList", TimeSpan.FromMilliseconds(100)) is not null;
 
@@ -1028,7 +1028,7 @@ public sealed partial class RealUserConfigSmokeTests
                 || session.MainWindow.FindFirstDescendant(cf => cf.ByAutomationId("ChatView.LoadingOverlayStatus")) is not null
                 || session.MainWindow.FindFirstDescendant(cf => cf.ByAutomationId("ChatView.LoadingOverlay")) is not null;
             var activeRootVisible = session.MainWindow.FindFirstDescendant(cf => cf.ByAutomationId("ChatView.ActiveRoot")) is not null;
-            var header = session.MainWindow.FindFirstDescendant(cf => cf.ByAutomationId("ChatView.CurrentSessionNameButton"));
+            var header = session.MainWindow.FindFirstDescendant(cf => cf.ByAutomationId("ChatView.CurrentSessionTitle"));
             var messagesVisible = session.MainWindow.FindFirstDescendant(cf => cf.ByAutomationId("ChatView.MessagesList")) is not null;
             var headerName = header?.Name ?? "<missing>";
 
@@ -1101,7 +1101,7 @@ public sealed partial class RealUserConfigSmokeTests
                 || session.MainWindow.FindFirstDescendant(cf => cf.ByAutomationId("ChatView.LoadingOverlayStatus")) is not null
                 || session.MainWindow.FindFirstDescendant(cf => cf.ByAutomationId("ChatView.LoadingOverlay")) is not null;
             var activeRootVisible = session.MainWindow.FindFirstDescendant(cf => cf.ByAutomationId("ChatView.ActiveRoot")) is not null;
-            var header = session.MainWindow.FindFirstDescendant(cf => cf.ByAutomationId("ChatView.CurrentSessionNameButton"));
+            var header = session.MainWindow.FindFirstDescendant(cf => cf.ByAutomationId("ChatView.CurrentSessionTitle"));
             var messagesVisible = session.MainWindow.FindFirstDescendant(cf => cf.ByAutomationId("ChatView.MessagesList")) is not null;
             var headerName = header?.Name ?? "<missing>";
             var screenshotPath = Path.Combine(captureRoot, $"frame-{index:00}-{stopwatch.ElapsedMilliseconds:0000}ms.png");
@@ -1152,7 +1152,7 @@ public sealed partial class RealUserConfigSmokeTests
         {
             var sessionSelected = session.TryGetIsSelected(SessionAutomationId(candidate.ConversationId)) == true;
             var startSelected = session.TryGetIsSelected("MainNav.Start") == true;
-            var headerVisible = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(100)) is not null;
+            var headerVisible = session.TryFindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromMilliseconds(100)) is not null;
             var overlayVisible = session.TryFindByAutomationId("ChatView.LoadingOverlay", TimeSpan.FromMilliseconds(100)) is not null;
 
             timeline.Add(
@@ -1222,7 +1222,7 @@ public sealed partial class RealUserConfigSmokeTests
         {
             var blockingMaskVisible = session.TryFindByAutomationId("ChatView.LoadingOverlayMask", TimeSpan.FromMilliseconds(100)) is not null;
             var overlayStatusVisible = session.TryFindByAutomationId("ChatView.LoadingOverlayStatus", TimeSpan.FromMilliseconds(100)) is not null;
-            var header = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(100));
+            var header = session.TryFindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromMilliseconds(100));
             var messagesList = session.TryFindByAutomationId("ChatView.MessagesList", TimeSpan.FromMilliseconds(100));
             var visibleTranscriptTextCount = CountVisibleTranscriptText(messagesList);
             var selected = session.TryGetIsSelected(SessionAutomationId(candidate.ConversationId));
@@ -1372,7 +1372,7 @@ public sealed partial class RealUserConfigSmokeTests
             var localSelected = session.TryGetIsSelected(SessionAutomationId(localCandidate.ConversationId)) == true;
             var overlayStatusVisible = session.TryFindByAutomationId("ChatView.LoadingOverlayStatus", TimeSpan.FromMilliseconds(100)) is not null;
             var blockingMaskVisible = session.TryFindByAutomationId("ChatView.LoadingOverlayMask", TimeSpan.FromMilliseconds(100)) is not null;
-            var headerVisible = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(100)) is not null;
+            var headerVisible = session.TryFindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromMilliseconds(100)) is not null;
 
             timeline.Add(
                 $"{DateTime.UtcNow:HH:mm:ss.fff} remoteSelected={remoteSelected} localSelected={localSelected} status={overlayStatusVisible} mask={blockingMaskVisible} header={headerVisible}");
@@ -1464,7 +1464,7 @@ public sealed partial class RealUserConfigSmokeTests
         session.ActivateElement(localItem);
         Thread.Sleep(700);
         var localSelected = session.TryGetIsSelected(localId) == true;
-        var headerVisible = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(4)) is not null;
+        var headerVisible = session.TryFindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(4)) is not null;
         timeline.Add($"{DateTime.UtcNow:HH:mm:ss.fff} final-local selected={localSelected} header={headerVisible}");
 
         // Interactivity contract:
@@ -1567,14 +1567,14 @@ public sealed partial class RealUserConfigSmokeTests
         session.ActivateElement(remoteAItem);
         Thread.Sleep(900);
         var remoteASelected = session.TryGetIsSelected(remoteAId) == true;
-        var remoteAHeaderVisible = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(4)) is not null;
+        var remoteAHeaderVisible = session.TryFindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(4)) is not null;
         timeline.Add($"{DateTime.UtcNow:HH:mm:ss.fff} final-remoteA selected={remoteASelected} header={remoteAHeaderVisible}");
 
         var localItem = session.FindByAutomationId(localId, TimeSpan.FromSeconds(10));
         session.ActivateElement(localItem);
         Thread.Sleep(900);
         var localSelected = session.TryGetIsSelected(localId) == true;
-        var localHeaderVisible = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(4)) is not null;
+        var localHeaderVisible = session.TryFindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(4)) is not null;
         timeline.Add($"{DateTime.UtcNow:HH:mm:ss.fff} final-local selected={localSelected} header={localHeaderVisible}");
 
         var remainedInteractive =
@@ -1648,10 +1648,10 @@ public sealed partial class RealUserConfigSmokeTests
         var remoteAOverlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(60));
         Assert.True(remoteAOverlayHidden, $"Initial remote hydration did not finish for conversation {remoteA.ConversationId}.");
 
-        var remoteAHeaderVisible = session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(10));
+        var remoteAHeaderVisible = session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10));
         Assert.True(remoteAHeaderVisible, $"Conversation header did not appear after selecting remote conversation {remoteA.ConversationId}.");
 
-        var remoteAHeader = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(2));
+        var remoteAHeader = session.TryFindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(2));
         Assert.True(
             remoteAHeader is not null && remoteAHeader.Name.Contains(remoteAExpectedHeader, StringComparison.Ordinal),
             $"Remote conversation {remoteA.ConversationId} did not project the expected header title before cross-profile switch. Expected='{remoteAExpectedHeader}' Actual='{remoteAHeader?.Name ?? "<missing>"}'{Environment.NewLine}{DumpChatTitleProjection(session)}");
@@ -1663,10 +1663,10 @@ public sealed partial class RealUserConfigSmokeTests
         var remoteBOverlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(60));
         Assert.True(remoteBOverlayHidden, $"Initial remote hydration did not finish for conversation {remoteB.ConversationId}.");
 
-        var remoteBHeaderVisible = session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(10));
+        var remoteBHeaderVisible = session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10));
         Assert.True(remoteBHeaderVisible, $"Conversation header did not appear after selecting remote conversation {remoteB.ConversationId}.");
 
-        var remoteBHeader = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(2));
+        var remoteBHeader = session.TryFindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(2));
         Assert.True(
             remoteBHeader is not null && remoteBHeader.Name.Contains(remoteBExpectedHeader, StringComparison.Ordinal),
             $"Remote conversation {remoteB.ConversationId} did not project the expected header title before hot return. Expected='{remoteBExpectedHeader}' Actual='{remoteBHeader?.Name ?? "<missing>"}'{Environment.NewLine}{DumpChatTitleProjection(session)}");
@@ -1691,7 +1691,7 @@ public sealed partial class RealUserConfigSmokeTests
             var remoteBSelected = session.TryGetIsSelected(remoteBId) == true;
             var blockingMaskVisible = session.TryFindByAutomationId("ChatView.LoadingOverlayMask", TimeSpan.FromMilliseconds(100)) is not null;
             var overlayStatusVisible = session.TryFindByAutomationId("ChatView.LoadingOverlayStatus", TimeSpan.FromMilliseconds(100)) is not null;
-            var header = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(100));
+            var header = session.TryFindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromMilliseconds(100));
             var headerName = header?.Name ?? "<missing>";
 
             if (remoteAHeaderRecoveredAtMs is null
@@ -1720,7 +1720,7 @@ public sealed partial class RealUserConfigSmokeTests
             Thread.Sleep(80);
         }
 
-        var finalHeader = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(200));
+        var finalHeader = session.TryFindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromMilliseconds(200));
         var finalHeaderName = finalHeader?.Name ?? "<missing>";
         if (remoteAHeaderRecoveredAtMs is null
             || sawBlockingMask
@@ -1760,7 +1760,7 @@ public sealed partial class RealUserConfigSmokeTests
         foreach (var automationId in new[]
         {
             "ChatView.ActiveRoot",
-            "ChatView.CurrentSessionNameButton",
+            "ChatView.CurrentSessionTitle",
             "ChatView.LoadingOverlay",
             "ChatView.LoadingOverlayMask",
             "ChatView.LoadingOverlayStatus",
@@ -2166,7 +2166,7 @@ public sealed partial class RealUserConfigSmokeTests
             TimeSpan.FromMilliseconds(120));
 
     private static bool IsChatActivationSurfaceVisible(WindowsGuiAppSession session)
-        => session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(80)) is not null
+        => session.TryFindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromMilliseconds(80)) is not null
             || session.TryFindByAutomationId("ChatView.LoadingOverlay", TimeSpan.FromMilliseconds(80)) is not null
             || session.TryFindByAutomationId("ChatView.LoadingOverlayMask", TimeSpan.FromMilliseconds(80)) is not null
             || session.TryFindByAutomationId("ChatView.LoadingOverlayStatus", TimeSpan.FromMilliseconds(80)) is not null

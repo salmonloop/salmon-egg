@@ -392,6 +392,7 @@ public class MessageParserTests
         Assert.Equal("Debug authentication timeout", sessionInfo.Title);
         Assert.True(sessionInfo.HasTitle);
         Assert.Null(sessionInfo.UpdatedAt);
+        Assert.False(sessionInfo.HasUpdatedAt);
         Assert.NotNull(sessionInfo.Meta);
         Assert.Equal("api-server", ReadMetaValue(sessionInfo.Meta!["projectName"]));
         Assert.Equal("main", ReadMetaValue(sessionInfo.Meta["branch"]));

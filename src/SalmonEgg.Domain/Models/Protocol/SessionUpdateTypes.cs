@@ -413,6 +413,7 @@ namespace SalmonEgg.Domain.Models.Protocol
     public class SessionInfoUpdate : SessionUpdate
     {
         private string? _title;
+        private string? _updatedAt;
 
         /// <summary>
         /// 协议扩展字段（_meta）。
@@ -441,6 +442,17 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// 最近更新时间（UTC iso8601）。
         /// </summary>
         [JsonPropertyName("updatedAt")]
-        public string? UpdatedAt { get; set; }
+        public string? UpdatedAt
+        {
+            get => _updatedAt;
+            set
+            {
+                _updatedAt = value;
+                HasUpdatedAt = true;
+            }
+        }
+
+        [JsonIgnore]
+        public bool HasUpdatedAt { get; set; }
     }
 }

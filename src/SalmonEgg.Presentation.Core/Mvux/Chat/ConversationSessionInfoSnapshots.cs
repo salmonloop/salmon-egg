@@ -21,6 +21,7 @@ internal static class ConversationSessionInfoSnapshots
             Description = sessionInfo.Description,
             Cwd = sessionInfo.Cwd,
             UpdatedAtUtc = sessionInfo.UpdatedAtUtc,
+            HasUpdatedAt = sessionInfo.HasUpdatedAt,
             Meta = sessionInfo.Meta is null
                 ? null
                 : new Dictionary<string, object?>(sessionInfo.Meta, StringComparer.Ordinal)
@@ -50,11 +51,29 @@ internal static class ConversationSessionInfoSnapshots
             HasTitle = incoming.HasTitle || existing?.HasTitle == true,
             Description = ResolveIncomingField(incoming.Description, existing?.Description),
             Cwd = ResolveIncomingField(incoming.Cwd, existing?.Cwd),
-            UpdatedAtUtc = AcpSessionTimestampPolicy.ResolveLatestUpdatedAtUtc(existing?.UpdatedAtUtc, incoming.UpdatedAtUtc),
+            UpdatedAtUtc = ResolveIncomingUpdatedAt(existing?.UpdatedAtUtc, incoming),
+            HasUpdatedAt = incoming.HasUpdatedAt || existing?.HasUpdatedAt == true,
             Meta = mergedMeta.Count == 0 ? null : mergedMeta
         };
     }
 
     private static string? ResolveIncomingField(string? incoming, string? existing)
         => !string.IsNullOrWhiteSpace(incoming) ? incoming : existing;
+
+    private static DateTime? ResolveIncomingUpdatedAt(
+        DateTime? existing,
+        ConversationSessionInfoSnapshot incoming)
+    {
+        if (!incoming.HasUpdatedAt)
+        {
+            return existing;
+        }
+
+        if (incoming.UpdatedAtUtc is not DateTime incomingValue || incomingValue == default)
+        {
+            return null;
+        }
+
+        return AcpSessionTimestampPolicy.ResolveLatestUpdatedAtUtc(existing, incomingValue);
+    }
 }

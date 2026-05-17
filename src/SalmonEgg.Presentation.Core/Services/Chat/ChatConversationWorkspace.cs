@@ -548,7 +548,8 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 Title = title,
                 HasTitle = true,
                 Cwd = cwd,
-                UpdatedAtUtc = updatedAtUtc
+                UpdatedAtUtc = updatedAtUtc,
+                HasUpdatedAt = true
             },
             allowRegisterWhenMissing,
             cancellationToken).ConfigureAwait(false);
@@ -647,6 +648,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                         Description = mergedSessionInfo.Description,
                         Cwd = establishedCwd,
                         UpdatedAtUtc = mergedSessionInfo.UpdatedAtUtc,
+                        HasUpdatedAt = mergedSessionInfo.HasUpdatedAt,
                         Meta = mergedSessionInfo.Meta is null
                             ? null
                             : new Dictionary<string, object?>(mergedSessionInfo.Meta, StringComparer.Ordinal)
@@ -1216,7 +1218,8 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             || left.HasTitle != right.HasTitle
             || !string.Equals(left.Description, right.Description, StringComparison.Ordinal)
             || !string.Equals(left.Cwd, right.Cwd, StringComparison.Ordinal)
-            || left.UpdatedAtUtc != right.UpdatedAtUtc)
+            || left.UpdatedAtUtc != right.UpdatedAtUtc
+            || left.HasUpdatedAt != right.HasUpdatedAt)
         {
             return false;
         }
@@ -1288,6 +1291,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             Description = sessionInfo.Description,
             Cwd = normalizedCwd,
             UpdatedAtUtc = sessionInfo.UpdatedAtUtc,
+            HasUpdatedAt = sessionInfo.HasUpdatedAt,
             Meta = sessionInfo.Meta is null
                 ? null
                 : new Dictionary<string, object?>(sessionInfo.Meta, StringComparer.Ordinal)

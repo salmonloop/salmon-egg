@@ -29,7 +29,7 @@ public sealed class ResponsiveNavigationAncestorTests
         var sessionItem = EnsureSessionItemReadyForInteraction(session);
         session.ActivateElement(sessionItem);
         Assert.True(
-            session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(10)),
+            session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10)),
             "Chat header did not appear after selecting deterministic session gui-session-01.");
 
         DragMainWindowToCompact(widths: [1280, 1160, 1040, 960, 900, 860, 820, 800], height: 900);
@@ -62,7 +62,7 @@ public sealed class ResponsiveNavigationAncestorTests
         var sessionItem = EnsureSessionItemReadyForInteraction(session);
         session.ActivateElement(sessionItem);
         Assert.True(
-            session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(10)),
+            session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10)),
             "Chat header did not appear after selecting deterministic session gui-session-01.");
 
         DragMainWindowToCompact(widths: [1280, 1160, 1040, 960, 900, 860, 820, 800], height: 900);
@@ -93,7 +93,7 @@ public sealed class ResponsiveNavigationAncestorTests
                 {
                     return IsElementVisible(session, SessionAutomationId)
                         && session.TryGetIsSelected(SessionAutomationId) == true
-                        && session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(200)) is not null;
+                        && session.TryFindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromMilliseconds(200)) is not null;
                 },
                 timeout: TimeSpan.FromSeconds(4),
                 pollInterval: TimeSpan.FromMilliseconds(120)),
@@ -112,7 +112,7 @@ public sealed class ResponsiveNavigationAncestorTests
         var sessionItem = EnsureSessionItemReadyForInteraction(session);
         session.ActivateElement(sessionItem);
         Assert.True(
-            session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(10)),
+            session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10)),
             "Chat header did not appear after selecting deterministic session gui-session-01.");
 
         DragMainWindowToCompact(
@@ -170,7 +170,7 @@ public sealed class ResponsiveNavigationAncestorTests
         var sessionItem = EnsureSessionItemReadyForInteraction(session);
         session.ActivateElement(sessionItem);
         Assert.True(
-            session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(10)),
+            session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10)),
             "Chat header did not appear after selecting deterministic session gui-session-01.");
 
         // Simulate manual slow dragging around the Expanded/Compact threshold before settling compact.

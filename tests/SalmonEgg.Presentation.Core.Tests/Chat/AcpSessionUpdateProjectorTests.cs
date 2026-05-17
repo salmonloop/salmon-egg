@@ -464,6 +464,7 @@ public class AcpSessionUpdateProjectorTests
         Assert.Null(delta.SessionInfo.Description);
         Assert.Null(delta.SessionInfo.Cwd);
         Assert.Equal(updatedAt, delta.SessionInfo.UpdatedAt);
+        Assert.True(delta.SessionInfo.HasUpdatedAt);
         Assert.Equal("profile-1", delta.SessionInfo.Meta!["profileId"]);
     }
 
@@ -514,6 +515,7 @@ public class AcpSessionUpdateProjectorTests
         Assert.NotNull(delta.SessionInfo);
         Assert.Equal("Remote session", delta.SessionInfo.Title);
         Assert.True(delta.SessionInfo.HasTitle);
+        Assert.False(delta.SessionInfo.HasUpdatedAt);
         Assert.Null(delta.SessionInfo.Meta);
     }
 

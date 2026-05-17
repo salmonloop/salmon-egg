@@ -32,7 +32,7 @@ public sealed class NavigationSmokeTests
         var launchSnapshot = string.Join(
             "; ",
             $"StartView={session.TryFindByAutomationId("StartView.Title", TimeSpan.FromSeconds(2)) is not null}",
-            $"ChatHeader={session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(2)) is not null}",
+            $"ChatHeader={session.TryFindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(2)) is not null}",
             $"StartSelected={session.TryGetIsSelected("MainNav.Start")}",
             $"Session01Selected={session.TryGetIsSelected("MainNav.Session.gui-session-01")}");
         Assert.True(
@@ -93,7 +93,7 @@ public sealed class NavigationSmokeTests
 
         session.ActivateElement(sessionItem);
 
-        var chatHeader = session.FindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(10));
+        var chatHeader = session.FindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10));
         var selectionItem = sessionItem.Patterns.SelectionItem.Pattern;
 
         Assert.NotNull(chatHeader);
@@ -162,7 +162,7 @@ public sealed class NavigationSmokeTests
 
         var sessionItem = session.FindByAutomationId("MainNav.Session.gui-session-01");
         session.ActivateElement(sessionItem);
-        session.FindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(10));
+        session.FindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10));
 
         var bottomPanelButton = session.FindByAutomationId("TitleBar.BottomPanel");
         Skip.IfNot(bottomPanelButton.Patterns.Toggle.IsSupported, "TitleBar.BottomPanel does not expose TogglePattern in current UIA backend.");
@@ -189,7 +189,7 @@ public sealed class NavigationSmokeTests
         Assert.NotNull(dialogSession);
         session.ActivateElement(dialogSession);
 
-        var chatHeader = session.FindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(10));
+        var chatHeader = session.FindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10));
 
         Assert.NotNull(dialog);
         Assert.False(string.IsNullOrWhiteSpace(chatHeader.Name));
@@ -302,7 +302,7 @@ public sealed class NavigationSmokeTests
 
         var sessionItem = session.FindByAutomationId("MainNav.Session.gui-session-01");
         session.ActivateElement(sessionItem);
-        session.FindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(10));
+        session.FindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10));
 
         session.InvokeButton("TitleBar.ToggleSidebar");
         Thread.Sleep(1500);
@@ -338,7 +338,7 @@ public sealed class NavigationSmokeTests
 
         var sessionItem = session.FindByAutomationId(sessionId, TimeSpan.FromSeconds(10));
         session.ActivateElement(sessionItem);
-        session.FindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(10));
+        session.FindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10));
         timeline.Add($"{Stamp()} selected session");
 
         Assert.True(
@@ -382,7 +382,7 @@ public sealed class NavigationSmokeTests
             session.InvokeButton("TitleBar.ToggleSidebar");
             timeline.Add($"{Stamp()} toggled compact open");
             Assert.True(
-                session.WaitUntilOnscreen("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(8)),
+                session.WaitUntilOnscreen("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(8)),
                 $"Expected active session content to remain visible after compact flyout open. timeline={string.Join(" | ", timeline)}{Environment.NewLine}{DumpSelectionSnapshot(session, sessionId, projectId, startId)}{Environment.NewLine}{DumpProjectSnapshot(session, projectId)}{Environment.NewLine}{appData.ReadBootLogTail()}");
         }
     }
@@ -401,7 +401,7 @@ public sealed class NavigationSmokeTests
         Thread.Sleep(1200);
 
         session.ActivateElement(session.FindByAutomationId(sessionId, TimeSpan.FromSeconds(10)));
-        session.FindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(10));
+        session.FindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10));
 
         ResizeMainWindow(width: 500, height: 900);
         Thread.Sleep(1400);
@@ -429,7 +429,7 @@ public sealed class NavigationSmokeTests
         Thread.Sleep(1200);
 
         session.ActivateElement(session.FindByAutomationId(sessionId, TimeSpan.FromSeconds(10)));
-        session.FindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(10));
+        session.FindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10));
 
         session.InvokeButton("TitleBar.ToggleSidebar");
         Thread.Sleep(600);
@@ -453,7 +453,7 @@ public sealed class NavigationSmokeTests
             session.InvokeButton("TitleBar.ToggleSidebar");
             Thread.Sleep(1200);
             Assert.True(
-                session.WaitUntilOnscreen("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(8)),
+                session.WaitUntilOnscreen("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(8)),
                 $"Expected active session content to remain visible after explicit-open compact path. {DumpSelectionSnapshot(session, sessionId, projectId, startId)}{Environment.NewLine}{DumpProjectSnapshot(session, projectId)}{Environment.NewLine}{appData.ReadBootLogTail()}");
         }
     }
@@ -472,7 +472,7 @@ public sealed class NavigationSmokeTests
         Thread.Sleep(1200);
 
         session.ActivateElement(session.FindByAutomationId(sessionId, TimeSpan.FromSeconds(10)));
-        session.FindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(10));
+        session.FindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10));
 
         ResizeMainWindow(width: 800, height: 900);
         Thread.Sleep(1600);
@@ -711,7 +711,7 @@ public sealed class NavigationSmokeTests
             var startSelected = TryGetVisibleIsSelected(session, startId) == true;
             var projectElement = session.TryFindByAutomationId(projectId, TimeSpan.FromMilliseconds(200));
             var projectHasSelectedDescendant = TryGetHasSelectedDescendant(projectElement);
-            var chatHeaderVisible = session.WaitUntilOnscreen("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(200));
+            var chatHeaderVisible = session.WaitUntilOnscreen("ChatView.CurrentSessionTitle", TimeSpan.FromMilliseconds(200));
 
             if (sessionVisible && sessionSelected)
             {

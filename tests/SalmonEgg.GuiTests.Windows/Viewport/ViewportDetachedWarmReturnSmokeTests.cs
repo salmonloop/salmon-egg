@@ -116,7 +116,7 @@ public sealed class ViewportDetachedWarmReturnSmokeTests
             session.ActivateElement(firstSession);
 
             Assert.True(
-                session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(4)),
+                session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(4)),
                 "Returning to detached remote session A did not restore the chat header quickly.");
             var messagesListAfterReturn = session.FindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(5));
             var returnTimeline = new System.Collections.Generic.List<string>();

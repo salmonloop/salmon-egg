@@ -100,6 +100,7 @@ namespace SalmonEgg.Domain.Models.Conversation
     public sealed class ConversationSessionInfoSnapshot
     {
         private string? _title;
+        private DateTime? _updatedAtUtc;
 
         public string? Title
         {
@@ -117,7 +118,17 @@ namespace SalmonEgg.Domain.Models.Conversation
 
         public string? Cwd { get; set; }
 
-        public DateTime? UpdatedAtUtc { get; set; }
+        public DateTime? UpdatedAtUtc
+        {
+            get => _updatedAtUtc;
+            set
+            {
+                _updatedAtUtc = value;
+                HasUpdatedAt = true;
+            }
+        }
+
+        public bool HasUpdatedAt { get; set; }
 
         public Dictionary<string, object?>? Meta { get; set; }
     }

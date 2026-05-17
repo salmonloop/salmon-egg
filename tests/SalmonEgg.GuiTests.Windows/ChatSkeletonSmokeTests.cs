@@ -69,7 +69,7 @@ public sealed class ChatSkeletonSmokeTests
 
         session.PressEscape();
 
-        var chatHeader = session.FindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(5));
+        var chatHeader = session.FindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(5));
         Assert.Contains("GUI Tool Call Session 01", chatHeader.Name, StringComparison.Ordinal);
     }
 
@@ -88,21 +88,21 @@ public sealed class ChatSkeletonSmokeTests
         session.ActivateElement(sessionItem);
 
         Assert.True(
-            session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(10)),
+            session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10)),
             "Chat header did not appear after selecting long-title session.");
 
         ResizeMainWindow(width: 500, height: 900);
 
-        var titleButton = session.FindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(5));
+        var titleText = session.FindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(5));
         var agentDisplay = session.FindByAutomationId("ChatView.CurrentAgentDisplay", TimeSpan.FromSeconds(5));
 
-        Assert.Equal(LongSessionHeaderTitle, titleButton.Name);
+        Assert.Equal(LongSessionHeaderTitle, titleText.Name);
 
         var stacked = false;
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
         while (DateTime.UtcNow < deadline)
         {
-            var titleBounds = titleButton.BoundingRectangle;
+            var titleBounds = titleText.BoundingRectangle;
             var agentBounds = agentDisplay.BoundingRectangle;
             stacked = agentBounds.Top >= titleBounds.Bottom - 1;
             if (stacked)
@@ -111,13 +111,13 @@ public sealed class ChatSkeletonSmokeTests
             }
 
             Thread.Sleep(120);
-            titleButton = session.FindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(250));
+            titleText = session.FindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromMilliseconds(250));
             agentDisplay = session.FindByAutomationId("ChatView.CurrentAgentDisplay", TimeSpan.FromMilliseconds(250));
         }
 
         Assert.True(
             stacked,
-            $"Expected agent display to wrap below the long session title in narrow layout. title={titleButton.BoundingRectangle} agent={agentDisplay.BoundingRectangle}");
+            $"Expected agent display to wrap below the long session title in narrow layout. title={titleText.BoundingRectangle} agent={agentDisplay.BoundingRectangle}");
     }
 
     [SkippableFact]
@@ -206,7 +206,7 @@ public sealed class ChatSkeletonSmokeTests
         session.DoubleClickElement(codeLine!);
         Thread.Sleep(400);
 
-        var header = session.FindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(8));
+        var header = session.FindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(8));
         Assert.Contains("GUI Markdown Session 01", header.Name, StringComparison.Ordinal);
 
         var stillVisible = session.TryFindVisibleText("var done = true;", messagesList, TimeSpan.FromSeconds(4));
@@ -462,7 +462,7 @@ public sealed class ChatSkeletonSmokeTests
         }
 
         // Verify content is now visible
-        var chatHeader = session.FindByAutomationId("ChatView.CurrentSessionNameButton");
+        var chatHeader = session.FindByAutomationId("ChatView.CurrentSessionTitle");
         var messagesList = session.FindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(10));
 
         Assert.NotNull(chatHeader);
@@ -1788,7 +1788,7 @@ public sealed class ChatSkeletonSmokeTests
             remoteItem = session.FindByAutomationId("MainNav.Session.gui-remote-conversation-01", TimeSpan.FromSeconds(10));
             session.ActivateElement(remoteItem);
 
-            var headerVisible = session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(5));
+            var headerVisible = session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(5));
             Assert.True(headerVisible, "Returning from discover to a hydrated remote chat did not restore the chat header quickly.");
 
             var returnedOverlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(5));
@@ -1853,10 +1853,10 @@ public sealed class ChatSkeletonSmokeTests
                 "MainNav.Session.gui-remote-conversation-01",
                 "remote-a-b-a-hot-return-back-a");
 
-            var hotHeaderVisible = session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(4));
+            var hotHeaderVisible = session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(4));
             Assert.True(hotHeaderVisible, "Returning to remote session A did not restore the chat header quickly.");
 
-            var hotHeader = session.FindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(1));
+            var hotHeader = session.FindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(1));
             Assert.Contains("GUI Remote Session 01", hotHeader.Name, StringComparison.Ordinal);
 
             var hotOverlayTimeline = new List<string>();
@@ -1947,10 +1947,10 @@ public sealed class ChatSkeletonSmokeTests
                 "MainNav.Session.gui-remote-conversation-01",
                 "cross-profile-remote-a-b-a-hot-return-back-a");
 
-            var hotHeaderVisible = session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(4));
+            var hotHeaderVisible = session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(4));
             Assert.True(hotHeaderVisible, "Returning to cross-profile remote session A did not restore the chat header quickly.");
 
-            var hotHeader = session.FindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(1));
+            var hotHeader = session.FindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(1));
             Assert.Contains("GUI Remote Session 01", hotHeader.Name, StringComparison.Ordinal);
 
             var hotOverlayTimeline = new List<string>();
@@ -2026,7 +2026,7 @@ public sealed class ChatSkeletonSmokeTests
                 "MainNav.Session.gui-remote-conversation-01",
                 "background-attention-back-a");
             Assert.True(
-                session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(4)),
+                session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(4)),
                 "Returning to remote session A did not restore the chat header quickly.");
 
             appData.TriggerBackgroundRemoteAgentUpdate("gui-remote-session-02", "background unread");
@@ -2046,7 +2046,7 @@ public sealed class ChatSkeletonSmokeTests
                 "background-attention-open-b-after-unread");
 
             Assert.True(
-                session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(4)),
+                session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(4)),
                 "Activating remote session B after the background update did not restore the chat header quickly.");
             Assert.True(
                 WaitForAutomationNameNotContains(
@@ -2099,7 +2099,7 @@ public sealed class ChatSkeletonSmokeTests
                 "MainNav.Session.gui-remote-conversation-01",
                 "background-two-way-back-a");
             Assert.True(
-                session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(4)),
+                session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(4)),
                 "Returning to remote session A did not restore the chat header quickly.");
             Assert.True(
                 session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(30)),
@@ -2130,7 +2130,7 @@ public sealed class ChatSkeletonSmokeTests
                 "MainNav.Session.gui-remote-conversation-02",
                 "background-two-way-open-b-after-first-round");
             Assert.True(
-                session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(4)),
+                session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(4)),
                 "Activating remote session B after background updates did not restore the chat header quickly.");
             Assert.True(
                 session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(30)),
@@ -2168,7 +2168,7 @@ public sealed class ChatSkeletonSmokeTests
                 "MainNav.Session.gui-remote-conversation-01",
                 "background-two-way-open-a-after-second-round");
             Assert.True(
-                session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(4)),
+                session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(4)),
                 "Activating remote session A after the second background updates did not restore the chat header quickly.");
             Assert.True(
                 WaitForAutomationNameNotContains(
@@ -2404,7 +2404,7 @@ public sealed class ChatSkeletonSmokeTests
         AutomationElement? header = null;
         while (DateTime.UtcNow < deadline)
         {
-            header = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(120));
+            header = session.TryFindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromMilliseconds(120));
             if (header is not null)
             {
                 break;
@@ -2508,7 +2508,7 @@ public sealed class ChatSkeletonSmokeTests
             AutomationElement? localHeader = null;
             while (DateTime.UtcNow < localDeadline)
             {
-                var header = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(120));
+                var header = session.TryFindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromMilliseconds(120));
                 if (header is not null
                     && header.Name.Contains("GUI Local Session 01", StringComparison.Ordinal))
                 {
@@ -2544,7 +2544,7 @@ public sealed class ChatSkeletonSmokeTests
             var rollbackDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(4);
             while (DateTime.UtcNow < rollbackDeadline)
             {
-                var header = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(120));
+                var header = session.TryFindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromMilliseconds(120));
                 if (header is not null
                     && header.Name.Contains("GUI Remote Session 01", StringComparison.Ordinal))
                 {
@@ -2968,7 +2968,7 @@ public sealed class ChatSkeletonSmokeTests
                 return loadingOverlay;
             }
 
-            var headerVisible = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(100)) is not null;
+            var headerVisible = session.TryFindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromMilliseconds(100)) is not null;
             var messagesVisible = session.TryFindByAutomationId("ChatView.MessagesList", TimeSpan.FromMilliseconds(100)) is not null;
             var interestingIds = session.MainWindow
                 .FindAllDescendants()
@@ -3009,7 +3009,7 @@ public sealed class ChatSkeletonSmokeTests
         while (DateTime.UtcNow < deadline)
         {
             var overlayVisible = session.TryFindByAutomationId("ChatView.LoadingOverlay", TimeSpan.FromMilliseconds(50)) is not null;
-            var header = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(50));
+            var header = session.TryFindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromMilliseconds(50));
             var messagesVisible = session.TryFindByAutomationId("ChatView.MessagesList", TimeSpan.FromMilliseconds(50)) is not null;
             var headerName = header?.Name ?? "<missing>";
 
@@ -3098,7 +3098,7 @@ public sealed class ChatSkeletonSmokeTests
 
     private static void AssertMarkdownSessionStableAfterReturn(WindowsGuiAppSession session)
     {
-        var header = session.FindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(8));
+        var header = session.FindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(8));
         Assert.Contains("GUI Markdown Session 01", header.Name, StringComparison.Ordinal);
 
         var messagesList = session.FindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(10));
@@ -3153,8 +3153,8 @@ public sealed class ChatSkeletonSmokeTests
         while (DateTime.UtcNow < deadline)
         {
             var overlayVisible = session.TryFindByAutomationId("ChatView.LoadingOverlay", TimeSpan.FromMilliseconds(50)) is not null;
-            var header = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(50))
-                ?? session.TryFindByAutomationIdAnywhere("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(50));
+            var header = session.TryFindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromMilliseconds(50))
+                ?? session.TryFindByAutomationIdAnywhere("ChatView.CurrentSessionTitle", TimeSpan.FromMilliseconds(50));
             var headerName = TryGetElementDisplayText(header);
             var remoteHeaderVisible = header is not null && headerName.Contains(expectedRemoteHeaderText, StringComparison.Ordinal);
             var messagesList = session.TryFindByAutomationId("ChatView.MessagesList", TimeSpan.FromMilliseconds(50))
@@ -3381,8 +3381,8 @@ public sealed class ChatSkeletonSmokeTests
 
         while (DateTime.UtcNow < deadline)
         {
-            var header = session.TryFindByAutomationId("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(100))
-                ?? session.TryFindByAutomationIdAnywhere("ChatView.CurrentSessionNameButton", TimeSpan.FromMilliseconds(100));
+            var header = session.TryFindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromMilliseconds(100))
+                ?? session.TryFindByAutomationIdAnywhere("ChatView.CurrentSessionTitle", TimeSpan.FromMilliseconds(100));
             var headerName = TryGetElementDisplayText(header);
             var overlayVisible =
                 session.TryFindByAutomationId("ChatView.LoadingOverlay", TimeSpan.FromMilliseconds(100)) is not null

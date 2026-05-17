@@ -56,7 +56,7 @@ public sealed class ChatViewXamlTests
 
         Assert.Contains("e.PropertyName == nameof(ChatViewModel.PresentedSessionHeaderDisplayName)", codeBehind, StringComparison.Ordinal);
         Assert.Contains("Bindings.Update();", codeBehind, StringComparison.Ordinal);
-        Assert.DoesNotContain("AutomationProperties.SetName(CurrentSessionNameButton", codeBehind, StringComparison.Ordinal);
+        Assert.DoesNotContain("AutomationProperties.SetName(CurrentSessionTitle", codeBehind, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -76,14 +76,15 @@ public sealed class ChatViewXamlTests
     }
 
     [Fact]
-    public void ChatViewXaml_SessionHeader_UsesNativeButtonAndSharedWidthContractForReadOnlyAndEditStates()
+    public void ChatViewXaml_SessionHeader_UsesReadOnlyNativeTextProjection()
     {
         var xaml = LoadChatViewXaml();
 
         Assert.DoesNotContain("Style x:Key=\"InlineHeaderButtonStyle\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Style=\"{StaticResource InlineHeaderButtonStyle}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("AutomationProperties.AutomationId=\"ChatView.CurrentSessionNameButton\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("HorizontalAlignment=\"Stretch\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("AutomationProperties.AutomationId=\"ChatView.CurrentSessionNameButton\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<Button AutomationProperties.AutomationId=\"ChatView.CurrentSessionTitle\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("<TextBlock AutomationProperties.AutomationId=\"ChatView.CurrentSessionTitle\"", xaml, StringComparison.Ordinal);
         Assert.Contains("MinWidth=\"0\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("MaxWidth=\"560\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("MinWidth=\"120\"", xaml, StringComparison.Ordinal);

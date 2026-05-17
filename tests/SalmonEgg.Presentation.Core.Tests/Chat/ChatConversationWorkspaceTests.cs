@@ -1638,6 +1638,81 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
+    public async Task ApplySessionInfoSnapshotAsync_OmittedUpdatedAt_PreservesEstablishedRemoteTimestamp()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            SessionInfo: new ConversationSessionInfoSnapshot
+            {
+                Title = "Original title",
+                UpdatedAtUtc = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)
+            }));
+
+        await workspace.ApplySessionInfoSnapshotAsync(
+            "session-1",
+            new ConversationSessionInfoSnapshot
+            {
+                Title = "Metadata-only title"
+            });
+
+        var sessionInfo = workspace.GetConversationSnapshot("session-1")!.SessionInfo;
+        Assert.NotNull(sessionInfo);
+        Assert.Equal("Metadata-only title", sessionInfo!.Title);
+        Assert.Equal(new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc), sessionInfo.UpdatedAtUtc);
+        Assert.True(sessionInfo.HasUpdatedAt);
+    }
+
+    [Fact]
+    public async Task ApplySessionInfoSnapshotAsync_ExplicitNullUpdatedAt_ClearsEstablishedRemoteTimestamp()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            PlanTitle: null,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            SessionInfo: new ConversationSessionInfoSnapshot
+            {
+                Title = "Original title",
+                UpdatedAtUtc = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)
+            }));
+
+        await workspace.ApplySessionInfoSnapshotAsync(
+            "session-1",
+            new ConversationSessionInfoSnapshot
+            {
+                Title = "Cleared timestamp title",
+                UpdatedAtUtc = null
+            });
+
+        var sessionInfo = workspace.GetConversationSnapshot("session-1")!.SessionInfo;
+        Assert.NotNull(sessionInfo);
+        Assert.Equal("Cleared timestamp title", sessionInfo!.Title);
+        Assert.Null(sessionInfo.UpdatedAtUtc);
+        Assert.True(sessionInfo.HasUpdatedAt);
+    }
+
+    [Fact]
     public async Task ApplySessionInfoSnapshotAsync_RemoteMetadataRefreshDoesNotOverrideEstablishedSessionCwd()
     {
         var syncContext = new ImmediateSynchronizationContext();

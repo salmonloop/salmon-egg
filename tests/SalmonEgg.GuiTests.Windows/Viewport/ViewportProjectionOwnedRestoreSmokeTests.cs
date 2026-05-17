@@ -109,7 +109,7 @@ public sealed class ViewportProjectionOwnedRestoreSmokeTests
             session.ActivateElement(firstSession);
 
             Assert.True(
-                session.WaitUntilVisible("ChatView.CurrentSessionNameButton", TimeSpan.FromSeconds(4)),
+                session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(4)),
                 "Returning to detached remote session A did not restore the chat header quickly.");
             Assert.True(
                 WaitForViewportState(session, "not_bottom", TimeSpan.FromSeconds(5)),

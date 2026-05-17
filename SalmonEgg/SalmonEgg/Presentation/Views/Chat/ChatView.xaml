@@ -137,22 +137,15 @@
                             <Grid Grid.Column="1"
                                   MinWidth="0"
                                   VerticalAlignment="Center">
-                                <Button AutomationProperties.AutomationId="ChatView.CurrentSessionNameButton"
-                                        AutomationProperties.Name="{x:Bind ViewModel.PresentedSessionHeaderDisplayName, Mode=OneWay}"
-                                        ToolTipService.ToolTip="{x:Bind ViewModel.PresentedSessionHeaderDisplayName, Mode=OneWay}"
-                                        Background="Transparent"
-                                        BorderBrush="Transparent"
-                                        BorderThickness="0"
-                                        HorizontalAlignment="Stretch"
-                                        HorizontalContentAlignment="Stretch"
-                                        MinWidth="0"
-                                        Padding="6,2">
-                                    <TextBlock Text="{x:Bind ViewModel.PresentedSessionHeaderDisplayName, Mode=OneWay}"
-                                               FontWeight="SemiBold"
-                                               FontSize="14"
-                                               TextTrimming="CharacterEllipsis"
-                                               MaxLines="1" />
-                                </Button>
+                                <TextBlock AutomationProperties.AutomationId="ChatView.CurrentSessionTitle"
+                                           AutomationProperties.Name="{x:Bind ViewModel.PresentedSessionHeaderDisplayName, Mode=OneWay}"
+                                           ToolTipService.ToolTip="{x:Bind ViewModel.PresentedSessionHeaderDisplayName, Mode=OneWay}"
+                                           Text="{x:Bind ViewModel.PresentedSessionHeaderDisplayName, Mode=OneWay}"
+                                           FontWeight="SemiBold"
+                                           FontSize="14"
+                                           TextTrimming="CharacterEllipsis"
+                                           MaxLines="1"
+                                           MinWidth="0" />
                             </Grid>
                         </Grid>
 

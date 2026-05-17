@@ -145,6 +145,7 @@ public sealed class AcpSessionUpdateProjector : IAcpSessionUpdateProjector
             // session/new or session/load and must remain immutable for the session.
             Cwd: null,
             UpdatedAt: update.UpdatedAt,
+            HasUpdatedAt: update.HasUpdatedAt,
             Meta: update.Meta is null
                 ? null
                 : new ReadOnlyDictionary<string, object?>(
@@ -214,6 +215,7 @@ public sealed record AcpSessionInfoSnapshot(
     string? Description,
     string? Cwd,
     string? UpdatedAt,
+    bool HasUpdatedAt,
     IReadOnlyDictionary<string, object?>? Meta);
 
 public sealed record AcpUsageSnapshot(
