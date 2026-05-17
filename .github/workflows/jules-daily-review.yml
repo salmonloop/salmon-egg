@@ -1,0 +1,95 @@
+name: Daily Lifecycle Review
+
+on:
+  schedule:
+    - cron: "0 8 * * *" # Runs daily at 08:00 UTC
+  workflow_dispatch:
+
+jobs:
+  jules-review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Jules Daily Review
+        uses: agency-hq/jules-action@v1
+        with:
+          prompt: |
+            You are reviewing the salmon-acp repository from the latest main branch state. Your job is to perform one deep, disciplined lifecycle audit focused on chat/session/navigation/loading behavior and, only if you verify a real problem and a safe fix, implement exactly one focused change and open a PR automatically.
+
+            Start by reading and obeying these repository rules before making any plan:
+            - AGENTS.md
+            - docs/coding-standards.md
+            - docs/hard-constraints-session-navigation-and-search.md
+            - BUILD_GUIDE.md
+
+            Prioritize these lifecycle surfaces:
+            - chat page activation and hydration lifecycle
+            - loading overlay lifecycle, including skeleton and status pill
+            - session-switch preview, session-switch overlay, connection lifecycle overlay, and history hydration overlay interaction
+            - auto-scroll, layout settle, and warm-resume behavior after hydration
+            - latest-intent cancellation and supersede behavior for rapid session switching
+            - navigation -> shell -> chat lifecycle alignment
+
+            Use these files and nearby tests as your starting map, then expand only as needed:
+            - src/SalmonEgg.Presentation.Core/ViewModels/Chat/ChatViewModel.cs
+            - src/SalmonEgg.Presentation.Core/Services/NavigationCoordinator.cs
+            - SalmonEgg/SalmonEgg/Presentation/Views/Chat/ChatView.xaml
+            - SalmonEgg/SalmonEgg/Presentation/Views/Chat/ChatView.xaml.cs
+            - SalmonEgg/SalmonEgg/Presentation/Views/MiniWindow/MiniChatView.xaml.cs
+            - tests/SalmonEgg.Presentation.Core.Tests/Chat/ChatViewModelTests.cs
+            - tests/SalmonEgg.Presentation.Core.Tests/Navigation/NavigationCoordinatorTests.cs
+            - docs/audit/
+
+            Non-negotiable rules:
+            - Root-cause investigation first. Do not make speculative fixes.
+            - Do not patch around symptoms by overriding native control behavior.
+            - Do not move business rules into the View or code-behind.
+            - Preserve Uno/WinUI cross-platform compatibility. If a WinUI-only API is truly required, it must be protected and still compile on non-Windows targets.
+            - Prefer the repository's existing SSOT and latest-intent patterns. Do not introduce parallel private state machines.
+            - Do not make broad refactors, cleanup-only churn, rename sweeps, or formatting-only edits.
+            - If you do not find a verified, high-confidence issue, make no code changes and do not manufacture a PR.
+
+            Execution policy:
+            - Find at most one bug or regression risk per run.
+            - The fix must be small, local, and test-backed.
+            - Add or update the smallest targeted regression test that proves the issue.
+            - Favor Presentation.Core tests unless the bug truly requires a different layer.
+            - Only touch GUI tests if the issue cannot be covered credibly in Core tests.
+
+            Required review checklist:
+            1. Verify state ownership and lifecycle monotonicity across preview -> selecting -> connection ready -> hydrating -> projection -> settle -> dismiss.
+            2. Check that skeleton, blocking mask, and bottom status pill never regress to an earlier stage after a later stage has already been reached.
+            3. Check that stale transcript content is never left interactable during a blocking transition.
+            4. Check that layout-loading state is not being misused as a fake visible overlay in places that should depend on actual presenter visibility.
+            5. Check for view-side hacks that compensate for missing state ownership in the ViewModel.
+            6. Check rapid-switch and supersede behavior for latest-intent correctness.
+
+            When you find a bug:
+            - Write the failing test first.
+            - Confirm the test fails for the expected reason.
+            - Implement the minimal fix.
+            - Re-run the targeted test and then broader verification.
+
+            Required verification before opening a PR:
+            - dotnet build SalmonEgg.sln --configuration Debug
+            - dotnet test tests/SalmonEgg.Presentation.Core.Tests/SalmonEgg.Presentation.Core.Tests.csproj --configuration Debug --no-restore
+            - If your change affects shared lifecycle contracts outside Presentation.Core, also run:
+              dotnet test SalmonEgg.sln --configuration Debug --no-build
+
+            PR requirements:
+            - Open a PR only if you changed code or tests.
+            - Keep the PR tightly scoped to the single verified lifecycle issue.
+            - In the PR summary, include:
+              - the observed problem
+              - the root cause
+              - why the fix is safe architecturally
+              - exact verification commands you ran
+              - any remaining unverified GUI-only risks
+
+            If no verified issue is found:
+            - Leave the repository unchanged.
+            - End the run with a short summary explaining what areas you audited and why no safe change was made.

@@ -9051,6 +9051,32 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task SelectAndHydrateConversationAsync_WhenHydrating_ClearsLayoutLoadingState()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var activationCoordinator = new Mock<IConversationActivationCoordinator>();
+        activationCoordinator
+            .Setup(coordinator => coordinator.ActivateSessionAsync("conv-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConversationActivationResult(true, "conv-1", null));
+
+        await using var fixture = CreateViewModel(syncContext, conversationActivationCoordinator: activationCoordinator.Object);
+        await fixture.ViewModel.RestoreAsync();
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            IsHydrating = true
+        });
+
+        await fixture.ViewModel.SwitchConversationAsync("conv-1");
+
+        Assert.Equal("conv-1", fixture.ViewModel.CurrentSessionId);
+        Assert.True(fixture.ViewModel.IsHydrating);
+        Assert.False(fixture.ViewModel.IsLayoutLoading);
+        // IsOverlayVisible is true because IsHydrating is true
+        Assert.True(fixture.ViewModel.IsOverlayVisible);
+    }
+
+    [Fact]
     public async Task SwitchConversationAsync_RemoteBoundConversation_WhenProfileConnectIsPending_KeepsOverlayVisible()
     {
         var syncContext = new QueueingSynchronizationContext();
