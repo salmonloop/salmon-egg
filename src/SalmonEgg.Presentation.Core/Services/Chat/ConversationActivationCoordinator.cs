@@ -86,8 +86,7 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
                         sessionId,
                         snapshot?.Transcript.ToImmutableList() ?? ImmutableList<ConversationMessageSnapshot>.Empty,
                         snapshot?.Plan.ToImmutableList() ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-                        snapshot?.ShowPlanPanel ?? false,
-                        snapshot?.PlanTitle)).ConfigureAwait(false);
+                        snapshot?.ShowPlanPanel ?? false)).ConfigureAwait(false);
                 }
 
                 if (shouldHydrateSessionState)

@@ -42,6 +42,73 @@ public class MessageParserTests
     }
 
     [Fact]
+    public void Options_ShouldReject_PlanUpdateWithoutEntries()
+    {
+        var json = """
+        {
+          "sessionId": "sess_test",
+          "update": {
+            "sessionUpdate": "plan"
+          }
+        }
+        """;
+
+        var parser = new MessageParser();
+
+        Assert.Throws<JsonException>(() =>
+            JsonSerializer.Deserialize<SessionUpdateParams>(json, parser.Options));
+    }
+
+    [Fact]
+    public void Options_ShouldReject_PlanUpdateWithUnsupportedStatus()
+    {
+        var json = """
+        {
+          "sessionId": "sess_test",
+          "update": {
+            "sessionUpdate": "plan",
+            "entries": [
+              { "content": "Work Items", "status": "failed", "priority": "medium" }
+            ]
+          }
+        }
+        """;
+
+        var parser = new MessageParser();
+
+        Assert.Throws<JsonException>(() =>
+            JsonSerializer.Deserialize<SessionUpdateParams>(json, parser.Options));
+    }
+
+    [Fact]
+    public void Options_ShouldSerialize_PlanUpdateWithOnlyOfficialFields()
+    {
+        var parser = new MessageParser();
+        var updateParams = new SessionUpdateParams(
+            "sess_test",
+            new PlanUpdate(new List<PlanEntry>
+            {
+                new()
+                {
+                    Content = "Work Items",
+                    Status = PlanEntryStatus.InProgress,
+                    Priority = PlanEntryPriority.Medium
+                }
+            }));
+
+        var json = JsonSerializer.Serialize(updateParams, parser.Options);
+
+        Assert.Contains("\"sessionUpdate\":\"plan\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"entries\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"content\":\"Work Items\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"status\":\"in_progress\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"priority\":\"medium\"", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"title\"", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"id\"", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"completedAt\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SerializeMessage_ShouldOmitNullOptionalFields()
     {
         var parser = new MessageParser();

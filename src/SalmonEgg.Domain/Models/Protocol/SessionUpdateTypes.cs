@@ -258,16 +258,11 @@ namespace SalmonEgg.Domain.Models.Protocol
     public class PlanUpdate : SessionUpdate
     {
         /// <summary>
-       /// 计划条目列表（用于 plan 类型的更新）。
-       /// </summary>
-       [JsonPropertyName("entries")]
-       public List<SalmonEgg.Domain.Models.Plan.PlanEntry>? Entries { get; set; }
-
-        /// <summary>
-        /// 标题（可选）。
+        /// 计划条目列表（用于 plan 类型的更新）。
         /// </summary>
-        [JsonPropertyName("title")]
-        public string? Title { get; set; }
+        [JsonRequired]
+        [JsonPropertyName("entries")]
+        public List<PlanEntry> Entries { get; set; } = new();
 
         /// <summary>
         /// 创建新的 PlanUpdate 实例。
@@ -280,11 +275,9 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// 创建新的 PlanUpdate 实例。
         /// </summary>
         /// <param name="entries">计划条目列表</param>
-        /// <param name="title">标题</param>
-        public PlanUpdate(List<PlanEntry>? entries = null, string? title = null)
+        public PlanUpdate(List<PlanEntry> entries)
         {
-            Entries = entries;
-            Title = title;
+            Entries = entries ?? throw new JsonException("Plan update entries must not be null.");
         }
     }
 

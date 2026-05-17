@@ -30,7 +30,6 @@ public sealed class ConversationProjectionReadinessPolicyTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc));
 
@@ -72,7 +71,6 @@ public sealed class ConversationProjectionReadinessPolicyTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc));
 
@@ -129,8 +127,7 @@ public sealed class ConversationProjectionReadinessPolicyTests
                 new ConversationContentSlice(
                     ImmutableList<ConversationMessageSnapshot>.Empty,
                     ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-                    false,
-                    null)),
+                    false)),
             ConversationSessionStates = ImmutableDictionary<string, ConversationSessionStateSlice>.Empty.Add(
                 "conv-1",
                 new ConversationSessionStateSlice(

@@ -496,8 +496,7 @@ public class ChatReducerTests
             SelectedModeId: "agent",
             ConfigOptions: ImmutableList.Create(new ConversationConfigOptionSnapshot { Id = "mode", Name = "Mode", SelectedValue = "agent" }),
             ShowConfigOptionsPanel: true,
-            ShowPlanPanel: true,
-            PlanTitle: "plan");
+            ShowPlanPanel: true);
 
         var newState = ChatReducer.Reduce(initialState, new SelectConversationAction("conv-2"));
 
@@ -509,7 +508,6 @@ public class ChatReducerTests
         Assert.Null(newState.ConfigOptions);
         Assert.False(newState.ShowConfigOptionsPanel);
         Assert.False(newState.ShowPlanPanel);
-        Assert.Null(newState.PlanTitle);
     }
 
     [Fact]
@@ -848,8 +846,7 @@ public class ChatReducerTests
             "conv-2",
             ImmutableList.Create(new ConversationMessageSnapshot { Id = "m-1", TextContent = "stale", ContentType = "text" }),
             ImmutableList.Create(new ConversationPlanEntrySnapshot { Content = "step-1" }),
-            true,
-            "plan");
+            true);
 
         var newState = ChatReducer.Reduce(initialState, action);
 
@@ -857,7 +854,6 @@ public class ChatReducerTests
         Assert.True(newState.Transcript is null or { Count: 0 });
         Assert.True(newState.PlanEntries is null or { Count: 0 });
         Assert.False(newState.ShowPlanPanel);
-        Assert.Null(newState.PlanTitle);
         Assert.Equal(8, newState.Generation);
         Assert.NotNull(newState.ResolveContentSlice("conv-2"));
     }

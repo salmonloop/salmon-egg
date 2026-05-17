@@ -14,6 +14,7 @@ namespace SalmonEgg.Domain.Models.Plan
         /// <summary>
         /// 计划条目列表。
         /// </summary>
+        [JsonRequired]
         [JsonPropertyName("entries")]
         public List<PlanEntry> Entries { get; set; } = new List<PlanEntry>();
 
@@ -30,7 +31,7 @@ namespace SalmonEgg.Domain.Models.Plan
         /// <param name="entries">计划条目列表</param>
         public Plan(List<PlanEntry> entries)
         {
-            Entries = entries;
+            Entries = entries ?? throw new JsonException("Plan entries must not be null.");
         }
 
         /// <summary>
@@ -83,32 +84,23 @@ namespace SalmonEgg.Domain.Models.Plan
         /// <summary>
         /// 条目的内容描述。
         /// </summary>
+        [JsonRequired]
         [JsonPropertyName("content")]
         public string Content { get; set; } = string.Empty;
 
         /// <summary>
         /// 条目的当前状态。
         /// </summary>
+        [JsonRequired]
         [JsonPropertyName("status")]
         public PlanEntryStatus Status { get; set; } = PlanEntryStatus.Pending;
 
         /// <summary>
         /// 条目的优先级。
         /// </summary>
+        [JsonRequired]
         [JsonPropertyName("priority")]
         public PlanEntryPriority Priority { get; set; } = PlanEntryPriority.Medium;
-
-        /// <summary>
-        /// 条目的唯一标识符（可选）。
-        /// </summary>
-        [JsonPropertyName("id")]
-        public string? Id { get; set; }
-
-        /// <summary>
-        /// 条目的完成时间（可选）。
-        /// </summary>
-        [JsonPropertyName("completedAt")]
-        public DateTime? CompletedAt { get; set; }
 
         /// <summary>
         /// 创建新的计划条目实例。
@@ -144,15 +136,6 @@ namespace SalmonEgg.Domain.Models.Plan
         public void Complete()
         {
             Status = PlanEntryStatus.Completed;
-            CompletedAt = DateTime.UtcNow;
-        }
-
-        /// <summary>
-        /// 标记条目为失败。
-        /// </summary>
-        public void Fail()
-        {
-            Status = PlanEntryStatus.Failed;
         }
     }
 
@@ -176,12 +159,7 @@ namespace SalmonEgg.Domain.Models.Plan
         /// <summary>
         /// 条目已成功完成。
         /// </summary>
-        Completed,
-
-        /// <summary>
-        /// 条目执行失败。
-        /// </summary>
-        Failed
+        Completed
     }
 
     /// <summary>
@@ -221,7 +199,6 @@ namespace SalmonEgg.Domain.Models.Plan
                 "pending" => PlanEntryStatus.Pending,
                 "in_progress" => PlanEntryStatus.InProgress,
                 "completed" => PlanEntryStatus.Completed,
-                "failed" => PlanEntryStatus.Failed,
                 var value => throw new JsonException($"Unsupported plan entry status '{value}'.")
             };
         }
@@ -233,7 +210,6 @@ namespace SalmonEgg.Domain.Models.Plan
                 PlanEntryStatus.Pending => "pending",
                 PlanEntryStatus.InProgress => "in_progress",
                 PlanEntryStatus.Completed => "completed",
-                PlanEntryStatus.Failed => "failed",
                 _ => throw new JsonException($"Unsupported plan entry status '{value}'.")
             });
         }

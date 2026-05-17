@@ -42,7 +42,6 @@ public sealed class WorkspaceWriterTests
             ],
             Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: originalUpdatedAt));
 
@@ -53,8 +52,7 @@ public sealed class WorkspaceWriterTests
                 new ConversationContentSlice(
                     ImmutableList<ConversationMessageSnapshot>.Empty.Add(message),
                     ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-                    false,
-                    null)),
+                    false)),
             Generation: 1), scheduleSave: false);
         await writer.FlushAsync();
 
@@ -80,8 +78,7 @@ public sealed class WorkspaceWriterTests
                 new ConversationContentSlice(
                     ImmutableList.Create(CreateTextMessage("bg-1", "background")),
                     ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-                    false,
-                    null)),
+                    false)),
             ConversationSessionStates: ImmutableDictionary<string, ConversationSessionStateSlice>.Empty.Add(
                 "session-bg",
                 new ConversationSessionStateSlice(
@@ -122,8 +119,7 @@ public sealed class WorkspaceWriterTests
                 new ConversationContentSlice(
                     ImmutableList.Create(message),
                     ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-                    false,
-                    null)),
+                    false)),
             Generation: 1), scheduleSave: false);
         await writer.FlushAsync();
 
@@ -213,7 +209,6 @@ public sealed class WorkspaceWriterTests
             ],
             Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
             AvailableModes:
@@ -299,7 +294,6 @@ public sealed class WorkspaceWriterTests
             ],
             Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
             AvailableModes:
@@ -353,7 +347,6 @@ public sealed class WorkspaceWriterTests
             ],
             Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
             AvailableModes:
@@ -428,7 +421,6 @@ public sealed class WorkspaceWriterTests
             ],
             Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
             AvailableModes:
@@ -496,7 +488,6 @@ public sealed class WorkspaceWriterTests
                 }
             ],
             ShowPlanPanel: true,
-            PlanTitle: "Persisted plan title",
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
 
@@ -532,7 +523,6 @@ public sealed class WorkspaceWriterTests
         Assert.Single(snapshot.Plan);
         Assert.Equal("persisted plan", snapshot.Plan[0].Content);
         Assert.True(snapshot.ShowPlanPanel);
-        Assert.Equal("Persisted plan title", snapshot.PlanTitle);
         var command = Assert.Single(snapshot.AvailableCommands ?? Array.Empty<ConversationAvailableCommandSnapshot>());
         Assert.Equal("plan", command.Name);
         Assert.NotNull(snapshot.SessionInfo);
@@ -560,7 +550,6 @@ public sealed class WorkspaceWriterTests
             ],
             Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
             SessionInfo: new ConversationSessionInfoSnapshot
@@ -576,8 +565,7 @@ public sealed class WorkspaceWriterTests
                 new ConversationContentSlice(
                     ImmutableList.Create(CreateTextMessage("m-1", "fresh transcript")),
                     ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-                    false,
-                    null)),
+                    false)),
             Generation: 1), scheduleSave: false);
         await writer.FlushAsync();
 
@@ -608,7 +596,6 @@ public sealed class WorkspaceWriterTests
             ],
             Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
             SessionInfo: new ConversationSessionInfoSnapshot
@@ -660,21 +647,18 @@ public sealed class WorkspaceWriterTests
             Transcript: Array.Empty<ConversationMessageSnapshot>(),
             Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
 
         writer.Enqueue(new ChatState(
             HydratedConversationId: "session-1",
             ShowPlanPanel: true,
-            PlanTitle: "Plan in progress",
             Generation: 1), scheduleSave: false);
         await writer.FlushAsync();
 
         var snapshot = workspace.GetConversationSnapshot("session-1");
         Assert.NotNull(snapshot);
         Assert.True(snapshot!.ShowPlanPanel);
-        Assert.Equal("Plan in progress", snapshot.PlanTitle);
     }
 
     [Fact]
@@ -695,7 +679,6 @@ public sealed class WorkspaceWriterTests
             ],
             Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
             SessionInfo: new ConversationSessionInfoSnapshot
@@ -711,8 +694,7 @@ public sealed class WorkspaceWriterTests
                 new ConversationContentSlice(
                     ImmutableList.Create(CreateTextMessage("m-1", "fresh transcript")),
                     ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-                    false,
-                    null)),
+                    false)),
             ConversationSessionStates: ImmutableDictionary<string, ConversationSessionStateSlice>.Empty.Add(
                 "session-1",
                 new ConversationSessionStateSlice(
@@ -753,7 +735,6 @@ public sealed class WorkspaceWriterTests
             ],
             Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
             AvailableCommands:
@@ -812,7 +793,6 @@ public sealed class WorkspaceWriterTests
             Transcript: Array.Empty<ConversationMessageSnapshot>(),
             Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
             AvailableModes:
@@ -896,7 +876,6 @@ public sealed class WorkspaceWriterTests
                 }
             ],
             ShowPlanPanel: true,
-            PlanTitle: "Persisted plan title",
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
             AvailableModes:
@@ -938,8 +917,7 @@ public sealed class WorkspaceWriterTests
                 new ConversationContentSlice(
                     ImmutableList.Create(CreateTextMessage("bg-2", "fresh transcript")),
                     ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-                    false,
-                    null)),
+                    false)),
             Generation: 1), scheduleSave: false);
         await writer.FlushAsync();
 

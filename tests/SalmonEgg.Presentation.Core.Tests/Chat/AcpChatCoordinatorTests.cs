@@ -10,6 +10,7 @@ using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Content;
 using SalmonEgg.Domain.Models.JsonRpc;
+using SalmonEgg.Domain.Models.Plan;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
@@ -24,6 +25,17 @@ public sealed class AcpChatCoordinatorTests
 {
     private static ITransportSupportPolicy CreateTransportSupportPolicy(bool supportsStdioTransport = true)
         => new TransportSupportPolicy(new TestPlatformCapabilities(supportsStdioTransport));
+
+    private static List<PlanEntry> CreatePlanEntries(string content)
+        =>
+        [
+            new()
+            {
+                Content = content,
+                Priority = PlanEntryPriority.Medium,
+                Status = PlanEntryStatus.Pending
+            }
+        ];
 
     [Fact]
     public async Task ConnectToProfileAsync_MapsProfileToTransportAndInitializesService()
@@ -1575,10 +1587,10 @@ public sealed class AcpChatCoordinatorTests
 
         service.Raise(
             x => x.SessionUpdateReceived += null,
-            new SessionUpdateEventArgs("remote-session-1", new PlanUpdate(title: "one")));
+            new SessionUpdateEventArgs("remote-session-1", new PlanUpdate(CreatePlanEntries("one"))));
         service.Raise(
             x => x.SessionUpdateReceived += null,
-            new SessionUpdateEventArgs("remote-session-1", new PlanUpdate(title: "two")));
+            new SessionUpdateEventArgs("remote-session-1", new PlanUpdate(CreatePlanEntries("two"))));
         dispatcher.RunAll();
 
         connectionCoordinator.Verify(
@@ -1654,10 +1666,10 @@ public sealed class AcpChatCoordinatorTests
 
         firstCandidate.Raise(
             x => x.SessionUpdateReceived += null,
-            new SessionUpdateEventArgs("remote-session-1", new PlanUpdate(title: "stale-one")));
+            new SessionUpdateEventArgs("remote-session-1", new PlanUpdate(CreatePlanEntries("stale-one"))));
         firstCandidate.Raise(
             x => x.SessionUpdateReceived += null,
-            new SessionUpdateEventArgs("remote-session-1", new PlanUpdate(title: "stale-two")));
+            new SessionUpdateEventArgs("remote-session-1", new PlanUpdate(CreatePlanEntries("stale-two"))));
         dispatcher.RunAll();
 
         connectionCoordinator.Verify(
@@ -1874,7 +1886,7 @@ public sealed class AcpChatCoordinatorTests
 
         service.Raise(
             x => x.SessionUpdateReceived += null,
-            new SessionUpdateEventArgs("remote-session-1", new PlanUpdate(title: "immediate")));
+            new SessionUpdateEventArgs("remote-session-1", new PlanUpdate(CreatePlanEntries("immediate"))));
 
         Assert.Single(updates);
     }

@@ -927,8 +927,7 @@ public partial class ChatViewModel
                 CurrentSessionId,
                 ImmutableList<ConversationMessageSnapshot>.Empty,
                 ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-                false,
-                null));
+                false));
         }
 
         _chatService?.ClearHistory();

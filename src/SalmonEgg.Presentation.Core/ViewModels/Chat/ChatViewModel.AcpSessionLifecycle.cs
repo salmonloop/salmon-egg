@@ -2166,8 +2166,7 @@ public partial class ChatViewModel
             await _chatStore.Dispatch(new ReplacePlanEntriesAction(
                 conversationId,
                 delta.PlanEntries.ToImmutableList(),
-                delta.ShowPlanPanel ?? true,
-                delta.PlanTitle)).ConfigureAwait(true);
+                delta.ShowPlanPanel ?? true)).ConfigureAwait(true);
         }
 
         if (nextSessionInfo is not null)

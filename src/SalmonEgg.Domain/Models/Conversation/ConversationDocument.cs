@@ -58,8 +58,6 @@ namespace SalmonEgg.Domain.Models.Conversation
         public List<ConversationPlanEntrySnapshot> Plan { get; set; } = new();
 
         public bool ShowPlanPanel { get; set; }
-
-        public string? PlanTitle { get; set; }
     }
 
     public sealed class ConversationModeOptionSnapshot

@@ -91,7 +91,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 5, 2, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 5, 2, 0, 0, 0, DateTimeKind.Utc)));
         fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -99,7 +98,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 5, 2, 0, 0, 1, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 5, 2, 0, 0, 1, DateTimeKind.Utc),
             AvailableCommands: availableCommands));

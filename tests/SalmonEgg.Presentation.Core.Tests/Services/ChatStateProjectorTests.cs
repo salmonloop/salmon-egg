@@ -166,8 +166,7 @@ public sealed class ChatStateProjectorTests
                 new ConversationContentSlice(
                     ImmutableList.Create(new ConversationMessageSnapshot { Id = "fresh", ContentType = "text", TextContent = "fresh" }),
                     ImmutableList.Create(new ConversationPlanEntrySnapshot { Content = "step-1" }),
-                    true,
-                    "plan")),
+                    true)),
             ConversationSessionStates = ImmutableDictionary<string, ConversationSessionStateSlice>.Empty.Add(
                 "conv-2",
                 new ConversationSessionStateSlice(
@@ -186,7 +185,6 @@ public sealed class ChatStateProjectorTests
         Assert.Equal("fresh", projection.Transcript[0].TextContent);
         Assert.Single(projection.PlanEntries);
         Assert.True(projection.ShowPlanPanel);
-        Assert.Equal("plan", projection.PlanTitle);
         Assert.Single(projection.AvailableModes);
         Assert.Equal("agent", projection.SelectedModeId);
         Assert.Single(projection.ConfigOptions);

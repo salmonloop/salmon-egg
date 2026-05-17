@@ -567,7 +567,6 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
             Domain.Models.Plan.PlanEntryStatus.Pending => "待处理",
             Domain.Models.Plan.PlanEntryStatus.InProgress => "进行中",
             Domain.Models.Plan.PlanEntryStatus.Completed => "已完成",
-            Domain.Models.Plan.PlanEntryStatus.Failed => "失败",
             _ => "未知"
         };
 

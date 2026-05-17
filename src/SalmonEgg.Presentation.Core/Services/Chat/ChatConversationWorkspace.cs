@@ -270,7 +270,6 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 CloneMessages(binding.Transcript).ToArray(),
                 binding.Plan.Select(ClonePlanEntry).ToArray(),
                 binding.ShowPlanPanel,
-                binding.PlanTitle,
                 binding.CreatedAt,
                 binding.LastUpdatedAt,
                 binding.AvailableModes.Select(CloneModeOption).ToArray(),
@@ -428,7 +427,6 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 ResolveEstablishedConversationCwd(binding));
             binding.Usage = CloneUsage(snapshot.Usage);
             binding.ShowPlanPanel = snapshot.ShowPlanPanel;
-            binding.PlanTitle = snapshot.PlanTitle;
             binding.SnapshotOrigin = origin;
             binding.SnapshotConnectionInstanceId = origin is ConversationWorkspaceSnapshotOrigin.RuntimeProjection
                 ? snapshot.ConnectionInstanceId
@@ -520,7 +518,6 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
 
         binding.Usage = null;
         binding.ShowPlanPanel = false;
-        binding.PlanTitle = null;
         binding.SnapshotOrigin = ConversationWorkspaceSnapshotOrigin.Restored;
         binding.SnapshotConnectionInstanceId = null;
         binding.RestoreProjectionItemKey = null;
@@ -798,7 +795,6 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                         shouldPersistRuntimeContent ? binding.SelectedModeId : null,
                         shouldPersistRuntimeContent && binding.ShowConfigOptionsPanel,
                         shouldPersistRuntimeContent && binding.ShowPlanPanel,
-                        shouldPersistRuntimeContent ? binding.PlanTitle : null,
                         shouldPersistRuntimeContent ? CloneMessages(binding.Transcript).ToArray() : [],
                         shouldPersistRuntimeContent ? binding.AvailableModes.Select(CloneModeOption).ToArray() : [],
                         shouldPersistRuntimeContent ? binding.ConfigOptions.Select(CloneConfigOption).ToArray() : [],
@@ -838,8 +834,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 ShowConfigOptionsPanel = conversationState.ShowConfigOptionsPanel,
                 SessionInfo = ConversationSessionInfoSnapshots.Clone(conversationState.SessionInfo),
                 Usage = CloneUsage(conversationState.Usage),
-                ShowPlanPanel = conversationState.ShowPlanPanel,
-                PlanTitle = conversationState.PlanTitle
+                ShowPlanPanel = conversationState.ShowPlanPanel
             };
 
             record.Messages.AddRange(conversationState.Transcript);
@@ -941,7 +936,6 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                     conversation.Cwd);
                 binding.Usage = shouldRestoreRuntimeContent ? CloneUsage(conversation.Usage) : null;
                 binding.ShowPlanPanel = shouldRestoreRuntimeContent && conversation.ShowPlanPanel;
-                binding.PlanTitle = shouldRestoreRuntimeContent ? conversation.PlanTitle : null;
                 binding.SnapshotOrigin = ConversationWorkspaceSnapshotOrigin.Restored;
                 binding.RemoteSessionId = conversation.RemoteSessionId;
                 binding.BoundProfileId = conversation.BoundProfileId;
@@ -1366,7 +1360,6 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         string? SelectedModeId,
         bool ShowConfigOptionsPanel,
         bool ShowPlanPanel,
-        string? PlanTitle,
         ConversationMessageSnapshot[] Transcript,
         ConversationModeOptionSnapshot[] AvailableModes,
         ConversationConfigOptionSnapshot[] ConfigOptions,
@@ -1417,8 +1410,6 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
 
         public bool ShowPlanPanel { get; set; }
 
-        public string? PlanTitle { get; set; }
-
         public ProjectAffinityOverride? ProjectAffinityOverride { get; set; }
 
         public ConversationWorkspaceSnapshotOrigin SnapshotOrigin { get; set; }
@@ -1442,7 +1433,6 @@ public sealed record ConversationWorkspaceSnapshot(
     IReadOnlyList<ConversationMessageSnapshot> Transcript,
     IReadOnlyList<ConversationPlanEntrySnapshot> Plan,
     bool ShowPlanPanel,
-    string? PlanTitle,
     DateTime CreatedAt,
     DateTime LastUpdatedAt,
     IReadOnlyList<ConversationModeOptionSnapshot>? AvailableModes = null,

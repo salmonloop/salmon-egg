@@ -236,7 +236,6 @@ public partial class ChatViewModel
         UpdateRestoreProjectionMetadata(projection);
         PublishProjectionRestoreReady(projection);
         ShowPlanPanel = projection.ShowPlanPanel;
-        CurrentPlanTitle = projection.PlanTitle;
         if (!sessionChanged)
         {
             SyncPlanEntries(projection.PlanEntries);

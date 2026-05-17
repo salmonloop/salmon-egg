@@ -165,8 +165,7 @@ public partial class ChatViewModelTests
                 new ConversationContentSlice(
                     transcript,
                     ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-                    ShowPlanPanel: false,
-                    PlanTitle: null))
+                    ShowPlanPanel: false))
         });
         SetCurrentSessionId(fixture.ViewModel, "conv-large");
 

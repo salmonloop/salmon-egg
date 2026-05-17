@@ -594,7 +594,7 @@
                 <Grid Grid.Row="0" Height="48" Padding="16,0,8,0">
                     <TextBlock x:Name="RightPanelTitle"
                                AutomationProperties.AutomationId="RightPanel.Title"
-                               Text="{x:Bind GetRightPanelTitle(LayoutVM.RightPanelMode, ChatVM.CurrentPlanTitle), Mode=OneWay}" 
+                               Text="{x:Bind GetRightPanelTitle(LayoutVM.RightPanelMode), Mode=OneWay}"
                                VerticalAlignment="Center" 
                                Style="{ThemeResource BodyStrongTextBlockStyle}" />
 

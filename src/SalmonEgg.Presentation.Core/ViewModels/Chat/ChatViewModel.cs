@@ -1018,9 +1018,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private bool _showPlanPanel;
 
     [ObservableProperty]
-    private string? _currentPlanTitle;
-
-    [ObservableProperty]
     private ObservableCollection<TerminalPanelSessionViewModel> _terminalSessions = new();
 
     [ObservableProperty]

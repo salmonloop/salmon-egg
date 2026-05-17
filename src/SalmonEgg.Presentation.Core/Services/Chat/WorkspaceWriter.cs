@@ -183,7 +183,7 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             && (!isRemoteBacked || existingSnapshotOrigin is ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
         var hasProjectedHydratedRootContent =
             isHydratedConversation
-            && HasProjectedConversationContent(state.Transcript, state.PlanEntries, state.ShowPlanPanel, state.PlanTitle);
+            && HasProjectedConversationContent(state.Transcript, state.PlanEntries, state.ShowPlanPanel);
         var hasProjectedHydratedRootSessionState =
             isHydratedConversation
             && HasProjectedPrimarySessionState(
@@ -206,8 +206,7 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             && HasProjectedConversationContent(
                 contentSlice.Value.Transcript,
                 contentSlice.Value.PlanEntries,
-                contentSlice.Value.ShowPlanPanel,
-                contentSlice.Value.PlanTitle);
+                contentSlice.Value.ShowPlanPanel);
         var hasProjectedContent = hasProjectedSliceContent || hasProjectedHydratedRootContent;
         var runtimeState = state.ResolveRuntimeState(conversationId);
         var transcriptSource = hasProjectedContent
@@ -302,9 +301,6 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
         var showPlanPanel = hasProjectedContent
             ? contentSlice?.ShowPlanPanel ?? (isHydratedConversation && state.ShowPlanPanel)
             : canReuseExistingSnapshotRuntimeContent ? existingSnapshot?.ShowPlanPanel ?? false : false;
-        var planTitle = hasProjectedContent
-            ? contentSlice?.PlanTitle ?? (isHydratedConversation ? state.PlanTitle : null)
-            : canReuseExistingSnapshotRuntimeContent ? existingSnapshot?.PlanTitle : null;
         var hasProjectedData = HasProjectedData(
             transcript,
             planEntries,
@@ -315,8 +311,7 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             availableCommands,
             sessionInfo,
             usage,
-            showPlanPanel,
-            planTitle);
+            showPlanPanel);
         if (!hasProjectedData
             && existingSnapshot is not null
             && HasSnapshotData(existingSnapshot)
@@ -337,8 +332,7 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
                 availableCommands,
                 sessionInfo,
                 usage,
-                showPlanPanel,
-                planTitle)
+                showPlanPanel)
             ? existingSnapshot.LastUpdatedAt
             : DateTime.UtcNow;
         var runtimeConnectionInstanceId = runtimeState is { } projectedRuntime
@@ -359,7 +353,6 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             transcript,
             planEntries,
             showPlanPanel,
-            planTitle,
             default,
             lastUpdatedAt,
             availableModes,
@@ -385,18 +378,15 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             snapshot.AvailableCommands ?? Array.Empty<ConversationAvailableCommandSnapshot>(),
             snapshot.SessionInfo,
             snapshot.Usage,
-            snapshot.ShowPlanPanel,
-            snapshot.PlanTitle);
+            snapshot.ShowPlanPanel);
 
     private static bool HasProjectedConversationContent(
         IReadOnlyList<ConversationMessageSnapshot>? transcript,
         IReadOnlyList<ConversationPlanEntrySnapshot>? planEntries,
-        bool showPlanPanel,
-        string? planTitle)
+        bool showPlanPanel)
         => (transcript?.Count ?? 0) > 0
             || (planEntries?.Count ?? 0) > 0
-            || showPlanPanel
-            || !string.IsNullOrWhiteSpace(planTitle);
+            || showPlanPanel;
 
     private static bool HasProjectedData(
         IReadOnlyList<ConversationMessageSnapshot> transcript,
@@ -408,8 +398,7 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
         IReadOnlyList<ConversationAvailableCommandSnapshot> availableCommands,
         ConversationSessionInfoSnapshot? sessionInfo,
         ConversationUsageSnapshot? usage,
-        bool showPlanPanel,
-        string? planTitle)
+        bool showPlanPanel)
         => transcript.Count > 0
             || planEntries.Count > 0
             || availableModes.Count > 0
@@ -419,8 +408,7 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             || showPlanPanel
             || !string.IsNullOrWhiteSpace(selectedModeId)
             || sessionInfo is not null
-            || usage is not null
-            || !string.IsNullOrWhiteSpace(planTitle);
+            || usage is not null;
 
     private TimeSpan ComputeDelay()
     {
@@ -511,13 +499,11 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
         IReadOnlyList<ConversationAvailableCommandSnapshot> availableCommands,
         ConversationSessionInfoSnapshot? sessionInfo,
         ConversationUsageSnapshot? usage,
-        bool showPlanPanel,
-        string? planTitle)
+        bool showPlanPanel)
     {
         return existingSnapshot.ShowConfigOptionsPanel == showConfigOptionsPanel
             && string.Equals(existingSnapshot.SelectedModeId, selectedModeId, StringComparison.Ordinal)
             && existingSnapshot.ShowPlanPanel == showPlanPanel
-            && string.Equals(existingSnapshot.PlanTitle, planTitle, StringComparison.Ordinal)
             && ModeSequencesEqual(existingSnapshot.AvailableModes ?? Array.Empty<ConversationModeOptionSnapshot>(), availableModes)
             && ConfigOptionSequencesEqual(existingSnapshot.ConfigOptions ?? Array.Empty<ConversationConfigOptionSnapshot>(), configOptions)
             && AvailableCommandSequencesEqual(existingSnapshot.AvailableCommands ?? Array.Empty<ConversationAvailableCommandSnapshot>(), availableCommands)

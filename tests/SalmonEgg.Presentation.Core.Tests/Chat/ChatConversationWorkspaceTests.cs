@@ -156,7 +156,6 @@ public sealed class ChatConversationWorkspaceTests
             ],
             Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
             AvailableModes:
@@ -225,7 +224,6 @@ public sealed class ChatConversationWorkspaceTests
                 ],
                 Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
                 ShowPlanPanel: false,
-                PlanTitle: null,
                 CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                 LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
 
@@ -275,7 +273,6 @@ public sealed class ChatConversationWorkspaceTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
 
@@ -312,7 +309,6 @@ public sealed class ChatConversationWorkspaceTests
             CreateTranscript("seed", 1024),
             Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
 
@@ -353,7 +349,6 @@ public sealed class ChatConversationWorkspaceTests
                         Transcript: CreateTranscript($"mutated-{counter}", 1024),
                         Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
                         ShowPlanPanel: false,
-                        PlanTitle: null,
                         CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                         LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc).AddSeconds(counter)));
                     counter++;
@@ -482,7 +477,6 @@ public sealed class ChatConversationWorkspaceTests
                 }
             ],
             ShowPlanPanel: true,
-            PlanTitle: "plan",
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
         workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-a");
@@ -499,7 +493,6 @@ public sealed class ChatConversationWorkspaceTests
         Assert.Single(snapshot.Plan);
         Assert.Equal("step-1", snapshot.Plan[0].Content);
         Assert.True(snapshot.ShowPlanPanel);
-        Assert.Equal("plan", snapshot.PlanTitle);
 
         var remoteBinding = workspace.GetRemoteBinding("session-1");
         Assert.NotNull(remoteBinding);
@@ -525,7 +518,6 @@ public sealed class ChatConversationWorkspaceTests
             ],
             Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -536,7 +528,6 @@ public sealed class ChatConversationWorkspaceTests
             ],
             Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 2, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 3, 0, DateTimeKind.Utc)));
 
@@ -578,7 +569,6 @@ public sealed class ChatConversationWorkspaceTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -589,7 +579,6 @@ public sealed class ChatConversationWorkspaceTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 3, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 4, 0, 0, 0, DateTimeKind.Utc)));
         workspace.UpdateRemoteBinding("session-1", "remote-older", "profile-older");
@@ -640,7 +629,6 @@ public sealed class ChatConversationWorkspaceTests
                 }
             ],
             ShowPlanPanel: true,
-            PlanTitle: "Active plan",
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             AvailableModes:
@@ -697,7 +685,6 @@ public sealed class ChatConversationWorkspaceTests
         Assert.Empty(conversation.AvailableCommands);
         Assert.Null(conversation.Usage);
         Assert.False(conversation.ShowPlanPanel);
-        Assert.Null(conversation.PlanTitle);
     }
 
     [Fact]
@@ -726,7 +713,6 @@ public sealed class ChatConversationWorkspaceTests
                 }
             ],
             ShowPlanPanel: true,
-            PlanTitle: "Active plan",
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             AvailableModes:
@@ -783,7 +769,6 @@ public sealed class ChatConversationWorkspaceTests
         Assert.Empty(conversation.AvailableCommands);
         Assert.Null(conversation.Usage);
         Assert.False(conversation.ShowPlanPanel);
-        Assert.Null(conversation.PlanTitle);
     }
 
     [Fact]
@@ -848,7 +833,6 @@ public sealed class ChatConversationWorkspaceTests
                             99,
                             new ConversationUsageCostSnapshot(1.25m, "USD")),
                         ShowPlanPanel = true,
-                        PlanTitle = "Active plan",
                         CreatedAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                         LastUpdatedAt = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
                     }
@@ -875,7 +859,6 @@ public sealed class ChatConversationWorkspaceTests
         Assert.Empty(snapshot.AvailableCommands!);
         Assert.Null(snapshot.Usage);
         Assert.False(snapshot.ShowPlanPanel);
-        Assert.Null(snapshot.PlanTitle);
 
         var binding = workspace.GetRemoteBinding("session-1");
         Assert.NotNull(binding);
@@ -983,7 +966,6 @@ public sealed class ChatConversationWorkspaceTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
         workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-1");
@@ -1013,7 +995,6 @@ public sealed class ChatConversationWorkspaceTests
             ],
             Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
 
@@ -1044,7 +1025,6 @@ public sealed class ChatConversationWorkspaceTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -1114,7 +1094,6 @@ public sealed class ChatConversationWorkspaceTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -1153,7 +1132,6 @@ public sealed class ChatConversationWorkspaceTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -1164,7 +1142,6 @@ public sealed class ChatConversationWorkspaceTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
 
@@ -1176,7 +1153,6 @@ public sealed class ChatConversationWorkspaceTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 5, 0, DateTimeKind.Utc)));
 
@@ -1203,7 +1179,6 @@ public sealed class ChatConversationWorkspaceTests
             ],
             Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -1214,7 +1189,6 @@ public sealed class ChatConversationWorkspaceTests
             ],
             Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 2, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 3, 0, DateTimeKind.Utc)));
 
@@ -1252,7 +1226,6 @@ public sealed class ChatConversationWorkspaceTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -1286,7 +1259,6 @@ public sealed class ChatConversationWorkspaceTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -1318,7 +1290,6 @@ public sealed class ChatConversationWorkspaceTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             SessionInfo: new ConversationSessionInfoSnapshot
@@ -1374,7 +1345,6 @@ public sealed class ChatConversationWorkspaceTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             SessionInfo: new ConversationSessionInfoSnapshot
@@ -1421,7 +1391,6 @@ public sealed class ChatConversationWorkspaceTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             SessionInfo: new ConversationSessionInfoSnapshot
@@ -1466,7 +1435,6 @@ public sealed class ChatConversationWorkspaceTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             SessionInfo: new ConversationSessionInfoSnapshot
@@ -1507,7 +1475,6 @@ public sealed class ChatConversationWorkspaceTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             SessionInfo: new ConversationSessionInfoSnapshot
@@ -1564,7 +1531,6 @@ public sealed class ChatConversationWorkspaceTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             SessionInfo: new ConversationSessionInfoSnapshot
@@ -1609,7 +1575,6 @@ public sealed class ChatConversationWorkspaceTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             SessionInfo: new ConversationSessionInfoSnapshot
@@ -1651,7 +1616,6 @@ public sealed class ChatConversationWorkspaceTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             SessionInfo: new ConversationSessionInfoSnapshot
@@ -1688,7 +1652,6 @@ public sealed class ChatConversationWorkspaceTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             SessionInfo: new ConversationSessionInfoSnapshot
@@ -1728,7 +1691,6 @@ public sealed class ChatConversationWorkspaceTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             SessionInfo: new ConversationSessionInfoSnapshot
@@ -1769,7 +1731,6 @@ public sealed class ChatConversationWorkspaceTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             SessionInfo: new ConversationSessionInfoSnapshot
@@ -1810,7 +1771,6 @@ public sealed class ChatConversationWorkspaceTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             SessionInfo: new ConversationSessionInfoSnapshot
@@ -1841,7 +1801,6 @@ public sealed class ChatConversationWorkspaceTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             SessionInfo: new ConversationSessionInfoSnapshot
@@ -1868,7 +1827,6 @@ public sealed class ChatConversationWorkspaceTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             SessionInfo: new ConversationSessionInfoSnapshot
@@ -1885,7 +1843,6 @@ public sealed class ChatConversationWorkspaceTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             SessionInfo: null));
@@ -1917,7 +1874,6 @@ public sealed class ChatConversationWorkspaceTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
         workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-1");
@@ -1942,7 +1898,6 @@ public sealed class ChatConversationWorkspaceTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
         workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-1");
@@ -1976,7 +1931,6 @@ public sealed class ChatConversationWorkspaceTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
         workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-1");
@@ -1986,7 +1940,6 @@ public sealed class ChatConversationWorkspaceTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             SessionInfo: new ConversationSessionInfoSnapshot
@@ -2014,7 +1967,6 @@ public sealed class ChatConversationWorkspaceTests
                 Transcript: [],
                 Plan: [],
                 ShowPlanPanel: false,
-                PlanTitle: null,
                 CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                 LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                 AvailableCommands:
@@ -2075,7 +2027,6 @@ public sealed class ChatConversationWorkspaceTests
             Transcript: [CreateTextMessage("m-1", "alpha")],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
         workspace.DeleteConversation("session-1");
@@ -2085,7 +2036,6 @@ public sealed class ChatConversationWorkspaceTests
             Transcript: [CreateTextMessage("m-2", "late")],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
 
@@ -2107,7 +2057,6 @@ public sealed class ChatConversationWorkspaceTests
             Transcript: [CreateTextMessage("m-1", "alpha")],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
         workspace.DeleteConversation("session-1");
@@ -2141,7 +2090,6 @@ public sealed class ChatConversationWorkspaceTests
                 }
             ],
             ShowPlanPanel: true,
-            PlanTitle: "Plan",
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
             AvailableModes:
@@ -2186,7 +2134,6 @@ public sealed class ChatConversationWorkspaceTests
         Assert.Single(snapshot.ConfigOptions ?? Array.Empty<ConversationConfigOptionSnapshot>());
         Assert.Single(snapshot.AvailableCommands ?? Array.Empty<ConversationAvailableCommandSnapshot>());
         Assert.True(snapshot.ShowPlanPanel);
-        Assert.Equal("Plan", snapshot.PlanTitle);
         Assert.True(snapshot.ShowConfigOptionsPanel);
         Assert.Equal("agent", snapshot.SelectedModeId);
         Assert.NotNull(snapshot.Usage);
@@ -2216,7 +2163,6 @@ public sealed class ChatConversationWorkspaceTests
                 Transcript: [CreateTextMessage("m-1", "alpha")],
                 Plan: [],
                 ShowPlanPanel: false,
-                PlanTitle: null,
                 CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                 LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
             workspace.DeleteConversation("session-1");
@@ -2255,7 +2201,6 @@ public sealed class ChatConversationWorkspaceTests
             ],
             Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 5, 6, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 5, 6, 0, 1, 0, DateTimeKind.Utc),
             ConnectionInstanceId: "conn-1",
@@ -2373,7 +2318,6 @@ public sealed class ChatConversationWorkspaceTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 5, 0, DateTimeKind.Utc)));
 
@@ -2387,7 +2331,6 @@ public sealed class ChatConversationWorkspaceTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 10, 0, DateTimeKind.Utc)));
 
@@ -2412,7 +2355,6 @@ public sealed class ChatConversationWorkspaceTests
             ],
             Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -2423,7 +2365,6 @@ public sealed class ChatConversationWorkspaceTests
             ],
             Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 2, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 3, 0, DateTimeKind.Utc)));
 
@@ -2438,7 +2379,6 @@ public sealed class ChatConversationWorkspaceTests
             ],
             Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 4, 0, DateTimeKind.Utc)));
 
@@ -2464,7 +2404,6 @@ public sealed class ChatConversationWorkspaceTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -2472,7 +2411,6 @@ public sealed class ChatConversationWorkspaceTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 2, 0, DateTimeKind.Utc)));
 

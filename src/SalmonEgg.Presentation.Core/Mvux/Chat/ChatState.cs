@@ -25,7 +25,6 @@ public record ChatState(
     ConversationSessionInfoSnapshot? SessionInfo = null,
     ConversationUsageSnapshot? Usage = null,
     bool ShowPlanPanel = false,
-    string? PlanTitle = null,
     string DraftText = "",
     bool IsHydrating = false)
 {

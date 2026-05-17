@@ -14,8 +14,7 @@ public static class ConversationProjectionReadinessPolicy
             ?? new ConversationContentSlice(
                 ImmutableList<ConversationMessageSnapshot>.Empty,
                 ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-                false,
-                null);
+                false);
 
         return !HasProjectedConversationContent(content);
     }
@@ -39,8 +38,7 @@ public static class ConversationProjectionReadinessPolicy
     public static bool HasProjectedConversationContent(ConversationContentSlice content)
         => content.Transcript.Count > 0
             || content.PlanEntries.Count > 0
-            || content.ShowPlanPanel
-            || !string.IsNullOrWhiteSpace(content.PlanTitle);
+            || content.ShowPlanPanel;
 
     public static bool HasProjectedPrimarySessionState(ConversationSessionStateSlice sessionState)
         => sessionState.AvailableModes.Count > 0
@@ -118,8 +116,7 @@ public static class ConversationProjectionReadinessPolicy
         var rootContent = new ConversationContentSlice(
             state.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty,
             state.PlanEntries ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-            state.ShowPlanPanel,
-            state.PlanTitle);
+            state.ShowPlanPanel);
         if (HasProjectedConversationContent(rootContent))
         {
             return true;
@@ -142,8 +139,7 @@ public static class ConversationProjectionReadinessPolicy
                new ConversationContentSlice(
                    snapshot.Transcript.ToImmutableList(),
                    snapshot.Plan.ToImmutableList(),
-                   snapshot.ShowPlanPanel,
-                   snapshot.PlanTitle))
+                   snapshot.ShowPlanPanel))
            || HasProjectedPrimarySessionState(
                new ConversationSessionStateSlice(
                    (snapshot.AvailableModes ?? Array.Empty<ConversationModeOptionSnapshot>()).ToImmutableList(),

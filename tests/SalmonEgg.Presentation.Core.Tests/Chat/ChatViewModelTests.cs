@@ -412,7 +412,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
         fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -420,7 +419,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
         await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "conv-local" });
@@ -495,7 +493,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
         await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "conv-remote" });
@@ -1398,7 +1395,6 @@ public partial class ChatViewModelTests
                 Transcript: [],
                 Plan: [],
                 ShowPlanPanel: false,
-                PlanTitle: null,
                 CreatedAt: new DateTime(2026, 4, 20, 0, 0, 0, DateTimeKind.Utc),
                 LastUpdatedAt: new DateTime(2026, 4, 20, 0, 0, 0, DateTimeKind.Utc)),
                 ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
@@ -1407,7 +1403,6 @@ public partial class ChatViewModelTests
                 Transcript: [],
                 Plan: [],
                 ShowPlanPanel: false,
-                PlanTitle: null,
                 CreatedAt: new DateTime(2026, 4, 20, 0, 0, 0, DateTimeKind.Utc),
                 LastUpdatedAt: new DateTime(2026, 4, 20, 0, 0, 0, DateTimeKind.Utc)),
                 ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
@@ -2112,7 +2107,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -2142,7 +2136,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -4346,6 +4339,17 @@ public partial class ChatViewModelTests
             }
         };
 
+    private static List<PlanEntry> CreatePlanEntries(string content)
+        => new()
+        {
+            new PlanEntry
+            {
+                Content = content,
+                Priority = PlanEntryPriority.Medium,
+                Status = PlanEntryStatus.Pending
+            }
+        };
+
     private sealed class ViewModelFixture : IDisposable, IAsyncDisposable
     {
         private readonly IState<ChatState> _state;
@@ -4836,8 +4840,7 @@ public partial class ChatViewModelTests
                         Timestamp = new DateTime(2026, 4, 23, 0, 0, 0, DateTimeKind.Utc)
                     }),
                     ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-                    false,
-                    null))
+                    false))
         };
         await fixture.UpdateStateAsync(_ => initialState);
         SetCurrentSessionId(viewModel, "conv-1");
@@ -5088,8 +5091,7 @@ public partial class ChatViewModelTests
                             }
                         }),
                     ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-                    false,
-                    null)),
+                    false)),
             ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.ToolRunning, turnStartedAt, turnStartedAt),
             IsPromptInFlight = true
         });
@@ -5454,8 +5456,7 @@ public partial class ChatViewModelTests
                         Timestamp = new DateTime(2026, 4, 22, 0, 0, 0, DateTimeKind.Utc)
                     }),
                     ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-                    false,
-                    null))
+                    false))
         };
         await fixture.UpdateStateAsync(_ => initialState);
         syncContext.RunAll();
@@ -5882,7 +5883,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
         var chatService = CreateConnectedChatService();
@@ -5962,7 +5962,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             SessionInfo: new ConversationSessionInfoSnapshot
@@ -6052,7 +6051,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             SessionInfo: new ConversationSessionInfoSnapshot
@@ -6292,7 +6290,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -6324,7 +6321,6 @@ public partial class ChatViewModelTests
                 Transcript: [],
                 Plan: [],
                 ShowPlanPanel: false,
-                PlanTitle: null,
                 CreatedAt: new DateTime(2026, 5, 13, 0, 0, 0, DateTimeKind.Utc),
                 LastUpdatedAt: new DateTime(2026, 5, 13, 0, 0, 1, DateTimeKind.Utc))));
 
@@ -6387,7 +6383,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -6446,7 +6441,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
         fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -6454,7 +6448,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 3, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 4, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -7670,7 +7663,6 @@ public partial class ChatViewModelTests
                 Transcript: [],
                 Plan: [],
                 ShowPlanPanel: false,
-                PlanTitle: null,
                 CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                 LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                 SessionInfo: new ConversationSessionInfoSnapshot
@@ -7984,7 +7976,6 @@ public partial class ChatViewModelTests
                 Transcript: [],
                 Plan: [],
                 ShowPlanPanel: false,
-                PlanTitle: null,
                 CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                 LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
             fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -7992,7 +7983,6 @@ public partial class ChatViewModelTests
                 Transcript: [],
                 Plan: [],
                 ShowPlanPanel: false,
-                PlanTitle: null,
                 CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
                 LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
             fixture.Workspace.UpdateRemoteBinding("conv-1", null, "profile-1");
@@ -8434,7 +8424,7 @@ public partial class ChatViewModelTests
             {
                 innerChatService!.RaiseSessionUpdate(new SessionUpdateEventArgs(
                     "remote-1",
-                    new PlanUpdate(title: "restored plan")));
+                    new PlanUpdate(CreatePlanEntries("restored plan"))));
                 innerChatService.RaiseSessionUpdate(new SessionUpdateEventArgs(
                     "remote-1",
                     new AgentMessageUpdate(new TextContentBlock("late replay after plan"))));
@@ -8465,7 +8455,11 @@ public partial class ChatViewModelTests
         await WaitForPendingSessionUpdatesAsync(fixture.ViewModel);
         var finalState = await fixture.GetStateAsync();
         var finalContent = finalState.ResolveContentSlice("conv-1");
-        Assert.Equal("restored plan", finalContent?.PlanTitle);
+        Assert.True(finalContent.HasValue);
+        var planEntry = Assert.Single(finalContent.Value.PlanEntries);
+        Assert.Equal("restored plan", planEntry.Content);
+        Assert.Equal(PlanEntryStatus.Pending, planEntry.Status);
+        Assert.Equal(PlanEntryPriority.Medium, planEntry.Priority);
         Assert.Contains(
             finalState.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty,
             message => string.Equals(message.TextContent, "late replay after plan", StringComparison.Ordinal));
@@ -8630,8 +8624,7 @@ public partial class ChatViewModelTests
                         Timestamp = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)
                     }),
                     ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-                    false,
-                    null))
+                    false))
         });
         await DispatchConnectedAsync(fixture, "profile-1");
         syncContext.RunAll();
@@ -8899,7 +8892,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
         fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -8907,7 +8899,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -8979,7 +8970,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -9042,7 +9032,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -9813,7 +9802,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
         fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -9821,7 +9809,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -9980,7 +9967,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             ConnectionInstanceId: "conn-1"),
@@ -10000,7 +9986,6 @@ public partial class ChatViewModelTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -10136,7 +10121,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             ConnectionInstanceId: "conn-1"),
@@ -10156,7 +10140,6 @@ public partial class ChatViewModelTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -10292,7 +10275,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 5, 13, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 5, 13, 0, 0, 0, DateTimeKind.Utc),
             ConnectionInstanceId: "conn-1"),
@@ -10312,7 +10294,6 @@ public partial class ChatViewModelTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 5, 13, 0, 0, 1, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 5, 13, 0, 0, 1, DateTimeKind.Utc),
             ConnectionInstanceId: "conn-1"),
@@ -10335,8 +10316,7 @@ public partial class ChatViewModelTests
                             TextContent = "remote cached transcript"
                         }),
                     ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-                    false,
-                    null)),
+                    false)),
             RuntimeStates = ImmutableDictionary<string, ConversationRuntimeSlice>.Empty
                 .Add("conv-remote", new ConversationRuntimeSlice(
                     ConversationId: "conv-remote",
@@ -10440,7 +10420,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 5, 13, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 5, 13, 0, 0, 0, DateTimeKind.Utc),
             ConnectionInstanceId: "conn-1"),
@@ -10460,7 +10439,6 @@ public partial class ChatViewModelTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 5, 13, 0, 0, 1, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 5, 13, 0, 0, 1, DateTimeKind.Utc),
             ConnectionInstanceId: "conn-1"),
@@ -10483,8 +10461,7 @@ public partial class ChatViewModelTests
                             TextContent = "remote cached transcript"
                         }),
                     ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-                    false,
-                    null)),
+                    false)),
             RuntimeStates = ImmutableDictionary<string, ConversationRuntimeSlice>.Empty
                 .Add("conv-remote", new ConversationRuntimeSlice(
                     ConversationId: "conv-remote",
@@ -10610,7 +10587,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 5, 12, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 5, 12, 0, 0, 0, DateTimeKind.Utc),
             ConnectionInstanceId: "conn-1"),
@@ -10630,7 +10606,6 @@ public partial class ChatViewModelTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 5, 13, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 5, 13, 0, 0, 0, DateTimeKind.Utc),
             ConnectionInstanceId: "conn-1"),
@@ -10974,7 +10949,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
         fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -10982,7 +10956,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -11104,7 +11077,6 @@ public partial class ChatViewModelTests
                 ],
                 Plan: [],
                 ShowPlanPanel: false,
-                PlanTitle: null,
                 CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                 LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
             fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -11112,7 +11084,6 @@ public partial class ChatViewModelTests
                 Transcript: [],
                 Plan: [],
                 ShowPlanPanel: false,
-                PlanTitle: null,
                 CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
                 LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -11240,7 +11211,6 @@ public partial class ChatViewModelTests
                 ],
                 Plan: [],
                 ShowPlanPanel: false,
-                PlanTitle: null,
                 CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                 LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
             fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -11248,7 +11218,6 @@ public partial class ChatViewModelTests
                 Transcript: [],
                 Plan: [],
                 ShowPlanPanel: false,
-                PlanTitle: null,
                 CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
                 LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -11349,7 +11318,6 @@ public partial class ChatViewModelTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             ConnectionInstanceId: "conn-1"),
@@ -11450,7 +11418,6 @@ public partial class ChatViewModelTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             ConnectionInstanceId: "conn-1"),
@@ -11470,7 +11437,6 @@ public partial class ChatViewModelTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -11611,7 +11577,6 @@ public partial class ChatViewModelTests
                 ],
                 Plan: [],
                 ShowPlanPanel: false,
-                PlanTitle: null,
                 CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                 LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
             fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -11619,7 +11584,6 @@ public partial class ChatViewModelTests
                 Transcript: [],
                 Plan: [],
                 ShowPlanPanel: false,
-                PlanTitle: null,
                 CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
                 LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -11746,7 +11710,6 @@ public partial class ChatViewModelTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
         fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -11754,7 +11717,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -11858,7 +11820,6 @@ public partial class ChatViewModelTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
         fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -11866,7 +11827,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -12586,7 +12546,6 @@ public partial class ChatViewModelTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
         fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -12594,7 +12553,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -12713,7 +12671,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
         fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -12721,7 +12678,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             ConnectionInstanceId: "conn-old"),
@@ -13012,7 +12968,6 @@ public partial class ChatViewModelTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
         fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -13020,7 +12975,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
         fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -13028,7 +12982,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 3, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 3, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -13209,7 +13162,6 @@ public partial class ChatViewModelTests
                 ],
                 Plan: [],
                 ShowPlanPanel: false,
-                PlanTitle: null,
                 CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                 LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
             fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -13217,7 +13169,6 @@ public partial class ChatViewModelTests
                 Transcript: [],
                 Plan: [],
                 ShowPlanPanel: false,
-                PlanTitle: null,
                 CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
                 LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -13334,7 +13285,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
         fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -13342,7 +13292,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             ConnectionInstanceId: "conn-1"),
@@ -13425,7 +13374,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
         fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -13443,7 +13391,6 @@ public partial class ChatViewModelTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -13560,7 +13507,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
         fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -13568,7 +13514,6 @@ public partial class ChatViewModelTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 

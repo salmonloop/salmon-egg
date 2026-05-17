@@ -43,7 +43,7 @@ public sealed class ChatPlanEntriesProjectionCoordinatorTests
         var entries = new ObservableCollection<PlanEntryViewModel>
         {
             new() { Content = "Step 1", Status = PlanEntryStatus.Pending, Priority = PlanEntryPriority.Low },
-            new() { Content = "Old tail", Status = PlanEntryStatus.Failed, Priority = PlanEntryPriority.High }
+            new() { Content = "Old tail", Status = PlanEntryStatus.InProgress, Priority = PlanEntryPriority.High }
         };
 
         coordinator.Sync(

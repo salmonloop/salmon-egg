@@ -1166,8 +1166,7 @@ public partial class ChatViewModel
             conversationId,
             ImmutableList<ConversationMessageSnapshot>.Empty,
             ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-            ShowPlanPanel: false,
-            PlanTitle: null)).ConfigureAwait(false);
+            ShowPlanPanel: false)).ConfigureAwait(false);
         await _chatStore.Dispatch(new SetConversationSessionStateAction(
             conversationId,
             ImmutableList<ConversationModeOptionSnapshot>.Empty,
@@ -1251,8 +1250,7 @@ public partial class ChatViewModel
             conversationId,
             snapshot.Transcript.ToImmutableList(),
             snapshot.Plan.ToImmutableList(),
-            snapshot.ShowPlanPanel,
-            snapshot.PlanTitle)).ConfigureAwait(false);
+            snapshot.ShowPlanPanel)).ConfigureAwait(false);
     }
 
     private async Task RecoverProjectionAfterStaleHydrationAttemptAsync(
@@ -1318,8 +1316,7 @@ public partial class ChatViewModel
             conversationId,
             snapshot.Transcript.ToImmutableList(),
             snapshot.Plan.ToImmutableList(),
-            snapshot.ShowPlanPanel,
-            snapshot.PlanTitle)).ConfigureAwait(false);
+            snapshot.ShowPlanPanel)).ConfigureAwait(false);
     }
 
     private async Task<bool> EnsureActiveConversationRemoteConnectionReadyAsync(

@@ -101,8 +101,7 @@ public static class ChatReducer
                     new ConversationContentSlice(
                         hydrate.Transcript,
                         hydrate.PlanEntries,
-                        hydrate.ShowPlanPanel,
-                        hydrate.PlanTitle))
+                        hydrate.ShowPlanPanel))
             }),
             ReplacePlanEntriesAction replacePlan => Mutate(current, current with
             {
@@ -112,8 +111,7 @@ public static class ChatReducer
                     new ConversationContentSlice(
                         ResolveTranscript(current, replacePlan.ConversationId) ?? ImmutableList<ConversationMessageSnapshot>.Empty,
                         replacePlan.PlanEntries,
-                        replacePlan.ShowPlanPanel,
-                        replacePlan.PlanTitle))
+                        replacePlan.ShowPlanPanel))
             }),
             UpsertTranscriptMessageAction upsertMessage => Mutate(current, current with
             {
@@ -263,8 +261,7 @@ public static class ChatReducer
                 new ConversationContentSlice(
                     ImmutableList<ConversationMessageSnapshot>.Empty,
                     ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-                    false,
-                    null)),
+                    false)),
             ConversationSessionStates = UpdateConversationSessionStates(
                 current.ConversationSessionStates,
                 scrub.ConversationId,
@@ -299,8 +296,7 @@ public static class ChatReducer
             AvailableCommands = ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
             SessionInfo = preservedSessionInfo,
             Usage = null,
-            ShowPlanPanel = false,
-            PlanTitle = null
+            ShowPlanPanel = false
         };
     }
 
@@ -320,7 +316,6 @@ public static class ChatReducer
             Transcript = content?.Transcript,
             PlanEntries = content?.PlanEntries,
             ShowPlanPanel = content?.ShowPlanPanel ?? false,
-            PlanTitle = content?.PlanTitle,
             AvailableModes = sessionState?.AvailableModes,
             SelectedModeId = sessionState?.SelectedModeId,
             ConfigOptions = sessionState?.ConfigOptions,
@@ -384,7 +379,6 @@ public static class ChatReducer
             Transcript = content?.Transcript,
             PlanEntries = content?.PlanEntries,
             ShowPlanPanel = content?.ShowPlanPanel ?? false,
-            PlanTitle = content?.PlanTitle,
             AvailableModes = sessionState?.AvailableModes,
             SelectedModeId = sessionState?.SelectedModeId,
             ConfigOptions = sessionState?.ConfigOptions,
@@ -433,19 +427,16 @@ public static class ChatReducer
         ConversationContentSlice? existing,
         IImmutableList<ConversationMessageSnapshot>? transcript = null,
         IImmutableList<ConversationPlanEntrySnapshot>? planEntries = null,
-        bool? showPlanPanel = null,
-        string? planTitle = null)
+        bool? showPlanPanel = null)
     {
         var current = existing ?? new ConversationContentSlice(
             ImmutableList<ConversationMessageSnapshot>.Empty,
             ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-            false,
-            null);
+            false);
         return new ConversationContentSlice(
             transcript ?? current.Transcript,
             planEntries ?? current.PlanEntries,
-            showPlanPanel ?? current.ShowPlanPanel,
-            planTitle ?? current.PlanTitle);
+            showPlanPanel ?? current.ShowPlanPanel);
     }
 
     private static ConversationSessionStateSlice BuildUpdatedSessionStateSlice(

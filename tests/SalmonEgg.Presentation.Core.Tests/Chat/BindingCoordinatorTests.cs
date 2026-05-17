@@ -38,7 +38,6 @@ public sealed class BindingCoordinatorTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
         workspace.UpdateRemoteBinding("session-1", "remote-old", "profile-old");
@@ -93,7 +92,6 @@ public sealed class BindingCoordinatorTests
                 }
             ],
             ShowPlanPanel: true,
-            PlanTitle: "Remote plan",
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             AvailableModes:
@@ -117,7 +115,6 @@ public sealed class BindingCoordinatorTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 3, 0, 0, 0, DateTimeKind.Utc)));
         workspace.UpdateRemoteBinding("session-1", "remote-shared", "profile-1");
@@ -144,8 +141,7 @@ public sealed class BindingCoordinatorTests
                         Status = PlanEntryStatus.Pending,
                         Priority = PlanEntryPriority.Medium
                     }),
-                    true,
-                    "Remote plan")),
+                    true)),
             ConversationSessionStates = ImmutableDictionary<string, ConversationSessionStateSlice>.Empty.Add(
                 "session-1",
                 new ConversationSessionStateSlice(
@@ -185,8 +181,7 @@ public sealed class BindingCoordinatorTests
             AvailableCommands = ImmutableList.Create(new ConversationAvailableCommandSnapshot("cmd-1", "Command 1", "desc")),
             SessionInfo = new ConversationSessionInfoSnapshot { Title = "Remote title", Cwd = @"C:\repo\one" },
             Usage = new ConversationUsageSnapshot { Used = 1, Size = 2 },
-            ShowPlanPanel = true,
-            PlanTitle = "Remote plan"
+            ShowPlanPanel = true
         };
         var state = State.Value(this, () => initialState);
         var chatStore = CreateChatStore(state, initialState);
@@ -215,7 +210,6 @@ public sealed class BindingCoordinatorTests
         Assert.Empty(currentState.AvailableCommands ?? ImmutableList<ConversationAvailableCommandSnapshot>.Empty);
         Assert.Null(currentState.Usage);
         Assert.False(currentState.ShowPlanPanel);
-        Assert.Null(currentState.PlanTitle);
 
         var workspaceBinding1 = workspace.GetRemoteBinding("session-1");
         Assert.NotNull(workspaceBinding1);
@@ -232,7 +226,6 @@ public sealed class BindingCoordinatorTests
         Assert.NotNull(workspaceSnapshot1.SessionInfo);
         Assert.Null(workspaceSnapshot1.Usage);
         Assert.False(workspaceSnapshot1.ShowPlanPanel);
-        Assert.Null(workspaceSnapshot1.PlanTitle);
 
         var workspaceBinding2 = workspace.GetRemoteBinding("session-2");
         Assert.NotNull(workspaceBinding2);
@@ -263,7 +256,6 @@ public sealed class BindingCoordinatorTests
                 ],
                 Plan: [],
                 ShowPlanPanel: false,
-                PlanTitle: null,
                 CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                 LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
                 SessionInfo: new ConversationSessionInfoSnapshot { Title = "Remote title", Cwd = @"C:\repo\one" }),
@@ -285,8 +277,7 @@ public sealed class BindingCoordinatorTests
                         TextContent = "remote transcript"
                     }),
                     ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-                    false,
-                    null)),
+                    false)),
             ConversationSessionStates = ImmutableDictionary<string, ConversationSessionStateSlice>.Empty.Add(
                 "session-1",
                 new ConversationSessionStateSlice(
@@ -356,7 +347,6 @@ public sealed class BindingCoordinatorTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
         workspace.UpdateRemoteBinding("session-1", "remote-old", "profile-old");
@@ -395,7 +385,6 @@ public sealed class BindingCoordinatorTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -438,7 +427,6 @@ public sealed class BindingCoordinatorTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -492,7 +480,6 @@ public sealed class BindingCoordinatorTests
                 }
             ],
             ShowPlanPanel: true,
-            PlanTitle: "Remote plan",
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -500,7 +487,6 @@ public sealed class BindingCoordinatorTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 3, 0, 0, 0, DateTimeKind.Utc)));
         workspace.UpdateRemoteBinding("session-1", "remote-shared", "profile-1");
@@ -526,8 +512,7 @@ public sealed class BindingCoordinatorTests
                         Status = PlanEntryStatus.Pending,
                         Priority = PlanEntryPriority.Medium
                     }),
-                    true,
-                    "Remote plan"))
+                    true))
         };
         var state = State.Value(this, () => initialState);
         var authoritativeState = initialState;

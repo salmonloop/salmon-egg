@@ -96,8 +96,7 @@ public sealed record HydrateConversationAction(
     string? ConversationId,
     IImmutableList<ConversationMessageSnapshot> Transcript,
     IImmutableList<ConversationPlanEntrySnapshot> PlanEntries,
-    bool ShowPlanPanel,
-    string? PlanTitle) : ChatAction;
+    bool ShowPlanPanel) : ChatAction;
 
 public sealed record UpsertTranscriptMessageAction(string? ConversationId, ConversationMessageSnapshot Message) : ChatAction;
 
@@ -129,5 +128,4 @@ public sealed record MergeConversationSessionStateAction(
 public sealed record ReplacePlanEntriesAction(
     string? ConversationId,
     IImmutableList<ConversationPlanEntrySnapshot> PlanEntries,
-    bool ShowPlanPanel,
-    string? PlanTitle) : ChatAction;
+    bool ShowPlanPanel) : ChatAction;

@@ -42,7 +42,6 @@ public sealed class ConversationActivationCoordinatorTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -81,7 +80,6 @@ public sealed class ConversationActivationCoordinatorTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
         workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-a");
@@ -122,7 +120,6 @@ public sealed class ConversationActivationCoordinatorTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -169,7 +166,6 @@ public sealed class ConversationActivationCoordinatorTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -180,8 +176,7 @@ public sealed class ConversationActivationCoordinatorTests
                 new ConversationContentSlice(
                     ImmutableList.Create(CreateTextMessage("cached-1", "cached")),
                     ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-                    false,
-                    null))
+                    false))
         });
         var chatStore = CreateChatStore(state);
         var connectionStore = CreateConnectionStore();
@@ -228,7 +223,6 @@ public sealed class ConversationActivationCoordinatorTests
                 }
             ],
             ShowPlanPanel: true,
-            PlanTitle: "workspace title",
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -277,7 +271,6 @@ public sealed class ConversationActivationCoordinatorTests
         Assert.Single(currentState.PlanEntries!);
         Assert.Equal("workspace plan", currentState.PlanEntries[0].Content);
         Assert.True(currentState.ShowPlanPanel);
-        Assert.Equal("workspace title", currentState.PlanTitle);
 
         var sessionState = currentState.ResolveSessionStateSlice("session-1");
         Assert.NotNull(sessionState);
@@ -314,7 +307,6 @@ public sealed class ConversationActivationCoordinatorTests
                 }
             ],
             ShowPlanPanel: true,
-            PlanTitle: "plan",
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
         workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-a");
@@ -356,7 +348,6 @@ public sealed class ConversationActivationCoordinatorTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             AvailableCommands:
@@ -422,7 +413,6 @@ public sealed class ConversationActivationCoordinatorTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             AvailableModes:
@@ -519,7 +509,6 @@ public sealed class ConversationActivationCoordinatorTests
                 }
             ],
             ShowPlanPanel: true,
-            PlanTitle: "plan",
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -546,7 +535,6 @@ public sealed class ConversationActivationCoordinatorTests
         Assert.Null(currentState.Transcript);
         Assert.Null(currentState.PlanEntries);
         Assert.False(currentState.ShowPlanPanel);
-        Assert.Null(currentState.PlanTitle);
     }
 
     [Fact]
@@ -574,7 +562,6 @@ public sealed class ConversationActivationCoordinatorTests
                 }
             ],
             ShowPlanPanel: true,
-            PlanTitle: "plan",
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             AvailableModes:
@@ -634,7 +621,6 @@ public sealed class ConversationActivationCoordinatorTests
         Assert.Null(currentState.Transcript);
         Assert.Null(currentState.PlanEntries);
         Assert.False(currentState.ShowPlanPanel);
-        Assert.Null(currentState.PlanTitle);
         Assert.NotNull(currentState.SessionInfo);
         Assert.Equal("Remote title", currentState.SessionInfo!.Title);
         Assert.Equal(@"C:\repo\one", currentState.SessionInfo.Cwd);
@@ -700,7 +686,6 @@ public sealed class ConversationActivationCoordinatorTests
                 }
             ],
             ShowPlanPanel: true,
-            PlanTitle: "plan",
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
         workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-a");
@@ -757,7 +742,6 @@ public sealed class ConversationActivationCoordinatorTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -768,7 +752,6 @@ public sealed class ConversationActivationCoordinatorTests
             ],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 2, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 3, 0, DateTimeKind.Utc)));
         workspace.UpdateRemoteBinding("session-old", "remote-1", "profile-a");
@@ -811,7 +794,6 @@ public sealed class ConversationActivationCoordinatorTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -850,7 +832,6 @@ public sealed class ConversationActivationCoordinatorTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -890,7 +871,6 @@ public sealed class ConversationActivationCoordinatorTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -929,7 +909,6 @@ public sealed class ConversationActivationCoordinatorTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -970,7 +949,6 @@ public sealed class ConversationActivationCoordinatorTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
@@ -1011,7 +989,6 @@ public sealed class ConversationActivationCoordinatorTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 

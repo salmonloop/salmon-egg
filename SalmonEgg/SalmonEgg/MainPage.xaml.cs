@@ -142,7 +142,6 @@ public sealed partial class MainPage : Page
         // 2. Listen for global preference changes (animations, theme, backdrop)
         Preferences.PropertyChanged += OnPreferencesPropertyChanged;
         Preferences.ShortcutBindingsChanged += OnShortcutBindingsChanged;
-        _chatViewModel.PropertyChanged += OnChatViewModelPropertyChanged;
         NavVM.PropertyChanged += OnNavigationViewModelPropertyChanged;
         NavVM.TreeRebuilt += OnNavigationTreeRebuilt;
         LayoutVM.PropertyChanged += OnLayoutViewModelPropertyChanged;
@@ -187,7 +186,6 @@ public sealed partial class MainPage : Page
         DetachGamepadInput();
         Preferences.PropertyChanged -= OnPreferencesPropertyChanged;
         Preferences.ShortcutBindingsChanged -= OnShortcutBindingsChanged;
-        _chatViewModel.PropertyChanged -= OnChatViewModelPropertyChanged;
         NavVM.PropertyChanged -= OnNavigationViewModelPropertyChanged;
         NavVM.TreeRebuilt -= OnNavigationTreeRebuilt;
         LayoutVM.PropertyChanged -= OnLayoutViewModelPropertyChanged;
@@ -491,12 +489,12 @@ public sealed partial class MainPage : Page
     private ValueTask<ShellNavigationResult> NavigateToContentAsync(Type pageType, object? parameter = null)
         => _contentNavigation.NavigateAsync(pageType, parameter);
 
-    private string GetRightPanelTitle(RightPanelMode mode, string? planTitle)
+    private string GetRightPanelTitle(RightPanelMode mode)
     {
         return mode switch
         {
             RightPanelMode.Diff => "Diff",
-            RightPanelMode.Todo => string.IsNullOrWhiteSpace(planTitle) ? "Todo" : planTitle,
+            RightPanelMode.Todo => "Todo",
             _ => "Panel"
         };
     }
@@ -841,20 +839,6 @@ public sealed partial class MainPage : Page
         UpdateMainNavAutomationSelectionState();
     }
 
-    private void OnChatViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (LayoutVM.RightPanelMode != RightPanelMode.Todo)
-        {
-            return;
-        }
-
-        if (e.PropertyName == nameof(ChatViewModel.CurrentPlanTitle))
-        {
-            // The title is now bound in XAML using GetRightPanelTitle.
-            // comunitToolkit.Mvvm will notify property changes.
-        }
-    }
-
     // Animation logic removed
 
     // Manual resizer positioning removed as it is now handled by XAML binding to LayoutVM.LeftNavResizerLeft
@@ -1177,7 +1161,6 @@ public sealed partial class MainPage
     {
         base.OnNavigatedFrom(e);
         Preferences.PropertyChanged -= OnPreferencesPropertyChanged;
-        _chatViewModel.PropertyChanged -= OnChatViewModelPropertyChanged;
         LayoutVM.PropertyChanged -= OnLayoutViewModelPropertyChanged;
 
         Loaded -= OnMainPageLoaded;

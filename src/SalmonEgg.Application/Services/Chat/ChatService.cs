@@ -179,7 +179,6 @@ namespace SalmonEgg.Application.Services.Chat
                     break;
                 case PlanUpdate planUpdate:
                     entry.Entries = planUpdate.Entries;
-                    entry.Title = planUpdate.Title;
                     break;
                 case CurrentModeUpdate modeChange:
                     entry.ModeId = modeChange.CurrentModeId;

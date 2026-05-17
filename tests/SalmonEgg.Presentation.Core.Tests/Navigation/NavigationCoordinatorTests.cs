@@ -1347,7 +1347,6 @@ public sealed class NavigationCoordinatorTests
                 [],
                 [],
                 false,
-                null,
                 DateTime.UtcNow,
                 DateTime.UtcNow));
             chat.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
@@ -1811,7 +1810,6 @@ public sealed class NavigationCoordinatorTests
                 [],
                 [],
                 false,
-                null,
                 session.CreatedAt,
                 session.LastActivityAt == default ? session.CreatedAt : session.LastActivityAt));
         }

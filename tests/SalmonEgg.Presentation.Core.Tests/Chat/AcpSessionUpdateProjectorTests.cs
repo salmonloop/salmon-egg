@@ -390,17 +390,18 @@ public class AcpSessionUpdateProjectorTests
         var args = new SessionUpdateEventArgs(
             "remote-1",
             new PlanUpdate(
-                entries: new List<PlanEntry>
+                new List<PlanEntry>
                 {
                     new() { Content = "Step 1", Status = PlanEntryStatus.Pending, Priority = PlanEntryPriority.High }
-                },
-                title: "My plan"));
+                }));
 
         var delta = projector.Project(args);
 
         Assert.True(delta.ShowPlanPanel);
-        Assert.Equal("My plan", delta.PlanTitle);
-        Assert.Single(delta.PlanEntries!);
+        var entry = Assert.Single(delta.PlanEntries!);
+        Assert.Equal("Step 1", entry.Content);
+        Assert.Equal(PlanEntryStatus.Pending, entry.Status);
+        Assert.Equal(PlanEntryPriority.High, entry.Priority);
     }
 
     [Fact]

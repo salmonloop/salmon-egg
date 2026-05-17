@@ -182,7 +182,6 @@ public sealed class RemoteConversationWorkspaceSnapshotPolicyTests
             Transcript: [],
             Plan: [],
             ShowPlanPanel: false,
-            PlanTitle: null,
             CreatedAt: new DateTime(2026, 5, 4, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 5, 4, 0, 0, 0, DateTimeKind.Utc),
             ConnectionInstanceId: "conn-1");

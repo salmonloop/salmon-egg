@@ -56,8 +56,7 @@ public sealed class TranscriptProjectionRestoreTokenProjectorTests
                 new ConversationContentSlice(
                     transcript,
                     ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-                    false,
-                    null)));
+                    false)));
         var sut = new ChatStateProjector();
 
         var projection = sut.Apply(state, ChatConnectionState.Empty, "conv-a", binding: null);

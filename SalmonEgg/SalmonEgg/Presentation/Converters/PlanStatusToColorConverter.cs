@@ -20,7 +20,6 @@ namespace SalmonEgg.Presentation.Converters
                     PlanEntryStatus.Pending => new SolidColorBrush(Microsoft.UI.Colors.Gray),
                     PlanEntryStatus.InProgress => new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 0, 120, 215)),
                     PlanEntryStatus.Completed => new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 0, 180, 0)),
-                    PlanEntryStatus.Failed => new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 200, 40, 40)),
                     _ => new SolidColorBrush(Microsoft.UI.Colors.Gray)
                 };
             }
