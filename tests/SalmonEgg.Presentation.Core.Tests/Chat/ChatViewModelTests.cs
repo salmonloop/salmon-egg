@@ -5229,6 +5229,79 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task PermissionRequestReceived_BeforeToolCallProjection_AttachesInlineActionsWhenToolCallAppears()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        var chatService = CreateConnectedChatService();
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+        });
+        syncContext.RunAll();
+
+        var toolCall = JsonDocument.Parse(
+            """
+            {
+              "toolCallId": "call-1",
+              "title": "Run tests",
+              "kind": "execute",
+              "status": "pending"
+            }
+            """).RootElement.Clone();
+
+        chatService.Raise(service => service.PermissionRequestReceived += null, new PermissionRequestEventArgs
+        {
+            MessageId = "permission-1",
+            SessionId = "remote-1",
+            ToolCall = toolCall,
+            Options =
+            [
+                new Domain.Services.Security.PermissionOption("allow-once", "Allow once", "allow_once"),
+                new Domain.Services.Security.PermissionOption("allow-always", "Always allow", "allow_always"),
+                new Domain.Services.Security.PermissionOption("reject-once", "Reject", "reject_once")
+            ]
+        });
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(fixture.ViewModel.PendingPermissionRequest?.Options.Count == 3);
+        }, timeoutMilliseconds: 5000);
+
+        chatService.Raise(
+            service => service.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs("remote-1", new ToolCallUpdate
+            {
+                ToolCallId = "call-1",
+                Title = "Run tests",
+                Kind = ToolCallKind.Execute,
+                Status = ToolCallStatus.Pending
+            }));
+
+        await WaitForConditionAsync(async () =>
+        {
+            syncContext.RunAll();
+            var state = await fixture.GetStateAsync();
+            var transcript = state.ResolveContentSlice("conv-1")?.Transcript
+                ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+            return transcript.Any(message => string.Equals(message.ToolCallId, "call-1", StringComparison.Ordinal));
+        }, timeoutMilliseconds: 5000);
+        await fixture.ApplyCurrentStoreProjectionAsync();
+
+        var toolMessage = Assert.Single(
+            fixture.ViewModel.MessageHistory.Where(message =>
+                string.Equals(message.ContentType, "tool_call", StringComparison.Ordinal)
+                && string.Equals(message.ToolCallId, "call-1", StringComparison.Ordinal)));
+        Assert.Same(fixture.ViewModel.PendingPermissionRequest, toolMessage.PendingPermissionRequest);
+        Assert.Equal(3, toolMessage.PendingPermissionRequest?.Options.Count);
+    }
+
+    [Fact]
     public async Task SendPromptAsync_WhenPromptResponseReturnsUserMessageId_ReconcilesOptimisticOutgoingMessage()
     {
         var syncContext = new QueueingSynchronizationContext();

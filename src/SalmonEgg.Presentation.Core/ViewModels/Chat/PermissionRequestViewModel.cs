@@ -38,6 +38,8 @@ public partial class PermissionRequestViewModel : ObservableObject
 
 public partial class PermissionOptionViewModel : ObservableObject
 {
+    public Func<PermissionOptionViewModel, Task>? OnSelect { get; set; }
+
     [ObservableProperty]
     private string _optionId = string.Empty;
 
@@ -46,4 +48,24 @@ public partial class PermissionOptionViewModel : ObservableObject
 
     [ObservableProperty]
     private string _kind = string.Empty;
+
+    [ObservableProperty]
+    private string _description = string.Empty;
+
+    public bool IsAllow => Kind.StartsWith("allow", StringComparison.Ordinal);
+
+    public bool HasDescription => !string.IsNullOrWhiteSpace(Description);
+
+    [RelayCommand]
+    private async Task SelectAsync()
+    {
+        if (OnSelect != null)
+        {
+            await OnSelect(this).ConfigureAwait(true);
+        }
+    }
+
+    partial void OnKindChanged(string value) => OnPropertyChanged(nameof(IsAllow));
+
+    partial void OnDescriptionChanged(string value) => OnPropertyChanged(nameof(HasDescription));
 }

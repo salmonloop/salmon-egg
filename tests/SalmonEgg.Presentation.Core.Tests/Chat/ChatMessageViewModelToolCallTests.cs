@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using SalmonEgg.Domain.Models.Tool;
 using SalmonEgg.Presentation.ViewModels.Chat;
 
@@ -110,6 +111,34 @@ public sealed class ChatMessageViewModelToolCallTests
         vm.PendingPermissionRequest = new PermissionRequestViewModel();
 
         Assert.True(vm.HasPendingPermissionRequest);
+    }
+
+    [Fact]
+    public void PermissionOptions_ProjectAllProtocolOptions()
+    {
+        var permissionRequest = new PermissionRequestViewModel
+        {
+            Options = new ObservableCollection<PermissionOptionViewModel>
+            {
+                new() { OptionId = "allow-once", Name = "Allow once", Kind = "allow_once" },
+                new() { OptionId = "allow-always", Name = "Always allow", Kind = "allow_always" },
+                new() { OptionId = "reject-once", Name = "Reject", Kind = "reject_once" }
+            }
+        };
+
+        var vm = ChatMessageViewModel.CreateFromToolCall(
+            id: "tool-8",
+            toolCallId: "call-8",
+            rawInput: null,
+            rawOutput: null,
+            kind: ToolCallKind.Execute,
+            status: ToolCallStatus.Pending,
+            title: "Run command");
+
+        vm.PendingPermissionRequest = permissionRequest;
+
+        Assert.Equal(3, vm.PendingPermissionRequest.Options.Count);
+        Assert.All(vm.PendingPermissionRequest.Options, option => Assert.False(string.IsNullOrWhiteSpace(option.OptionId)));
     }
 
     [Fact]

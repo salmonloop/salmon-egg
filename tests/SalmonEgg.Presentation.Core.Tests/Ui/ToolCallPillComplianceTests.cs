@@ -52,6 +52,23 @@ public sealed class ToolCallPillComplianceTests
     }
 
     [Fact]
+    public void ToolCallPill_XamlProjectsAllPermissionOptions()
+    {
+        var xaml = File.ReadAllText(GetRepoPath(@"SalmonEgg\SalmonEgg\Controls\ToolCallPill.xaml"));
+
+        Assert.Contains(
+            "ItemsSource=\"{x:Bind PermissionOptions, Mode=OneWay}\"",
+            xaml,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Command=\"{x:Bind SelectCommand, Mode=OneWay}\"",
+            xaml,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("AllowPermissionOption", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("RejectPermissionOption", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ToolCallPill_UsesExpanderAsSingleExpansionOwner()
     {
         var xaml = File.ReadAllText(GetRepoPath(@"SalmonEgg\SalmonEgg\Controls\ToolCallPill.xaml"));

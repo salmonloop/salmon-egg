@@ -1172,6 +1172,218 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         [Fact]
+        public async Task SessionRequestPermission_WhenPayloadIsStandard_PublishesAllOptions()
+        {
+            var parser = new MessageParser();
+            var client = await CreateInitializedClientAsync();
+            PermissionRequestEventArgs? published = null;
+            client.PermissionRequestReceived += (_, args) => published = args;
+
+            var request = new JsonRpcRequest(
+                206,
+                "session/request_permission",
+                ElementFromJson(
+                    """
+                    {
+                      "sessionId": "session-1",
+                      "toolCall": {
+                        "toolCallId": "call-1",
+                        "title": "Run tests",
+                        "kind": "execute",
+                        "status": "pending"
+                      },
+                      "options": [
+                        {
+                          "optionId": "allow-once",
+                          "name": "Allow once",
+                          "kind": "allow_once",
+                          "description": "Run this command once"
+                        },
+                        {
+                          "optionId": "allow-always",
+                          "name": "Always allow",
+                          "kind": "allow_always"
+                        },
+                        {
+                          "optionId": "reject-once",
+                          "name": "Reject",
+                          "kind": "reject_once"
+                        }
+                      ]
+                    }
+                    """));
+
+            _transportMock.Raise(
+                t => t.MessageReceived += null,
+                new MessageReceivedEventArgs(parser.SerializeMessage(request)));
+            await WaitForPublishedPermissionRequestAsync(() => published);
+
+            Assert.NotNull(published);
+            Assert.Equal("session-1", published!.SessionId);
+            Assert.Equal(3, published.Options.Count);
+            Assert.Equal("allow-once", published.Options[0].OptionId);
+            Assert.Equal("Run this command once", published.Options[0].Description);
+            Assert.Equal("allow-always", published.Options[1].OptionId);
+            Assert.Equal("reject-once", published.Options[2].OptionId);
+        }
+
+        [Fact]
+        public async Task SessionRequestPermission_WhenOptionsAreMissing_ReturnsInvalidParams()
+        {
+            var parser = new MessageParser();
+            var client = await CreateInitializedClientAsync();
+            var sentMessages = new ConcurrentQueue<string>();
+
+            _transportMock
+                .Setup(t => t.SendMessageAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .Callback<string, CancellationToken>((message, _) => sentMessages.Enqueue(message))
+                .ReturnsAsync(true);
+
+            var request = new JsonRpcRequest(
+                207,
+                "session/request_permission",
+                ElementFromJson(
+                    """
+                    {
+                      "sessionId": "session-1",
+                      "toolCall": {
+                        "toolCallId": "call-1"
+                      }
+                    }
+                    """));
+
+            _transportMock.Raise(
+                t => t.MessageReceived += null,
+                new MessageReceivedEventArgs(parser.SerializeMessage(request)));
+
+            var response = await WaitForResponseAsync(parser, sentMessages, responseId: 207);
+
+            Assert.True(response.IsError);
+            Assert.Equal(JsonRpcErrorCode.InvalidParams, response.Error!.Code);
+        }
+
+        [Fact]
+        public async Task SessionRequestPermission_WhenSessionIdIsNotString_ReturnsInvalidParams()
+        {
+            var parser = new MessageParser();
+            var client = await CreateInitializedClientAsync();
+            var sentMessages = new ConcurrentQueue<string>();
+
+            _transportMock
+                .Setup(t => t.SendMessageAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .Callback<string, CancellationToken>((message, _) => sentMessages.Enqueue(message))
+                .ReturnsAsync(true);
+
+            var request = new JsonRpcRequest(
+                208,
+                "session/request_permission",
+                ElementFromJson(
+                    """
+                    {
+                      "sessionId": 123,
+                      "toolCall": {
+                        "toolCallId": "call-1"
+                      },
+                      "options": [
+                        {
+                          "optionId": "allow-once",
+                          "name": "Allow once",
+                          "kind": "allow_once"
+                        }
+                      ]
+                    }
+                    """));
+
+            _transportMock.Raise(
+                t => t.MessageReceived += null,
+                new MessageReceivedEventArgs(parser.SerializeMessage(request)));
+
+            var response = await WaitForResponseAsync(parser, sentMessages, responseId: 208);
+
+            Assert.True(response.IsError);
+            Assert.Equal(JsonRpcErrorCode.InvalidParams, response.Error!.Code);
+        }
+
+        [Fact]
+        public async Task SessionRequestPermission_WhenToolCallIsMissing_ReturnsInvalidParams()
+        {
+            var parser = new MessageParser();
+            var client = await CreateInitializedClientAsync();
+            var sentMessages = new ConcurrentQueue<string>();
+
+            _transportMock
+                .Setup(t => t.SendMessageAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .Callback<string, CancellationToken>((message, _) => sentMessages.Enqueue(message))
+                .ReturnsAsync(true);
+
+            var request = new JsonRpcRequest(
+                209,
+                "session/request_permission",
+                ElementFromJson(
+                    """
+                    {
+                      "sessionId": "session-1",
+                      "options": [
+                        {
+                          "optionId": "allow-once",
+                          "name": "Allow once",
+                          "kind": "allow_once"
+                        }
+                      ]
+                    }
+                    """));
+
+            _transportMock.Raise(
+                t => t.MessageReceived += null,
+                new MessageReceivedEventArgs(parser.SerializeMessage(request)));
+
+            var response = await WaitForResponseAsync(parser, sentMessages, responseId: 209);
+
+            Assert.True(response.IsError);
+            Assert.Equal(JsonRpcErrorCode.InvalidParams, response.Error!.Code);
+        }
+
+        [Fact]
+        public async Task SessionRequestPermission_WhenToolCallIdIsMissing_ReturnsInvalidParams()
+        {
+            var parser = new MessageParser();
+            var client = await CreateInitializedClientAsync();
+            var sentMessages = new ConcurrentQueue<string>();
+
+            _transportMock
+                .Setup(t => t.SendMessageAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .Callback<string, CancellationToken>((message, _) => sentMessages.Enqueue(message))
+                .ReturnsAsync(true);
+
+            var request = new JsonRpcRequest(
+                210,
+                "session/request_permission",
+                ElementFromJson(
+                    """
+                    {
+                      "sessionId": "session-1",
+                      "toolCall": {},
+                      "options": [
+                        {
+                          "optionId": "allow-once",
+                          "name": "Allow once",
+                          "kind": "allow_once"
+                        }
+                      ]
+                    }
+                    """));
+
+            _transportMock.Raise(
+                t => t.MessageReceived += null,
+                new MessageReceivedEventArgs(parser.SerializeMessage(request)));
+
+            var response = await WaitForResponseAsync(parser, sentMessages, responseId: 210);
+
+            Assert.True(response.IsError);
+            Assert.Equal(JsonRpcErrorCode.InvalidParams, response.Error!.Code);
+        }
+
+        [Fact]
         public async Task RespondToPermissionRequestAsync_WhenRequestIdIsUnknown_ReturnsFalseBeforePayloadValidation()
         {
             var client = await CreateInitializedClientAsync();

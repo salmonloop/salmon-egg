@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Microsoft.UI.Xaml;
@@ -131,13 +130,8 @@ public sealed partial class ToolCallPill : UserControl, INotifyPropertyChanged
 
     public bool HasPendingPermissionRequest => PendingPermissionRequest != null;
 
-    public PermissionOptionViewModel? AllowPermissionOption => FindPermissionOption("allow");
-
-    public PermissionOptionViewModel? RejectPermissionOption => FindPermissionOption("reject");
-
-    public bool HasAllowPermissionOption => AllowPermissionOption != null;
-
-    public bool HasRejectPermissionOption => RejectPermissionOption != null;
+    public IReadOnlyList<PermissionOptionViewModel> PermissionOptions
+        => PendingPermissionRequest?.Options ?? (IReadOnlyList<PermissionOptionViewModel>)Array.Empty<PermissionOptionViewModel>();
 
     public bool HasInlineContent => HasPendingPermissionRequest || HasDisplayItems;
 
@@ -231,10 +225,7 @@ public sealed partial class ToolCallPill : UserControl, INotifyPropertyChanged
         OnPropertyChanged(nameof(PermissionHeaderText));
         OnPropertyChanged(nameof(HasDisplayItems));
         OnPropertyChanged(nameof(HasPendingPermissionRequest));
-        OnPropertyChanged(nameof(AllowPermissionOption));
-        OnPropertyChanged(nameof(RejectPermissionOption));
-        OnPropertyChanged(nameof(HasAllowPermissionOption));
-        OnPropertyChanged(nameof(HasRejectPermissionOption));
+        OnPropertyChanged(nameof(PermissionOptions));
         OnPropertyChanged(nameof(HasInlineContent));
         OnPropertyChanged(nameof(PreviewMaxHeight));
         ApplyDefaultExpansionState();
@@ -325,18 +316,6 @@ public sealed partial class ToolCallPill : UserControl, INotifyPropertyChanged
     private void UpdateDisplayProjection()
     {
         NotifyInlineContentChanged();
-    }
-
-    private PermissionOptionViewModel? FindPermissionOption(string kindPrefix)
-    {
-        var options = PendingPermissionRequest?.Options;
-        if (options is null)
-        {
-            return null;
-        }
-
-        return options.FirstOrDefault(option =>
-            option.Kind.StartsWith(kindPrefix, StringComparison.OrdinalIgnoreCase));
     }
 
     private string SummarizeStructuredContentArray(JsonElement root)
@@ -463,15 +442,6 @@ public sealed partial class ToolCallPill : UserControl, INotifyPropertyChanged
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-
-    private async void OnPermissionOptionClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is Button { Tag: PermissionOptionViewModel option }
-            && PendingPermissionRequest?.RespondCommand is { } command)
-        {
-            await command.ExecuteAsync(option);
-        }
-    }
 
     private void RootExpander_Expanding(Expander sender, ExpanderExpandingEventArgs args)
     {

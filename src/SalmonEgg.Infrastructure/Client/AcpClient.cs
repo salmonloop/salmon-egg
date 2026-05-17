@@ -1077,7 +1077,8 @@ namespace SalmonEgg.Infrastructure.Client
                 }
 
                 var rawParams = request.Params.Value;
-                if (!rawParams.TryGetProperty("sessionId", out var sessionIdProp))
+                if (!rawParams.TryGetProperty("sessionId", out var sessionIdProp)
+                    || sessionIdProp.ValueKind != JsonValueKind.String)
                 {
                     RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
                     _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Missing sessionId")));
@@ -1098,25 +1099,55 @@ namespace SalmonEgg.Infrastructure.Client
                 {
                     SetPendingInboundSessionId(requestId, sessionId);
                 }
-                var toolCall = rawParams.TryGetProperty("toolCall", out var toolCallProp) ? toolCallProp : default;
-                var optionsProp = rawParams.TryGetProperty("options", out var options) ? options : default;
+                if (!rawParams.TryGetProperty("toolCall", out var toolCall)
+                    || toolCall.ValueKind != JsonValueKind.Object)
+                {
+                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+                    _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Missing toolCall")));
+                    return;
+                }
+
+                if (!toolCall.TryGetProperty("toolCallId", out var toolCallId)
+                    || toolCallId.ValueKind != JsonValueKind.String
+                    || string.IsNullOrWhiteSpace(toolCallId.GetString()))
+                {
+                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+                    _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Missing toolCallId")));
+                    return;
+                }
+
+                if (!rawParams.TryGetProperty("options", out var optionsProp)
+                    || optionsProp.ValueKind != JsonValueKind.Array)
+                {
+                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+                    _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Missing options")));
+                    return;
+                }
 
                 var optionsList = new List<SalmonEgg.Domain.Services.Security.PermissionOption>();
-                if (optionsProp.ValueKind == JsonValueKind.Array)
+                foreach (var option in optionsProp.EnumerateArray())
                 {
-                    foreach (var option in optionsProp.EnumerateArray())
+                    if (option.ValueKind != JsonValueKind.Object
+                        || !option.TryGetProperty("optionId", out var id)
+                        || id.ValueKind != JsonValueKind.String
+                        || !option.TryGetProperty("name", out var n)
+                        || n.ValueKind != JsonValueKind.String
+                        || !option.TryGetProperty("kind", out var k)
+                        || k.ValueKind != JsonValueKind.String)
                     {
-                        var optionId = option.TryGetProperty("optionId", out var id)
-                            ? id.GetString() ?? string.Empty
-                            : string.Empty;
-                        var name = option.TryGetProperty("name", out var n)
-                            ? n.GetString() ?? string.Empty
-                            : string.Empty;
-                        var kind = option.TryGetProperty("kind", out var k)
-                            ? k.GetString() ?? string.Empty
-                            : string.Empty;
-                        optionsList.Add(new SalmonEgg.Domain.Services.Security.PermissionOption(optionId, name, kind));
+                        RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+                        _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Invalid permission option")));
+                        return;
                     }
+
+                    var description = option.TryGetProperty("description", out var d) && d.ValueKind == JsonValueKind.String
+                        ? d.GetString()
+                        : null;
+                    optionsList.Add(new SalmonEgg.Domain.Services.Security.PermissionOption(
+                        id.GetString() ?? string.Empty,
+                        n.GetString() ?? string.Empty,
+                        k.GetString() ?? string.Empty,
+                        description));
                 }
 
                 var permissionResponseFunc = new Func<string, string?, Task>((outcome, optionId) =>

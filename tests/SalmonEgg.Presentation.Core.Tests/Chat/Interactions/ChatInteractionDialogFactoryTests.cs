@@ -21,7 +21,7 @@ public sealed class ChatInteractionDialogFactoryTests
                 SessionId = "remote-1",
                 Options =
                 [
-                    new PermissionOption("opt-1", "Option 1", "allow_once")
+                    new PermissionOption("opt-1", "Option 1", "allow_once", "Allow one run")
                 ]
             },
             (messageId, outcome, optionId) =>
@@ -32,6 +32,8 @@ public sealed class ChatInteractionDialogFactoryTests
                 return Task.FromResult(true);
             },
             () => dismissed = true);
+
+        Assert.Equal("Allow one run", sut.Options[0].Description);
 
         await sut.RespondCommand.ExecuteAsync(sut.Options[0]);
 

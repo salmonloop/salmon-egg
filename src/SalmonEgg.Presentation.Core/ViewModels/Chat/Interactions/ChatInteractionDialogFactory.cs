@@ -18,18 +18,22 @@ public static class ChatInteractionDialogFactory
         ArgumentNullException.ThrowIfNull(respondAsync);
         ArgumentNullException.ThrowIfNull(dismiss);
 
+        var optionViewModels = request.Options
+            .Select(opt => new PermissionOptionViewModel
+            {
+                OptionId = opt.OptionId,
+                Name = opt.Name,
+                Kind = opt.Kind,
+                Description = opt.Description ?? string.Empty
+            })
+            .ToArray();
+
         var viewModel = new PermissionRequestViewModel
         {
             MessageId = request.MessageId,
             SessionId = request.SessionId,
             ToolCallJson = request.ToolCall?.ToString() ?? string.Empty,
-            Options = new ObservableCollection<PermissionOptionViewModel>(
-                request.Options.Select(opt => new PermissionOptionViewModel
-                {
-                    OptionId = opt.OptionId,
-                    Name = opt.Name,
-                    Kind = opt.Kind
-                }))
+            Options = new ObservableCollection<PermissionOptionViewModel>(optionViewModels)
         };
 
         viewModel.OnRespond = async (outcome, optionId) =>
@@ -40,6 +44,10 @@ public static class ChatInteractionDialogFactory
                 dismiss();
             }
         };
+        foreach (var option in optionViewModels)
+        {
+            option.OnSelect = selected => viewModel.RespondCommand.ExecuteAsync(selected);
+        }
 
         return viewModel;
     }
