@@ -146,7 +146,7 @@
                                 AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.SessionItem(SessionId)}"
                                 AutomationProperties.Name="{x:Bind AutomationName, Mode=OneWay}"
                                 Tag="{x:Bind navModels:NavItemTag.Session(SessionId)}"
-                                ContentTransitions="{x:Bind models:UiMotion.Current.NavItemTransitions, Mode=OneWay}">
+                                ContentTransitions="{x:Bind models:UiMotionController.Current.NavItemTransitions, Mode=OneWay}">
                 <NavigationViewItem.Icon>
                     <SymbolIcon Symbol="Comment" />
                 </NavigationViewItem.Icon>
@@ -209,7 +209,7 @@
                                 SelectsOnInvoked="False"
                                 AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.MoreItem(ProjectId)}"
                                 Tag="{x:Bind navModels:NavItemTag.More(ProjectId)}"
-                                ContentTransitions="{x:Bind models:UiMotion.Current.NavItemTransitions, Mode=OneWay}">
+                                ContentTransitions="{x:Bind models:UiMotionController.Current.NavItemTransitions, Mode=OneWay}">
                 <NavigationViewItem.Icon>
                     <SymbolIcon Symbol="More" />
                 </NavigationViewItem.Icon>
@@ -544,8 +544,7 @@
 
                         <Grid Grid.Row="0">
                             <Frame x:Name="ContentFrame"
-                                   Background="Transparent"
-                                   ContentTransitions="{x:Bind models:UiMotion.Current.PageTransitions, Mode=OneWay}" />
+                                   Background="Transparent" />
 
                             <ContentControl x:Name="ShellLoadingOverlayPresenter"
                                             Grid.Row="0"

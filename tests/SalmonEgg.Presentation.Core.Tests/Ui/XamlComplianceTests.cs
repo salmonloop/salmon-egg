@@ -420,11 +420,11 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
-    public void AppXaml_DoesNotDeclareASecondUiMotionInstance()
+    public void AppXaml_DoesNotDeclareASecondUiMotionControllerInstance()
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\App.xaml");
 
-        Assert.DoesNotContain("<models:UiMotion x:Key=\"UiMotion\"", xaml);
+        Assert.DoesNotContain("<models:UiMotionController x:Key=", xaml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1048,6 +1048,66 @@ public sealed class XamlComplianceTests
         Assert.Contains("<Setter Property=\"PaneDisplayMode\" Value=\"Top\" />", xaml);
         Assert.DoesNotContain("PaneDisplayMode\" Value=\"Left", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("<NavigationViewItemHeader", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FrameNavigation_UsesNativeNavigationTransitionInfo()
+    {
+        var settingsShellCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\SettingsShellPage.xaml.cs");
+        var contentNavigationCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Navigation\ContentFrameNavigationAdapter.cs");
+        var motionCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Models\UiMotionController.cs");
+        string[] frameNavigationFiles =
+        [
+            @"SalmonEgg\SalmonEgg\App.xaml.cs",
+            @"SalmonEgg\SalmonEgg\Presentation\Navigation\ContentFrameNavigationAdapter.cs",
+            @"SalmonEgg\SalmonEgg\Presentation\Views\SettingsShellPage.xaml.cs",
+            @"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AcpConnectionSettingsPage.xaml.cs",
+            @"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AgentProfileEditorPage.xaml.cs"
+        ];
+
+        Assert.DoesNotContain("ContentTransitions = new TransitionCollection", settingsShellCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("EntranceThemeTransition()", settingsShellCode, StringComparison.Ordinal);
+        Assert.Contains("NavigationTransitionInfo CreateNavigationTransitionInfo()", motionCode, StringComparison.Ordinal);
+        Assert.Contains("new EntranceNavigationTransitionInfo()", motionCode, StringComparison.Ordinal);
+        Assert.Contains("new SuppressNavigationTransitionInfo()", motionCode, StringComparison.Ordinal);
+
+        foreach (var frameNavigationFile in frameNavigationFiles)
+        {
+            var code = LoadText(frameNavigationFile);
+            var navigateCalls = code.Split([".Navigate("], StringSplitOptions.None).Skip(1);
+
+            foreach (var navigateCall in navigateCalls)
+            {
+                var statement = navigateCall.Split(';')[0];
+
+                Assert.Contains(
+                    "UiMotionController.Current.CreateNavigationTransitionInfo()",
+                    statement,
+                    StringComparison.Ordinal);
+            }
+        }
+
+        Assert.Contains("UiMotionController.Current.CreateNavigationTransitionInfo()", contentNavigationCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SharedViews_DoNotUseUnsupportedUiElementTransitions()
+    {
+        string[] xamlFiles =
+        [
+            @"SalmonEgg\SalmonEgg\MainPage.xaml",
+            @"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml",
+            @"SalmonEgg\SalmonEgg\Presentation\Views\Start\StartView.xaml",
+            @"SalmonEgg\SalmonEgg\Presentation\Views\SettingsShellPage.xaml"
+        ];
+
+        foreach (var xamlFile in xamlFiles)
+        {
+            var xaml = LoadXaml(xamlFile);
+
+            Assert.DoesNotContain(" Transitions=\"", xaml, StringComparison.Ordinal);
+            Assert.DoesNotContain("\n          Transitions=\"", xaml, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

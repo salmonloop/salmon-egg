@@ -19,7 +19,6 @@ public sealed partial class ChatView : Page
         public ChatViewModel ViewModel => ShellViewModel.Chat;
         public ListViewTranscriptItemsSource MessagesItemsSource { get; } = new();
         public ShellLayoutViewModel LayoutVM => ShellViewModel.ShellLayout;
-        public UiMotion Motion => UiMotion.Current;
         private bool _isViewLoaded;
         private bool _isTrackingMessages;
         private readonly TranscriptViewportController _viewportController = new();

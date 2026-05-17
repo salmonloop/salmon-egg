@@ -44,7 +44,6 @@
         <!-- 已激活会话状态：对话界面 -->
         <Grid x:Name="ActiveConversationRoot"
               AutomationProperties.AutomationId="ChatView.ActiveRoot"
-              Transitions="{x:Bind Motion.PageTransitions, Mode=OneWay}"
               x:Load="{x:Bind ViewModel.ShouldLoadActiveConversationRoot, Mode=OneWay}"
               Visibility="{x:Bind ViewModel.ShouldShowActiveConversationRoot, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
             <Grid.RowDefinitions>

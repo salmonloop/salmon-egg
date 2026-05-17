@@ -148,7 +148,7 @@
                         Width="20"
                         Height="20"
                         VerticalAlignment="Top"
-                        ChildrenTransitions="{x:Bind models:UiMotion.Current.StatusIconTransitions, Mode=OneWay}">
+                        ChildrenTransitions="{x:Bind models:UiMotionController.Current.StatusIconTransitions, Mode=OneWay}">
                         <ProgressRing
                             IsActive="{x:Bind IsInProgress, Mode=OneWay}"
                             Width="14"

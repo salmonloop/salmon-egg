@@ -1310,7 +1310,7 @@ public sealed partial class MainPage : Page
         if (e.PropertyName == nameof(ShellLayoutViewModel.RightPanelVisible))
         {
             ApplyRightPanelAnimationRequest(
-                _rightPanelAnimation.UpdateTarget(LayoutVM.RightPanelVisible, LayoutVM.RightPanelWidth, UiMotion.Current.IsAnimationEnabled));
+                _rightPanelAnimation.UpdateTarget(LayoutVM.RightPanelVisible, LayoutVM.RightPanelWidth, UiMotionController.Current.IsAnimationEnabled));
         }
 
         if (e.PropertyName == nameof(ShellLayoutViewModel.RightPanelWidth))
@@ -1321,7 +1321,7 @@ public sealed partial class MainPage : Page
         if (e.PropertyName == nameof(ShellLayoutViewModel.BottomPanelVisible))
         {
             ApplyBottomPanelAnimationRequest(
-                _bottomPanelAnimation.UpdateTarget(LayoutVM.BottomPanelVisible, LayoutVM.BottomPanelHeight, UiMotion.Current.IsAnimationEnabled));
+                _bottomPanelAnimation.UpdateTarget(LayoutVM.BottomPanelVisible, LayoutVM.BottomPanelHeight, UiMotionController.Current.IsAnimationEnabled));
         }
 
         if (e.PropertyName == nameof(ShellLayoutViewModel.BottomPanelHeight))

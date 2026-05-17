@@ -1,7 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using SalmonEgg.Presentation.Models;
 using SalmonEgg.Presentation.ViewModels.Start;
 
 namespace SalmonEgg.Presentation.Views.Start;
@@ -9,7 +8,6 @@ namespace SalmonEgg.Presentation.Views.Start;
 public sealed partial class StartView : Page
 {
     public StartViewModel ViewModel { get; }
-    public UiMotion Motion => UiMotion.Current;
 
     public StartView()
     {

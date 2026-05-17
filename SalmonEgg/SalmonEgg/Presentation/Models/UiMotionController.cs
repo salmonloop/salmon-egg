@@ -3,14 +3,14 @@ using Microsoft.UI.Xaml.Media.Animation;
 
 namespace SalmonEgg.Presentation.Models;
 
-public sealed partial class UiMotion : ObservableObject
+public sealed partial class UiMotionController : ObservableObject
 {
-    public static UiMotion Current { get; } = new();
+    public static UiMotionController Current { get; } = new();
 
     private bool _isAnimationEnabled = true;
 
     /// <summary>
-    /// SSOT for whether animations are globally enabled.
+    /// Single owner for whether application motion is enabled.
     /// </summary>
     public bool IsAnimationEnabled
     {
@@ -20,7 +20,6 @@ public sealed partial class UiMotion : ObservableObject
             if (SetProperty(ref _isAnimationEnabled, value))
             {
                 // Notify that all transition properties might have changed (from null to collection or vice versa)
-                OnPropertyChanged(nameof(PageTransitions));
                 OnPropertyChanged(nameof(NavItemTransitions));
                 OnPropertyChanged(nameof(ListItemTransitions));
                 OnPropertyChanged(nameof(ToolCallTransitions));
@@ -30,11 +29,12 @@ public sealed partial class UiMotion : ObservableObject
     }
 
     /// <summary>
-    /// Entrance transitions for pages. Returning a new collection each time avoids 
-    /// "element already has a parent" or thread-affinity issues in WinUI 3.
+    /// Native Frame navigation transition selected by the global motion preference. Uno maps this WinUI API per platform.
     /// </summary>
-    public TransitionCollection? PageTransitions =>
-        IsAnimationEnabled ? CreateEntranceTransitions(0, 12) : null;
+    public NavigationTransitionInfo CreateNavigationTransitionInfo()
+        => IsAnimationEnabled
+            ? new EntranceNavigationTransitionInfo()
+            : new SuppressNavigationTransitionInfo();
 
     /// <summary>
     /// Entrance transitions for sidebar items.

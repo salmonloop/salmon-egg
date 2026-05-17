@@ -1,6 +1,7 @@
 using System.Linq;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using SalmonEgg.Presentation.Models;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.Views;
 
@@ -25,7 +26,10 @@ public sealed partial class AcpConnectionSettingsPage : SettingsPageBase
 
     private void OnAddProfileClick(object sender, RoutedEventArgs e)
     {
-        Frame?.Navigate(typeof(AgentProfileEditorPage), new AgentProfileEditorArgs(isEditing: false, profileId: null));
+        Frame?.Navigate(
+            typeof(AgentProfileEditorPage),
+            new AgentProfileEditorArgs(isEditing: false, profileId: null),
+            UiMotionController.Current.CreateNavigationTransitionInfo());
     }
 
     private void OnEditProfileMenuClick(object sender, RoutedEventArgs e)
@@ -35,7 +39,10 @@ public sealed partial class AcpConnectionSettingsPage : SettingsPageBase
             return;
         }
 
-        Frame?.Navigate(typeof(AgentProfileEditorPage), new AgentProfileEditorArgs(isEditing: true, profileId: profileId));
+        Frame?.Navigate(
+            typeof(AgentProfileEditorPage),
+            new AgentProfileEditorArgs(isEditing: true, profileId: profileId),
+            UiMotionController.Current.CreateNavigationTransitionInfo());
     }
 
     

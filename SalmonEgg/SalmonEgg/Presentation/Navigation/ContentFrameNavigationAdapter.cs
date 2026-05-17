@@ -68,10 +68,7 @@ public sealed class ContentFrameNavigationAdapter
         var navigated = false;
         try
         {
-            var transition = UiMotion.Current.IsAnimationEnabled
-                ? (NavigationTransitionInfo)new EntranceNavigationTransitionInfo()
-                : new SuppressNavigationTransitionInfo();
-            navigated = _frame.Navigate(pageType, parameter, transition);
+            navigated = _frame.Navigate(pageType, parameter, UiMotionController.Current.CreateNavigationTransitionInfo());
         }
         catch (Exception ex)
         {

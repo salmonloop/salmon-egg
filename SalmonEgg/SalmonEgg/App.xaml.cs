@@ -56,7 +56,7 @@ public partial class App : global::Microsoft.UI.Xaml.Application
                 if (window.Content is Frame frame)
                 {
                     frame.BackStack.Clear();
-                    frame.Navigate(typeof(MainPage));
+                    frame.Navigate(typeof(MainPage), null, UiMotionController.Current.CreateNavigationTransitionInfo());
                 }
             });
         }
@@ -194,7 +194,7 @@ public partial class App : global::Microsoft.UI.Xaml.Application
             if (_appSettingsService != null)
             {
                 var settings = await _appSettingsService.LoadAsync();
-                UiMotion.Current.IsAnimationEnabled = settings.IsAnimationEnabled;
+                UiMotionController.Current.IsAnimationEnabled = settings.IsAnimationEnabled;
                 ApplyReducedMotion(!settings.IsAnimationEnabled);
             }
         }
@@ -205,7 +205,7 @@ public partial class App : global::Microsoft.UI.Xaml.Application
 
         if (rootFrame.Content == null)
         {
-            rootFrame.Navigate(typeof(MainPage), args.Arguments);
+            rootFrame.Navigate(typeof(MainPage), args.Arguments, UiMotionController.Current.CreateNavigationTransitionInfo());
             BootLog("OnLaunched: navigated to MainPage");
         }
 

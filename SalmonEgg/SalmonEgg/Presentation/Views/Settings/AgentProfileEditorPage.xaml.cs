@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Presentation.Models;
 using SalmonEgg.Presentation.ViewModels;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.ViewModels.Settings;
@@ -92,7 +93,7 @@ public sealed partial class AgentProfileEditorPage : SettingsPageBase
         }
         else
         {
-            Frame?.Navigate(typeof(AcpConnectionSettingsPage));
+            Frame?.Navigate(typeof(AcpConnectionSettingsPage), null, UiMotionController.Current.CreateNavigationTransitionInfo());
         }
     }
 

@@ -33,8 +33,7 @@
     <Grid x:Name="StartRoot"
           RowDefinitions="*,Auto"
           Background="Transparent"
-          Padding="24,20,24,24"
-          Transitions="{x:Bind Motion.PageTransitions, Mode=OneWay}">
+          Padding="24,20,24,24">
 
         <Grid x:Name="HeroLayer"
               Grid.Row="0"
