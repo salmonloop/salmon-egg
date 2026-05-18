@@ -30,6 +30,7 @@ public partial class App : global::Microsoft.UI.Xaml.Application
 
     internal static void BootLog(string message)
     {
+#if DEBUG
         try
         {
             var dir = SalmonEggPaths.GetAppDataRootPath();
@@ -39,6 +40,7 @@ public partial class App : global::Microsoft.UI.Xaml.Application
         catch
         {
         }
+#endif
     }
 
     internal static void ReloadMainShell()

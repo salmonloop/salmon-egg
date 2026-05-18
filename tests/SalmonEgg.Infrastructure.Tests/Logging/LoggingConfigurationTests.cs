@@ -109,6 +109,44 @@ public class LoggingConfigurationTests
     }
 
     [Fact]
+    public void ConfigureLogging_DefaultMode_ShouldNotWriteDebugOrVerboseEntries()
+    {
+        // Arrange
+        var tempPath = Path.Combine(Path.GetTempPath(), "SalmonEggTests", Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tempPath);
+        var debugMarker = $"debug-{Guid.NewGuid()}";
+        var verboseMarker = $"verbose-{Guid.NewGuid()}";
+        var infoMarker = $"info-{Guid.NewGuid()}";
+
+        try
+        {
+            // Act
+            var logger = LoggingConfiguration.ConfigureLogging(tempPath);
+            logger.Debug("Debug marker {Marker}", debugMarker);
+            logger.Verbose("Verbose marker {Marker}", verboseMarker);
+            logger.Information("Information marker {Marker}", infoMarker);
+            (logger as IDisposable)?.Dispose();
+
+            // Assert
+            var logDirectory = Path.Combine(tempPath, "logs");
+            var logFiles = Directory.GetFiles(logDirectory, "app-*.log");
+            Assert.NotEmpty(logFiles);
+
+            var logContent = string.Join(Environment.NewLine, logFiles.Select(File.ReadAllText));
+            Assert.Contains(infoMarker, logContent, StringComparison.Ordinal);
+            Assert.DoesNotContain(debugMarker, logContent, StringComparison.Ordinal);
+            Assert.DoesNotContain(verboseMarker, logContent, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(tempPath))
+            {
+                Directory.Delete(tempPath, true);
+            }
+        }
+    }
+
+    [Fact]
     public void ConfigureLogging_ShouldWriteToLogFile()
     {
         // Arrange

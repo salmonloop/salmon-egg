@@ -20,7 +20,7 @@ public static class LoggingConfiguration
     /// <returns>配置好的 ILogger 实例</returns>
     public static ILogger ConfigureLogging(
         string appDataPath,
-        bool enableDebugMode = true,
+        bool enableDebugMode = false,
         LoggingHostCapabilities? hostCapabilities = null)
     {
         hostCapabilities ??= LoggingHostCapabilities.Desktop;
@@ -38,15 +38,13 @@ public static class LoggingConfiguration
             logPath = Path.Combine(logDirectory, "app-.log");
         }
 
-        // 根据调试模式设置日志级别 (Requirement 6.2, 6.3)
-        // 默认启用 Verbose 级别以查看完整的传输层调试信息
         var minimumLevel = enableDebugMode ? LogEventLevel.Verbose : LogEventLevel.Information;
 
         var configuration = new LoggerConfiguration()
             // 配置日志级别 (Requirement 6.2)
             .MinimumLevel.Is(minimumLevel)
-            .MinimumLevel.Override("Microsoft", LogEventLevel.Debug)
-            .MinimumLevel.Override("System", LogEventLevel.Debug)
+            .MinimumLevel.Override("Microsoft", enableDebugMode ? LogEventLevel.Debug : LogEventLevel.Warning)
+            .MinimumLevel.Override("System", enableDebugMode ? LogEventLevel.Debug : LogEventLevel.Warning)
             // 添加上下文信息 (Requirement 6.1)
             .Enrich.FromLogContext();
 
