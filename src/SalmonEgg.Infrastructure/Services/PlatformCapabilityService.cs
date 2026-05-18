@@ -30,6 +30,8 @@ public sealed class PlatformCapabilityService : IPlatformCapabilityService
 
     public bool SupportsLocalTerminal => SupportsStdioTransport && SupportsInteractiveTerminalSurface;
 
+    public bool SupportsGamepadInput => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+
     private static bool IsDesktopProcessHost
     {
         get

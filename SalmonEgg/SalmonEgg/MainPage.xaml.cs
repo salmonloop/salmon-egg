@@ -673,6 +673,11 @@ public sealed partial class MainPage : Page
         _ = _gamepadNavigationDispatcher.TryDispatch(intent);
     }
 
+    public bool TryGoBack()
+    {
+        return _titleBarAdapter.TryGoBack();
+    }
+
     private void OnAppTitleBarLoaded(object sender, RoutedEventArgs e)
     {
 #if WINDOWS
@@ -711,7 +716,7 @@ public sealed partial class MainPage : Page
 
     private void OnTitleBarBackClick(object sender, RoutedEventArgs e)
     {
-        _titleBarAdapter.TryGoBack();
+        TryGoBack();
     }
 
     private async void OnToggleLeftNavClick(object sender, RoutedEventArgs e)

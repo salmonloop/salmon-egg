@@ -1015,7 +1015,9 @@ public sealed class XamlComplianceTests
         var code = LoadText(@"SalmonEgg\SalmonEgg\DependencyInjection.cs");
 
         Assert.Contains("IGamepadInputService", code);
+        Assert.Contains("SupportsGamepadInput", code);
         Assert.DoesNotContain("new WindowsGamepadInputService(", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("new NoOpGamepadInputService(", code, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1488,8 +1490,30 @@ public sealed class XamlComplianceTests
         Assert.Contains("IToggleProvider", code);
         Assert.Contains("IExpandCollapseProvider", code);
         Assert.Contains("ISelectionItemProvider", code);
+        Assert.Contains("IShellBackNavigationService", code);
         Assert.DoesNotContain("SelectedItem =", code, StringComparison.Ordinal);
         Assert.DoesNotContain(".IsOpen = false", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("ContentFrame", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("TitleBarBackButton", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetOpenPopupsForXamlRoot", code, StringComparison.Ordinal);
+        Assert.DoesNotContain(".GoBack(", code, StringComparison.Ordinal);
+        Assert.DoesNotContain(".Hide()", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ShellBackNavigationService_UsesCurrentShellBackOwner()
+    {
+        var service = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\ShellBackNavigationService.cs");
+        var mainPage = LoadText(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
+
+        Assert.Contains("IShellBackNavigationService", service, StringComparison.Ordinal);
+        Assert.Contains("public sealed class ShellBackNavigationService : IShellBackNavigationService", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("IShellBackNavigationService", mainPage, StringComparison.Ordinal);
+        Assert.Contains("rootFrame.Content as MainPage", service, StringComparison.Ordinal);
+        Assert.Contains("public bool TryGoBack()", mainPage, StringComparison.Ordinal);
+        Assert.Contains("_titleBarAdapter.TryGoBack()", mainPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("TitleBarBackButton", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("ContentFrame", service, StringComparison.Ordinal);
     }
 
     [Fact]

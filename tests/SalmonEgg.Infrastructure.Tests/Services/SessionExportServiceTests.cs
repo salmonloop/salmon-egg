@@ -98,6 +98,7 @@ public sealed class SessionExportServiceTests : IDisposable
         public bool SupportsStdioTransport => false;
         public bool SupportsInteractiveTerminalSurface => false;
         public bool SupportsLocalTerminal => false;
+        public bool SupportsGamepadInput => false;
     }
 
     private sealed class TestAppDataService : IAppDataService

@@ -11,4 +11,5 @@ public interface IPlatformCapabilityService
     bool SupportsStdioTransport { get; }
     bool SupportsInteractiveTerminalSurface { get; }
     bool SupportsLocalTerminal { get; }
+    bool SupportsGamepadInput { get; }
 }

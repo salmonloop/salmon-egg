@@ -3,10 +3,10 @@ using System.Threading;
 
 namespace SalmonEgg.GuiTests.Windows;
 
-public sealed class GamepadShellSmokeTests
+public sealed class ShellFocusedActivationSmokeTests
 {
     [SkippableFact]
-    public void DiscoverSessions_CanBeReached_AndActivated_ThroughGamepadNavigationPath()
+    public void DiscoverSessions_CanBeReached_AndActivated_ThroughFocusedNativeActivationPath()
     {
         GuiTestGate.RequireEnabled();
 
@@ -20,6 +20,6 @@ public sealed class GamepadShellSmokeTests
 
         Assert.True(
             session.WaitUntilVisible("DiscoverSessions.Title", TimeSpan.FromSeconds(10)),
-            $"Discover sessions page did not become visible through shell directional navigation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+            $"Discover sessions page did not become visible through focused native activation.{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 }

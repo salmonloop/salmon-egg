@@ -168,12 +168,15 @@ public sealed class MainWindowTitleBarAdapter : ITitleBarInsetProvider, IDisposa
         _titleBarBackButton.IsEnabled = canGoBack;
     }
 
-    public void TryGoBack()
+    public bool TryGoBack()
     {
-        if (_contentFrame.CanGoBack)
+        if (!_contentFrame.CanGoBack)
         {
-            _contentFrame.GoBack();
+            return false;
         }
+
+        _contentFrame.GoBack();
+        return true;
     }
 
     public void UpdateNavToggleToolTip(string tooltipText)

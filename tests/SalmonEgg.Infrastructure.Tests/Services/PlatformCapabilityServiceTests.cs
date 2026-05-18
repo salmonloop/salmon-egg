@@ -44,4 +44,14 @@ public sealed class PlatformCapabilityServiceTests
 
         Assert.Equal(sut.SupportsExternalFileOpen, sut.SupportsLocalFileExport);
     }
+
+    [Fact]
+    public void SupportsGamepadInput_FollowsWindowsGamingInputAvailability()
+    {
+        var sut = new PlatformCapabilityService();
+
+        Assert.Equal(
+            RuntimeInformation.IsOSPlatform(OSPlatform.Windows),
+            sut.SupportsGamepadInput);
+    }
 }

@@ -70,5 +70,7 @@ public sealed class DiscoverSessionsConnectionFacadeTests
         public bool SupportsInteractiveTerminalSurface => SupportsStdioTransport;
 
         public bool SupportsLocalTerminal => SupportsStdioTransport;
+
+        public bool SupportsGamepadInput => false;
     }
 }

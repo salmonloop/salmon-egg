@@ -31,6 +31,7 @@ using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Core.Mvux.ShellLayout;
 using SalmonEgg.Presentation.Core.Services.Chat;
+using SalmonEgg.Presentation.Core.Services.Navigation;
 using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Core.Services.Search;
 using SalmonEgg.Presentation.Core.Services.Input;
@@ -144,7 +145,12 @@ public static class DependencyInjection
         });
 #if WINDOWS
         services.AddSingleton<WindowsRawGameControllerMapper>();
-        services.AddSingleton<IGamepadInputService, WindowsGamepadInputService>();
+        services.AddSingleton<WindowsGamepadInputService>();
+        services.AddSingleton<NoOpGamepadInputService>();
+        services.AddSingleton<IGamepadInputService>(sp =>
+            sp.GetRequiredService<IPlatformCapabilityService>().SupportsGamepadInput
+                ? sp.GetRequiredService<WindowsGamepadInputService>()
+                : sp.GetRequiredService<NoOpGamepadInputService>());
 #elif __ANDROID__
         services.AddSingleton<IGamepadInputService, NoOpGamepadInputService>();
 #else
@@ -156,6 +162,7 @@ public static class DependencyInjection
 #else
         services.AddSingleton<IVoiceInputService>(NoOpVoiceInputService.Instance);
 #endif
+        services.AddSingleton<IShellBackNavigationService, ShellBackNavigationService>();
         services.AddSingleton<IGamepadNavigationDispatcher, MainShellGamepadNavigationDispatcher>();
 
         // Secure Storage

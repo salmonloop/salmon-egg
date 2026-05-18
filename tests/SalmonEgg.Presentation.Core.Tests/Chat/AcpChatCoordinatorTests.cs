@@ -2163,5 +2163,7 @@ public sealed class AcpChatCoordinatorTests
         public bool SupportsInteractiveTerminalSurface => SupportsStdioTransport;
 
         public bool SupportsLocalTerminal => SupportsStdioTransport;
+
+        public bool SupportsGamepadInput => false;
     }
 }

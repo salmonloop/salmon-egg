@@ -4,10 +4,10 @@ using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
-using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using SalmonEgg.Presentation.Core.Services.Input;
+using SalmonEgg.Presentation.Core.Services.Navigation;
 using ExpandCollapseState = Microsoft.UI.Xaml.Automation.ExpandCollapseState;
 using FocusDirection = Microsoft.UI.Xaml.Input.FocusNavigationDirection;
 using XamlFocusManager = Microsoft.UI.Xaml.Input.FocusManager;
@@ -17,10 +17,14 @@ namespace SalmonEgg.Presentation.Services.Input;
 public sealed class MainShellGamepadNavigationDispatcher : IGamepadNavigationDispatcher
 {
     private readonly ILogger<MainShellGamepadNavigationDispatcher> _logger;
+    private readonly IShellBackNavigationService _shellBackNavigation;
 
-    public MainShellGamepadNavigationDispatcher(ILogger<MainShellGamepadNavigationDispatcher> logger)
+    public MainShellGamepadNavigationDispatcher(
+        ILogger<MainShellGamepadNavigationDispatcher> logger,
+        IShellBackNavigationService shellBackNavigation)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _shellBackNavigation = shellBackNavigation ?? throw new ArgumentNullException(nameof(shellBackNavigation));
     }
 
     public bool TryDispatch(GamepadNavigationIntent intent)
@@ -37,7 +41,7 @@ public sealed class MainShellGamepadNavigationDispatcher : IGamepadNavigationDis
             GamepadNavigationIntent.MoveLeft => TryMoveFocus(FocusDirection.Left),
             GamepadNavigationIntent.MoveRight => TryMoveFocus(FocusDirection.Right),
             GamepadNavigationIntent.Activate => TryActivateFocusedElement(),
-            GamepadNavigationIntent.Back => TryHandleBack(),
+            GamepadNavigationIntent.Back => _shellBackNavigation.TryGoBack(),
             _ => false
         };
     }
@@ -83,58 +87,6 @@ public sealed class MainShellGamepadNavigationDispatcher : IGamepadNavigationDis
         }
 
         return TrySelect(focusedElement);
-    }
-
-    private bool TryHandleBack()
-    {
-        if (TryCloseTopPopup())
-        {
-            return true;
-        }
-
-        var contentFrame = FindNamedDescendant<Frame>(GetRootElement(), "ContentFrame");
-        if (contentFrame?.CanGoBack == true)
-        {
-            contentFrame.GoBack();
-            return true;
-        }
-
-        var backButton = FindNamedDescendant<Button>(GetRootElement(), "TitleBarBackButton");
-        if (backButton?.IsEnabled == true)
-        {
-            return TryInvoke(backButton);
-        }
-
-        return false;
-    }
-
-    private bool TryCloseTopPopup()
-    {
-        var root = GetRootElement();
-        var xamlRoot = root?.XamlRoot;
-        if (xamlRoot is null)
-        {
-            return false;
-        }
-
-        var popups = VisualTreeHelper.GetOpenPopupsForXamlRoot(xamlRoot);
-        if (popups.Count > 0)
-        {
-            var popup = popups[popups.Count - 1];
-            if (popup.Child is FrameworkElement child)
-            {
-                var dialog = FindDescendant<ContentDialog>(child);
-                if (dialog != null)
-                {
-                    dialog.Hide();
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        return false;
     }
 
     private static DependencyObject? GetFocusedElement()
@@ -271,45 +223,4 @@ public sealed class MainShellGamepadNavigationDispatcher : IGamepadNavigationDis
         }
     }
 
-    private static T? FindNamedDescendant<T>(DependencyObject? root, string name)
-        where T : FrameworkElement
-    {
-        var match = FindDescendant<T>(root, element => string.Equals(element.Name, name, StringComparison.Ordinal));
-        return match;
-    }
-
-    private static T? FindDescendant<T>(DependencyObject? root)
-        where T : DependencyObject
-    {
-        return FindDescendant<T>(root, static _ => true);
-    }
-
-    private static T? FindDescendant<T>(DependencyObject? root, Predicate<T> predicate)
-        where T : DependencyObject
-    {
-        if (root is null)
-        {
-            return default;
-        }
-
-        var queue = new Queue<DependencyObject>();
-        queue.Enqueue(root);
-
-        while (queue.Count > 0)
-        {
-            var current = queue.Dequeue();
-            if (current is T match && predicate(match))
-            {
-                return match;
-            }
-
-            var childCount = VisualTreeHelper.GetChildrenCount(current);
-            for (var i = 0; i < childCount; i++)
-            {
-                queue.Enqueue(VisualTreeHelper.GetChild(current, i));
-            }
-        }
-
-        return default;
-    }
 }
