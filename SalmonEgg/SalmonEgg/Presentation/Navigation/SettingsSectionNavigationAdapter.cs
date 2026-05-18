@@ -15,7 +15,6 @@ public sealed class SettingsSectionNavigationAdapter : IDisposable
     private readonly NavigationView _navigationView;
     private readonly Dictionary<string, NavigationViewItem> _sectionItemsByKey = new(StringComparer.Ordinal);
     private bool _disposed;
-    private bool _suppressSelectionChanged;
 
     public SettingsSectionNavigationAdapter(
         NavigationView navigationView,
@@ -25,7 +24,7 @@ public sealed class SettingsSectionNavigationAdapter : IDisposable
         ArgumentNullException.ThrowIfNull(sections);
 
         PopulateSections(sections);
-        _navigationView.SelectionChanged += OnSelectionChanged;
+        _navigationView.ItemInvoked += OnItemInvoked;
     }
 
     public event EventHandler<SettingsSectionNavigationInvokedEventArgs>? SectionInvoked;
@@ -40,14 +39,9 @@ public sealed class SettingsSectionNavigationAdapter : IDisposable
             return;
         }
 
-        _suppressSelectionChanged = true;
-        try
+        if (!ReferenceEquals(_navigationView.SelectedItem, item))
         {
             _navigationView.SelectedItem = item;
-        }
-        finally
-        {
-            _suppressSelectionChanged = false;
         }
     }
 
@@ -58,7 +52,7 @@ public sealed class SettingsSectionNavigationAdapter : IDisposable
             return;
         }
 
-        _navigationView.SelectionChanged -= OnSelectionChanged;
+        _navigationView.ItemInvoked -= OnItemInvoked;
         _disposed = true;
     }
 
@@ -82,14 +76,14 @@ public sealed class SettingsSectionNavigationAdapter : IDisposable
         }
     }
 
-    private void OnSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
+    private void OnItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
     {
-        if (_disposed || _suppressSelectionChanged)
+        if (_disposed)
         {
             return;
         }
 
-        if (args.SelectedItem is NavigationViewItem item && item.Tag is string key)
+        if (args.InvokedItemContainer is NavigationViewItem item && item.Tag is string key)
         {
             SectionInvoked?.Invoke(this, new SettingsSectionNavigationInvokedEventArgs(key));
         }

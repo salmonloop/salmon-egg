@@ -1189,7 +1189,10 @@ public sealed class XamlComplianceTests
         Assert.Contains("foreach (var section in sections)", adapterCode, StringComparison.Ordinal);
         Assert.Contains("_navigationView.MenuItems.Add(item)", adapterCode, StringComparison.Ordinal);
         Assert.Contains("_navigationView.SelectedItem = item", adapterCode, StringComparison.Ordinal);
-        Assert.Contains("_navigationView.SelectionChanged -= OnSelectionChanged", adapterCode, StringComparison.Ordinal);
+        Assert.Contains("_navigationView.ItemInvoked += OnItemInvoked", adapterCode, StringComparison.Ordinal);
+        Assert.Contains("_navigationView.ItemInvoked -= OnItemInvoked", adapterCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("SelectionChanged", adapterCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("_suppressSelectionChanged", adapterCode, StringComparison.Ordinal);
         Assert.DoesNotContain("MenuItemsSource=\"", adapterCode, StringComparison.Ordinal);
         Assert.DoesNotContain(".MenuItemsSource", adapterCode, StringComparison.Ordinal);
     }
