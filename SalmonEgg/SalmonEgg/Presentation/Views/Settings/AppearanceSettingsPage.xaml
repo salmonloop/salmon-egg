@@ -127,8 +127,8 @@
                                           HorizontalAlignment="Stretch"
                                           VerticalAlignment="Center">
                                     <ComboBoxItem x:Uid="Appearance_BackdropSystem" Content="自动（系统推荐）" Tag="System" />
-                                    <ComboBoxItem Content="Mica" Tag="Mica" />
-                                    <ComboBoxItem Content="Acrylic" Tag="Acrylic" />
+                                    <ComboBoxItem x:Uid="Appearance_BackdropMica" Content="Mica" Tag="Mica" />
+                                    <ComboBoxItem x:Uid="Appearance_BackdropAcrylic" Content="Acrylic" Tag="Acrylic" />
                                     <ComboBoxItem x:Uid="Appearance_BackdropSolid" Content="纯色" Tag="Solid" />
                                 </ComboBox>
                             </Grid>

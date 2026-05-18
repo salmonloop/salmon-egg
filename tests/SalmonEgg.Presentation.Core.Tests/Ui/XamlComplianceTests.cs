@@ -1138,7 +1138,9 @@ public sealed class XamlComplianceTests
             "Appearance_PageTitle.Text",
             "Appearance_PageSummary.Text",
             "Appearance_ThemeLabel.Text",
-            "Appearance_BackdropLabel.Text"
+            "Appearance_BackdropLabel.Text",
+            "Appearance_BackdropMica.Content",
+            "Appearance_BackdropAcrylic.Content"
         ];
 
         foreach (var resourceFile in resourceFiles)

@@ -711,6 +711,12 @@
   <data name="Appearance_BackdropSystem.Content" xml:space="preserve">
     <value>Automatic (recommended)</value>
   </data>
+  <data name="Appearance_BackdropMica.Content" xml:space="preserve">
+    <value>Mica</value>
+  </data>
+  <data name="Appearance_BackdropAcrylic.Content" xml:space="preserve">
+    <value>Acrylic</value>
+  </data>
   <data name="Appearance_BackdropSolid.Content" xml:space="preserve">
     <value>Solid</value>
   </data>
