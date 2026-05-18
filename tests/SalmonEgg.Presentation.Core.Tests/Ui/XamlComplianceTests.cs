@@ -1165,8 +1165,8 @@ public sealed class XamlComplianceTests
         Assert.Contains("<Setter Property=\"PaneDisplayMode\" Value=\"Top\" />", xaml);
         Assert.DoesNotContain("PaneDisplayMode\" Value=\"Left", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("<NavigationViewItemHeader", xaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("MenuItemsSource=\"", xaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("SelectedItem=\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MenuItemsSource=\"{x:Bind ViewModel.Sections, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("SelectedItem=\"{x:Bind ViewModel.SelectedSection, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("SelectionChanged=\"", xaml, StringComparison.Ordinal);
     }
 
@@ -1177,7 +1177,7 @@ public sealed class XamlComplianceTests
         var adapterCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Navigation\SettingsSectionNavigationAdapter.cs");
 
         Assert.Contains("public SettingsShellViewModel ViewModel { get; }", code, StringComparison.Ordinal);
-        Assert.Contains("_sectionNavigation = new SettingsSectionNavigationAdapter(SettingsNavView, ViewModel.Sections)", code, StringComparison.Ordinal);
+        Assert.Contains("_sectionNavigation = new SettingsSectionNavigationAdapter(SettingsNavView)", code, StringComparison.Ordinal);
         Assert.Contains("private void AttachSectionNavigation()", code, StringComparison.Ordinal);
         Assert.Contains("private void DetachSectionNavigation()", code, StringComparison.Ordinal);
         Assert.Contains("_sectionNavigation = null;", code, StringComparison.Ordinal);
@@ -1186,14 +1186,15 @@ public sealed class XamlComplianceTests
         Assert.DoesNotContain("SettingsNavView.MenuItems", code, StringComparison.Ordinal);
         Assert.DoesNotContain("FindNavItemByKey", code, StringComparison.Ordinal);
 
-        Assert.Contains("foreach (var section in sections)", adapterCode, StringComparison.Ordinal);
-        Assert.Contains("_navigationView.MenuItems.Add(item)", adapterCode, StringComparison.Ordinal);
-        Assert.Contains("_navigationView.SelectedItem = item", adapterCode, StringComparison.Ordinal);
+        Assert.Contains("SettingsShellSectionViewModel section", adapterCode, StringComparison.Ordinal);
         Assert.Contains("_navigationView.ItemInvoked += OnItemInvoked", adapterCode, StringComparison.Ordinal);
         Assert.Contains("_navigationView.ItemInvoked -= OnItemInvoked", adapterCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("foreach (var section in sections)", adapterCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("_navigationView.MenuItems.Add", adapterCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("_navigationView.SelectedItem =", adapterCode, StringComparison.Ordinal);
         Assert.DoesNotContain("SelectionChanged", adapterCode, StringComparison.Ordinal);
         Assert.DoesNotContain("_suppressSelectionChanged", adapterCode, StringComparison.Ordinal);
-        Assert.DoesNotContain("MenuItemsSource=\"", adapterCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("MenuItemsSource=", adapterCode, StringComparison.Ordinal);
         Assert.DoesNotContain(".MenuItemsSource", adapterCode, StringComparison.Ordinal);
     }
 

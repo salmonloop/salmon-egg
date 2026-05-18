@@ -1,8 +1,5 @@
 using System;
-using System.Collections.Generic;
-using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
-using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.ViewModels.Settings;
 
 namespace SalmonEgg.Presentation.Navigation;
@@ -13,37 +10,16 @@ namespace SalmonEgg.Presentation.Navigation;
 public sealed class SettingsSectionNavigationAdapter : IDisposable
 {
     private readonly NavigationView _navigationView;
-    private readonly Dictionary<string, NavigationViewItem> _sectionItemsByKey = new(StringComparer.Ordinal);
     private bool _disposed;
 
-    public SettingsSectionNavigationAdapter(
-        NavigationView navigationView,
-        IReadOnlyList<SettingsShellSectionViewModel> sections)
+    public SettingsSectionNavigationAdapter(NavigationView navigationView)
     {
         _navigationView = navigationView ?? throw new ArgumentNullException(nameof(navigationView));
-        ArgumentNullException.ThrowIfNull(sections);
 
-        PopulateSections(sections);
         _navigationView.ItemInvoked += OnItemInvoked;
     }
 
     public event EventHandler<SettingsSectionNavigationInvokedEventArgs>? SectionInvoked;
-
-    public void Select(string key)
-    {
-        ThrowIfDisposed();
-
-        var section = SettingsSectionCatalog.FindOrDefault(key);
-        if (!_sectionItemsByKey.TryGetValue(section.Key, out var item))
-        {
-            return;
-        }
-
-        if (!ReferenceEquals(_navigationView.SelectedItem, item))
-        {
-            _navigationView.SelectedItem = item;
-        }
-    }
 
     public void Dispose()
     {
@@ -56,26 +32,6 @@ public sealed class SettingsSectionNavigationAdapter : IDisposable
         _disposed = true;
     }
 
-    private void PopulateSections(IReadOnlyList<SettingsShellSectionViewModel> sections)
-    {
-        // Keep Settings Top NavigationView on its native MenuItems path; Uno splits
-        // MenuItemsSource internally for overflow, which can desynchronize indices.
-        _navigationView.MenuItems.Clear();
-        _sectionItemsByKey.Clear();
-
-        foreach (var section in sections)
-        {
-            var item = new NavigationViewItem
-            {
-                Content = section.Title,
-                Tag = section.Key
-            };
-            AutomationProperties.SetAutomationId(item, section.AutomationId);
-            _navigationView.MenuItems.Add(item);
-            _sectionItemsByKey[section.Key] = item;
-        }
-    }
-
     private void OnItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
     {
         if (_disposed)
@@ -83,18 +39,38 @@ public sealed class SettingsSectionNavigationAdapter : IDisposable
             return;
         }
 
-        if (args.InvokedItemContainer is NavigationViewItem item && item.Tag is string key)
+        if (TryGetInvokedSectionKey(args, out var key))
         {
             SectionInvoked?.Invoke(this, new SettingsSectionNavigationInvokedEventArgs(key));
         }
     }
 
-    private void ThrowIfDisposed()
+    private static bool TryGetInvokedSectionKey(NavigationViewItemInvokedEventArgs args, out string key)
     {
-        if (_disposed)
+        key = string.Empty;
+
+        if (args.InvokedItemContainer is NavigationViewItem item)
         {
-            throw new ObjectDisposedException(nameof(SettingsSectionNavigationAdapter));
+            if (item.DataContext is SettingsShellSectionViewModel section)
+            {
+                key = section.Key;
+                return true;
+            }
+
+            if (item.Tag is string tag)
+            {
+                key = tag;
+                return true;
+            }
         }
+
+        if (args.InvokedItem is SettingsShellSectionViewModel invokedSection)
+        {
+            key = invokedSection.Key;
+            return true;
+        }
+
+        return false;
     }
 }
 

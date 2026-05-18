@@ -1,0 +1,40 @@
+name: WASM Smoke Gates
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 2 * * *"
+
+env:
+  DOTNET_VERSION: "10.0.x"
+  CONFIGURATION: "Debug"
+
+jobs:
+  browserwasm-smoke:
+    name: Browser WASM Smoke Gates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      - name: Install browser dependencies
+        run: npx --yes playwright install --with-deps chromium
+
+      - name: Install WASM workload
+        run: dotnet workload install wasm-tools --skip-manifest-update --disable-parallel --no-http-cache
+
+      - name: Restore dependencies
+        run: dotnet restore SalmonEgg/SalmonEgg/SalmonEgg.csproj
+
+      - name: Run WASM smoke gates
+        run: ./scripts/gates/run-wasm-smoke-gates.sh "${{ env.CONFIGURATION }}"

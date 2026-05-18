@@ -44,7 +44,6 @@ public sealed partial class SettingsShellPage : Page
 
         var section = ViewModel.SelectSection(key);
         AttachSectionNavigation();
-        _sectionNavigation?.Select(section.Key);
         NavigateFrameToSection(section.Key);
     }
 
@@ -62,7 +61,7 @@ public sealed partial class SettingsShellPage : Page
             return;
         }
 
-        _sectionNavigation = new SettingsSectionNavigationAdapter(SettingsNavView, ViewModel.Sections);
+        _sectionNavigation = new SettingsSectionNavigationAdapter(SettingsNavView);
         _sectionNavigation.SectionInvoked += OnSectionNavigationInvoked;
     }
 

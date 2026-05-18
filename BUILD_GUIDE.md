@@ -141,6 +141,13 @@ dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj \
 > 若要连当前 worktree 的 WasmHost 也一起清掉，可运行 `pwsh -File scripts/dev/stop-stale-wasm-hosts.ps1 -IncludeCurrentWorktree`。
 > 发布到 Vercel 时，本仓库以 `vercel.json` 为唯一部署配置入口，输出目录固定为 `publish/vercel-wasm/wwwroot`。Vercel 官方文档说明 Deployment Protection 会限制生成部署 URL，保护所有 URL 时生产域和生成 URL 都会受保护；因此浏览器对 `manifest.webmanifest` 和 `service-worker.js` 的自动请求返回 401 属于部署保护策略，不是应用导航状态。验证静态资源可运行 `scripts/gates/verify-wasm-static-assets.sh <deployment-url>`，报告会写入 `artifacts/verification/` 并记录提交与 URL。
 
+#### WebAssembly smoke gate
+```bash
+scripts/gates/run-wasm-smoke-gates.sh Debug
+```
+
+该 gate 会构建当前 `net10.0-browserwasm` 产物、静态托管 `wwwroot`，再用 Playwright/Chromium 在窄屏视口执行设置页顶部原生 `NavigationView` overflow 路径。它补充 Windows self-hosted FlaUI gate，专门覆盖 WASM 浏览器里的原生 Uno 控件行为。
+
 #### WebAssembly 持久化策略
 
 Uno 官方 IDBFS 文档要求通过 `<WasmShellEnableIDBFS>true</WasmShellEnableIDBFS>` 显式启用浏览器 IndexedDB-backed 文件系统。本仓库在 `net10.0-browserwasm` 上启用该构建能力，用于 `/local/SalmonEgg` 下的非敏感应用数据。安全存储仍由平台服务决定，WASM 继续使用 volatile secure storage，不能把 IndexedDB 文件系统冒充为平台安全凭据存储。
