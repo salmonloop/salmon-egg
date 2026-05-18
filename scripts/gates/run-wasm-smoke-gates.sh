@@ -65,7 +65,7 @@ echo "[gate] Install Playwright Chromium"
 npx --yes playwright install chromium
 
 echo "[gate] Run WASM settings navigation smoke"
-xvfb-run -a npx --yes --package playwright node \
+xvfb-run -a npx --yes --package playwright -- node \
   "${REPO_ROOT}/scripts/gates/wasm-settings-navigation-smoke.mjs" \
   "${BASE_URL}"
 

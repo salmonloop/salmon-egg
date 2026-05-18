@@ -24,6 +24,9 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: Install WASM workload
+        run: dotnet workload install wasm-tools --skip-manifest-update --disable-parallel --no-http-cache
+
       - name: Publish WebAssembly
         run: |
           cd SalmonEgg/SalmonEgg
@@ -163,11 +166,16 @@ jobs:
             /p:DisableCustomWinSdkXamlReferences=true `
             /v:minimal
 
-      - name: Build net10.0 references
+      - name: Build net10.0 project references
         shell: pwsh
         run: |
           dotnet build `
             src/SalmonEgg.Presentation.Core/SalmonEgg.Presentation.Core.csproj `
+            -c ${{ env.CONFIGURATION }} `
+            -f net10.0 `
+            -v minimal
+          dotnet build `
+            src/SalmonEgg.Infrastructure.Desktop/SalmonEgg.Infrastructure.Desktop.csproj `
             -c ${{ env.CONFIGURATION }} `
             -f net10.0 `
             -v minimal

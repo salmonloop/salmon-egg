@@ -25,6 +25,9 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: Install WASM workload
+        run: dotnet workload install wasm-tools --skip-manifest-update --disable-parallel --no-http-cache
+
       - name: Restore dependencies
         run: dotnet restore SalmonEgg.sln
 
