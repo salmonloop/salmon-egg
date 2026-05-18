@@ -2,12 +2,11 @@
 set -euo pipefail
 
 CONFIGURATION="${1:-Debug}"
-PORT="${SALMONEGG_WASM_SMOKE_PORT:-5123}"
 HOST="127.0.0.1"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PROJECT="${REPO_ROOT}/SalmonEgg/SalmonEgg/SalmonEgg.csproj"
 WWWROOT="${REPO_ROOT}/SalmonEgg/SalmonEgg/bin/${CONFIGURATION}/net10.0-browserwasm/wwwroot"
-BASE_URL="http://${HOST}:${PORT}/"
+COMMIT="$(git -C "${REPO_ROOT}" rev-parse HEAD)"
 SERVER_PID=""
 
 cleanup() {
@@ -19,6 +18,19 @@ cleanup() {
 
 trap cleanup EXIT
 
+PORT="${SALMONEGG_WASM_SMOKE_PORT:-$(python3 - <<'PY'
+import socket
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    sock.bind(("127.0.0.1", 0))
+    print(sock.getsockname()[1])
+PY
+)}"
+BASE_URL="http://${HOST}:${PORT}/"
+
+echo "[gate] Restore browserwasm dependencies"
+dotnet restore "${PROJECT}"
+
 echo "[gate] Build browserwasm app"
 dotnet build "${PROJECT}" -c "${CONFIGURATION}" -f net10.0-browserwasm --no-restore -v minimal
 
@@ -28,10 +40,17 @@ if [ ! -f "${WWWROOT}/index.html" ]; then
 fi
 
 echo "[gate] Serve browserwasm app from ${WWWROOT}"
+echo "[gate] Runtime source commit=${COMMIT} port=${PORT}"
 python3 -m http.server "${PORT}" --bind "${HOST}" --directory "${WWWROOT}" >/tmp/salmonegg-wasm-smoke-http.log 2>&1 &
 SERVER_PID="$!"
 
 for _ in {1..50}; do
+  if ! kill -0 "${SERVER_PID}" 2>/dev/null; then
+    echo "browserwasm static server exited before readiness." >&2
+    cat /tmp/salmonegg-wasm-smoke-http.log >&2
+    exit 1
+  fi
+
   if curl -fsS "${BASE_URL}index.html" >/dev/null 2>&1; then
     break
   fi
@@ -40,6 +59,7 @@ for _ in {1..50}; do
 done
 
 curl -fsS "${BASE_URL}index.html" >/dev/null
+echo "[gate] Static server ready pid=${SERVER_PID} base=${BASE_URL}"
 
 echo "[gate] Install Playwright Chromium"
 npx --yes playwright install chromium
