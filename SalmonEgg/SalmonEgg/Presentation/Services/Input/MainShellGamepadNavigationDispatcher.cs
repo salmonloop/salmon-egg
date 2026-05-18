@@ -5,7 +5,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using SalmonEgg.Presentation.Core.Services.Input;
@@ -132,8 +131,7 @@ public sealed class MainShellGamepadNavigationDispatcher : IGamepadNavigationDis
                 }
             }
 
-            popup.IsOpen = false;
-            return true;
+            return false;
         }
 
         return false;
@@ -180,12 +178,6 @@ public sealed class MainShellGamepadNavigationDispatcher : IGamepadNavigationDis
         if (peer?.GetPattern(PatternInterface.SelectionItem) is ISelectionItemProvider selectionItemProvider)
         {
             selectionItemProvider.Select();
-            return true;
-        }
-
-        if (frameworkElement is SelectorItem selectorItem && selectorItem.Parent is Selector selector)
-        {
-            selector.SelectedItem = selectorItem.DataContext;
             return true;
         }
 

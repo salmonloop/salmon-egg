@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using SalmonEgg.Domain.Models.Content;
 using SalmonEgg.Domain.Models.Plan;
 using SalmonEgg.Domain.Models.Tool;
@@ -117,18 +118,28 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
        private PlanEntryViewModel? _planEntry;
 
        // 模式切换
-       [ObservableProperty]
-       private string? _modeId;
+        [ObservableProperty]
+        private string? _modeId;
 
        // 资源内容
        [ObservableProperty]
-       private ResourceViewModel? _resourceViewModel;
+        private ResourceViewModel? _resourceViewModel;
+
+        private ChatMarkdownPresentationState _markdownPresentation = ChatMarkdownPresentationState.PlainStreaming;
+        private Func<string, Task<bool>>? _copyTextAsync;
+        private Func<Uri, Task<bool>>? _openUriAsync;
 
         public ChatMessageViewModel()
         {
+            CopyTextCommand = new AsyncRelayCommand<string?>(CopyTextAsync, CanCopyText);
+            OpenMarkdownLinkCommand = new AsyncRelayCommand<string?>(OpenMarkdownLinkAsync, CanOpenMarkdownLink);
             Timestamp = DateTime.Now;
             RefreshMarkdownPresentation();
         }
+
+        public IAsyncRelayCommand<string?> CopyTextCommand { get; }
+
+        public IAsyncRelayCommand<string?> OpenMarkdownLinkCommand { get; }
 
         public static ChatMessageViewModel CreateFromTextContent(string id, ContentBlock content, bool isOutgoing = false)
         {
@@ -343,6 +354,16 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
        public bool HasToolCallRawOutput => !string.IsNullOrWhiteSpace(ToolCallRawOutputJson);
        public bool HasToolCallDetails => ToolCallDetailItems.Count > 0;
 
+       public void ConfigureShellActions(
+            Func<string, Task<bool>> copyTextAsync,
+            Func<Uri, Task<bool>> openUriAsync)
+       {
+            _copyTextAsync = copyTextAsync ?? throw new ArgumentNullException(nameof(copyTextAsync));
+            _openUriAsync = openUriAsync ?? throw new ArgumentNullException(nameof(openUriAsync));
+            CopyTextCommand.NotifyCanExecuteChanged();
+            OpenMarkdownLinkCommand.NotifyCanExecuteChanged();
+       }
+
        public void MarkMarkdownRenderFailed()
        {
             IsMarkdownFallbackSticky = true;
@@ -357,12 +378,12 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
 
        partial void OnTextContentChanged(string value)
        {
+            OnPropertyChanged(nameof(HasTextContent));
+            CopyTextCommand.NotifyCanExecuteChanged();
             RefreshMarkdownPresentation();
        }
 
        partial void OnIsMarkdownFallbackStickyChanged(bool value) => RefreshMarkdownPresentation();
-
-       private ChatMarkdownPresentationState _markdownPresentation = ChatMarkdownPresentationState.PlainStreaming;
 
        private void RefreshMarkdownPresentation()
        {
@@ -372,6 +393,34 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                 TextContent,
                 IsMarkdownFallbackSticky);
             MarkdownPresentation = ChatMarkdownPresentationState.Create(renderMode, TextContent);
+       }
+
+       private bool CanCopyText(string? text)
+            => _copyTextAsync is not null && !string.IsNullOrWhiteSpace(text);
+
+       private async Task CopyTextAsync(string? text)
+       {
+            if (!CanCopyText(text))
+            {
+                return;
+            }
+
+            _ = await _copyTextAsync!(text!).ConfigureAwait(true);
+       }
+
+       private bool CanOpenMarkdownLink(string? rawLink)
+            => _openUriAsync is not null
+               && ChatMarkdownLinkPolicy.TryResolveLaunchUri(rawLink, out _);
+
+       private async Task OpenMarkdownLinkAsync(string? rawLink)
+       {
+            if (!CanOpenMarkdownLink(rawLink))
+            {
+                return;
+            }
+
+            _ = ChatMarkdownLinkPolicy.TryResolveLaunchUri(rawLink, out var uri);
+            _ = await _openUriAsync!(uri!).ConfigureAwait(true);
        }
 
         private void UpdateToolCallState()

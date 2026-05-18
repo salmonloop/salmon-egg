@@ -137,6 +137,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private IChatService? _chatService;
     private readonly IUiDispatcher _uiDispatcher;
     private readonly IConversationPreviewStore _previewStore;
+    private readonly IPlatformShellService _platformShell;
     private readonly ChatTranscriptProjectionCoordinator _transcriptProjectionCoordinator;
     private readonly ChatTranscriptProjectionContext _transcriptProjectionContext;
     private readonly ConversationHydrationCoordinator _hydrationCoordinator;
@@ -1123,7 +1124,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         IChatUiProjectionApplicationCoordinator? chatUiProjectionApplicationCoordinator = null,
         IConversationActivationOrchestrator? conversationActivationOrchestrator = null,
         ISlashCommandSource? localSlashCommandSource = null,
-        IConversationMutationPipeline? conversationMutationPipeline = null)
+        IConversationMutationPipeline? conversationMutationPipeline = null,
+        IPlatformShellService? platformShell = null)
         : base(logger)
     {
         _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
@@ -1180,6 +1182,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _slashInteractionCoordinator = new SlashInteractionCoordinator(_slashCommandRegistry);
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
         _previewStore = previewStore ?? throw new ArgumentNullException(nameof(previewStore));
+        _platformShell = platformShell ?? NoOpPlatformShellService.Instance;
         _transcriptProjectionCoordinator = new ChatTranscriptProjectionCoordinator(_previewStore);
         _transcriptProjectionContext = new ChatTranscriptProjectionContext
         {
@@ -2062,8 +2065,18 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private ChatMessageViewModel CreateProjectedMessageFromSnapshot(ConversationMessageSnapshot s, int projectionIndex)
     {
         var viewModel = FromSnapshot(s, projectionIndex);
+        ConfigureMessageCommands(viewModel);
         ApplyPendingInlinePermissionProjection(viewModel);
         return viewModel;
+    }
+
+    private void ConfigureMessageCommands(ChatMessageViewModel message)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+
+        message.ConfigureShellActions(
+            _platformShell.CopyToClipboardAsync,
+            _platformShell.OpenUriAsync);
     }
 
     private void ApplyPendingInlinePermissionProjection(ChatMessageViewModel message)

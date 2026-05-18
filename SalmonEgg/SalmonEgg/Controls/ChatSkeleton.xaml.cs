@@ -1,4 +1,3 @@
-using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
 namespace SalmonEgg.Controls
@@ -8,14 +7,6 @@ namespace SalmonEgg.Controls
         public ChatSkeleton()
         {
             InitializeComponent();
-            Loaded += OnLoaded;
-            Unloaded += OnUnloaded;
         }
-
-        private void OnLoaded(object sender, RoutedEventArgs e)
-            => ShimmerStoryboard.Begin();
-
-        private void OnUnloaded(object sender, RoutedEventArgs e)
-            => ShimmerStoryboard.Stop();
     }
 }

@@ -239,6 +239,8 @@ public sealed class SessionNavItemViewModelTests
 
         public Task<bool> OpenFileAsync(string path) => Task.FromResult(false);
 
+        public Task<bool> OpenUriAsync(Uri uri) => Task.FromResult(false);
+
         public Task<bool> CopyToClipboardAsync(string text)
         {
             LastCopiedText = text;

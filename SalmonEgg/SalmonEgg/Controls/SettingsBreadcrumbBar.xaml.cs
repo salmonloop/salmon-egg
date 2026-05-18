@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Presentation.Models.Navigation;
-using SalmonEgg.Presentation.Services;
+using SalmonEgg.Presentation.Core.Services;
 
 namespace SalmonEgg.Controls;
 
@@ -15,11 +15,11 @@ public sealed partial class SettingsBreadcrumbBar : UserControl
             typeof(SettingsBreadcrumbBar),
             new PropertyMetadata(null));
 
-    private readonly IShellNavigationService _shellNavigation;
+    private readonly INavigationCoordinator _navigationCoordinator;
 
     public SettingsBreadcrumbBar()
     {
-        _shellNavigation = App.ServiceProvider.GetRequiredService<IShellNavigationService>();
+        _navigationCoordinator = App.ServiceProvider.GetRequiredService<INavigationCoordinator>();
         InitializeComponent();
     }
 
@@ -41,6 +41,6 @@ public sealed partial class SettingsBreadcrumbBar : UserControl
             return;
         }
 
-        _ = _shellNavigation.NavigateToSettings(item.SettingsKey);
+        _ = _navigationCoordinator.ActivateSettingsAsync(item.SettingsKey);
     }
 }

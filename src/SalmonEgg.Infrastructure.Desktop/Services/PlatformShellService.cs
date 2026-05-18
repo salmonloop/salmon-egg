@@ -19,6 +19,16 @@ public sealed class PlatformShellService : IPlatformShellService
 
     public Task<bool> OpenFileAsync(string path) => OpenWithShellAsync(path);
 
+    public Task<bool> OpenUriAsync(Uri uri)
+    {
+        if (uri == null)
+        {
+            return Task.FromResult(false);
+        }
+
+        return LaunchShellTargetAsync(uri.AbsoluteUri);
+    }
+
     public Task<bool> CopyToClipboardAsync(string text)
     {
 #if WINDOWS || WINDOWS_UWP
@@ -43,13 +53,23 @@ public sealed class PlatformShellService : IPlatformShellService
             return Task.FromResult(false);
         }
 
+        return LaunchShellTargetAsync(path);
+    }
+
+    private static Task<bool> LaunchShellTargetAsync(string target)
+    {
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            return Task.FromResult(false);
+        }
+
         try
         {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 Process.Start(new ProcessStartInfo
                 {
-                    FileName = path,
+                    FileName = target,
                     UseShellExecute = true
                 });
                 return Task.FromResult(true);
@@ -57,11 +77,11 @@ public sealed class PlatformShellService : IPlatformShellService
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
-                Process.Start("open", path);
+                Process.Start("open", target);
                 return Task.FromResult(true);
             }
 
-            Process.Start("xdg-open", path);
+            Process.Start("xdg-open", target);
             return Task.FromResult(true);
         }
         catch

@@ -81,7 +81,9 @@ public sealed class WasmStartupAssetsTests
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\DependencyInjection.cs");
 
-        Assert.Contains("#if __WASM__ || __ANDROID__ || __IOS__", code, StringComparison.Ordinal);
+        Assert.Contains("#if __WASM__", code, StringComparison.Ordinal);
+        Assert.Contains("services.AddSingleton<IPlatformShellService, WasmPlatformShellService>();", code, StringComparison.Ordinal);
+        Assert.Contains("#elif __ANDROID__ || __IOS__", code, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<ITerminalSessionManager, UnsupportedTerminalSessionManager>();", code, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<IStdioTransportFactory, UnsupportedStdioTransportFactory>();", code, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<IPlatformShellService, UnsupportedPlatformShellService>();", code, StringComparison.Ordinal);

@@ -224,6 +224,33 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void ResponsiveContentHost_UsesNativeMaxWidthInsteadOfManualSizeState()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Controls\ResponsiveContentHost.xaml");
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Controls\ResponsiveContentHost.xaml.cs");
+
+        Assert.Contains("MaxWidth=\"{x:Bind MaxContentWidth, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("SizeChanged=", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ColumnDefinition x:Name=", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ActualWidth", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("GridLength", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("MinGutter", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatSkeleton_DoesNotOwnStoryboardAnimationState()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Controls\ChatSkeleton.xaml");
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Controls\ChatSkeleton.xaml.cs");
+
+        Assert.DoesNotContain("<Storyboard", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("DoubleAnimation", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Loaded +=", code, StringComparison.Ordinal);
+        Assert.DoesNotContain(".Begin()", code, StringComparison.Ordinal);
+        Assert.DoesNotContain(".Stop()", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TitleBarButtons_UseSharedIconTemplates()
     {
         var mainPageXaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");
@@ -272,6 +299,24 @@ public sealed class XamlComplianceTests
             setter => string.Equals(setter.Attribute("Property")?.Value, "Height", StringComparison.Ordinal)
                 && string.Equals(setter.Attribute("Value")?.Value, "40", StringComparison.Ordinal));
         Assert.DoesNotContain(miniAccessoryStyle.Descendants(), element => string.Equals(element.Name.LocalName, "Viewbox", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void TitleBarButtonStyles_DoNotReplaceNativeControlTemplates()
+    {
+        string[] styleFiles =
+        [
+            @"SalmonEgg\SalmonEgg\Styles\TitleBarCommandButtonStyle.xaml",
+            @"SalmonEgg\SalmonEgg\Styles\TitleBarToggleButtonStyle.xaml"
+        ];
+
+        foreach (var styleFile in styleFiles)
+        {
+            var xaml = LoadXaml(styleFile);
+
+            Assert.DoesNotContain("<ControlTemplate", xaml, StringComparison.Ordinal);
+            Assert.DoesNotContain("VisualStateGroup", xaml, StringComparison.Ordinal);
+        }
     }
 
     [Fact]
@@ -1224,6 +1269,17 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void SettingsBreadcrumbBar_ActivatesThroughNavigationCoordinator()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Controls\SettingsBreadcrumbBar.xaml.cs");
+
+        Assert.Contains("INavigationCoordinator", code, StringComparison.Ordinal);
+        Assert.Contains("ActivateSettingsAsync", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("IShellNavigationService", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("NavigateToSettings", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FrameNavigation_UsesNativeNavigationTransitionInfo()
     {
         var settingsShellCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\SettingsShellPage.xaml.cs");
@@ -1261,6 +1317,36 @@ public sealed class XamlComplianceTests
         }
 
         Assert.Contains("UiMotionController.Current.CreateNavigationTransitionInfo()", contentNavigationCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SharedChatUi_UsesPlatformShellServiceForClipboardAndUriLaunch()
+    {
+        var chatStylesXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Styles\ChatStyles.xaml");
+        var chatStylesCode = LoadText(@"SalmonEgg\SalmonEgg\Styles\ChatStyles.xaml.cs");
+        var markdownCode = LoadText(@"SalmonEgg\SalmonEgg\Controls\MarkdownTextPresenter.cs");
+        var chatMessageViewModel = LoadText(@"src\SalmonEgg.Presentation.Core\ViewModels\Chat\ChatMessageViewModel.cs");
+        var chatViewModel = LoadText(@"src\SalmonEgg.Presentation.Core\ViewModels\Chat\ChatViewModel.cs");
+
+        Assert.Contains("Command=\"{x:Bind CopyTextCommand}\"", chatStylesXaml, StringComparison.Ordinal);
+        Assert.Contains("IAsyncRelayCommand<string?> CopyTextCommand", chatMessageViewModel, StringComparison.Ordinal);
+        Assert.Contains("IAsyncRelayCommand<string?> OpenMarkdownLinkCommand", chatMessageViewModel, StringComparison.Ordinal);
+        Assert.Contains("ConfigureShellActions", chatViewModel, StringComparison.Ordinal);
+        Assert.Contains("CopyToClipboardAsync", chatViewModel, StringComparison.Ordinal);
+        Assert.Contains("OpenUriAsync", chatViewModel, StringComparison.Ordinal);
+        Assert.Contains("LinkCommand=\"{x:Bind OpenMarkdownLinkCommand}\"", chatStylesXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsEnabled=\"{x:Bind HasTextContent", chatStylesXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetRequiredService", chatStylesCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("Windows.ApplicationModel.DataTransfer", chatStylesCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("Clipboard.SetContent", chatStylesCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("DataPackage", chatStylesCode, StringComparison.Ordinal);
+
+        Assert.Contains("LinkCommandProperty", markdownCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("IPlatformShellService", markdownCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetRequiredService", markdownCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("OpenUriAsync", markdownCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("using Windows.System;", markdownCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("Launcher.LaunchUriAsync", markdownCode, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1401,6 +1487,9 @@ public sealed class XamlComplianceTests
 
         Assert.Contains("IToggleProvider", code);
         Assert.Contains("IExpandCollapseProvider", code);
+        Assert.Contains("ISelectionItemProvider", code);
+        Assert.DoesNotContain("SelectedItem =", code, StringComparison.Ordinal);
+        Assert.DoesNotContain(".IsOpen = false", code, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1469,10 +1558,39 @@ public sealed class XamlComplianceTests
         Assert.Contains("UpdatePressedModifier(e.Key, isDown: true)", code, StringComparison.Ordinal);
         Assert.Contains("UpdatePressedModifier(e.Key, isDown: false)", code, StringComparison.Ordinal);
         Assert.Contains("_pressedModifiers = AppShortcutModifiers.None;", code, StringComparison.Ordinal);
+        Assert.Contains("partial void AttachSystemKeyCapture()", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("Microsoft.UI.Input", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("InputKeyboardSource", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("CoreVirtualKeyStates", code, StringComparison.Ordinal);
 
-        var modifierLookup = ExtractSection(code, "private AppShortcutModifiers GetCurrentModifiers()", "private static bool IsKeyCurrentlyDown");
-        Assert.Contains("return _pressedModifiers;", modifierLookup, StringComparison.Ordinal);
-        Assert.DoesNotContain("return false;", modifierLookup, StringComparison.Ordinal);
+        var modifierLookup = ExtractSection(code, "private AppShortcutModifiers GetCurrentModifiers()", "private void UpdatePressedModifier");
+        Assert.Contains("=> _pressedModifiers;", modifierLookup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MainPage_KeepsWindowsTrayImplementationInPlatformPartial()
+    {
+        var sharedPage = LoadText(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
+        var windowsPage = LoadText(@"SalmonEgg\SalmonEgg\Platforms\Windows\MainPage.Windows.cs");
+
+        Assert.Contains("partial void InitializeTray();", sharedPage, StringComparison.Ordinal);
+        Assert.Contains("partial void DisposePlatformTray();", sharedPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("TrayIconManager", sharedPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("AppWindowClosingEventArgs", sharedPage, StringComparison.Ordinal);
+        Assert.Contains("TrayIconManager", windowsPage, StringComparison.Ordinal);
+        Assert.Contains("AppWindowClosingEventArgs", windowsPage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WindowMetricsProvider_DoesNotExposeAppWindowTitleBar()
+    {
+        var provider = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\WindowMetricsProvider.cs");
+        var titleBarAdapter = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Navigation\MainWindowTitleBarAdapter.cs");
+
+        Assert.Contains("ITitleBarInsetProvider", provider, StringComparison.Ordinal);
+        Assert.DoesNotContain("AppWindowTitleBar", provider, StringComparison.Ordinal);
+        Assert.DoesNotContain("AppWindowTitleBar =>", titleBarAdapter, StringComparison.Ordinal);
+        Assert.Contains("ITitleBarInsetProvider", titleBarAdapter, StringComparison.Ordinal);
     }
 
     [Fact]

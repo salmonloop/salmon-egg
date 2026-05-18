@@ -1,10 +1,10 @@
+using System.Windows.Input;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Text;
 using SalmonEgg.Presentation.ViewModels.Chat;
-using Windows.System;
 
 #if WINDOWS
 using CommunityToolkit.WinUI.Controls;
@@ -122,6 +122,12 @@ public sealed class MarkdownTextPresenter : Grid
         typeof(MarkdownTextPresenter),
         new PropertyMetadata(null));
 
+    public static readonly DependencyProperty LinkCommandProperty = DependencyProperty.Register(
+        nameof(LinkCommand),
+        typeof(ICommand),
+        typeof(MarkdownTextPresenter),
+        new PropertyMetadata(null));
+
     public MarkdownTextPresenter()
     {
         _requestedIsTextSelectionEnabled = false;
@@ -229,6 +235,12 @@ public sealed class MarkdownTextPresenter : Grid
     {
         get => (IRenderFailureSink?)GetValue(RenderFailureSinkProperty);
         set => SetValue(RenderFailureSinkProperty, value);
+    }
+
+    public ICommand? LinkCommand
+    {
+        get => (ICommand?)GetValue(LinkCommandProperty);
+        set => SetValue(LinkCommandProperty, value);
     }
 
     private static void OnTextChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -545,37 +557,31 @@ public sealed class MarkdownTextPresenter : Grid
     }
 
 #if WINDOWS
-    private async void OnWindowsLinkClicked(object? sender, CommunityToolkit.WinUI.Controls.LinkClickedEventArgs e)
+    private void OnWindowsLinkClicked(object? sender, CommunityToolkit.WinUI.Controls.LinkClickedEventArgs e)
     {
-        if (!ChatMarkdownLinkPolicy.TryResolveLaunchUri(e.Uri, out var uri) || uri is null)
+        if (!TryExecuteLinkCommand(e.Uri?.AbsoluteUri))
         {
             return;
         }
 
         e.Handled = true;
-        await TryLaunchUriAsync(uri);
     }
 #else
-    private async void OnUnoLinkClicked(object? sender, CommunityToolkit.WinUI.UI.Controls.LinkClickedEventArgs e)
+    private void OnUnoLinkClicked(object? sender, CommunityToolkit.WinUI.UI.Controls.LinkClickedEventArgs e)
     {
-        if (!ChatMarkdownLinkPolicy.TryResolveLaunchUri(e.Link, out var uri) || uri is null)
-        {
-            return;
-        }
-
-        await TryLaunchUriAsync(uri);
+        _ = TryExecuteLinkCommand(e.Link);
     }
 #endif
 
-    private static async Task TryLaunchUriAsync(Uri uri)
+    private bool TryExecuteLinkCommand(string? rawLink)
     {
-        try
+        var command = LinkCommand;
+        if (command?.CanExecute(rawLink) != true)
         {
-            await Launcher.LaunchUriAsync(uri);
+            return false;
         }
-        catch
-        {
-            // Keep chat rendering resilient when host platform cannot open the URI.
-        }
+
+        command.Execute(rawLink);
+        return true;
     }
 }

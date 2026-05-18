@@ -163,4 +163,100 @@ public sealed class ChatMessageViewModelMarkdownTests
         Assert.Equal(string.Empty, vm.MarkdownPresentation.CopyableCodeBlockText);
         Assert.False(vm.MarkdownPresentation.HasCopyableCodeBlock);
     }
+
+    [Fact]
+    public async Task CopyTextCommand_ForwardsConfiguredNonWhitespaceText()
+    {
+        var copiedText = (string?)null;
+        var vm = ChatMessageViewModel.CreateFromTextContent(
+            "m-copy-command",
+            new TextContentBlock("copy me"),
+            isOutgoing: false);
+        vm.ConfigureShellActions(
+            text =>
+            {
+                copiedText = text;
+                return Task.FromResult(true);
+            },
+            _ => Task.FromResult(true));
+
+        await vm.CopyTextCommand.ExecuteAsync("copy me");
+
+        Assert.Equal("copy me", copiedText);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task CopyTextCommand_RejectsMissingOrWhitespaceText(string? text)
+    {
+        var copyCount = 0;
+        var vm = new ChatMessageViewModel();
+        vm.ConfigureShellActions(
+            _ =>
+            {
+                copyCount++;
+                return Task.FromResult(true);
+            },
+            _ => Task.FromResult(true));
+
+        Assert.False(vm.CopyTextCommand.CanExecute(text));
+        await vm.CopyTextCommand.ExecuteAsync(text);
+
+        Assert.Equal(0, copyCount);
+    }
+
+    [Fact]
+    public async Task CopyTextCommand_RejectsTextBeforeShellActionsAreConfigured()
+    {
+        var vm = ChatMessageViewModel.CreateFromTextContent(
+            "m-unconfigured-copy",
+            new TextContentBlock("copy me"),
+            isOutgoing: false);
+
+        Assert.False(vm.CopyTextCommand.CanExecute("copy me"));
+        await vm.CopyTextCommand.ExecuteAsync("copy me");
+    }
+
+    [Fact]
+    public async Task OpenMarkdownLinkCommand_ForwardsAllowedUriThroughConfiguredShellAction()
+    {
+        var openedUri = (Uri?)null;
+        var vm = new ChatMessageViewModel();
+        vm.ConfigureShellActions(
+            _ => Task.FromResult(true),
+            uri =>
+            {
+                openedUri = uri;
+                return Task.FromResult(true);
+            });
+
+        await vm.OpenMarkdownLinkCommand.ExecuteAsync("https://example.com/docs");
+
+        Assert.NotNull(openedUri);
+        Assert.Equal("https://example.com/docs", openedUri!.AbsoluteUri);
+    }
+
+    [Theory]
+    [InlineData("file:///tmp/secret.txt")]
+    [InlineData("mailto:test@example.com")]
+    [InlineData("/relative/path")]
+    public async Task OpenMarkdownLinkCommand_RejectsDisallowedLinks(string rawLink)
+    {
+        var openCount = 0;
+        var vm = new ChatMessageViewModel();
+        vm.ConfigureShellActions(
+            _ => Task.FromResult(true),
+            _ =>
+            {
+                openCount++;
+                return Task.FromResult(true);
+            });
+
+        Assert.False(vm.OpenMarkdownLinkCommand.CanExecute(rawLink));
+        await vm.OpenMarkdownLinkCommand.ExecuteAsync(rawLink);
+
+        Assert.Equal(0, openCount);
+    }
 }

@@ -41,6 +41,8 @@ using SalmonEgg.Presentation.Services.Input;
 using SalmonEgg.Presentation.Core.Resources;
 #if WINDOWS
 using SalmonEgg.Platforms.Windows;
+#elif __WASM__
+using SalmonEgg.Platforms.WebAssembly;
 #endif
 
 namespace SalmonEgg;
@@ -194,7 +196,9 @@ public static class DependencyInjection
                 sp.GetRequiredService<IStdioTransportFactory>()));
         services.AddSingleton<IDiagnosticsBundleService, SalmonEgg.Infrastructure.Services.DiagnosticsBundleService>();
         services.AddSingleton<ILiveLogStreamService, SalmonEgg.Infrastructure.Services.LiveLogStreamService>();
-#if __WASM__ || __ANDROID__ || __IOS__
+#if __WASM__
+        services.AddSingleton<IPlatformShellService, WasmPlatformShellService>();
+#elif __ANDROID__ || __IOS__
         services.AddSingleton<IPlatformShellService, UnsupportedPlatformShellService>();
 #else
         services.AddSingleton<IPlatformShellService>(sp =>

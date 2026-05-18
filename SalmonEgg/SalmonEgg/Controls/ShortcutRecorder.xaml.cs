@@ -2,10 +2,6 @@ using System;
 using System.Globalization;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
-#if WINDOWS
-using Microsoft.UI.Input;
-using Windows.UI.Core;
-#endif
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -46,9 +42,6 @@ public sealed partial class ShortcutRecorder : UserControl, INotifyPropertyChang
 
     private bool _isRecording;
     private AppShortcutModifiers _pressedModifiers;
-#if WINDOWS
-    private InputKeyboardSource? _keyboardSource;
-#endif
 
     public ShortcutRecorder()
     {
@@ -165,57 +158,9 @@ public sealed partial class ShortcutRecorder : UserControl, INotifyPropertyChang
         OnPropertyChanged(nameof(AutomationName));
     }
 
-#if WINDOWS
-    private void AttachSystemKeyCapture()
-    {
-        if (XamlRoot?.ContentIsland is null)
-        {
-            return;
-        }
+    partial void AttachSystemKeyCapture();
 
-        _keyboardSource ??= InputKeyboardSource.GetForIsland(XamlRoot.ContentIsland);
-        _keyboardSource.SystemKeyDown -= OnSystemKeyDown;
-        _keyboardSource.SystemKeyDown += OnSystemKeyDown;
-    }
-
-    private void DetachSystemKeyCapture()
-    {
-        if (_keyboardSource is null)
-        {
-            return;
-        }
-
-        _keyboardSource.SystemKeyDown -= OnSystemKeyDown;
-    }
-
-    private void OnSystemKeyDown(InputKeyboardSource sender, Microsoft.UI.Input.KeyEventArgs args)
-    {
-        if (!_isRecording && CanStartRecordingFromKey(args.VirtualKey))
-        {
-            StartRecording();
-        }
-
-        if (!_isRecording)
-        {
-            return;
-        }
-
-        UpdatePressedModifier(args.VirtualKey, isDown: true);
-
-        if (TryHandleVirtualKey(args.VirtualKey, out var handled))
-        {
-            args.Handled = handled;
-        }
-    }
-#else
-    private void AttachSystemKeyCapture()
-    {
-    }
-
-    private void DetachSystemKeyCapture()
-    {
-    }
-#endif
+    partial void DetachSystemKeyCapture();
 
     private bool TryHandleVirtualKey(VirtualKey key, out bool handled)
     {
@@ -353,41 +298,35 @@ public sealed partial class ShortcutRecorder : UserControl, INotifyPropertyChang
     }
 
     private AppShortcutModifiers GetCurrentModifiers()
-    {
-#if WINDOWS
-        var modifiers = AppShortcutModifiers.None;
-        if (IsKeyCurrentlyDown(VirtualKey.Control))
-        {
-            modifiers |= AppShortcutModifiers.Control;
-        }
-
-        if (IsKeyCurrentlyDown(VirtualKey.Menu))
-        {
-            modifiers |= AppShortcutModifiers.Alt;
-        }
-
-        if (IsKeyCurrentlyDown(VirtualKey.Shift))
-        {
-            modifiers |= AppShortcutModifiers.Shift;
-        }
-
-        return modifiers;
-#else
-        return _pressedModifiers;
-#endif
-    }
-
-    private static bool IsKeyCurrentlyDown(VirtualKey key)
-    {
-#if WINDOWS
-        var state = InputKeyboardSource.GetKeyStateForCurrentThread(key);
-        return (state & CoreVirtualKeyStates.Down) == CoreVirtualKeyStates.Down;
-#else
-        return false;
-#endif
-    }
+        => _pressedModifiers;
 
     private void UpdatePressedModifier(VirtualKey key, bool isDown)
+    {
+        ApplyModifierKeyState(key, isDown);
+    }
+
+    private void HandleSystemKeyDown(VirtualKey key, out bool handled)
+    {
+        handled = false;
+        if (!_isRecording && CanStartRecordingFromKey(key))
+        {
+            StartRecording();
+        }
+
+        if (!_isRecording)
+        {
+            return;
+        }
+
+        UpdatePressedModifier(key, isDown: true);
+
+        if (TryHandleVirtualKey(key, out var virtualKeyHandled))
+        {
+            handled = virtualKeyHandled;
+        }
+    }
+
+    private void ApplyModifierKeyState(VirtualKey key, bool isDown)
     {
         var modifier = key switch
         {

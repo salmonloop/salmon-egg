@@ -6,17 +6,9 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid x:Name="LayoutRoot"
-          HorizontalAlignment="Stretch"
-          SizeChanged="OnRootSizeChanged">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition x:Name="LeftGutter" Width="0"/>
-            <ColumnDefinition x:Name="ContentColumn" Width="*"/>
-            <ColumnDefinition x:Name="RightGutter" Width="0"/>
-        </Grid.ColumnDefinitions>
-
-        <ContentPresenter Grid.Column="1"
-                          Content="{x:Bind Child, Mode=OneWay}"
+    <Grid HorizontalAlignment="Stretch">
+        <ContentPresenter Content="{x:Bind Child, Mode=OneWay}"
+                          MaxWidth="{x:Bind MaxContentWidth, Mode=OneWay}"
                           HorizontalAlignment="Stretch"/>
     </Grid>
 </UserControl>

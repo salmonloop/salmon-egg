@@ -1,4 +1,3 @@
-using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using SalmonEgg.Presentation.Core.Services;
 
@@ -14,15 +13,15 @@ public sealed class WindowMetricsProvider
     }
 
     private Window? _window;
-    private AppWindowTitleBar? _titleBar;
+    private ITitleBarInsetProvider? _titleBarInsetProvider;
     private FrameworkElement? _contentRoot;
 
-    public void Attach(Window window, AppWindowTitleBar? titleBar)
+    public void Attach(Window window, ITitleBarInsetProvider? titleBarInsetProvider)
     {
         Detach();
 
         _window = window;
-        _titleBar = titleBar;
+        _titleBarInsetProvider = titleBarInsetProvider;
         _contentRoot = _window.Content as FrameworkElement;
 
         _window.SizeChanged += OnSizeChanged;
@@ -35,9 +34,9 @@ public sealed class WindowMetricsProvider
         // Initial report
         ReportWindowMetrics(_window.Bounds.Width, _window.Bounds.Height);
 
-        if (_titleBar != null)
+        if (_titleBarInsetProvider != null)
         {
-            ReportTitleBarInsets(_titleBar);
+            ReportTitleBarInsets();
         }
     }
 
@@ -54,7 +53,7 @@ public sealed class WindowMetricsProvider
         }
 
         _window = null;
-        _titleBar = null;
+        _titleBarInsetProvider = null;
         _contentRoot = null;
     }
 
@@ -65,9 +64,9 @@ public sealed class WindowMetricsProvider
 
     private void OnActivated(object sender, WindowActivatedEventArgs e)
     {
-        if (_titleBar != null)
+        if (_titleBarInsetProvider != null)
         {
-            ReportTitleBarInsets(_titleBar);
+            ReportTitleBarInsets();
         }
     }
 
@@ -81,9 +80,14 @@ public sealed class WindowMetricsProvider
         ReportWindowMetrics(_window.Bounds.Width, _window.Bounds.Height);
     }
 
-    private void ReportTitleBarInsets(AppWindowTitleBar titleBar)
+    private void ReportTitleBarInsets()
     {
-        var (left, right, height) = GetTitleBarInsets(titleBar);
+        if (_titleBarInsetProvider is null)
+        {
+            return;
+        }
+
+        var (left, right, height) = _titleBarInsetProvider.GetInsets();
         _ = _sink.ReportTitleBarInsets(left, right, height);
     }
 
@@ -99,14 +103,5 @@ public sealed class WindowMetricsProvider
             contentActualHeight);
 
         _ = _sink.ReportWindowMetrics(width, height, effectiveWidth, effectiveHeight);
-    }
-
-    private static (double Left, double Right, double Height) GetTitleBarInsets(AppWindowTitleBar titleBar)
-    {
-#if WINDOWS
-        return (titleBar.LeftInset, titleBar.RightInset, titleBar.Height);
-#else
-        return (0, 0, titleBar.Height);
-#endif
     }
 }

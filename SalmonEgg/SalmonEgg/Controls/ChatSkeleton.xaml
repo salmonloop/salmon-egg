@@ -24,53 +24,14 @@
             <Setter Property="Opacity" Value="0.22"/>
         </Style>
 
-        <Storyboard x:Name="ShimmerStoryboard" RepeatBehavior="Forever">
-            <DoubleAnimationUsingKeyFrames Storyboard.TargetName="ShimmerLeadingStop" Storyboard.TargetProperty="Offset">
-                <EasingDoubleKeyFrame KeyTime="0:0:0" Value="-0.8" />
-                <EasingDoubleKeyFrame KeyTime="0:0:1.5" Value="1.2">
-                    <EasingDoubleKeyFrame.EasingFunction>
-                        <CubicEase EasingMode="EaseInOut" />
-                    </EasingDoubleKeyFrame.EasingFunction>
-                </EasingDoubleKeyFrame>
-            </DoubleAnimationUsingKeyFrames>
-            <DoubleAnimationUsingKeyFrames Storyboard.TargetName="ShimmerHighlightStop" Storyboard.TargetProperty="Offset">
-                <EasingDoubleKeyFrame KeyTime="0:0:0" Value="-0.6" />
-                <EasingDoubleKeyFrame KeyTime="0:0:1.5" Value="1.4">
-                    <EasingDoubleKeyFrame.EasingFunction>
-                        <CubicEase EasingMode="EaseInOut" />
-                    </EasingDoubleKeyFrame.EasingFunction>
-                </EasingDoubleKeyFrame>
-            </DoubleAnimationUsingKeyFrames>
-            <DoubleAnimationUsingKeyFrames Storyboard.TargetName="ShimmerTrailingStop" Storyboard.TargetProperty="Offset">
-                <EasingDoubleKeyFrame KeyTime="0:0:0" Value="-0.4" />
-                <EasingDoubleKeyFrame KeyTime="0:0:1.5" Value="1.6">
-                    <EasingDoubleKeyFrame.EasingFunction>
-                        <CubicEase EasingMode="EaseInOut" />
-                    </EasingDoubleKeyFrame.EasingFunction>
-                </EasingDoubleKeyFrame>
-            </DoubleAnimationUsingKeyFrames>
-            <DoubleAnimation Storyboard.TargetName="RootGrid"
-                             Storyboard.TargetProperty="Opacity"
-                             From="0" To="1" Duration="0:0:0.4">
-                <DoubleAnimation.EasingFunction>
-                    <CircleEase EasingMode="EaseOut" />
-                </DoubleAnimation.EasingFunction>
-            </DoubleAnimation>
-        </Storyboard>
+        <SolidColorBrush x:Key="SkeletonHighlightBrush"
+                         Color="{ThemeResource SystemAltHighColor}"
+                         Opacity="0.18" />
     </UserControl.Resources>
 
     <controls:ResponsiveContentHost MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}">
         <controls:ResponsiveContentHost.Child>
             <Grid x:Name="RootGrid" Padding="20">
-                <Grid.Resources>
-                    <LinearGradientBrush x:Key="ShimmerBrush" StartPoint="0,0" EndPoint="1,0">
-                        <GradientStop x:Name="ShimmerLeadingStop" Color="Transparent" Offset="-0.8" />
-                        <!-- GradientStop.Color must resolve to a Color resource, not a Brush resource. -->
-                        <GradientStop x:Name="ShimmerHighlightStop" Color="{ThemeResource SystemAltHighColor}" Offset="-0.6" />
-                        <GradientStop x:Name="ShimmerTrailingStop" Color="Transparent" Offset="-0.4" />
-                    </LinearGradientBrush>
-                </Grid.Resources>
-
                 <StackPanel VerticalAlignment="Top" HorizontalAlignment="Stretch">
                     <Grid Margin="0,0,0,16">
                         <Grid.ColumnDefinitions>
@@ -79,7 +40,7 @@
                         </Grid.ColumnDefinitions>
                         <Grid Grid.Column="0">
                             <Border Style="{StaticResource IncomingSkeletonItemStyle}" Height="60"/>
-                            <Border Style="{StaticResource IncomingSkeletonItemStyle}" Height="60" Background="{StaticResource ShimmerBrush}"/>
+                            <Border Style="{StaticResource IncomingSkeletonItemStyle}" Height="60" Background="{StaticResource SkeletonHighlightBrush}"/>
                         </Grid>
                     </Grid>
 
@@ -90,7 +51,7 @@
                         </Grid.ColumnDefinitions>
                         <Grid Grid.Column="0">
                             <Border Style="{StaticResource IncomingSkeletonItemStyle}" Height="80"/>
-                            <Border Style="{StaticResource IncomingSkeletonItemStyle}" Height="80" Background="{StaticResource ShimmerBrush}"/>
+                            <Border Style="{StaticResource IncomingSkeletonItemStyle}" Height="80" Background="{StaticResource SkeletonHighlightBrush}"/>
                         </Grid>
                     </Grid>
 
@@ -101,7 +62,7 @@
                         </Grid.ColumnDefinitions>
                         <Grid Grid.Column="1">
                             <Border Style="{StaticResource OutgoingSkeletonItemStyle}" Height="44"/>
-                            <Border Style="{StaticResource OutgoingSkeletonItemStyle}" Height="44" Background="{StaticResource ShimmerBrush}"/>
+                            <Border Style="{StaticResource OutgoingSkeletonItemStyle}" Height="44" Background="{StaticResource SkeletonHighlightBrush}"/>
                         </Grid>
                     </Grid>
 
@@ -112,7 +73,7 @@
                         </Grid.ColumnDefinitions>
                         <Grid Grid.Column="0">
                             <Border Style="{StaticResource IncomingSkeletonItemStyle}" Height="120"/>
-                            <Border Style="{StaticResource IncomingSkeletonItemStyle}" Height="120" Background="{StaticResource ShimmerBrush}"/>
+                            <Border Style="{StaticResource IncomingSkeletonItemStyle}" Height="120" Background="{StaticResource SkeletonHighlightBrush}"/>
                         </Grid>
                     </Grid>
 
@@ -123,7 +84,7 @@
                         </Grid.ColumnDefinitions>
                         <Grid Grid.Column="1">
                             <Border Style="{StaticResource OutgoingSkeletonItemStyle}" Height="60"/>
-                            <Border Style="{StaticResource OutgoingSkeletonItemStyle}" Height="60" Background="{StaticResource ShimmerBrush}"/>
+                            <Border Style="{StaticResource OutgoingSkeletonItemStyle}" Height="60" Background="{StaticResource SkeletonHighlightBrush}"/>
                         </Grid>
                     </Grid>
                 </StackPanel>

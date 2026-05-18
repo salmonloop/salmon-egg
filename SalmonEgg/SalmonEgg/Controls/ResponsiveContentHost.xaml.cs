@@ -1,4 +1,3 @@
-using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Presentation.Models;
@@ -7,9 +6,6 @@ namespace SalmonEgg.Controls;
 
 public sealed partial class ResponsiveContentHost : UserControl
 {
-    private bool _isUpdatingColumns;
-    private bool _isWide;
-
     public static readonly DependencyProperty ChildProperty =
         DependencyProperty.Register(
             nameof(Child),
@@ -22,14 +18,7 @@ public sealed partial class ResponsiveContentHost : UserControl
             nameof(MaxContentWidth),
             typeof(double),
             typeof(ResponsiveContentHost),
-            new PropertyMetadata(UiLayout.ContentMaxWidth, OnMaxContentWidthChanged));
-
-    public static readonly DependencyProperty MinGutterProperty =
-        DependencyProperty.Register(
-            nameof(MinGutter),
-            typeof(double),
-            typeof(ResponsiveContentHost),
-            new PropertyMetadata(24d, OnMaxContentWidthChanged));
+            new PropertyMetadata(UiLayout.ContentMaxWidth));
 
     public object? Child
     {
@@ -43,86 +32,8 @@ public sealed partial class ResponsiveContentHost : UserControl
         set => SetValue(MaxContentWidthProperty, value);
     }
 
-    public double MinGutter
-    {
-        get => (double)GetValue(MinGutterProperty);
-        set => SetValue(MinGutterProperty, value);
-    }
-
     public ResponsiveContentHost()
     {
         InitializeComponent();
-    }
-
-    private static void OnMaxContentWidthChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        if (d is ResponsiveContentHost host)
-        {
-            host.UpdateColumns(host.LayoutRoot?.ActualWidth ?? host.ActualWidth);
-        }
-    }
-
-    private void OnRootSizeChanged(object sender, SizeChangedEventArgs e)
-    {
-        UpdateColumns(e.NewSize.Width);
-    }
-
-    private void UpdateColumns(double availableWidth)
-    {
-        if (_isUpdatingColumns || availableWidth <= 0)
-        {
-            return;
-        }
-
-        var max = MaxContentWidth;
-        if (max <= 0)
-        {
-            SetNarrow();
-            return;
-        }
-
-        var minGutter = Math.Max(0, MinGutter);
-        var wideThreshold = max + (minGutter * 2);
-
-        if (availableWidth >= wideThreshold && !_isWide)
-        {
-            SetWide(max);
-        }
-        else if (availableWidth < wideThreshold && _isWide)
-        {
-            SetNarrow();
-        }
-    }
-
-    private void SetWide(double max)
-    {
-        _isUpdatingColumns = true;
-        try
-        {
-            _isWide = true;
-            ContentColumn.Width = new GridLength(max, GridUnitType.Pixel);
-            LeftGutter.Width = new GridLength(1, GridUnitType.Star);
-            RightGutter.Width = new GridLength(1, GridUnitType.Star);
-        }
-        finally
-        {
-            _isUpdatingColumns = false;
-        }
-    }
-
-    private void SetNarrow()
-    {
-        _isUpdatingColumns = true;
-        try
-        {
-            _isWide = false;
-            ContentColumn.Width = new GridLength(1, GridUnitType.Star);
-            LeftGutter.Width = new GridLength(0);
-            RightGutter.Width = new GridLength(0);
-        }
-        finally
-        {
-            _isUpdatingColumns = false;
-        }
     }
 }

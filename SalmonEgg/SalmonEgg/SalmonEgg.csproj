@@ -227,6 +227,10 @@
   <ItemGroup Condition="'$(TargetFramework)' != 'net10.0-windows10.0.26100.0'">
     <Compile Remove="Platforms/Windows/**/*.cs" />
   </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.26100.0'">
+    <Compile Remove="Controls/ShortcutRecorder.Default.cs" />
+    <Compile Remove="MainPage.Default.cs" />
+  </ItemGroup>
 
   <Target Name="ResolveWinUI3Toolchain"
           BeforeTargets="GetVCInstallPath"

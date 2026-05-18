@@ -36,6 +36,7 @@ public sealed class ChatStylesMarkdownXamlTests
         Assert.Contains("<controls:MarkdownTextPresenter", xaml, StringComparison.Ordinal);
         Assert.Contains("ShouldRenderMarkdown=\"{x:Bind MarkdownPresentation.ShouldRenderMarkdown, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("RenderFailureSink=\"{x:Bind}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("LinkCommand=\"{x:Bind OpenMarkdownLinkCommand}\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("MessageViewModel=\"{x:Bind}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Load=\"{x:Bind MarkdownPresentation.ShouldRenderMarkdown, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Load=\"{x:Bind MarkdownPresentation.ShouldRenderPlainText, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
@@ -66,10 +67,11 @@ public sealed class ChatStylesMarkdownXamlTests
         Assert.Contains("x:Name=\"IncomingMarkdownCopyCodeButton\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Uid=\"ChatMarkdownCopyCodeButton\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Load=\"{x:Bind MarkdownPresentation.HasCopyableCodeBlock, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind CopyTextCommand}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("CommandParameter=\"{x:Bind MarkdownPresentation.CopyableCodeBlockText, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Click=\"OnCopyTextClick\"", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"ChatMessage.CopyCodeButton\"", xaml, StringComparison.Ordinal);
         Assert.Contains("<SymbolIcon Symbol=\"Copy\" />", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Click=\"OnCopyTextClick\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Click=\"OnCopyCodeBlockClick\"", xaml, StringComparison.Ordinal);
     }
 
@@ -127,7 +129,9 @@ public sealed class ChatStylesMarkdownXamlTests
         Assert.Contains("IsTextSelectionEnabled=\"True\"", xaml, StringComparison.Ordinal);
         Assert.Contains("<Border.ContextFlyout>", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Uid=\"ChatMessageCopyMenu\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Click=\"OnCopyMessageClick\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind CopyTextCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsEnabled=\"{x:Bind HasTextContent", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Click=\"OnCopyMessageClick\"", xaml, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -189,9 +193,12 @@ public sealed class ChatStylesMarkdownXamlTests
         Assert.Contains("QuoteBorderBrushProperty", source, StringComparison.Ordinal);
         Assert.Contains("ParagraphLineHeight = 22", source, StringComparison.Ordinal);
         Assert.Contains("UseListExtras = true", source, StringComparison.Ordinal);
+        Assert.Contains("LinkCommandProperty", source, StringComparison.Ordinal);
+        Assert.Contains("TryExecuteLinkCommand", source, StringComparison.Ordinal);
         Assert.DoesNotContain("ChatMarkdownFenceDetector.HasClosedFence", source, StringComparison.Ordinal);
-        Assert.Contains("ChatMarkdownLinkPolicy.TryResolveLaunchUri", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("ChatMarkdownLinkPolicy.TryResolveLaunchUri", source, StringComparison.Ordinal);
         Assert.DoesNotContain("Uri.TryCreate(e.Link", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("App.ServiceProvider", source, StringComparison.Ordinal);
     }
 
     private static string LoadChatStylesXaml()

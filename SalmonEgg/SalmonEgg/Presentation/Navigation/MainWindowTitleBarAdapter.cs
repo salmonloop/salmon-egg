@@ -12,6 +12,7 @@ using Microsoft.UI.Windowing;
 using Windows.Foundation;
 using Windows.Graphics;
 #endif
+using SalmonEgg.Presentation.Services;
 
 namespace SalmonEgg.Presentation.Navigation;
 
@@ -19,7 +20,7 @@ namespace SalmonEgg.Presentation.Navigation;
 /// UI adapter that encapsulates WinUI title bar hosting and non-client passthrough region updates.
 /// MainPage should only forward lifecycle events and never own title-bar stateful plumbing.
 /// </summary>
-public sealed class MainWindowTitleBarAdapter : IDisposable
+public sealed class MainWindowTitleBarAdapter : ITitleBarInsetProvider, IDisposable
 {
     private readonly Border _appTitleBar;
     private readonly Grid _appTitleBarLayoutRoot;
@@ -39,12 +40,6 @@ public sealed class MainWindowTitleBarAdapter : IDisposable
     private Microsoft.UI.Xaml.Controls.TitleBar? _winuiTitleBarControl;
     private InputNonClientPointerSource? _titleBarPointerSource;
     private XamlRoot? _observedTitleBarXamlRoot;
-#endif
-
-#if WINDOWS
-    public AppWindowTitleBar? AppWindowTitleBar => _appWindowTitleBar;
-#else
-    public object? AppWindowTitleBar => null;
 #endif
 
     public MainWindowTitleBarAdapter(
@@ -184,6 +179,17 @@ public sealed class MainWindowTitleBarAdapter : IDisposable
     public void UpdateNavToggleToolTip(string tooltipText)
     {
         ToolTipService.SetToolTip(_titleBarToggleLeftNavButton, tooltipText);
+    }
+
+    public (double Left, double Right, double Height) GetInsets()
+    {
+#if WINDOWS
+        return _appWindowTitleBar is null
+            ? (0, 0, 0)
+            : (_appWindowTitleBar.LeftInset, _appWindowTitleBar.RightInset, _appWindowTitleBar.Height);
+#else
+        return (0, 0, 0);
+#endif
     }
 
     public void Detach()

@@ -1,6 +1,8 @@
 using System;
 using System.IO;
 using SalmonEgg.Presentation.Models.Navigation;
+using SalmonEgg.Presentation.Core.Services.Navigation;
+using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 
 namespace SalmonEgg.Presentation.Core.Tests;
@@ -373,6 +375,7 @@ public sealed class NavigationCoreTests
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
         var adapter = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Navigation\ContentFrameNavigationAdapter.cs");
+        var tracker = LoadFile(@"src\SalmonEgg.Presentation.Core\Services\Navigation\ContentNavigationRequestTracker.cs");
 
         Assert.Contains("new ContentFrameNavigationAdapter(ContentFrame)", code, StringComparison.Ordinal);
         Assert.Contains("_contentNavigation.NavigateAsync(pageType, parameter, activationToken)", code, StringComparison.Ordinal);
@@ -380,16 +383,77 @@ public sealed class NavigationCoreTests
         Assert.Contains("_frame.Navigating += OnFrameNavigating;", adapter, StringComparison.Ordinal);
         Assert.Contains("_frame.Navigated += OnFrameNavigated;", adapter, StringComparison.Ordinal);
         Assert.Contains("_frame.NavigationFailed += OnFrameNavigationFailed;", adapter, StringComparison.Ordinal);
-        Assert.Contains("e.Cancel = true;", adapter, StringComparison.Ordinal);
-        Assert.Contains("request.Matches(e.SourcePageType, e.Parameter)", adapter, StringComparison.Ordinal);
-        Assert.Contains("ShellNavigationResult.Failed(\"StaleNavigation\")", adapter, StringComparison.Ordinal);
-        Assert.Contains("ShellNavigationResult.Failed(\"ContentNotProjected\")", adapter, StringComparison.Ordinal);
+        Assert.Contains("_requests.TryResolveNavigating(e.SourcePageType, e.Parameter, out var cancel)", adapter, StringComparison.Ordinal);
+        Assert.Contains("e.Cancel = cancel;", adapter, StringComparison.Ordinal);
+        Assert.Contains("request.Matches(pageType, parameter)", tracker, StringComparison.Ordinal);
+        Assert.Contains("RememberPendingFrameRequest", tracker, StringComparison.Ordinal);
+        Assert.Contains("ConsumePendingFrameRequest(pageType)", tracker, StringComparison.Ordinal);
+        Assert.DoesNotContain("e.Parameter", ExtractSection(adapter, "private void OnFrameNavigationFailed", "private ShellNavigationResult CompleteCurrentRequest"), StringComparison.Ordinal);
+        Assert.Contains("ShellNavigationResult.Failed(\"StaleNavigation\")", tracker, StringComparison.Ordinal);
+        Assert.Contains("ShellNavigationResult.Failed(\"ContentNotProjected\")", tracker, StringComparison.Ordinal);
         Assert.Contains("pageType.IsInstanceOfType(_frame.Content)", adapter, StringComparison.Ordinal);
         Assert.DoesNotContain("ContentFrame.Navigated +=", code, StringComparison.Ordinal);
         Assert.DoesNotContain("private void EnsureStartContent(", code, StringComparison.Ordinal);
         Assert.DoesNotContain("private void EnsureChatContent(", code, StringComparison.Ordinal);
         Assert.DoesNotContain("private void EnsureDiscoverSessionsContent(", code, StringComparison.Ordinal);
         Assert.DoesNotContain("private void EnsureSettingsContent(", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ContentNavigationRequestTracker_FailedNavigationWithoutParameterFailsMatchingActiveRequest()
+    {
+        var tracker = new ContentNavigationRequestTracker();
+        var request = tracker.BeginRequest(typeof(TestPageA), "settings", activationToken: 1);
+        request.Completion = new TaskCompletionSource<ShellNavigationResult>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var navigationMatched = tracker.TryResolveNavigating(typeof(TestPageA), "settings", out var cancel);
+        var failure = tracker.ResolveNavigationFailed(typeof(TestPageA));
+
+        Assert.True(navigationMatched);
+        Assert.False(cancel);
+        Assert.Equal(ContentNavigationFailureKind.Active, failure.Kind);
+        Assert.Same(request, failure.Request);
+
+        var result = request.Complete(ShellNavigationResult.Failed("InvalidOperationException"));
+        Assert.False(result.Succeeded);
+        Assert.Equal("InvalidOperationException", result.FailureReason);
+        Assert.True(request.Completion.Task.IsCompletedSuccessfully);
+        Assert.Equal(result, await request.Completion.Task);
+    }
+
+    [Fact]
+    public async Task ContentNavigationRequestTracker_FailedSupersededNavigationDoesNotCorruptLatestActiveRequest()
+    {
+        var tracker = new ContentNavigationRequestTracker();
+        var first = tracker.BeginRequest(typeof(TestPageA), "first", activationToken: 1);
+        first.Completion = new TaskCompletionSource<ShellNavigationResult>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var firstNavigationMatched = tracker.TryResolveNavigating(typeof(TestPageA), "first", out var firstCancel);
+        var latest = tracker.BeginRequest(typeof(TestPageB), "latest", activationToken: 2);
+        latest.Completion = new TaskCompletionSource<ShellNavigationResult>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var failure = tracker.ResolveNavigationFailed(typeof(TestPageA));
+        var latestCompletion = tracker.ResolveNavigated(typeof(TestPageB), "latest");
+
+        Assert.True(firstNavigationMatched);
+        Assert.False(firstCancel);
+        Assert.Equal(ContentNavigationFailureKind.Stale, failure.Kind);
+        Assert.Same(first, failure.Request);
+        Assert.True(first.Completion.Task.IsCompletedSuccessfully);
+        var firstResult = await first.Completion.Task;
+        Assert.False(firstResult.Succeeded);
+        Assert.Equal("StaleNavigation", firstResult.FailureReason);
+
+        Assert.Equal(ContentNavigationCompletionKind.Active, latestCompletion.Kind);
+        Assert.Same(latest, latestCompletion.Request);
+
+        var latestResult = tracker.CompleteActive(latest, isDisplaying: true);
+        Assert.True(latestResult.Succeeded);
+        Assert.True(latest.Completion.Task.IsCompletedSuccessfully);
+        Assert.Equal(latestResult, await latest.Completion.Task);
     }
 
     [Fact]
@@ -971,4 +1035,8 @@ public sealed class NavigationCoreTests
 
     private static string NormalizeRelativePath(string relativePath)
         => relativePath.Replace('\\', Path.DirectorySeparatorChar);
+
+    private sealed class TestPageA;
+
+    private sealed class TestPageB;
 }

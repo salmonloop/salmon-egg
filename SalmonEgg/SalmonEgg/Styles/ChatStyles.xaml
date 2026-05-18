@@ -26,9 +26,8 @@
                 <Border.ContextFlyout>
                     <MenuFlyout>
                         <MenuFlyoutItem x:Uid="ChatMessageCopyMenu"
-                                        Click="OnCopyMessageClick"
-                                        CommandParameter="{x:Bind TextContent, Mode=OneWay}"
-                                        IsEnabled="{x:Bind HasTextContent, Mode=OneWay}" />
+                                        Command="{x:Bind CopyTextCommand}"
+                                        CommandParameter="{x:Bind TextContent, Mode=OneWay}" />
                     </MenuFlyout>
                 </Border.ContextFlyout>
                 <StackPanel>
@@ -67,13 +66,14 @@
                                                         QuoteForeground="{ThemeResource TextFillColorSecondaryBrush}"
                                                         QuoteBorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
                                                         TableBorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                                        LinkCommand="{x:Bind OpenMarkdownLinkCommand}"
                                                         IsTextSelectionEnabled="{x:Bind MarkdownPresentation.AllowsNativeSelection, Mode=OneWay}"/>
 
                         <Button x:Name="IncomingMarkdownCopyCodeButton"
                                 x:Uid="ChatMarkdownCopyCodeButton"
                                 x:Load="{x:Bind MarkdownPresentation.HasCopyableCodeBlock, Mode=OneWay}"
+                                Command="{x:Bind CopyTextCommand}"
                                 CommandParameter="{x:Bind MarkdownPresentation.CopyableCodeBlockText, Mode=OneWay}"
-                                Click="OnCopyTextClick"
                                 AutomationProperties.AutomationId="ChatMessage.CopyCodeButton"
                                 HorizontalAlignment="Right"
                                 VerticalAlignment="Top"
@@ -104,9 +104,8 @@
                 <Border.ContextFlyout>
                     <MenuFlyout>
                         <MenuFlyoutItem x:Uid="ChatMessageCopyMenu"
-                                        Click="OnCopyMessageClick"
-                                        CommandParameter="{x:Bind TextContent, Mode=OneWay}"
-                                        IsEnabled="{x:Bind HasTextContent, Mode=OneWay}" />
+                                        Command="{x:Bind CopyTextCommand}"
+                                        CommandParameter="{x:Bind TextContent, Mode=OneWay}" />
                     </MenuFlyout>
                 </Border.ContextFlyout>
                 <StackPanel x:Name="OutgoingMessageContentRoot">

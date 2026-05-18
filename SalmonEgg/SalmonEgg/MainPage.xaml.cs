@@ -6,9 +6,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-#if WINDOWS
-using Microsoft.UI.Windowing;
-#endif
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -37,9 +34,6 @@ using SalmonEgg.Presentation.Views;
 using SalmonEgg.Presentation.Views.Chat;
 using SalmonEgg.Presentation.Views.Start;
 using Windows.ApplicationModel.Resources;
-#if WINDOWS
-using SalmonEgg.Platforms.Windows;
-#endif
 
 namespace SalmonEgg;
 
@@ -63,10 +57,6 @@ public sealed partial class MainPage : Page
     private readonly Dictionary<KeyboardAccelerator, string> _appShortcutActions = new();
     private string? _pendingArchiveSessionId;
     private string? _pendingMoveSessionId;
-#if WINDOWS
-    private TrayIconManager? _trayIcon;
-    private bool _allowClose;
-#endif
 #if WINDOWS
     // Title bar hosting/interactive-region state is encapsulated by MainWindowTitleBarAdapter.
 #endif
@@ -192,11 +182,8 @@ public sealed partial class MainPage : Page
         _metricsProvider.Detach();
         _contentNavigation.NavigationCompleted -= OnContentFrameNavigationCompleted;
         _contentNavigation.NavigationFailed -= OnContentFrameNavigationFailed;
-#if WINDOWS
         _titleBarAdapter.Detach();
-        _trayIcon?.Dispose();
-        _trayIcon = null;
-#endif
+        DisposePlatformTray();
     }
 
     public void NavigateToChat()
@@ -276,12 +263,10 @@ public sealed partial class MainPage : Page
             ApplyBackdrop();
         }
 
-#if WINDOWS
         if (e.PropertyName == nameof(Preferences.MinimizeToTray))
         {
             UpdateTrayState();
         }
-#endif
     }
 
     private void OnShortcutBindingsChanged(object? sender, EventArgs e)
@@ -643,19 +628,13 @@ public sealed partial class MainPage : Page
     {
         AttachGamepadInput();
         _titleBarAdapter.Configure(App.MainWindowInstance);
-#if WINDOWS
-        _metricsProvider.Attach(App.MainWindowInstance!, _titleBarAdapter.AppWindowTitleBar);
-#else
-        _metricsProvider.Attach(App.MainWindowInstance!, null);
-#endif
+        _metricsProvider.Attach(App.MainWindowInstance!, _titleBarAdapter);
         UpdateNavPaneToggleUi();
         NavVM.RebuildTree();
         UpdateMainNavAutomationSelectionState();
         await _startupNavigation.ActivateInitialContentAsync().ConfigureAwait(true);
         BootLogDebug("MainPage: initial shell content activated");
-#if WINDOWS
         InitializeTray();
-#endif
         await _chatViewModel.RestoreAsync();
     }
 
@@ -1071,105 +1050,12 @@ public sealed partial class MainPage : Page
         }
     }
 
-#if WINDOWS
-    private void InitializeTray()
-    {
-        UpdateTrayState();
+    partial void InitializeTray();
 
-        var window = App.MainWindowInstance;
-        if (window?.AppWindow != null)
-        {
-            window.AppWindow.Closing -= OnAppWindowClosing;
-            window.AppWindow.Closing += OnAppWindowClosing;
-        }
-    }
+    partial void UpdateTrayState();
 
-    private void UpdateTrayState()
-    {
-        if (!Preferences.IsMinimizeToTraySupported)
-        {
-            DisposeTray();
-            return;
-        }
+    partial void DisposePlatformTray();
 
-        if (!Preferences.MinimizeToTray)
-        {
-            DisposeTray();
-            ShowMainWindow();
-            return;
-        }
-
-        EnsureTrayIcon();
-    }
-
-    private void EnsureTrayIcon()
-    {
-        if (_trayIcon != null)
-        {
-            return;
-        }
-
-        var window = App.MainWindowInstance;
-        if (window == null)
-        {
-            return;
-        }
-
-        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
-        if (hwnd == IntPtr.Zero)
-        {
-            return;
-        }
-
-        _trayIcon = new TrayIconManager(hwnd, "Salmon Egg", ShowMainWindow, ExitFromTray);
-    }
-
-    private void DisposeTray()
-    {
-        _trayIcon?.Dispose();
-        _trayIcon = null;
-    }
-
-    private void ShowMainWindow()
-    {
-        var window = App.MainWindowInstance;
-        if (window == null)
-        {
-            return;
-        }
-
-        try
-        {
-            window.AppWindow?.Show();
-        }
-        catch
-        {
-        }
-    }
-
-    private void ExitFromTray()
-    {
-        _allowClose = true;
-        DisposeTray();
-        App.MainWindowInstance?.Close();
-    }
-
-    private void OnAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
-    {
-        if (_allowClose)
-        {
-            return;
-        }
-
-        if (!Preferences.MinimizeToTray)
-        {
-            return;
-        }
-
-        args.Cancel = true;
-        sender.Hide();
-    }
-#endif
     // TitleBar insets are now handled by WindowMetricsProvider reporting to IShellLayoutMetricsSink,
     // which updates ShellLayoutStore/ShellLayoutViewModel. Visuals are bound using x:Bind in XAML.
 }
