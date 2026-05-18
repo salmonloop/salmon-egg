@@ -14,22 +14,22 @@ using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using SalmonEgg.Domain.Models.Session;
-using SalmonEgg.Presentation.Models.Search;
-using SalmonEgg.Presentation.Models.Navigation;
-using SalmonEgg.Presentation.Models.Settings;
-using SalmonEgg.Presentation.Navigation;
-using SalmonEgg.Presentation.Shortcuts;
-using SalmonEgg.Presentation.ViewModels;
-using SalmonEgg.Presentation.ViewModels.Chat;
-using SalmonEgg.Presentation.ViewModels.Navigation;
-using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.Core.Mvux.ShellLayout;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Input;
 using SalmonEgg.Presentation.Core.Services.Shortcuts;
 using SalmonEgg.Presentation.Core.ViewModels.ShellLayout;
+using SalmonEgg.Presentation.Models.Navigation;
+using SalmonEgg.Presentation.Models.Search;
+using SalmonEgg.Presentation.Models.Settings;
+using SalmonEgg.Presentation.Navigation;
 using SalmonEgg.Presentation.Services;
+using SalmonEgg.Presentation.Shortcuts;
 using SalmonEgg.Presentation.Utilities;
+using SalmonEgg.Presentation.ViewModels;
+using SalmonEgg.Presentation.ViewModels.Chat;
+using SalmonEgg.Presentation.ViewModels.Navigation;
+using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.Views;
 using SalmonEgg.Presentation.Views.Chat;
 using SalmonEgg.Presentation.Views.Start;
@@ -387,7 +387,7 @@ public sealed partial class MainPage : Page
         {
             return;
         }
-        
+
         BootLogDebug("MainNav ItemInvoked: no adapter route matched.");
     }
 
@@ -1008,7 +1008,7 @@ public sealed partial class MainPage : Page
         _metricsSink.ReportLeftNavWidth(newWidth);
         e.Handled = true;
     }
-    
+
     // Debug line removed
 
     private void OnLeftNavResizerPointerReleased(object sender, PointerRoutedEventArgs e)
