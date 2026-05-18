@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 using SalmonEgg.Presentation.Models;
 using SalmonEgg.Presentation.Models.Settings;
+using SalmonEgg.Presentation.Navigation;
 using SalmonEgg.Presentation.ViewModels.Settings;
 
 namespace SalmonEgg.Presentation.Views;
@@ -15,7 +16,7 @@ namespace SalmonEgg.Presentation.Views;
 /// </summary>
 public sealed partial class SettingsShellPage : Page
 {
-    private bool _suppressSelection;
+    private SettingsSectionNavigationAdapter? _sectionNavigation;
 
     public SettingsShellViewModel ViewModel { get; }
 
@@ -23,6 +24,7 @@ public sealed partial class SettingsShellPage : Page
     {
         ViewModel = App.ServiceProvider.GetRequiredService<SettingsShellViewModel>();
         InitializeComponent();
+        AttachSectionNavigation();
     }
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
@@ -40,29 +42,46 @@ public sealed partial class SettingsShellPage : Page
             return;
         }
 
-        _suppressSelection = true;
-        try
-        {
-            var section = ViewModel.SelectSection(key);
-            NavigateFrameToSection(section.Key);
-        }
-        finally
-        {
-            _suppressSelection = false;
-        }
+        var section = ViewModel.SelectSection(key);
+        AttachSectionNavigation();
+        _sectionNavigation?.Select(section.Key);
+        NavigateFrameToSection(section.Key);
     }
 
-    private void OnSettingsNavSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
+    protected override void OnNavigatedFrom(NavigationEventArgs e)
     {
-        if (_suppressSelection)
+        base.OnNavigatedFrom(e);
+
+        DetachSectionNavigation();
+    }
+
+    private void AttachSectionNavigation()
+    {
+        if (_sectionNavigation is not null)
         {
             return;
         }
 
-        if (args.SelectedItem is SettingsShellSectionViewModel section)
+        _sectionNavigation = new SettingsSectionNavigationAdapter(SettingsNavView, ViewModel.Sections);
+        _sectionNavigation.SectionInvoked += OnSectionNavigationInvoked;
+    }
+
+    private void DetachSectionNavigation()
+    {
+        if (_sectionNavigation is null)
         {
-            NavigateFrameToSection(section.Key);
+            return;
         }
+
+        _sectionNavigation.SectionInvoked -= OnSectionNavigationInvoked;
+        _sectionNavigation.Dispose();
+        _sectionNavigation = null;
+    }
+
+    private void OnSectionNavigationInvoked(object? sender, SettingsSectionNavigationInvokedEventArgs args)
+    {
+        var section = ViewModel.SelectSection(args.Key);
+        NavigateFrameToSection(section.Key);
     }
 
     private void NavigateFrameToSection(string key)

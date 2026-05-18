@@ -17,7 +17,15 @@ public sealed class ShellNavigationService : IShellNavigationService, IActivatio
     }
 
     public ValueTask<ShellNavigationResult> NavigateToSettings(string key, long activationToken)
-        => NavigateToSettings(key);
+    {
+        var shell = GetShell();
+        if (shell is null)
+        {
+            return ValueTask.FromResult(ShellNavigationResult.Failed("ShellUnavailable"));
+        }
+
+        return shell.NavigateToSettingsSubPageAsync(key, activationToken);
+    }
 
     public ValueTask<ShellNavigationResult> NavigateToChat()
     {
@@ -31,7 +39,15 @@ public sealed class ShellNavigationService : IShellNavigationService, IActivatio
     }
 
     public ValueTask<ShellNavigationResult> NavigateToChat(long activationToken)
-        => NavigateToChat();
+    {
+        var shell = GetShell();
+        if (shell is null)
+        {
+            return ValueTask.FromResult(ShellNavigationResult.Failed("ShellUnavailable"));
+        }
+
+        return shell.NavigateToChatAsync(activationToken);
+    }
 
     public ValueTask<ShellNavigationResult> NavigateToStart()
     {
@@ -45,7 +61,15 @@ public sealed class ShellNavigationService : IShellNavigationService, IActivatio
     }
 
     public ValueTask<ShellNavigationResult> NavigateToStart(long activationToken)
-        => NavigateToStart();
+    {
+        var shell = GetShell();
+        if (shell is null)
+        {
+            return ValueTask.FromResult(ShellNavigationResult.Failed("ShellUnavailable"));
+        }
+
+        return shell.NavigateToStartAsync(activationToken);
+    }
 
     public ValueTask<ShellNavigationResult> NavigateToDiscoverSessions()
     {
@@ -59,7 +83,15 @@ public sealed class ShellNavigationService : IShellNavigationService, IActivatio
     }
 
     public ValueTask<ShellNavigationResult> NavigateToDiscoverSessions(long activationToken)
-        => NavigateToDiscoverSessions();
+    {
+        var shell = GetShell();
+        if (shell is null)
+        {
+            return ValueTask.FromResult(ShellNavigationResult.Failed("ShellUnavailable"));
+        }
+
+        return shell.NavigateToDiscoverSessionsAsync(activationToken);
+    }
 
     private static MainPage? GetShell()
     {

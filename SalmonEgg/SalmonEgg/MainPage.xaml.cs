@@ -16,7 +16,6 @@ using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Navigation;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Presentation.Models.Search;
 using SalmonEgg.Presentation.Models.Navigation;
@@ -137,8 +136,8 @@ public sealed partial class MainPage : Page
 
         Loaded += OnMainPageLoaded;
         Unloaded += OnMainPageUnloaded;
-        ContentFrame.Navigated += OnContentFrameNavigated;
-        ContentFrame.NavigationFailed += OnContentFrameNavigationFailed;
+        _contentNavigation.NavigationCompleted += OnContentFrameNavigationCompleted;
+        _contentNavigation.NavigationFailed += OnContentFrameNavigationFailed;
 
         // 2. Listen for global preference changes (animations, theme, backdrop)
         Preferences.PropertyChanged += OnPreferencesPropertyChanged;
@@ -191,7 +190,8 @@ public sealed partial class MainPage : Page
         NavVM.TreeRebuilt -= OnNavigationTreeRebuilt;
         LayoutVM.PropertyChanged -= OnLayoutViewModelPropertyChanged;
         _metricsProvider.Detach();
-        ContentFrame.NavigationFailed -= OnContentFrameNavigationFailed;
+        _contentNavigation.NavigationCompleted -= OnContentFrameNavigationCompleted;
+        _contentNavigation.NavigationFailed -= OnContentFrameNavigationFailed;
 #if WINDOWS
         _titleBarAdapter.Detach();
         _trayIcon?.Dispose();
@@ -207,6 +207,9 @@ public sealed partial class MainPage : Page
     public ValueTask<ShellNavigationResult> NavigateToChatAsync()
         => EnsureChatContentAsync();
 
+    public ValueTask<ShellNavigationResult> NavigateToChatAsync(long activationToken)
+        => EnsureChatContentAsync(activationToken);
+
     public void NavigateToStart()
     {
         _ = EnsureStartContentAsync();
@@ -215,6 +218,9 @@ public sealed partial class MainPage : Page
     public ValueTask<ShellNavigationResult> NavigateToStartAsync()
         => EnsureStartContentAsync();
 
+    public ValueTask<ShellNavigationResult> NavigateToStartAsync(long activationToken)
+        => EnsureStartContentAsync(activationToken);
+
     public void NavigateToDiscoverSessions()
     {
         _ = EnsureDiscoverSessionsContentAsync();
@@ -222,6 +228,9 @@ public sealed partial class MainPage : Page
 
     public ValueTask<ShellNavigationResult> NavigateToDiscoverSessionsAsync()
         => EnsureDiscoverSessionsContentAsync();
+
+    public ValueTask<ShellNavigationResult> NavigateToDiscoverSessionsAsync(long activationToken)
+        => EnsureDiscoverSessionsContentAsync(activationToken);
 
     public void NavigateToSettingsSubPage(string key)
     {
@@ -241,6 +250,16 @@ public sealed partial class MainPage : Page
         }
 
         return EnsureSettingsContentAsync(key);
+    }
+
+    public ValueTask<ShellNavigationResult> NavigateToSettingsSubPageAsync(string key, long activationToken)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            key = SettingsSectionCatalog.GeneralKey;
+        }
+
+        return EnsureSettingsContentAsync(key, activationToken);
     }
 
     private static Type GetSettingsShellPageType() => typeof(SalmonEgg.Presentation.Views.SettingsShellPage);
@@ -447,48 +466,46 @@ public sealed partial class MainPage : Page
         });
     }
 
-    private async ValueTask<ShellNavigationResult> EnsureChatContentAsync()
+    private async ValueTask<ShellNavigationResult> EnsureChatContentAsync(long? activationToken = null)
     {
-        var result = await NavigateToContentAsync(typeof(ChatView)).ConfigureAwait(true);
+        var result = await NavigateToContentAsync(typeof(ChatView), activationToken: activationToken).ConfigureAwait(true);
         _titleBarAdapter.UpdateBackButtonState();
         return result;
     }
 
-    private async ValueTask<ShellNavigationResult> EnsureDiscoverSessionsContentAsync()
+    private async ValueTask<ShellNavigationResult> EnsureDiscoverSessionsContentAsync(long? activationToken = null)
     {
         var pageType = typeof(SalmonEgg.Presentation.Views.Discover.DiscoverSessionsPage);
-        var result = await NavigateToContentAsync(pageType).ConfigureAwait(true);
+        var result = await NavigateToContentAsync(pageType, activationToken: activationToken).ConfigureAwait(true);
         _titleBarAdapter.UpdateBackButtonState();
         return result;
     }
 
-    private async ValueTask<ShellNavigationResult> EnsureStartContentAsync()
+    private async ValueTask<ShellNavigationResult> EnsureStartContentAsync(long? activationToken = null)
     {
-        var result = await NavigateToContentAsync(typeof(StartView)).ConfigureAwait(true);
+        var result = await NavigateToContentAsync(typeof(StartView), activationToken: activationToken).ConfigureAwait(true);
         _titleBarAdapter.UpdateBackButtonState();
         return result;
     }
 
-    private async ValueTask<ShellNavigationResult> EnsureSettingsContentAsync(string key)
+    private async ValueTask<ShellNavigationResult> EnsureSettingsContentAsync(string key, long? activationToken = null)
     {
         var pageType = GetSettingsShellPageType();
-        if (IsContentFrameDisplaying(pageType))
+        var result = await NavigateToContentAsync(pageType, key, activationToken).ConfigureAwait(true);
+        if (result.Succeeded)
         {
             (ContentFrame.Content as SalmonEgg.Presentation.Views.SettingsShellPage)?.NavigateToSection(key);
-            _titleBarAdapter.UpdateBackButtonState();
-            return ShellNavigationResult.Success();
         }
 
-        var result = await NavigateToContentAsync(pageType, key).ConfigureAwait(true);
         _titleBarAdapter.UpdateBackButtonState();
         return result;
     }
 
-    private bool IsContentFrameDisplaying(Type pageType)
-        => _contentNavigation.IsDisplaying(pageType);
-
-    private ValueTask<ShellNavigationResult> NavigateToContentAsync(Type pageType, object? parameter = null)
-        => _contentNavigation.NavigateAsync(pageType, parameter);
+    private ValueTask<ShellNavigationResult> NavigateToContentAsync(
+        Type pageType,
+        object? parameter = null,
+        long? activationToken = null)
+        => _contentNavigation.NavigateAsync(pageType, parameter, activationToken);
 
     private string GetRightPanelTitle(RightPanelMode mode)
     {
@@ -691,11 +708,11 @@ public sealed partial class MainPage : Page
 #endif
     }
 
-    private async void OnContentFrameNavigated(object sender, NavigationEventArgs e)
+    private async void OnContentFrameNavigationCompleted(object? sender, ContentFrameNavigationCompletedEventArgs e)
     {
-        BootLogDebug($"ContentFrame Navigated: {e.SourcePageType?.Name ?? "<null>"}");
+        BootLogDebug($"ContentFrame Navigated: {e.PageType.Name}");
         var navigationVersion = Interlocked.Increment(ref _contentFrameNavigationVersion);
-        var isChatPage = IsChatPageType(e.SourcePageType);
+        var isChatPage = IsChatPageType(e.PageType);
         try
         {
             await _metricsSink.ReportContentContext(isChatPage, navigationVersion).ConfigureAwait(true);
@@ -708,9 +725,9 @@ public sealed partial class MainPage : Page
         _titleBarAdapter.UpdateBackButtonState();
     }
 
-    private void OnContentFrameNavigationFailed(object sender, NavigationFailedEventArgs e)
+    private void OnContentFrameNavigationFailed(object? sender, ContentFrameNavigationFailedEventArgs e)
     {
-        BootLogDebug($"ContentFrame NavigationFailed: target={e.SourcePageType?.Name ?? "<null>"} exception={e.Exception}");
+        BootLogDebug($"ContentFrame NavigationFailed: target={e.PageType.Name} reason={e.Reason}");
     }
 
     private void OnTitleBarBackClick(object sender, RoutedEventArgs e)
@@ -1166,7 +1183,7 @@ public sealed partial class MainPage
 
         Loaded -= OnMainPageLoaded;
         Unloaded -= OnMainPageUnloaded;
-        ContentFrame.Navigated -= OnContentFrameNavigated;
-        ContentFrame.NavigationFailed -= OnContentFrameNavigationFailed;
+        _contentNavigation.NavigationCompleted -= OnContentFrameNavigationCompleted;
+        _contentNavigation.NavigationFailed -= OnContentFrameNavigationFailed;
     }
 }

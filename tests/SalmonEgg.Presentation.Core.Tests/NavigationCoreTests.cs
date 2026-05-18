@@ -375,12 +375,17 @@ public sealed class NavigationCoreTests
         var adapter = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Navigation\ContentFrameNavigationAdapter.cs");
 
         Assert.Contains("new ContentFrameNavigationAdapter(ContentFrame)", code, StringComparison.Ordinal);
-        Assert.Contains("_contentNavigation.NavigateAsync(pageType, parameter)", code, StringComparison.Ordinal);
-        Assert.Contains("_frame.Navigated += OnNavigated;", adapter, StringComparison.Ordinal);
-        Assert.Contains("_frame.NavigationFailed += OnNavigationFailed;", adapter, StringComparison.Ordinal);
+        Assert.Contains("_contentNavigation.NavigateAsync(pageType, parameter, activationToken)", code, StringComparison.Ordinal);
+        Assert.Contains("_contentNavigation.NavigationCompleted += OnContentFrameNavigationCompleted;", code, StringComparison.Ordinal);
+        Assert.Contains("_frame.Navigating += OnFrameNavigating;", adapter, StringComparison.Ordinal);
+        Assert.Contains("_frame.Navigated += OnFrameNavigated;", adapter, StringComparison.Ordinal);
+        Assert.Contains("_frame.NavigationFailed += OnFrameNavigationFailed;", adapter, StringComparison.Ordinal);
+        Assert.Contains("e.Cancel = true;", adapter, StringComparison.Ordinal);
+        Assert.Contains("request.Matches(e.SourcePageType, e.Parameter)", adapter, StringComparison.Ordinal);
+        Assert.Contains("ShellNavigationResult.Failed(\"StaleNavigation\")", adapter, StringComparison.Ordinal);
         Assert.Contains("ShellNavigationResult.Failed(\"ContentNotProjected\")", adapter, StringComparison.Ordinal);
         Assert.Contains("pageType.IsInstanceOfType(_frame.Content)", adapter, StringComparison.Ordinal);
-        Assert.DoesNotContain("ContentFrame.Navigated += OnNavigated;", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("ContentFrame.Navigated +=", code, StringComparison.Ordinal);
         Assert.DoesNotContain("private void EnsureStartContent(", code, StringComparison.Ordinal);
         Assert.DoesNotContain("private void EnsureChatContent(", code, StringComparison.Ordinal);
         Assert.DoesNotContain("private void EnsureDiscoverSessionsContent(", code, StringComparison.Ordinal);
