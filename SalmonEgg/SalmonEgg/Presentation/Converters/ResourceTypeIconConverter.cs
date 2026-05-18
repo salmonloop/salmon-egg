@@ -1,6 +1,5 @@
 using System;
 using Microsoft.UI.Xaml.Data;
-using Microsoft.UI.Xaml.Media;
 
 namespace SalmonEgg.Presentation.Converters;
 
@@ -16,7 +15,7 @@ public class ResourceTypeIconConverter : IValueConverter
     {
         if (value is not string mimeType || string.IsNullOrEmpty(mimeType))
         {
-            return new SolidColorBrush(Microsoft.UI.Colors.Gray);
+            return ThemeBrushConverter.Resolve("TextFillColorSecondaryBrush");
         }
 
         // 根据 MIME 类型返回不同的颜色
@@ -28,7 +27,7 @@ public class ResourceTypeIconConverter : IValueConverter
             "text/css" or
             "text/javascript" or
             "application/json" or
-            "application/xml" => new SolidColorBrush(Microsoft.UI.Colors.LightBlue),
+            "application/xml" => ThemeBrushConverter.Resolve("AccentBrush"),
 
             // 代码文件
             "application/x-sh" or
@@ -37,25 +36,25 @@ public class ResourceTypeIconConverter : IValueConverter
             "text/x-csharp" or
             "text/x-java" or
             "text/x-c++" or
-            "text/x-c" => new SolidColorBrush(Microsoft.UI.Colors.LightGreen),
+            "text/x-c" => ThemeBrushConverter.Resolve("SystemFillColorSuccessBrush"),
 
             // 图片类型
             "image/png" or
             "image/jpeg" or
             "image/gif" or
             "image/svg+xml" or
-            "image/webp" => new SolidColorBrush(Microsoft.UI.Colors.LightYellow),
+            "image/webp" => ThemeBrushConverter.Resolve("SystemFillColorCautionBrush", "AccentBrush"),
 
             // 音频类型
             "audio/mpeg" or
             "audio/wav" or
             "audio/ogg" or
-            "audio/mp4" => new SolidColorBrush(Microsoft.UI.Colors.LightCoral),
+            "audio/mp4" => ThemeBrushConverter.Resolve("SystemFillColorCriticalBrush"),
 
             // 视频类型
             "video/mp4" or
             "video/webm" or
-            "video/ogg" => new SolidColorBrush(Microsoft.UI.Colors.LightPink),
+            "video/ogg" => ThemeBrushConverter.Resolve("SystemFillColorCriticalBrush"),
 
             // 文档类型
             "application/pdf" or
@@ -64,10 +63,10 @@ public class ResourceTypeIconConverter : IValueConverter
             "application/vnd.ms-excel" or
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" or
             "application/zip" or
-            "application/x-rar-compressed" => new SolidColorBrush(Microsoft.UI.Colors.LightSlateGray),
+            "application/x-rar-compressed" => ThemeBrushConverter.Resolve("TextFillColorSecondaryBrush"),
 
             // 默认颜色
-            _ => new SolidColorBrush(Microsoft.UI.Colors.LightGray)
+            _ => ThemeBrushConverter.Resolve("TextFillColorSecondaryBrush")
         };
     }
 

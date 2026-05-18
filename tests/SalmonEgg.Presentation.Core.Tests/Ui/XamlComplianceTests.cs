@@ -453,6 +453,20 @@ public sealed class XamlComplianceTests
         Assert.DoesNotContain("FallbackColor=\"#", xaml);
     }
 
+    [Theory]
+    [InlineData(@"SalmonEgg\SalmonEgg\Presentation\Converters\PlanStatusToColorConverter.cs")]
+    [InlineData(@"SalmonEgg\SalmonEgg\Presentation\Converters\ConnectionStatusToColorConverter.cs")]
+    [InlineData(@"SalmonEgg\SalmonEgg\Presentation\Converters\ResourceTypeIconConverter.cs")]
+    public void SemanticColorConverters_UseThemeResources(string relativePath)
+    {
+        var source = LoadText(relativePath);
+
+        Assert.Contains("ThemeBrushConverter.Resolve", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("new SolidColorBrush", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("ColorHelper.FromArgb", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("Microsoft.UI.Colors", source, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void AgentProfileEditor_DoesNotUseValueChangedHandlers()
     {

@@ -41,6 +41,7 @@
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
             <SolidColorBrush x:Key="AccentBrush" Color="{ThemeResource SystemAccentColor}" />
+            <SolidColorBrush x:Key="AppTerminalSurfaceBrush" Color="{ThemeResource SystemAltHighColor}" />
 
             <!-- Settings layout (Win11-like): fixed content column on wide windows, fluid on narrow ones -->
             <x:Double x:Key="SettingsContentMaxWidth">780</x:Double>

@@ -1,7 +1,5 @@
 using System;
-using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
-using Microsoft.UI.Xaml.Media;
 using SalmonEgg.Domain.Models.Plan;
 
 namespace SalmonEgg.Presentation.Converters
@@ -17,13 +15,12 @@ namespace SalmonEgg.Presentation.Converters
             {
                 return status switch
                 {
-                    PlanEntryStatus.Pending => new SolidColorBrush(Microsoft.UI.Colors.Gray),
-                    PlanEntryStatus.InProgress => new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 0, 120, 215)),
-                    PlanEntryStatus.Completed => new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 0, 180, 0)),
-                    _ => new SolidColorBrush(Microsoft.UI.Colors.Gray)
+                    PlanEntryStatus.InProgress => ThemeBrushConverter.Resolve("AccentBrush"),
+                    PlanEntryStatus.Completed => ThemeBrushConverter.Resolve("SystemFillColorSuccessBrush"),
+                    _ => ThemeBrushConverter.Resolve("TextFillColorSecondaryBrush")
                 };
             }
-            return new SolidColorBrush(Microsoft.UI.Colors.Gray);
+            return ThemeBrushConverter.Resolve("TextFillColorSecondaryBrush");
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, string language)
