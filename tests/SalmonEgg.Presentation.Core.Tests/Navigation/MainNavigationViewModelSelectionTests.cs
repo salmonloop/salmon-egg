@@ -328,6 +328,63 @@ public sealed class MainNavigationViewModelSelectionTests
     }
 
     [Fact]
+    public async Task RebuildTree_PreservesPreviouslyBoundMenuSnapshots_WhenNavigationTreeChanges()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var sessionManager = CreateSessionManager(
+                new Session("session-1", @"C:\repo\demo")
+                {
+                    DisplayName = "Session 1"
+                },
+                new Session("session-2", @"C:\repo\demo")
+                {
+                    DisplayName = "Session 2"
+                });
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog("session-1", "session-2");
+            var presenter = CreatePresenter(chatCatalog);
+
+            using var navVm = CreateNavigationViewModel(
+                chatCatalog,
+                sessionManager.Object,
+                preferences,
+                navState,
+                out _,
+                out _,
+                presenter);
+            navVm.RebuildTree();
+
+            var firstMenuSnapshot = navVm.MenuItems;
+            var project = Assert.Single(firstMenuSnapshot.OfType<ProjectNavItemViewModel>(), p => p.ProjectId == "project-1");
+            var firstChildrenSnapshot = project.ChildrenMenuItems;
+            Assert.Same(project, navVm.Items.OfType<ProjectNavItemViewModel>().Single(p => p.ProjectId == "project-1"));
+            Assert.Equal(["session-1", "session-2"], firstChildrenSnapshot.OfType<SessionNavItemViewModel>().Select(item => item.SessionId).ToArray());
+
+            presenter.Refresh(CreateSnapshot(["session-1"]));
+
+            Assert.Equal(["session-1", "session-2"], firstChildrenSnapshot.OfType<SessionNavItemViewModel>().Select(item => item.SessionId).ToArray());
+            Assert.Contains(project, firstMenuSnapshot);
+            Assert.Same(project, navVm.MenuItems.OfType<ProjectNavItemViewModel>().Single(p => p.ProjectId == "project-1"));
+            Assert.Equal(["session-1"], project.ChildrenMenuItems.OfType<SessionNavItemViewModel>().Select(item => item.SessionId).ToArray());
+
+            navVm.Dispose();
+
+            Assert.Empty(navVm.MenuItems);
+            Assert.Empty(navVm.FooterMenuItems);
+            Assert.Empty(project.ChildrenMenuItems);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public async Task ReopenPane_DoesNotForceExpandProject_WhenUserCollapsedWhileClosed()
     {
         var originalContext = SynchronizationContext.Current;

@@ -97,9 +97,31 @@ public sealed class XamlComplianceTests
     [Fact]
     public void MainPage_ProjectExpansionUsesNativeNavigationViewBehavior()
     {
-        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");
+        var document = XDocument.Parse(LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml"));
+        var xNamespace = XNamespace.Get("http://schemas.microsoft.com/winfx/2006/xaml");
 
-        Assert.Contains("IsExpanded=\"{x:Bind IsExpanded, Mode=TwoWay}\"", xaml);
+        var mainNavView = document
+            .Descendants()
+            .Single(element =>
+                string.Equals(element.Name.LocalName, "NavigationView", StringComparison.Ordinal)
+                && string.Equals(element.Attribute(xNamespace + "Name")?.Value, "MainNavView", StringComparison.Ordinal));
+        var projectTemplate = document
+            .Descendants()
+            .Single(element =>
+                string.Equals(element.Name.LocalName, "DataTemplate", StringComparison.Ordinal)
+                && string.Equals(element.Attribute(xNamespace + "Key")?.Value, "ProjectNavTemplate", StringComparison.Ordinal));
+        var projectNavItem = projectTemplate
+            .Descendants()
+            .Single(element => string.Equals(element.Name.LocalName, "NavigationViewItem", StringComparison.Ordinal));
+        var xaml = document.ToString(SaveOptions.DisableFormatting);
+
+        Assert.Equal("{x:Bind NavVM.MenuItems, Mode=OneWay}", mainNavView.Attribute("MenuItemsSource")?.Value);
+        Assert.Equal("{x:Bind NavVM.FooterMenuItems, Mode=OneWay}", mainNavView.Attribute("FooterMenuItemsSource")?.Value);
+        Assert.Equal("{x:Bind ChildrenMenuItems, Mode=OneWay}", projectNavItem.Attribute("MenuItemsSource")?.Value);
+        Assert.Equal("{x:Bind IsExpanded, Mode=TwoWay}", projectNavItem.Attribute("IsExpanded")?.Value);
+        Assert.DoesNotContain("MenuItemsSource=\"{x:Bind NavVM.Items, Mode=OneWay}\"", xaml);
+        Assert.DoesNotContain("FooterMenuItemsSource=\"{x:Bind NavVM.FooterItems, Mode=OneWay}\"", xaml);
+        Assert.DoesNotContain("MenuItemsSource=\"{x:Bind Children, Mode=OneWay}\"", xaml);
         Assert.DoesNotContain("IsExpanded=\"{x:Bind IsExpanded, Mode=OneWay}\"", xaml);
         Assert.DoesNotContain("Expanding=\"OnMainNavItemExpanding\"", xaml);
         Assert.DoesNotContain("Collapsed=\"OnMainNavItemCollapsed\"", xaml);
