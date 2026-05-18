@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.Extensions.Logging;
+using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.Views;
 
@@ -21,7 +22,7 @@ public sealed partial class DiagnosticsSettingsPage : SettingsPageBase
         _logger = App.ServiceProvider.GetRequiredService<ILogger<DiagnosticsSettingsPage>>();
         ViewModel = App.ServiceProvider.GetRequiredService<DiagnosticsSettingsViewModel>();
         InitializeComponent();
-        SetSettingsBreadcrumbFromResource("SettingsNav_Diagnostics.Content", "诊断与日志");
+        SetSettingsBreadcrumbForSection(SettingsSectionCatalog.DiagnosticsKey);
         Unloaded += OnUnloaded;
     }
 

@@ -13,6 +13,7 @@ using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Core.Services.Search;
 using SalmonEgg.Presentation.Core.Tests.Threading;
 using SalmonEgg.Presentation.Models.Search;
+using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels;
@@ -126,7 +127,7 @@ public sealed class GlobalSearchViewModelTests
         await viewModel.SubmitQueryAsync("acp");
 
         navigationCoordinator.Verify(
-            coordinator => coordinator.ActivateSettingsAsync("AgentAcp"),
+            coordinator => coordinator.ActivateSettingsAsync(SettingsSectionCatalog.AgentAcpKey),
             Times.Once);
     }
 
@@ -185,7 +186,7 @@ public sealed class GlobalSearchViewModelTests
         await viewModel.ActivateSuggestionAsync(suggestion);
 
         navigationCoordinator.Verify(
-            coordinator => coordinator.ActivateSettingsAsync("AgentAcp"),
+            coordinator => coordinator.ActivateSettingsAsync(SettingsSectionCatalog.AgentAcpKey),
             Times.Once);
     }
 
@@ -212,7 +213,7 @@ public sealed class GlobalSearchViewModelTests
         await Task.Delay(350);
         await viewModel.SelectResultCommand.ExecuteAsync(new SearchResultItem
         {
-            Id = "AgentAcp",
+            Id = SettingsSectionCatalog.AgentAcpKey,
             Title = "ACP 配置",
             Kind = SearchResultKind.Setting
         });
@@ -296,13 +297,13 @@ public sealed class GlobalSearchViewModelTests
 
         await viewModel.SelectResultCommand.ExecuteAsync(new SearchResultItem
         {
-            Id = "AgentAcp",
+            Id = SettingsSectionCatalog.AgentAcpKey,
             Title = "ACP 配置",
             Kind = SearchResultKind.Setting
         });
 
         navigationCoordinator.Verify(
-            coordinator => coordinator.ActivateSettingsAsync("AgentAcp"),
+            coordinator => coordinator.ActivateSettingsAsync(SettingsSectionCatalog.AgentAcpKey),
             Times.Once);
     }
 

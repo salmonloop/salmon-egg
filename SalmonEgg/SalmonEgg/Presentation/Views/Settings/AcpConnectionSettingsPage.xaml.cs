@@ -2,6 +2,7 @@ using System.Linq;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Presentation.Models;
+using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.Views;
 
@@ -16,7 +17,7 @@ public sealed partial class AcpConnectionSettingsPage : SettingsPageBase
         ViewModel = App.ServiceProvider.GetRequiredService<AcpConnectionSettingsViewModel>();
         InitializeComponent();
         Loaded += OnLoaded;
-        SetSettingsBreadcrumbFromResource("SettingsNav_AgentAcp.Content", "ACP / Agent");
+        SetSettingsBreadcrumbForSection(SettingsSectionCatalog.AgentAcpKey);
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)

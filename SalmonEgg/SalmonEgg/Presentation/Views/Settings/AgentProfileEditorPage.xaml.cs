@@ -6,6 +6,7 @@ using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Models;
 using SalmonEgg.Presentation.ViewModels;
 using SalmonEgg.Presentation.Models.Navigation;
+using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.Views;
 
@@ -80,8 +81,10 @@ public sealed partial class AgentProfileEditorPage : SettingsPageBase
     private void UpdateBreadcrumb()
     {
         SetBreadcrumb(
-            SettingsBreadcrumbItem.Link(ResolveResourceString("SettingsBreadcrumbRoot", "设置"), "General"),
-            SettingsBreadcrumbItem.Link(ResolveResourceString("SettingsNav_AgentAcp.Content", "Agent (ACP)"), "AgentAcp"),
+            SettingsBreadcrumbItem.Link(ResolveSettingsRootTitle(), SettingsSectionCatalog.GeneralKey),
+            SettingsBreadcrumbItem.Link(
+                ResolveSettingsSectionTitle(SettingsSectionCatalog.AgentAcpKey),
+                SettingsSectionCatalog.AgentAcpKey),
             SettingsBreadcrumbItem.Current(PageTitle));
     }
 

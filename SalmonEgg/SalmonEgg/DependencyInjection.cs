@@ -498,6 +498,8 @@ public static class DependencyInjection
 
         // General settings
         services.AddSingleton<GeneralSettingsViewModel>();
+        services.AddTransient<SettingsShellViewModel>(sp =>
+            new SettingsShellViewModel(sp.GetRequiredService<IStringLocalizer<CoreStrings>>()));
 
         // ACP session registry: single source of truth for per-profile connection sessions.
         // Registered as a singleton concrete type first, then aliased to both interfaces

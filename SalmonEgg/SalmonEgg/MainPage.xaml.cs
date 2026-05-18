@@ -20,6 +20,7 @@ using Microsoft.UI.Xaml.Navigation;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Presentation.Models.Search;
 using SalmonEgg.Presentation.Models.Navigation;
+using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.Navigation;
 using SalmonEgg.Presentation.Shortcuts;
 using SalmonEgg.Presentation.ViewModels;
@@ -226,7 +227,7 @@ public sealed partial class MainPage : Page
     {
         if (string.IsNullOrWhiteSpace(key))
         {
-            key = "General";
+            key = SettingsSectionCatalog.GeneralKey;
         }
 
         _ = EnsureSettingsContentAsync(key);
@@ -236,7 +237,7 @@ public sealed partial class MainPage : Page
     {
         if (string.IsNullOrWhiteSpace(key))
         {
-            key = "General";
+            key = SettingsSectionCatalog.GeneralKey;
         }
 
         return EnsureSettingsContentAsync(key);

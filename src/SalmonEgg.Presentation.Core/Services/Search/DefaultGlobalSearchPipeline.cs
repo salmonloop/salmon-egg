@@ -8,6 +8,7 @@ using Microsoft.Extensions.Localization;
 using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Models.Search;
+using SalmonEgg.Presentation.Models.Settings;
 
 namespace SalmonEgg.Presentation.Core.Services.Search;
 
@@ -141,13 +142,13 @@ public sealed class DefaultGlobalSearchPipeline : IGlobalSearchPipeline
     {
         var settingsItems = new (string Id, string Title, string Subtitle)[]
         {
-            ("General", "通用设置", "主题、语言、启动选项"),
-            ("Shortcuts", "快捷键", "自定义键盘快捷键"),
-            ("Appearance", "外观", "主题和背景效果"),
-            ("DataStorage", "数据与存储", "历史记录和缓存管理"),
-            ("AgentAcp", "ACP 配置", "服务器和连接配置"),
-            ("Diagnostics", "诊断", "日志和调试信息"),
-            ("About", "关于", "版本和许可证信息")
+            (SettingsSectionCatalog.GeneralKey, "通用设置", "主题、语言、启动选项"),
+            (SettingsSectionCatalog.ShortcutsKey, "快捷键", "自定义键盘快捷键"),
+            (SettingsSectionCatalog.AppearanceKey, "外观", "主题和背景效果"),
+            (SettingsSectionCatalog.DataStorageKey, "数据与存储", "历史记录和缓存管理"),
+            (SettingsSectionCatalog.AgentAcpKey, "ACP 配置", "服务器和连接配置"),
+            (SettingsSectionCatalog.DiagnosticsKey, "诊断", "日志和调试信息"),
+            (SettingsSectionCatalog.AboutKey, "关于", "版本和许可证信息")
         };
 
         var items = settingsItems

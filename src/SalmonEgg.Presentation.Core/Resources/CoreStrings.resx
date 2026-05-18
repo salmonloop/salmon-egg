@@ -15,6 +15,27 @@
   <data name="Nav_Unclassified" xml:space="preserve">
     <value>未归类</value>
   </data>
+  <data name="SettingsSection_General" xml:space="preserve">
+    <value>常规</value>
+  </data>
+  <data name="SettingsSection_Appearance" xml:space="preserve">
+    <value>外观</value>
+  </data>
+  <data name="SettingsSection_AgentAcp" xml:space="preserve">
+    <value>ACP / Agent</value>
+  </data>
+  <data name="SettingsSection_DataStorage" xml:space="preserve">
+    <value>数据与存储</value>
+  </data>
+  <data name="SettingsSection_Shortcuts" xml:space="preserve">
+    <value>快捷键</value>
+  </data>
+  <data name="SettingsSection_Diagnostics" xml:space="preserve">
+    <value>诊断与日志</value>
+  </data>
+  <data name="SettingsSection_About" xml:space="preserve">
+    <value>关于</value>
+  </data>
 
   <!-- Search section titles -->
   <data name="Search_Sessions" xml:space="preserve">

@@ -15,6 +15,27 @@
   <data name="Nav_Settings" xml:space="preserve">
     <value>Settings</value>
   </data>
+  <data name="SettingsSection_General" xml:space="preserve">
+    <value>General</value>
+  </data>
+  <data name="SettingsSection_Appearance" xml:space="preserve">
+    <value>Appearance</value>
+  </data>
+  <data name="SettingsSection_AgentAcp" xml:space="preserve">
+    <value>ACP / Agent</value>
+  </data>
+  <data name="SettingsSection_DataStorage" xml:space="preserve">
+    <value>Data &amp; Storage</value>
+  </data>
+  <data name="SettingsSection_Shortcuts" xml:space="preserve">
+    <value>Shortcuts</value>
+  </data>
+  <data name="SettingsSection_Diagnostics" xml:space="preserve">
+    <value>Diagnostics &amp; Logs</value>
+  </data>
+  <data name="SettingsSection_About" xml:space="preserve">
+    <value>About</value>
+  </data>
   <data name="About_ReleaseNotesTitle" xml:space="preserve">
     <value>release notes</value>
   </data>

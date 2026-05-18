@@ -1,7 +1,10 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using Microsoft.Extensions.Localization;
 using Microsoft.UI.Xaml.Controls;
+using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Models.Navigation;
+using SalmonEgg.Presentation.Models.Settings;
 using Windows.ApplicationModel.Resources;
 
 namespace SalmonEgg.Presentation.Views;
@@ -13,18 +16,25 @@ public class SettingsPageBase : Page
 {
     private static readonly ResourceLoader ResourceLoader = ResourceLoader.GetForViewIndependentUse();
 
+    private readonly IStringLocalizer<CoreStrings> _coreStrings;
+
+    protected SettingsPageBase()
+    {
+        _coreStrings = App.ServiceProvider.GetRequiredService<IStringLocalizer<CoreStrings>>();
+    }
+
     public ObservableCollection<SettingsBreadcrumbItem> BreadcrumbItems { get; } = new();
 
     protected void SetSettingsBreadcrumb(string currentText)
     {
         SetBreadcrumb(
-            SettingsBreadcrumbItem.Link(ResolveResourceString("SettingsBreadcrumbRoot", "设置"), "General"),
+            SettingsBreadcrumbItem.Link(ResolveSettingsRootTitle(), SettingsSectionCatalog.GeneralKey),
             SettingsBreadcrumbItem.Current(currentText));
     }
 
-    protected void SetSettingsBreadcrumbFromResource(string currentResourceKey, string fallbackText)
+    protected void SetSettingsBreadcrumbForSection(string sectionKey)
     {
-        SetSettingsBreadcrumb(ResolveResourceString(currentResourceKey, fallbackText));
+        SetSettingsBreadcrumb(ResolveSettingsSectionTitle(sectionKey));
     }
 
     protected void SetBreadcrumb(params SettingsBreadcrumbItem[] items)
@@ -35,6 +45,12 @@ public class SettingsPageBase : Page
             BreadcrumbItems.Add(item);
         }
     }
+
+    protected string ResolveSettingsRootTitle()
+        => SettingsSectionCatalog.ResolveRootTitle(_coreStrings);
+
+    protected string ResolveSettingsSectionTitle(string sectionKey)
+        => SettingsSectionCatalog.ResolveTitle(_coreStrings, sectionKey);
 
     protected static string ResolveResourceString(string resourceKey, string fallbackText)
     {

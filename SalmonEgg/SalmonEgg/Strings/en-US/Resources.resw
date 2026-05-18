@@ -12,29 +12,6 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=6.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
-
-  <data name="SettingsNav_General.Content" xml:space="preserve">
-    <value>General</value>
-  </data>
-  <data name="SettingsNav_Appearance.Content" xml:space="preserve">
-    <value>Appearance</value>
-  </data>
-  <data name="SettingsNav_AgentAcp.Content" xml:space="preserve">
-    <value>ACP / Agent</value>
-  </data>
-  <data name="SettingsNav_DataStorage.Content" xml:space="preserve">
-    <value>Data &amp; Storage</value>
-  </data>
-  <data name="SettingsNav_Shortcuts.Content" xml:space="preserve">
-    <value>Shortcuts</value>
-  </data>
-  <data name="SettingsNav_Diagnostics.Content" xml:space="preserve">
-    <value>Diagnostics &amp; Logs</value>
-  </data>
-  <data name="SettingsNav_About.Content" xml:space="preserve">
-    <value>About</value>
-  </data>
-
   <data name="Appearance_PageTitle.Text" xml:space="preserve">
     <value>Appearance</value>
   </data>
@@ -797,9 +774,6 @@
   </data>
   <data name="BottomPanelOutputTab.Text" xml:space="preserve">
     <value>Output</value>
-  </data>
-  <data name="SettingsBreadcrumbRoot" xml:space="preserve">
-    <value>Settings</value>
   </data>
   <data name="TitleBarBackButton.ToolTipService.ToolTip" xml:space="preserve">
     <value>Back</value>

@@ -1,4 +1,5 @@
 using Microsoft.UI.Xaml.Controls;
+using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.Views;
 
@@ -12,6 +13,6 @@ public sealed partial class ShortcutsSettingsPage : SettingsPageBase
     {
         ViewModel = App.ServiceProvider.GetRequiredService<ShortcutsSettingsViewModel>();
         InitializeComponent();
-        SetSettingsBreadcrumbFromResource("SettingsNav_Shortcuts.Content", "快捷键");
+        SetSettingsBreadcrumbForSection(SettingsSectionCatalog.ShortcutsKey);
     }
 }

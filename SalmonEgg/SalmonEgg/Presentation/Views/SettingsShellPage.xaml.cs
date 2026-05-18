@@ -2,6 +2,8 @@ using System;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 using SalmonEgg.Presentation.Models;
+using SalmonEgg.Presentation.Models.Settings;
+using SalmonEgg.Presentation.ViewModels.Settings;
 
 namespace SalmonEgg.Presentation.Views;
 
@@ -15,8 +17,11 @@ public sealed partial class SettingsShellPage : Page
 {
     private bool _suppressSelection;
 
+    public SettingsShellViewModel ViewModel { get; }
+
     public SettingsShellPage()
     {
+        ViewModel = App.ServiceProvider.GetRequiredService<SettingsShellViewModel>();
         InitializeComponent();
     }
 
@@ -25,19 +30,12 @@ public sealed partial class SettingsShellPage : Page
         base.OnNavigatedTo(e);
 
         var key = e.Parameter as string;
-        NavigateToSection(string.IsNullOrWhiteSpace(key) ? "General" : key);
+        NavigateToSection(string.IsNullOrWhiteSpace(key) ? SettingsSectionCatalog.GeneralKey : key);
     }
 
     public void NavigateToSection(string key)
     {
-        if (string.IsNullOrWhiteSpace(key) || SettingsNavView is null || SettingsFrame is null)
-        {
-            return;
-        }
-
-        // Keep the secondary nav selection in sync (but avoid re-entrancy loops).
-        var target = FindNavItemByKey(key) ?? FindNavItemByKey("General");
-        if (target is null)
+        if (string.IsNullOrWhiteSpace(key) || SettingsFrame is null)
         {
             return;
         }
@@ -45,17 +43,12 @@ public sealed partial class SettingsShellPage : Page
         _suppressSelection = true;
         try
         {
-            SettingsNavView.SelectedItem = target;
+            var section = ViewModel.SelectSection(key);
+            NavigateFrameToSection(section.Key);
         }
         finally
         {
             _suppressSelection = false;
-        }
-
-        var pageType = GetSettingsSectionPageType(key);
-        if (SettingsFrame.CurrentSourcePageType != pageType)
-        {
-            SettingsFrame.Navigate(pageType, null, UiMotionController.Current.CreateNavigationTransitionInfo());
         }
     }
 
@@ -66,34 +59,30 @@ public sealed partial class SettingsShellPage : Page
             return;
         }
 
-        if (args.SelectedItem is NavigationViewItem item && item.Tag is string key)
+        if (args.SelectedItem is SettingsShellSectionViewModel section)
         {
-            NavigateToSection(key);
+            NavigateFrameToSection(section.Key);
         }
     }
 
-    private NavigationViewItem? FindNavItemByKey(string key)
+    private void NavigateFrameToSection(string key)
     {
-        foreach (var obj in SettingsNavView.MenuItems)
+        var pageType = GetSettingsSectionPageType(key);
+        if (SettingsFrame.CurrentSourcePageType != pageType)
         {
-            if (obj is NavigationViewItem item && item.Tag is string tag && string.Equals(tag, key, StringComparison.Ordinal))
-            {
-                return item;
-            }
+            SettingsFrame.Navigate(pageType, null, UiMotionController.Current.CreateNavigationTransitionInfo());
         }
-
-        return null;
     }
 
     private static Type GetSettingsSectionPageType(string key) => key switch
     {
-        "General" => typeof(GeneralSettingsPage),
-        "Appearance" => typeof(Settings.AppearanceSettingsPage),
-        "AgentAcp" => typeof(Settings.AcpConnectionSettingsPage),
-        "DataStorage" => typeof(Settings.DataStorageSettingsPage),
-        "Shortcuts" => typeof(Settings.ShortcutsSettingsPage),
-        "Diagnostics" => typeof(Settings.DiagnosticsSettingsPage),
-        "About" => typeof(Settings.AboutPage),
+        SettingsSectionCatalog.GeneralKey => typeof(GeneralSettingsPage),
+        SettingsSectionCatalog.AppearanceKey => typeof(Settings.AppearanceSettingsPage),
+        SettingsSectionCatalog.AgentAcpKey => typeof(Settings.AcpConnectionSettingsPage),
+        SettingsSectionCatalog.DataStorageKey => typeof(Settings.DataStorageSettingsPage),
+        SettingsSectionCatalog.ShortcutsKey => typeof(Settings.ShortcutsSettingsPage),
+        SettingsSectionCatalog.DiagnosticsKey => typeof(Settings.DiagnosticsSettingsPage),
+        SettingsSectionCatalog.AboutKey => typeof(Settings.AboutPage),
         _ => typeof(GeneralSettingsPage)
     };
 

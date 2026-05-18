@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Models.Navigation;
+using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.Services;
 
 namespace SalmonEgg.Presentation.Core.Services;
@@ -131,7 +132,9 @@ public sealed class NavigationCoordinator : INavigationCoordinator
     public async Task ActivateSettingsAsync(string settingsKey)
     {
         var activationToken = BeginActivation();
-        var normalizedSettingsKey = string.IsNullOrWhiteSpace(settingsKey) ? "General" : settingsKey;
+        var normalizedSettingsKey = string.IsNullOrWhiteSpace(settingsKey)
+            ? SettingsSectionCatalog.GeneralKey
+            : settingsKey;
         try
         {
             CancelInFlightSessionActivation();

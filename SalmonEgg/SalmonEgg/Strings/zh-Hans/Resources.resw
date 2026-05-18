@@ -12,29 +12,6 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=6.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
-
-  <data name="SettingsNav_General.Content" xml:space="preserve">
-    <value>常规</value>
-  </data>
-  <data name="SettingsNav_Appearance.Content" xml:space="preserve">
-    <value>外观</value>
-  </data>
-  <data name="SettingsNav_AgentAcp.Content" xml:space="preserve">
-    <value>ACP / Agent</value>
-  </data>
-  <data name="SettingsNav_DataStorage.Content" xml:space="preserve">
-    <value>数据与存储</value>
-  </data>
-  <data name="SettingsNav_Shortcuts.Content" xml:space="preserve">
-    <value>快捷键</value>
-  </data>
-  <data name="SettingsNav_Diagnostics.Content" xml:space="preserve">
-    <value>诊断与日志</value>
-  </data>
-  <data name="SettingsNav_About.Content" xml:space="preserve">
-    <value>关于</value>
-  </data>
-
   <data name="Appearance_PageTitle.Text" xml:space="preserve">
     <value>外观</value>
   </data>
@@ -740,9 +717,6 @@
   </data>
   <data name="BottomPanelOutputTab.Text" xml:space="preserve">
     <value>输出</value>
-  </data>
-  <data name="SettingsBreadcrumbRoot" xml:space="preserve">
-    <value>设置</value>
   </data>
   <data name="TitleBarBackButton.ToolTipService.ToolTip" xml:space="preserve">
     <value>返回</value>

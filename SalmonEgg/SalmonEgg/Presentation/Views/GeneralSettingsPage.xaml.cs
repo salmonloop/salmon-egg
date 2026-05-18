@@ -1,4 +1,5 @@
 using Microsoft.UI.Xaml.Controls;
+using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.ViewModels.Settings;
 
 namespace SalmonEgg.Presentation.Views
@@ -11,7 +12,7 @@ public sealed partial class GeneralSettingsPage : SettingsPageBase
     {
         ViewModel = App.ServiceProvider.GetRequiredService<GeneralSettingsViewModel>();
         this.InitializeComponent();
-        SetSettingsBreadcrumbFromResource("SettingsNav_General.Content", "常规");
+        SetSettingsBreadcrumbForSection(SettingsSectionCatalog.GeneralKey);
     }
 }
 }

@@ -13,6 +13,7 @@ using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Core.Tests.Threading;
 using SalmonEgg.Presentation.Models.Navigation;
+using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using Xunit;
@@ -169,7 +170,7 @@ public sealed class ChatLaunchWorkflowTests
 
         Assert.Equal(1, chat.AutoConnectCallCount);
         Assert.Equal(1, navigation.ActivateSettingsCount);
-        Assert.Equal("General", navigation.LastSettingsKey);
+        Assert.Equal(SettingsSectionCatalog.GeneralKey, navigation.LastSettingsKey);
         Assert.True(chat.ShowTransportConfigPanel);
         Assert.Equal(0, chat.SendPromptCount);
     }

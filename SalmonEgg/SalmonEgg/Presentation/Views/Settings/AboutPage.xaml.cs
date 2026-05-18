@@ -1,4 +1,5 @@
 using Microsoft.UI.Xaml.Controls;
+using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.Views;
 
@@ -12,6 +13,6 @@ public sealed partial class AboutPage : SettingsPageBase
     {
         ViewModel = App.ServiceProvider.GetRequiredService<AboutViewModel>();
         InitializeComponent();
-        SetSettingsBreadcrumbFromResource("SettingsNav_About.Content", "关于");
+        SetSettingsBreadcrumbForSection(SettingsSectionCatalog.AboutKey);
     }
 }

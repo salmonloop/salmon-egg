@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
+using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.ViewModels.Settings;
 
@@ -113,7 +114,7 @@ public sealed class ChatLaunchWorkflow : IChatLaunchWorkflow
                 return;
 
             case ChatLaunchConnectionOutcome.RequiresConfiguration:
-                await _navigationCoordinator.ActivateSettingsAsync("General").ConfigureAwait(true);
+                await _navigationCoordinator.ActivateSettingsAsync(SettingsSectionCatalog.GeneralKey).ConfigureAwait(true);
                 _chat.ShowTransportConfigPanel = true;
                 return;
 

@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Models.Navigation;
+using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 
 namespace SalmonEgg.Presentation.Navigation;
@@ -72,7 +73,7 @@ public sealed class MainNavigationViewAdapter
 
         if (string.Equals(tag, NavItemTag.Settings, StringComparison.Ordinal))
         {
-            return AwaitActivationHandledAsync(_navigationCoordinator.ActivateSettingsAsync("General"));
+            return AwaitActivationHandledAsync(_navigationCoordinator.ActivateSettingsAsync(SettingsSectionCatalog.GeneralKey));
         }
 
         if (NavItemTag.TryParseSession(tag, out var sessionId))

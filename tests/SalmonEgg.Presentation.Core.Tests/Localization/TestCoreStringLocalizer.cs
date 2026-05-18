@@ -9,6 +9,7 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
 {
     private static readonly Dictionary<string, string> Strings = new()
     {
+        ["Nav_Settings"] = "设置",
         ["AcpConnection_TransportStdio"] = "Stdio（子进程）",
         ["AcpConnection_TransportWebSocket"] = "WebSocket",
         ["AcpConnection_TransportHttpSse"] = "HTTP SSE",
@@ -16,6 +17,13 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["AcpConnection_HydrationStrictReplayDescription"] = "回放投影进入稳定状态后完成 hydration。",
         ["AcpConnection_HydrationLoadResponseName"] = "加载响应",
         ["AcpConnection_HydrationLoadResponseDescription"] = "session/load 返回后立即完成 hydration，回放异步投影。",
+        ["SettingsSection_General"] = "常规",
+        ["SettingsSection_Appearance"] = "外观",
+        ["SettingsSection_AgentAcp"] = "ACP / Agent",
+        ["SettingsSection_DataStorage"] = "数据与存储",
+        ["SettingsSection_Shortcuts"] = "快捷键",
+        ["SettingsSection_Diagnostics"] = "诊断与日志",
+        ["SettingsSection_About"] = "关于",
         ["AgentProfile_StatusConnecting"] = "连接中...",
         ["AgentProfile_StatusConnected"] = "已连接",
         ["AgentProfile_StatusDisconnected"] = "未连接",

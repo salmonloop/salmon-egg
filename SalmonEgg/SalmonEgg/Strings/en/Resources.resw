@@ -309,9 +309,6 @@
   <data name="Diagnostics_CreateBundle.Content" xml:space="preserve">
     <value>Generate diagnostics (ZIP)</value>
   </data>
-  <data name="SettingsBreadcrumbRoot" xml:space="preserve">
-    <value>Settings</value>
-  </data>
   <data name="TitleBarBackButton.ToolTipService.ToolTip" xml:space="preserve">
     <value>Back</value>
   </data>

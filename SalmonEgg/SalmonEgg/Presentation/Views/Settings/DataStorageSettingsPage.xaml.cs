@@ -1,4 +1,5 @@
 using Microsoft.UI.Xaml.Controls;
+using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.Views;
 using Windows.ApplicationModel.Resources;
@@ -15,7 +16,7 @@ public sealed partial class DataStorageSettingsPage : SettingsPageBase
     {
         ViewModel = App.ServiceProvider.GetRequiredService<DataStorageSettingsViewModel>();
         InitializeComponent();
-        SetSettingsBreadcrumbFromResource("SettingsNav_DataStorage.Content", "数据与存储");
+        SetSettingsBreadcrumbForSection(SettingsSectionCatalog.DataStorageKey);
     }
 
     private async void OnClearCacheClick(object sender, RoutedEventArgs e)

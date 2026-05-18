@@ -11,6 +11,7 @@ using SalmonEgg.Domain.Interfaces;
 using SalmonEgg.Domain.Interfaces.Storage;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Conversation;
+using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services;
@@ -604,6 +605,15 @@ public sealed class StartViewModelTests
         {
             var preferences = CreatePreferences();
             using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var chatService = CreateConnectedChatService();
+            chatService
+                .Setup(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+                .ThrowsAsync(new InvalidOperationException("session/new failed"));
+            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+            await chat.DispatchConnectionAsync(new SetSettingsSelectedProfileAction("profile-1"));
+            await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
+            await chat.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+            await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
 
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
@@ -612,15 +622,9 @@ public sealed class StartViewModelTests
                 preferences,
                 nav,
                 workflow.Object);
-            var faultedDraft = CreateFaultedDraft("session/new failed");
 
             startViewModel.OnComposerLoaded();
             startViewModel.StartPrompt = "draft";
-            await chat.DispatchConnectionAsync(new SetSettingsSelectedProfileAction("profile-1"));
-            await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
-            await chat.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
-            await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
-            await chat.DispatchConnectionAsync(new SetNewSessionDraftAction(faultedDraft));
             await WaitForConditionAsync(() => startViewModel.HasStartSessionDraftError);
 
             Assert.True(startViewModel.IsInputEnabled);
@@ -1270,21 +1274,14 @@ public sealed class StartViewModelTests
             AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
             SessionInfo: null);
 
-    private static NewSessionDraftState CreateFaultedDraft(string error)
-        => new(
-            ProfileId: "profile-1",
-            Cwd: @"C:\Repo\App",
-            RemoteSessionId: null,
-            ConnectionInstanceId: "conn-1",
-            Phase: NewSessionDraftPhase.Faulted,
-            Version: 1,
-            AvailableModes: ImmutableList<ConversationModeOptionSnapshot>.Empty,
-            SelectedModeId: null,
-            ConfigOptions: ImmutableList<ConversationConfigOptionSnapshot>.Empty,
-            ShowConfigOptionsPanel: false,
-            AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
-            SessionInfo: null,
-            Error: error);
+    private static Mock<IChatService> CreateConnectedChatService()
+    {
+        var chatService = new Mock<IChatService>();
+        chatService.SetupGet(service => service.IsConnected).Returns(true);
+        chatService.SetupGet(service => service.IsInitialized).Returns(true);
+        chatService.SetupGet(service => service.SessionHistory).Returns(Array.Empty<SessionUpdateEntry>());
+        return chatService;
+    }
 
     private static async Task MakeStartDraftReadyAsync(
         ChatViewModelHarness chat,

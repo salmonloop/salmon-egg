@@ -6,7 +6,7 @@
     xmlns:controls="using:SalmonEgg.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:nav="using:SalmonEgg.Presentation.Models.Navigation"
+    xmlns:settings="using:SalmonEgg.Presentation.ViewModels.Settings"
     mc:Ignorable="d"
     Background="Transparent">
 
@@ -18,6 +18,11 @@
             <Setter Property="IsSettingsVisible" Value="False" />
             <Setter Property="PaneDisplayMode" Value="Top" />
         </Style>
+        <DataTemplate x:Key="SettingsSectionNavigationTemplate" x:DataType="settings:SettingsShellSectionViewModel">
+            <NavigationViewItem Content="{x:Bind Title, Mode=OneWay}"
+                                Tag="{x:Bind Key, Mode=OneWay}"
+                                AutomationProperties.AutomationId="{x:Bind AutomationId, Mode=OneWay}" />
+        </DataTemplate>
     </Page.Resources>
 
     <Grid Padding="40,24">
@@ -28,39 +33,11 @@
 
         <NavigationView x:Name="SettingsNavView"
                         Grid.Row="0"
+                        MenuItemsSource="{x:Bind ViewModel.Sections, Mode=OneWay}"
+                        MenuItemTemplate="{StaticResource SettingsSectionNavigationTemplate}"
+                        SelectedItem="{x:Bind ViewModel.SelectedSection, Mode=TwoWay}"
                         SelectionChanged="OnSettingsNavSelectionChanged"
-                        Margin="0,0,0,16">
-            <NavigationView.MenuItems>
-                <NavigationViewItem x:Uid="SettingsNav_General"
-                                    Content="常规"
-                                    Tag="General"
-                                    AutomationProperties.AutomationId="SettingsNav.General" />
-                <NavigationViewItem x:Uid="SettingsNav_Appearance"
-                                    Content="外观"
-                                    Tag="Appearance"
-                                    AutomationProperties.AutomationId="SettingsNav.Appearance" />
-                <NavigationViewItem x:Uid="SettingsNav_AgentAcp"
-                                    Content="ACP / Agent"
-                                    Tag="AgentAcp"
-                                    AutomationProperties.AutomationId="SettingsNav.AgentAcp" />
-                <NavigationViewItem x:Uid="SettingsNav_DataStorage"
-                                    Content="数据与存储"
-                                    Tag="DataStorage"
-                                    AutomationProperties.AutomationId="SettingsNav.DataStorage" />
-                <NavigationViewItem x:Uid="SettingsNav_Shortcuts"
-                                    Content="快捷键"
-                                    Tag="Shortcuts"
-                                    AutomationProperties.AutomationId="SettingsNav.Shortcuts" />
-                <NavigationViewItem x:Uid="SettingsNav_Diagnostics"
-                                    Content="诊断与日志"
-                                    Tag="Diagnostics"
-                                    AutomationProperties.AutomationId="SettingsNav.Diagnostics" />
-                <NavigationViewItem x:Uid="SettingsNav_About"
-                                    Content="关于"
-                                    Tag="About"
-                                    AutomationProperties.AutomationId="SettingsNav.About" />
-            </NavigationView.MenuItems>
-        </NavigationView>
+                        Margin="0,0,0,16" />
 
         <Frame x:Name="SettingsFrame"
                Grid.Row="1"

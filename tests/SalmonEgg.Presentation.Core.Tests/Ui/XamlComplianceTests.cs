@@ -1146,8 +1146,48 @@ public sealed class XamlComplianceTests
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\SettingsShellPage.xaml");
 
         Assert.Contains("<Setter Property=\"PaneDisplayMode\" Value=\"Top\" />", xaml);
+        Assert.Contains("MenuItemsSource=\"{x:Bind ViewModel.Sections, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("SelectedItem=\"{x:Bind ViewModel.SelectedSection, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("PaneDisplayMode\" Value=\"Left", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("<NavigationViewItemHeader", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<NavigationView.MenuItems>", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SettingsShell_SelectionUsesViewModelSectionIdentity()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\SettingsShellPage.xaml.cs");
+
+        Assert.Contains("public SettingsShellViewModel ViewModel { get; }", code, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.SelectSection(key)", code, StringComparison.Ordinal);
+        Assert.Contains("args.SelectedItem is SettingsShellSectionViewModel section", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("SettingsNavView.SelectedItem =", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("SettingsNavView.MenuItems", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SettingsBreadcrumbsUseCanonicalSectionCatalog()
+    {
+        string[] settingsPageFiles =
+        [
+            @"SalmonEgg\SalmonEgg\Presentation\Views\GeneralSettingsPage.xaml.cs",
+            @"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AppearanceSettingsPage.xaml.cs",
+            @"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AcpConnectionSettingsPage.xaml.cs",
+            @"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DataStorageSettingsPage.xaml.cs",
+            @"SalmonEgg\SalmonEgg\Presentation\Views\Settings\ShortcutsSettingsPage.xaml.cs",
+            @"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DiagnosticsSettingsPage.xaml.cs",
+            @"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AboutPage.xaml.cs",
+            @"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AgentProfileEditorPage.xaml.cs"
+        ];
+
+        foreach (var settingsPageFile in settingsPageFiles)
+        {
+            var code = LoadText(settingsPageFile);
+
+            Assert.DoesNotContain("SettingsNav_", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("SettingsBreadcrumbRoot", code, StringComparison.Ordinal);
+            Assert.Contains("SettingsSectionCatalog.", code, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

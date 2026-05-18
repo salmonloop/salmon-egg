@@ -10,9 +10,17 @@ namespace SalmonEgg.Presentation.Core.Tests.Localization;
 public sealed class CoreStringResourceTests
 {
     [Theory]
+    [InlineData("Nav_Settings")]
     [InlineData("Platform_ExternalOpenUnsupported")]
     [InlineData("Platform_LocalFileExportUnsupported")]
-    public void PlatformMessages_ArePresentInAllCoreStringResources(string key)
+    [InlineData("SettingsSection_General")]
+    [InlineData("SettingsSection_Appearance")]
+    [InlineData("SettingsSection_AgentAcp")]
+    [InlineData("SettingsSection_DataStorage")]
+    [InlineData("SettingsSection_Shortcuts")]
+    [InlineData("SettingsSection_Diagnostics")]
+    [InlineData("SettingsSection_About")]
+    public void CoreMessages_ArePresentInAllCoreStringResources(string key)
     {
         foreach (var relativePath in CoreStringResourcePaths)
         {
