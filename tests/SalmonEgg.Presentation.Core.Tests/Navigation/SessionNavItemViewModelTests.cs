@@ -149,6 +149,8 @@ public sealed class SessionNavItemViewModelTests
 
     private sealed class RecordingUiInteractionService : IUiInteractionService
     {
+        public bool CanPickFolder => false;
+
         public string? NextProjectId { get; init; }
 
         public bool PickConversationProjectCalled { get; private set; }

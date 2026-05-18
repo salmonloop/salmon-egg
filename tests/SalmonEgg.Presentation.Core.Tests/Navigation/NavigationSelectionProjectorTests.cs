@@ -154,6 +154,8 @@ public sealed class NavigationSelectionProjectorTests
 
     private sealed class NoopUiInteractionService : IUiInteractionService
     {
+        public bool CanPickFolder => false;
+
         public Task<string?> PickFolderAsync() => Task.FromResult<string?>(null);
         public Task ShowInfoAsync(string message) => Task.CompletedTask;
         public Task<bool> ConfirmAsync(string title, string message, string primaryButtonText = "确定", string closeButtonText = "取消") => Task.FromResult(false);

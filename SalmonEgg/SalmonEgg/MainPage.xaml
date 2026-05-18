@@ -98,6 +98,7 @@
 
         <DataTemplate x:Key="AddProjectTemplate" x:DataType="nav:AddProjectNavItemViewModel">
             <NavigationViewItem SelectsOnInvoked="False"
+                                IsEnabled="{x:Bind IsEnabled, Mode=OneWay}"
                                 AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.AddProject()}"
                                 Tag="{x:Bind navModels:NavItemTag.AddProject}">
                 <NavigationViewItem.Icon>

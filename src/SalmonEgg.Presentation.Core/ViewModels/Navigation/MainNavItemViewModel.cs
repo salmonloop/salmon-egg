@@ -98,11 +98,16 @@ public sealed partial class SessionsLabelNavItemViewModel : MainNavItemViewModel
 /// </summary>
 public sealed partial class AddProjectNavItemViewModel : MainNavItemViewModel
 {
+    private readonly IAsyncRelayCommand _addProjectCommand;
+
     public IAsyncRelayCommand AddProjectCommand { get; }
 
     public AddProjectNavItemViewModel(IAsyncRelayCommand addProjectCommand, INavigationPaneState navigationState, IUiDispatcher uiDispatcher)
         : base(navigationState, uiDispatcher)
     {
-        AddProjectCommand = addProjectCommand;
+        _addProjectCommand = addProjectCommand ?? throw new ArgumentNullException(nameof(addProjectCommand));
+        AddProjectCommand = _addProjectCommand;
     }
+
+    public bool IsEnabled => _addProjectCommand.CanExecute(null);
 }
