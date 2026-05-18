@@ -8,11 +8,16 @@ PROJECT="${REPO_ROOT}/SalmonEgg/SalmonEgg/SalmonEgg.csproj"
 WWWROOT="${REPO_ROOT}/SalmonEgg/SalmonEgg/bin/${CONFIGURATION}/net10.0-browserwasm/wwwroot"
 COMMIT="$(git -C "${REPO_ROOT}" rev-parse HEAD)"
 SERVER_PID=""
+PLAYWRIGHT_WORKDIR=""
 
 cleanup() {
   if [ -n "${SERVER_PID}" ] && kill -0 "${SERVER_PID}" 2>/dev/null; then
     kill "${SERVER_PID}" 2>/dev/null || true
     wait "${SERVER_PID}" 2>/dev/null || true
+  fi
+
+  if [ -n "${PLAYWRIGHT_WORKDIR}" ] && [ -d "${PLAYWRIGHT_WORKDIR}" ]; then
+    rm -rf "${PLAYWRIGHT_WORKDIR}"
   fi
 }
 
@@ -61,12 +66,18 @@ done
 curl -fsS "${BASE_URL}index.html" >/dev/null
 echo "[gate] Static server ready pid=${SERVER_PID} base=${BASE_URL}"
 
+PLAYWRIGHT_WORKDIR="$(mktemp -d)"
+cp "${REPO_ROOT}/scripts/gates/wasm-settings-navigation-smoke.mjs" "${PLAYWRIGHT_WORKDIR}/"
+
+echo "[gate] Install Playwright package"
+npm --prefix "${PLAYWRIGHT_WORKDIR}" install --no-audit --no-fund --no-save playwright
+
 echo "[gate] Install Playwright Chromium"
-npx --yes playwright install chromium
+npm --prefix "${PLAYWRIGHT_WORKDIR}" exec -- playwright install chromium
 
 echo "[gate] Run WASM settings navigation smoke"
-xvfb-run -a npx --yes --package playwright -- node \
-  "${REPO_ROOT}/scripts/gates/wasm-settings-navigation-smoke.mjs" \
+xvfb-run -a node \
+  "${PLAYWRIGHT_WORKDIR}/wasm-settings-navigation-smoke.mjs" \
   "${BASE_URL}"
 
 echo "[gate] WASM smoke gates passed"
