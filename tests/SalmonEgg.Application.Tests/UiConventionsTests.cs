@@ -591,19 +591,21 @@ public class UiConventionsTests
     public void MainPage_ShouldBindAuxiliaryPanelLayoutToShellLayoutViewModel()
     {
         var repoRoot = FindRepoRoot();
+        var mainPage = ReadXml(Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "MainPage.xaml"));
         var mainPageXaml = File.ReadAllText(Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "MainPage.xaml"));
         var mainPageText = File.ReadAllText(Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "MainPage.xaml.cs"));
+        var rightPanelSplitView = FindElementByXName(mainPage, "SplitView", "RightPanelSplitView");
+        var rightPanelPane = FindElementByXName(mainPage, "Grid", "RightPanelPane");
 
-        Assert.Contains(
-            "Width=\"{x:Bind LayoutVM.RightPanelWidth, Mode=OneWay, Converter={StaticResource GridLengthConverter}}\"",
-            mainPageXaml,
-            StringComparison.Ordinal);
+        Assert.Equal("Right", GetAttributeValueByLocalName(rightPanelSplitView, "PanePlacement"));
+        Assert.Equal("Inline", GetAttributeValueByLocalName(rightPanelSplitView, "DisplayMode"));
+        Assert.Equal("0", GetAttributeValueByLocalName(rightPanelSplitView, "CompactPaneLength"));
+        Assert.Equal("{x:Bind LayoutVM.RightPanelVisible, Mode=OneWay}", GetAttributeValueByLocalName(rightPanelSplitView, "IsPaneOpen"));
+        Assert.Equal("{x:Bind LayoutVM.RightPanelOpenPaneLength, Mode=OneWay}", GetAttributeValueByLocalName(rightPanelSplitView, "OpenPaneLength"));
+        Assert.Null(GetAttributeValueByLocalName(rightPanelPane, "Visibility"));
+        Assert.DoesNotContain("RightPanelColumnDefinition", mainPageXaml, StringComparison.Ordinal);
         Assert.Contains(
             "Height=\"{x:Bind LayoutVM.BottomPanelHeight, Mode=OneWay, Converter={StaticResource GridLengthConverter}}\"",
-            mainPageXaml,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "Visibility=\"{x:Bind LayoutVM.RightPanelVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}\"",
             mainPageXaml,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -612,6 +614,8 @@ public class UiConventionsTests
             StringComparison.Ordinal);
         Assert.DoesNotContain("nameof(ShellLayoutViewModel.RightPanelWidth)", mainPageText, StringComparison.Ordinal);
         Assert.DoesNotContain("nameof(ShellLayoutViewModel.BottomPanelHeight)", mainPageText, StringComparison.Ordinal);
+        Assert.DoesNotContain("RightPanelSplitView.IsPaneOpen =", mainPageText, StringComparison.Ordinal);
+        Assert.DoesNotContain("RightPanelPane.Visibility =", mainPageText, StringComparison.Ordinal);
         Assert.DoesNotContain("AuxiliaryPanelAnimation", mainPageText, StringComparison.Ordinal);
     }
 

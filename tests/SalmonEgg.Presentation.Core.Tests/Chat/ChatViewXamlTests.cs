@@ -285,7 +285,9 @@ public sealed class ChatViewXamlTests
 
         Assert.Contains("x:Load=\"{x:Bind LayoutVM.SupportsLocalTerminal, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Visibility=\"{x:Bind LayoutVM.BottomPanelVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Visibility=\"{x:Bind LayoutVM.RightPanelVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("IsPaneOpen=\"{x:Bind LayoutVM.RightPanelVisible, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("OpenPaneLength=\"{x:Bind LayoutVM.RightPanelOpenPaneLength, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("OpenPaneLength=\"{x:Bind LayoutVM.RightPanelWidth", xaml, StringComparison.Ordinal);
         Assert.Contains("await _metricsSink.ReportContentContext(isChatPage, navigationVersion).ConfigureAwait(true);", codeBehind, StringComparison.Ordinal);
         Assert.DoesNotContain("ReportContentContext(IsChatPageType", codeBehind, StringComparison.Ordinal);
         Assert.DoesNotContain("ResetChatAuxiliaryPanelsOnChatExitAsync", codeBehind, StringComparison.Ordinal);
@@ -298,6 +300,8 @@ public sealed class ChatViewXamlTests
         Assert.DoesNotContain("ApplyBottomPanelVisualState", codeBehind, StringComparison.Ordinal);
         Assert.DoesNotContain("BottomPanelHost.Visibility =", codeBehind, StringComparison.Ordinal);
         Assert.DoesNotContain("RightPanelColumn.Visibility =", codeBehind, StringComparison.Ordinal);
+        Assert.DoesNotContain("RightPanelPane.Visibility =", codeBehind, StringComparison.Ordinal);
+        Assert.DoesNotContain("RightPanelSplitView.IsPaneOpen =", codeBehind, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -100,11 +100,15 @@ public static class ShellLayoutPolicy
             }
         }
 
+        var rightPaneCanRender = canToggleRightPanels;
+        var rightPanelOpenPaneLength = rightPaneCanRender
+            ? Math.Clamp(state.RightPanelPreferredWidth, RightPanelMinWidth, maxRightPanelWidth)
+            : 0;
         var rightPanelVisible = effectiveRightPanelMode != RightPanelMode.None;
         double rightPanelWidth = 0;
         if (rightPanelVisible)
         {
-            rightPanelWidth = Math.Clamp(state.RightPanelPreferredWidth, RightPanelMinWidth, maxRightPanelWidth);
+            rightPanelWidth = rightPanelOpenPaneLength;
         }
 
         var bottomPanelVisible = effectiveBottomPanelMode != BottomPanelMode.None;
@@ -128,6 +132,7 @@ public static class ShellLayoutPolicy
             canShowSimultaneousAuxiliaryPanels,
             rightPanelVisible,
             rightPanelWidth,
+            rightPanelOpenPaneLength,
             effectiveRightPanelMode,
             bottomPanelVisible,
             bottomPanelHeight,

@@ -14,6 +14,7 @@ public sealed record ShellLayoutSnapshot(
     bool CanShowSimultaneousAuxiliaryPanels,
     bool RightPanelVisible,
     double RightPanelWidth,
+    double RightPanelOpenPaneLength,
     RightPanelMode RightPanelMode,
     bool BottomPanelVisible,
     double BottomPanelHeight,

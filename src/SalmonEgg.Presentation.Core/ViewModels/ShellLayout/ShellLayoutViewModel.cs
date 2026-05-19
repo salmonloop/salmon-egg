@@ -35,6 +35,7 @@ public sealed partial class ShellLayoutViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _canShowSimultaneousAuxiliaryPanels;
     [ObservableProperty] private bool _rightPanelVisible;
     [ObservableProperty] private double _rightPanelWidth;
+    [ObservableProperty] private double _rightPanelOpenPaneLength;
     [ObservableProperty] private RightPanelMode _rightPanelMode;
     [ObservableProperty] private bool _bottomPanelVisible;
     [ObservableProperty] private double _bottomPanelHeight;
@@ -124,8 +125,9 @@ public sealed partial class ShellLayoutViewModel : ObservableObject, IDisposable
         NavViewPadding = snapshot.NavViewPadding;
         TitleBarHeight = snapshot.TitleBarHeight;
         CanShowSimultaneousAuxiliaryPanels = snapshot.CanShowSimultaneousAuxiliaryPanels;
-        RightPanelVisible = snapshot.RightPanelVisible;
+        RightPanelOpenPaneLength = snapshot.RightPanelOpenPaneLength;
         RightPanelWidth = snapshot.RightPanelWidth;
+        RightPanelVisible = snapshot.RightPanelVisible;
         RightPanelMode = snapshot.RightPanelMode;
         BottomPanelVisible = snapshot.BottomPanelVisible;
         BottomPanelHeight = snapshot.BottomPanelHeight;

@@ -105,6 +105,24 @@ public class ShellLayoutPolicyTests
     }
 
     [Fact]
+    public void Policy_KeepsNativeRightPaneOpenLengthStable_WhenPanelIsClosed()
+    {
+        var state = ShellLayoutState.Default with
+        {
+            IsChatContext = true,
+            DesiredRightPanelMode = RightPanelMode.None,
+            RightPanelPreferredWidth = 400,
+            WindowMetrics = new WindowMetrics(1280, 900, 1280, 900)
+        };
+
+        var snapshot = ShellLayoutPolicy.Compute(state);
+
+        Assert.False(snapshot.RightPanelVisible);
+        Assert.Equal(0, snapshot.RightPanelWidth);
+        Assert.Equal(400, snapshot.RightPanelOpenPaneLength);
+    }
+
+    [Fact]
     public void Policy_Disables_RightPanelToggles_WhenRightPanelCannotRender()
     {
         var state = ShellLayoutState.Default with

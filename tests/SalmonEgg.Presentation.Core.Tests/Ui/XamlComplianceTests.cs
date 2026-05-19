@@ -392,11 +392,19 @@ public sealed class XamlComplianceTests
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");
 
-        Assert.Contains("x:Name=\"RightPanelColumn\"", xaml);
+        Assert.Contains("x:Name=\"RightPanelSplitView\"", xaml);
+        Assert.Contains("PanePlacement=\"Right\"", xaml);
+        Assert.Contains("DisplayMode=\"Inline\"", xaml);
+        Assert.Contains("IsPaneOpen=\"{x:Bind LayoutVM.RightPanelVisible, Mode=OneWay}\"", xaml);
+        Assert.Contains("OpenPaneLength=\"{x:Bind LayoutVM.RightPanelOpenPaneLength, Mode=OneWay}\"", xaml);
+        Assert.DoesNotContain("OpenPaneLength=\"{x:Bind LayoutVM.RightPanelWidth", xaml);
+        Assert.Contains("x:Name=\"RightPanelPane\"", xaml);
         Assert.Contains("AutomationProperties.AutomationId=\"RightPanel.Root\"", xaml);
         Assert.Contains("x:Name=\"RightPanelTitle\"", xaml);
         Assert.Contains("AutomationProperties.AutomationId=\"RightPanel.Title\"", xaml);
         Assert.Contains("AutomationProperties.AutomationId=\"RightPanel.TodoEmptyTitle\"", xaml);
+        Assert.DoesNotContain("x:Name=\"RightPanelColumn\"", xaml);
+        Assert.DoesNotContain("RightPanelColumnDefinition", xaml);
     }
 
     [Fact]

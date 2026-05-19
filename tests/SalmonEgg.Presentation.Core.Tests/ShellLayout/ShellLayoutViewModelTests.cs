@@ -49,7 +49,7 @@ public class ShellLayoutViewModelTests
         await store.SnapshotState.Update(_ => new ShellLayoutSnapshot(
             NavigationPaneDisplayMode.Compact, false, 300, 72,
             false, 0, 0, new LayoutPadding(4, 0, 4, 0), new LayoutPadding(0, 0, 0, 0), 60,
-            false, false, 0, RightPanelMode.None, false, 0, BottomPanelMode.None, false, 0), default);
+            false, false, 0, 0, RightPanelMode.None, false, 0, BottomPanelMode.None, false, 0), default);
 
         await WaitForConditionAsync(
             () => vm.NavPaneDisplayMode == NavigationPaneDisplayMode.Compact
@@ -97,6 +97,43 @@ public class ShellLayoutViewModelTests
         Assert.Equal(240, vm.BottomPanelHeight);
         Assert.Equal(BottomPanelMode.Dock, vm.BottomPanelMode);
         Assert.True(vm.CanShowSimultaneousAuxiliaryPanels);
+    }
+
+    [Fact]
+    public async Task ViewModel_ProjectsRightPanelOpenPaneLengthBeforeOpeningPane()
+    {
+        var initialState = ShellLayoutState.Default with
+        {
+            WindowMetrics = new WindowMetrics(500, 900, 500, 900),
+            IsChatContext = true,
+            DesiredRightPanelMode = RightPanelMode.Todo,
+            RightPanelPreferredWidth = 400
+        };
+        await using var store = new FakeShellLayoutStore(initialState);
+        using var vm = new ShellLayoutViewModel(store, new ImmediateUiDispatcher());
+        Assert.False(vm.RightPanelVisible);
+        Assert.Equal(0, vm.RightPanelWidth);
+        Assert.Equal(0, vm.RightPanelOpenPaneLength);
+
+        var changes = new List<string>();
+        vm.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName is not null)
+            {
+                changes.Add(args.PropertyName);
+            }
+        };
+
+        await store.Dispatch(new WindowMetricsChanged(1280, 900, 1280, 900));
+        await WaitForConditionAsync(() => vm.RightPanelVisible);
+
+        Assert.Equal(400, vm.RightPanelOpenPaneLength);
+        Assert.Equal(400, vm.RightPanelWidth);
+        Assert.True(
+            changes.IndexOf(nameof(vm.RightPanelOpenPaneLength)) >= 0
+            && changes.IndexOf(nameof(vm.RightPanelVisible)) >= 0
+            && changes.IndexOf(nameof(vm.RightPanelOpenPaneLength)) < changes.IndexOf(nameof(vm.RightPanelVisible)),
+            "SplitView.OpenPaneLength must update before SplitView.IsPaneOpen changes.");
     }
 
     [Fact]
@@ -157,7 +194,7 @@ public class ShellLayoutViewModelTests
         await store.SnapshotState.Update(_ => new ShellLayoutSnapshot(
             NavigationPaneDisplayMode.Compact, false, 300, 72,
             false, 0, 0, new LayoutPadding(4, 0, 4, 0), new LayoutPadding(0, 0, 0, 0), 60,
-            false, false, 0, RightPanelMode.None, false, 0, BottomPanelMode.None, false, 0,
+            false, false, 0, 0, RightPanelMode.None, false, 0, BottomPanelMode.None, false, 0,
             false, false, false), default);
 
         await WaitForConditionAsync(
@@ -179,7 +216,7 @@ public class ShellLayoutViewModelTests
         await store.SnapshotState.Update(_ => new ShellLayoutSnapshot(
             NavigationPaneDisplayMode.Compact, false, 300, 72,
             false, 0, 0, new LayoutPadding(4, 0, 4, 0), new LayoutPadding(0, 0, 0, 0), 60,
-            false, false, 0, RightPanelMode.None, false, 0, BottomPanelMode.None, false, 0,
+            false, false, 0, 0, RightPanelMode.None, false, 0, BottomPanelMode.None, false, 0,
             false, false, false,
             true,
             42), default);
@@ -199,7 +236,7 @@ public class ShellLayoutViewModelTests
         await store.SnapshotState.Update(_ => new ShellLayoutSnapshot(
             NavigationPaneDisplayMode.Compact, false, 300, 72,
             false, 0, 0, new LayoutPadding(4, 0, 4, 0), new LayoutPadding(0, 0, 0, 0), 60,
-            false, false, 0, RightPanelMode.None, false, 0, BottomPanelMode.None, false, 0,
+            false, false, 0, 0, RightPanelMode.None, false, 0, BottomPanelMode.None, false, 0,
             false, false, false), default);
 
         await WaitForConditionAsync(

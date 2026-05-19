@@ -449,143 +449,144 @@
             </Grid>
         </Border>
 
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition x:Name="RightPanelColumnDefinition" Width="{x:Bind LayoutVM.RightPanelWidth, Mode=OneWay, Converter={StaticResource GridLengthConverter}}" />
-            </Grid.ColumnDefinitions>
+        <SplitView x:Name="RightPanelSplitView"
+                   Grid.Row="1"
+                   Background="Transparent"
+                   PanePlacement="Right"
+                   DisplayMode="Inline"
+                   CompactPaneLength="0"
+                   IsPaneOpen="{x:Bind LayoutVM.RightPanelVisible, Mode=OneWay}"
+                   OpenPaneLength="{x:Bind LayoutVM.RightPanelOpenPaneLength, Mode=OneWay}">
+            <SplitView.Content>
+                <Grid>
+                    <NavigationView x:Name="MainNavView"
+                                    Background="Transparent"
+                                    AutomationProperties.AutomationId="MainNavView"
+                                    CompactPaneLength="{x:Bind LayoutVM.NavCompactPaneLength, Mode=OneWay}"
+                                    OpenPaneLength="{x:Bind LayoutVM.NavOpenPaneLength, Mode=OneWay}"
+                                    PaneDisplayMode="Auto"
+                                    CompactModeThresholdWidth="640"
+                                    ExpandedModeThresholdWidth="1000"
+                                    IsPaneOpen="{x:Bind LayoutVM.IsNavPaneOpen, Mode=OneWay}"
+                                    IsBackButtonVisible="Collapsed"
+                                    IsPaneToggleButtonVisible="False"
+                                    IsSettingsVisible="False"
+                                    AlwaysShowHeader="False"
+                                    SelectedItem="{x:Bind NavVM.ProjectedControlSelectedItem, Mode=OneWay}"
+                                    Padding="{x:Bind LayoutVM.NavViewPadding, Mode=OneWay, Converter={StaticResource PaddingConverter}}"
+                                    MenuItemsSource="{x:Bind NavVM.Items, Mode=OneWay}"
+                                    FooterMenuItemsSource="{x:Bind NavVM.FooterItems, Mode=OneWay}"
+                                    MenuItemTemplateSelector="{StaticResource MainNavItemTemplateSelector}"
+                                    ItemInvoked="OnMainNavItemInvoked"
+                                    DisplayModeChanged="OnMainNavPanePresentationChanged"
+                                    PaneOpened="OnMainNavPanePresentationChanged"
+                                    PaneClosed="OnMainNavPanePresentationChanged">
+                        <NavigationView.Content>
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="{x:Bind LayoutVM.BottomPanelHeight, Mode=OneWay, Converter={StaticResource GridLengthConverter}}" />
+                                </Grid.RowDefinitions>
 
-            <NavigationView x:Name="MainNavView"
-                             Grid.Column="0"
-                             Background="Transparent"
-                             AutomationProperties.AutomationId="MainNavView"
-                             CompactPaneLength="{x:Bind LayoutVM.NavCompactPaneLength, Mode=OneWay}"
-                             OpenPaneLength="{x:Bind LayoutVM.NavOpenPaneLength, Mode=OneWay}"
-                             PaneDisplayMode="Auto"
-                             CompactModeThresholdWidth="640"
-                             ExpandedModeThresholdWidth="1000"
-                             IsPaneOpen="{x:Bind LayoutVM.IsNavPaneOpen, Mode=OneWay}"
-                             IsBackButtonVisible="Collapsed"
-                             IsPaneToggleButtonVisible="False"
-                             IsSettingsVisible="False"
-                             AlwaysShowHeader="False"
-                             SelectedItem="{x:Bind NavVM.ProjectedControlSelectedItem, Mode=OneWay}"
-                             Padding="{x:Bind LayoutVM.NavViewPadding, Mode=OneWay, Converter={StaticResource PaddingConverter}}"
-                             MenuItemsSource="{x:Bind NavVM.Items, Mode=OneWay}"
-                             FooterMenuItemsSource="{x:Bind NavVM.FooterItems, Mode=OneWay}"
-                             MenuItemTemplateSelector="{StaticResource MainNavItemTemplateSelector}"
-                             ItemInvoked="OnMainNavItemInvoked"
-                             DisplayModeChanged="OnMainNavPanePresentationChanged"
-                             PaneOpened="OnMainNavPanePresentationChanged"
-                             PaneClosed="OnMainNavPanePresentationChanged">
-                <NavigationView.Content>
-                    <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="*" />
-                            <RowDefinition Height="{x:Bind LayoutVM.BottomPanelHeight, Mode=OneWay, Converter={StaticResource GridLengthConverter}}" />
-                        </Grid.RowDefinitions>
+                                <Grid Grid.Row="0">
+                                    <Frame x:Name="ContentFrame"
+                                           Background="Transparent" />
 
-                        <Grid Grid.Row="0">
-                            <Frame x:Name="ContentFrame"
-                                   Background="Transparent" />
+                                    <ContentControl x:Name="ShellLoadingOverlayPresenter"
+                                                    Grid.Row="0"
+                                                    x:Uid="ChatViewLoadingOverlay"
+                                                    AutomationProperties.AutomationId="ChatView.LoadingOverlay"
+                                                    HorizontalAlignment="Stretch"
+                                                    VerticalAlignment="Stretch"
+                                                    HorizontalContentAlignment="Stretch"
+                                                    VerticalContentAlignment="Stretch"
+                                                    IsTabStop="False"
+                                                    IsHitTestVisible="{x:Bind ShellOverlayVM.ShowsBlockingMask, Mode=OneWay}"
+                                                    Visibility="{x:Bind ShellOverlayVM.ShowsPresenter, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <Grid>
+                                            <Border Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+                                                    AutomationProperties.AutomationId="ChatView.LoadingOverlayMask"
+                                                    Visibility="{x:Bind ShellOverlayVM.ShowsBlockingMask, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                <controls:ChatSkeleton VerticalAlignment="Stretch"
+                                                                       HorizontalAlignment="Stretch" />
+                                            </Border>
 
-                            <ContentControl x:Name="ShellLoadingOverlayPresenter"
-                                            Grid.Row="0"
-                                            x:Uid="ChatViewLoadingOverlay"
-                                            AutomationProperties.AutomationId="ChatView.LoadingOverlay"
-                                            HorizontalAlignment="Stretch"
-                                            VerticalAlignment="Stretch"
-                                            HorizontalContentAlignment="Stretch"
-                                            VerticalContentAlignment="Stretch"
-                                            IsTabStop="False"
-                                            IsHitTestVisible="{x:Bind ShellOverlayVM.ShowsBlockingMask, Mode=OneWay}"
-                                            Visibility="{x:Bind ShellOverlayVM.ShowsPresenter, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                                <Grid>
-                                    <Border Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
-                                            AutomationProperties.AutomationId="ChatView.LoadingOverlayMask"
-                                            Visibility="{x:Bind ShellOverlayVM.ShowsBlockingMask, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                                        <controls:ChatSkeleton VerticalAlignment="Stretch"
-                                                               HorizontalAlignment="Stretch" />
-                                    </Border>
-
-                                    <Grid>
-                                        <Border VerticalAlignment="Bottom"
-                                                HorizontalAlignment="Center"
-                                                Margin="0,0,0,48"
-                                                Padding="16,8"
-                                                Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                                                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                                                BorderThickness="1"
-                                                CornerRadius="20"
-                                                Visibility="{x:Bind ShellOverlayVM.ShowsStatusPill, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                                <ProgressRing IsActive="True" Width="16" Height="16" />
-                                                <TextBlock AutomationProperties.AutomationId="ChatView.LoadingOverlayStatus"
-                                                           Text="{x:Bind ShellOverlayVM.StatusText, Mode=OneWay}"
-                                                           FontSize="12"
-                                                           FontWeight="Medium"
-                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                            </StackPanel>
-                                        </Border>
-                                    </Grid>
+                                            <Grid>
+                                                <Border VerticalAlignment="Bottom"
+                                                        HorizontalAlignment="Center"
+                                                        Margin="0,0,0,48"
+                                                        Padding="16,8"
+                                                        Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
+                                                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="20"
+                                                        Visibility="{x:Bind ShellOverlayVM.ShowsStatusPill, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                                        <ProgressRing IsActive="True" Width="16" Height="16" />
+                                                        <TextBlock AutomationProperties.AutomationId="ChatView.LoadingOverlayStatus"
+                                                                   Text="{x:Bind ShellOverlayVM.StatusText, Mode=OneWay}"
+                                                                   FontSize="12"
+                                                                   FontWeight="Medium"
+                                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                    </StackPanel>
+                                                </Border>
+                                            </Grid>
+                                        </Grid>
+                                    </ContentControl>
                                 </Grid>
-                            </ContentControl>
-                        </Grid>
 
-                        <chatViews:BottomPanelHost x:Name="BottomPanelHost"
-                                                   Grid.Row="1"
-                                                   x:Load="{x:Bind LayoutVM.SupportsLocalTerminal, Mode=OneWay}"
-                                                   Visibility="{x:Bind LayoutVM.BottomPanelVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                   LocalTerminalSession="{x:Bind ChatVM.ActiveLocalTerminalSession, Mode=OneWay}" />
-                    </Grid>
-                </NavigationView.Content>
-            </NavigationView>
+                                <chatViews:BottomPanelHost x:Name="BottomPanelHost"
+                                                           Grid.Row="1"
+                                                           x:Load="{x:Bind LayoutVM.SupportsLocalTerminal, Mode=OneWay}"
+                                                           Visibility="{x:Bind LayoutVM.BottomPanelVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                           LocalTerminalSession="{x:Bind ChatVM.ActiveLocalTerminalSession, Mode=OneWay}" />
+                            </Grid>
+                        </NavigationView.Content>
+                    </NavigationView>
 
-            <Button x:Name="AutomationArchiveSelectedButton"
-                    Grid.Column="0"
-                    HorizontalAlignment="Left"
-                    VerticalAlignment="Top"
-                    Width="1"
-                    Height="1"
-                    Opacity="0.01"
-                    Visibility="{x:Bind IsGuiAutomationMode, Mode=OneTime, Converter={StaticResource BoolToVisibilityConverter}}"
-                    AutomationProperties.AutomationId="MainNav.Session.AutomationArchiveSelected"
-                    Click="OnAutomationArchiveSelectedClick" />
+                    <Button x:Name="AutomationArchiveSelectedButton"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Top"
+                            Width="1"
+                            Height="1"
+                            Opacity="0.01"
+                            Visibility="{x:Bind IsGuiAutomationMode, Mode=OneTime, Converter={StaticResource BoolToVisibilityConverter}}"
+                            AutomationProperties.AutomationId="MainNav.Session.AutomationArchiveSelected"
+                            Click="OnAutomationArchiveSelectedClick" />
 
-                <TextBlock x:Name="MainNavAutomationSelectionStateText"
-                       Grid.Column="0"
-                       HorizontalAlignment="Left"
-                       VerticalAlignment="Top"
-                       Width="1"
-                       Height="1"
-                       Opacity="0.01"
-                       Visibility="{x:Bind IsGuiAutomationMode, Mode=OneTime, Converter={StaticResource BoolToVisibilityConverter}}"
-                       AutomationProperties.AutomationId="MainNav.Automation.SelectionState" />
+                    <TextBlock x:Name="MainNavAutomationSelectionStateText"
+                               HorizontalAlignment="Left"
+                               VerticalAlignment="Top"
+                               Width="1"
+                               Height="1"
+                               Opacity="0.01"
+                               Visibility="{x:Bind IsGuiAutomationMode, Mode=OneTime, Converter={StaticResource BoolToVisibilityConverter}}"
+                               AutomationProperties.AutomationId="MainNav.Automation.SelectionState" />
 
-                <controls:ResizeGrip x:Name="LeftNavResizer"
-                                 Grid.Column="0"
-                                 HorizontalAlignment="Left"
-                                 VerticalAlignment="Stretch"
-                                 Width="6"
-                                 Background="Transparent"
-                                 Style="{StaticResource SubMenuResizerThumbStyle}"
-                                 Visibility="{x:Bind LayoutVM.IsNavResizerVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                                 PointerPressed="OnLeftNavResizerPointerPressed"
-                                 PointerMoved="OnLeftNavResizerPointerMoved"
-                                 PointerReleased="OnLeftNavResizerPointerReleased"
-                                 PointerCaptureLost="OnLeftNavResizerPointerCaptureLost">
-                <controls:ResizeGrip.RenderTransform>
-                    <TranslateTransform x:Name="LeftNavResizerTransform" X="{x:Bind LayoutVM.LeftNavResizerLeft, Mode=OneWay}" />
-                </controls:ResizeGrip.RenderTransform>
-            </controls:ResizeGrip>
+                    <controls:ResizeGrip x:Name="LeftNavResizer"
+                                         HorizontalAlignment="Left"
+                                         VerticalAlignment="Stretch"
+                                         Width="6"
+                                         Background="Transparent"
+                                         Style="{StaticResource SubMenuResizerThumbStyle}"
+                                         Visibility="{x:Bind LayoutVM.IsNavResizerVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                         PointerPressed="OnLeftNavResizerPointerPressed"
+                                         PointerMoved="OnLeftNavResizerPointerMoved"
+                                         PointerReleased="OnLeftNavResizerPointerReleased"
+                                         PointerCaptureLost="OnLeftNavResizerPointerCaptureLost">
+                        <controls:ResizeGrip.RenderTransform>
+                            <TranslateTransform x:Name="LeftNavResizerTransform" X="{x:Bind LayoutVM.LeftNavResizerLeft, Mode=OneWay}" />
+                        </controls:ResizeGrip.RenderTransform>
+                    </controls:ResizeGrip>
+                </Grid>
+            </SplitView.Content>
 
-                <Grid x:Name="RightPanelColumn"
-                  AutomationProperties.AutomationId="RightPanel.Root"
-                  Grid.Column="1"
-                  Background="{ThemeResource LayerFillColorDefaultBrush}"
-                  BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                  BorderThickness="1,0,0,0"
-                  Visibility="{x:Bind LayoutVM.RightPanelVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+            <SplitView.Pane>
+                <Grid x:Name="RightPanelPane"
+                      AutomationProperties.AutomationId="RightPanel.Root"
+                      Background="{ThemeResource LayerFillColorDefaultBrush}"
+                      BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                      BorderThickness="1,0,0,0">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
@@ -648,6 +649,7 @@
                                      PointerReleased="OnRightPanelResizerPointerReleased"
                                      PointerCaptureLost="OnRightPanelResizerPointerCaptureLost" />
                 </Grid>
-        </Grid>
+            </SplitView.Pane>
+        </SplitView>
     </Grid>
 </Page>

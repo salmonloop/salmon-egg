@@ -567,7 +567,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
 
     private void OnRightPanelResizerPointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        if (RightPanelColumn is null || RightPanelResizer is null || LayoutVM.RightPanelVisible == false)
+        if (RightPanelPane is null || RightPanelResizer is null || LayoutVM.RightPanelVisible == false)
         {
             return;
         }
@@ -582,7 +582,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
 
     private void OnRightPanelResizerPointerMoved(object sender, PointerRoutedEventArgs e)
     {
-        if (!_isResizingRightPanel || RightPanelColumn is null)
+        if (!_isResizingRightPanel || RightPanelPane is null)
         {
             return;
         }
