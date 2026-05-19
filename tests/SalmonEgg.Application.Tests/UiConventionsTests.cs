@@ -599,8 +599,8 @@ public class UiConventionsTests
         var mainNavView = FindElementByXName(mainPage, "NavigationView", "MainNavView");
 
         Assert.Equal("Right", GetAttributeValueByLocalName(rightPanelSplitView, "PanePlacement"));
-        Assert.Equal("CompactInline", GetAttributeValueByLocalName(rightPanelSplitView, "DisplayMode"));
-        Assert.Equal("0", GetAttributeValueByLocalName(rightPanelSplitView, "CompactPaneLength"));
+        Assert.Equal("Inline", GetAttributeValueByLocalName(rightPanelSplitView, "DisplayMode"));
+        Assert.Null(GetAttributeValueByLocalName(rightPanelSplitView, "CompactPaneLength"));
         Assert.Equal("{x:Bind LayoutVM.RightPanelVisible, Mode=OneWay}", GetAttributeValueByLocalName(rightPanelSplitView, "IsPaneOpen"));
         Assert.Equal("{x:Bind LayoutVM.RightPanelOpenPaneLength, Mode=OneWay}", GetAttributeValueByLocalName(rightPanelSplitView, "OpenPaneLength"));
         Assert.Equal("NavigationView.Content", rightPanelSplitView.Parent?.Name.LocalName);
@@ -630,6 +630,7 @@ public class UiConventionsTests
         Assert.DoesNotContain("RightPanelSplitView.IsPaneOpen =", mainPageText, StringComparison.Ordinal);
         Assert.DoesNotContain("RightPanelPane.Visibility =", mainPageText, StringComparison.Ordinal);
         Assert.DoesNotContain("AuxiliaryPanelAnimation", mainPageText, StringComparison.Ordinal);
+        Assert.DoesNotContain("ConfigureShellLayoutAnimations", mainPageText, StringComparison.Ordinal);
     }
 
     [Fact]

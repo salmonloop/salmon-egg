@@ -394,7 +394,8 @@ public sealed class XamlComplianceTests
 
         Assert.Contains("x:Name=\"RightPanelSplitView\"", xaml);
         Assert.Contains("PanePlacement=\"Right\"", xaml);
-        Assert.Contains("DisplayMode=\"CompactInline\"", xaml);
+        Assert.Contains("DisplayMode=\"Inline\"", xaml);
+        Assert.DoesNotContain("CompactPaneLength=\"0\"", xaml);
         Assert.Contains("IsPaneOpen=\"{x:Bind LayoutVM.RightPanelVisible, Mode=OneWay}\"", xaml);
         Assert.Contains("OpenPaneLength=\"{x:Bind LayoutVM.RightPanelOpenPaneLength, Mode=OneWay}\"", xaml);
         Assert.DoesNotContain("OpenPaneLength=\"{x:Bind LayoutVM.RightPanelWidth", xaml);
@@ -1404,6 +1405,31 @@ public sealed class XamlComplianceTests
 
             Assert.DoesNotContain(" Transitions=\"", xaml, StringComparison.Ordinal);
             Assert.DoesNotContain("\n          Transitions=\"", xaml, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void MainPage_LeavesRightPanelMotionToNativeSplitView()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");
+        var mainPageCode = LoadText(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
+        var defaultPlatformCode = LoadText(@"SalmonEgg\SalmonEgg\MainPage.Default.cs");
+        var windowsPlatformCode = LoadText(@"SalmonEgg\SalmonEgg\Platforms\Windows\MainPage.Windows.cs");
+
+        Assert.Contains("x:Name=\"RightPanelSplitView\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("DisplayMode=\"Inline\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("DisplayMode=\"CompactInline\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("CompactPaneLength=\"0\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Name=\"RightPanelContentRoot\"", xaml, StringComparison.Ordinal);
+
+        foreach (var code in new[] { mainPageCode, defaultPlatformCode, windowsPlatformCode })
+        {
+            Assert.DoesNotContain("ConfigureShellLayoutAnimations", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("ElementCompositionPreview.GetElementVisual", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("CreateImplicitAnimationCollection", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("ImplicitAnimations", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("Storyboard", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("DoubleAnimation", code, StringComparison.Ordinal);
         }
     }
 
