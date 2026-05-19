@@ -476,7 +476,7 @@
                     <SplitView x:Name="RightPanelSplitView"
                                Background="Transparent"
                                PanePlacement="Right"
-                               DisplayMode="Inline"
+                               DisplayMode="CompactInline"
                                CompactPaneLength="0"
                                IsPaneOpen="{x:Bind LayoutVM.RightPanelVisible, Mode=OneWay}"
                                OpenPaneLength="{x:Bind LayoutVM.RightPanelOpenPaneLength, Mode=OneWay}">

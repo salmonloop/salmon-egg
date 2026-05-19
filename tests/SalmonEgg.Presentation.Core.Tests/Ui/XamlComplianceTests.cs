@@ -394,7 +394,7 @@ public sealed class XamlComplianceTests
 
         Assert.Contains("x:Name=\"RightPanelSplitView\"", xaml);
         Assert.Contains("PanePlacement=\"Right\"", xaml);
-        Assert.Contains("DisplayMode=\"Inline\"", xaml);
+        Assert.Contains("DisplayMode=\"CompactInline\"", xaml);
         Assert.Contains("IsPaneOpen=\"{x:Bind LayoutVM.RightPanelVisible, Mode=OneWay}\"", xaml);
         Assert.Contains("OpenPaneLength=\"{x:Bind LayoutVM.RightPanelOpenPaneLength, Mode=OneWay}\"", xaml);
         Assert.DoesNotContain("OpenPaneLength=\"{x:Bind LayoutVM.RightPanelWidth", xaml);

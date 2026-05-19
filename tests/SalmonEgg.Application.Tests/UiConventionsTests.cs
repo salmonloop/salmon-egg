@@ -599,7 +599,7 @@ public class UiConventionsTests
         var mainNavView = FindElementByXName(mainPage, "NavigationView", "MainNavView");
 
         Assert.Equal("Right", GetAttributeValueByLocalName(rightPanelSplitView, "PanePlacement"));
-        Assert.Equal("Inline", GetAttributeValueByLocalName(rightPanelSplitView, "DisplayMode"));
+        Assert.Equal("CompactInline", GetAttributeValueByLocalName(rightPanelSplitView, "DisplayMode"));
         Assert.Equal("0", GetAttributeValueByLocalName(rightPanelSplitView, "CompactPaneLength"));
         Assert.Equal("{x:Bind LayoutVM.RightPanelVisible, Mode=OneWay}", GetAttributeValueByLocalName(rightPanelSplitView, "IsPaneOpen"));
         Assert.Equal("{x:Bind LayoutVM.RightPanelOpenPaneLength, Mode=OneWay}", GetAttributeValueByLocalName(rightPanelSplitView, "OpenPaneLength"));
