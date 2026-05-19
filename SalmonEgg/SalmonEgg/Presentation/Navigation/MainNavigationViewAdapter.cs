@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Presentation.Core.Services;
@@ -17,13 +18,38 @@ public sealed class MainNavigationViewAdapter
 {
     private readonly MainNavigationViewModel _viewModel;
     private readonly INavigationCoordinator _navigationCoordinator;
+    private readonly ILogger<MainNavigationViewAdapter> _logger;
 
     public MainNavigationViewAdapter(
         MainNavigationViewModel viewModel,
-        INavigationCoordinator navigationCoordinator)
+        INavigationCoordinator navigationCoordinator,
+        ILogger<MainNavigationViewAdapter> logger)
     {
         _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
         _navigationCoordinator = navigationCoordinator ?? throw new ArgumentNullException(nameof(navigationCoordinator));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
+    public bool TryHandleFocusedItemActivation(NavigationViewItem navItem)
+    {
+        if (navItem.Tag is not string tag)
+        {
+            return false;
+        }
+
+        if (NavItemTag.TryParseProject(tag, out _))
+        {
+            return false;
+        }
+
+        var activationTask = HandleActivatableTagAsync(navItem, tag);
+        if (activationTask is null)
+        {
+            return false;
+        }
+
+        _ = ObserveFocusedActivationAsync(activationTask, tag);
+        return true;
     }
 
     public Task<bool> HandleItemInvokedAsync(NavigationViewItemInvokedEventArgs args)
@@ -49,6 +75,11 @@ public sealed class MainNavigationViewAdapter
             return Task.FromResult(true);
         }
 
+        return HandleActivatableTagAsync(navItem, tag) ?? Task.FromResult(false);
+    }
+
+    private Task<bool>? HandleActivatableTagAsync(NavigationViewItem navItem, string tag)
+    {
         if (string.Equals(tag, NavItemTag.AddProject, StringComparison.Ordinal))
         {
             _ = _viewModel.AddProjectItem.AddProjectCommand.ExecuteAsync(null);
@@ -84,7 +115,7 @@ public sealed class MainNavigationViewAdapter
             return AwaitActivationHandledAsync(_navigationCoordinator.ActivateSessionAsync(sessionId, sessionProjectId));
         }
 
-        return Task.FromResult(false);
+        return null;
     }
 
     private static async Task<bool> AwaitActivationHandledAsync(Task activationTask)
@@ -96,5 +127,17 @@ public sealed class MainNavigationViewAdapter
     private static async Task<bool> AwaitActivationHandledAsync(Task<bool> activationTask)
     {
         return await activationTask.ConfigureAwait(true);
+    }
+
+    private async Task ObserveFocusedActivationAsync(Task<bool> activationTask, string tag)
+    {
+        try
+        {
+            await activationTask.ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Focused navigation activation failed for {NavigationTag}", tag);
+        }
     }
 }

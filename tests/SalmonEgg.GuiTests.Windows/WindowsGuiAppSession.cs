@@ -333,18 +333,12 @@ internal sealed class WindowsGuiAppSession : IDisposable
 
     public void ActivateElement(AutomationElement element)
     {
-        if (element.Patterns.SelectionItem.IsSupported)
+        try
         {
-            try
-            {
-                element.Focus();
-            }
-            catch
-            {
-            }
-
-            element.Patterns.SelectionItem.Pattern.Select();
-            return;
+            element.Focus();
+        }
+        catch
+        {
         }
 
         if (element.Patterns.Invoke.IsSupported)
@@ -361,6 +355,12 @@ internal sealed class WindowsGuiAppSession : IDisposable
         }
         catch
         {
+        }
+
+        if (element.Patterns.SelectionItem.IsSupported)
+        {
+            element.Patterns.SelectionItem.Pattern.Select();
+            return;
         }
 
         string elementId;

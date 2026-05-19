@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -86,7 +85,14 @@ public sealed class MainShellGamepadNavigationDispatcher : IGamepadNavigationDis
             return true;
         }
 
-        return TrySelect(focusedElement);
+        if (focusedElement is FrameworkElement frameworkElement)
+        {
+            _logger.LogDebug(
+                "Gamepad activate ignored because focused element {ElementType} does not expose invoke, toggle, or expand/collapse patterns.",
+                frameworkElement.GetType().Name);
+        }
+
+        return false;
     }
 
     private static DependencyObject? GetFocusedElement()
@@ -100,7 +106,7 @@ public sealed class MainShellGamepadNavigationDispatcher : IGamepadNavigationDis
         return XamlFocusManager.GetFocusedElement(root.XamlRoot) as DependencyObject;
     }
 
-    private bool TryInvoke(DependencyObject element)
+    private static bool TryInvoke(DependencyObject element)
     {
         if (element is not FrameworkElement frameworkElement)
         {
@@ -118,26 +124,7 @@ public sealed class MainShellGamepadNavigationDispatcher : IGamepadNavigationDis
         return false;
     }
 
-    private bool TrySelect(DependencyObject element)
-    {
-        if (element is not FrameworkElement frameworkElement)
-        {
-            return false;
-        }
-
-        var peer = FrameworkElementAutomationPeer.FromElement(frameworkElement)
-            ?? FrameworkElementAutomationPeer.CreatePeerForElement(frameworkElement);
-        if (peer?.GetPattern(PatternInterface.SelectionItem) is ISelectionItemProvider selectionItemProvider)
-        {
-            selectionItemProvider.Select();
-            return true;
-        }
-
-        _logger.LogDebug("Gamepad activate ignored because focused element {ElementType} does not expose an invoke or selection pattern.", frameworkElement.GetType().Name);
-        return false;
-    }
-
-    private bool TryToggle(DependencyObject element)
+    private static bool TryToggle(DependencyObject element)
     {
         if (element is not FrameworkElement frameworkElement)
         {
@@ -155,7 +142,7 @@ public sealed class MainShellGamepadNavigationDispatcher : IGamepadNavigationDis
         return false;
     }
 
-    private bool TryExpandOrCollapse(DependencyObject element)
+    private static bool TryExpandOrCollapse(DependencyObject element)
     {
         if (element is not FrameworkElement frameworkElement)
         {

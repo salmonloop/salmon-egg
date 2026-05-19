@@ -830,7 +830,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     {
         try
         {
-            ApplySelectionProjection();
+            ApplySelectionProjection(forceSelectedItemNotification: true);
         }
         catch
         {
@@ -847,7 +847,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         }
     }
 
-    private void ApplySelectionProjection()
+    private void ApplySelectionProjection(bool forceSelectedItemNotification = false)
     {
         var previousProjection = _projection;
         var projectedSelection = GetProjectedSelectionState();
@@ -881,7 +881,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             OnPropertyChanged(nameof(IsSettingsSelected));
         }
 
-        if (!ReferenceEquals(previousProjection.ControlSelectedItem, _projection.ControlSelectedItem))
+        if (forceSelectedItemNotification || !ReferenceEquals(previousProjection.ControlSelectedItem, _projection.ControlSelectedItem))
         {
             OnPropertyChanged(nameof(ProjectedControlSelectedItem));
         }

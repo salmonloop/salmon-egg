@@ -149,6 +149,51 @@ public sealed class MainNavigationViewModelSelectionTests
     }
 
     [Fact]
+    public void RebuildTree_RepublishesSelectedItemBinding_WhenMenuSourceSnapshotChanges()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            navState.SetPaneOpen(true);
+
+            var sessionManager = CreateSessionManager(new Session("session-1", @"C:\repo\demo")
+            {
+                DisplayName = "Session 1"
+            });
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog("session-1");
+
+            using var navVm = CreateNavigationViewModel(chatCatalog, sessionManager.Object, preferences, navState, out var selectionStore);
+            navVm.RebuildTree();
+            SetSessionSelection(selectionStore, "session-1");
+
+            var projectedBefore = Assert.IsType<SessionNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+            var selectedItemChanges = 0;
+            navVm.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(MainNavigationViewModel.ProjectedControlSelectedItem))
+                {
+                    selectedItemChanges++;
+                }
+            };
+
+            navVm.RebuildTree();
+
+            Assert.True(
+                selectedItemChanges > 0,
+                "MenuItemsSource republish can make NavigationView clear native SelectedItem; the VM must re-emit the same SSOT selected item.");
+            Assert.Same(projectedBefore, navVm.ProjectedControlSelectedItem);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public void PaneOpenToClosed_KeepsSessionAsProjectedSelection()
     {
         var originalContext = SynchronizationContext.Current;

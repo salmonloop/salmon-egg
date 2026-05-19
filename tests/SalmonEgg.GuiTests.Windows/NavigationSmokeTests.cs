@@ -127,7 +127,10 @@ public sealed class NavigationSmokeTests
         const string projectId = "MainNav.Project.project-1";
         const string startId = "MainNav.Start";
 
-        Assert.Null(session.TryFindByAutomationId(targetSessionId, TimeSpan.FromSeconds(2)));
+        Assert.Contains(
+            "SessionVisible=False",
+            session.TryGetElementName("MainNav.Automation.SelectionState", TimeSpan.FromSeconds(2)) ?? string.Empty,
+            StringComparison.Ordinal);
 
         var startItem = session.FindByAutomationId(startId);
         session.FocusElement(startItem);

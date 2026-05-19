@@ -1495,14 +1495,15 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
-    public void MainShellGamepadNavigationDispatcher_UsesNativeToggleAndExpandCollapsePatterns()
+    public void MainShellGamepadNavigationDispatcher_UsesNativeActivationPatternsWithoutManualSelection()
     {
         var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\MainShellGamepadNavigationDispatcher.cs");
 
         Assert.Contains("IToggleProvider", code);
         Assert.Contains("IExpandCollapseProvider", code);
-        Assert.Contains("ISelectionItemProvider", code);
         Assert.Contains("IShellBackNavigationService", code);
+        Assert.DoesNotContain("ISelectionItemProvider", code);
+        Assert.DoesNotContain(".Select()", code, StringComparison.Ordinal);
         Assert.DoesNotContain("SelectedItem =", code, StringComparison.Ordinal);
         Assert.DoesNotContain(".IsOpen = false", code, StringComparison.Ordinal);
         Assert.DoesNotContain("ContentFrame", code, StringComparison.Ordinal);
@@ -1510,6 +1511,59 @@ public sealed class XamlComplianceTests
         Assert.DoesNotContain("GetOpenPopupsForXamlRoot", code, StringComparison.Ordinal);
         Assert.DoesNotContain(".GoBack(", code, StringComparison.Ordinal);
         Assert.DoesNotContain(".Hide()", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MainPage_GamepadMainNavActivation_DelegatesToNavigationAdapterWithoutSelectionWriteback()
+    {
+        var mainPage = LoadText(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
+        var adapter = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Navigation\MainNavigationViewAdapter.cs");
+        var mainPageSection = ExtractSection(
+            mainPage,
+            "public bool TryConsumeNavigationIntent",
+            "private NavigationViewItem?");
+        var adapterSection = ExtractSection(
+            adapter,
+            "public bool TryHandleFocusedItemActivation",
+            "public Task<bool> HandleItemInvokedAsync");
+
+        Assert.Contains("MainPage : Page, INavigationIntentConsumer", mainPage, StringComparison.Ordinal);
+        Assert.Contains("GamepadNavigationIntent.Activate", mainPageSection, StringComparison.Ordinal);
+        Assert.Contains("TryFindFocusedMainNavItem()", mainPageSection, StringComparison.Ordinal);
+        Assert.Contains("_mainNavigationViewAdapter.TryHandleFocusedItemActivation", mainPageSection, StringComparison.Ordinal);
+        Assert.Contains("focusedItem ??= navItem", mainPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("SelectedItem =", mainPageSection, StringComparison.Ordinal);
+
+        Assert.Contains("TryHandleFocusedItemActivation", adapter, StringComparison.Ordinal);
+        Assert.Contains("if (NavItemTag.TryParseProject", adapterSection, StringComparison.Ordinal);
+        Assert.Contains("return false;", adapterSection, StringComparison.Ordinal);
+        Assert.Contains("ObserveFocusedActivationAsync", adapterSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("_ = activationTask;", adapterSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("SelectionChanged", adapterSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("SelectedItem =", adapterSection, StringComparison.Ordinal);
+        Assert.Contains("ILogger<MainNavigationViewAdapter>", adapter, StringComparison.Ordinal);
+        Assert.Contains("_logger.LogError", adapter, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WindowsGuiAppSession_ActivatesThroughInvokeOrPointerBeforeSelectionPattern()
+    {
+        var code = LoadText(@"tests\SalmonEgg.GuiTests.Windows\WindowsGuiAppSession.cs");
+        var activateElement = ExtractSection(
+            code,
+            "public void ActivateElement",
+            "public void ClickElement");
+
+        var invokeIndex = activateElement.IndexOf("Patterns.Invoke.IsSupported", StringComparison.Ordinal);
+        var pointerIndex = activateElement.IndexOf("GetClickablePoint()", StringComparison.Ordinal);
+        var selectionIndex = activateElement.IndexOf("Patterns.SelectionItem.IsSupported", StringComparison.Ordinal);
+
+        Assert.True(invokeIndex >= 0, "Activation helper must prefer the native Invoke pattern.");
+        Assert.True(pointerIndex >= 0, "Activation helper must fall back to a real pointer click before manual selection.");
+        Assert.True(selectionIndex >= 0, "SelectionItem fallback may remain only for controls with no invoke or pointer path.");
+        Assert.True(
+            invokeIndex < selectionIndex && pointerIndex < selectionIndex,
+            "SelectionItem.Select must not be the first activation path for NavigationViewItem.");
     }
 
     [Fact]
