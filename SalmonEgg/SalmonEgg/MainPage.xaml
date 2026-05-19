@@ -475,7 +475,6 @@
                              FooterMenuItemsSource="{x:Bind NavVM.FooterItems, Mode=OneWay}"
                              MenuItemTemplateSelector="{StaticResource MainNavItemTemplateSelector}"
                              ItemInvoked="OnMainNavItemInvoked"
-                             SelectionChanged="OnMainNavSelectionChanged"
                              DisplayModeChanged="OnMainNavPanePresentationChanged"
                              PaneOpened="OnMainNavPanePresentationChanged"
                              PaneClosed="OnMainNavPanePresentationChanged">

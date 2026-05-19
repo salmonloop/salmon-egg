@@ -55,11 +55,6 @@ public sealed class MainNavigationViewAdapter
     public Task<bool> HandleItemInvokedAsync(NavigationViewItemInvokedEventArgs args)
         => HandleItemInvokedCoreAsync(args);
 
-    public Task HandleSelectionChangedAsync(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
-    {
-        return Task.CompletedTask;
-    }
-
     private Task<bool> HandleItemInvokedCoreAsync(NavigationViewItemInvokedEventArgs args)
     {
         if (args.InvokedItemContainer is not NavigationViewItem navItem || navItem.Tag is not string tag)

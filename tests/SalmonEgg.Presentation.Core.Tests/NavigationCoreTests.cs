@@ -490,32 +490,22 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
-    public void MainNavigationViewAdapter_SelectionChanged_DoesNotActivateNavigationDestinations()
+    public void MainNavigationViewAdapter_DoesNotHandleSelectionChangedAsNavigationInput()
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Navigation\MainNavigationViewAdapter.cs");
-        var section = ExtractSection(
-            code,
-            "public Task HandleSelectionChangedAsync",
-            "private Task<bool> HandleItemInvokedCoreAsync");
 
-        Assert.DoesNotContain("ActivateSettingsAsync", section, StringComparison.Ordinal);
-        Assert.DoesNotContain("ActivateStartAsync", section, StringComparison.Ordinal);
-        Assert.DoesNotContain("ActivateDiscoverSessionsAsync", section, StringComparison.Ordinal);
-        Assert.DoesNotContain("ActivateSessionAsync", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("HandleSelectionChangedAsync", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("NavigationViewSelectionChangedEventArgs", code, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void MainNavigationViewAdapter_SelectionChanged_DoesNotDependOnProjectedSelectionEcho()
+    public void MainNavigationViewAdapter_DoesNotDependOnProjectedSelectionEcho()
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Navigation\MainNavigationViewAdapter.cs");
-        var section = ExtractSection(
-            code,
-            "public Task HandleSelectionChangedAsync",
-            "private Task<bool> HandleItemInvokedCoreAsync");
 
-        Assert.DoesNotContain("IsProjectedSelectionEcho", section, StringComparison.Ordinal);
-        Assert.DoesNotContain("ProjectedControlSelectedItem", section, StringComparison.Ordinal);
-        Assert.Contains("return Task.CompletedTask;", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsProjectedSelectionEcho", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("ProjectedControlSelectedItem", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("Task.CompletedTask", code, StringComparison.Ordinal);
     }
 
     [Fact]

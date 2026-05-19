@@ -125,6 +125,7 @@ public sealed class XamlComplianceTests
         Assert.DoesNotContain("IsExpanded=\"{x:Bind IsExpanded, Mode=OneWay}\"", xaml);
         Assert.DoesNotContain("Expanding=\"OnMainNavItemExpanding\"", xaml);
         Assert.DoesNotContain("Collapsed=\"OnMainNavItemCollapsed\"", xaml);
+        Assert.DoesNotContain("SelectionChanged=\"OnMainNavSelectionChanged\"", xaml);
     }
 
     [Fact]
@@ -1562,7 +1563,7 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
-    public void WindowsGuiAppSession_ActivatesThroughInvokeOrPointerBeforeSelectionPattern()
+    public void WindowsGuiAppSession_ActivatesThroughInvokeOrPointerWithoutManualSelection()
     {
         var code = LoadText(@"tests\SalmonEgg.GuiTests.Windows\WindowsGuiAppSession.cs");
         var activateElement = ExtractSection(
@@ -1572,14 +1573,11 @@ public sealed class XamlComplianceTests
 
         var invokeIndex = activateElement.IndexOf("Patterns.Invoke.IsSupported", StringComparison.Ordinal);
         var pointerIndex = activateElement.IndexOf("GetClickablePoint()", StringComparison.Ordinal);
-        var selectionIndex = activateElement.IndexOf("Patterns.SelectionItem.IsSupported", StringComparison.Ordinal);
 
         Assert.True(invokeIndex >= 0, "Activation helper must prefer the native Invoke pattern.");
-        Assert.True(pointerIndex >= 0, "Activation helper must fall back to a real pointer click before manual selection.");
-        Assert.True(selectionIndex >= 0, "SelectionItem fallback may remain only for controls with no invoke or pointer path.");
-        Assert.True(
-            invokeIndex < selectionIndex && pointerIndex < selectionIndex,
-            "SelectionItem.Select must not be the first activation path for NavigationViewItem.");
+        Assert.True(pointerIndex >= 0, "Activation helper must fall back to a real pointer click.");
+        Assert.DoesNotContain("Patterns.SelectionItem.IsSupported", activateElement, StringComparison.Ordinal);
+        Assert.DoesNotContain(".Select()", activateElement, StringComparison.Ordinal);
     }
 
     [Fact]

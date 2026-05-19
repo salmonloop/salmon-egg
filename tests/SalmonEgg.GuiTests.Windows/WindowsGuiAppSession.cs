@@ -357,12 +357,6 @@ internal sealed class WindowsGuiAppSession : IDisposable
         {
         }
 
-        if (element.Patterns.SelectionItem.IsSupported)
-        {
-            element.Patterns.SelectionItem.Pattern.Select();
-            return;
-        }
-
         string elementId;
         try
         {

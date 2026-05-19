@@ -835,19 +835,6 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
 
     }
 
-    private void OnMainNavSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
-    {
-        BootLogDebug($"MainNav SelectionChanged: selected={DescribeNavSelection(sender.SelectedItem)} settings={args.IsSettingsSelected}");
-        UpdateMainNavAutomationSelectionState();
-        _logger.LogDebug(
-            "NavView selection changed SelectedItem={SelectedItem} SettingsSelected={IsSettingsSelected} SemanticSelection={SemanticSelection}",
-            DescribeNavSelection(sender.SelectedItem),
-            args.IsSettingsSelected,
-            NavVM.CurrentSelection);
-
-        _ = _mainNavigationViewAdapter.HandleSelectionChangedAsync(sender, args);
-    }
-
     private void OnNavigationViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(MainNavigationViewModel.IsSettingsSelected))
