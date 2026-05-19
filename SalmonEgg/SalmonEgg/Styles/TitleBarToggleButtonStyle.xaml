@@ -7,5 +7,8 @@
         <Setter Property="Height" Value="44" />
         <Setter Property="Padding" Value="10" />
         <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="8" />
     </Style>
 </ResourceDictionary>

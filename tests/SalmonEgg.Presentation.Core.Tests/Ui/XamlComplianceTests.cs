@@ -337,6 +337,17 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void TitleBarButtonStyles_KeepNativeRoundedBorderlessAppearance()
+    {
+        var commandStyles = XDocument.Parse(LoadXaml(@"SalmonEgg\SalmonEgg\Styles\TitleBarCommandButtonStyle.xaml"));
+        var toggleStyles = XDocument.Parse(LoadXaml(@"SalmonEgg\SalmonEgg\Styles\TitleBarToggleButtonStyle.xaml"));
+
+        AssertTitleBarStyleKeepsNativeRoundedBorderlessAppearance(commandStyles, "TitleBarCommandButtonStyle", "8");
+        AssertTitleBarStyleKeepsNativeRoundedBorderlessAppearance(commandStyles, "MiniTitleBarAccessoryButtonStyle", "4");
+        AssertTitleBarStyleKeepsNativeRoundedBorderlessAppearance(toggleStyles, "TitleBarToggleButtonStyle", "8");
+    }
+
+    [Fact]
     public void MiniChatView_RootSurfaceKeepsWindowBackdropVisible()
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml");
@@ -1791,6 +1802,29 @@ public sealed class XamlComplianceTests
         }
 
         return element;
+    }
+
+    private static void AssertTitleBarStyleKeepsNativeRoundedBorderlessAppearance(
+        XDocument document,
+        string styleKey,
+        string expectedCornerRadius)
+    {
+        var xNamespace = XNamespace.Get("http://schemas.microsoft.com/winfx/2006/xaml");
+        var style = document.Descendants()
+            .FirstOrDefault(element =>
+                string.Equals(element.Name.LocalName, "Style", StringComparison.Ordinal)
+                && string.Equals(element.Attribute(xNamespace + "Key")?.Value, styleKey, StringComparison.Ordinal));
+
+        Assert.NotNull(style);
+        Assert.Contains(style!.Descendants().Where(element => string.Equals(element.Name.LocalName, "Setter", StringComparison.Ordinal)),
+            setter => string.Equals(setter.Attribute("Property")?.Value, "CornerRadius", StringComparison.Ordinal)
+                && string.Equals(setter.Attribute("Value")?.Value, expectedCornerRadius, StringComparison.Ordinal));
+        Assert.Contains(style.Descendants().Where(element => string.Equals(element.Name.LocalName, "Setter", StringComparison.Ordinal)),
+            setter => string.Equals(setter.Attribute("Property")?.Value, "BorderBrush", StringComparison.Ordinal)
+                && string.Equals(setter.Attribute("Value")?.Value, "Transparent", StringComparison.Ordinal));
+        Assert.Contains(style.Descendants().Where(element => string.Equals(element.Name.LocalName, "Setter", StringComparison.Ordinal)),
+            setter => string.Equals(setter.Attribute("Property")?.Value, "BorderThickness", StringComparison.Ordinal)
+                && string.Equals(setter.Attribute("Value")?.Value, "0", StringComparison.Ordinal));
     }
 
     private static string NormalizeRelativePath(string relativePath)
