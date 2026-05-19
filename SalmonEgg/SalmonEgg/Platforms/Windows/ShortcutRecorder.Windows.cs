@@ -1,4 +1,5 @@
 using Microsoft.UI.Input;
+using WinUIKeyEventArgs = Microsoft.UI.Input.KeyEventArgs;
 
 namespace SalmonEgg.Controls;
 
@@ -28,7 +29,7 @@ public sealed partial class ShortcutRecorder
         _keyboardSource.SystemKeyDown -= OnSystemKeyDown;
     }
 
-    private void OnSystemKeyDown(InputKeyboardSource sender, KeyEventArgs args)
+    private void OnSystemKeyDown(InputKeyboardSource sender, WinUIKeyEventArgs args)
     {
         HandleSystemKeyDown(args.VirtualKey, out var handled);
         args.Handled = handled;
