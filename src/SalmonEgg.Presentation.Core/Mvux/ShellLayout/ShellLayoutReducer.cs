@@ -9,11 +9,7 @@ public static class ShellLayoutReducer
         var next = action switch
         {
             WindowMetricsChanged m => ApplyWindowMetrics(state, m),
-            TitleBarInsetsChanged t => state with
-            {
-                TitleBarPadding = new LayoutPadding(t.Left, 0, t.Right, 0),
-                TitleBarInsetsHeight = t.Height
-            },
+            TitleBarInsetsChanged t => ApplyTitleBarInsets(state, t),
             NavToggleRequested => ApplyNavToggleIntent(state),
             NavPaneOpenIntentRequested r => state with
             {
@@ -98,6 +94,27 @@ public static class ShellLayoutReducer
 
         return next;
     }
+
+    private static ShellLayoutState ApplyTitleBarInsets(ShellLayoutState state, TitleBarInsetsChanged titleBarInsets)
+    {
+        if (titleBarInsets.Height <= 0)
+        {
+            return state with
+            {
+                TitleBarPadding = new LayoutPadding(0, 0, 0, 0),
+                TitleBarInsetsHeight = ResolveAppTitleBarHeight(state.TitleBarInsetsHeight)
+            };
+        }
+
+        return state with
+        {
+            TitleBarPadding = new LayoutPadding(titleBarInsets.Left, 0, titleBarInsets.Right, 0),
+            TitleBarInsetsHeight = titleBarInsets.Height
+        };
+    }
+
+    private static double ResolveAppTitleBarHeight(double currentHeight)
+        => currentHeight > 0 ? currentHeight : ShellLayoutState.DefaultTitleBarHeight;
 
     private static ShellLayoutState ApplyNavToggleIntent(ShellLayoutState state)
     {

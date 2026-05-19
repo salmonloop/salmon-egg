@@ -21,6 +21,30 @@ public class ShellLayoutReducerTests
         Assert.Equal(60, reduced.Snapshot.TitleBarHeight);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Reducer_PreservesAppTitleBarHeight_WhenPlatformInsetsAreUnavailable(double reportedHeight)
+    {
+        var state = ShellLayoutState.Default;
+
+        var reduced = ShellLayoutReducer.Reduce(state, new TitleBarInsetsChanged(0, 0, reportedHeight));
+
+        Assert.Equal(ShellLayoutState.DefaultTitleBarHeight, reduced.State.TitleBarInsetsHeight);
+        Assert.Equal(ShellLayoutState.DefaultTitleBarHeight, reduced.Snapshot.TitleBarHeight);
+        Assert.Equal(new LayoutPadding(0, 0, 0, 0), reduced.Snapshot.TitleBarPadding);
+    }
+
+    [Fact]
+    public void Reducer_RestoresDefaultAppTitleBarHeight_WhenCurrentHeightIsInvalid()
+    {
+        var state = ShellLayoutState.Default with { TitleBarInsetsHeight = 0 };
+
+        var reduced = ShellLayoutReducer.Reduce(state, new TitleBarInsetsChanged(0, 0, 0));
+
+        Assert.Equal(ShellLayoutState.DefaultTitleBarHeight, reduced.Snapshot.TitleBarHeight);
+    }
+
     [Fact]
     public void Reducer_Preserves_NavIntent_Across_Resize()
     {

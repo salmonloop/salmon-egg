@@ -17,10 +17,12 @@ public sealed record ShellLayoutState(
     long ContentContextVersion = 0,
     bool SupportsLocalTerminal = true)
 {
+    public const double DefaultTitleBarHeight = 48;
+
     public static ShellLayoutState Default => new(
         new WindowMetrics(1280, 720, 1280, 720),
         new LayoutPadding(0, 0, 0, 0),
-        48,
+        DefaultTitleBarHeight,
         false,
         RightPanelMode.None,
         320,
