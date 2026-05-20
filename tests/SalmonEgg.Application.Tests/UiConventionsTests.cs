@@ -206,8 +206,16 @@ public class UiConventionsTests
         var properties = document
             .Descendants()
             .Single(element => string.Equals(element.Name.LocalName, "Properties", StringComparison.Ordinal));
+        var displayName = properties
+            .Elements()
+            .Single(element => string.Equals(element.Name.LocalName, "DisplayName", StringComparison.Ordinal));
+        var publisherDisplayName = properties
+            .Elements()
+            .Single(element => string.Equals(element.Name.LocalName, "PublisherDisplayName", StringComparison.Ordinal));
 
         Assert.NotNull(logo);
+        Assert.Equal("Salmon Egg", displayName.Value.Trim());
+        Assert.Equal("Salmon Egg", publisherDisplayName.Value.Trim());
         Assert.Equal(@"Assets\Icons\Windows\iconLogo.png", logo!.Value.Trim());
         Assert.Equal("transparent", GetAttributeValueByLocalName(visualElements, "BackgroundColor"));
         Assert.Equal(@"Assets\Icons\Windows\iconLogo44.png", GetAttributeValueByLocalName(visualElements, "Square44x44Logo"));

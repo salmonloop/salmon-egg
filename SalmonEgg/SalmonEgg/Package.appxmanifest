@@ -10,8 +10,8 @@
             Publisher="CN=SalmonEgg"
             Version="1.0.0.0" />
   <Properties>
-    <DisplayName>SalmonEgg</DisplayName>
-    <PublisherDisplayName>SalmonEgg</PublisherDisplayName>
+    <DisplayName>Salmon Egg</DisplayName>
+    <PublisherDisplayName>Salmon Egg</PublisherDisplayName>
     <Logo>Assets\Icons\Windows\iconLogo.png</Logo>
   </Properties>
 
