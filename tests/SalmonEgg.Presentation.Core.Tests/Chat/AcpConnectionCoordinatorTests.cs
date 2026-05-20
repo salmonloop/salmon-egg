@@ -146,6 +146,50 @@ public sealed class AcpConnectionCoordinatorTests
     }
 
     [Fact]
+    public async Task ResyncAsync_LoadSessionDeepClonesCurrentMcpServers()
+    {
+        var inner = new FakeChatService
+        {
+            AgentCapabilities = new AgentCapabilities(loadSession: true)
+        };
+        inner.OnLoadSessionAsync = (_, _) => Task.FromResult(SessionLoadResponse.Completed);
+
+        var current = new HttpMcpServer(
+            "api",
+            "api.example.com/mcp",
+            [new McpHttpHeader("Authorization", "Bearer token")])
+        {
+            Meta = new()
+            {
+                ["source"] = "profile"
+            }
+        };
+        var sink = new FakeSink
+        {
+            CurrentChatService = inner,
+            CurrentSessionId = "conv-1",
+            CurrentRemoteSessionId = "remote-1",
+            IsSessionActive = true,
+            CurrentMcpServers = [current]
+        };
+
+        var coordinator = new AcpConnectionCoordinator(
+            Mock.Of<IChatConnectionStore>(),
+            Mock.Of<ILogger<AcpConnectionCoordinator>>());
+
+        await coordinator.ResyncAsync(sink);
+        current.Url = "mutated.example.com/mcp";
+        current.Meta["source"] = "mutated";
+        current.Headers![0].Value = "mutated";
+
+        var captured = Assert.IsType<HttpMcpServer>(Assert.Single(inner.LastLoadParams!.McpServers));
+        Assert.NotSame(current, captured);
+        Assert.Equal("api.example.com/mcp", captured.Url);
+        Assert.Equal("profile", captured.Meta!["source"]);
+        Assert.Equal("Bearer token", Assert.Single(captured.Headers!).Value);
+    }
+
+    [Fact]
     public async Task ResyncAsync_WhenOnlyResumeIsSupported_ResumesWithoutResettingProjection()
     {
         var expectedResponse = new SessionResumeResponse(

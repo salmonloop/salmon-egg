@@ -48,6 +48,8 @@ internal sealed class McpServerYamlV1
 
     public string Name { get; set; } = string.Empty;
 
+    public Dictionary<string, object?>? Meta { get; set; }
+
     public string Command { get; set; } = string.Empty;
 
     public List<string> Args { get; set; } = new();
@@ -64,4 +66,6 @@ internal sealed class McpNameValueYamlV1
     public string Name { get; set; } = string.Empty;
 
     public string Value { get; set; } = string.Empty;
+
+    public Dictionary<string, object?>? Meta { get; set; }
 }

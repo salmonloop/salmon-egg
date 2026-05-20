@@ -61,6 +61,122 @@ public sealed class SessionNewTypesTests
     }
 
     [Test]
+    public void SessionNewParams_McpServers_Should_Serialize_Meta_With_UnderscoreMeta()
+    {
+        var sessionParams = new SessionNewParams
+        {
+            Cwd = "/home/user/project",
+            McpServers =
+            [
+                new StdioMcpServer(
+                    "filesystem",
+                    "/usr/bin/mcp-filesystem",
+                    [],
+                    [
+                        new McpEnvVariable("ROOT", "/repo")
+                        {
+                            Meta = new Dictionary<string, object?>
+                            {
+                                ["scope"] = "workspace"
+                            }
+                        }
+                    ])
+                {
+                    Meta = new Dictionary<string, object?>
+                    {
+                        ["source"] = "profile",
+                        ["enabled"] = true
+                    }
+                },
+                new HttpMcpServer(
+                    "api",
+                    "api.example.com/mcp",
+                    [
+                        new McpHttpHeader("Authorization", "Bearer token")
+                        {
+                            Meta = new Dictionary<string, object?>
+                            {
+                                ["secretRef"] = "header-auth"
+                            }
+                        }
+                    ])
+                {
+                    Meta = new Dictionary<string, object?>
+                    {
+                        ["transport"] = "remote"
+                    }
+                }
+            ]
+        };
+
+        var json = JsonSerializer.Serialize(sessionParams);
+        var parsed = JsonDocument.Parse(json);
+        var mcpServers = parsed.RootElement.GetProperty("mcpServers");
+
+        Assert.That(mcpServers[0].GetProperty("_meta").GetProperty("source").GetString(), Is.EqualTo("profile"));
+        Assert.That(mcpServers[0].GetProperty("_meta").GetProperty("enabled").ValueKind, Is.EqualTo(JsonValueKind.True));
+        Assert.That(mcpServers[0].GetProperty("env")[0].GetProperty("_meta").GetProperty("scope").GetString(), Is.EqualTo("workspace"));
+        Assert.That(mcpServers[1].GetProperty("_meta").GetProperty("transport").GetString(), Is.EqualTo("remote"));
+        Assert.That(mcpServers[1].GetProperty("headers")[0].GetProperty("_meta").GetProperty("secretRef").GetString(), Is.EqualTo("header-auth"));
+    }
+
+    [Test]
+    public void McpServer_Meta_Should_Deserialize_And_Clone_As_ProtocolObjects()
+    {
+        var json = """
+        {
+          "name": "filesystem",
+          "command": "/usr/bin/mcp-filesystem",
+          "args": [],
+          "env": [
+            {
+              "name": "ROOT",
+              "value": "/repo",
+              "_meta": { "scope": "workspace" }
+            }
+          ],
+          "_meta": {
+            "source": "profile",
+            "nested": { "value": 1 }
+          }
+        }
+        """;
+
+        var server = JsonSerializer.Deserialize<McpServer>(json);
+
+        Assert.That(server, Is.TypeOf<StdioMcpServer>());
+        var stdio = (StdioMcpServer)server!;
+        Assert.That(stdio.Meta, Is.Not.Null);
+        Assert.That(((JsonElement)stdio.Meta!["source"]!).GetString(), Is.EqualTo("profile"));
+        Assert.That(((JsonElement)stdio.Meta["nested"]!).GetProperty("value").GetInt32(), Is.EqualTo(1));
+        Assert.That(stdio.Env, Has.Count.EqualTo(1));
+        Assert.That(((JsonElement)stdio.Env![0].Meta!["scope"]!).GetString(), Is.EqualTo("workspace"));
+
+        var clonedServer = McpServerJsonConverter.CloneServer(stdio);
+        Assert.That(clonedServer, Is.TypeOf<StdioMcpServer>());
+        var clone = (StdioMcpServer)clonedServer;
+        Assert.That(((JsonElement)clone.Meta!["source"]!).GetString(), Is.EqualTo("profile"));
+        Assert.That(clone.Env, Has.Count.EqualTo(1));
+        Assert.That(((JsonElement)clone.Env![0].Meta!["scope"]!).GetString(), Is.EqualTo("workspace"));
+    }
+
+    [Test]
+    public void McpServer_WhenMetaIsNotObjectOrNull_Should_NotDeserialize()
+    {
+        var json = """
+        {
+          "name": "filesystem",
+          "command": "/usr/bin/mcp-filesystem",
+          "args": [],
+          "env": [],
+          "_meta": "invalid"
+        }
+        """;
+
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<McpServer>(json));
+    }
+
+    [Test]
     public void McpServer_WithStdioTypeDiscriminator_Should_NotDeserialize()
     {
         var json = """

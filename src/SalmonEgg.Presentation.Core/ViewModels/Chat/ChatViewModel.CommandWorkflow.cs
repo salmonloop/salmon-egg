@@ -167,7 +167,7 @@ public partial class ChatViewModel
         => new()
         {
             Cwd = GetActiveSessionCwdOrDefault(),
-            McpServers = new List<McpServer>(CurrentMcpServers)
+            McpServers = McpServerJsonConverter.CloneServers(CurrentMcpServers)
         };
 
     private async Task<SessionNewResponse> CreateRemoteSessionAsync(

@@ -138,7 +138,7 @@ namespace SalmonEgg.Application.Services.Chat
                     var newSessionParams = new SessionNewParams
                     {
                         Cwd = Environment.CurrentDirectory,
-                        McpServers = new List<McpServer>(_mcpServersAccessor())
+                        McpServers = McpServerJsonConverter.CloneServers(_mcpServersAccessor())
                     };
 
                     var chatService = _chatServiceAccessor();

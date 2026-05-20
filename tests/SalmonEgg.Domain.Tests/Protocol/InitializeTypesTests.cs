@@ -231,6 +231,48 @@ public sealed class InitializeTypesTests
     }
 
     [Test]
+    public void McpCapabilities_Meta_Should_Serialize_With_UnderscoreMeta()
+    {
+        var capabilities = new McpCapabilities(
+            http: true,
+            sse: false,
+            meta: new Dictionary<string, object?>
+            {
+                ["vendor"] = "agent",
+                ["priority"] = 2
+            });
+
+        var json = JsonSerializer.Serialize(capabilities);
+        var parsed = JsonDocument.Parse(json);
+
+        Assert.That(parsed.RootElement.GetProperty("http").ValueKind, Is.EqualTo(JsonValueKind.True));
+        Assert.That(parsed.RootElement.GetProperty("sse").ValueKind, Is.EqualTo(JsonValueKind.False));
+        Assert.That(parsed.RootElement.TryGetProperty("_meta", out var meta), Is.True);
+        Assert.That(meta.GetProperty("vendor").GetString(), Is.EqualTo("agent"));
+        Assert.That(meta.GetProperty("priority").GetInt32(), Is.EqualTo(2));
+    }
+
+    [Test]
+    public void McpCapabilities_Meta_Should_Deserialize_From_UnderscoreMeta()
+    {
+        var json = """
+                   {
+                     "http": true,
+                     "sse": true,
+                     "_meta": { "vendor": "agent" }
+                   }
+                   """;
+
+        var capabilities = JsonSerializer.Deserialize<McpCapabilities>(json);
+
+        Assert.That(capabilities, Is.Not.Null);
+        Assert.That(capabilities!.Http, Is.True);
+        Assert.That(capabilities.Sse, Is.True);
+        Assert.That(capabilities.Meta, Is.Not.Null);
+        Assert.That(((JsonElement)capabilities.Meta!["vendor"]!).GetString(), Is.EqualTo("agent"));
+    }
+
+    [Test]
     public void ClientCapabilityDefaults_Should_Not_Advertise_FileSystem_Or_Terminal()
     {
         var capabilities = ClientCapabilityDefaults.Create();

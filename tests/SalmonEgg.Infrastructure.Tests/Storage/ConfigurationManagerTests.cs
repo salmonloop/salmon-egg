@@ -168,6 +168,114 @@ public sealed class ConfigurationManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task SaveConfigurationAsync_WithMcpMeta_WritesYamlAndLoadsBack()
+    {
+        var config = CreateTestConfiguration("mcp-meta-001");
+        config.McpServers =
+        [
+            new StdioMcpServer(
+                "filesystem",
+                "/usr/bin/mcp-filesystem",
+                ["--stdio"],
+                [
+                    new McpEnvVariable("ROOT", "/repo")
+                    {
+                        Meta = new()
+                        {
+                            ["scope"] = "workspace"
+                        }
+                    }
+                ])
+            {
+                Meta = new()
+                {
+                    ["source"] = "profile"
+                }
+            },
+            new HttpMcpServer(
+                "api",
+                "api.example.com/mcp",
+                [
+                    new McpHttpHeader("Authorization", "Bearer token")
+                    {
+                        Meta = new()
+                        {
+                            ["secret_ref"] = "header-auth"
+                        }
+                    }
+                ])
+            {
+                Meta = new()
+                {
+                    ["transport"] = "remote"
+                }
+            }
+        ];
+
+        await _configManager.SaveConfigurationAsync(config);
+
+        var yaml = await File.ReadAllTextAsync(GetServerYamlPath(config.Id));
+        Assert.Contains("meta:", yaml, StringComparison.Ordinal);
+        Assert.Contains("source: profile", yaml, StringComparison.Ordinal);
+        Assert.Contains("scope: workspace", yaml, StringComparison.Ordinal);
+        Assert.Contains("secret_ref: header-auth", yaml, StringComparison.Ordinal);
+
+        var loaded = await _configManager.LoadConfigurationAsync(config.Id);
+
+        Assert.NotNull(loaded);
+        var stdio = Assert.IsType<StdioMcpServer>(loaded!.McpServers[0]);
+        Assert.Equal("profile", stdio.Meta!["source"]);
+        Assert.Equal("workspace", Assert.Single(stdio.Env!).Meta!["scope"]);
+
+        var http = Assert.IsType<HttpMcpServer>(loaded.McpServers[1]);
+        Assert.Equal("remote", http.Meta!["transport"]);
+        Assert.Equal("header-auth", Assert.Single(http.Headers!).Meta!["secret_ref"]);
+    }
+
+    [Fact]
+    public async Task LoadConfigurationAsync_WithInvalidMcpServer_ReturnsNull()
+    {
+        var config = CreateTestConfiguration("invalid-mcp-load-001");
+        config.McpServers =
+        [
+            new StdioMcpServer("filesystem", "/usr/bin/mcp-filesystem", [], [])
+        ];
+        await _configManager.SaveConfigurationAsync(config);
+
+        var path = GetServerYamlPath(config.Id);
+        var yaml = await File.ReadAllTextAsync(path);
+        yaml = yaml.Replace("command: /usr/bin/mcp-filesystem", "command: ''", StringComparison.Ordinal);
+        await File.WriteAllTextAsync(path, yaml);
+
+        var loaded = await _configManager.LoadConfigurationAsync(config.Id);
+
+        Assert.Null(loaded);
+    }
+
+    [Fact]
+    public async Task ListConfigurationsAsync_WithInvalidMcpServer_SkipsConfiguration()
+    {
+        var valid = CreateTestConfiguration("valid-mcp-list-001");
+        var invalid = CreateTestConfiguration("invalid-mcp-list-001");
+        invalid.McpServers =
+        [
+            new StdioMcpServer("filesystem", "/usr/bin/mcp-filesystem", [], [])
+        ];
+        await _configManager.SaveConfigurationAsync(valid);
+        await _configManager.SaveConfigurationAsync(invalid);
+
+        var invalidPath = GetServerYamlPath(invalid.Id);
+        var invalidYaml = await File.ReadAllTextAsync(invalidPath);
+        invalidYaml = invalidYaml.Replace("command: /usr/bin/mcp-filesystem", "command: ''", StringComparison.Ordinal);
+        await File.WriteAllTextAsync(invalidPath, invalidYaml);
+
+        var configs = (await _configManager.ListConfigurationsAsync()).ToList();
+
+        Assert.Contains(configs, c => c.Id == valid.Id);
+        Assert.DoesNotContain(configs, c => c.Id == invalid.Id);
+    }
+
+    [Fact]
     public async Task LoadConfigurationAsync_NonExistentConfig_ReturnsNull()
     {
         var loaded = await _configManager.LoadConfigurationAsync("non-existent");

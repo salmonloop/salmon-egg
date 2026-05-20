@@ -2048,13 +2048,13 @@ public partial class ChatViewModel
         string remoteSessionId,
         string cwd,
         IReadOnlyList<McpServer> mcpServers)
-        => new(remoteSessionId, cwd, new List<McpServer>(mcpServers));
+        => new(remoteSessionId, cwd, McpServerJsonConverter.CloneServers(mcpServers));
 
     private static SessionResumeParams CreateSessionResumeParams(
         string remoteSessionId,
         string cwd,
         IReadOnlyList<McpServer> mcpServers)
-        => new(remoteSessionId, cwd, new List<McpServer>(mcpServers));
+        => new(remoteSessionId, cwd, McpServerJsonConverter.CloneServers(mcpServers));
 
     private async Task<bool> PublishRemoteSessionRecoveryProjectionAsync(
         string conversationId,

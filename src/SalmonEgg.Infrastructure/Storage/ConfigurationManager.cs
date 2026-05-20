@@ -106,6 +106,11 @@ public sealed class ConfigurationManager : IConfigurationService
         }
 
         var config = FromYaml(yamlModel, fallbackId: id);
+        if (!HasValidMcpConfiguration(config))
+        {
+            return null;
+        }
+
         await HydrateSecretsAsync(config, yamlModel.Authentication?.Mode).ConfigureAwait(false);
         return config;
     }
@@ -150,6 +155,11 @@ public sealed class ConfigurationManager : IConfigurationService
                     }
 
                     var config = FromYaml(yamlModel, fallbackId: System.IO.Path.GetFileNameWithoutExtension(path));
+                    if (!HasValidMcpConfiguration(config))
+                    {
+                        continue;
+                    }
+
                     result.Add(config);
                 }
                 catch (Exception)
@@ -251,6 +261,7 @@ public sealed class ConfigurationManager : IConfigurationService
                     {
                         Transport = StdioMcpTransport,
                         Name = stdio.Name ?? string.Empty,
+                        Meta = McpServerJsonConverter.CloneMeta(stdio.Meta),
                         Command = stdio.Command ?? string.Empty,
                         Args = stdio.Args ?? new List<string>(),
                         Env = ToYamlNameValues(stdio.Env)
@@ -261,6 +272,7 @@ public sealed class ConfigurationManager : IConfigurationService
                     {
                         Transport = HttpMcpTransport,
                         Name = http.Name ?? string.Empty,
+                        Meta = McpServerJsonConverter.CloneMeta(http.Meta),
                         Url = http.Url ?? string.Empty,
                         Headers = ToYamlNameValues(http.Headers)
                     });
@@ -270,6 +282,7 @@ public sealed class ConfigurationManager : IConfigurationService
                     {
                         Transport = SseMcpTransport,
                         Name = sse.Name ?? string.Empty,
+                        Meta = McpServerJsonConverter.CloneMeta(sse.Meta),
                         Url = sse.Url ?? string.Empty,
                         Headers = ToYamlNameValues(sse.Headers)
                     });
@@ -297,20 +310,29 @@ public sealed class ConfigurationManager : IConfigurationService
                     servers.Add(new HttpMcpServer(
                         yamlServer.Name ?? string.Empty,
                         yamlServer.Url ?? string.Empty,
-                        FromYamlHeaders(yamlServer.Headers)));
+                        FromYamlHeaders(yamlServer.Headers))
+                    {
+                        Meta = McpServerJsonConverter.CloneMeta(yamlServer.Meta)
+                    });
                     break;
                 case SseMcpTransport:
                     servers.Add(new SseMcpServer(
                         yamlServer.Name ?? string.Empty,
                         yamlServer.Url ?? string.Empty,
-                        FromYamlHeaders(yamlServer.Headers)));
+                        FromYamlHeaders(yamlServer.Headers))
+                    {
+                        Meta = McpServerJsonConverter.CloneMeta(yamlServer.Meta)
+                    });
                     break;
                 default:
                     servers.Add(new StdioMcpServer(
                         yamlServer.Name ?? string.Empty,
                         yamlServer.Command ?? string.Empty,
                         yamlServer.Args ?? new List<string>(),
-                        FromYamlEnv(yamlServer.Env)));
+                        FromYamlEnv(yamlServer.Env))
+                    {
+                        Meta = McpServerJsonConverter.CloneMeta(yamlServer.Meta)
+                    });
                     break;
             }
         }
@@ -329,7 +351,8 @@ public sealed class ConfigurationManager : IConfigurationService
             .Select(value => new McpNameValueYamlV1
             {
                 Name = value.Name ?? string.Empty,
-                Value = value.Value ?? string.Empty
+                Value = value.Value ?? string.Empty,
+                Meta = McpServerJsonConverter.CloneMeta(value.Meta)
             })
             .ToList();
     }
@@ -345,7 +368,8 @@ public sealed class ConfigurationManager : IConfigurationService
             .Select(value => new McpNameValueYamlV1
             {
                 Name = value.Name ?? string.Empty,
-                Value = value.Value ?? string.Empty
+                Value = value.Value ?? string.Empty,
+                Meta = McpServerJsonConverter.CloneMeta(value.Meta)
             })
             .ToList();
     }
@@ -358,7 +382,10 @@ public sealed class ConfigurationManager : IConfigurationService
         }
 
         return values
-            .Select(value => new McpEnvVariable(value.Name ?? string.Empty, value.Value ?? string.Empty))
+            .Select(value => new McpEnvVariable(value.Name ?? string.Empty, value.Value ?? string.Empty)
+            {
+                Meta = McpServerJsonConverter.CloneMeta(value.Meta)
+            })
             .ToList();
     }
 
@@ -370,9 +397,17 @@ public sealed class ConfigurationManager : IConfigurationService
         }
 
         return values
-            .Select(value => new McpHttpHeader(value.Name ?? string.Empty, value.Value ?? string.Empty))
+            .Select(value => new McpHttpHeader(value.Name ?? string.Empty, value.Value ?? string.Empty)
+            {
+                Meta = McpServerJsonConverter.CloneMeta(value.Meta)
+            })
             .ToList();
     }
+
+    private static bool HasValidMcpConfiguration(ServerConfiguration config)
+        => McpServerSupportPolicy
+            .Validate(config.McpServers, McpServerSupportPolicy.SupportAllTransports)
+            .IsSupported;
 
     private async Task HydrateSecretsAsync(ServerConfiguration config, string? mode)
     {

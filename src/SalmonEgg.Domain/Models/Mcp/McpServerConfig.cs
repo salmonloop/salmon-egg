@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -17,6 +18,12 @@ namespace SalmonEgg.Domain.Models.Mcp
         /// </summary>
         [JsonPropertyName("name")]
         public string Name { get; set; } = string.Empty;
+
+        /// <summary>
+        /// ACP 保留的扩展元数据。
+        /// </summary>
+        [JsonPropertyName("_meta")]
+        public Dictionary<string, object?>? Meta { get; set; }
     }
 
     public enum McpServerTransport
@@ -173,6 +180,12 @@ namespace SalmonEgg.Domain.Models.Mcp
         public string Value { get; set; } = string.Empty;
 
         /// <summary>
+        /// ACP 保留的扩展元数据。
+        /// </summary>
+        [JsonPropertyName("_meta")]
+        public Dictionary<string, object?>? Meta { get; set; }
+
+        /// <summary>
         /// 创建新的 McpEnvVariable 实例。
         /// </summary>
         public McpEnvVariable()
@@ -207,6 +220,12 @@ namespace SalmonEgg.Domain.Models.Mcp
         /// </summary>
         [JsonPropertyName("value")]
         public string Value { get; set; } = string.Empty;
+
+        /// <summary>
+        /// ACP 保留的扩展元数据。
+        /// </summary>
+        [JsonPropertyName("_meta")]
+        public Dictionary<string, object?>? Meta { get; set; }
 
         /// <summary>
         /// 创建新的 McpHttpHeader 实例。
@@ -254,20 +273,45 @@ namespace SalmonEgg.Domain.Models.Mcp
                         stdio.Name,
                         stdio.Command,
                         stdio.Args == null ? null : new List<string>(stdio.Args),
-                        CloneEnv(stdio.Env));
+                        CloneEnv(stdio.Env))
+                    {
+                        Meta = CloneMeta(stdio.Meta)
+                    };
                 case HttpMcpServer http:
                     return new HttpMcpServer(
                         http.Name,
                         http.Url,
-                        CloneHeaders(http.Headers));
+                        CloneHeaders(http.Headers))
+                    {
+                        Meta = CloneMeta(http.Meta)
+                    };
                 case SseMcpServer sse:
                     return new SseMcpServer(
                         sse.Name,
                         sse.Url,
-                        CloneHeaders(sse.Headers));
+                        CloneHeaders(sse.Headers))
+                    {
+                        Meta = CloneMeta(sse.Meta)
+                    };
                 default:
                     throw new ArgumentException("Unsupported MCP server type.", nameof(server));
             }
+        }
+
+        public static Dictionary<string, object?>? CloneMeta(Dictionary<string, object?>? meta)
+        {
+            if (meta == null)
+            {
+                return null;
+            }
+
+            var result = new Dictionary<string, object?>(meta.Comparer);
+            foreach (var item in meta)
+            {
+                result[item.Key] = CloneMetaValue(item.Value);
+            }
+
+            return result;
         }
 
         public override McpServer? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
@@ -297,6 +341,7 @@ namespace SalmonEgg.Domain.Models.Mcp
                     writer.WriteString("name", http.Name);
                     writer.WriteString("url", http.Url);
                     WriteHeaders(writer, http.Headers);
+                    WriteMeta(writer, http.Meta);
                     writer.WriteEndObject();
                     break;
                 case SseMcpServer sse:
@@ -305,6 +350,7 @@ namespace SalmonEgg.Domain.Models.Mcp
                     writer.WriteString("name", sse.Name);
                     writer.WriteString("url", sse.Url);
                     WriteHeaders(writer, sse.Headers);
+                    WriteMeta(writer, sse.Meta);
                     writer.WriteEndObject();
                     break;
                 default:
@@ -335,7 +381,11 @@ namespace SalmonEgg.Domain.Models.Mcp
                 Name = ReadRequiredString(root, "name"),
                 Command = ReadRequiredString(root, "command"),
                 Args = ReadRequiredStringArray(root, "args"),
-                Env = ReadRequiredNameValueArray<McpEnvVariable>(root, "env", (name, value) => new McpEnvVariable(name, value))
+                Env = ReadRequiredNameValueArray<McpEnvVariable>(
+                    root,
+                    "env",
+                    (name, value, meta) => new McpEnvVariable(name, value) { Meta = meta }),
+                Meta = ReadOptionalMeta(root)
             };
         }
 
@@ -345,7 +395,11 @@ namespace SalmonEgg.Domain.Models.Mcp
             {
                 Name = ReadRequiredString(root, "name"),
                 Url = ReadRequiredString(root, "url"),
-                Headers = ReadRequiredNameValueArray<McpHttpHeader>(root, "headers", (name, value) => new McpHttpHeader(name, value))
+                Headers = ReadRequiredNameValueArray<McpHttpHeader>(
+                    root,
+                    "headers",
+                    (name, value, meta) => new McpHttpHeader(name, value) { Meta = meta }),
+                Meta = ReadOptionalMeta(root)
             };
         }
 
@@ -355,7 +409,11 @@ namespace SalmonEgg.Domain.Models.Mcp
             {
                 Name = ReadRequiredString(root, "name"),
                 Url = ReadRequiredString(root, "url"),
-                Headers = ReadRequiredNameValueArray<McpHttpHeader>(root, "headers", (name, value) => new McpHttpHeader(name, value))
+                Headers = ReadRequiredNameValueArray<McpHttpHeader>(
+                    root,
+                    "headers",
+                    (name, value, meta) => new McpHttpHeader(name, value) { Meta = meta }),
+                Meta = ReadOptionalMeta(root)
             };
         }
 
@@ -403,7 +461,7 @@ namespace SalmonEgg.Domain.Models.Mcp
         private static List<TValue> ReadRequiredNameValueArray<TValue>(
             JsonElement root,
             string propertyName,
-            Func<string, string, TValue> factory)
+            Func<string, string, Dictionary<string, object?>?, TValue> factory)
         {
             if (!root.TryGetProperty(propertyName, out var values))
             {
@@ -425,10 +483,33 @@ namespace SalmonEgg.Domain.Models.Mcp
 
                 result.Add(factory(
                     ReadRequiredString(value, "name"),
-                    ReadRequiredString(value, "value")));
+                    ReadRequiredString(value, "value"),
+                    ReadOptionalMeta(value)));
             }
 
             return result;
+        }
+
+        private static Dictionary<string, object?>? ReadOptionalMeta(JsonElement root)
+        {
+            if (!root.TryGetProperty("_meta", out var metaElement)
+                || metaElement.ValueKind == JsonValueKind.Null)
+            {
+                return null;
+            }
+
+            if (metaElement.ValueKind != JsonValueKind.Object)
+            {
+                throw new JsonException("MCP '_meta' must be an object or null.");
+            }
+
+            var meta = new Dictionary<string, object?>();
+            foreach (var property in metaElement.EnumerateObject())
+            {
+                meta[property.Name] = property.Value.Clone();
+            }
+
+            return meta;
         }
 
         private static void WriteStdio(Utf8JsonWriter writer, StdioMcpServer stdio)
@@ -456,11 +537,13 @@ namespace SalmonEgg.Domain.Models.Mcp
                     writer.WriteStartObject();
                     writer.WriteString("name", variable.Name);
                     writer.WriteString("value", variable.Value);
+                    WriteMeta(writer, variable.Meta);
                     writer.WriteEndObject();
                 }
             }
 
             writer.WriteEndArray();
+            WriteMeta(writer, stdio.Meta);
             writer.WriteEndObject();
         }
 
@@ -475,11 +558,129 @@ namespace SalmonEgg.Domain.Models.Mcp
                     writer.WriteStartObject();
                     writer.WriteString("name", header.Name);
                     writer.WriteString("value", header.Value);
+                    WriteMeta(writer, header.Meta);
                     writer.WriteEndObject();
                 }
             }
 
             writer.WriteEndArray();
+        }
+
+        private static void WriteMeta(Utf8JsonWriter writer, Dictionary<string, object?>? meta)
+        {
+            if (meta == null)
+            {
+                return;
+            }
+
+            writer.WritePropertyName("_meta");
+            WriteMetaObject(writer, meta);
+        }
+
+        private static void WriteMetaObject(Utf8JsonWriter writer, IEnumerable<KeyValuePair<string, object?>> meta)
+        {
+            writer.WriteStartObject();
+            foreach (var item in meta)
+            {
+                writer.WritePropertyName(item.Key);
+                WriteMetaValue(writer, item.Value);
+            }
+
+            writer.WriteEndObject();
+        }
+
+        private static void WriteDictionaryMetaObject(Utf8JsonWriter writer, IDictionary meta)
+        {
+            writer.WriteStartObject();
+            foreach (DictionaryEntry item in meta)
+            {
+                if (item.Key is not string key)
+                {
+                    throw new JsonException("MCP '_meta' object keys must be strings.");
+                }
+
+                writer.WritePropertyName(key);
+                WriteMetaValue(writer, item.Value);
+            }
+
+            writer.WriteEndObject();
+        }
+
+        private static void WriteMetaArray(Utf8JsonWriter writer, IEnumerable values)
+        {
+            writer.WriteStartArray();
+            foreach (var item in values)
+            {
+                WriteMetaValue(writer, item);
+            }
+
+            writer.WriteEndArray();
+        }
+
+        private static void WriteMetaValue(Utf8JsonWriter writer, object? value)
+        {
+            switch (value)
+            {
+                case null:
+                    writer.WriteNullValue();
+                    break;
+                case JsonElement element:
+                    element.WriteTo(writer);
+                    break;
+                case JsonDocument document:
+                    document.RootElement.WriteTo(writer);
+                    break;
+                case string text:
+                    writer.WriteStringValue(text);
+                    break;
+                case bool flag:
+                    writer.WriteBooleanValue(flag);
+                    break;
+                case byte number:
+                    writer.WriteNumberValue(number);
+                    break;
+                case sbyte number:
+                    writer.WriteNumberValue(number);
+                    break;
+                case short number:
+                    writer.WriteNumberValue(number);
+                    break;
+                case ushort number:
+                    writer.WriteNumberValue(number);
+                    break;
+                case int number:
+                    writer.WriteNumberValue(number);
+                    break;
+                case uint number:
+                    writer.WriteNumberValue(number);
+                    break;
+                case long number:
+                    writer.WriteNumberValue(number);
+                    break;
+                case ulong number:
+                    writer.WriteNumberValue(number);
+                    break;
+                case float number:
+                    writer.WriteNumberValue(number);
+                    break;
+                case double number:
+                    writer.WriteNumberValue(number);
+                    break;
+                case decimal number:
+                    writer.WriteNumberValue(number);
+                    break;
+                case IReadOnlyDictionary<string, object?> readOnlyDictionary:
+                    WriteMetaObject(writer, readOnlyDictionary);
+                    break;
+                case IDictionary dictionary:
+                    WriteDictionaryMetaObject(writer, dictionary);
+                    break;
+                case IEnumerable values:
+                    WriteMetaArray(writer, values);
+                    break;
+                default:
+                    throw new JsonException($"Unsupported MCP '_meta' value type: {value.GetType().FullName}");
+            }
         }
 
         private static List<McpEnvVariable>? CloneEnv(List<McpEnvVariable>? env)
@@ -492,7 +693,10 @@ namespace SalmonEgg.Domain.Models.Mcp
             var result = new List<McpEnvVariable>();
             foreach (var variable in env)
             {
-                result.Add(new McpEnvVariable(variable.Name, variable.Value));
+                result.Add(new McpEnvVariable(variable.Name, variable.Value)
+                {
+                    Meta = CloneMeta(variable.Meta)
+                });
             }
 
             return result;
@@ -508,7 +712,83 @@ namespace SalmonEgg.Domain.Models.Mcp
             var result = new List<McpHttpHeader>();
             foreach (var header in headers)
             {
-                result.Add(new McpHttpHeader(header.Name, header.Value));
+                result.Add(new McpHttpHeader(header.Name, header.Value)
+                {
+                    Meta = CloneMeta(header.Meta)
+                });
+            }
+
+            return result;
+        }
+
+        private static object? CloneMetaValue(object? value)
+        {
+            switch (value)
+            {
+                case null:
+                case string:
+                case bool:
+                case byte:
+                case sbyte:
+                case short:
+                case ushort:
+                case int:
+                case uint:
+                case long:
+                case ulong:
+                case float:
+                case double:
+                case decimal:
+                    return value;
+                case JsonElement element:
+                    return element.Clone();
+                case JsonDocument document:
+                    return document.RootElement.Clone();
+                case IReadOnlyDictionary<string, object?> readOnlyDictionary:
+                    return CloneReadOnlyMetaDictionary(readOnlyDictionary);
+                case IDictionary dictionary:
+                    return CloneMetaDictionary(dictionary);
+                case IEnumerable values:
+                    return CloneMetaArray(values);
+                default:
+                    throw new JsonException($"Unsupported MCP '_meta' value type: {value.GetType().FullName}");
+            }
+        }
+
+        private static Dictionary<string, object?> CloneReadOnlyMetaDictionary(
+            IReadOnlyDictionary<string, object?> dictionary)
+        {
+            var result = new Dictionary<string, object?>();
+            foreach (var item in dictionary)
+            {
+                result[item.Key] = CloneMetaValue(item.Value);
+            }
+
+            return result;
+        }
+
+        private static Dictionary<string, object?> CloneMetaDictionary(IDictionary dictionary)
+        {
+            var result = new Dictionary<string, object?>();
+            foreach (DictionaryEntry item in dictionary)
+            {
+                if (item.Key is not string key)
+                {
+                    throw new JsonException("MCP '_meta' object keys must be strings.");
+                }
+
+                result[key] = CloneMetaValue(item.Value);
+            }
+
+            return result;
+        }
+
+        private static List<object?> CloneMetaArray(IEnumerable values)
+        {
+            var result = new List<object?>();
+            foreach (var item in values)
+            {
+                result.Add(CloneMetaValue(item));
             }
 
             return result;

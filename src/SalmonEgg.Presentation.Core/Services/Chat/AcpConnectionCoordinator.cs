@@ -147,7 +147,7 @@ public sealed class AcpConnectionCoordinator : IAcpConnectionCoordinator
                     new SessionLoadParams(
                         sessionId,
                         sink.GetSessionCwdOrDefault(conversationId!),
-                        new List<McpServer>(sink.CurrentMcpServers)),
+                        McpServerJsonConverter.CloneServers(sink.CurrentMcpServers)),
                     cancellationToken);
                 recoveryProjection = AcpSessionRecoveryProjection.FromLoad(
                     await loadTask.WaitAsync(SessionLoadTimeout, cancellationToken).ConfigureAwait(false));
@@ -169,7 +169,7 @@ public sealed class AcpConnectionCoordinator : IAcpConnectionCoordinator
                     new SessionResumeParams(
                         sessionId,
                         sink.GetSessionCwdOrDefault(conversationId!),
-                        new List<McpServer>(sink.CurrentMcpServers)),
+                        McpServerJsonConverter.CloneServers(sink.CurrentMcpServers)),
                     cancellationToken);
                 recoveryProjection = AcpSessionRecoveryProjection.FromResume(
                     await resumeTask.WaitAsync(SessionLoadTimeout, cancellationToken).ConfigureAwait(false));

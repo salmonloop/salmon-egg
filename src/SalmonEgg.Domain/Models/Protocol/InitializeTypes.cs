@@ -494,6 +494,12 @@ namespace SalmonEgg.Domain.Models.Protocol
         public bool Sse { get; set; }
 
         /// <summary>
+        /// ACP 保留的扩展元数据。
+        /// </summary>
+        [JsonPropertyName("_meta")]
+        public Dictionary<string, object?>? Meta { get; set; }
+
+        /// <summary>
         /// 创建新的 McpCapabilities 实例。
         /// </summary>
         public McpCapabilities()
@@ -505,10 +511,15 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// </summary>
         /// <param name="http">是否支持 HTTP</param>
         /// <param name="sse">是否支持 SSE</param>
-        public McpCapabilities(bool http = false, bool sse = false)
+        /// <param name="meta">扩展元数据</param>
+        public McpCapabilities(
+            bool http = false,
+            bool sse = false,
+            Dictionary<string, object?>? meta = null)
         {
             Http = http;
             Sse = sse;
+            Meta = meta;
         }
     }
 
