@@ -27,6 +27,6 @@ public sealed class AcpProfileMcpServerProvider : IAcpMcpServerProvider
             return Array.Empty<McpServer>();
         }
 
-        return profile.McpServers;
+        return McpServerJsonConverter.CloneServers(profile.McpServers);
     }
 }

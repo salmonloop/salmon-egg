@@ -69,6 +69,18 @@ public sealed class SessionLoadTypesTests
     }
 
     [Test]
+    public void SessionResumeParams_Constructor_Should_Default_McpServers_To_Empty_Array()
+    {
+        var sessionParams = new SessionResumeParams("test-session", "/home/user/project");
+
+        Assert.That(sessionParams.McpServers, Is.Not.Null);
+        Assert.That(sessionParams.McpServers, Is.Empty);
+
+        var json = JsonSerializer.Serialize(sessionParams);
+        Assert.That(json, Does.Contain("\"mcpServers\":[]"));
+    }
+
+    [Test]
     public void SessionLoadResponse_Modes_Should_Deserialize_Standard_State_Object()
     {
         var json = """

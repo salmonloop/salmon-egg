@@ -137,21 +137,24 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         [Fact]
-        public async Task CreateSessionAsync_WhenHttpMcpServerUrlIsNotHttp_DoesNotSendProtocolRequest()
+        public async Task CreateSessionAsync_WhenHttpMcpServerUrlIsPresent_SendsProtocolRequest()
         {
+            var parser = new MessageParser();
             var client = await CreateInitializedClientAsync(
                 capabilities: new AgentCapabilities(mcpCapabilities: new McpCapabilities(http: true)));
 
-            var ex = await Assert.ThrowsAsync<AcpException>(() =>
-                client.CreateSessionAsync(new SessionNewParams(
-                    AbsoluteCwd,
-                    new List<McpServer> { new HttpMcpServer("api", "ftp://api.example.com/mcp") })));
+            SetupJsonRpcResponse(
+                "session/new",
+                JsonSerializer.SerializeToElement(new SessionNewResponse("session-123"), parser.Options),
+                parser);
 
-            Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
-            Assert.Contains("HTTP URL", ex.Message);
+            await client.CreateSessionAsync(new SessionNewParams(
+                AbsoluteCwd,
+                new List<McpServer> { new HttpMcpServer("api", "api.example.com/mcp") }));
+
             _transportMock.Verify(
                 t => t.SendMessageAsync(It.IsRegex("session/new"), It.IsAny<CancellationToken>()),
-                Times.Never);
+                Times.Once);
         }
 
         [Fact]
@@ -389,6 +392,25 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         [Fact]
+        public async Task LoadSessionAsync_WhenHttpMcpServerUnsupported_DoesNotSendProtocolRequest()
+        {
+            var client = await CreateInitializedClientAsync(
+                capabilities: new AgentCapabilities(loadSession: true));
+
+            var ex = await Assert.ThrowsAsync<AcpException>(() =>
+                client.LoadSessionAsync(new SessionLoadParams(
+                    "session-123",
+                    AbsoluteCwd,
+                    new List<McpServer> { new HttpMcpServer("api", "https://api.example.com/mcp") })));
+
+            Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
+            Assert.Contains("mcpCapabilities.http", ex.Message);
+            _transportMock.Verify(
+                t => t.SendMessageAsync(It.IsRegex("session/load"), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
         public async Task LoadSessionAsync_WhenAgentDoesNotSupportLoadSession_DoesNotSendProtocolRequest()
         {
             var client = await CreateInitializedClientAsync(
@@ -528,6 +550,28 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 client.ResumeSessionAsync(new SessionResumeParams("session-123", "relative-path")));
 
             Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
+            _transportMock.Verify(
+                t => t.SendMessageAsync(It.IsRegex("session/resume"), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
+        public async Task ResumeSessionAsync_WhenSseMcpServerUnsupported_DoesNotSendProtocolRequest()
+        {
+            var client = await CreateInitializedClientAsync(
+                capabilities: new AgentCapabilities(sessionCapabilities: new SessionCapabilities
+                {
+                    Resume = new SessionResumeCapabilities()
+                }));
+
+            var ex = await Assert.ThrowsAsync<AcpException>(() =>
+                client.ResumeSessionAsync(new SessionResumeParams(
+                    "session-123",
+                    AbsoluteCwd,
+                    new List<McpServer> { new SseMcpServer("events", "https://events.example.com/mcp") })));
+
+            Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
+            Assert.Contains("mcpCapabilities.sse", ex.Message);
             _transportMock.Verify(
                 t => t.SendMessageAsync(It.IsRegex("session/resume"), It.IsAny<CancellationToken>()),
                 Times.Never);

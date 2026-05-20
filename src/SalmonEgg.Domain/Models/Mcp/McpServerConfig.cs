@@ -229,6 +229,47 @@ namespace SalmonEgg.Domain.Models.Mcp
 
     public sealed class McpServerJsonConverter : JsonConverter<McpServer>
     {
+        public static List<McpServer> CloneServers(IEnumerable<McpServer>? servers)
+        {
+            if (servers == null)
+            {
+                return new List<McpServer>();
+            }
+
+            var result = new List<McpServer>();
+            foreach (var server in servers)
+            {
+                result.Add(CloneServer(server));
+            }
+
+            return result;
+        }
+
+        public static McpServer CloneServer(McpServer server)
+        {
+            switch (server)
+            {
+                case StdioMcpServer stdio:
+                    return new StdioMcpServer(
+                        stdio.Name,
+                        stdio.Command,
+                        stdio.Args == null ? null : new List<string>(stdio.Args),
+                        CloneEnv(stdio.Env));
+                case HttpMcpServer http:
+                    return new HttpMcpServer(
+                        http.Name,
+                        http.Url,
+                        CloneHeaders(http.Headers));
+                case SseMcpServer sse:
+                    return new SseMcpServer(
+                        sse.Name,
+                        sse.Url,
+                        CloneHeaders(sse.Headers));
+                default:
+                    throw new ArgumentException("Unsupported MCP server type.", nameof(server));
+            }
+        }
+
         public override McpServer? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
             using var document = JsonDocument.ParseValue(ref reader);
@@ -291,10 +332,10 @@ namespace SalmonEgg.Domain.Models.Mcp
         {
             return new StdioMcpServer
             {
-                Name = ReadString(root, "name"),
-                Command = ReadString(root, "command"),
-                Args = ReadStringArray(root, "args"),
-                Env = ReadNameValueArray<McpEnvVariable>(root, "env", (name, value) => new McpEnvVariable(name, value))
+                Name = ReadRequiredString(root, "name"),
+                Command = ReadRequiredString(root, "command"),
+                Args = ReadRequiredStringArray(root, "args"),
+                Env = ReadRequiredNameValueArray<McpEnvVariable>(root, "env", (name, value) => new McpEnvVariable(name, value))
             };
         }
 
@@ -302,9 +343,9 @@ namespace SalmonEgg.Domain.Models.Mcp
         {
             return new HttpMcpServer
             {
-                Name = ReadString(root, "name"),
-                Url = ReadString(root, "url"),
-                Headers = ReadNameValueArray<McpHttpHeader>(root, "headers", (name, value) => new McpHttpHeader(name, value))
+                Name = ReadRequiredString(root, "name"),
+                Url = ReadRequiredString(root, "url"),
+                Headers = ReadRequiredNameValueArray<McpHttpHeader>(root, "headers", (name, value) => new McpHttpHeader(name, value))
             };
         }
 
@@ -312,49 +353,66 @@ namespace SalmonEgg.Domain.Models.Mcp
         {
             return new SseMcpServer
             {
-                Name = ReadString(root, "name"),
-                Url = ReadString(root, "url"),
-                Headers = ReadNameValueArray<McpHttpHeader>(root, "headers", (name, value) => new McpHttpHeader(name, value))
+                Name = ReadRequiredString(root, "name"),
+                Url = ReadRequiredString(root, "url"),
+                Headers = ReadRequiredNameValueArray<McpHttpHeader>(root, "headers", (name, value) => new McpHttpHeader(name, value))
             };
         }
 
-        private static string ReadString(JsonElement root, string propertyName)
+        private static string ReadRequiredString(JsonElement root, string propertyName)
         {
-            return root.TryGetProperty(propertyName, out var value)
-                && value.ValueKind == JsonValueKind.String
-                ? value.GetString() ?? string.Empty
-                : string.Empty;
+            if (!root.TryGetProperty(propertyName, out var value))
+            {
+                throw new JsonException($"MCP server is missing required '{propertyName}'.");
+            }
+
+            if (value.ValueKind != JsonValueKind.String)
+            {
+                throw new JsonException($"MCP server '{propertyName}' must be a string.");
+            }
+
+            return value.GetString() ?? string.Empty;
         }
 
-        private static List<string> ReadStringArray(JsonElement root, string propertyName)
+        private static List<string> ReadRequiredStringArray(JsonElement root, string propertyName)
         {
-            if (!root.TryGetProperty(propertyName, out var values)
-                || values.ValueKind != JsonValueKind.Array)
+            if (!root.TryGetProperty(propertyName, out var values))
             {
-                return new List<string>();
+                throw new JsonException($"MCP server is missing required '{propertyName}'.");
+            }
+
+            if (values.ValueKind != JsonValueKind.Array)
+            {
+                throw new JsonException($"MCP server '{propertyName}' must be an array.");
             }
 
             var result = new List<string>();
             foreach (var value in values.EnumerateArray())
             {
-                if (value.ValueKind == JsonValueKind.String)
+                if (value.ValueKind != JsonValueKind.String)
                 {
-                    result.Add(value.GetString() ?? string.Empty);
+                    throw new JsonException($"MCP server '{propertyName}' entries must be strings.");
                 }
+
+                result.Add(value.GetString() ?? string.Empty);
             }
 
             return result;
         }
 
-        private static List<TValue> ReadNameValueArray<TValue>(
+        private static List<TValue> ReadRequiredNameValueArray<TValue>(
             JsonElement root,
             string propertyName,
             Func<string, string, TValue> factory)
         {
-            if (!root.TryGetProperty(propertyName, out var values)
-                || values.ValueKind != JsonValueKind.Array)
+            if (!root.TryGetProperty(propertyName, out var values))
             {
-                return new List<TValue>();
+                throw new JsonException($"MCP server is missing required '{propertyName}'.");
+            }
+
+            if (values.ValueKind != JsonValueKind.Array)
+            {
+                throw new JsonException($"MCP server '{propertyName}' must be an array.");
             }
 
             var result = new List<TValue>();
@@ -362,10 +420,12 @@ namespace SalmonEgg.Domain.Models.Mcp
             {
                 if (value.ValueKind != JsonValueKind.Object)
                 {
-                    continue;
+                    throw new JsonException($"MCP server '{propertyName}' entries must be objects.");
                 }
 
-                result.Add(factory(ReadString(value, "name"), ReadString(value, "value")));
+                result.Add(factory(
+                    ReadRequiredString(value, "name"),
+                    ReadRequiredString(value, "value")));
             }
 
             return result;
@@ -420,6 +480,38 @@ namespace SalmonEgg.Domain.Models.Mcp
             }
 
             writer.WriteEndArray();
+        }
+
+        private static List<McpEnvVariable>? CloneEnv(List<McpEnvVariable>? env)
+        {
+            if (env == null)
+            {
+                return null;
+            }
+
+            var result = new List<McpEnvVariable>();
+            foreach (var variable in env)
+            {
+                result.Add(new McpEnvVariable(variable.Name, variable.Value));
+            }
+
+            return result;
+        }
+
+        private static List<McpHttpHeader>? CloneHeaders(List<McpHttpHeader>? headers)
+        {
+            if (headers == null)
+            {
+                return null;
+            }
+
+            var result = new List<McpHttpHeader>();
+            foreach (var header in headers)
+            {
+                result.Add(new McpHttpHeader(header.Name, header.Value));
+            }
+
+            return result;
         }
     }
 }

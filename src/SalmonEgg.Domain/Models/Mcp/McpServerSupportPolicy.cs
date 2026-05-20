@@ -26,8 +26,11 @@ namespace SalmonEgg.Domain.Models.Mcp
 
     public static class McpServerSupportPolicy
     {
+        public static AgentCapabilities SupportAllTransports { get; } = new(
+            mcpCapabilities: new McpCapabilities(http: true, sse: true));
+
         public static McpServerSupportResult Validate(
-            IEnumerable<McpServer>? servers,
+            IEnumerable<McpServer?>? servers,
             AgentCapabilities? agentCapabilities)
         {
             if (servers == null)
@@ -53,7 +56,7 @@ namespace SalmonEgg.Domain.Models.Mcp
         {
             return server switch
             {
-                null => McpServerSupportResult.Supported,
+                null => McpServerSupportResult.Unsupported("MCP server entry cannot be null."),
                 StdioMcpServer stdio => ValidateStdio(stdio),
                 HttpMcpServer http when agentCapabilities?.SupportsHttp == true => ValidateHttp(http),
                 HttpMcpServer http => McpServerSupportResult.Unsupported(
@@ -95,7 +98,7 @@ namespace SalmonEgg.Domain.Models.Mcp
             }
 
             return ProtocolPathRules.IsAbsolutePath(server.Command)
-                ? McpServerSupportResult.Supported
+                ? ValidateArgsAndEnv(server)
                 : McpServerSupportResult.Unsupported($"Stdio MCP server '{ResolveName(server)}' requires an absolute command path.");
         }
 
@@ -111,9 +114,7 @@ namespace SalmonEgg.Domain.Models.Mcp
                 return McpServerSupportResult.Unsupported($"HTTP MCP server '{ResolveName(server)}' requires a URL.");
             }
 
-            return IsHttpUrl(server.Url)
-                ? McpServerSupportResult.Supported
-                : McpServerSupportResult.Unsupported($"HTTP MCP server '{ResolveName(server)}' requires an HTTP URL.");
+            return ValidateHeaders(server);
         }
 
         private static McpServerSupportResult ValidateSse(SseMcpServer server)
@@ -128,19 +129,82 @@ namespace SalmonEgg.Domain.Models.Mcp
                 return McpServerSupportResult.Unsupported($"SSE MCP server '{ResolveName(server)}' requires a URL.");
             }
 
-            return IsHttpUrl(server.Url)
-                ? McpServerSupportResult.Supported
-                : McpServerSupportResult.Unsupported($"SSE MCP server '{ResolveName(server)}' requires an HTTP URL.");
+            return ValidateHeaders(server);
         }
 
         private static string ResolveName(McpServer server)
             => string.IsNullOrWhiteSpace(server.Name) ? "<unnamed>" : server.Name;
 
-        private static bool IsHttpUrl(string url)
+        private static McpServerSupportResult ValidateArgsAndEnv(StdioMcpServer server)
         {
-            return Uri.TryCreate(url, UriKind.Absolute, out var uri)
-                && (string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase));
+            var args = server.Args ?? new List<string>();
+            for (var index = 0; index < args.Count; index++)
+            {
+                if (args[index] == null)
+                {
+                    return McpServerSupportResult.Unsupported(
+                        $"Stdio MCP server '{ResolveName(server)}' has null args[{index}].");
+                }
+            }
+
+            var env = server.Env ?? new List<McpEnvVariable>();
+            for (var index = 0; index < env.Count; index++)
+            {
+                var variable = env[index];
+                if (variable == null)
+                {
+                    return McpServerSupportResult.Unsupported(
+                        $"Stdio MCP server '{ResolveName(server)}' has null env[{index}].");
+                }
+
+                if (variable.Name == null)
+                {
+                    return McpServerSupportResult.Unsupported(
+                        $"Stdio MCP server '{ResolveName(server)}' has env[{index}] without a name.");
+                }
+
+                if (variable.Value == null)
+                {
+                    return McpServerSupportResult.Unsupported(
+                        $"Stdio MCP server '{ResolveName(server)}' has env[{index}] without a value.");
+                }
+            }
+
+            return McpServerSupportResult.Supported;
+        }
+
+        private static McpServerSupportResult ValidateHeaders(HttpMcpServer server)
+            => ValidateHeaders((McpServer)server, server.Headers);
+
+        private static McpServerSupportResult ValidateHeaders(SseMcpServer server)
+            => ValidateHeaders((McpServer)server, server.Headers);
+
+        private static McpServerSupportResult ValidateHeaders(McpServer server, IList<McpHttpHeader>? headers)
+        {
+            headers ??= new List<McpHttpHeader>();
+            for (var index = 0; index < headers.Count; index++)
+            {
+                var header = headers[index];
+                if (header == null)
+                {
+                    return McpServerSupportResult.Unsupported(
+                        $"MCP server '{ResolveName(server)}' has null headers[{index}].");
+                }
+
+                if (header.Name == null)
+                {
+                    return McpServerSupportResult.Unsupported(
+                        $"MCP server '{ResolveName(server)}' has headers[{index}] without a name.");
+                }
+
+                if (header.Value == null)
+                {
+                    return McpServerSupportResult.Unsupported(
+                        $"MCP server '{ResolveName(server)}' has headers[{index}] without a value.");
+                }
+            }
+
+            return McpServerSupportResult.Supported;
         }
     }
 }

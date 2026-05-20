@@ -249,7 +249,7 @@ public sealed class ServerConfigurationValidatorTests
             StdioCommand = "cmd",
             McpServers =
             [
-                new HttpMcpServer("api", "ftp://api.example.com/mcp")
+                new HttpMcpServer("api", string.Empty)
             ]
         };
 

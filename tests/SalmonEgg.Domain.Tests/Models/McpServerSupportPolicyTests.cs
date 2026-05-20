@@ -41,6 +41,35 @@ public sealed class McpServerSupportPolicyTests
     }
 
     [Test]
+    public void Validate_WhenServerEntryIsNull_Should_BeUnsupported()
+    {
+        var result = McpServerSupportPolicy.Validate(
+            new McpServer?[] { null },
+            McpServerSupportPolicy.SupportAllTransports);
+
+        Assert.That(result.IsSupported, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain("cannot be null"));
+    }
+
+    [Test]
+    public void Validate_StdioServer_WhenEnvNameIsNull_Should_BeUnsupported()
+    {
+        var result = McpServerSupportPolicy.Validate(
+            new List<McpServer>
+            {
+                new StdioMcpServer(
+                    "filesystem",
+                    "/usr/bin/mcp",
+                    [],
+                    [new McpEnvVariable(null!, "value")])
+            },
+            new AgentCapabilities());
+
+        Assert.That(result.IsSupported, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain("without a name"));
+    }
+
+    [Test]
     public void Validate_HttpServer_WhenAgentDoesNotAdvertiseHttp_Should_BeUnsupported()
     {
         var result = McpServerSupportPolicy.Validate(
@@ -73,14 +102,30 @@ public sealed class McpServerSupportPolicyTests
     }
 
     [Test]
-    public void Validate_HttpServer_WhenUrlIsNotHttp_Should_BeUnsupported()
+    public void Validate_HttpServer_WhenUrlIsPresent_Should_BeSupported()
     {
         var result = McpServerSupportPolicy.Validate(
-            new List<McpServer> { new HttpMcpServer("api", "ftp://api.example.com/mcp") },
+            new List<McpServer> { new HttpMcpServer("api", "api.example.com/mcp") },
+            new AgentCapabilities(mcpCapabilities: new McpCapabilities(http: true)));
+
+        Assert.That(result.IsSupported, Is.True);
+    }
+
+    [Test]
+    public void Validate_HttpServer_WhenHeaderValueMissing_Should_BeUnsupported()
+    {
+        var result = McpServerSupportPolicy.Validate(
+            new List<McpServer>
+            {
+                new HttpMcpServer(
+                    "api",
+                    "https://api.example.com/mcp",
+                    [new McpHttpHeader("Authorization", null!)])
+            },
             new AgentCapabilities(mcpCapabilities: new McpCapabilities(http: true)));
 
         Assert.That(result.IsSupported, Is.False);
-        Assert.That(result.ErrorMessage, Does.Contain("HTTP URL"));
+        Assert.That(result.ErrorMessage, Does.Contain("without a value"));
     }
 
     [Test]

@@ -88,7 +88,7 @@ public partial class ChatViewModel
 
     public void SetCurrentMcpServers(IReadOnlyList<McpServer> mcpServers)
     {
-        _currentMcpServers = mcpServers ?? Array.Empty<McpServer>();
+        _currentMcpServers = McpServerJsonConverter.CloneServers(mcpServers);
     }
 
     public Task SetIsHydratingAsync(bool isHydrating, CancellationToken cancellationToken = default)

@@ -1,7 +1,6 @@
 using FluentValidation;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Mcp;
-using SalmonEgg.Domain.Models.Protocol;
 
 namespace SalmonEgg.Application.Validators
 {
@@ -116,29 +115,9 @@ namespace SalmonEgg.Application.Validators
 
         private bool BeValidMcpServer(McpServer? server)
         {
-            return server switch
-            {
-                null => false,
-                StdioMcpServer stdio => !string.IsNullOrWhiteSpace(stdio.Name)
-                    && ProtocolPathRules.IsAbsolutePath(stdio.Command),
-                HttpMcpServer http => !string.IsNullOrWhiteSpace(http.Name)
-                    && BeValidHttpUrl(http.Url),
-                SseMcpServer sse => !string.IsNullOrWhiteSpace(sse.Name)
-                    && BeValidHttpUrl(sse.Url),
-                _ => false
-            };
-        }
-
-        private bool BeValidHttpUrl(string? url)
-        {
-            if (string.IsNullOrWhiteSpace(url))
-                return false;
-
-            if (!System.Uri.TryCreate(url, System.UriKind.Absolute, out var uri))
-                return false;
-
-            var scheme = uri.Scheme.ToLowerInvariant();
-            return scheme == "http" || scheme == "https";
+            return McpServerSupportPolicy.Validate(
+                server,
+                McpServerSupportPolicy.SupportAllTransports).IsSupported;
         }
     }
 }

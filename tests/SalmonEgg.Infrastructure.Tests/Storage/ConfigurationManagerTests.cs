@@ -153,11 +153,15 @@ public sealed class ConfigurationManagerTests : IDisposable
         Assert.Equal("filesystem", stdio.Name);
         Assert.Equal("/usr/bin/mcp-filesystem", stdio.Command);
         Assert.Equal("--stdio", Assert.Single(stdio.Args!));
-        Assert.Equal("ROOT", Assert.Single(stdio.Env!).Name);
+        var env = Assert.Single(stdio.Env!);
+        Assert.Equal("ROOT", env.Name);
+        Assert.Equal("/repo", env.Value);
 
         var http = Assert.IsType<HttpMcpServer>(loaded.McpServers[1]);
         Assert.Equal("https://api.example.com/mcp", http.Url);
-        Assert.Equal("Authorization", Assert.Single(http.Headers!).Name);
+        var header = Assert.Single(http.Headers!);
+        Assert.Equal("Authorization", header.Name);
+        Assert.Equal("Bearer token", header.Value);
 
         var sse = Assert.IsType<SseMcpServer>(loaded.McpServers[2]);
         Assert.Equal("events", sse.Name);

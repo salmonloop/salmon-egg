@@ -77,6 +77,39 @@ public sealed class SessionNewTypesTests
     }
 
     [Test]
+    public void McpServer_WhenRequiredArrayIsMissing_Should_NotDeserialize()
+    {
+        var json = """
+        {
+          "name": "test-server",
+          "command": "/usr/local/bin/node",
+          "env": []
+        }
+        """;
+
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<McpServer>(json));
+    }
+
+    [Test]
+    public void McpServer_WhenHeaderEntryValueIsMissing_Should_NotDeserialize()
+    {
+        var json = """
+        {
+          "type": "http",
+          "name": "http-api",
+          "url": "https://api.example.com/mcp",
+          "headers": [
+            {
+              "name": "Authorization"
+            }
+          ]
+        }
+        """;
+
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<McpServer>(json));
+    }
+
+    [Test]
     public void SessionNewParams_McpServers_Should_Serialize_As_Array()
     {
         // Given: A SessionNewParams with MCP servers

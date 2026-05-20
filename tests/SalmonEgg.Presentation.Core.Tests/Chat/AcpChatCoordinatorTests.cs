@@ -1194,6 +1194,44 @@ public sealed class AcpChatCoordinatorTests
     }
 
     [Fact]
+    public async Task ConnectToProfileAsync_SnapshotsMcpServersFromProfile()
+    {
+        var profile = new ServerConfiguration
+        {
+            Id = "profile-1",
+            Name = "Profile",
+            Transport = TransportType.Stdio,
+            StdioCommand = "agent.exe",
+            StdioArgs = "--serve",
+            McpServers =
+            [
+                new StdioMcpServer(
+                    "filesystem",
+                    "/usr/bin/mcp",
+                    ["--stdio"],
+                    [new McpEnvVariable("ROOT", "/repo")])
+            ]
+        };
+        var transport = new FakeTransportConfiguration();
+        var service = CreateChatService(new AgentCapabilities(loadSession: true));
+        var sink = new FakeSink();
+        var factory = new Mock<IAcpChatServiceFactory>();
+        var logger = new Mock<ILogger<AcpChatCoordinator>>();
+
+        factory
+            .Setup(x => x.CreateChatService(TransportType.Stdio, "agent.exe", "--serve", null))
+            .Returns(service.Object);
+
+        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy());
+
+        await sut.ConnectToProfileAsync(profile, transport, sink);
+        profile.McpServers.Clear();
+
+        var stdio = Assert.IsType<StdioMcpServer>(Assert.Single(sink.CurrentMcpServers));
+        Assert.Equal("/repo", Assert.Single(stdio.Env!).Value);
+    }
+
+    [Fact]
     public async Task EnsureRemoteSessionAsync_WhenSelectedProfileChangesWhilePending_UsesOriginalProfileBinding()
     {
         var service = CreateChatService();

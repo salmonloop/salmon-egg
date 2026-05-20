@@ -20,6 +20,9 @@ namespace SalmonEgg.Infrastructure.Storage;
 public sealed class ConfigurationManager : IConfigurationService
 {
     private const int CurrentSchemaVersion = 1;
+    private const string StdioMcpTransport = "stdio";
+    private const string HttpMcpTransport = "http";
+    private const string SseMcpTransport = "sse";
 
     private readonly ISecureStorage _secureStorage;
     private readonly IAppFileStore _fileStore;
@@ -38,6 +41,12 @@ public sealed class ConfigurationManager : IConfigurationService
     {
         if (config is null) throw new ArgumentNullException(nameof(config));
         if (string.IsNullOrWhiteSpace(config.Id)) throw new ArgumentException("Configuration ID cannot be empty", nameof(config));
+
+        var mcpValidation = McpServerSupportPolicy.Validate(config.McpServers, McpServerSupportPolicy.SupportAllTransports);
+        if (!mcpValidation.IsSupported)
+        {
+            throw new InvalidOperationException($"MCP server configuration is invalid: {mcpValidation.ErrorMessage}");
+        }
 
         var serverPath = GetServerYamlPath(config.Id);
         await EnsureWritableSchemaAsync(serverPath).ConfigureAwait(false);
@@ -85,12 +94,13 @@ public sealed class ConfigurationManager : IConfigurationService
             return null;
         }
 
-        if (TransportFromString(yamlModel.Transport) != TransportType.Stdio && string.IsNullOrWhiteSpace(yamlModel.ServerUrl))
+        var transport = TransportFromString(yamlModel.Transport);
+        if (transport != TransportType.Stdio && string.IsNullOrWhiteSpace(yamlModel.ServerUrl))
         {
             return null;
         }
 
-        if (TransportFromString(yamlModel.Transport) == TransportType.Stdio && string.IsNullOrWhiteSpace(yamlModel.StdioCommand))
+        if (transport == TransportType.Stdio && string.IsNullOrWhiteSpace(yamlModel.StdioCommand))
         {
             return null;
         }
@@ -239,7 +249,7 @@ public sealed class ConfigurationManager : IConfigurationService
                 case StdioMcpServer stdio:
                     yamlServers.Add(new McpServerYamlV1
                     {
-                        Transport = "stdio",
+                        Transport = StdioMcpTransport,
                         Name = stdio.Name ?? string.Empty,
                         Command = stdio.Command ?? string.Empty,
                         Args = stdio.Args ?? new List<string>(),
@@ -249,7 +259,7 @@ public sealed class ConfigurationManager : IConfigurationService
                 case HttpMcpServer http:
                     yamlServers.Add(new McpServerYamlV1
                     {
-                        Transport = "http",
+                        Transport = HttpMcpTransport,
                         Name = http.Name ?? string.Empty,
                         Url = http.Url ?? string.Empty,
                         Headers = ToYamlNameValues(http.Headers)
@@ -258,7 +268,7 @@ public sealed class ConfigurationManager : IConfigurationService
                 case SseMcpServer sse:
                     yamlServers.Add(new McpServerYamlV1
                     {
-                        Transport = "sse",
+                        Transport = SseMcpTransport,
                         Name = sse.Name ?? string.Empty,
                         Url = sse.Url ?? string.Empty,
                         Headers = ToYamlNameValues(sse.Headers)
@@ -283,13 +293,13 @@ public sealed class ConfigurationManager : IConfigurationService
             var transport = (yamlServer.Transport ?? "stdio").Trim().ToLowerInvariant();
             switch (transport)
             {
-                case "http":
+                case HttpMcpTransport:
                     servers.Add(new HttpMcpServer(
                         yamlServer.Name ?? string.Empty,
                         yamlServer.Url ?? string.Empty,
                         FromYamlHeaders(yamlServer.Headers)));
                     break;
-                case "sse":
+                case SseMcpTransport:
                     servers.Add(new SseMcpServer(
                         yamlServer.Name ?? string.Empty,
                         yamlServer.Url ?? string.Empty,
