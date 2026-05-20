@@ -10,7 +10,7 @@ namespace SalmonEgg.Domain.Tests.Protocol;
 public sealed class SessionLoadTypesTests
 {
     [Test]
-    public void SessionLoadParams_McpServers_Should_Serialize_With_TypeDiscriminator()
+    public void SessionLoadParams_StdioMcpServers_Should_Serialize_StableProtocolShape()
     {
         var sessionParams = new SessionLoadParams
         {
@@ -18,7 +18,7 @@ public sealed class SessionLoadTypesTests
             Cwd = "/home/user/project",
             McpServers =
             [
-                new StdioMcpServer("test-server", "node", ["server.js"])
+                new StdioMcpServer("test-server", "/usr/local/bin/node", ["server.js"])
             ]
         };
 
@@ -27,7 +27,8 @@ public sealed class SessionLoadTypesTests
 
         Assert.That(parsed.RootElement.TryGetProperty("mcpServers", out var mcpServers), Is.True);
         Assert.That(mcpServers.ValueKind, Is.EqualTo(JsonValueKind.Array));
-        Assert.That(mcpServers[0].GetProperty("type").GetString(), Is.EqualTo("stdio"));
+        Assert.That(mcpServers[0].TryGetProperty("type", out _), Is.False);
+        Assert.That(mcpServers[0].GetProperty("command").GetString(), Is.EqualTo("/usr/local/bin/node"));
     }
 
     [Test]
@@ -40,7 +41,7 @@ public sealed class SessionLoadTypesTests
             Cwd = "/home/user/project",
             McpServers = new List<McpServer>
             {
-                new StdioMcpServer("test-server", "node", new List<string> { "server.js" })
+                new StdioMcpServer("test-server", "/usr/local/bin/node", new List<string> { "server.js" })
             }
         };
 

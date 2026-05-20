@@ -10,6 +10,7 @@ using SalmonEgg.Domain.Interfaces;
 using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Domain.Models.Content;
 using SalmonEgg.Domain.Models.JsonRpc;
+using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Models.Plan;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Models.Session;
@@ -263,6 +264,7 @@ namespace SalmonEgg.Infrastructure.Client
         {
             EnsureInitialized();
             ValidateRequiredAbsolutePath(@params.Cwd, "cwd", "session/new");
+            EnsureMcpServersSupported(@params.McpServers, "session/new");
 
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),
@@ -295,6 +297,7 @@ namespace SalmonEgg.Infrastructure.Client
         {
             EnsureInitialized();
             ValidateRequiredAbsolutePath(@params.Cwd, "cwd", "session/load");
+            EnsureMcpServersSupported(@params.McpServers, "session/load");
 
             if (!SupportsSessionLoad)
             {
@@ -337,6 +340,7 @@ namespace SalmonEgg.Infrastructure.Client
         {
             EnsureInitialized();
             ValidateRequiredAbsolutePath(@params.Cwd, "cwd", "session/resume");
+            EnsureMcpServersSupported(@params.McpServers, "session/resume");
 
             if (!SupportsSessionResume)
             {
@@ -976,6 +980,19 @@ namespace SalmonEgg.Infrastructure.Client
 
         private bool SupportsAdvertisedAskUserExtension(string method)
             => _clientCapabilities?.SupportsExtension(method) == true;
+
+        private void EnsureMcpServersSupported(IEnumerable<McpServer>? mcpServers, string method)
+        {
+            var result = McpServerSupportPolicy.Validate(mcpServers, _agentCapabilities);
+            if (result.IsSupported)
+            {
+                return;
+            }
+
+            throw new AcpException(
+                JsonRpcErrorCode.InvalidParams,
+                $"{method} contains unsupported MCP server configuration: {result.ErrorMessage}");
+        }
 
         private void RejectUnsupportedClientRequest(JsonRpcRequest request)
         {

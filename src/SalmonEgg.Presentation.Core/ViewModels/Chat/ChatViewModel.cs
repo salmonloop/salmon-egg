@@ -135,6 +135,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly ObservableCollection<SessionModeViewModel> _newSessionDraftModeOptions = new();
     private readonly SemaphoreSlim _newSessionDraftGate = new(1, 1);
     private IChatService? _chatService;
+    private IReadOnlyList<McpServer> _currentMcpServers = Array.Empty<McpServer>();
     private readonly IUiDispatcher _uiDispatcher;
     private readonly IConversationPreviewStore _previewStore;
     private readonly IPlatformShellService _platformShell;
@@ -2778,10 +2779,19 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         public bool IsInitialized => _owner.IsInitialized;
         public string? CurrentRemoteSessionId => _owner.CurrentRemoteSessionId;
         public string? SelectedProfileId => _owner.SelectedProfileId;
+        public IReadOnlyList<McpServer> CurrentMcpServers => _owner.CurrentMcpServers;
         public string? ConnectionInstanceId => _owner.ConnectionInstanceId;
         public long ConnectionGeneration => _owner.ConnectionGeneration;
         public IUiDispatcher Dispatcher => _owner.Dispatcher;
         public IConversationBindingCommands ConversationBindingCommands => _bindingCommands;
+
+        public void SetCurrentMcpServers(IReadOnlyList<McpServer> mcpServers)
+        {
+            if (CanMutate())
+            {
+                _owner.SetCurrentMcpServers(mcpServers);
+            }
+        }
 
         public ValueTask<ConversationRemoteBindingState?> GetCurrentRemoteBindingAsync(CancellationToken cancellationToken = default)
             => _owner.GetCurrentRemoteBindingAsync(cancellationToken);

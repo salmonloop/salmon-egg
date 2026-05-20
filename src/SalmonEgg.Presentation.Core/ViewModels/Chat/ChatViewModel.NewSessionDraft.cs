@@ -97,7 +97,7 @@ public partial class ChatViewModel
             try
             {
                 response = await chatService.CreateSessionAsync(
-                    new SessionNewParams(normalizedCwd, new List<McpServer>())).ConfigureAwait(false);
+                    new SessionNewParams(normalizedCwd, new List<McpServer>(CurrentMcpServers))).ConfigureAwait(false);
             }
             catch (Exception ex) when (ChatAuthenticationCoordinator.IsAuthenticationRequiredError(ex))
             {
@@ -108,7 +108,7 @@ public partial class ChatViewModel
                 }
 
                 response = await chatService.CreateSessionAsync(
-                    new SessionNewParams(normalizedCwd, new List<McpServer>())).ConfigureAwait(false);
+                    new SessionNewParams(normalizedCwd, new List<McpServer>(CurrentMcpServers))).ConfigureAwait(false);
             }
 
             if (cancellationToken.IsCancellationRequested)

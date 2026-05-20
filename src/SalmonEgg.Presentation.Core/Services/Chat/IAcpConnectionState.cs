@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using System.Threading;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Models.Protocol;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
@@ -56,6 +57,12 @@ public interface IAcpChatCoordinatorSink : IAcpConnectionState
     string? CurrentRemoteSessionId => null;
 
     string? SelectedProfileId => null;
+
+    IReadOnlyList<McpServer> CurrentMcpServers => Array.Empty<McpServer>();
+
+    void SetCurrentMcpServers(IReadOnlyList<McpServer> mcpServers)
+    {
+    }
 
     long ConnectionGeneration => 0;
 

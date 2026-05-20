@@ -1,5 +1,7 @@
 using FluentValidation;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.Domain.Models.Mcp;
+using SalmonEgg.Domain.Models.Protocol;
 
 namespace SalmonEgg.Application.Validators
 {
@@ -74,6 +76,10 @@ namespace SalmonEgg.Application.Validators
                     .Must(BeValidProxyUrl)
                     .WithMessage("Invalid proxy URL format");
             });
+
+            RuleForEach(x => x.McpServers)
+                .Must(BeValidMcpServer)
+                .WithMessage("MCP server configuration is invalid");
         }
 
         /// <summary>
@@ -104,6 +110,33 @@ namespace SalmonEgg.Application.Validators
                 return false;
 
             // 代理通常使用 HTTP 或 HTTPS
+            var scheme = uri.Scheme.ToLowerInvariant();
+            return scheme == "http" || scheme == "https";
+        }
+
+        private bool BeValidMcpServer(McpServer? server)
+        {
+            return server switch
+            {
+                null => false,
+                StdioMcpServer stdio => !string.IsNullOrWhiteSpace(stdio.Name)
+                    && ProtocolPathRules.IsAbsolutePath(stdio.Command),
+                HttpMcpServer http => !string.IsNullOrWhiteSpace(http.Name)
+                    && BeValidHttpUrl(http.Url),
+                SseMcpServer sse => !string.IsNullOrWhiteSpace(sse.Name)
+                    && BeValidHttpUrl(sse.Url),
+                _ => false
+            };
+        }
+
+        private bool BeValidHttpUrl(string? url)
+        {
+            if (string.IsNullOrWhiteSpace(url))
+                return false;
+
+            if (!System.Uri.TryCreate(url, System.UriKind.Absolute, out var uri))
+                return false;
+
             var scheme = uri.Scheme.ToLowerInvariant();
             return scheme == "http" || scheme == "https";
         }

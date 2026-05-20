@@ -10,6 +10,7 @@ using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Content;
 using SalmonEgg.Domain.Models.JsonRpc;
+using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Models.Plan;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Models.Session;
@@ -1124,6 +1125,75 @@ public sealed class AcpChatCoordinatorTests
     }
 
     [Fact]
+    public async Task EnsureRemoteSessionAsync_UsesCurrentMcpServers()
+    {
+        var service = CreateChatService();
+        var sink = new FakeSink
+        {
+            CurrentChatService = service.Object,
+            IsConnected = true,
+            IsInitialized = true,
+            IsSessionActive = true,
+            CurrentSessionId = "local-session-1",
+            ActiveSessionCwd = @"C:\repo\demo",
+            SelectedProfileId = "profile-1",
+            CurrentMcpServers =
+            [
+                new HttpMcpServer("api", "https://api.example.com/mcp")
+            ]
+        };
+        var factory = new Mock<IAcpChatServiceFactory>();
+        var logger = new Mock<ILogger<AcpChatCoordinator>>();
+        SessionNewParams? capturedParams = null;
+
+        service
+            .Setup(x => x.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+            .Callback<SessionNewParams>(parameters => capturedParams = parameters)
+            .ReturnsAsync(new SessionNewResponse("remote-session-1"));
+
+        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy());
+
+        await sut.EnsureRemoteSessionAsync(sink, _ => Task.FromResult(true));
+
+        Assert.NotNull(capturedParams);
+        var http = Assert.IsType<HttpMcpServer>(Assert.Single(capturedParams!.McpServers));
+        Assert.Equal("api", http.Name);
+    }
+
+    [Fact]
+    public async Task ConnectToProfileAsync_LoadsMcpServersFromProfileProvider()
+    {
+        var profile = new ServerConfiguration
+        {
+            Id = "profile-1",
+            Name = "Profile",
+            Transport = TransportType.Stdio,
+            StdioCommand = "agent.exe",
+            StdioArgs = "--serve",
+            McpServers =
+            [
+                new StdioMcpServer("filesystem", "/usr/bin/mcp", ["--stdio"])
+            ]
+        };
+        var transport = new FakeTransportConfiguration();
+        var service = CreateChatService(new AgentCapabilities(loadSession: true));
+        var sink = new FakeSink();
+        var factory = new Mock<IAcpChatServiceFactory>();
+        var logger = new Mock<ILogger<AcpChatCoordinator>>();
+
+        factory
+            .Setup(x => x.CreateChatService(TransportType.Stdio, "agent.exe", "--serve", null))
+            .Returns(service.Object);
+
+        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy());
+
+        await sut.ConnectToProfileAsync(profile, transport, sink);
+
+        var stdio = Assert.IsType<StdioMcpServer>(Assert.Single(sink.CurrentMcpServers));
+        Assert.Equal("filesystem", stdio.Name);
+    }
+
+    [Fact]
     public async Task EnsureRemoteSessionAsync_WhenSelectedProfileChangesWhilePending_UsesOriginalProfileBinding()
     {
         var service = CreateChatService();
@@ -1992,6 +2062,7 @@ public sealed class AcpChatCoordinatorTests
         public string? CurrentSessionId { get; set; }
         public string? CurrentRemoteSessionId { get; set; }
         public string? SelectedProfileId { get; set; }
+        public IReadOnlyList<McpServer> CurrentMcpServers { get; set; } = Array.Empty<McpServer>();
         public string? ConnectionInstanceId { get; set; }
         public IUiDispatcher Dispatcher { get; set; } = new ImmediateUiDispatcher();
         public long ConnectionGeneration { get; set; }
@@ -2013,6 +2084,11 @@ public sealed class AcpChatCoordinatorTests
         public void SelectProfile(ServerConfiguration profile)
         {
             SelectedProfileId = profile.Id;
+        }
+
+        public void SetCurrentMcpServers(IReadOnlyList<McpServer> mcpServers)
+        {
+            CurrentMcpServers = mcpServers;
         }
 
         public void ReplaceChatService(IChatService? chatService)

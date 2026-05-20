@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Infrastructure.Storage;
 using Xunit;
 
@@ -116,6 +117,50 @@ public sealed class ConfigurationManagerTests : IDisposable
         Assert.Contains("transport: stdio", yaml, StringComparison.Ordinal);
         Assert.Contains("stdio_command: ssh", yaml, StringComparison.Ordinal);
         Assert.Contains("stdio_args: -T -o BatchMode=yes user@host /opt/acp/bin/agent stdio", yaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SaveConfigurationAsync_WithMcpServers_WritesYamlAndLoadsBack()
+    {
+        var config = CreateTestConfiguration("mcp-servers-001");
+        config.McpServers =
+        [
+            new StdioMcpServer(
+                "filesystem",
+                "/usr/bin/mcp-filesystem",
+                ["--stdio"],
+                [new McpEnvVariable("ROOT", "/repo")]),
+            new HttpMcpServer(
+                "api",
+                "https://api.example.com/mcp",
+                [new McpHttpHeader("Authorization", "Bearer token")]),
+            new SseMcpServer("events", "https://events.example.com/mcp")
+        ];
+
+        await _configManager.SaveConfigurationAsync(config);
+
+        var yaml = await File.ReadAllTextAsync(GetServerYamlPath(config.Id));
+        Assert.Contains("mcp_servers:", yaml, StringComparison.Ordinal);
+        Assert.Contains("transport: stdio", yaml, StringComparison.Ordinal);
+        Assert.Contains("transport: http", yaml, StringComparison.Ordinal);
+        Assert.Contains("transport: sse", yaml, StringComparison.Ordinal);
+
+        var loaded = await _configManager.LoadConfigurationAsync(config.Id);
+        Assert.NotNull(loaded);
+        Assert.Equal(3, loaded!.McpServers.Count);
+
+        var stdio = Assert.IsType<StdioMcpServer>(loaded.McpServers[0]);
+        Assert.Equal("filesystem", stdio.Name);
+        Assert.Equal("/usr/bin/mcp-filesystem", stdio.Command);
+        Assert.Equal("--stdio", Assert.Single(stdio.Args!));
+        Assert.Equal("ROOT", Assert.Single(stdio.Env!).Name);
+
+        var http = Assert.IsType<HttpMcpServer>(loaded.McpServers[1]);
+        Assert.Equal("https://api.example.com/mcp", http.Url);
+        Assert.Equal("Authorization", Assert.Single(http.Headers!).Name);
+
+        var sse = Assert.IsType<SseMcpServer>(loaded.McpServers[2]);
+        Assert.Equal("events", sse.Name);
     }
 
     [Fact]

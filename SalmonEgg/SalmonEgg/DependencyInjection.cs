@@ -254,6 +254,7 @@ public static class DependencyInjection
         services.AddSingleton<IAcpSessionCommandOrchestrator>(sp =>
             new AcpSessionCommandOrchestrator(
                 sp.GetRequiredService<ILogger<AcpSessionCommandOrchestrator>>()));
+        services.AddSingleton<IAcpMcpServerProvider>(AcpProfileMcpServerProvider.Instance);
 
         services.AddSingleton<IShellLayoutStore>(sp =>
         {
@@ -341,7 +342,8 @@ public static class DependencyInjection
                 sp.GetRequiredService<IAcpConnectionSessionCleaner>(),
                 sp.GetRequiredService<IAcpConnectionPoolManager>(),
                 sp.GetRequiredService<IAcpConnectionDependencySnapshotProvider>(),
-                sp.GetRequiredService<IAcpSessionCommandOrchestrator>());
+                sp.GetRequiredService<IAcpSessionCommandOrchestrator>(),
+                sp.GetRequiredService<IAcpMcpServerProvider>());
         });
         services.AddSingleton<IErrorRecoveryService>(sp =>
         {
@@ -350,7 +352,8 @@ public static class DependencyInjection
             return new ErrorRecoveryService(
                 () => sp.GetRequiredService<ChatViewModel>().CurrentChatService,
                 pathValidator,
-                errorLogger);
+                errorLogger,
+                () => sp.GetRequiredService<ChatViewModel>().CurrentMcpServers);
         });
 
         services.AddSingleton(sp =>

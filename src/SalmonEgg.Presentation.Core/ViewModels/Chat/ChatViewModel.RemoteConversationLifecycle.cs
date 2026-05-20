@@ -84,6 +84,13 @@ public partial class ChatViewModel
 
     public string? SelectedProfileId => _selectedProfileIdFromStore;
 
+    public IReadOnlyList<McpServer> CurrentMcpServers => _currentMcpServers;
+
+    public void SetCurrentMcpServers(IReadOnlyList<McpServer> mcpServers)
+    {
+        _currentMcpServers = mcpServers ?? Array.Empty<McpServer>();
+    }
+
     public Task SetIsHydratingAsync(bool isHydrating, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -1941,7 +1948,7 @@ public partial class ChatViewModel
 
         var requestToken = request.Token;
         var resumeTask = chatService.ResumeSessionAsync(
-            CreateSessionResumeParams(remoteSessionId, cwd),
+            CreateSessionResumeParams(remoteSessionId, cwd, CurrentMcpServers),
             requestToken);
         request.TrackTransportTask(resumeTask);
         _ = ObserveRemoteSessionRecoveryTransportTaskAsync(resumeTask, recoveryMode, remoteSessionId);
@@ -1982,7 +1989,7 @@ public partial class ChatViewModel
     {
         var requestToken = request.Token;
         var loadTask = chatService.LoadSessionAsync(
-            CreateSessionLoadParams(remoteSessionId, cwd),
+            CreateSessionLoadParams(remoteSessionId, cwd, CurrentMcpServers),
             requestToken);
         request.TrackTransportTask(loadTask);
 
@@ -2037,11 +2044,17 @@ public partial class ChatViewModel
         }
     }
 
-    private static SessionLoadParams CreateSessionLoadParams(string remoteSessionId, string cwd)
-        => new(remoteSessionId, cwd, new List<McpServer>());
+    private static SessionLoadParams CreateSessionLoadParams(
+        string remoteSessionId,
+        string cwd,
+        IReadOnlyList<McpServer> mcpServers)
+        => new(remoteSessionId, cwd, new List<McpServer>(mcpServers));
 
-    private static SessionResumeParams CreateSessionResumeParams(string remoteSessionId, string cwd)
-        => new(remoteSessionId, cwd, new List<McpServer>());
+    private static SessionResumeParams CreateSessionResumeParams(
+        string remoteSessionId,
+        string cwd,
+        IReadOnlyList<McpServer> mcpServers)
+        => new(remoteSessionId, cwd, new List<McpServer>(mcpServers));
 
     private async Task<bool> PublishRemoteSessionRecoveryProjectionAsync(
         string conversationId,

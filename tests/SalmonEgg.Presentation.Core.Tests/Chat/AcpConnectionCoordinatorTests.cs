@@ -8,6 +8,7 @@ using Moq;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Content;
+using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Models.Plan;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Models.Session;
@@ -114,6 +115,37 @@ public sealed class AcpConnectionCoordinatorTests
     }
 
     [Fact]
+    public async Task ResyncAsync_LoadSessionIncludesCurrentMcpServers()
+    {
+        var inner = new FakeChatService
+        {
+            AgentCapabilities = new AgentCapabilities(loadSession: true)
+        };
+        inner.OnLoadSessionAsync = (_, _) => Task.FromResult(SessionLoadResponse.Completed);
+
+        var sink = new FakeSink
+        {
+            CurrentChatService = inner,
+            CurrentSessionId = "conv-1",
+            CurrentRemoteSessionId = "remote-1",
+            IsSessionActive = true,
+            CurrentMcpServers =
+            [
+                new HttpMcpServer("api", "https://api.example.com/mcp")
+            ]
+        };
+
+        var coordinator = new AcpConnectionCoordinator(
+            Mock.Of<IChatConnectionStore>(),
+            Mock.Of<ILogger<AcpConnectionCoordinator>>());
+
+        await coordinator.ResyncAsync(sink);
+
+        var http = Assert.IsType<HttpMcpServer>(Assert.Single(inner.LastLoadParams!.McpServers));
+        Assert.Equal("api", http.Name);
+    }
+
+    [Fact]
     public async Task ResyncAsync_WhenOnlyResumeIsSupported_ResumesWithoutResettingProjection()
     {
         var expectedResponse = new SessionResumeResponse(
@@ -154,6 +186,40 @@ public sealed class AcpConnectionCoordinatorTests
         Assert.NotNull(sink.AppliedLoadResponse);
         Assert.Equal("agent", sink.AppliedLoadResponse!.Modes?.CurrentModeId);
         Assert.Equal(1, sink.MarkConversationRemoteHydratedCalls);
+    }
+
+    [Fact]
+    public async Task ResyncAsync_ResumeSessionIncludesCurrentMcpServers()
+    {
+        var inner = new FakeChatService
+        {
+            AgentCapabilities = new AgentCapabilities(sessionCapabilities: new SessionCapabilities
+            {
+                Resume = new SessionResumeCapabilities()
+            }),
+            OnResumeSessionAsync = (_, _) => Task.FromResult(SessionResumeResponse.Completed)
+        };
+
+        var sink = new FakeSink
+        {
+            CurrentChatService = inner,
+            CurrentSessionId = "conv-1",
+            CurrentRemoteSessionId = "remote-1",
+            IsSessionActive = true,
+            CurrentMcpServers =
+            [
+                new SseMcpServer("events", "https://events.example.com/mcp")
+            ]
+        };
+
+        var coordinator = new AcpConnectionCoordinator(
+            Mock.Of<IChatConnectionStore>(),
+            Mock.Of<ILogger<AcpConnectionCoordinator>>());
+
+        await coordinator.ResyncAsync(sink);
+
+        var sse = Assert.IsType<SseMcpServer>(Assert.Single(inner.LastResumeParams!.McpServers));
+        Assert.Equal("events", sse.Name);
     }
 
     [Fact]
@@ -471,6 +537,8 @@ public sealed class AcpConnectionCoordinatorTests
         public string? CurrentRemoteSessionId { get; set; }
 
         public string? SelectedProfileId { get; set; }
+
+        public IReadOnlyList<McpServer> CurrentMcpServers { get; set; } = Array.Empty<McpServer>();
 
         public string? ConnectionInstanceId { get; set; }
 

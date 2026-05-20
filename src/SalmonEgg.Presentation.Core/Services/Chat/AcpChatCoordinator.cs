@@ -27,6 +27,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
     private readonly IAcpConnectionPoolManager _connectionPoolManager;
     private readonly IAcpConnectionDependencySnapshotProvider _connectionDependencySnapshotProvider;
     private readonly IAcpSessionCommandOrchestrator _sessionCommandOrchestrator;
+    private readonly IAcpMcpServerProvider _mcpServerProvider;
     private readonly ITransportSupportPolicy _transportSupportPolicy;
     private readonly ILogger<AcpChatCoordinator> _logger;
     private readonly int _sessionUpdateBufferLimit;
@@ -44,6 +45,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         IAcpConnectionPoolManager? connectionPoolManager = null,
         IAcpConnectionDependencySnapshotProvider? connectionDependencySnapshotProvider = null,
         IAcpSessionCommandOrchestrator? sessionCommandOrchestrator = null,
+        IAcpMcpServerProvider? mcpServerProvider = null,
         int sessionUpdateBufferLimit = DefaultSessionUpdateBufferLimit)
     {
         _chatServiceFactory = chatServiceFactory ?? throw new ArgumentNullException(nameof(chatServiceFactory));
@@ -70,6 +72,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             ?? NoopAcpConnectionDependencySnapshotProvider.Instance;
         _sessionCommandOrchestrator = sessionCommandOrchestrator ?? new AcpSessionCommandOrchestrator(
             NullLogger<AcpSessionCommandOrchestrator>.Instance);
+        _mcpServerProvider = mcpServerProvider ?? AcpProfileMcpServerProvider.Instance;
         _transportSupportPolicy = transportSupportPolicy ?? throw new ArgumentNullException(nameof(transportSupportPolicy));
         _sessionUpdateBufferLimit = sessionUpdateBufferLimit;
     }
@@ -105,6 +108,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         ArgumentNullException.ThrowIfNull(sink);
 
         EnsureTransportSupported(profile.Transport);
+        sink.SetCurrentMcpServers(_mcpServerProvider.GetMcpServers(profile, cancellationToken));
         await sink.SelectProfileAsync(profile, cancellationToken).ConfigureAwait(false);
         ApplyProfileToTransportConfiguration(profile, transportConfiguration);
 

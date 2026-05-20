@@ -91,7 +91,7 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
 
         var sessionParams = new SessionNewParams(
             sink.GetActiveSessionCwdOrDefault(),
-            new List<McpServer>());
+            new List<McpServer>(sink.CurrentMcpServers));
 
         SessionNewResponse response;
         try

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -8,10 +9,7 @@ namespace SalmonEgg.Domain.Models.Mcp
     /// MCP 服务器配置类。
     /// 支持多种传输类型（stdio、http、sse）的配置。
     /// </summary>
-    [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
-    [JsonDerivedType(typeof(StdioMcpServer), "stdio")]
-    [JsonDerivedType(typeof(HttpMcpServer), "http")]
-    [JsonDerivedType(typeof(SseMcpServer), "sse")]
+    [JsonConverter(typeof(McpServerJsonConverter))]
     public abstract class McpServer
     {
         /// <summary>
@@ -19,6 +17,13 @@ namespace SalmonEgg.Domain.Models.Mcp
         /// </summary>
         [JsonPropertyName("name")]
         public string Name { get; set; } = string.Empty;
+    }
+
+    public enum McpServerTransport
+    {
+        Stdio,
+        Http,
+        Sse
     }
 
     /// <summary>
@@ -43,7 +48,7 @@ namespace SalmonEgg.Domain.Models.Mcp
         /// 环境变量配置。
         /// </summary>
         [JsonPropertyName("env")]
-        public Dictionary<string, string>? Env { get; set; }
+        public List<McpEnvVariable>? Env { get; set; }
 
         /// <summary>
         /// 创建新的 StdioMcpServer 实例。
@@ -59,7 +64,11 @@ namespace SalmonEgg.Domain.Models.Mcp
         /// <param name="command">命令</param>
         /// <param name="args">参数列表</param>
         /// <param name="env">环境变量</param>
-        public StdioMcpServer(string name, string command, List<string>? args = null, Dictionary<string, string>? env = null)
+        public StdioMcpServer(
+            string name,
+            string command,
+            List<string>? args = null,
+            List<McpEnvVariable>? env = null)
         {
             Name = name;
             Command = command;
@@ -215,6 +224,202 @@ namespace SalmonEgg.Domain.Models.Mcp
         {
             Name = name;
             Value = value;
+        }
+    }
+
+    public sealed class McpServerJsonConverter : JsonConverter<McpServer>
+    {
+        public override McpServer? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            using var document = JsonDocument.ParseValue(ref reader);
+            var root = document.RootElement;
+            var transport = ResolveTransport(root);
+
+            return transport switch
+            {
+                McpServerTransport.Http => ReadHttp(root),
+                McpServerTransport.Sse => ReadSse(root),
+                _ => ReadStdio(root)
+            };
+        }
+
+        public override void Write(Utf8JsonWriter writer, McpServer value, JsonSerializerOptions options)
+        {
+            switch (value)
+            {
+                case StdioMcpServer stdio:
+                    WriteStdio(writer, stdio);
+                    break;
+                case HttpMcpServer http:
+                    writer.WriteStartObject();
+                    writer.WriteString("type", "http");
+                    writer.WriteString("name", http.Name);
+                    writer.WriteString("url", http.Url);
+                    WriteHeaders(writer, http.Headers);
+                    writer.WriteEndObject();
+                    break;
+                case SseMcpServer sse:
+                    writer.WriteStartObject();
+                    writer.WriteString("type", "sse");
+                    writer.WriteString("name", sse.Name);
+                    writer.WriteString("url", sse.Url);
+                    WriteHeaders(writer, sse.Headers);
+                    writer.WriteEndObject();
+                    break;
+                default:
+                    throw new JsonException($"Unsupported MCP server type: {value.GetType().FullName}");
+            }
+        }
+
+        private static McpServerTransport ResolveTransport(JsonElement root)
+        {
+            if (!root.TryGetProperty("type", out var typeElement)
+                || typeElement.ValueKind != JsonValueKind.String)
+            {
+                return McpServerTransport.Stdio;
+            }
+
+            return typeElement.GetString() switch
+            {
+                "http" => McpServerTransport.Http,
+                "sse" => McpServerTransport.Sse,
+                _ => throw new JsonException("Unknown MCP server transport type.")
+            };
+        }
+
+        private static StdioMcpServer ReadStdio(JsonElement root)
+        {
+            return new StdioMcpServer
+            {
+                Name = ReadString(root, "name"),
+                Command = ReadString(root, "command"),
+                Args = ReadStringArray(root, "args"),
+                Env = ReadNameValueArray<McpEnvVariable>(root, "env", (name, value) => new McpEnvVariable(name, value))
+            };
+        }
+
+        private static HttpMcpServer ReadHttp(JsonElement root)
+        {
+            return new HttpMcpServer
+            {
+                Name = ReadString(root, "name"),
+                Url = ReadString(root, "url"),
+                Headers = ReadNameValueArray<McpHttpHeader>(root, "headers", (name, value) => new McpHttpHeader(name, value))
+            };
+        }
+
+        private static SseMcpServer ReadSse(JsonElement root)
+        {
+            return new SseMcpServer
+            {
+                Name = ReadString(root, "name"),
+                Url = ReadString(root, "url"),
+                Headers = ReadNameValueArray<McpHttpHeader>(root, "headers", (name, value) => new McpHttpHeader(name, value))
+            };
+        }
+
+        private static string ReadString(JsonElement root, string propertyName)
+        {
+            return root.TryGetProperty(propertyName, out var value)
+                && value.ValueKind == JsonValueKind.String
+                ? value.GetString() ?? string.Empty
+                : string.Empty;
+        }
+
+        private static List<string> ReadStringArray(JsonElement root, string propertyName)
+        {
+            if (!root.TryGetProperty(propertyName, out var values)
+                || values.ValueKind != JsonValueKind.Array)
+            {
+                return new List<string>();
+            }
+
+            var result = new List<string>();
+            foreach (var value in values.EnumerateArray())
+            {
+                if (value.ValueKind == JsonValueKind.String)
+                {
+                    result.Add(value.GetString() ?? string.Empty);
+                }
+            }
+
+            return result;
+        }
+
+        private static List<TValue> ReadNameValueArray<TValue>(
+            JsonElement root,
+            string propertyName,
+            Func<string, string, TValue> factory)
+        {
+            if (!root.TryGetProperty(propertyName, out var values)
+                || values.ValueKind != JsonValueKind.Array)
+            {
+                return new List<TValue>();
+            }
+
+            var result = new List<TValue>();
+            foreach (var value in values.EnumerateArray())
+            {
+                if (value.ValueKind != JsonValueKind.Object)
+                {
+                    continue;
+                }
+
+                result.Add(factory(ReadString(value, "name"), ReadString(value, "value")));
+            }
+
+            return result;
+        }
+
+        private static void WriteStdio(Utf8JsonWriter writer, StdioMcpServer stdio)
+        {
+            writer.WriteStartObject();
+            writer.WriteString("name", stdio.Name);
+            writer.WriteString("command", stdio.Command);
+            writer.WritePropertyName("args");
+            writer.WriteStartArray();
+            if (stdio.Args != null)
+            {
+                foreach (var arg in stdio.Args)
+                {
+                    writer.WriteStringValue(arg);
+                }
+            }
+
+            writer.WriteEndArray();
+            writer.WritePropertyName("env");
+            writer.WriteStartArray();
+            if (stdio.Env != null)
+            {
+                foreach (var variable in stdio.Env)
+                {
+                    writer.WriteStartObject();
+                    writer.WriteString("name", variable.Name);
+                    writer.WriteString("value", variable.Value);
+                    writer.WriteEndObject();
+                }
+            }
+
+            writer.WriteEndArray();
+            writer.WriteEndObject();
+        }
+
+        private static void WriteHeaders(Utf8JsonWriter writer, List<McpHttpHeader>? headers)
+        {
+            writer.WritePropertyName("headers");
+            writer.WriteStartArray();
+            if (headers != null)
+            {
+                foreach (var header in headers)
+                {
+                    writer.WriteStartObject();
+                    writer.WriteString("name", header.Name);
+                    writer.WriteString("value", header.Value);
+                    writer.WriteEndObject();
+                }
+            }
+
+            writer.WriteEndArray();
         }
     }
 }

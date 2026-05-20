@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 
@@ -142,7 +144,10 @@ public sealed class AcpConnectionCoordinator : IAcpConnectionCoordinator
                 hydrationAttemptId = adapter?.BeginHydrationBufferingScope(sessionId);
                 await sink.ResetConversationForResyncAsync(conversationId!, cancellationToken).ConfigureAwait(false);
                 var loadTask = sink.CurrentChatService.LoadSessionAsync(
-                    new SessionLoadParams(sessionId, sink.GetSessionCwdOrDefault(conversationId!)),
+                    new SessionLoadParams(
+                        sessionId,
+                        sink.GetSessionCwdOrDefault(conversationId!),
+                        new List<McpServer>(sink.CurrentMcpServers)),
                     cancellationToken);
                 recoveryProjection = AcpSessionRecoveryProjection.FromLoad(
                     await loadTask.WaitAsync(SessionLoadTimeout, cancellationToken).ConfigureAwait(false));
@@ -161,7 +166,10 @@ public sealed class AcpConnectionCoordinator : IAcpConnectionCoordinator
             else
             {
                 var resumeTask = sink.CurrentChatService.ResumeSessionAsync(
-                    new SessionResumeParams(sessionId, sink.GetSessionCwdOrDefault(conversationId!)),
+                    new SessionResumeParams(
+                        sessionId,
+                        sink.GetSessionCwdOrDefault(conversationId!),
+                        new List<McpServer>(sink.CurrentMcpServers)),
                     cancellationToken);
                 recoveryProjection = AcpSessionRecoveryProjection.FromResume(
                     await resumeTask.WaitAsync(SessionLoadTimeout, cancellationToken).ConfigureAwait(false));

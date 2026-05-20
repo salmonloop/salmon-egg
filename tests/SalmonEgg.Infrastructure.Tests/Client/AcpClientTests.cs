@@ -119,6 +119,102 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         [Fact]
+        public async Task CreateSessionAsync_WhenHttpMcpServerUnsupported_DoesNotSendProtocolRequest()
+        {
+            var client = await CreateInitializedClientAsync(
+                capabilities: new AgentCapabilities(mcpCapabilities: new McpCapabilities(http: false)));
+
+            var ex = await Assert.ThrowsAsync<AcpException>(() =>
+                client.CreateSessionAsync(new SessionNewParams(
+                    AbsoluteCwd,
+                    new List<McpServer> { new HttpMcpServer("api", "https://api.example.com/mcp") })));
+
+            Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
+            Assert.Contains("mcpCapabilities.http", ex.Message);
+            _transportMock.Verify(
+                t => t.SendMessageAsync(It.IsRegex("session/new"), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
+        public async Task CreateSessionAsync_WhenHttpMcpServerUrlIsNotHttp_DoesNotSendProtocolRequest()
+        {
+            var client = await CreateInitializedClientAsync(
+                capabilities: new AgentCapabilities(mcpCapabilities: new McpCapabilities(http: true)));
+
+            var ex = await Assert.ThrowsAsync<AcpException>(() =>
+                client.CreateSessionAsync(new SessionNewParams(
+                    AbsoluteCwd,
+                    new List<McpServer> { new HttpMcpServer("api", "ftp://api.example.com/mcp") })));
+
+            Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
+            Assert.Contains("HTTP URL", ex.Message);
+            _transportMock.Verify(
+                t => t.SendMessageAsync(It.IsRegex("session/new"), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
+        public async Task CreateSessionAsync_WhenStdioMcpServerCommandMissing_DoesNotSendProtocolRequest()
+        {
+            var client = await CreateInitializedClientAsync();
+
+            var ex = await Assert.ThrowsAsync<AcpException>(() =>
+                client.CreateSessionAsync(new SessionNewParams(
+                    AbsoluteCwd,
+                    new List<McpServer> { new StdioMcpServer("filesystem", string.Empty) })));
+
+            Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
+            Assert.Contains("requires a command", ex.Message);
+            _transportMock.Verify(
+                t => t.SendMessageAsync(It.IsRegex("session/new"), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
+        public async Task CreateSessionAsync_WhenStdioMcpServerCommandIsRelative_DoesNotSendProtocolRequest()
+        {
+            var client = await CreateInitializedClientAsync();
+
+            var ex = await Assert.ThrowsAsync<AcpException>(() =>
+                client.CreateSessionAsync(new SessionNewParams(
+                    AbsoluteCwd,
+                    new List<McpServer> { new StdioMcpServer("filesystem", "mcp-server") })));
+
+            Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
+            Assert.Contains("absolute command path", ex.Message);
+            _transportMock.Verify(
+                t => t.SendMessageAsync(It.IsRegex("session/new"), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
+        public async Task CreateSessionAsync_WhenHttpMcpServerSupported_SendsProtocolRequest()
+        {
+            var parser = new MessageParser();
+            var sentMessages = new ConcurrentQueue<string>();
+            var client = await CreateInitializedClientAsync(
+                capabilities: new AgentCapabilities(mcpCapabilities: new McpCapabilities(http: true)));
+
+            SetupJsonRpcResponse(
+                "session/new",
+                JsonSerializer.SerializeToElement(new SessionNewResponse("session-123"), parser.Options),
+                parser,
+                onSend: message => sentMessages.Enqueue(message));
+
+            var result = await client.CreateSessionAsync(new SessionNewParams(
+                AbsoluteCwd,
+                new List<McpServer> { new HttpMcpServer("api", "https://api.example.com/mcp") }));
+
+            Assert.Equal("session-123", result.SessionId);
+            Assert.True(sentMessages.TryDequeue(out var requestJson));
+
+            using var document = JsonDocument.Parse(requestJson);
+            var mcpServers = document.RootElement.GetProperty("params").GetProperty("mcpServers");
+            Assert.Equal("http", mcpServers[0].GetProperty("type").GetString());
+        }
+
+        [Fact]
         public async Task InitializeAsync_SendsAskUserCapabilityMetadataInClientCapabilities()
         {
             var parser = new MessageParser();

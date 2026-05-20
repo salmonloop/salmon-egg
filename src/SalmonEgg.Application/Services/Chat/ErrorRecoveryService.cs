@@ -14,6 +14,7 @@ namespace SalmonEgg.Application.Services.Chat
     public class ErrorRecoveryService : IErrorRecoveryService
     {
         private readonly Func<IChatService?> _chatServiceAccessor;
+        private readonly Func<IReadOnlyList<McpServer>> _mcpServersAccessor;
         private readonly IPathValidator _pathValidator;
         private readonly IErrorLogger _errorLogger;
         private readonly ErrorRecoveryConfig _config;
@@ -26,9 +27,11 @@ namespace SalmonEgg.Application.Services.Chat
         public ErrorRecoveryService(
             Func<IChatService?> chatServiceAccessor,
             IPathValidator pathValidator,
-            IErrorLogger errorLogger)
+            IErrorLogger errorLogger,
+            Func<IReadOnlyList<McpServer>>? mcpServersAccessor = null)
         {
             _chatServiceAccessor = chatServiceAccessor ?? throw new ArgumentNullException(nameof(chatServiceAccessor));
+            _mcpServersAccessor = mcpServersAccessor ?? (() => Array.Empty<McpServer>());
             _pathValidator = pathValidator ?? throw new ArgumentNullException(nameof(pathValidator));
             _errorLogger = errorLogger ?? throw new ArgumentNullException(nameof(errorLogger));
             _config = new ErrorRecoveryConfig();
@@ -135,7 +138,7 @@ namespace SalmonEgg.Application.Services.Chat
                     var newSessionParams = new SessionNewParams
                     {
                         Cwd = Environment.CurrentDirectory,
-                        McpServers = new List<McpServer>()
+                        McpServers = new List<McpServer>(_mcpServersAccessor())
                     };
 
                     var chatService = _chatServiceAccessor();

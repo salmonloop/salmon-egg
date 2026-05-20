@@ -1,6 +1,7 @@
 using FluentValidation.TestHelper;
 using SalmonEgg.Application.Validators;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.Domain.Models.Mcp;
 using Xunit;
 
 namespace SalmonEgg.Application.Tests.Validators;
@@ -212,5 +213,48 @@ public sealed class ServerConfigurationValidatorTests
         };
         var result = _validator.TestValidate(configuration);
         result.ShouldNotHaveValidationErrorFor(x => x.Proxy!.ProxyUrl);
+    }
+
+    [Fact]
+    public void Validate_WhenMcpServerIsValid_ShouldNotHaveError()
+    {
+        var configuration = new ServerConfiguration
+        {
+            Id = "valid",
+            Name = "valid",
+            Transport = TransportType.Stdio,
+            StdioCommand = "cmd",
+            McpServers =
+            [
+                new StdioMcpServer("filesystem", "/usr/bin/mcp", ["--stdio"]),
+                new HttpMcpServer("api", "https://api.example.com/mcp"),
+                new SseMcpServer("events", "https://events.example.com/mcp")
+            ]
+        };
+
+        var result = _validator.TestValidate(configuration);
+        result.ShouldNotHaveValidationErrorFor("McpServers[0]");
+        result.ShouldNotHaveValidationErrorFor("McpServers[1]");
+        result.ShouldNotHaveValidationErrorFor("McpServers[2]");
+    }
+
+    [Fact]
+    public void Validate_WhenMcpServerIsInvalid_ShouldHaveError()
+    {
+        var configuration = new ServerConfiguration
+        {
+            Id = "valid",
+            Name = "valid",
+            Transport = TransportType.Stdio,
+            StdioCommand = "cmd",
+            McpServers =
+            [
+                new HttpMcpServer("api", "ftp://api.example.com/mcp")
+            ]
+        };
+
+        var result = _validator.TestValidate(configuration);
+        result.ShouldHaveValidationErrorFor("McpServers[0]")
+            .WithErrorMessage("MCP server configuration is invalid");
     }
 }

@@ -10,14 +10,18 @@ namespace SalmonEgg.Domain.Tests.Protocol;
 public sealed class SessionNewTypesTests
 {
     [Test]
-    public void SessionNewParams_McpServers_Should_Serialize_With_TypeDiscriminator()
+    public void SessionNewParams_StdioMcpServers_Should_Serialize_StableProtocolShape()
     {
         var sessionParams = new SessionNewParams
         {
             Cwd = "/home/user/project",
             McpServers =
             [
-                new StdioMcpServer("test-server", "node", ["server.js"])
+                new StdioMcpServer(
+                    "test-server",
+                    "/usr/local/bin/node",
+                    ["server.js"],
+                    [new McpEnvVariable("API_KEY", "secret")])
             ]
         };
 
@@ -26,7 +30,50 @@ public sealed class SessionNewTypesTests
 
         Assert.That(parsed.RootElement.TryGetProperty("mcpServers", out var mcpServers), Is.True);
         Assert.That(mcpServers.ValueKind, Is.EqualTo(JsonValueKind.Array));
-        Assert.That(mcpServers[0].GetProperty("type").GetString(), Is.EqualTo("stdio"));
+        Assert.That(mcpServers[0].TryGetProperty("type", out _), Is.False);
+        Assert.That(mcpServers[0].GetProperty("name").GetString(), Is.EqualTo("test-server"));
+        Assert.That(mcpServers[0].GetProperty("command").GetString(), Is.EqualTo("/usr/local/bin/node"));
+        Assert.That(mcpServers[0].GetProperty("args")[0].GetString(), Is.EqualTo("server.js"));
+        Assert.That(mcpServers[0].GetProperty("env")[0].GetProperty("name").GetString(), Is.EqualTo("API_KEY"));
+        Assert.That(mcpServers[0].GetProperty("env")[0].GetProperty("value").GetString(), Is.EqualTo("secret"));
+    }
+
+    [Test]
+    public void SessionNewParams_HttpAndSseMcpServers_Should_Serialize_With_TransportType()
+    {
+        var sessionParams = new SessionNewParams
+        {
+            Cwd = "/home/user/project",
+            McpServers =
+            [
+                new HttpMcpServer("http-api", "https://api.example.com/mcp", [new McpHttpHeader("Authorization", "Bearer token")]),
+                new SseMcpServer("events", "https://events.example.com/mcp")
+            ]
+        };
+
+        var json = JsonSerializer.Serialize(sessionParams);
+        var parsed = JsonDocument.Parse(json);
+        var mcpServers = parsed.RootElement.GetProperty("mcpServers");
+
+        Assert.That(mcpServers[0].GetProperty("type").GetString(), Is.EqualTo("http"));
+        Assert.That(mcpServers[0].GetProperty("headers")[0].GetProperty("name").GetString(), Is.EqualTo("Authorization"));
+        Assert.That(mcpServers[1].GetProperty("type").GetString(), Is.EqualTo("sse"));
+    }
+
+    [Test]
+    public void McpServer_WithStdioTypeDiscriminator_Should_NotDeserialize()
+    {
+        var json = """
+        {
+          "type": "stdio",
+          "name": "test-server",
+          "command": "/usr/local/bin/node",
+          "args": [],
+          "env": []
+        }
+        """;
+
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<McpServer>(json));
     }
 
     [Test]
@@ -38,7 +85,7 @@ public sealed class SessionNewTypesTests
             Cwd = "/home/user/project",
             McpServers = new List<McpServer>
             {
-                new StdioMcpServer("test-server", "node", new List<string> { "server.js" })
+                new StdioMcpServer("test-server", "/usr/local/bin/node", new List<string> { "server.js" })
             }
         };
 

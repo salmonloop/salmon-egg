@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Infrastructure.Storage.YamlModels;
 using YamlDotNet.Core;
@@ -192,7 +193,8 @@ public sealed class ConfigurationManager : IConfigurationService
             Authentication = new AuthenticationYamlV1 { Mode = mode },
             Proxy = config.Proxy is { Enabled: true }
                 ? new ProxyYamlV1 { Enabled = true, ProxyUrl = config.Proxy.ProxyUrl ?? string.Empty }
-                : new ProxyYamlV1 { Enabled = false, ProxyUrl = string.Empty }
+                : new ProxyYamlV1 { Enabled = false, ProxyUrl = string.Empty },
+            McpServers = ToYamlMcpServers(config.McpServers)
         };
     }
 
@@ -206,7 +208,8 @@ public sealed class ConfigurationManager : IConfigurationService
             StdioCommand = yamlModel.StdioCommand ?? string.Empty,
             StdioArgs = yamlModel.StdioArgs ?? string.Empty,
             Transport = TransportFromString(yamlModel.Transport),
-            ConnectionTimeout = yamlModel.ConnectionTimeoutSeconds > 0 ? yamlModel.ConnectionTimeoutSeconds : 10
+            ConnectionTimeout = yamlModel.ConnectionTimeoutSeconds > 0 ? yamlModel.ConnectionTimeoutSeconds : 10,
+            McpServers = FromYamlMcpServers(yamlModel.McpServers)
         };
 
         if (yamlModel.Proxy is { Enabled: true })
@@ -219,6 +222,146 @@ public sealed class ConfigurationManager : IConfigurationService
         }
 
         return config;
+    }
+
+    private static List<McpServerYamlV1> ToYamlMcpServers(IEnumerable<McpServer>? servers)
+    {
+        if (servers == null)
+        {
+            return new List<McpServerYamlV1>();
+        }
+
+        var yamlServers = new List<McpServerYamlV1>();
+        foreach (var server in servers)
+        {
+            switch (server)
+            {
+                case StdioMcpServer stdio:
+                    yamlServers.Add(new McpServerYamlV1
+                    {
+                        Transport = "stdio",
+                        Name = stdio.Name ?? string.Empty,
+                        Command = stdio.Command ?? string.Empty,
+                        Args = stdio.Args ?? new List<string>(),
+                        Env = ToYamlNameValues(stdio.Env)
+                    });
+                    break;
+                case HttpMcpServer http:
+                    yamlServers.Add(new McpServerYamlV1
+                    {
+                        Transport = "http",
+                        Name = http.Name ?? string.Empty,
+                        Url = http.Url ?? string.Empty,
+                        Headers = ToYamlNameValues(http.Headers)
+                    });
+                    break;
+                case SseMcpServer sse:
+                    yamlServers.Add(new McpServerYamlV1
+                    {
+                        Transport = "sse",
+                        Name = sse.Name ?? string.Empty,
+                        Url = sse.Url ?? string.Empty,
+                        Headers = ToYamlNameValues(sse.Headers)
+                    });
+                    break;
+            }
+        }
+
+        return yamlServers;
+    }
+
+    private static List<McpServer> FromYamlMcpServers(IEnumerable<McpServerYamlV1>? yamlServers)
+    {
+        if (yamlServers == null)
+        {
+            return new List<McpServer>();
+        }
+
+        var servers = new List<McpServer>();
+        foreach (var yamlServer in yamlServers)
+        {
+            var transport = (yamlServer.Transport ?? "stdio").Trim().ToLowerInvariant();
+            switch (transport)
+            {
+                case "http":
+                    servers.Add(new HttpMcpServer(
+                        yamlServer.Name ?? string.Empty,
+                        yamlServer.Url ?? string.Empty,
+                        FromYamlHeaders(yamlServer.Headers)));
+                    break;
+                case "sse":
+                    servers.Add(new SseMcpServer(
+                        yamlServer.Name ?? string.Empty,
+                        yamlServer.Url ?? string.Empty,
+                        FromYamlHeaders(yamlServer.Headers)));
+                    break;
+                default:
+                    servers.Add(new StdioMcpServer(
+                        yamlServer.Name ?? string.Empty,
+                        yamlServer.Command ?? string.Empty,
+                        yamlServer.Args ?? new List<string>(),
+                        FromYamlEnv(yamlServer.Env)));
+                    break;
+            }
+        }
+
+        return servers;
+    }
+
+    private static List<McpNameValueYamlV1> ToYamlNameValues(IEnumerable<McpEnvVariable>? values)
+    {
+        if (values == null)
+        {
+            return new List<McpNameValueYamlV1>();
+        }
+
+        return values
+            .Select(value => new McpNameValueYamlV1
+            {
+                Name = value.Name ?? string.Empty,
+                Value = value.Value ?? string.Empty
+            })
+            .ToList();
+    }
+
+    private static List<McpNameValueYamlV1> ToYamlNameValues(IEnumerable<McpHttpHeader>? values)
+    {
+        if (values == null)
+        {
+            return new List<McpNameValueYamlV1>();
+        }
+
+        return values
+            .Select(value => new McpNameValueYamlV1
+            {
+                Name = value.Name ?? string.Empty,
+                Value = value.Value ?? string.Empty
+            })
+            .ToList();
+    }
+
+    private static List<McpEnvVariable> FromYamlEnv(IEnumerable<McpNameValueYamlV1>? values)
+    {
+        if (values == null)
+        {
+            return new List<McpEnvVariable>();
+        }
+
+        return values
+            .Select(value => new McpEnvVariable(value.Name ?? string.Empty, value.Value ?? string.Empty))
+            .ToList();
+    }
+
+    private static List<McpHttpHeader> FromYamlHeaders(IEnumerable<McpNameValueYamlV1>? values)
+    {
+        if (values == null)
+        {
+            return new List<McpHttpHeader>();
+        }
+
+        return values
+            .Select(value => new McpHttpHeader(value.Name ?? string.Empty, value.Value ?? string.Empty))
+            .ToList();
     }
 
     private async Task HydrateSecretsAsync(ServerConfiguration config, string? mode)
