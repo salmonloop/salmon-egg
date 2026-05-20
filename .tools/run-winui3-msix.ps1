@@ -542,8 +542,9 @@ function Invoke-LoggedProcess {
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $certCacheDir = Join-Path $repoRoot '.tools\certs'
-$certPfxPath = Join-Path $certCacheDir 'SalmonEgg-dev.pfx'
-$certSecretCachePath = Join-Path $certCacheDir 'SalmonEgg-dev.pfx.secret'
+$storePublisherSubject = 'CN=0B694F0E-510C-433A-A6F7-1484D6A39E19'
+$certPfxPath = Join-Path $certCacheDir 'SalmonEgg-store-dev.pfx'
+$certSecretCachePath = Join-Path $certCacheDir 'SalmonEgg-store-dev.pfx.secret'
 New-Item -ItemType Directory -Force -Path $certCacheDir | Out-Null
 
 # Ensure dotnet first-time setup and tool caches go to a writable location
@@ -698,7 +699,7 @@ if (-not $msix) {
 }
 
 $isAdmin = Test-IsAdmin
-$certSubject = 'CN=SalmonEgg'
+$certSubject = $storePublisherSubject
 $cert = Get-OrCreateDevCert -Subject $certSubject -PfxPath $certPfxPath -SecretCachePath $certSecretCachePath
 $signTool = Get-SignToolPath
 

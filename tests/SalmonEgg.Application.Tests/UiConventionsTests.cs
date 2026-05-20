@@ -199,6 +199,9 @@ public class UiConventionsTests
             .Descendants()
             .Single(element => string.Equals(element.Name.LocalName, "Logo", StringComparison.Ordinal)
                 && string.Equals(element.Parent?.Name.LocalName, "Protocol", StringComparison.Ordinal));
+        var identity = document
+            .Descendants()
+            .Single(element => string.Equals(element.Name.LocalName, "Identity", StringComparison.Ordinal));
         var logo = document
             .Descendants()
             .SingleOrDefault(element => string.Equals(element.Name.LocalName, "Logo", StringComparison.Ordinal)
@@ -214,6 +217,8 @@ public class UiConventionsTests
             .Single(element => string.Equals(element.Name.LocalName, "PublisherDisplayName", StringComparison.Ordinal));
 
         Assert.NotNull(logo);
+        Assert.Equal("SalmonEgg.SalmonEgg", GetAttributeValueByLocalName(identity, "Name"));
+        Assert.Equal("CN=0B694F0E-510C-433A-A6F7-1484D6A39E19", GetAttributeValueByLocalName(identity, "Publisher"));
         Assert.Equal("Salmon Egg", displayName.Value.Trim());
         Assert.Equal("Salmon Egg", publisherDisplayName.Value.Trim());
         Assert.Equal(@"Assets\Icons\Windows\iconLogo.png", logo!.Value.Trim());
