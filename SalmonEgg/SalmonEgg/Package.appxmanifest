@@ -31,8 +31,8 @@
       <uap:VisualElements DisplayName="Salmon Egg"
                           Description="AI Agent"
                           BackgroundColor="transparent"
-                          Square44x44Logo="Assets\Icons\Windows\iconLogo.png"
-                          Square150x150Logo="Assets\Icons\Windows\iconLogo.png">
+                          Square44x44Logo="Assets\Icons\Windows\iconLogo44.png"
+                          Square150x150Logo="Assets\Icons\Windows\iconLogo150.png">
         <uap:DefaultTile Square71x71Logo="Assets\Icons\Windows\SmallTile.png"
                          Wide310x150Logo="Assets\Icons\Windows\WideTile.png"
                          Square310x310Logo="Assets\Icons\Windows\LargeTile.png" />

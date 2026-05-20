@@ -210,14 +210,35 @@ public class UiConventionsTests
         Assert.NotNull(logo);
         Assert.Equal(@"Assets\Icons\Windows\iconLogo.png", logo!.Value.Trim());
         Assert.Equal("transparent", GetAttributeValueByLocalName(visualElements, "BackgroundColor"));
-        Assert.Equal(@"Assets\Icons\Windows\iconLogo.png", GetAttributeValueByLocalName(visualElements, "Square44x44Logo"));
-        Assert.Equal(@"Assets\Icons\Windows\iconLogo.png", GetAttributeValueByLocalName(visualElements, "Square150x150Logo"));
+        Assert.Equal(@"Assets\Icons\Windows\iconLogo44.png", GetAttributeValueByLocalName(visualElements, "Square44x44Logo"));
+        Assert.Equal(@"Assets\Icons\Windows\iconLogo150.png", GetAttributeValueByLocalName(visualElements, "Square150x150Logo"));
         Assert.Equal(@"Assets\Icons\Windows\SmallTile.png", GetAttributeValueByLocalName(defaultTile, "Square71x71Logo"));
         Assert.Equal(@"Assets\Icons\Windows\WideTile.png", GetAttributeValueByLocalName(defaultTile, "Wide310x150Logo"));
         Assert.Equal(@"Assets\Icons\Windows\LargeTile.png", GetAttributeValueByLocalName(defaultTile, "Square310x310Logo"));
         Assert.Equal(@"Assets\Icons\Windows\SplashScreen.png", GetAttributeValueByLocalName(splashScreen, "Image"));
         Assert.Equal(@"Assets\Icons\Windows\iconLogo.png", protocolLogo.Value.Trim());
         Assert.DoesNotContain(properties.Elements().Select(element => element.Value), value => value.Contains("appicon", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void PackageManifest_ShouldKeepSquare44AndSquare150LogoResourceFamiliesWithinWackLimits()
+    {
+        var repoRoot = FindRepoRoot();
+        var manifestFile = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Package.appxmanifest");
+        var document = ReadXml(manifestFile);
+        var visualElements = document
+            .Descendants()
+            .Single(element => string.Equals(element.Name.LocalName, "VisualElements", StringComparison.Ordinal));
+
+        var square44Logo = GetAttributeValueByLocalName(visualElements, "Square44x44Logo");
+        var square150Logo = GetAttributeValueByLocalName(visualElements, "Square150x150Logo");
+
+        Assert.Equal(@"Assets\Icons\Windows\iconLogo44.png", square44Logo);
+        Assert.Equal(@"Assets\Icons\Windows\iconLogo150.png", square150Logo);
+        Assert.NotEqual(square44Logo, square150Logo);
+
+        AssertWindowsIconScaleDimensions(repoRoot, square44Logo!, 44);
+        AssertWindowsIconScaleDimensions(repoRoot, square150Logo!, 150);
     }
 
     [Fact]
@@ -247,7 +268,9 @@ public class UiConventionsTests
         Assert.Empty(propertyGroups.Elements("UnoIconForegroundFile"));
         Assert.True(File.Exists(Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Assets", "Icons", "icon.png")));
         Assert.True(File.Exists(Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Assets", "Icons", "Windows", "icon.ico")));
+        Assert.True(File.Exists(Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Assets", "Icons", "Windows", "iconLogo44.scale-100.png")));
         Assert.True(File.Exists(Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Assets", "Icons", "Windows", "iconLogo.scale-100.png")));
+        Assert.True(File.Exists(Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Assets", "Icons", "Windows", "iconLogo150.scale-100.png")));
         Assert.False(File.Exists(Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Assets", "Icons", "appicon.png")));
         Assert.False(File.Exists(Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Assets", "Icons", "icon.svg")));
         Assert.False(File.Exists(Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Assets", "Icons", "icon_foreground.svg")));
@@ -759,5 +782,55 @@ public class UiConventionsTests
         Assert.DoesNotContain("NavigationViewExpandedPaneBackground", text, StringComparison.Ordinal);
         Assert.DoesNotContain("NavigationViewTopPaneBackground", text, StringComparison.Ordinal);
         Assert.DoesNotContain("PaneBackground=", text, StringComparison.Ordinal);
+    }
+
+    private static void AssertWindowsIconScaleDimensions(string repoRoot, string manifestAssetPath, int baseSize)
+    {
+        var normalizedPath = manifestAssetPath.Replace('\\', Path.DirectorySeparatorChar);
+        var assetDirectory = Path.GetDirectoryName(normalizedPath);
+        var assetBaseName = Path.GetFileNameWithoutExtension(normalizedPath);
+
+        Assert.False(string.IsNullOrWhiteSpace(assetDirectory));
+        Assert.False(string.IsNullOrWhiteSpace(assetBaseName));
+
+        foreach (var (scale, expectedSize) in new[] { (100, baseSize), (125, baseSize * 125 / 100), (150, baseSize * 150 / 100), (200, baseSize * 2), (400, baseSize * 4) })
+        {
+            var imagePath = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", assetDirectory!, $"{assetBaseName}.scale-{scale}.png");
+
+            Assert.True(File.Exists(imagePath), $"Missing {scale}% scaled image for '{manifestAssetPath}'.");
+
+            var (width, height) = ReadPngDimensions(imagePath);
+            Assert.Equal(expectedSize, width);
+            Assert.Equal(expectedSize, height);
+        }
+    }
+
+    private static (int Width, int Height) ReadPngDimensions(string filePath)
+    {
+        using var stream = File.OpenRead(filePath);
+        using var reader = new BinaryReader(stream);
+
+        var signature = reader.ReadBytes(8);
+        Assert.True(signature.SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }), $"'{filePath}' is not a valid PNG file.");
+
+        var chunkLengthBytes = reader.ReadBytes(4);
+        var chunkTypeBytes = reader.ReadBytes(4);
+        Assert.True(chunkLengthBytes.Length == 4 && chunkTypeBytes.Length == 4, $"'{filePath}' is missing the PNG IHDR header.");
+        Assert.Equal("IHDR", System.Text.Encoding.ASCII.GetString(chunkTypeBytes));
+
+        var width = ReadBigEndianInt32(reader.ReadBytes(4));
+        var height = ReadBigEndianInt32(reader.ReadBytes(4));
+        return (width, height);
+    }
+
+    private static int ReadBigEndianInt32(byte[] bytes)
+    {
+        Assert.Equal(4, bytes.Length);
+        if (BitConverter.IsLittleEndian)
+        {
+            Array.Reverse(bytes);
+        }
+
+        return BitConverter.ToInt32(bytes, 0);
     }
 }
