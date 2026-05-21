@@ -71,6 +71,29 @@ public sealed class AcpConnectionSettingsViewModelTests
     }
 
     [Fact]
+    public async Task GlobalAcpEnabled_ProjectsAppPreference()
+    {
+        var preferences = await CreatePreferencesAsync();
+        var profiles = CreateProfiles(preferences);
+        var chat = new TestSettingsChatConnection();
+        var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
+
+        using var viewModel = new AcpConnectionSettingsViewModel(
+            chat,
+            profiles,
+            preferences,
+            CreateTransportSupportPolicy(preferences),
+            logger.Object,
+            new TestCoreStringLocalizer());
+
+        Assert.True(viewModel.IsAcpEnabled);
+
+        viewModel.IsAcpEnabled = false;
+
+        Assert.False(preferences.AcpEnabled);
+    }
+
+    [Fact]
     public async Task TransportOptions_Should_PresentStdioAsSubprocessTransport()
     {
         var preferences = await CreatePreferencesAsync(supportsStdioTransport: true);

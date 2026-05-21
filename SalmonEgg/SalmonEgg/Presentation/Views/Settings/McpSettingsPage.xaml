@@ -17,11 +17,6 @@
         <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
         <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
 
-        <Style x:Key="McpServerListItemStyle" TargetType="ListViewItem">
-            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-            <Setter Property="Padding" Value="0"/>
-            <Setter Property="MinHeight" Value="72"/>
-        </Style>
     </Page.Resources>
 
     <ScrollViewer Padding="0"
@@ -57,6 +52,7 @@
 
                                 <ToggleSwitch Grid.Column="1"
                                               x:Uid="Mcp_EnableSwitch"
+                                              AutomationProperties.AutomationId="Mcp.Global.Enabled"
                                               IsOn="{x:Bind ViewModel.IsEnabled, Mode=TwoWay}"
                                               OnContent="开启"
                                               OffContent="关闭"
@@ -77,12 +73,16 @@
                                         Spacing="8"
                                         VerticalAlignment="Center">
                                 <Button x:Uid="Mcp_Reload"
-                                        Content="重新读取"
+                                        Content="刷新"
                                         Command="{x:Bind ViewModel.LoadCommand}"
                                         IsEnabled="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"/>
+                                <Button x:Uid="Mcp_ImportFromJson"
+                                        Content="从 JSON 导入"
+                                        Command="{x:Bind ViewModel.OpenImportPanelCommand}"/>
                                 <Button x:Uid="Mcp_AddServer"
-                                        Content="新增服务"
+                                        Content="新建"
                                         Command="{x:Bind ViewModel.AddServerCommand}"
+                                        AutomationProperties.AutomationId="Mcp.AddServer"
                                         Style="{StaticResource AccentButtonStyle}"/>
                             </StackPanel>
                         </Grid>
@@ -91,10 +91,16 @@
                             <StackPanel>
                                 <Grid Style="{StaticResource SettingsRowGridStyle}"
                                       ColumnDefinitions="*,Auto">
-                                    <TextBlock x:Uid="Mcp_ServerCatalogDescription"
-                                               Text="本地服务通常使用 stdio；远程服务优先使用 HTTP；SSE 仅用于兼容仍未迁移的旧服务。"
-                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"
-                                               VerticalAlignment="Center"/>
+                                    <StackPanel VerticalAlignment="Center"
+                                                Spacing="4">
+                                        <TextBlock x:Uid="Mcp_ServerCatalogDescription"
+                                                   Text="本地服务通常使用 stdio；远程服务优先使用 HTTP；SSE 仅用于兼容仍未迁移的旧服务。"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                        <TextBlock Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                   TextWrapping="Wrap"
+                                                   AutomationProperties.AutomationId="Mcp.Status"/>
+                                    </StackPanel>
                                     <Button Grid.Column="1"
                                             x:Uid="Mcp_Save"
                                             Content="保存"
@@ -104,13 +110,76 @@
 
                                 <MenuFlyoutSeparator Margin="16,0"/>
 
-                                <ListView ItemsSource="{x:Bind ViewModel.Servers, Mode=OneWay}"
-                                          SelectionMode="None"
-                                          MinHeight="160"
-                                          Background="Transparent"
-                                          ItemContainerStyle="{StaticResource McpServerListItemStyle}"
-                                          AutomationProperties.AutomationId="Mcp.Servers.List">
-                                    <ListView.ItemTemplate>
+                                <Border Margin="16,16,16,0"
+                                        Padding="0,0,0,16"
+                                        BorderThickness="0,0,0,1"
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        Visibility="{x:Bind ViewModel.IsImportPanelOpen, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                        AutomationProperties.AutomationId="Mcp.Import.Panel">
+                                    <StackPanel Spacing="12">
+                                        <Grid ColumnDefinitions="*,Auto"
+                                              ColumnSpacing="12">
+                                            <StackPanel Spacing="4">
+                                                <TextBlock x:Uid="Mcp_ImportTitle"
+                                                           Text="从 JSON 导入 MCP 服务"
+                                                           Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                                <TextBlock x:Uid="Mcp_ImportDescription"
+                                                           Text="粘贴包含 mcpServers 的配置。导入后会变成可编辑服务项，仍需手动保存。"
+                                                           Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                            </StackPanel>
+
+                                            <Button Grid.Column="1"
+                                                    x:Uid="Mcp_ImportJsonCollapse"
+                                                    Content="收起"
+                                                    Command="{x:Bind ViewModel.CollapseImportPanelCommand}"
+                                                    VerticalAlignment="Top"/>
+                                        </Grid>
+
+                                        <TextBox x:Uid="Mcp_ImportJson"
+                                                 Header="MCP JSON"
+                                                 Text="{x:Bind ViewModel.ImportJsonText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                 AcceptsReturn="True"
+                                                 TextWrapping="NoWrap"
+                                                 MinHeight="132"
+                                                 FontFamily="Consolas"
+                                                 PlaceholderText="Paste mcpServers JSON here"/>
+
+                                        <Grid ColumnDefinitions="*,Auto"
+                                              ColumnSpacing="12">
+                                            <StackPanel Spacing="4">
+                                                <TextBlock x:Uid="Mcp_ImportHint"
+                                                           Text="支持 stdio、HTTP 和 SSE。无法识别的字段会被忽略。"
+                                                           Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                                <TextBlock Text="{x:Bind ViewModel.ImportStatusMessage, Mode=OneWay}"
+                                                           Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                           TextWrapping="Wrap"
+                                                           AutomationProperties.AutomationId="Mcp.Import.Status"/>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1"
+                                                        Orientation="Horizontal"
+                                                        Spacing="8"
+                                                        VerticalAlignment="Center">
+                                                <Button x:Uid="Mcp_ImportJsonClear"
+                                                        Content="清空"
+                                                        Command="{x:Bind ViewModel.ClearImportJsonCommand}"/>
+                                                <Button x:Uid="Mcp_ImportJsonApply"
+                                                        Content="导入"
+                                                        Command="{x:Bind ViewModel.ImportJsonCommand}"
+                                                        Style="{StaticResource AccentButtonStyle}"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+
+                                <ItemsControl ItemsSource="{x:Bind ViewModel.Servers, Mode=OneWay}"
+                                              MinHeight="160"
+                                              AutomationProperties.AutomationId="Mcp.Servers.List">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Spacing="8"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="vm:McpServerRowViewModel">
                                             <Grid Padding="16"
                                                   ColumnDefinitions="*,Auto"
@@ -133,7 +202,8 @@
 
                                                 <Button Grid.Column="1"
                                                         x:Uid="Mcp_RemoveServer"
-                                                        Command="{x:Bind RemoveCommand}"
+                                                        Command="{x:Bind RemoveCommand, Mode=OneWay}"
+                                                        AutomationProperties.AutomationId="Mcp.RemoveServer"
                                                         VerticalAlignment="Bottom"
                                                         ToolTipService.ToolTip="删除">
                                                     <Button.Content>
@@ -181,13 +251,11 @@
                                                 </StackPanel>
                                             </Grid>
                                         </DataTemplate>
-                                    </ListView.ItemTemplate>
-                                </ListView>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
                             </StackPanel>
                         </Border>
 
-                        <TextBlock Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
-                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                     </StackPanel>
                 </StackPanel>
             </controls:ResponsiveContentHost.Child>

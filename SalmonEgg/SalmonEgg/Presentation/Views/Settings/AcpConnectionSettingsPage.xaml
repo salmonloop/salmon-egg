@@ -39,6 +39,34 @@
                                    Style="{StaticResource SettingsPageSummaryTextStyle}"/>
                     </StackPanel>
 
+                    <StackPanel Spacing="12">
+                        <TextBlock x:Uid="Acp_GlobalTitle"
+                                   Text="全局 ACP 配置"
+                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <Grid Style="{StaticResource SettingsRowGridStyle}"
+                                  ColumnDefinitions="*,Auto">
+                                <StackPanel VerticalAlignment="Center" Spacing="4">
+                                    <TextBlock x:Uid="Acp_GlobalEnabledTitle"
+                                               Text="启用 ACP Agent"
+                                               Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                    <TextBlock x:Uid="Acp_GlobalEnabledDescription"
+                                               Text="关闭后，Salmon Egg 不会自动启动、复用或恢复 ACP 会话连接。"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                </StackPanel>
+
+                                <ToggleSwitch Grid.Column="1"
+                                              x:Uid="Acp_GlobalEnabledSwitch"
+                                              AutomationProperties.AutomationId="Acp.Global.Enabled"
+                                              IsOn="{x:Bind ViewModel.IsAcpEnabled, Mode=TwoWay}"
+                                              OnContent="开启"
+                                              OffContent="关闭"
+                                              VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+
                     <!-- Profiles -->
                     <StackPanel Spacing="12">
                         <Grid ColumnDefinitions="*,Auto">

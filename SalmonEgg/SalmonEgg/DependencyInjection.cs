@@ -261,6 +261,8 @@ public static class DependencyInjection
             new GlobalAcpMcpServerProvider(sp.GetRequiredService<IMcpSettingsService>()));
         services.AddSingleton<IAcpMcpServerResolver>(sp =>
             new AcpMcpServerResolver(sp.GetRequiredService<IAcpMcpServerProvider>()));
+        services.AddSingleton<IAcpAvailabilityPolicy>(sp =>
+            new AppPreferencesAcpAvailabilityPolicy(sp.GetRequiredService<AppPreferencesViewModel>()));
 
         services.AddSingleton<IShellLayoutStore>(sp =>
         {
@@ -349,7 +351,8 @@ public static class DependencyInjection
                 sp.GetRequiredService<IAcpConnectionSessionRegistry>(),
                 sp.GetRequiredService<IAcpConnectionSessionCleaner>(),
                 sp.GetRequiredService<IAcpConnectionPoolManager>(),
-                sp.GetRequiredService<IAcpConnectionDependencySnapshotProvider>());
+                sp.GetRequiredService<IAcpConnectionDependencySnapshotProvider>(),
+                sp.GetRequiredService<IAcpAvailabilityPolicy>());
         });
         services.AddSingleton<IErrorRecoveryService>(sp =>
         {
@@ -396,7 +399,8 @@ public static class DependencyInjection
             new DiscoverSessionsConnectionFacade(
                 sp.GetRequiredService<IAcpChatServiceFactory>(),
                 sp.GetRequiredService<ITransportSupportPolicy>(),
-                sp.GetRequiredService<ILogger<DiscoverSessionsConnectionFacade>>()));
+                sp.GetRequiredService<ILogger<DiscoverSessionsConnectionFacade>>(),
+                sp.GetRequiredService<IAcpAvailabilityPolicy>()));
         services.AddSingleton<ISettingsChatConnection>(sp =>
             new SettingsChatConnectionAdapter(
                 sp.GetRequiredService<ChatViewModel>(),

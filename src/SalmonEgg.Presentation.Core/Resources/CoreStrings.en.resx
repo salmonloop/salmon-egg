@@ -197,4 +197,16 @@ Create the corresponding Markdown file in:
   <data name="McpSettings_SaveFailed" xml:space="preserve">
     <value>Save failed. Check the service name, command, and address.</value>
   </data>
+  <data name="McpSettings_SaveValidationFailed" xml:space="preserve">
+    <value>Complete the MCP service name, command, or address before saving.</value>
+  </data>
+  <data name="McpSettings_ImportSucceeded" xml:space="preserve">
+    <value>MCP services imported. Review them before saving.</value>
+  </data>
+  <data name="McpSettings_ImportSucceededWithReplacements" xml:space="preserve">
+    <value>MCP services imported, and same-name entries were replaced. Review them before saving.</value>
+  </data>
+  <data name="McpSettings_ImportFailed" xml:space="preserve">
+    <value>Could not parse MCP JSON. Check mcpServers, service names, commands, and addresses.</value>
+  </data>
 </root>

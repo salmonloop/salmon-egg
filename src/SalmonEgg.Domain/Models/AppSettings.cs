@@ -11,6 +11,8 @@ public sealed class AppSettings
 
     public string? LastSelectedServerId { get; set; }
 
+    public bool AcpEnabled { get; set; } = true;
+
     // General
     public bool LaunchOnStartup { get; set; }
 

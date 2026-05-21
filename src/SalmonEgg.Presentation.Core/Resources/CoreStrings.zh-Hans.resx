@@ -230,4 +230,16 @@
   <data name="McpSettings_SaveFailed" xml:space="preserve">
     <value>保存失败，请检查服务名称、命令和地址。</value>
   </data>
+  <data name="McpSettings_SaveValidationFailed" xml:space="preserve">
+    <value>请先补全 MCP 服务名称、命令或地址，再保存。</value>
+  </data>
+  <data name="McpSettings_ImportSucceeded" xml:space="preserve">
+    <value>已导入 MCP 服务，请检查后保存。</value>
+  </data>
+  <data name="McpSettings_ImportSucceededWithReplacements" xml:space="preserve">
+    <value>已导入 MCP 服务，其中同名配置已覆盖。请检查后保存。</value>
+  </data>
+  <data name="McpSettings_ImportFailed" xml:space="preserve">
+    <value>无法解析 MCP JSON，请检查 mcpServers、服务名称、命令和地址。</value>
+  </data>
 </root>

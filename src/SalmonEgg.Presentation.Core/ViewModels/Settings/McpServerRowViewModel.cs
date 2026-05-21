@@ -9,7 +9,21 @@ namespace SalmonEgg.Presentation.ViewModels.Settings;
 
 public sealed partial class McpServerRowViewModel : ObservableObject
 {
-    public IRelayCommand RemoveCommand { get; set; } = new RelayCommand(() => { });
+    private static readonly Action<McpServerRowViewModel> NoopRemove = static _ => { };
+    private readonly Action<McpServerRowViewModel>? _remove;
+
+    public McpServerRowViewModel()
+    {
+        RemoveCommand = new RelayCommand(Remove);
+    }
+
+    public McpServerRowViewModel(Action<McpServerRowViewModel> remove)
+        : this()
+    {
+        _remove = remove ?? throw new ArgumentNullException(nameof(remove));
+    }
+
+    public IRelayCommand RemoveCommand { get; }
 
     [ObservableProperty]
     private string _name = string.Empty;
@@ -43,13 +57,13 @@ public sealed partial class McpServerRowViewModel : ObservableObject
         McpServerTransport.Sse
     ];
 
-    public static McpServerRowViewModel FromServer(McpServer server)
+    public static McpServerRowViewModel FromServer(McpServer server, Action<McpServerRowViewModel>? remove = null)
     {
         ArgumentNullException.ThrowIfNull(server);
 
         return server switch
         {
-            StdioMcpServer stdio => new McpServerRowViewModel
+            StdioMcpServer stdio => new McpServerRowViewModel(remove ?? NoopRemove)
             {
                 Name = stdio.Name,
                 Transport = McpServerTransport.Stdio,
@@ -57,14 +71,14 @@ public sealed partial class McpServerRowViewModel : ObservableObject
                 ArgumentsText = JoinCommandLine(stdio.Args),
                 EnvironmentText = JoinNameValueLines(stdio.Env)
             },
-            HttpMcpServer http => new McpServerRowViewModel
+            HttpMcpServer http => new McpServerRowViewModel(remove ?? NoopRemove)
             {
                 Name = http.Name,
                 Transport = McpServerTransport.Http,
                 Url = http.Url,
                 HeadersText = JoinNameValueLines(http.Headers)
             },
-            SseMcpServer sse => new McpServerRowViewModel
+            SseMcpServer sse => new McpServerRowViewModel(remove ?? NoopRemove)
             {
                 Name = sse.Name,
                 Transport = McpServerTransport.Sse,
@@ -73,6 +87,11 @@ public sealed partial class McpServerRowViewModel : ObservableObject
             },
             _ => throw new NotSupportedException($"Unsupported MCP server type '{server.GetType().Name}'.")
         };
+    }
+
+    private void Remove()
+    {
+        _remove?.Invoke(this);
     }
 
     public McpServer ToServer()

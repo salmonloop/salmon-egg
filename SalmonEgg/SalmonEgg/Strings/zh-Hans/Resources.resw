@@ -532,6 +532,21 @@
   <data name="Acp_PageSummary.Text" xml:space="preserve">
     <value>管理 ACP 连接配置、路径映射，以及会话加载策略。</value>
   </data>
+  <data name="Acp_GlobalTitle.Text" xml:space="preserve">
+    <value>全局 ACP 配置</value>
+  </data>
+  <data name="Acp_GlobalEnabledTitle.Text" xml:space="preserve">
+    <value>启用 ACP Agent</value>
+  </data>
+  <data name="Acp_GlobalEnabledDescription.Text" xml:space="preserve">
+    <value>关闭后，Salmon Egg 不会自动启动、复用或恢复 ACP 会话连接。</value>
+  </data>
+  <data name="Acp_GlobalEnabledSwitch.OnContent" xml:space="preserve">
+    <value>开启</value>
+  </data>
+  <data name="Acp_GlobalEnabledSwitch.OffContent" xml:space="preserve">
+    <value>关闭</value>
+  </data>
   <data name="Acp_AdvancedExpander.Header" xml:space="preserve">
     <value>高级加载策略</value>
   </data>
@@ -1043,16 +1058,43 @@
     <value>MCP 服务</value>
   </data>
   <data name="Mcp_Reload.Content" xml:space="preserve">
-    <value>重新读取</value>
+    <value>刷新</value>
+  </data>
+  <data name="Mcp_ImportFromJson.Content" xml:space="preserve">
+    <value>从 JSON 导入</value>
   </data>
   <data name="Mcp_AddServer.Content" xml:space="preserve">
-    <value>新增服务</value>
+    <value>新建</value>
   </data>
   <data name="Mcp_ServerCatalogDescription.Text" xml:space="preserve">
     <value>本地服务通常使用 stdio；远程服务优先使用 HTTP；SSE 仅用于兼容仍未迁移的旧服务。</value>
   </data>
   <data name="Mcp_Save.Content" xml:space="preserve">
     <value>保存</value>
+  </data>
+  <data name="Mcp_ImportTitle.Text" xml:space="preserve">
+    <value>从 JSON 导入 MCP 服务</value>
+  </data>
+  <data name="Mcp_ImportDescription.Text" xml:space="preserve">
+    <value>粘贴包含 mcpServers 的配置。导入后会变成可编辑服务项，仍需手动保存。</value>
+  </data>
+  <data name="Mcp_ImportJson.Header" xml:space="preserve">
+    <value>MCP JSON</value>
+  </data>
+  <data name="Mcp_ImportJson.PlaceholderText" xml:space="preserve">
+    <value>{&quot;mcpServers&quot;:{&quot;filesystem&quot;:{&quot;command&quot;:&quot;npx&quot;,&quot;args&quot;:[&quot;-y&quot;,&quot;@modelcontextprotocol/server-filesystem&quot;]}}}</value>
+  </data>
+  <data name="Mcp_ImportHint.Text" xml:space="preserve">
+    <value>支持 stdio、HTTP 和 SSE。无法识别的字段会被忽略。</value>
+  </data>
+  <data name="Mcp_ImportJsonClear.Content" xml:space="preserve">
+    <value>清空</value>
+  </data>
+  <data name="Mcp_ImportJsonApply.Content" xml:space="preserve">
+    <value>导入</value>
+  </data>
+  <data name="Mcp_ImportJsonCollapse.Content" xml:space="preserve">
+    <value>收起</value>
   </data>
   <data name="Mcp_ServerName.Header" xml:space="preserve">
     <value>服务名称</value>

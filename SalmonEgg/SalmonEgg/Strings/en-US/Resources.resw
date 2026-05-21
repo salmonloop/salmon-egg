@@ -619,6 +619,21 @@
   <data name="Acp_PageSummary.Text" xml:space="preserve">
     <value>Manage ACP connection profiles, path mappings, and session loading policy.</value>
   </data>
+  <data name="Acp_GlobalTitle.Text" xml:space="preserve">
+    <value>Global ACP configuration</value>
+  </data>
+  <data name="Acp_GlobalEnabledTitle.Text" xml:space="preserve">
+    <value>Enable ACP agents</value>
+  </data>
+  <data name="Acp_GlobalEnabledDescription.Text" xml:space="preserve">
+    <value>When off, Salmon Egg will not start, reuse, or recover ACP session connections.</value>
+  </data>
+  <data name="Acp_GlobalEnabledSwitch.OnContent" xml:space="preserve">
+    <value>On</value>
+  </data>
+  <data name="Acp_GlobalEnabledSwitch.OffContent" xml:space="preserve">
+    <value>Off</value>
+  </data>
   <data name="Acp_AdvancedExpander.Header" xml:space="preserve">
     <value>Advanced loading policy</value>
   </data>
@@ -1100,16 +1115,43 @@
     <value>MCP services</value>
   </data>
   <data name="Mcp_Reload.Content" xml:space="preserve">
-    <value>Reload</value>
+    <value>Refresh</value>
+  </data>
+  <data name="Mcp_ImportFromJson.Content" xml:space="preserve">
+    <value>Import from JSON</value>
   </data>
   <data name="Mcp_AddServer.Content" xml:space="preserve">
-    <value>Add service</value>
+    <value>New</value>
   </data>
   <data name="Mcp_ServerCatalogDescription.Text" xml:space="preserve">
     <value>Local services usually use stdio. Remote services should use HTTP first. SSE is only for older services that have not migrated.</value>
   </data>
   <data name="Mcp_Save.Content" xml:space="preserve">
     <value>Save</value>
+  </data>
+  <data name="Mcp_ImportTitle.Text" xml:space="preserve">
+    <value>Import MCP services from JSON</value>
+  </data>
+  <data name="Mcp_ImportDescription.Text" xml:space="preserve">
+    <value>Paste a config with mcpServers. Imported items become editable services and still need to be saved.</value>
+  </data>
+  <data name="Mcp_ImportJson.Header" xml:space="preserve">
+    <value>MCP JSON</value>
+  </data>
+  <data name="Mcp_ImportJson.PlaceholderText" xml:space="preserve">
+    <value>{&quot;mcpServers&quot;:{&quot;filesystem&quot;:{&quot;command&quot;:&quot;npx&quot;,&quot;args&quot;:[&quot;-y&quot;,&quot;@modelcontextprotocol/server-filesystem&quot;]}}}</value>
+  </data>
+  <data name="Mcp_ImportHint.Text" xml:space="preserve">
+    <value>Supports stdio, HTTP, and SSE. Unknown fields are ignored.</value>
+  </data>
+  <data name="Mcp_ImportJsonClear.Content" xml:space="preserve">
+    <value>Clear</value>
+  </data>
+  <data name="Mcp_ImportJsonApply.Content" xml:space="preserve">
+    <value>Import</value>
+  </data>
+  <data name="Mcp_ImportJsonCollapse.Content" xml:space="preserve">
+    <value>Collapse</value>
   </data>
   <data name="Mcp_ServerName.Header" xml:space="preserve">
     <value>Service name</value>

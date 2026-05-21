@@ -28,6 +28,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
     private readonly IAcpConnectionDependencySnapshotProvider _connectionDependencySnapshotProvider;
     private readonly IAcpSessionCommandOrchestrator _sessionCommandOrchestrator;
     private readonly IAcpMcpServerProvider _mcpServerProvider;
+    private readonly IAcpAvailabilityPolicy _availabilityPolicy;
     private readonly ITransportSupportPolicy _transportSupportPolicy;
     private readonly ILogger<AcpChatCoordinator> _logger;
     private readonly int _sessionUpdateBufferLimit;
@@ -46,6 +47,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         IAcpConnectionSessionCleaner? sessionCleaner = null,
         IAcpConnectionPoolManager? connectionPoolManager = null,
         IAcpConnectionDependencySnapshotProvider? connectionDependencySnapshotProvider = null,
+        IAcpAvailabilityPolicy? availabilityPolicy = null,
         int sessionUpdateBufferLimit = DefaultSessionUpdateBufferLimit)
     {
         _chatServiceFactory = chatServiceFactory ?? throw new ArgumentNullException(nameof(chatServiceFactory));
@@ -71,6 +73,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         _connectionDependencySnapshotProvider = connectionDependencySnapshotProvider
             ?? NoopAcpConnectionDependencySnapshotProvider.Instance;
         _mcpServerProvider = mcpServerProvider ?? throw new ArgumentNullException(nameof(mcpServerProvider));
+        _availabilityPolicy = availabilityPolicy ?? AlwaysEnabledAcpAvailabilityPolicy.Instance;
         _sessionCommandOrchestrator = sessionCommandOrchestrator
             ?? throw new ArgumentNullException(nameof(sessionCommandOrchestrator));
         _transportSupportPolicy = transportSupportPolicy ?? throw new ArgumentNullException(nameof(transportSupportPolicy));
@@ -107,6 +110,8 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         ArgumentNullException.ThrowIfNull(transportConfiguration);
         ArgumentNullException.ThrowIfNull(sink);
 
+        EnsureAcpEnabled();
+
         EnsureTransportSupported(profile.Transport);
         sink.SetCurrentMcpServers(
             await _mcpServerProvider.GetMcpServersAsync(cancellationToken).ConfigureAwait(false));
@@ -140,6 +145,8 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         ArgumentNullException.ThrowIfNull(transportConfiguration);
         ArgumentNullException.ThrowIfNull(sink);
         cancellationToken.ThrowIfCancellationRequested();
+
+        EnsureAcpEnabled();
 
         EnsureTransportSupported(transportConfiguration.SelectedTransportType);
 
@@ -368,6 +375,8 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         Func<CancellationToken, Task<bool>> authenticateAsync,
         CancellationToken cancellationToken = default)
     {
+        EnsureAcpEnabled();
+
         return await _sessionCommandOrchestrator.EnsureRemoteSessionAsync(
                 sink,
                 authenticateAsync,
@@ -383,6 +392,8 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         Func<CancellationToken, Task<bool>> authenticateAsync,
         CancellationToken cancellationToken = default)
     {
+        EnsureAcpEnabled();
+
         return await _sessionCommandOrchestrator.SendPromptAsync(
                 promptText,
                 promptMessageId,
@@ -405,6 +416,8 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         Func<CancellationToken, Task<bool>> authenticateAsync,
         CancellationToken cancellationToken = default)
     {
+        EnsureAcpEnabled();
+
         return await _sessionCommandOrchestrator.DispatchPromptToRemoteSessionAsync(
                 remoteSessionId,
                 promptText,
@@ -463,6 +476,8 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(transportConfiguration);
         cancellationToken.ThrowIfCancellationRequested();
+
+        EnsureAcpEnabled();
 
         EnsureTransportSupported(profile.Transport);
         ApplyProfileToTransportConfiguration(profile, transportConfiguration);
@@ -540,6 +555,14 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             resyncRequiredAsync: resyncCallback);
         wrappedService = new AcpChatServiceAdapter(chatService, eventAdapter);
         return wrappedService;
+    }
+
+    private void EnsureAcpEnabled()
+    {
+        if (!_availabilityPolicy.IsAcpEnabled)
+        {
+            throw new InvalidOperationException("ACP is disabled by global settings.");
+        }
     }
 
     private async Task HandleResyncRequiredAsync(

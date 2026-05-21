@@ -18,6 +18,7 @@ internal sealed class GuiAppDataScope : IDisposable
     private readonly string _conversationsDirectory;
     private readonly string _serversDirectory;
     private readonly string _appYamlPath;
+    private readonly string _mcpYamlPath;
     private readonly string _conversationsPath;
     private readonly string? _serverYamlPath;
     private readonly string? _secondaryServerYamlPath;
@@ -63,6 +64,7 @@ internal sealed class GuiAppDataScope : IDisposable
         _conversationsDirectory = Path.GetDirectoryName(conversationsPath)!;
         _serversDirectory = Path.Combine(_configDirectory, "servers");
         _appYamlPath = appYamlPath;
+        _mcpYamlPath = Path.Combine(_configDirectory, "mcp.yaml");
         _conversationsPath = conversationsPath;
         _serverYamlPath = serverYamlPath;
         _secondaryServerYamlPath = secondaryServerYamlPath;
@@ -668,6 +670,40 @@ internal sealed class GuiAppDataScope : IDisposable
         catch (Exception ex)
         {
             return $"<conversations unreadable: {ex.Message}>";
+        }
+    }
+
+    public string ReadAppYaml()
+    {
+        if (!File.Exists(_appYamlPath))
+        {
+            return "<app.yaml missing>";
+        }
+
+        try
+        {
+            return File.ReadAllText(_appYamlPath);
+        }
+        catch (Exception ex)
+        {
+            return $"<app.yaml unreadable: {ex.Message}>";
+        }
+    }
+
+    public string ReadMcpYaml()
+    {
+        if (!File.Exists(_mcpYamlPath))
+        {
+            return "<mcp.yaml missing>";
+        }
+
+        try
+        {
+            return File.ReadAllText(_mcpYamlPath);
+        }
+        catch (Exception ex)
+        {
+            return $"<mcp.yaml unreadable: {ex.Message}>";
         }
     }
 

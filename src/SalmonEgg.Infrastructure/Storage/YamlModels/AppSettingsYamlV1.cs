@@ -17,6 +17,8 @@ internal sealed class AppSettingsYamlV1
 
     public string LastSelectedServerId { get; set; } = string.Empty;
 
+    public bool AcpEnabled { get; set; } = true;
+
     // General
     public bool LaunchOnStartup { get; set; }
 

@@ -104,6 +104,7 @@ public sealed class AppSettingsServiceTests : IDisposable
         var service = CreateService();
         var settings = new AppSettings
         {
+            AcpEnabled = false,
             AcpEnableConnectionEviction = true,
             AcpConnectionIdleTtlMinutes = 15,
             AcpMaxWarmProfiles = 3,
@@ -113,10 +114,15 @@ public sealed class AppSettingsServiceTests : IDisposable
         await service.SaveAsync(settings);
 
         var loaded = await service.LoadAsync();
+        Assert.False(loaded.AcpEnabled);
         Assert.True(loaded.AcpEnableConnectionEviction);
         Assert.Equal(15, loaded.AcpConnectionIdleTtlMinutes);
         Assert.Equal(3, loaded.AcpMaxWarmProfiles);
         Assert.Equal(1, loaded.AcpMaxPinnedProfiles);
+
+        var appYamlPath = Path.Combine(_testDirectory, "SalmonEgg", "config", "app.yaml");
+        var yaml = await File.ReadAllTextAsync(appYamlPath);
+        Assert.Contains("acp_enabled: false", yaml, StringComparison.Ordinal);
     }
 
     [Fact]

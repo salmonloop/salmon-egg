@@ -15,12 +15,35 @@ public sealed class AcpConnectionSettingsXamlTests
         Assert.Contains("x:Uid=\"Mcp_PageTitle\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Uid=\"Mcp_PageSummary\"", xaml, StringComparison.Ordinal);
         Assert.Contains("IsOn=\"{x:Bind ViewModel.IsEnabled, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("ItemsSource=\"{x:Bind ViewModel.Servers, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"Mcp.Global.Enabled\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("<ItemsControl ItemsSource=\"{x:Bind ViewModel.Servers, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<ListView ItemsSource=\"{x:Bind ViewModel.Servers", xaml, StringComparison.Ordinal);
         Assert.Contains("Command=\"{x:Bind ViewModel.AddServerCommand}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Command=\"{x:Bind ViewModel.SaveCommand}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Command=\"{x:Bind RemoveCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind ViewModel.OpenImportPanelCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind ViewModel.ImportJsonCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Visibility=\"{x:Bind ViewModel.IsImportPanelOpen, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind ViewModel.ImportStatusMessage, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"Mcp.Import.Status\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"Mcp.AddServer\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"Mcp.RemoveServer\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind RemoveCommand, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind ViewModel.ImportJsonText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("{Binding}", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ContentDialog", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"Mcp.Servers.List\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void McpSettingsRows_KeepStableOwnCommandsForVirtualizedListItems()
+    {
+        var rowViewModel = LoadFile(@"src\SalmonEgg.Presentation.Core\ViewModels\Settings\McpServerRowViewModel.cs");
+        var settingsViewModel = LoadFile(@"src\SalmonEgg.Presentation.Core\ViewModels\Settings\McpSettingsViewModel.cs");
+
+        Assert.Contains("public IRelayCommand RemoveCommand { get; }", rowViewModel, StringComparison.Ordinal);
+        Assert.Contains("RemoveCommand = new RelayCommand(Remove);", rowViewModel, StringComparison.Ordinal);
+        Assert.DoesNotContain("RemoveCommand { get; set; }", rowViewModel, StringComparison.Ordinal);
+        Assert.DoesNotContain("row.RemoveCommand =", settingsViewModel, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -43,9 +66,18 @@ public sealed class AcpConnectionSettingsXamlTests
             "Mcp_EnableSwitch.OffContent",
             "Mcp_ServersTitle.Text",
             "Mcp_Reload.Content",
+            "Mcp_ImportFromJson.Content",
             "Mcp_AddServer.Content",
             "Mcp_ServerCatalogDescription.Text",
             "Mcp_Save.Content",
+            "Mcp_ImportTitle.Text",
+            "Mcp_ImportDescription.Text",
+            "Mcp_ImportJson.Header",
+            "Mcp_ImportJson.PlaceholderText",
+            "Mcp_ImportHint.Text",
+            "Mcp_ImportJsonClear.Content",
+            "Mcp_ImportJsonApply.Content",
+            "Mcp_ImportJsonCollapse.Content",
             "Mcp_ServerName.Header",
             "Mcp_ServerName.PlaceholderText",
             "Mcp_ServerTransport.Header",
@@ -83,10 +115,48 @@ public sealed class AcpConnectionSettingsXamlTests
 
         Assert.Contains("x:Uid=\"Acp_PageTitle\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Uid=\"Acp_PageSummary\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Uid=\"Acp_GlobalTitle\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Uid=\"Acp_GlobalEnabledTitle\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Uid=\"Acp_GlobalEnabledDescription\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("IsOn=\"{x:Bind ViewModel.IsAcpEnabled, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"Acp.Global.Enabled\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsOn=\"{x:Bind ViewModel.Profiles", xaml, StringComparison.Ordinal);
         Assert.Contains("Style=\"{StaticResource SettingsPageTitleTextStyle}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Style=\"{StaticResource SettingsPageSummaryTextStyle}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("<Expander", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Uid=\"Acp_AdvancedExpander\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AcpConnectionSettingsPage_HasLocalizedGlobalAcpResources()
+    {
+        string[] resourceFiles =
+        [
+            @"SalmonEgg\SalmonEgg\Strings\zh-Hans\Resources.resw",
+            @"SalmonEgg\SalmonEgg\Strings\en\Resources.resw",
+            @"SalmonEgg\SalmonEgg\Strings\en-US\Resources.resw"
+        ];
+        string[] requiredResources =
+        [
+            "Acp_GlobalTitle.Text",
+            "Acp_GlobalEnabledTitle.Text",
+            "Acp_GlobalEnabledDescription.Text",
+            "Acp_GlobalEnabledSwitch.OnContent",
+            "Acp_GlobalEnabledSwitch.OffContent"
+        ];
+
+        foreach (var resourceFile in resourceFiles)
+        {
+            var resources = XDocument.Parse(LoadFile(resourceFile));
+
+            foreach (var resourceName in requiredResources)
+            {
+                Assert.True(
+                    resources.Descendants("data")
+                        .Any(data => string.Equals((string?)data.Attribute("name"), resourceName, StringComparison.Ordinal)),
+                    $"{resourceFile} must define {resourceName}.");
+            }
+        }
     }
 
     [Fact]

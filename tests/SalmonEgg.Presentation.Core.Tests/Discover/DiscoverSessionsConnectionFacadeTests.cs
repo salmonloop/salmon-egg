@@ -11,6 +11,42 @@ namespace SalmonEgg.Presentation.Core.Tests.Discover;
 public sealed class DiscoverSessionsConnectionFacadeTests
 {
     [Fact]
+    public async Task ConnectToProfileAsync_WhenGlobalAcpDisabled_DoesNotCreateService()
+    {
+        var factory = new Mock<IAcpChatServiceFactory>(MockBehavior.Strict);
+        var availability = new Mock<IAcpAvailabilityPolicy>();
+        availability.SetupGet(x => x.IsAcpEnabled).Returns(false);
+        var sut = new DiscoverSessionsConnectionFacade(
+            factory.Object,
+            CreateTransportSupportPolicy(supportsStdioTransport: true),
+            NullLogger<DiscoverSessionsConnectionFacade>.Instance,
+            availability.Object);
+        var profile = new ServerConfiguration
+        {
+            Id = "profile-1",
+            Name = "Local Agent",
+            Transport = TransportType.Stdio,
+            StdioCommand = "agent"
+        };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.ConnectToProfileAsync(profile));
+
+        Assert.Contains("ACP is disabled", ex.Message, StringComparison.Ordinal);
+        Assert.False(sut.IsConnecting);
+        Assert.False(sut.IsInitializing);
+        Assert.False(sut.IsConnected);
+        Assert.Equal(ex.Message, sut.ConnectionErrorMessage);
+        factory.Verify(
+            x => x.CreateChatService(
+                It.IsAny<TransportType>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task ConnectToProfileAsync_WhenTransportUnsupported_DoesNotCreateService()
     {
         var factory = new Mock<IAcpChatServiceFactory>(MockBehavior.Strict);

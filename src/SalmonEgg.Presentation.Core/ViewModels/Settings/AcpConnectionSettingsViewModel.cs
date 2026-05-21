@@ -47,6 +47,21 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
     [ObservableProperty]
     private HydrationCompletionModeOptionViewModel? _selectedHydrationCompletionMode;
 
+    public bool IsAcpEnabled
+    {
+        get => _preferences.AcpEnabled;
+        set
+        {
+            if (_preferences.AcpEnabled == value)
+            {
+                return;
+            }
+
+            _preferences.AcpEnabled = value;
+            OnPropertyChanged();
+        }
+    }
+
     public string SelectedTransportName => SelectedTransport?.Name ?? string.Empty;
     public string SelectedHydrationCompletionModeDescription => SelectedHydrationCompletionMode?.Description ?? string.Empty;
 
@@ -161,6 +176,12 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
 
     private void OnPreferencesPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(AppPreferencesViewModel.AcpEnabled))
+        {
+            PostToUi(() => OnPropertyChanged(nameof(IsAcpEnabled)));
+            return;
+        }
+
         if (e.PropertyName == nameof(AppPreferencesViewModel.AcpHydrationCompletionMode))
         {
             PostToUi(() =>

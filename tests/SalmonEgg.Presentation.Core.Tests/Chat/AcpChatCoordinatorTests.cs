@@ -43,6 +43,7 @@ public sealed class AcpChatCoordinatorTests
         IAcpConnectionDependencySnapshotProvider? connectionDependencySnapshotProvider = null,
         IAcpSessionCommandOrchestrator? sessionCommandOrchestrator = null,
         IAcpMcpServerResolver? mcpServerResolver = null,
+        IAcpAvailabilityPolicy? availabilityPolicy = null,
         int sessionUpdateBufferLimit = 256)
     {
         var orchestrator = sessionCommandOrchestrator ?? new AcpSessionCommandOrchestrator(
@@ -60,6 +61,7 @@ public sealed class AcpChatCoordinatorTests
             sessionCleaner,
             connectionPoolManager,
             connectionDependencySnapshotProvider,
+            availabilityPolicy,
             sessionUpdateBufferLimit);
     }
 
@@ -131,6 +133,39 @@ public sealed class AcpChatCoordinatorTests
         connectionCoordinator.Verify(
             x => x.ClearAuthenticationRequiredAsync(It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task ConnectToProfileAsync_WhenGlobalAcpDisabled_DoesNotCreateService()
+    {
+        var transport = new FakeTransportConfiguration();
+        var sink = new FakeSink();
+        var factory = new Mock<IAcpChatServiceFactory>(MockBehavior.Strict);
+        var logger = new Mock<ILogger<AcpChatCoordinator>>();
+        var availability = new Mock<IAcpAvailabilityPolicy>();
+        availability.SetupGet(x => x.IsAcpEnabled).Returns(false);
+
+        var sut = CreateCoordinator(
+            factory.Object,
+            logger.Object,
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider,
+            availabilityPolicy: availability.Object);
+        var profile = new ServerConfiguration
+        {
+            Id = "profile-1",
+            Name = "Local Agent",
+            Transport = TransportType.Stdio,
+            StdioCommand = "agent.exe",
+            StdioArgs = "--serve"
+        };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.ConnectToProfileAsync(profile, transport, sink));
+
+        Assert.Contains("ACP is disabled", ex.Message, StringComparison.Ordinal);
+        factory.VerifyNoOtherCalls();
+        Assert.Null(sink.CurrentChatService);
     }
 
     [Fact]
