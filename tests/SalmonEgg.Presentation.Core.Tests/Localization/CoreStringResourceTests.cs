@@ -16,6 +16,7 @@ public sealed class CoreStringResourceTests
     [InlineData("SettingsSection_General")]
     [InlineData("SettingsSection_Appearance")]
     [InlineData("SettingsSection_AgentAcp")]
+    [InlineData("SettingsSection_Mcp")]
     [InlineData("SettingsSection_DataStorage")]
     [InlineData("SettingsSection_Shortcuts")]
     [InlineData("SettingsSection_Diagnostics")]
@@ -37,6 +38,9 @@ public sealed class CoreStringResourceTests
     [InlineData("SettingsSearchSubtitle_AgentAcp")]
     [InlineData("SettingsSearchSubtitle_Diagnostics")]
     [InlineData("SettingsSearchSubtitle_About")]
+    [InlineData("McpSettings_LoadFailed")]
+    [InlineData("McpSettings_Saved")]
+    [InlineData("McpSettings_SaveFailed")]
     public void CoreMessages_ArePresentInAllCoreStringResources(string key)
     {
         foreach (var relativePath in CoreStringResourcePaths)

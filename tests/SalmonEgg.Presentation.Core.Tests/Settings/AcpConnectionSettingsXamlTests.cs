@@ -1,9 +1,81 @@
 using System.IO;
+using System.Linq;
+using System.Xml.Linq;
 
 namespace SalmonEgg.Presentation.Core.Tests.Settings;
 
 public sealed class AcpConnectionSettingsXamlTests
 {
+    [Fact]
+    public void McpSettingsPage_UsesNativeSettingsLayoutAndViewModelBindings()
+    {
+        var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\McpSettingsPage.xaml");
+
+        Assert.Contains("x:Class=\"SalmonEgg.Presentation.Views.Settings.McpSettingsPage\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Uid=\"Mcp_PageTitle\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Uid=\"Mcp_PageSummary\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("IsOn=\"{x:Bind ViewModel.IsEnabled, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ItemsSource=\"{x:Bind ViewModel.Servers, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind ViewModel.AddServerCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind ViewModel.SaveCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind RemoveCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("{Binding}", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"Mcp.Servers.List\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void McpSettingsPage_HasLocalizedVisibleTextResources()
+    {
+        string[] resourceFiles =
+        [
+            @"SalmonEgg\SalmonEgg\Strings\zh-Hans\Resources.resw",
+            @"SalmonEgg\SalmonEgg\Strings\en\Resources.resw",
+            @"SalmonEgg\SalmonEgg\Strings\en-US\Resources.resw"
+        ];
+        string[] requiredResources =
+        [
+            "Mcp_PageTitle.Text",
+            "Mcp_PageSummary.Text",
+            "Mcp_GlobalTitle.Text",
+            "Mcp_EnableTitle.Text",
+            "Mcp_EnableDescription.Text",
+            "Mcp_EnableSwitch.OnContent",
+            "Mcp_EnableSwitch.OffContent",
+            "Mcp_ServersTitle.Text",
+            "Mcp_Reload.Content",
+            "Mcp_AddServer.Content",
+            "Mcp_ServerCatalogDescription.Text",
+            "Mcp_Save.Content",
+            "Mcp_ServerName.Header",
+            "Mcp_ServerName.PlaceholderText",
+            "Mcp_ServerTransport.Header",
+            "Mcp_RemoveServer.ToolTipService.ToolTip",
+            "Mcp_ServerCommand.Header",
+            "Mcp_ServerCommand.PlaceholderText",
+            "Mcp_ServerArguments.Header",
+            "Mcp_ServerArguments.PlaceholderText",
+            "Mcp_ServerEnvironment.Header",
+            "Mcp_ServerEnvironment.PlaceholderText",
+            "Mcp_ServerUrl.Header",
+            "Mcp_ServerUrl.PlaceholderText",
+            "Mcp_ServerHeaders.Header",
+            "Mcp_ServerHeaders.PlaceholderText"
+        ];
+
+        foreach (var resourceFile in resourceFiles)
+        {
+            var resources = XDocument.Parse(LoadFile(resourceFile));
+
+            foreach (var resourceName in requiredResources)
+            {
+                Assert.True(
+                    resources.Descendants("data")
+                        .Any(data => string.Equals((string?)data.Attribute("name"), resourceName, StringComparison.Ordinal)),
+                    $"{resourceFile} must define {resourceName}.");
+            }
+        }
+    }
+
     [Fact]
     public void AcpConnectionSettingsPage_ExposesPageTitleSummaryAndAdvancedHydrationDisclosure()
     {

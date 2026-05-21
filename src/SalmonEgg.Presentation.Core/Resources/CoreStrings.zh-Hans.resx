@@ -24,6 +24,9 @@
   <data name="SettingsSection_AgentAcp" xml:space="preserve">
     <value>ACP / Agent</value>
   </data>
+  <data name="SettingsSection_Mcp" xml:space="preserve">
+    <value>MCP</value>
+  </data>
   <data name="SettingsSection_DataStorage" xml:space="preserve">
     <value>数据与存储</value>
   </data>
@@ -217,5 +220,14 @@
   </data>
   <data name="AcpConnection_HydrationLoadResponseDescription" xml:space="preserve">
     <value>session/load 返回后立即完成 hydration，回放异步投影。</value>
+  </data>
+  <data name="McpSettings_LoadFailed" xml:space="preserve">
+    <value>未能读取 MCP 配置。</value>
+  </data>
+  <data name="McpSettings_Saved" xml:space="preserve">
+    <value>MCP 配置已保存。</value>
+  </data>
+  <data name="McpSettings_SaveFailed" xml:space="preserve">
+    <value>保存失败，请检查服务名称、命令和地址。</value>
   </data>
 </root>

@@ -24,6 +24,9 @@
   <data name="SettingsSection_AgentAcp" xml:space="preserve">
     <value>ACP / Agent</value>
   </data>
+  <data name="SettingsSection_Mcp" xml:space="preserve">
+    <value>MCP</value>
+  </data>
   <data name="SettingsSection_DataStorage" xml:space="preserve">
     <value>Data &amp; Storage</value>
   </data>
@@ -184,5 +187,14 @@ Create the corresponding Markdown file in:
   </data>
   <data name="AcpConnection_HydrationLoadResponseDescription" xml:space="preserve">
     <value>Complete hydration right after session/load; replay projects asynchronously.</value>
+  </data>
+  <data name="McpSettings_LoadFailed" xml:space="preserve">
+    <value>Could not read MCP configuration.</value>
+  </data>
+  <data name="McpSettings_Saved" xml:space="preserve">
+    <value>MCP configuration saved.</value>
+  </data>
+  <data name="McpSettings_SaveFailed" xml:space="preserve">
+    <value>Save failed. Check the service name, command, and address.</value>
   </data>
 </root>

@@ -582,6 +582,11 @@ public static class DependencyInjection
 
         // Settings pages (Data/Shortcuts/Diagnostics/About)
         services.AddSingleton<DataStorageSettingsViewModel>();
+        services.AddSingleton<McpSettingsViewModel>(sp =>
+            new McpSettingsViewModel(
+                sp.GetRequiredService<IMcpSettingsService>(),
+                sp.GetRequiredService<IStringLocalizer<CoreStrings>>(),
+                sp.GetRequiredService<ILogger<McpSettingsViewModel>>()));
         services.AddSingleton<ShortcutsSettingsViewModel>();
         services.AddSingleton<LiveLogViewerViewModel>(sp =>
             new LiveLogViewerViewModel(

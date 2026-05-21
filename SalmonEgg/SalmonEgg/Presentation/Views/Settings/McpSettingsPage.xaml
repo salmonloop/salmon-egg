@@ -1,0 +1,196 @@
+<views:SettingsPageBase
+    x:Class="SalmonEgg.Presentation.Views.Settings.McpSettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:SalmonEgg.Controls"
+    xmlns:views="using:SalmonEgg.Presentation.Views"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="using:SalmonEgg.Presentation.ViewModels.Settings"
+    xmlns:mcp="using:SalmonEgg.Domain.Models.Mcp"
+    xmlns:converters="using:SalmonEgg.Presentation.Converters"
+    mc:Ignorable="d"
+    Background="Transparent"
+    AllowDrop="False">
+
+    <Page.Resources>
+        <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+        <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
+
+        <Style x:Key="McpServerListItemStyle" TargetType="ListViewItem">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="MinHeight" Value="72"/>
+        </Style>
+    </Page.Resources>
+
+    <ScrollViewer Padding="0"
+                  HorizontalScrollBarVisibility="Disabled">
+        <controls:ResponsiveContentHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
+            <controls:ResponsiveContentHost.Child>
+                <StackPanel Spacing="28">
+                    <StackPanel Spacing="8">
+                        <TextBlock x:Uid="Mcp_PageTitle"
+                                   Text="MCP"
+                                   Style="{StaticResource SettingsPageTitleTextStyle}"/>
+                        <TextBlock x:Uid="Mcp_PageSummary"
+                                   Text="集中管理可随会话提供给智能体的 MCP 服务。开启后，新建、恢复和加载会话都会使用这里的配置。"
+                                   Style="{StaticResource SettingsPageSummaryTextStyle}"/>
+                    </StackPanel>
+
+                    <StackPanel Spacing="12">
+                        <TextBlock x:Uid="Mcp_GlobalTitle"
+                                   Text="全局 MCP 配置"
+                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <Grid Style="{StaticResource SettingsRowGridStyle}"
+                                  ColumnDefinitions="*,Auto">
+                                <StackPanel VerticalAlignment="Center" Spacing="4">
+                                    <TextBlock x:Uid="Mcp_EnableTitle"
+                                               Text="随 ACP 会话提供 MCP 服务"
+                                               Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                    <TextBlock x:Uid="Mcp_EnableDescription"
+                                               Text="开启后，Salmon Egg 会在会话启动或恢复时带上当前 MCP 服务列表。"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                </StackPanel>
+
+                                <ToggleSwitch Grid.Column="1"
+                                              x:Uid="Mcp_EnableSwitch"
+                                              IsOn="{x:Bind ViewModel.IsEnabled, Mode=TwoWay}"
+                                              OnContent="开启"
+                                              OffContent="关闭"
+                                              VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel Spacing="12">
+                        <Grid ColumnDefinitions="*,Auto"
+                              AutomationProperties.AutomationId="Mcp.Servers.Header">
+                            <TextBlock x:Uid="Mcp_ServersTitle"
+                                       Text="MCP 服务"
+                                       Style="{StaticResource SettingsSectionTitleTextStyle}"
+                                       VerticalAlignment="Center"/>
+                            <StackPanel Grid.Column="1"
+                                        Orientation="Horizontal"
+                                        Spacing="8"
+                                        VerticalAlignment="Center">
+                                <Button x:Uid="Mcp_Reload"
+                                        Content="重新读取"
+                                        Command="{x:Bind ViewModel.LoadCommand}"
+                                        IsEnabled="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"/>
+                                <Button x:Uid="Mcp_AddServer"
+                                        Content="新增服务"
+                                        Command="{x:Bind ViewModel.AddServerCommand}"
+                                        Style="{StaticResource AccentButtonStyle}"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <StackPanel>
+                                <Grid Style="{StaticResource SettingsRowGridStyle}"
+                                      ColumnDefinitions="*,Auto">
+                                    <TextBlock x:Uid="Mcp_ServerCatalogDescription"
+                                               Text="本地服务通常使用 stdio；远程服务优先使用 HTTP；SSE 仅用于兼容仍未迁移的旧服务。"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                               VerticalAlignment="Center"/>
+                                    <Button Grid.Column="1"
+                                            x:Uid="Mcp_Save"
+                                            Content="保存"
+                                            Command="{x:Bind ViewModel.SaveCommand}"
+                                            VerticalAlignment="Center"/>
+                                </Grid>
+
+                                <MenuFlyoutSeparator Margin="16,0"/>
+
+                                <ListView ItemsSource="{x:Bind ViewModel.Servers, Mode=OneWay}"
+                                          SelectionMode="None"
+                                          MinHeight="160"
+                                          Background="Transparent"
+                                          ItemContainerStyle="{StaticResource McpServerListItemStyle}"
+                                          AutomationProperties.AutomationId="Mcp.Servers.List">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:McpServerRowViewModel">
+                                            <Grid Padding="16"
+                                                  ColumnDefinitions="*,Auto"
+                                                  RowDefinitions="Auto,Auto,Auto"
+                                                  RowSpacing="12"
+                                                  ColumnSpacing="12">
+                                                <Grid ColumnDefinitions="*,180"
+                                                      ColumnSpacing="12">
+                                                    <TextBox x:Uid="Mcp_ServerName"
+                                                             Header="服务名称"
+                                                             Text="{x:Bind Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                             PlaceholderText="filesystem"/>
+                                                    <ComboBox Grid.Column="1"
+                                                              x:Uid="Mcp_ServerTransport"
+                                                              Header="连接方式"
+                                                              ItemsSource="{x:Bind TransportOptions, Mode=OneWay}"
+                                                              SelectedItem="{x:Bind Transport, Mode=TwoWay}">
+                                                    </ComboBox>
+                                                </Grid>
+
+                                                <Button Grid.Column="1"
+                                                        x:Uid="Mcp_RemoveServer"
+                                                        Command="{x:Bind RemoveCommand}"
+                                                        VerticalAlignment="Bottom"
+                                                        ToolTipService.ToolTip="删除">
+                                                    <Button.Content>
+                                                        <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                                                  Glyph="&#xE74D;"/>
+                                                    </Button.Content>
+                                                </Button>
+
+                                                <StackPanel Grid.Row="1"
+                                                            Grid.ColumnSpan="2"
+                                                            Spacing="8"
+                                                            Visibility="{x:Bind IsStdio, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <TextBox x:Uid="Mcp_ServerCommand"
+                                                             Header="启动命令"
+                                                             Text="{x:Bind Command, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                             PlaceholderText="C:\tools\mcp-filesystem.exe"/>
+                                                    <TextBox x:Uid="Mcp_ServerArguments"
+                                                             Header="启动参数"
+                                                             Text="{x:Bind ArgumentsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                             PlaceholderText="--root C:\repo"/>
+                                                    <TextBox x:Uid="Mcp_ServerEnvironment"
+                                                             Header="环境变量"
+                                                             Text="{x:Bind EnvironmentText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                             PlaceholderText="API_KEY=value"
+                                                             AcceptsReturn="True"
+                                                             TextWrapping="Wrap"
+                                                             MinHeight="72"/>
+                                                </StackPanel>
+
+                                                <StackPanel Grid.Row="2"
+                                                            Grid.ColumnSpan="2"
+                                                            Spacing="8"
+                                                            Visibility="{x:Bind IsHttpLike, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <TextBox x:Uid="Mcp_ServerUrl"
+                                                             Header="服务地址"
+                                                             Text="{x:Bind Url, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                             PlaceholderText="https://example.com/mcp"/>
+                                                    <TextBox x:Uid="Mcp_ServerHeaders"
+                                                             Header="请求头"
+                                                             Text="{x:Bind HeadersText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                             PlaceholderText="Authorization: Bearer token"
+                                                             AcceptsReturn="True"
+                                                             TextWrapping="Wrap"
+                                                             MinHeight="72"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
+                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                    </StackPanel>
+                </StackPanel>
+            </controls:ResponsiveContentHost.Child>
+        </controls:ResponsiveContentHost>
+    </ScrollViewer>
+</views:SettingsPageBase>

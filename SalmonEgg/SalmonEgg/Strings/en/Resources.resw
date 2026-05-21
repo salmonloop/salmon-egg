@@ -993,4 +993,82 @@
   <data name="About_AcknowledgementSourceFallback" xml:space="preserve">
     <value>Source not listed</value>
   </data>
+  <data name="Mcp_PageTitle.Text" xml:space="preserve">
+    <value>MCP</value>
+  </data>
+  <data name="Mcp_PageSummary.Text" xml:space="preserve">
+    <value>Manage the MCP services that can be offered to agents during sessions. When enabled, new, resumed, and loaded sessions use this configuration.</value>
+  </data>
+  <data name="Mcp_GlobalTitle.Text" xml:space="preserve">
+    <value>Global MCP configuration</value>
+  </data>
+  <data name="Mcp_EnableTitle.Text" xml:space="preserve">
+    <value>Offer MCP services with ACP sessions</value>
+  </data>
+  <data name="Mcp_EnableDescription.Text" xml:space="preserve">
+    <value>When enabled, Salmon Egg includes the current MCP service list when a session starts or resumes.</value>
+  </data>
+  <data name="Mcp_EnableSwitch.OnContent" xml:space="preserve">
+    <value>On</value>
+  </data>
+  <data name="Mcp_EnableSwitch.OffContent" xml:space="preserve">
+    <value>Off</value>
+  </data>
+  <data name="Mcp_ServersTitle.Text" xml:space="preserve">
+    <value>MCP services</value>
+  </data>
+  <data name="Mcp_Reload.Content" xml:space="preserve">
+    <value>Reload</value>
+  </data>
+  <data name="Mcp_AddServer.Content" xml:space="preserve">
+    <value>Add service</value>
+  </data>
+  <data name="Mcp_ServerCatalogDescription.Text" xml:space="preserve">
+    <value>Local services usually use stdio. Remote services should use HTTP first. SSE is only for older services that have not migrated.</value>
+  </data>
+  <data name="Mcp_Save.Content" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="Mcp_ServerName.Header" xml:space="preserve">
+    <value>Service name</value>
+  </data>
+  <data name="Mcp_ServerName.PlaceholderText" xml:space="preserve">
+    <value>filesystem</value>
+  </data>
+  <data name="Mcp_ServerTransport.Header" xml:space="preserve">
+    <value>Connection type</value>
+  </data>
+  <data name="Mcp_RemoveServer.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="Mcp_ServerCommand.Header" xml:space="preserve">
+    <value>Launch command</value>
+  </data>
+  <data name="Mcp_ServerCommand.PlaceholderText" xml:space="preserve">
+    <value>C:\tools\mcp-filesystem.exe</value>
+  </data>
+  <data name="Mcp_ServerArguments.Header" xml:space="preserve">
+    <value>Launch arguments</value>
+  </data>
+  <data name="Mcp_ServerArguments.PlaceholderText" xml:space="preserve">
+    <value>--root C:\repo</value>
+  </data>
+  <data name="Mcp_ServerEnvironment.Header" xml:space="preserve">
+    <value>Environment variables</value>
+  </data>
+  <data name="Mcp_ServerEnvironment.PlaceholderText" xml:space="preserve">
+    <value>API_KEY=value</value>
+  </data>
+  <data name="Mcp_ServerUrl.Header" xml:space="preserve">
+    <value>Service address</value>
+  </data>
+  <data name="Mcp_ServerUrl.PlaceholderText" xml:space="preserve">
+    <value>https://example.com/mcp</value>
+  </data>
+  <data name="Mcp_ServerHeaders.Header" xml:space="preserve">
+    <value>Request headers</value>
+  </data>
+  <data name="Mcp_ServerHeaders.PlaceholderText" xml:space="preserve">
+    <value>Authorization: Bearer token</value>
+  </data>
 </root>

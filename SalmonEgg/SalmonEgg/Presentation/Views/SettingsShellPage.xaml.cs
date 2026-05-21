@@ -97,6 +97,7 @@ public sealed partial class SettingsShellPage : Page
         SettingsSectionCatalog.GeneralKey => typeof(GeneralSettingsPage),
         SettingsSectionCatalog.AppearanceKey => typeof(Settings.AppearanceSettingsPage),
         SettingsSectionCatalog.AgentAcpKey => typeof(Settings.AcpConnectionSettingsPage),
+        SettingsSectionCatalog.McpKey => typeof(Settings.McpSettingsPage),
         SettingsSectionCatalog.DataStorageKey => typeof(Settings.DataStorageSettingsPage),
         SettingsSectionCatalog.ShortcutsKey => typeof(Settings.ShortcutsSettingsPage),
         SettingsSectionCatalog.DiagnosticsKey => typeof(Settings.DiagnosticsSettingsPage),

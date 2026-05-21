@@ -1018,6 +1018,84 @@
   <data name="Acp_HydrationMode_LoadResponse.Description" xml:space="preserve">
     <value>在 session/load 返回后即判定加载完成，回放在后台继续进行。</value>
   </data>
+  <data name="Mcp_PageTitle.Text" xml:space="preserve">
+    <value>MCP</value>
+  </data>
+  <data name="Mcp_PageSummary.Text" xml:space="preserve">
+    <value>集中管理可随会话提供给智能体的 MCP 服务。开启后，新建、恢复和加载会话都会使用这里的配置。</value>
+  </data>
+  <data name="Mcp_GlobalTitle.Text" xml:space="preserve">
+    <value>全局 MCP 配置</value>
+  </data>
+  <data name="Mcp_EnableTitle.Text" xml:space="preserve">
+    <value>随 ACP 会话提供 MCP 服务</value>
+  </data>
+  <data name="Mcp_EnableDescription.Text" xml:space="preserve">
+    <value>开启后，Salmon Egg 会在会话启动或恢复时带上当前 MCP 服务列表。</value>
+  </data>
+  <data name="Mcp_EnableSwitch.OnContent" xml:space="preserve">
+    <value>开启</value>
+  </data>
+  <data name="Mcp_EnableSwitch.OffContent" xml:space="preserve">
+    <value>关闭</value>
+  </data>
+  <data name="Mcp_ServersTitle.Text" xml:space="preserve">
+    <value>MCP 服务</value>
+  </data>
+  <data name="Mcp_Reload.Content" xml:space="preserve">
+    <value>重新读取</value>
+  </data>
+  <data name="Mcp_AddServer.Content" xml:space="preserve">
+    <value>新增服务</value>
+  </data>
+  <data name="Mcp_ServerCatalogDescription.Text" xml:space="preserve">
+    <value>本地服务通常使用 stdio；远程服务优先使用 HTTP；SSE 仅用于兼容仍未迁移的旧服务。</value>
+  </data>
+  <data name="Mcp_Save.Content" xml:space="preserve">
+    <value>保存</value>
+  </data>
+  <data name="Mcp_ServerName.Header" xml:space="preserve">
+    <value>服务名称</value>
+  </data>
+  <data name="Mcp_ServerName.PlaceholderText" xml:space="preserve">
+    <value>filesystem</value>
+  </data>
+  <data name="Mcp_ServerTransport.Header" xml:space="preserve">
+    <value>连接方式</value>
+  </data>
+  <data name="Mcp_RemoveServer.ToolTipService.ToolTip" xml:space="preserve">
+    <value>删除</value>
+  </data>
+  <data name="Mcp_ServerCommand.Header" xml:space="preserve">
+    <value>启动命令</value>
+  </data>
+  <data name="Mcp_ServerCommand.PlaceholderText" xml:space="preserve">
+    <value>C:\tools\mcp-filesystem.exe</value>
+  </data>
+  <data name="Mcp_ServerArguments.Header" xml:space="preserve">
+    <value>启动参数</value>
+  </data>
+  <data name="Mcp_ServerArguments.PlaceholderText" xml:space="preserve">
+    <value>--root C:\repo</value>
+  </data>
+  <data name="Mcp_ServerEnvironment.Header" xml:space="preserve">
+    <value>环境变量</value>
+  </data>
+  <data name="Mcp_ServerEnvironment.PlaceholderText" xml:space="preserve">
+    <value>API_KEY=value</value>
+  </data>
+  <data name="Mcp_ServerUrl.Header" xml:space="preserve">
+    <value>服务地址</value>
+  </data>
+  <data name="Mcp_ServerUrl.PlaceholderText" xml:space="preserve">
+    <value>https://example.com/mcp</value>
+  </data>
+  <data name="Mcp_ServerHeaders.Header" xml:space="preserve">
+    <value>请求头</value>
+  </data>
+  <data name="Mcp_ServerHeaders.PlaceholderText" xml:space="preserve">
+    <value>Authorization: Bearer token</value>
+  </data>
   <data name="ToolCallPillPayloadTitle" xml:space="preserve">
     <value>调用参数详情</value>
   </data>
