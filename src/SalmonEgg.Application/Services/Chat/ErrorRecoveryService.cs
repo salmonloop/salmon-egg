@@ -14,7 +14,7 @@ namespace SalmonEgg.Application.Services.Chat
     public class ErrorRecoveryService : IErrorRecoveryService
     {
         private readonly Func<IChatService?> _chatServiceAccessor;
-        private readonly Func<IReadOnlyList<McpServer>> _mcpServersAccessor;
+        private readonly Func<CancellationToken, Task<IReadOnlyList<McpServer>>> _mcpServersResolver;
         private readonly IPathValidator _pathValidator;
         private readonly IErrorLogger _errorLogger;
         private readonly ErrorRecoveryConfig _config;
@@ -28,10 +28,14 @@ namespace SalmonEgg.Application.Services.Chat
             Func<IChatService?> chatServiceAccessor,
             IPathValidator pathValidator,
             IErrorLogger errorLogger,
-            Func<IReadOnlyList<McpServer>>? mcpServersAccessor = null)
+            Func<CancellationToken, Task<IReadOnlyList<McpServer>>>? mcpServersResolver = null)
         {
             _chatServiceAccessor = chatServiceAccessor ?? throw new ArgumentNullException(nameof(chatServiceAccessor));
-            _mcpServersAccessor = mcpServersAccessor ?? (() => Array.Empty<McpServer>());
+            _mcpServersResolver = mcpServersResolver ?? (cancellationToken =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return Task.FromResult<IReadOnlyList<McpServer>>(Array.Empty<McpServer>());
+            });
             _pathValidator = pathValidator ?? throw new ArgumentNullException(nameof(pathValidator));
             _errorLogger = errorLogger ?? throw new ArgumentNullException(nameof(errorLogger));
             _config = new ErrorRecoveryConfig();
@@ -134,18 +138,20 @@ namespace SalmonEgg.Application.Services.Chat
 
                 try
                 {
-                    // STATE RESET: Attempt to start completely fresh using the original workspace/context.
-                    var newSessionParams = new SessionNewParams
-                    {
-                        Cwd = Environment.CurrentDirectory,
-                        McpServers = McpServerJsonConverter.CloneServers(_mcpServersAccessor())
-                    };
-
                     var chatService = _chatServiceAccessor();
                     if (chatService == null)
                     {
                         return Result<string>.Failure("No active chat service is available for session recovery");
                     }
+
+                    var mcpServers = await _mcpServersResolver(CancellationToken.None).ConfigureAwait(false);
+
+                    // STATE RESET: Attempt to start completely fresh using the original workspace/context.
+                    var newSessionParams = new SessionNewParams
+                    {
+                        Cwd = Environment.CurrentDirectory,
+                        McpServers = McpServerJsonConverter.CloneServers(mcpServers)
+                    };
 
                     var response = await chatService.CreateSessionAsync(newSessionParams);
 

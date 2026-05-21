@@ -359,7 +359,8 @@ public static class DependencyInjection
                 () => sp.GetRequiredService<ChatViewModel>().CurrentChatService,
                 pathValidator,
                 errorLogger,
-                () => sp.GetRequiredService<ChatViewModel>().CurrentMcpServers);
+                cancellationToken => sp.GetRequiredService<ChatViewModel>()
+                    .ResolveCurrentMcpServersAsync(cancellationToken));
         });
 
         services.AddSingleton(sp =>
