@@ -983,6 +983,13 @@ namespace SalmonEgg.Infrastructure.Client
 
         private void EnsureMcpServersSupported(IEnumerable<McpServer>? mcpServers, string method)
         {
+            if (mcpServers == null)
+            {
+                throw new AcpException(
+                    JsonRpcErrorCode.InvalidParams,
+                    $"{method} requires mcpServers to be an array.");
+            }
+
             var result = McpServerSupportPolicy.Validate(mcpServers, _agentCapabilities);
             if (result.IsSupported)
             {

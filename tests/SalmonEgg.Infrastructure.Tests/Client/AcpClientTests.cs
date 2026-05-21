@@ -137,6 +137,25 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         [Fact]
+        public async Task CreateSessionAsync_WhenMcpServersIsNull_DoesNotSendProtocolRequest()
+        {
+            var client = await CreateInitializedClientAsync();
+            var @params = new SessionNewParams(AbsoluteCwd)
+            {
+                McpServers = null!
+            };
+
+            var ex = await Assert.ThrowsAsync<AcpException>(() => client.CreateSessionAsync(@params));
+
+            Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
+            Assert.Contains("mcpServers", ex.Message);
+            Assert.Contains("array", ex.Message);
+            _transportMock.Verify(
+                t => t.SendMessageAsync(It.IsRegex("session/new"), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
         public async Task CreateSessionAsync_WhenHttpMcpServerUrlIsPresent_SendsProtocolRequest()
         {
             var parser = new MessageParser();
@@ -411,6 +430,26 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         [Fact]
+        public async Task LoadSessionAsync_WhenMcpServersIsNull_DoesNotSendProtocolRequest()
+        {
+            var client = await CreateInitializedClientAsync(
+                capabilities: new AgentCapabilities(loadSession: true));
+            var @params = new SessionLoadParams("session-123", AbsoluteCwd)
+            {
+                McpServers = null!
+            };
+
+            var ex = await Assert.ThrowsAsync<AcpException>(() => client.LoadSessionAsync(@params));
+
+            Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
+            Assert.Contains("mcpServers", ex.Message);
+            Assert.Contains("array", ex.Message);
+            _transportMock.Verify(
+                t => t.SendMessageAsync(It.IsRegex("session/load"), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
         public async Task LoadSessionAsync_WhenAgentDoesNotSupportLoadSession_DoesNotSendProtocolRequest()
         {
             var client = await CreateInitializedClientAsync(
@@ -606,6 +645,29 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
             Assert.Contains("mcpCapabilities.sse", ex.Message);
+            _transportMock.Verify(
+                t => t.SendMessageAsync(It.IsRegex("session/resume"), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
+        public async Task ResumeSessionAsync_WhenMcpServersIsNull_DoesNotSendProtocolRequest()
+        {
+            var client = await CreateInitializedClientAsync(
+                capabilities: new AgentCapabilities(sessionCapabilities: new SessionCapabilities
+                {
+                    Resume = new SessionResumeCapabilities()
+                }));
+            var @params = new SessionResumeParams("session-123", AbsoluteCwd)
+            {
+                McpServers = null!
+            };
+
+            var ex = await Assert.ThrowsAsync<AcpException>(() => client.ResumeSessionAsync(@params));
+
+            Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
+            Assert.Contains("mcpServers", ex.Message);
+            Assert.Contains("array", ex.Message);
             _transportMock.Verify(
                 t => t.SendMessageAsync(It.IsRegex("session/resume"), It.IsAny<CancellationToken>()),
                 Times.Never);
