@@ -177,6 +177,28 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         [Fact]
+        public async Task CreateSessionAsync_WhenNoMcpServers_SendsEmptyMcpServersArray()
+        {
+            var parser = new MessageParser();
+            var sentMessages = new ConcurrentQueue<string>();
+            var client = await CreateInitializedClientAsync();
+
+            SetupJsonRpcResponse(
+                "session/new",
+                JsonSerializer.SerializeToElement(new SessionNewResponse("session-123"), parser.Options),
+                parser,
+                onSend: message => sentMessages.Enqueue(message));
+
+            await client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd));
+
+            Assert.True(sentMessages.TryDequeue(out var requestJson));
+            using var document = JsonDocument.Parse(requestJson);
+            var @params = document.RootElement.GetProperty("params");
+            Assert.Equal(JsonValueKind.Array, @params.GetProperty("mcpServers").ValueKind);
+            Assert.Equal(0, @params.GetProperty("mcpServers").GetArrayLength());
+        }
+
+        [Fact]
         public async Task CreateSessionAsync_WhenStdioMcpServerCommandMissing_DoesNotSendProtocolRequest()
         {
             var client = await CreateInitializedClientAsync();
@@ -508,6 +530,28 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var result = await client.LoadSessionAsync(new SessionLoadParams("session-123", AbsoluteCwd, null));
 
             Assert.Same(SessionLoadResponse.Completed, result);
+        }
+
+        [Fact]
+        public async Task LoadSessionAsync_WhenNoMcpServers_SendsEmptyMcpServersArray()
+        {
+            var parser = new MessageParser();
+            var sentMessages = new ConcurrentQueue<string>();
+            var client = await CreateInitializedClientAsync();
+
+            SetupJsonRpcResponse(
+                "session/load",
+                JsonSerializer.SerializeToElement<object?>(null, parser.Options),
+                parser,
+                onSend: message => sentMessages.Enqueue(message));
+
+            await client.LoadSessionAsync(new SessionLoadParams("session-123", AbsoluteCwd));
+
+            Assert.True(sentMessages.TryDequeue(out var requestJson));
+            using var document = JsonDocument.Parse(requestJson);
+            var @params = document.RootElement.GetProperty("params");
+            Assert.Equal(JsonValueKind.Array, @params.GetProperty("mcpServers").ValueKind);
+            Assert.Equal(0, @params.GetProperty("mcpServers").GetArrayLength());
         }
 
         [Fact]
