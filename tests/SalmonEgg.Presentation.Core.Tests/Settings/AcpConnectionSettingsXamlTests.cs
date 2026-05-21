@@ -45,8 +45,10 @@ public sealed class AcpConnectionSettingsXamlTests
         Assert.Contains("AutomationProperties.AutomationId=\"Mcp.FillFromClipboardJson\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{x:Bind ViewModel.ImportStatusMessage, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"Mcp.Import.Status\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.LiveSetting=\"Polite\"", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"Mcp.AddServer\"", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"Mcp.RemoveServer\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.Name=\"删除\"", xaml, StringComparison.Ordinal);
         Assert.Contains("<Button.Flyout>", xaml, StringComparison.Ordinal);
         Assert.Contains("<Flyout>", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Uid=\"Mcp_RemoveServerConfirm\"", xaml, StringComparison.Ordinal);
@@ -55,7 +57,7 @@ public sealed class AcpConnectionSettingsXamlTests
         Assert.Contains("<Expander", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Uid=\"Mcp_ServerAdvanced\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Uid=\"Mcp_ServerDetails\"", xaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("IsExpanded=\"{x:Bind IsDetailsExpanded, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("IsExpanded=\"{x:Bind IsDetailsExpanded, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{x:Bind StatusMessage, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"Mcp.Server.Status\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Text=\"{x:Bind ViewModel.ImportJsonText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}\"", xaml, StringComparison.Ordinal);
@@ -102,6 +104,7 @@ public sealed class AcpConnectionSettingsXamlTests
             "Mcp_ServerEnabled.OffContent",
             "Mcp_EditServer.Content",
             "Mcp_RemoveServer.ToolTipService.ToolTip",
+            "Mcp_RemoveServer.AutomationProperties.Name",
             "Mcp_RemoveServerConfirmTitle.Text",
             "Mcp_RemoveServerConfirmDescription.Text",
             "Mcp_RemoveServerConfirm.Content",

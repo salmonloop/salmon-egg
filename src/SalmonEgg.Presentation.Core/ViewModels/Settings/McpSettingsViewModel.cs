@@ -21,6 +21,7 @@ public sealed partial class McpSettingsViewModel : ObservableObject
     private readonly IPlatformShellService _platformShell;
     private readonly IStringLocalizer<CoreStrings> _localizer;
     private readonly ILogger<McpSettingsViewModel> _logger;
+    private readonly SemaphoreSlim _persistenceLock = new(1, 1);
     private List<McpServer> _persistedServers = [];
     private bool _isLoadingRows;
 
@@ -66,6 +67,7 @@ public sealed partial class McpSettingsViewModel : ObservableObject
             IsLoading = true;
             var settings = await _settingsService.LoadAsync(cancellationToken).ConfigureAwait(true);
             _persistedServers = McpServerJsonConverter.CloneServers(settings.Servers);
+            EditingServer = null;
             _isLoadingRows = true;
             Servers.Clear();
             foreach (var server in settings.Servers)
@@ -76,7 +78,7 @@ public sealed partial class McpSettingsViewModel : ObservableObject
                     SaveServerAsync,
                     OpenEditor,
                     MarkServerUnsaved,
-                    SaveEnabledState);
+                    SaveEnabledStateAsync);
                 row.SetStatusMessage(_localizer["McpSettings_RowSaved"]);
                 Servers.Add(row);
             }
@@ -158,6 +160,7 @@ public sealed partial class McpSettingsViewModel : ObservableObject
             Servers.Remove(server);
             if (server.PersistedName is not null)
             {
+                CloseEditorForPersistedName(server.PersistedName);
                 _ = PersistRemovedServerAsync(server.PersistedName);
             }
         }
@@ -174,47 +177,42 @@ public sealed partial class McpSettingsViewModel : ObservableObject
 
         using var document = JsonDocument.Parse(ExtractJsonPayload(json));
         var root = document.RootElement;
-        var nestedServers = ParseNestedMcpServers(root, remove);
-        if (nestedServers.Count > 0)
+        if (TryFindNestedMcpServers(root, out var nestedServers))
         {
-            return nestedServers;
+            return ParseServerContainer(nestedServers, remove);
         }
 
-        return root.ValueKind switch
+        return ParseServerContainer(root, remove);
+    }
+
+    private static List<McpServerRowViewModel> ParseServerContainer(
+        JsonElement serversElement,
+        Action<McpServerRowViewModel>? remove)
+        => serversElement.ValueKind switch
         {
-            JsonValueKind.Array => ParseServerArray(root, remove),
-            JsonValueKind.Object => ParseServerObject(root, remove),
+            JsonValueKind.Array => ParseServerArray(serversElement, remove),
+            JsonValueKind.Object => ParseServerObject(serversElement, remove),
             _ => throw new JsonException("MCP import root must be an object or array.")
         };
-    }
 
-    private static List<McpServerRowViewModel> ParseNestedMcpServers(
+    private static bool TryFindNestedMcpServers(
         JsonElement element,
-        Action<McpServerRowViewModel>? remove)
-    {
-        var result = new List<McpServerRowViewModel>();
-        CollectNestedMcpServers(element, remove, result);
-        return result;
-    }
-
-    private static void CollectNestedMcpServers(
-        JsonElement element,
-        Action<McpServerRowViewModel>? remove,
-        List<McpServerRowViewModel> result)
+        out JsonElement serversElement)
     {
         switch (element.ValueKind)
         {
             case JsonValueKind.Object:
                 if (element.TryGetProperty("mcpServers", out var mcpServers))
                 {
-                    TryAppendServerContainer(mcpServers, remove, result);
+                    serversElement = mcpServers;
+                    return true;
                 }
 
                 foreach (var property in element.EnumerateObject())
                 {
-                    if (!string.Equals(property.Name, "mcpServers", StringComparison.Ordinal))
+                    if (TryFindNestedMcpServers(property.Value, out serversElement))
                     {
-                        CollectNestedMcpServers(property.Value, remove, result);
+                        return true;
                     }
                 }
 
@@ -222,31 +220,17 @@ public sealed partial class McpSettingsViewModel : ObservableObject
             case JsonValueKind.Array:
                 foreach (var item in element.EnumerateArray())
                 {
-                    CollectNestedMcpServers(item, remove, result);
+                    if (TryFindNestedMcpServers(item, out serversElement))
+                    {
+                        return true;
+                    }
                 }
 
                 break;
         }
-    }
 
-    private static void TryAppendServerContainer(
-        JsonElement serversElement,
-        Action<McpServerRowViewModel>? remove,
-        List<McpServerRowViewModel> result)
-    {
-        try
-        {
-            var parsed = serversElement.ValueKind switch
-            {
-                JsonValueKind.Array => ParseServerArray(serversElement, remove),
-                JsonValueKind.Object => ParseServerObject(serversElement, remove),
-                _ => []
-            };
-            result.AddRange(parsed);
-        }
-        catch (JsonException)
-        {
-        }
+        serversElement = default;
+        return false;
     }
 
     private static List<McpServerRowViewModel> ParseServerArray(
@@ -301,12 +285,13 @@ public sealed partial class McpSettingsViewModel : ObservableObject
             ?? ReadOptionalString(server, "transport")
             ?? (server.TryGetProperty("url", out _) ? "http" : "stdio");
         var name = ReadOptionalString(server, "name") ?? fallbackName;
+        var enabled = ReadEnabled(server);
 
-        return type.ToLowerInvariant() switch
+        var row = type.ToLowerInvariant() switch
         {
             "stdio" => new McpServerRowViewModel(remove ?? NoopRemove)
             {
-                Enabled = true,
+                Enabled = enabled.Value,
                 Name = name,
                 Transport = McpServerTransport.Stdio,
                 IsDetailsExpanded = true,
@@ -316,7 +301,7 @@ public sealed partial class McpSettingsViewModel : ObservableObject
             },
             "http" or "streamable-http" or "streamable_http" => new McpServerRowViewModel(remove ?? NoopRemove)
             {
-                Enabled = true,
+                Enabled = enabled.Value,
                 Name = name,
                 Transport = McpServerTransport.Http,
                 IsDetailsExpanded = true,
@@ -325,7 +310,7 @@ public sealed partial class McpSettingsViewModel : ObservableObject
             },
             "sse" => new McpServerRowViewModel(remove ?? NoopRemove)
             {
-                Enabled = true,
+                Enabled = enabled.Value,
                 Name = name,
                 Transport = McpServerTransport.Sse,
                 IsDetailsExpanded = true,
@@ -334,6 +319,13 @@ public sealed partial class McpSettingsViewModel : ObservableObject
             },
             _ => throw new JsonException("Unsupported MCP server transport.")
         };
+
+        if (enabled.IsExplicit)
+        {
+            row.MarkExplicitEnabledSetting();
+        }
+
+        return row;
     }
 
     private static bool LooksLikeSingleServer(JsonElement element)
@@ -366,6 +358,34 @@ public sealed partial class McpSettingsViewModel : ObservableObject
         }
 
         return value.GetString();
+    }
+
+    private static (bool Value, bool IsExplicit) ReadEnabled(JsonElement element)
+    {
+        if (ReadOptionalBoolean(element, "enabled") is { } enabled)
+        {
+            return (enabled, true);
+        }
+
+        return ReadOptionalBoolean(element, "disabled") is { } disabled
+            ? (!disabled, true)
+            : (true, false);
+    }
+
+    private static bool? ReadOptionalBoolean(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var value) || value.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.String when bool.TryParse(value.GetString(), out var parsed) => parsed,
+            _ => throw new JsonException($"MCP server '{propertyName}' must be a boolean.")
+        };
     }
 
     private static List<string> ReadStringArray(JsonElement element, string propertyName)
@@ -491,6 +511,10 @@ public sealed partial class McpSettingsViewModel : ObservableObject
 
     private void ApplyImportedRowToEditor(McpServerRowViewModel editor, McpServerRowViewModel imported)
     {
+        if (imported.HasExplicitEnabledSetting)
+        {
+            editor.Enabled = imported.Enabled;
+        }
         editor.Name = imported.Name;
         editor.Transport = imported.Transport;
         editor.Command = imported.Command;
@@ -524,9 +548,22 @@ public sealed partial class McpSettingsViewModel : ObservableObject
                 return;
             }
 
+            if (server.PersistedName is not null && !Servers.Any(candidate => IsRowPersistedMatch(candidate, server.PersistedName)))
+            {
+                EditingServer = null;
+                StatusMessage = _localizer["McpSettings_Removed"];
+                return;
+            }
+
             var savedServer = server.ToServer();
-            var nextServers = ReplacePersistedServer(server.PersistedName, savedServer);
-            await PersistServersAsync(nextServers, CancellationToken.None).ConfigureAwait(true);
+            var persisted = await PersistServerAsync(server.PersistedName, savedServer, CancellationToken.None).ConfigureAwait(true);
+            if (!persisted)
+            {
+                EditingServer = null;
+                StatusMessage = _localizer["McpSettings_Removed"];
+                return;
+            }
+
             var savedMessage = _localizer["McpSettings_RowSaved"];
             var savedRow = CreateListRow(savedServer, savedMessage);
             ReplaceListRow(server.PersistedName, savedRow);
@@ -543,7 +580,7 @@ public sealed partial class McpSettingsViewModel : ObservableObject
         }
     }
 
-    private async void SaveEnabledState(McpServerRowViewModel server)
+    private async Task SaveEnabledStateAsync(McpServerRowViewModel server)
     {
         if (_isLoadingRows)
         {
@@ -563,6 +600,11 @@ public sealed partial class McpSettingsViewModel : ObservableObject
             }
         }
 
+        if (server.PersistedName is not null)
+        {
+            CloseEditorForPersistedName(server.PersistedName);
+        }
+
         await SaveServerAsync(server).ConfigureAwait(true);
     }
 
@@ -574,7 +616,7 @@ public sealed partial class McpSettingsViewModel : ObservableObject
             SaveServerAsync,
             OpenEditor,
             MarkServerUnsaved,
-            SaveEnabledState);
+            SaveEnabledStateAsync);
         row.SetStatusMessage(statusMessage);
         return row;
     }
@@ -599,10 +641,7 @@ public sealed partial class McpSettingsViewModel : ObservableObject
     {
         try
         {
-            var nextServers = _persistedServers
-                .Where(server => !IsPersistedMatch(server, persistedName))
-                .ToList();
-            await PersistServersAsync(nextServers, CancellationToken.None).ConfigureAwait(true);
+            await PersistRemoveAsync(persistedName, CancellationToken.None).ConfigureAwait(true);
             StatusMessage = _localizer["McpSettings_Removed"];
         }
         catch (Exception ex)
@@ -612,34 +651,79 @@ public sealed partial class McpSettingsViewModel : ObservableObject
         }
     }
 
-    private async Task PersistServersAsync(List<McpServer> servers, CancellationToken cancellationToken)
+    private async Task<bool> PersistServerAsync(string? persistedName, McpServer server, CancellationToken cancellationToken)
     {
-        var settings = new McpSettings { Servers = servers };
-        await _settingsService.SaveAsync(settings, cancellationToken).ConfigureAwait(true);
-        _persistedServers = McpServerJsonConverter.CloneServers(servers);
+        var skippedStalePersistedRow = false;
+        await PersistMutationAsync(
+            servers =>
+            {
+                var index = persistedName is null
+                    ? servers.FindIndex(candidate => string.Equals(candidate.Name, server.Name, StringComparison.OrdinalIgnoreCase))
+                    : servers.FindIndex(candidate => IsPersistedMatch(candidate, persistedName));
+
+                if (persistedName is not null
+                    && index < 0
+                    && !Servers.Any(candidate => IsRowPersistedMatch(candidate, persistedName)))
+                {
+                    skippedStalePersistedRow = true;
+                    return servers;
+                }
+
+                if (index >= 0)
+                {
+                    servers[index] = server;
+                }
+                else
+                {
+                    servers.Add(server);
+                }
+
+                return servers;
+            },
+            cancellationToken).ConfigureAwait(true);
+        return !skippedStalePersistedRow;
     }
 
-    private List<McpServer> ReplacePersistedServer(string? persistedName, McpServer server)
+    private async Task PersistRemoveAsync(string persistedName, CancellationToken cancellationToken)
     {
-        var nextServers = McpServerJsonConverter.CloneServers(_persistedServers);
-        var index = persistedName is null
-            ? nextServers.FindIndex(candidate => string.Equals(candidate.Name, server.Name, StringComparison.OrdinalIgnoreCase))
-            : nextServers.FindIndex(candidate => IsPersistedMatch(candidate, persistedName));
+        await PersistMutationAsync(
+            servers => servers
+                .Where(server => !IsPersistedMatch(server, persistedName))
+                .ToList(),
+            cancellationToken).ConfigureAwait(true);
+    }
 
-        if (index >= 0)
+    private async Task PersistMutationAsync(
+        Func<List<McpServer>, List<McpServer>> mutate,
+        CancellationToken cancellationToken)
+    {
+        await _persistenceLock.WaitAsync(cancellationToken).ConfigureAwait(true);
+        try
         {
-            nextServers[index] = server;
+            var nextServers = mutate(McpServerJsonConverter.CloneServers(_persistedServers));
+            var settings = new McpSettings { Servers = nextServers };
+            await _settingsService.SaveAsync(settings, cancellationToken).ConfigureAwait(true);
+            _persistedServers = McpServerJsonConverter.CloneServers(nextServers);
         }
-        else
+        finally
         {
-            nextServers.Add(server);
+            _persistenceLock.Release();
         }
-
-        return nextServers;
     }
 
     private static bool IsPersistedMatch(McpServer server, string persistedName)
         => string.Equals(server.Name, persistedName, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsRowPersistedMatch(McpServerRowViewModel row, string persistedName)
+        => string.Equals(row.PersistedName ?? row.Name, persistedName, StringComparison.OrdinalIgnoreCase);
+
+    private void CloseEditorForPersistedName(string persistedName)
+    {
+        if (EditingServer is not null && IsRowPersistedMatch(EditingServer, persistedName))
+        {
+            EditingServer = null;
+        }
+    }
 
     private static string? GetValidationResourceKey(McpServerRowViewModel server)
     {

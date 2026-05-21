@@ -15,7 +15,7 @@ public sealed partial class McpServerRowViewModel : ObservableObject
     private Func<McpServerRowViewModel, Task>? _save;
     private Action<McpServerRowViewModel>? _edit;
     private Action<McpServerRowViewModel>? _edited;
-    private Action<McpServerRowViewModel>? _enabledChanged;
+    private Func<McpServerRowViewModel, Task>? _enabledChanged;
     private bool _suppressEnabledChanged;
     private bool _suppressEdited;
 
@@ -42,6 +42,8 @@ public sealed partial class McpServerRowViewModel : ObservableObject
     public IAsyncRelayCommand SaveCommand { get; }
 
     public string? PersistedName { get; private set; }
+
+    internal bool HasExplicitEnabledSetting { get; private set; }
 
     [ObservableProperty]
     private string _name = string.Empty;
@@ -90,7 +92,7 @@ public sealed partial class McpServerRowViewModel : ObservableObject
         Func<McpServerRowViewModel, Task>? save = null,
         Action<McpServerRowViewModel>? edit = null,
         Action<McpServerRowViewModel>? edited = null,
-        Action<McpServerRowViewModel>? enabledChanged = null)
+        Func<McpServerRowViewModel, Task>? enabledChanged = null)
     {
         ArgumentNullException.ThrowIfNull(server);
 
@@ -146,6 +148,12 @@ public sealed partial class McpServerRowViewModel : ObservableObject
     public void MarkPersisted(string persistedName)
     {
         PersistedName = persistedName;
+        HasExplicitEnabledSetting = true;
+    }
+
+    internal void MarkExplicitEnabledSetting()
+    {
+        HasExplicitEnabledSetting = true;
     }
 
     public void SetSaveCallback(Func<McpServerRowViewModel, Task>? save)
@@ -163,7 +171,7 @@ public sealed partial class McpServerRowViewModel : ObservableObject
         _edited = edited;
     }
 
-    public void SetEnabledChangedCallback(Action<McpServerRowViewModel>? enabledChanged)
+    public void SetEnabledChangedCallback(Func<McpServerRowViewModel, Task>? enabledChanged)
     {
         _enabledChanged = enabledChanged;
     }
@@ -188,7 +196,7 @@ public sealed partial class McpServerRowViewModel : ObservableObject
             return;
         }
 
-        _enabledChanged?.Invoke(this);
+        _ = _enabledChanged?.Invoke(this);
     }
 
     public void SetStatusMessage(string statusMessage)

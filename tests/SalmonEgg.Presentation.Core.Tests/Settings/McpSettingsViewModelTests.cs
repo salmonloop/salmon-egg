@@ -223,6 +223,31 @@ public sealed class McpSettingsViewModelTests
     }
 
     [Fact]
+    public async Task FillEditorFromClipboardCommand_PreservesDisabledIntent()
+    {
+        var shell = new FakePlatformShellService
+        {
+            ClipboardText = """
+            {
+              "mcpServers": {
+                "filesystem": {
+                  "enabled": false,
+                  "command": "C:\\tools\\filesystem.exe"
+                }
+              }
+            }
+            """
+        };
+        var viewModel = CreateViewModel(new FakeMcpSettingsService(), shell);
+
+        await viewModel.FillEditorFromClipboardCommand.ExecuteAsync(null);
+
+        Assert.True(viewModel.IsEditorOpen);
+        Assert.False(viewModel.EditingServer!.Enabled);
+        Assert.Equal("filesystem", viewModel.EditingServer.Name);
+    }
+
+    [Fact]
     public async Task FillEditorFromClipboardCommand_FillsExistingEditorWithoutChangingEnabledState()
     {
         var service = new FakeMcpSettingsService
@@ -332,7 +357,7 @@ public sealed class McpSettingsViewModelTests
     }
 
     [Fact]
-    public async Task FillEditorFromClipboardCommand_SkipsInvalidNestedCandidateWhenLaterCandidateIsValid()
+    public async Task FillEditorFromClipboardCommand_WhenFirstNestedMcpServersIsInvalid_DoesNotUseUnrelatedLaterCandidate()
     {
         var shell = new FakePlatformShellService
         {
@@ -361,11 +386,8 @@ public sealed class McpSettingsViewModelTests
 
         await viewModel.FillEditorFromClipboardCommand.ExecuteAsync(null);
 
-        Assert.True(viewModel.IsEditorOpen);
-        Assert.Equal("remote-search", viewModel.EditingServer!.Name);
-        Assert.Equal(McpServerTransport.Http, viewModel.EditingServer.Transport);
-        Assert.Equal("https://example.com/mcp", viewModel.EditingServer.Url);
-        Assert.Equal("McpSettings_ClipboardFilled", viewModel.ImportStatusMessage);
+        Assert.False(viewModel.IsEditorOpen);
+        Assert.Equal("McpSettings_ImportFailed", viewModel.ImportStatusMessage);
     }
 
     [Fact]
@@ -545,6 +567,34 @@ public sealed class McpSettingsViewModelTests
         Assert.Equal("McpSettings_RowUnsaved", viewModel.EditingServer.StatusMessage);
         Assert.Equal("McpSettings_RowSaved", viewModel.Servers[0].StatusMessage);
         Assert.Equal("McpSettings_RowSaved", viewModel.Servers[1].StatusMessage);
+    }
+
+    [Fact]
+    public async Task SavingEditorAfterOriginalRowRemoved_DoesNotResurrectRemovedServer()
+    {
+        var service = new FakeMcpSettingsService
+        {
+            Settings = new McpSettings
+            {
+                Servers =
+                {
+                    new HttpMcpServer("search", "https://example.com/mcp")
+                }
+            }
+        };
+        var viewModel = CreateViewModel(service);
+        await viewModel.LoadCommand.ExecuteAsync(null);
+
+        viewModel.Servers[0].EditCommand.Execute(null);
+        var editor = viewModel.EditingServer!;
+        viewModel.Servers[0].RemoveCommand.Execute(null);
+
+        await editor.SaveCommand.ExecuteAsync(null);
+
+        Assert.Empty(viewModel.Servers);
+        Assert.NotNull(service.SavedSettings);
+        Assert.Empty(service.SavedSettings!.Servers);
+        Assert.False(viewModel.IsEditorOpen);
     }
 
     private static McpSettingsViewModel CreateViewModel(

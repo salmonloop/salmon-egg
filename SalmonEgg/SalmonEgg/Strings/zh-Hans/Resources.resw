@@ -1075,6 +1075,9 @@
   <data name="Mcp_RemoveServer.ToolTipService.ToolTip" xml:space="preserve">
     <value>删除</value>
   </data>
+  <data name="Mcp_RemoveServer.AutomationProperties.Name" xml:space="preserve">
+    <value>删除</value>
+  </data>
   <data name="Mcp_EditServer.Content" xml:space="preserve">
     <value>编辑</value>
   </data>

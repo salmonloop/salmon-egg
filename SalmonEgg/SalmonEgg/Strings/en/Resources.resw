@@ -1050,6 +1050,9 @@
   <data name="Mcp_RemoveServer.ToolTipService.ToolTip" xml:space="preserve">
     <value>Delete</value>
   </data>
+  <data name="Mcp_RemoveServer.AutomationProperties.Name" xml:space="preserve">
+    <value>Delete</value>
+  </data>
   <data name="Mcp_EditServer.Content" xml:space="preserve">
     <value>Edit</value>
   </data>
