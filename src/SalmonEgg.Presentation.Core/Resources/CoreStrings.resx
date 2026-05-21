@@ -225,7 +225,7 @@
     <value>未能读取 MCP 配置。</value>
   </data>
   <data name="McpSettings_Saved" xml:space="preserve">
-    <value>MCP 配置已保存。</value>
+    <value>MCP 服务已保存。</value>
   </data>
   <data name="McpSettings_SaveFailed" xml:space="preserve">
     <value>保存失败，请检查服务名称、命令和地址。</value>
@@ -233,13 +233,31 @@
   <data name="McpSettings_SaveValidationFailed" xml:space="preserve">
     <value>请先补全 MCP 服务名称、命令或地址，再保存。</value>
   </data>
-  <data name="McpSettings_ImportSucceeded" xml:space="preserve">
-    <value>已导入 MCP 服务，请检查后保存。</value>
+  <data name="McpSettings_SaveValidationNameRequired" xml:space="preserve">
+    <value>请先填写服务名称。</value>
   </data>
-  <data name="McpSettings_ImportSucceededWithReplacements" xml:space="preserve">
-    <value>已导入 MCP 服务，其中同名配置已覆盖。请检查后保存。</value>
+  <data name="McpSettings_SaveValidationCommandRequired" xml:space="preserve">
+    <value>请先填写启动命令，或先停用该服务。</value>
+  </data>
+  <data name="McpSettings_SaveValidationUrlRequired" xml:space="preserve">
+    <value>请先填写服务地址，或先停用该服务。</value>
+  </data>
+  <data name="McpSettings_RowUnsaved" xml:space="preserve">
+    <value>有未保存的修改。</value>
+  </data>
+  <data name="McpSettings_RowSaved" xml:space="preserve">
+    <value>已保存。</value>
+  </data>
+  <data name="McpSettings_Removed" xml:space="preserve">
+    <value>MCP 服务已删除。</value>
   </data>
   <data name="McpSettings_ImportFailed" xml:space="preserve">
     <value>无法解析 MCP JSON，请检查 mcpServers、服务名称、命令和地址。</value>
+  </data>
+  <data name="McpSettings_ClipboardEmpty" xml:space="preserve">
+    <value>剪贴板中没有可读取的 MCP JSON。</value>
+  </data>
+  <data name="McpSettings_ClipboardFilled" xml:space="preserve">
+    <value>已从剪贴板填入当前服务。</value>
   </data>
 </root>

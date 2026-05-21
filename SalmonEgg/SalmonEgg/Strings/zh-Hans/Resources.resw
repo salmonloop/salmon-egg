@@ -1037,67 +1037,28 @@
     <value>MCP</value>
   </data>
   <data name="Mcp_PageSummary.Text" xml:space="preserve">
-    <value>集中管理可随会话提供给智能体的 MCP 服务。开启后，新建、恢复和加载会话都会使用这里的配置。</value>
-  </data>
-  <data name="Mcp_GlobalTitle.Text" xml:space="preserve">
-    <value>全局 MCP 配置</value>
-  </data>
-  <data name="Mcp_EnableTitle.Text" xml:space="preserve">
-    <value>随 ACP 会话提供 MCP 服务</value>
-  </data>
-  <data name="Mcp_EnableDescription.Text" xml:space="preserve">
-    <value>开启后，Salmon Egg 会在会话启动或恢复时带上当前 MCP 服务列表。</value>
-  </data>
-  <data name="Mcp_EnableSwitch.OnContent" xml:space="preserve">
-    <value>开启</value>
-  </data>
-  <data name="Mcp_EnableSwitch.OffContent" xml:space="preserve">
-    <value>关闭</value>
+    <value>按需启用 MCP 服务。已启用且配置完整的服务会随 ACP 会话一起提供。</value>
   </data>
   <data name="Mcp_ServersTitle.Text" xml:space="preserve">
-    <value>MCP 服务</value>
+    <value>服务配置</value>
   </data>
   <data name="Mcp_Reload.Content" xml:space="preserve">
     <value>刷新</value>
   </data>
-  <data name="Mcp_ImportFromJson.Content" xml:space="preserve">
-    <value>从 JSON 导入</value>
-  </data>
   <data name="Mcp_AddServer.Content" xml:space="preserve">
     <value>新建</value>
   </data>
-  <data name="Mcp_ServerCatalogDescription.Text" xml:space="preserve">
-    <value>本地服务通常使用 stdio；远程服务优先使用 HTTP；SSE 仅用于兼容仍未迁移的旧服务。</value>
+  <data name="Mcp_FillFromClipboardJson.Content" xml:space="preserve">
+    <value>从剪贴板填入</value>
   </data>
-  <data name="Mcp_Save.Content" xml:space="preserve">
+  <data name="Mcp_ServerCatalogDescription.Text" xml:space="preserve">
+    <value>本地服务使用 stdio；远程服务支持 Streamable HTTP 与 SSE。</value>
+  </data>
+  <data name="Mcp_SaveServer.Content" xml:space="preserve">
     <value>保存</value>
   </data>
-  <data name="Mcp_ImportTitle.Text" xml:space="preserve">
-    <value>从 JSON 导入 MCP 服务</value>
-  </data>
-  <data name="Mcp_ImportDescription.Text" xml:space="preserve">
-    <value>粘贴包含 mcpServers 的配置。导入后会变成可编辑服务项，仍需手动保存。</value>
-  </data>
-  <data name="Mcp_ImportJson.Header" xml:space="preserve">
-    <value>MCP JSON</value>
-  </data>
-  <data name="Mcp_ImportJson.PlaceholderText" xml:space="preserve">
-    <value>{&quot;mcpServers&quot;:{&quot;filesystem&quot;:{&quot;command&quot;:&quot;npx&quot;,&quot;args&quot;:[&quot;-y&quot;,&quot;@modelcontextprotocol/server-filesystem&quot;]}}}</value>
-  </data>
-  <data name="Mcp_ImportHint.Text" xml:space="preserve">
-    <value>支持 stdio、HTTP 和 SSE。无法识别的字段会被忽略。</value>
-  </data>
-  <data name="Mcp_ImportJsonClear.Content" xml:space="preserve">
-    <value>清空</value>
-  </data>
-  <data name="Mcp_ImportJsonApply.Content" xml:space="preserve">
-    <value>导入</value>
-  </data>
-  <data name="Mcp_ImportJsonCollapse.Content" xml:space="preserve">
-    <value>收起</value>
-  </data>
   <data name="Mcp_ServerName.Header" xml:space="preserve">
-    <value>服务名称</value>
+    <value>名称</value>
   </data>
   <data name="Mcp_ServerName.PlaceholderText" xml:space="preserve">
     <value>filesystem</value>
@@ -1105,8 +1066,41 @@
   <data name="Mcp_ServerTransport.Header" xml:space="preserve">
     <value>连接方式</value>
   </data>
+  <data name="Mcp_ServerEnabled.OnContent" xml:space="preserve">
+    <value>启用</value>
+  </data>
+  <data name="Mcp_ServerEnabled.OffContent" xml:space="preserve">
+    <value>停用</value>
+  </data>
   <data name="Mcp_RemoveServer.ToolTipService.ToolTip" xml:space="preserve">
     <value>删除</value>
+  </data>
+  <data name="Mcp_EditServer.Content" xml:space="preserve">
+    <value>编辑</value>
+  </data>
+  <data name="Mcp_RemoveServerConfirmTitle.Text" xml:space="preserve">
+    <value>删除此服务？</value>
+  </data>
+  <data name="Mcp_RemoveServerConfirmDescription.Text" xml:space="preserve">
+    <value>删除后会立即从 MCP 配置中移除。</value>
+  </data>
+  <data name="Mcp_RemoveServerConfirm.Content" xml:space="preserve">
+    <value>删除</value>
+  </data>
+  <data name="Mcp_EditorTitle.Text" xml:space="preserve">
+    <value>编辑 MCP 服务</value>
+  </data>
+  <data name="Mcp_EditorDescription.Text" xml:space="preserve">
+    <value>编辑连接信息，保存后应用到该服务。</value>
+  </data>
+  <data name="Mcp_EditorClose.Content" xml:space="preserve">
+    <value>关闭</value>
+  </data>
+  <data name="Mcp_EditorSave.Content" xml:space="preserve">
+    <value>保存</value>
+  </data>
+  <data name="Mcp_ServerAdvanced.Header" xml:space="preserve">
+    <value>高级设置</value>
   </data>
   <data name="Mcp_ServerCommand.Header" xml:space="preserve">
     <value>启动命令</value>
@@ -1120,11 +1114,17 @@
   <data name="Mcp_ServerArguments.PlaceholderText" xml:space="preserve">
     <value>--root C:\repo</value>
   </data>
+  <data name="Mcp_ServerArgumentsHelp.Text" xml:space="preserve">
+    <value>用空格分隔参数；带空格的值请使用引号。</value>
+  </data>
   <data name="Mcp_ServerEnvironment.Header" xml:space="preserve">
     <value>环境变量</value>
   </data>
   <data name="Mcp_ServerEnvironment.PlaceholderText" xml:space="preserve">
     <value>API_KEY=value</value>
+  </data>
+  <data name="Mcp_ServerEnvironmentHelp.Text" xml:space="preserve">
+    <value>每行一个变量，格式 KEY=value。</value>
   </data>
   <data name="Mcp_ServerUrl.Header" xml:space="preserve">
     <value>服务地址</value>
@@ -1137,6 +1137,9 @@
   </data>
   <data name="Mcp_ServerHeaders.PlaceholderText" xml:space="preserve">
     <value>Authorization: Bearer token</value>
+  </data>
+  <data name="Mcp_ServerHeadersHelp.Text" xml:space="preserve">
+    <value>每行一个请求头，格式 Header: value。</value>
   </data>
   <data name="ToolCallPillPayloadTitle" xml:space="preserve">
     <value>调用参数详情</value>

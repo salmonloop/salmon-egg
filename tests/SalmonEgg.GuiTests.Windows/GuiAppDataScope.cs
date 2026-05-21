@@ -707,6 +707,12 @@ internal sealed class GuiAppDataScope : IDisposable
         }
     }
 
+    public void WriteMcpYaml(string yaml)
+    {
+        Directory.CreateDirectory(_configDirectory);
+        File.WriteAllText(_mcpYamlPath, yaml, Encoding.UTF8);
+    }
+
     private void Seed(
         int sessionCount,
         bool withContent = false,

@@ -8,6 +8,8 @@ internal sealed class McpServerYamlV1
 
     public string Name { get; set; } = string.Empty;
 
+    public bool Enabled { get; set; } = true;
+
     public Dictionary<string, object?>? Meta { get; set; }
 
     public string Command { get; set; } = string.Empty;

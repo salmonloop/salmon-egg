@@ -1298,7 +1298,7 @@ public sealed class AcpChatCoordinatorTests
     }
 
     [Fact]
-    public async Task ProductionComposition_ResolvesGlobalMcpServersThroughSessionCommands()
+    public async Task ProductionComposition_ResolvesEnabledMcpServersThroughSessionCommands()
     {
         var service = CreateChatService();
         var sink = new FakeSink
@@ -1327,14 +1327,13 @@ public sealed class AcpChatCoordinatorTests
         services.AddSingleton<IMcpSettingsService>(
             new FakeMcpSettingsService(new McpSettings
             {
-                IsEnabled = true,
                 Servers =
                 [
                     new HttpMcpServer("global", "https://global.example.com/mcp")
                 ]
             }));
         services.AddSingleton<IAcpMcpServerProvider>(sp =>
-            new GlobalAcpMcpServerProvider(sp.GetRequiredService<IMcpSettingsService>()));
+            new SettingsAcpMcpServerProvider(sp.GetRequiredService<IMcpSettingsService>()));
         services.AddSingleton<IAcpMcpServerResolver>(sp =>
             new AcpMcpServerResolver(sp.GetRequiredService<IAcpMcpServerProvider>()));
         services.AddSingleton<IAcpSessionCommandOrchestrator>(sp =>
@@ -1364,11 +1363,10 @@ public sealed class AcpChatCoordinatorTests
     }
 
     [Fact]
-    public async Task ConnectToProfileAsync_LoadsMcpServersFromGlobalSettingsProvider()
+    public async Task ConnectToProfileAsync_LoadsEnabledMcpServersFromSettingsProvider()
     {
         var settings = new McpSettings
         {
-            IsEnabled = true,
             Servers =
             [
                 new StdioMcpServer("filesystem", "/usr/bin/mcp", ["--stdio"])
@@ -1392,7 +1390,7 @@ public sealed class AcpChatCoordinatorTests
             .Setup(x => x.CreateChatService(TransportType.Stdio, "agent.exe", "--serve", null))
             .Returns(service.Object);
 
-        var provider = new GlobalAcpMcpServerProvider(new FakeMcpSettingsService(settings));
+        var provider = new SettingsAcpMcpServerProvider(new FakeMcpSettingsService(settings));
         var sut = CreateCoordinator(
             factory.Object,
             logger.Object,
@@ -1406,11 +1404,10 @@ public sealed class AcpChatCoordinatorTests
     }
 
     [Fact]
-    public async Task ConnectToProfileAsync_SnapshotsMcpServersFromGlobalSettings()
+    public async Task ConnectToProfileAsync_SnapshotsEnabledMcpServersFromSettings()
     {
         var settings = new McpSettings
         {
-            IsEnabled = true,
             Servers =
             [
                 new StdioMcpServer(
@@ -1438,7 +1435,7 @@ public sealed class AcpChatCoordinatorTests
             .Setup(x => x.CreateChatService(TransportType.Stdio, "agent.exe", "--serve", null))
             .Returns(service.Object);
 
-        var provider = new GlobalAcpMcpServerProvider(new FakeMcpSettingsService(settings));
+        var provider = new SettingsAcpMcpServerProvider(new FakeMcpSettingsService(settings));
         var sut = CreateCoordinator(
             factory.Object,
             logger.Object,
@@ -1453,17 +1450,19 @@ public sealed class AcpChatCoordinatorTests
     }
 
     [Fact]
-    public async Task GlobalAcpMcpServerProvider_WhenDisabled_ReturnsEmptyCatalog()
+    public async Task SettingsAcpMcpServerProvider_WhenServerDisabled_ReturnsEmptyCatalog()
     {
         var settings = new McpSettings
         {
-            IsEnabled = false,
             Servers =
             [
                 new StdioMcpServer("filesystem", "/usr/bin/mcp", ["--stdio"])
+                {
+                    Enabled = false
+                }
             ]
         };
-        var provider = new GlobalAcpMcpServerProvider(new FakeMcpSettingsService(settings));
+        var provider = new SettingsAcpMcpServerProvider(new FakeMcpSettingsService(settings));
 
         var servers = await provider.GetMcpServersAsync();
 
@@ -1471,7 +1470,29 @@ public sealed class AcpChatCoordinatorTests
     }
 
     [Fact]
-    public async Task GlobalAcpMcpServerProvider_WhenEnabled_ReturnsDeepClonedGlobalCatalog()
+    public async Task SettingsAcpMcpServerProvider_ReturnsOnlyEnabledServers()
+    {
+        var settings = new McpSettings
+        {
+            Servers =
+            [
+                new StdioMcpServer("disabled", "/usr/bin/disabled", ["--stdio"])
+                {
+                    Enabled = false
+                },
+                new HttpMcpServer("enabled", "https://enabled.example.com/mcp")
+            ]
+        };
+        var provider = new SettingsAcpMcpServerProvider(new FakeMcpSettingsService(settings));
+
+        var servers = await provider.GetMcpServersAsync();
+
+        var server = Assert.IsType<HttpMcpServer>(Assert.Single(servers));
+        Assert.Equal("enabled", server.Name);
+    }
+
+    [Fact]
+    public async Task SettingsAcpMcpServerProvider_WhenServerEnabled_ReturnsDeepClonedCatalog()
     {
         var source = new HttpMcpServer(
             "api",
@@ -1485,10 +1506,9 @@ public sealed class AcpChatCoordinatorTests
         };
         var settings = new McpSettings
         {
-            IsEnabled = true,
             Servers = [source]
         };
-        var provider = new GlobalAcpMcpServerProvider(new FakeMcpSettingsService(settings));
+        var provider = new SettingsAcpMcpServerProvider(new FakeMcpSettingsService(settings));
 
         var servers = await provider.GetMcpServersAsync();
         source.Url = "https://mutated.example.com/mcp";

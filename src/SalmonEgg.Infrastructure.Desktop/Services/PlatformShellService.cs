@@ -46,6 +46,26 @@ public sealed class PlatformShellService : IPlatformShellService
         return Task.FromResult(false);
     }
 
+    public async Task<string?> ReadClipboardTextAsync()
+    {
+#if WINDOWS || WINDOWS_UWP
+        try
+        {
+            var content = Windows.ApplicationModel.DataTransfer.Clipboard.GetContent();
+            if (!content.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text))
+            {
+                return null;
+            }
+
+            return await content.GetTextAsync().AsTask().ConfigureAwait(false);
+        }
+        catch
+        {
+        }
+#endif
+        return null;
+    }
+
     private Task<bool> OpenWithShellAsync(string path)
     {
         if (!_capabilities.SupportsExternalFileOpen || string.IsNullOrWhiteSpace(path))

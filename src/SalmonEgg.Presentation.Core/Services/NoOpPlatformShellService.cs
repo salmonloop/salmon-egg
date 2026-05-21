@@ -19,4 +19,6 @@ internal sealed class NoOpPlatformShellService : IPlatformShellService
     public Task<bool> OpenUriAsync(Uri uri) => Task.FromResult(false);
 
     public Task<bool> CopyToClipboardAsync(string text) => Task.FromResult(false);
+
+    public Task<string?> ReadClipboardTextAsync() => Task.FromResult<string?>(null);
 }

@@ -246,5 +246,7 @@ public sealed class SessionNavItemViewModelTests
             LastCopiedText = text;
             return Task.FromResult(true);
         }
+
+        public Task<string?> ReadClipboardTextAsync() => Task.FromResult<string?>(null);
     }
 }

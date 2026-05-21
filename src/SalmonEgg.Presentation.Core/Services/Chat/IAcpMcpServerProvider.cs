@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Domain.Models.Mcp;
@@ -13,11 +14,11 @@ public interface IAcpMcpServerProvider
         CancellationToken cancellationToken = default);
 }
 
-public sealed class GlobalAcpMcpServerProvider : IAcpMcpServerProvider
+public sealed class SettingsAcpMcpServerProvider : IAcpMcpServerProvider
 {
     private readonly IMcpSettingsService _settingsService;
 
-    public GlobalAcpMcpServerProvider(IMcpSettingsService settingsService)
+    public SettingsAcpMcpServerProvider(IMcpSettingsService settingsService)
     {
         _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
     }
@@ -26,9 +27,7 @@ public sealed class GlobalAcpMcpServerProvider : IAcpMcpServerProvider
     {
         cancellationToken.ThrowIfCancellationRequested();
         var settings = await _settingsService.LoadAsync(cancellationToken).ConfigureAwait(false);
-        return settings.IsEnabled
-            ? McpServerJsonConverter.CloneServers(settings.Servers)
-            : Array.Empty<McpServer>();
+        return McpServerJsonConverter.CloneServers(settings.Servers.Where(server => server.Enabled));
     }
 }
 

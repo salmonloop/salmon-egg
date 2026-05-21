@@ -192,7 +192,7 @@ Create the corresponding Markdown file in:
     <value>Could not read MCP configuration.</value>
   </data>
   <data name="McpSettings_Saved" xml:space="preserve">
-    <value>MCP configuration saved.</value>
+    <value>MCP service saved.</value>
   </data>
   <data name="McpSettings_SaveFailed" xml:space="preserve">
     <value>Save failed. Check the service name, command, and address.</value>
@@ -200,13 +200,31 @@ Create the corresponding Markdown file in:
   <data name="McpSettings_SaveValidationFailed" xml:space="preserve">
     <value>Complete the MCP service name, command, or address before saving.</value>
   </data>
-  <data name="McpSettings_ImportSucceeded" xml:space="preserve">
-    <value>MCP services imported. Review them before saving.</value>
+  <data name="McpSettings_SaveValidationNameRequired" xml:space="preserve">
+    <value>Enter a service name first.</value>
   </data>
-  <data name="McpSettings_ImportSucceededWithReplacements" xml:space="preserve">
-    <value>MCP services imported, and same-name entries were replaced. Review them before saving.</value>
+  <data name="McpSettings_SaveValidationCommandRequired" xml:space="preserve">
+    <value>Enter a launch command first, or disable this service.</value>
+  </data>
+  <data name="McpSettings_SaveValidationUrlRequired" xml:space="preserve">
+    <value>Enter a service address first, or disable this service.</value>
+  </data>
+  <data name="McpSettings_RowUnsaved" xml:space="preserve">
+    <value>Unsaved changes.</value>
+  </data>
+  <data name="McpSettings_RowSaved" xml:space="preserve">
+    <value>Saved.</value>
+  </data>
+  <data name="McpSettings_Removed" xml:space="preserve">
+    <value>MCP service deleted.</value>
   </data>
   <data name="McpSettings_ImportFailed" xml:space="preserve">
     <value>Could not parse MCP JSON. Check mcpServers, service names, commands, and addresses.</value>
+  </data>
+  <data name="McpSettings_ClipboardEmpty" xml:space="preserve">
+    <value>No readable MCP JSON was found on the clipboard.</value>
+  </data>
+  <data name="McpSettings_ClipboardFilled" xml:space="preserve">
+    <value>Filled the current service from the clipboard.</value>
   </data>
 </root>

@@ -37,23 +37,21 @@ public sealed class McpSettingsServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task LoadAsync_WhenMcpYamlMissing_ReturnsDisabledEmptyCatalog()
+    public async Task LoadAsync_WhenMcpYamlMissing_ReturnsEmptyCatalog()
     {
         var service = CreateService();
 
         var settings = await service.LoadAsync();
 
-        Assert.False(settings.IsEnabled);
         Assert.Empty(settings.Servers);
     }
 
     [Fact]
-    public async Task SaveThenLoad_RoundTripsGlobalMcpSettings()
+    public async Task SaveThenLoad_RoundTripsMcpServerCatalog()
     {
         var service = CreateService();
         var settings = new McpSettings
         {
-            IsEnabled = true,
             Servers =
             [
                 new StdioMcpServer(
@@ -70,6 +68,7 @@ public sealed class McpSettingsServiceTests : IDisposable
                         }
                     ])
                 {
+                    Enabled = false,
                     Meta = new()
                     {
                         ["source"] = "settings"
@@ -94,7 +93,8 @@ public sealed class McpSettingsServiceTests : IDisposable
         await service.SaveAsync(settings);
 
         var yaml = await File.ReadAllTextAsync(GetMcpYamlPath());
-        Assert.Contains("is_enabled: true", yaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("is_enabled:", yaml, StringComparison.Ordinal);
+        Assert.Contains("enabled: false", yaml, StringComparison.Ordinal);
         Assert.Contains("servers:", yaml, StringComparison.Ordinal);
         Assert.Contains("transport: stdio", yaml, StringComparison.Ordinal);
         Assert.Contains("transport: http", yaml, StringComparison.Ordinal);
@@ -105,10 +105,10 @@ public sealed class McpSettingsServiceTests : IDisposable
 
         var loaded = await service.LoadAsync();
 
-        Assert.True(loaded.IsEnabled);
         Assert.Equal(3, loaded.Servers.Count);
 
         var stdio = Assert.IsType<StdioMcpServer>(loaded.Servers[0]);
+        Assert.False(stdio.Enabled);
         Assert.Equal("filesystem", stdio.Name);
         Assert.Equal("/usr/bin/mcp-filesystem", stdio.Command);
         Assert.Equal("--stdio", Assert.Single(stdio.Args!));
@@ -130,15 +130,17 @@ public sealed class McpSettingsServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SaveAsync_WhenCatalogDisabled_StillPersistsConfiguredServers()
+    public async Task SaveAsync_WhenServerDisabled_StillPersistsConfiguredServer()
     {
         var service = CreateService();
         var settings = new McpSettings
         {
-            IsEnabled = false,
             Servers =
             [
-                new StdioMcpServer("filesystem", "/usr/bin/mcp-filesystem", [], [])
+                new StdioMcpServer("filesystem", string.Empty, [], [])
+                {
+                    Enabled = false
+                }
             ]
         };
 
@@ -146,8 +148,9 @@ public sealed class McpSettingsServiceTests : IDisposable
 
         var loaded = await service.LoadAsync();
 
-        Assert.False(loaded.IsEnabled);
-        Assert.Single(loaded.Servers);
+        var server = Assert.IsType<StdioMcpServer>(Assert.Single(loaded.Servers));
+        Assert.False(server.Enabled);
+        Assert.Equal(string.Empty, server.Command);
     }
 
     [Fact]
@@ -156,7 +159,6 @@ public sealed class McpSettingsServiceTests : IDisposable
         var service = CreateService();
         var settings = new McpSettings
         {
-            IsEnabled = true,
             Servers =
             [
                 new StdioMcpServer("filesystem", string.Empty, [], [])
@@ -168,14 +170,13 @@ public sealed class McpSettingsServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task LoadAsync_WithInvalidMcpYaml_ReturnsDisabledEmptyCatalog()
+    public async Task LoadAsync_WithInvalidMcpYaml_ReturnsEmptyCatalog()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(GetMcpYamlPath())!);
         await File.WriteAllTextAsync(
             GetMcpYamlPath(),
             """
             schema_version: 1
-            is_enabled: true
             servers:
             - transport: stdio
               name: filesystem
@@ -185,21 +186,19 @@ public sealed class McpSettingsServiceTests : IDisposable
 
         var loaded = await service.LoadAsync();
 
-        Assert.False(loaded.IsEnabled);
         Assert.Empty(loaded.Servers);
     }
 
     [Theory]
     [InlineData("")]
     [InlineData("legacy")]
-    public async Task LoadAsync_WithUnsupportedTransport_ReturnsDisabledEmptyCatalog(string transport)
+    public async Task LoadAsync_WithUnsupportedTransport_ReturnsEmptyCatalog(string transport)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(GetMcpYamlPath())!);
         await File.WriteAllTextAsync(
             GetMcpYamlPath(),
             $$"""
             schema_version: 1
-            is_enabled: true
             servers:
             - transport: '{{transport}}'
               name: filesystem
@@ -209,7 +208,6 @@ public sealed class McpSettingsServiceTests : IDisposable
 
         var loaded = await service.LoadAsync();
 
-        Assert.False(loaded.IsEnabled);
         Assert.Empty(loaded.Servers);
     }
 

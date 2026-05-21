@@ -12,32 +12,41 @@ namespace SalmonEgg.GuiTests.Windows;
 public sealed class McpSettingsSmokeTests
 {
     [SkippableFact]
-    public void GlobalMcpEnabledToggle_PersistsWhenLeavingAndReturningToSettingsPage()
+    public void PerServerEnabledToggle_PersistsWhenLeavingAndReturningToSettingsPage()
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
+        appData.WriteMcpYaml(
+            """
+            schema_version: 1
+            servers:
+            - transport: http
+              name: search
+              enabled: false
+              url: https://example.com/mcp
+            """);
         using var session = WindowsGuiAppSession.LaunchFresh();
 
         EnsureMainWindowWide(session);
         NavigateToMcpSettings(session);
 
-        var toggle = session.FindByAutomationId("Mcp.Global.Enabled", TimeSpan.FromSeconds(10));
+        var toggle = session.FindByAutomationId("Mcp.Server.Enabled", TimeSpan.FromSeconds(10));
         Assert.Equal(ToggleState.Off, toggle.Patterns.Toggle.Pattern.ToggleState.Value);
 
         session.ClickElement(toggle);
 
         Assert.True(
-            WaitUntil(() => appData.ReadMcpYaml().Contains("is_enabled: true", StringComparison.Ordinal), TimeSpan.FromSeconds(5)),
-            $"Global MCP toggle did not persist true to mcp.yaml.{Environment.NewLine}{appData.ReadMcpYaml()}");
+            WaitUntil(() => appData.ReadMcpYaml().Contains("enabled: true", StringComparison.Ordinal), TimeSpan.FromSeconds(5)),
+            $"MCP service toggle did not persist true to mcp.yaml.{Environment.NewLine}{appData.ReadMcpYaml()}");
 
         NavigateToAcpSettings(session);
         NavigateToMcpSettings(session);
 
-        toggle = session.FindByAutomationId("Mcp.Global.Enabled", TimeSpan.FromSeconds(10));
+        toggle = session.FindByAutomationId("Mcp.Server.Enabled", TimeSpan.FromSeconds(10));
         Assert.Equal(ToggleState.On, toggle.Patterns.Toggle.Pattern.ToggleState.Value);
     }
 
     [SkippableFact]
-    public void AddRemoveAddServer_DoesNotCrash()
+    public void AddCloseAddServerEditor_DoesNotCrash()
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
         using var session = WindowsGuiAppSession.LaunchFresh();
@@ -47,18 +56,18 @@ public sealed class McpSettingsSmokeTests
 
         ClickButton(session, "Mcp.AddServer");
         Assert.True(
-            session.WaitUntilOnscreen("Mcp.RemoveServer", TimeSpan.FromSeconds(5)),
-            "MCP remove button did not become visible after adding a server.");
+            session.WaitUntilOnscreen("Mcp.SaveServer", TimeSpan.FromSeconds(5)),
+            "MCP editor save button did not become visible after adding a server.");
 
-        ClickButton(session, "Mcp.RemoveServer");
+        ClickButton(session, "Mcp.Editor.Close");
         Assert.True(
-            session.WaitUntilHidden("Mcp.RemoveServer", TimeSpan.FromSeconds(5)),
-            "MCP remove button stayed visible after deleting the only server row.");
+            session.WaitUntilHidden("Mcp.SaveServer", TimeSpan.FromSeconds(5)),
+            "MCP editor stayed visible after closing the draft.");
 
         ClickButton(session, "Mcp.AddServer");
         Assert.True(
-            session.WaitUntilOnscreen("Mcp.RemoveServer", TimeSpan.FromSeconds(5)),
-            "MCP remove button did not become visible after adding a second server row.");
+            session.WaitUntilOnscreen("Mcp.SaveServer", TimeSpan.FromSeconds(5)),
+            "MCP editor did not become visible after adding a second server draft.");
 
         Thread.Sleep(250);
         Assert.True(
@@ -79,6 +88,8 @@ public sealed class McpSettingsSmokeTests
     private static void NavigateToMcpSettings(WindowsGuiAppSession session)
     {
         var settingsItem = session.FindByAutomationId("SettingsItem", TimeSpan.FromSeconds(10));
+        session.ActivateElement(settingsItem);
+        Thread.Sleep(250);
         session.ClickElement(settingsItem);
         Thread.Sleep(250);
 
@@ -108,6 +119,8 @@ public sealed class McpSettingsSmokeTests
     private static void NavigateToAcpSettings(WindowsGuiAppSession session)
     {
         var settingsItem = session.FindByAutomationId("SettingsItem", TimeSpan.FromSeconds(10));
+        session.ActivateElement(settingsItem);
+        Thread.Sleep(250);
         session.ClickElement(settingsItem);
         Thread.Sleep(250);
 

@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Domain.Models.Mcp;
@@ -42,7 +43,6 @@ public sealed class McpSettingsService : IMcpSettingsService
 
             var settings = new McpSettings
             {
-                IsEnabled = model.IsEnabled,
                 Servers = McpServerYamlMapper.FromYamlServers(model.Servers)
             };
 
@@ -67,7 +67,7 @@ public sealed class McpSettingsService : IMcpSettingsService
         if (settings is null) throw new ArgumentNullException(nameof(settings));
 
         var validation = McpServerSupportPolicy.Validate(
-            settings.Servers,
+            settings.Servers.Where(server => server.Enabled),
             McpServerSupportPolicy.SupportAllTransports);
         if (!validation.IsSupported)
         {
@@ -80,7 +80,6 @@ public sealed class McpSettingsService : IMcpSettingsService
         {
             SchemaVersion = CurrentSchemaVersion,
             UpdatedAtUtc = DateTimeOffset.UtcNow.ToString("O"),
-            IsEnabled = settings.IsEnabled,
             Servers = McpServerYamlMapper.ToYamlServers(settings.Servers)
         };
 
@@ -91,13 +90,12 @@ public sealed class McpSettingsService : IMcpSettingsService
     private static McpSettings CloneSettings(McpSettings settings)
         => new()
         {
-            IsEnabled = settings.IsEnabled,
             Servers = McpServerJsonConverter.CloneServers(settings.Servers)
         };
 
     private static bool HasValidServers(McpSettings settings)
         => McpServerSupportPolicy
-            .Validate(settings.Servers, McpServerSupportPolicy.SupportAllTransports)
+            .Validate(settings.Servers.Where(server => server.Enabled), McpServerSupportPolicy.SupportAllTransports)
             .IsSupported;
 
     private async Task EnsureWritableSchemaAsync(CancellationToken cancellationToken)

@@ -42,9 +42,15 @@ public sealed class CoreStringResourceTests
     [InlineData("McpSettings_Saved")]
     [InlineData("McpSettings_SaveFailed")]
     [InlineData("McpSettings_SaveValidationFailed")]
-    [InlineData("McpSettings_ImportSucceeded")]
-    [InlineData("McpSettings_ImportSucceededWithReplacements")]
+    [InlineData("McpSettings_SaveValidationNameRequired")]
+    [InlineData("McpSettings_SaveValidationCommandRequired")]
+    [InlineData("McpSettings_SaveValidationUrlRequired")]
+    [InlineData("McpSettings_RowUnsaved")]
+    [InlineData("McpSettings_RowSaved")]
+    [InlineData("McpSettings_Removed")]
     [InlineData("McpSettings_ImportFailed")]
+    [InlineData("McpSettings_ClipboardEmpty")]
+    [InlineData("McpSettings_ClipboardFilled")]
     public void CoreMessages_ArePresentInAllCoreStringResources(string key)
     {
         foreach (var relativePath in CoreStringResourcePaths)

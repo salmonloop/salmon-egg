@@ -12,4 +12,6 @@ public interface IPlatformShellService
     Task<bool> OpenUriAsync(Uri uri);
 
     Task<bool> CopyToClipboardAsync(string text);
+
+    Task<string?> ReadClipboardTextAsync();
 }

@@ -258,7 +258,7 @@ public static class DependencyInjection
                 sp.GetRequiredService<ILogger<AcpSessionCommandOrchestrator>>(),
                 sp.GetRequiredService<IAcpMcpServerResolver>()));
         services.AddSingleton<IAcpMcpServerProvider>(sp =>
-            new GlobalAcpMcpServerProvider(sp.GetRequiredService<IMcpSettingsService>()));
+            new SettingsAcpMcpServerProvider(sp.GetRequiredService<IMcpSettingsService>()));
         services.AddSingleton<IAcpMcpServerResolver>(sp =>
             new AcpMcpServerResolver(sp.GetRequiredService<IAcpMcpServerProvider>()));
         services.AddSingleton<IAcpAvailabilityPolicy>(sp =>
@@ -589,6 +589,7 @@ public static class DependencyInjection
         services.AddSingleton<McpSettingsViewModel>(sp =>
             new McpSettingsViewModel(
                 sp.GetRequiredService<IMcpSettingsService>(),
+                sp.GetRequiredService<IPlatformShellService>(),
                 sp.GetRequiredService<IStringLocalizer<CoreStrings>>(),
                 sp.GetRequiredService<ILogger<McpSettingsViewModel>>()));
         services.AddSingleton<ShortcutsSettingsViewModel>();

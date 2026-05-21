@@ -14,21 +14,51 @@ public sealed class AcpConnectionSettingsXamlTests
         Assert.Contains("x:Class=\"SalmonEgg.Presentation.Views.Settings.McpSettingsPage\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Uid=\"Mcp_PageTitle\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Uid=\"Mcp_PageSummary\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("IsOn=\"{x:Bind ViewModel.IsEnabled, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("AutomationProperties.AutomationId=\"Mcp.Global.Enabled\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ViewModel.IsEnabled", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("AutomationProperties.AutomationId=\"Mcp.Global.Enabled\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Uid=\"Mcp_EnableSwitch\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("IsOn=\"{x:Bind Enabled, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Uid=\"Mcp_ServerEnabled\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"Mcp.Server.Enabled\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind EditCommand, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"Mcp.EditServer\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Visibility=\"{x:Bind ViewModel.IsEditorOpen, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"Mcp.Editor.Panel\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Content=\"{x:Bind ViewModel.EditingServer, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind ViewModel.CloseEditorCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"Mcp.Editor.Close\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("DisplayMemberPath=\"Name\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("SelectedValuePath=\"Transport\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("SelectedValue=\"{x:Bind Transport, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("SelectedItem=\"{x:Bind Transport, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("<ItemsControl ItemsSource=\"{x:Bind ViewModel.Servers, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("<ListView ItemsSource=\"{x:Bind ViewModel.Servers", xaml, StringComparison.Ordinal);
         Assert.Contains("Command=\"{x:Bind ViewModel.AddServerCommand}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Command=\"{x:Bind ViewModel.SaveCommand}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Command=\"{x:Bind ViewModel.OpenImportPanelCommand}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Command=\"{x:Bind ViewModel.ImportJsonCommand}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Visibility=\"{x:Bind ViewModel.IsImportPanelOpen, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Command=\"{x:Bind ViewModel.SaveCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("AutomationProperties.AutomationId=\"Mcp.SaveConfig\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind SaveCommand, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"Mcp.SaveServer\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Command=\"{x:Bind ViewModel.OpenImportPanelCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Command=\"{x:Bind ViewModel.ImportJsonCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Visibility=\"{x:Bind ViewModel.IsImportPanelOpen", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind ViewModel.FillEditorFromClipboardCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"Mcp.FillFromClipboardJson\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{x:Bind ViewModel.ImportStatusMessage, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"Mcp.Import.Status\"", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"Mcp.AddServer\"", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"Mcp.RemoveServer\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("<Button.Flyout>", xaml, StringComparison.Ordinal);
+        Assert.Contains("<Flyout>", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Uid=\"Mcp_RemoveServerConfirm\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"Mcp.RemoveServer.Confirm\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Command=\"{x:Bind RemoveCommand, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Text=\"{x:Bind ViewModel.ImportJsonText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("<Expander", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Uid=\"Mcp_ServerAdvanced\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Uid=\"Mcp_ServerDetails\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsExpanded=\"{x:Bind IsDetailsExpanded, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind StatusMessage, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"Mcp.Server.Status\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Text=\"{x:Bind ViewModel.ImportJsonText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("{Binding}", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("ContentDialog", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"Mcp.Servers.List\"", xaml, StringComparison.Ordinal);
@@ -59,39 +89,40 @@ public sealed class AcpConnectionSettingsXamlTests
         [
             "Mcp_PageTitle.Text",
             "Mcp_PageSummary.Text",
-            "Mcp_GlobalTitle.Text",
-            "Mcp_EnableTitle.Text",
-            "Mcp_EnableDescription.Text",
-            "Mcp_EnableSwitch.OnContent",
-            "Mcp_EnableSwitch.OffContent",
             "Mcp_ServersTitle.Text",
             "Mcp_Reload.Content",
-            "Mcp_ImportFromJson.Content",
             "Mcp_AddServer.Content",
+            "Mcp_FillFromClipboardJson.Content",
             "Mcp_ServerCatalogDescription.Text",
-            "Mcp_Save.Content",
-            "Mcp_ImportTitle.Text",
-            "Mcp_ImportDescription.Text",
-            "Mcp_ImportJson.Header",
-            "Mcp_ImportJson.PlaceholderText",
-            "Mcp_ImportHint.Text",
-            "Mcp_ImportJsonClear.Content",
-            "Mcp_ImportJsonApply.Content",
-            "Mcp_ImportJsonCollapse.Content",
+            "Mcp_SaveServer.Content",
             "Mcp_ServerName.Header",
             "Mcp_ServerName.PlaceholderText",
             "Mcp_ServerTransport.Header",
+            "Mcp_ServerEnabled.OnContent",
+            "Mcp_ServerEnabled.OffContent",
+            "Mcp_EditServer.Content",
             "Mcp_RemoveServer.ToolTipService.ToolTip",
+            "Mcp_RemoveServerConfirmTitle.Text",
+            "Mcp_RemoveServerConfirmDescription.Text",
+            "Mcp_RemoveServerConfirm.Content",
+            "Mcp_EditorTitle.Text",
+            "Mcp_EditorDescription.Text",
+            "Mcp_EditorClose.Content",
+            "Mcp_EditorSave.Content",
+            "Mcp_ServerAdvanced.Header",
             "Mcp_ServerCommand.Header",
             "Mcp_ServerCommand.PlaceholderText",
             "Mcp_ServerArguments.Header",
             "Mcp_ServerArguments.PlaceholderText",
+            "Mcp_ServerArgumentsHelp.Text",
             "Mcp_ServerEnvironment.Header",
             "Mcp_ServerEnvironment.PlaceholderText",
+            "Mcp_ServerEnvironmentHelp.Text",
             "Mcp_ServerUrl.Header",
             "Mcp_ServerUrl.PlaceholderText",
             "Mcp_ServerHeaders.Header",
-            "Mcp_ServerHeaders.PlaceholderText"
+            "Mcp_ServerHeaders.PlaceholderText",
+            "Mcp_ServerHeadersHelp.Text"
         ];
 
         foreach (var resourceFile in resourceFiles)

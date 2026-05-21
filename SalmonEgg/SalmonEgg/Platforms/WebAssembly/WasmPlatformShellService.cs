@@ -31,4 +31,6 @@ public sealed class WasmPlatformShellService : IPlatformShellService
     }
 
     public Task<bool> CopyToClipboardAsync(string text) => _unsupported.CopyToClipboardAsync(text);
+
+    public Task<string?> ReadClipboardTextAsync() => _unsupported.ReadClipboardTextAsync();
 }

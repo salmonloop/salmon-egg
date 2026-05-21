@@ -1094,67 +1094,28 @@
     <value>MCP</value>
   </data>
   <data name="Mcp_PageSummary.Text" xml:space="preserve">
-    <value>Manage the MCP services that can be offered to agents during sessions. When enabled, new, resumed, and loaded sessions use this configuration.</value>
-  </data>
-  <data name="Mcp_GlobalTitle.Text" xml:space="preserve">
-    <value>Global MCP configuration</value>
-  </data>
-  <data name="Mcp_EnableTitle.Text" xml:space="preserve">
-    <value>Offer MCP services with ACP sessions</value>
-  </data>
-  <data name="Mcp_EnableDescription.Text" xml:space="preserve">
-    <value>When enabled, Salmon Egg includes the current MCP service list when a session starts or resumes.</value>
-  </data>
-  <data name="Mcp_EnableSwitch.OnContent" xml:space="preserve">
-    <value>On</value>
-  </data>
-  <data name="Mcp_EnableSwitch.OffContent" xml:space="preserve">
-    <value>Off</value>
+    <value>Enable MCP services as needed. Enabled and complete services are provided with ACP sessions.</value>
   </data>
   <data name="Mcp_ServersTitle.Text" xml:space="preserve">
-    <value>MCP services</value>
+    <value>Service configuration</value>
   </data>
   <data name="Mcp_Reload.Content" xml:space="preserve">
     <value>Refresh</value>
   </data>
-  <data name="Mcp_ImportFromJson.Content" xml:space="preserve">
-    <value>Import from JSON</value>
-  </data>
   <data name="Mcp_AddServer.Content" xml:space="preserve">
     <value>New</value>
   </data>
-  <data name="Mcp_ServerCatalogDescription.Text" xml:space="preserve">
-    <value>Local services usually use stdio. Remote services should use HTTP first. SSE is only for older services that have not migrated.</value>
+  <data name="Mcp_FillFromClipboardJson.Content" xml:space="preserve">
+    <value>Fill from clipboard</value>
   </data>
-  <data name="Mcp_Save.Content" xml:space="preserve">
+  <data name="Mcp_ServerCatalogDescription.Text" xml:space="preserve">
+    <value>Local services use stdio. Remote services support Streamable HTTP and SSE.</value>
+  </data>
+  <data name="Mcp_SaveServer.Content" xml:space="preserve">
     <value>Save</value>
   </data>
-  <data name="Mcp_ImportTitle.Text" xml:space="preserve">
-    <value>Import MCP services from JSON</value>
-  </data>
-  <data name="Mcp_ImportDescription.Text" xml:space="preserve">
-    <value>Paste a config with mcpServers. Imported items become editable services and still need to be saved.</value>
-  </data>
-  <data name="Mcp_ImportJson.Header" xml:space="preserve">
-    <value>MCP JSON</value>
-  </data>
-  <data name="Mcp_ImportJson.PlaceholderText" xml:space="preserve">
-    <value>{&quot;mcpServers&quot;:{&quot;filesystem&quot;:{&quot;command&quot;:&quot;npx&quot;,&quot;args&quot;:[&quot;-y&quot;,&quot;@modelcontextprotocol/server-filesystem&quot;]}}}</value>
-  </data>
-  <data name="Mcp_ImportHint.Text" xml:space="preserve">
-    <value>Supports stdio, HTTP, and SSE. Unknown fields are ignored.</value>
-  </data>
-  <data name="Mcp_ImportJsonClear.Content" xml:space="preserve">
-    <value>Clear</value>
-  </data>
-  <data name="Mcp_ImportJsonApply.Content" xml:space="preserve">
-    <value>Import</value>
-  </data>
-  <data name="Mcp_ImportJsonCollapse.Content" xml:space="preserve">
-    <value>Collapse</value>
-  </data>
   <data name="Mcp_ServerName.Header" xml:space="preserve">
-    <value>Service name</value>
+    <value>Name</value>
   </data>
   <data name="Mcp_ServerName.PlaceholderText" xml:space="preserve">
     <value>filesystem</value>
@@ -1162,8 +1123,41 @@
   <data name="Mcp_ServerTransport.Header" xml:space="preserve">
     <value>Connection type</value>
   </data>
+  <data name="Mcp_ServerEnabled.OnContent" xml:space="preserve">
+    <value>Enabled</value>
+  </data>
+  <data name="Mcp_ServerEnabled.OffContent" xml:space="preserve">
+    <value>Disabled</value>
+  </data>
   <data name="Mcp_RemoveServer.ToolTipService.ToolTip" xml:space="preserve">
     <value>Delete</value>
+  </data>
+  <data name="Mcp_EditServer.Content" xml:space="preserve">
+    <value>Edit</value>
+  </data>
+  <data name="Mcp_RemoveServerConfirmTitle.Text" xml:space="preserve">
+    <value>Delete this service?</value>
+  </data>
+  <data name="Mcp_RemoveServerConfirmDescription.Text" xml:space="preserve">
+    <value>This immediately removes it from the MCP configuration.</value>
+  </data>
+  <data name="Mcp_RemoveServerConfirm.Content" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="Mcp_EditorTitle.Text" xml:space="preserve">
+    <value>Edit MCP service</value>
+  </data>
+  <data name="Mcp_EditorDescription.Text" xml:space="preserve">
+    <value>Edit connection details, then save them to this service.</value>
+  </data>
+  <data name="Mcp_EditorClose.Content" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="Mcp_EditorSave.Content" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="Mcp_ServerAdvanced.Header" xml:space="preserve">
+    <value>Advanced settings</value>
   </data>
   <data name="Mcp_ServerCommand.Header" xml:space="preserve">
     <value>Launch command</value>
@@ -1177,11 +1171,17 @@
   <data name="Mcp_ServerArguments.PlaceholderText" xml:space="preserve">
     <value>--root C:\repo</value>
   </data>
+  <data name="Mcp_ServerArgumentsHelp.Text" xml:space="preserve">
+    <value>Separate arguments with spaces; quote values that contain spaces.</value>
+  </data>
   <data name="Mcp_ServerEnvironment.Header" xml:space="preserve">
     <value>Environment variables</value>
   </data>
   <data name="Mcp_ServerEnvironment.PlaceholderText" xml:space="preserve">
     <value>API_KEY=value</value>
+  </data>
+  <data name="Mcp_ServerEnvironmentHelp.Text" xml:space="preserve">
+    <value>Use one variable per line: KEY=value.</value>
   </data>
   <data name="Mcp_ServerUrl.Header" xml:space="preserve">
     <value>Service address</value>
@@ -1194,5 +1194,8 @@
   </data>
   <data name="Mcp_ServerHeaders.PlaceholderText" xml:space="preserve">
     <value>Authorization: Bearer token</value>
+  </data>
+  <data name="Mcp_ServerHeadersHelp.Text" xml:space="preserve">
+    <value>Use one header per line: Header: value.</value>
   </data>
 </root>

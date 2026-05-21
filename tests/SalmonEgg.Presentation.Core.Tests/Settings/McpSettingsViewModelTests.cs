@@ -14,16 +14,18 @@ namespace SalmonEgg.Presentation.Core.Tests.Settings;
 public sealed class McpSettingsViewModelTests
 {
     [Fact]
-    public async Task LoadCommand_LoadsGlobalMcpSettingsIntoRows()
+    public async Task LoadCommand_LoadsMcpSettingsIntoRows()
     {
         var service = new FakeMcpSettingsService
         {
             Settings = new McpSettings
             {
-                IsEnabled = true,
                 Servers =
                 {
-                    new StdioMcpServer("filesystem", "C:\\mcp\\filesystem.exe", ["--root", "C:\\repo"]),
+                    new StdioMcpServer("filesystem", "C:\\mcp\\filesystem.exe", ["--root", "C:\\repo"])
+                    {
+                        Enabled = false
+                    },
                     new HttpMcpServer("search", "https://example.com/mcp", [new McpHttpHeader("Authorization", "Bearer token")])
                 }
             }
@@ -32,88 +34,86 @@ public sealed class McpSettingsViewModelTests
 
         await viewModel.LoadCommand.ExecuteAsync(null);
 
-        Assert.True(viewModel.IsEnabled);
         Assert.Equal(2, viewModel.Servers.Count);
         Assert.Equal("filesystem", viewModel.Servers[0].Name);
+        Assert.False(viewModel.Servers[0].Enabled);
         Assert.Equal(McpServerTransport.Stdio, viewModel.Servers[0].Transport);
+        Assert.False(viewModel.Servers[0].IsDetailsExpanded);
         Assert.Equal("C:\\mcp\\filesystem.exe", viewModel.Servers[0].Command);
         Assert.Equal("--root C:\\repo", viewModel.Servers[0].ArgumentsText);
+        Assert.Equal("McpSettings_RowSaved", viewModel.Servers[0].StatusMessage);
         Assert.Equal("search", viewModel.Servers[1].Name);
         Assert.Equal(McpServerTransport.Http, viewModel.Servers[1].Transport);
+        Assert.False(viewModel.Servers[1].IsDetailsExpanded);
         Assert.Equal("https://example.com/mcp", viewModel.Servers[1].Url);
         Assert.Equal("Authorization: Bearer token", viewModel.Servers[1].HeadersText);
+        Assert.Equal("McpSettings_RowSaved", viewModel.Servers[1].StatusMessage);
+        Assert.False(viewModel.IsEditorOpen);
     }
 
     [Fact]
-    public async Task SaveCommand_PersistsEnabledStateAndEditedRows()
+    public void TransportOptions_UseMcpProtocolCasingForDisplayNames()
     {
-        var service = new FakeMcpSettingsService();
+        var row = new McpServerRowViewModel();
+
+        Assert.Collection(
+            row.TransportOptions,
+            option =>
+            {
+                Assert.Equal(McpServerTransport.Stdio, option.Transport);
+                Assert.Equal("stdio", option.Name);
+            },
+            option =>
+            {
+                Assert.Equal(McpServerTransport.Http, option.Transport);
+                Assert.Equal("Streamable HTTP", option.Name);
+            },
+            option =>
+            {
+                Assert.Equal(McpServerTransport.Sse, option.Transport);
+                Assert.Equal("SSE", option.Name);
+            });
+    }
+
+    [Fact]
+    public async Task RowSaveCommand_PersistsOnlySelectedServer()
+    {
+        var service = new FakeMcpSettingsService
+        {
+            Settings = new McpSettings
+            {
+                Servers =
+                {
+                    new HttpMcpServer("search", "https://example.com/mcp"),
+                    new HttpMcpServer("docs", "https://docs.example.com/mcp")
+                }
+            }
+        };
         var viewModel = CreateViewModel(service);
         await viewModel.LoadCommand.ExecuteAsync(null);
 
-        viewModel.IsEnabled = true;
-        viewModel.AddServerCommand.Execute(null);
-        var row = Assert.Single(viewModel.Servers);
+        var row = viewModel.Servers[0];
         row.Name = "filesystem";
         row.Transport = McpServerTransport.Stdio;
         row.Command = "C:\\mcp\\filesystem.exe";
         row.ArgumentsText = "--root \"C:\\repo path\"";
         row.EnvironmentText = "ROOT=C:\\repo path";
+        viewModel.Servers[1].Name = "unsaved-local-edit";
 
-        await viewModel.SaveCommand.ExecuteAsync(null);
+        await row.SaveCommand.ExecuteAsync(null);
 
         Assert.NotNull(service.SavedSettings);
-        Assert.True(service.SavedSettings!.IsEnabled);
-        var server = Assert.IsType<StdioMcpServer>(Assert.Single(service.SavedSettings.Servers));
+        Assert.Equal(2, service.SavedSettings!.Servers.Count);
+        var server = Assert.IsType<StdioMcpServer>(service.SavedSettings.Servers[0]);
         Assert.Equal("filesystem", server.Name);
         Assert.Equal("C:\\mcp\\filesystem.exe", server.Command);
         Assert.Equal(["--root", "C:\\repo path"], server.Args);
         var env = Assert.Single(server.Env!);
         Assert.Equal("ROOT", env.Name);
         Assert.Equal("C:\\repo path", env.Value);
-    }
-
-    [Fact]
-    public async Task IsEnabledChanged_PersistsGlobalSwitchWithoutServerRows()
-    {
-        var service = new FakeMcpSettingsService
-        {
-            Settings = new McpSettings
-            {
-                IsEnabled = false
-            }
-        };
-        var viewModel = CreateViewModel(service);
-        await viewModel.LoadCommand.ExecuteAsync(null);
-
-        viewModel.IsEnabled = true;
-
-        await WaitUntilAsync(() => service.SavedSettings is not null);
-
-        Assert.NotNull(service.SavedSettings);
-        Assert.True(service.SavedSettings!.IsEnabled);
-        Assert.Empty(service.SavedSettings.Servers);
-    }
-
-    [Fact]
-    public async Task IsEnabledChanged_WhenReloaded_RetainsPersistedGlobalSwitch()
-    {
-        var service = new FakeMcpSettingsService
-        {
-            Settings = new McpSettings
-            {
-                IsEnabled = false
-            }
-        };
-        var viewModel = CreateViewModel(service);
-        await viewModel.LoadCommand.ExecuteAsync(null);
-
-        viewModel.IsEnabled = true;
-        await WaitUntilAsync(() => service.SavedSettings is not null);
-        service.Settings = service.SavedSettings!;
-        await viewModel.LoadCommand.ExecuteAsync(null);
-
-        Assert.True(viewModel.IsEnabled);
+        Assert.Equal("docs", service.SavedSettings.Servers[1].Name);
+        Assert.Equal("filesystem", row.PersistedName);
+        Assert.Equal("McpSettings_RowSaved", row.StatusMessage);
     }
 
     [Fact]
@@ -123,7 +123,6 @@ public sealed class McpSettingsViewModelTests
         {
             Settings = new McpSettings
             {
-                IsEnabled = true,
                 Servers =
                 {
                     new HttpMcpServer("search", "https://example.com/mcp")
@@ -134,7 +133,6 @@ public sealed class McpSettingsViewModelTests
         await viewModel.LoadCommand.ExecuteAsync(null);
 
         viewModel.RemoveServerCommand.Execute(viewModel.Servers[0]);
-        await viewModel.SaveCommand.ExecuteAsync(null);
 
         Assert.Empty(viewModel.Servers);
         Assert.NotNull(service.SavedSettings);
@@ -171,54 +169,61 @@ public sealed class McpSettingsViewModelTests
         await viewModel.LoadCommand.ExecuteAsync(null);
 
         viewModel.AddServerCommand.Execute(null);
-        var firstRow = Assert.Single(viewModel.Servers);
-        firstRow.RemoveCommand.Execute(null);
+        Assert.NotNull(viewModel.EditingServer);
+        var firstRow = viewModel.EditingServer;
+        viewModel.CloseEditorCommand.Execute(null);
 
         Assert.Empty(viewModel.Servers);
+        Assert.False(viewModel.IsEditorOpen);
 
         viewModel.AddServerCommand.Execute(null);
-        var secondRow = Assert.Single(viewModel.Servers);
+        Assert.NotNull(viewModel.EditingServer);
+        var secondRow = viewModel.EditingServer;
         Assert.NotSame(firstRow, secondRow);
 
-        secondRow.RemoveCommand.Execute(null);
+        viewModel.CloseEditorCommand.Execute(null);
 
         Assert.Empty(viewModel.Servers);
     }
 
     [Fact]
-    public async Task ImportJsonCommand_ExpandsAndImportsKeyedMcpServers()
+    public async Task FillEditorFromClipboardCommand_FillsDraftFromKeyedMcpServersJson()
     {
-        var viewModel = CreateViewModel(new FakeMcpSettingsService());
-        await viewModel.LoadCommand.ExecuteAsync(null);
-        viewModel.ImportJsonText = """
+        var shell = new FakePlatformShellService
         {
-          "mcpServers": {
-            "filesystem": {
-              "command": "npx",
-              "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:\\repo"],
-              "env": {
-                "API_KEY": "secret"
+            ClipboardText = """
+            {
+              "mcpServers": {
+                "filesystem": {
+                  "command": "npx",
+                  "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:\\repo"],
+                  "env": {
+                    "API_KEY": "secret"
+                  }
+                }
               }
             }
-          }
-        }
-        """;
+            """
+        };
+        var viewModel = CreateViewModel(new FakeMcpSettingsService(), shell);
+        await viewModel.LoadCommand.ExecuteAsync(null);
+        viewModel.AddServerCommand.Execute(null);
 
-        await viewModel.ImportJsonCommand.ExecuteAsync(null);
+        await viewModel.FillEditorFromClipboardCommand.ExecuteAsync(null);
 
-        Assert.True(viewModel.IsImportPanelOpen);
-        var row = Assert.Single(viewModel.Servers);
-        Assert.Equal("filesystem", row.Name);
-        Assert.Equal(McpServerTransport.Stdio, row.Transport);
-        Assert.Equal("npx", row.Command);
-        Assert.Equal("-y @modelcontextprotocol/server-filesystem C:\\repo", row.ArgumentsText);
-        Assert.Equal("API_KEY=secret", row.EnvironmentText);
-        Assert.Equal("McpSettings_ImportSucceeded", viewModel.StatusMessage);
-        Assert.Equal("McpSettings_ImportSucceeded", viewModel.ImportStatusMessage);
+        Assert.Empty(viewModel.Servers);
+        Assert.True(viewModel.IsEditorOpen);
+        Assert.Equal("filesystem", viewModel.EditingServer!.Name);
+        Assert.Equal(McpServerTransport.Stdio, viewModel.EditingServer.Transport);
+        Assert.Equal("npx", viewModel.EditingServer.Command);
+        Assert.Equal("-y @modelcontextprotocol/server-filesystem C:\\repo", viewModel.EditingServer.ArgumentsText);
+        Assert.Equal("API_KEY=secret", viewModel.EditingServer.EnvironmentText);
+        Assert.Empty(viewModel.StatusMessage);
+        Assert.Equal("McpSettings_ClipboardFilled", viewModel.ImportStatusMessage);
     }
 
     [Fact]
-    public async Task ImportJsonCommand_ImportsArrayServersAndReplacesSameName()
+    public async Task FillEditorFromClipboardCommand_FillsExistingEditorWithoutChangingEnabledState()
     {
         var service = new FakeMcpSettingsService
         {
@@ -230,89 +235,340 @@ public sealed class McpSettingsViewModelTests
                 }
             }
         };
-        var viewModel = CreateViewModel(service);
-        await viewModel.LoadCommand.ExecuteAsync(null);
-        viewModel.ImportJsonText = """
+        var shell = new FakePlatformShellService
         {
-          "mcpServers": [
+            ClipboardText = """
             {
-              "name": "search",
-              "type": "http",
-              "url": "https://example.com/mcp",
-              "headers": {
-                "Authorization": "Bearer token"
-              }
+              "mcpServers": [
+                {
+                  "name": "search",
+                  "type": "http",
+                  "url": "https://example.com/mcp",
+                  "headers": {
+                    "Authorization": "Bearer token"
+                  }
+                }
+              ]
             }
-          ]
-        }
-        """;
+            """
+        };
+        var viewModel = CreateViewModel(service, shell);
+        await viewModel.LoadCommand.ExecuteAsync(null);
+        viewModel.Servers[0].SetEnabledFromStore(false);
+        viewModel.Servers[0].EditCommand.Execute(null);
 
-        await viewModel.ImportJsonCommand.ExecuteAsync(null);
+        await viewModel.FillEditorFromClipboardCommand.ExecuteAsync(null);
 
         var row = Assert.Single(viewModel.Servers);
-        Assert.Equal("search", row.Name);
-        Assert.Equal(McpServerTransport.Http, row.Transport);
-        Assert.Equal("https://example.com/mcp", row.Url);
-        Assert.Equal("Authorization: Bearer token", row.HeadersText);
-        Assert.Equal("McpSettings_ImportSucceededWithReplacements", viewModel.StatusMessage);
-        Assert.Equal("McpSettings_ImportSucceededWithReplacements", viewModel.ImportStatusMessage);
+        Assert.Equal("old.exe", row.Command);
+        Assert.False(viewModel.EditingServer!.Enabled);
+        Assert.True(viewModel.IsEditorOpen);
+        Assert.Equal("search", viewModel.EditingServer!.Name);
+        Assert.Equal("search", viewModel.EditingServer.PersistedName);
+        Assert.Equal(McpServerTransport.Http, viewModel.EditingServer.Transport);
+        Assert.Equal("https://example.com/mcp", viewModel.EditingServer.Url);
+        Assert.Equal("Authorization: Bearer token", viewModel.EditingServer.HeadersText);
+        Assert.Empty(viewModel.StatusMessage);
+        Assert.Equal("McpSettings_ClipboardFilled", viewModel.ImportStatusMessage);
     }
 
     [Fact]
-    public async Task ImportJsonCommand_WhenJsonInvalid_SetsLocalizedFailure()
+    public async Task FillEditorFromClipboardCommand_AcceptsJsonCodeFence()
     {
-        var viewModel = CreateViewModel(new FakeMcpSettingsService());
-        viewModel.ImportJsonText = "{ invalid";
+        var shell = new FakePlatformShellService
+        {
+            ClipboardText = """
+            ```json
+            {
+              "name": "docs",
+              "transport": "sse",
+              "url": "https://example.com/sse"
+            }
+            ```
+            """
+        };
+        var viewModel = CreateViewModel(new FakeMcpSettingsService(), shell);
 
-        await viewModel.ImportJsonCommand.ExecuteAsync(null);
+        await viewModel.FillEditorFromClipboardCommand.ExecuteAsync(null);
+
+        Assert.True(viewModel.IsEditorOpen);
+        Assert.Equal("docs", viewModel.EditingServer!.Name);
+        Assert.Equal(McpServerTransport.Sse, viewModel.EditingServer.Transport);
+        Assert.Equal("https://example.com/sse", viewModel.EditingServer.Url);
+        Assert.Equal("McpSettings_ClipboardFilled", viewModel.ImportStatusMessage);
+    }
+
+    [Fact]
+    public async Task FillEditorFromClipboardCommand_FindsNestedMcpServers()
+    {
+        var shell = new FakePlatformShellService
+        {
+            ClipboardText = """
+            {
+              "workspace": {
+                "tools": {
+                  "profile": {
+                    "mcpServers": {
+                      "nested-filesystem": {
+                        "command": "npx",
+                        "args": ["-y", "@modelcontextprotocol/server-filesystem"]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            """
+        };
+        var viewModel = CreateViewModel(new FakeMcpSettingsService(), shell);
+
+        await viewModel.FillEditorFromClipboardCommand.ExecuteAsync(null);
+
+        Assert.True(viewModel.IsEditorOpen);
+        Assert.Equal("nested-filesystem", viewModel.EditingServer!.Name);
+        Assert.Equal(McpServerTransport.Stdio, viewModel.EditingServer.Transport);
+        Assert.Equal("npx", viewModel.EditingServer.Command);
+        Assert.Equal("-y @modelcontextprotocol/server-filesystem", viewModel.EditingServer.ArgumentsText);
+    }
+
+    [Fact]
+    public async Task FillEditorFromClipboardCommand_SkipsInvalidNestedCandidateWhenLaterCandidateIsValid()
+    {
+        var shell = new FakePlatformShellService
+        {
+            ClipboardText = """
+            {
+              "bad": {
+                "mcpServers": {
+                  "broken": {
+                    "type": "http"
+                  }
+                }
+              },
+              "good": {
+                "mcpServers": [
+                  {
+                    "name": "remote-search",
+                    "type": "streamable-http",
+                    "url": "https://example.com/mcp"
+                  }
+                ]
+              }
+            }
+            """
+        };
+        var viewModel = CreateViewModel(new FakeMcpSettingsService(), shell);
+
+        await viewModel.FillEditorFromClipboardCommand.ExecuteAsync(null);
+
+        Assert.True(viewModel.IsEditorOpen);
+        Assert.Equal("remote-search", viewModel.EditingServer!.Name);
+        Assert.Equal(McpServerTransport.Http, viewModel.EditingServer.Transport);
+        Assert.Equal("https://example.com/mcp", viewModel.EditingServer.Url);
+        Assert.Equal("McpSettings_ClipboardFilled", viewModel.ImportStatusMessage);
+    }
+
+    [Fact]
+    public async Task FillEditorFromClipboardCommand_WhenJsonInvalid_SetsLocalizedFailure()
+    {
+        var viewModel = CreateViewModel(
+            new FakeMcpSettingsService(),
+            new FakePlatformShellService { ClipboardText = "{ invalid" });
+
+        await viewModel.FillEditorFromClipboardCommand.ExecuteAsync(null);
 
         Assert.Empty(viewModel.Servers);
-        Assert.Equal("McpSettings_ImportFailed", viewModel.StatusMessage);
+        Assert.Empty(viewModel.StatusMessage);
         Assert.Equal("McpSettings_ImportFailed", viewModel.ImportStatusMessage);
     }
 
     [Fact]
-    public async Task ClearImportJsonCommand_ClearsImportFeedback()
+    public async Task FillEditorFromClipboardCommand_WhenClipboardEmpty_SetsLocalizedFailure()
     {
-        var viewModel = CreateViewModel(new FakeMcpSettingsService());
-        viewModel.ImportJsonText = "{ invalid";
-        await viewModel.ImportJsonCommand.ExecuteAsync(null);
+        var viewModel = CreateViewModel(
+            new FakeMcpSettingsService(),
+            new FakePlatformShellService { ClipboardText = " " });
 
-        viewModel.ClearImportJsonCommand.Execute(null);
+        await viewModel.FillEditorFromClipboardCommand.ExecuteAsync(null);
 
-        Assert.Empty(viewModel.ImportJsonText);
-        Assert.Empty(viewModel.ImportStatusMessage);
+        Assert.Empty(viewModel.StatusMessage);
+        Assert.Equal("McpSettings_ClipboardEmpty", viewModel.ImportStatusMessage);
     }
 
     [Fact]
-    public async Task SaveCommand_WhenAddedDraftIsIncomplete_ShowsValidationAndDoesNotPersist()
+    public async Task RowSaveCommand_WhenAddedDraftIsIncomplete_ShowsValidationAndDoesNotPersist()
     {
         var service = new FakeMcpSettingsService();
         var viewModel = CreateViewModel(service);
         await viewModel.LoadCommand.ExecuteAsync(null);
         viewModel.AddServerCommand.Execute(null);
 
-        await viewModel.SaveCommand.ExecuteAsync(null);
+        Assert.NotNull(viewModel.EditingServer);
+        var row = viewModel.EditingServer!;
+        await row.SaveCommand.ExecuteAsync(null);
 
         Assert.Null(service.SavedSettings);
-        Assert.Equal("McpSettings_SaveValidationFailed", viewModel.StatusMessage);
+        Assert.Equal("McpSettings_SaveValidationCommandRequired", viewModel.StatusMessage);
+        Assert.Equal("McpSettings_SaveValidationCommandRequired", row.StatusMessage);
     }
 
-    private static McpSettingsViewModel CreateViewModel(IMcpSettingsService settingsService)
-        => new(settingsService, new TestCoreStringLocalizer(), Mock.Of<ILogger<McpSettingsViewModel>>());
-
-    private static async Task WaitUntilAsync(Func<bool> condition)
+    [Fact]
+    public async Task AddServerCommand_CreatesExpandedEditableDraft()
     {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(2);
-        while (DateTime.UtcNow < deadline)
-        {
-            if (condition())
-            {
-                return;
-            }
+        var viewModel = CreateViewModel(new FakeMcpSettingsService());
+        await viewModel.LoadCommand.ExecuteAsync(null);
 
-            await Task.Delay(20);
-        }
+        viewModel.AddServerCommand.Execute(null);
+
+        Assert.NotNull(viewModel.EditingServer);
+        var row = viewModel.EditingServer!;
+        Assert.Empty(viewModel.Servers);
+        Assert.True(viewModel.IsEditorOpen);
+        Assert.True(row.IsDetailsExpanded);
+        Assert.Equal("McpSettings_RowUnsaved", row.StatusMessage);
+    }
+
+    [Fact]
+    public async Task RowSaveCommand_WhenDisabledDraftIsIncomplete_PersistsAsDisabledDraft()
+    {
+        var service = new FakeMcpSettingsService();
+        var viewModel = CreateViewModel(service);
+        await viewModel.LoadCommand.ExecuteAsync(null);
+        viewModel.AddServerCommand.Execute(null);
+        Assert.NotNull(viewModel.EditingServer);
+        var row = viewModel.EditingServer!;
+        row.Enabled = false;
+
+        await row.SaveCommand.ExecuteAsync(null);
+
+        Assert.NotNull(service.SavedSettings);
+        var server = Assert.IsType<StdioMcpServer>(Assert.Single(service.SavedSettings!.Servers));
+        Assert.False(server.Enabled);
+        Assert.Equal("new-mcp-server", server.Name);
+        Assert.Equal(string.Empty, server.Command);
+        Assert.Single(viewModel.Servers);
+        Assert.False(viewModel.IsEditorOpen);
+    }
+
+    [Fact]
+    public async Task RowSaveCommand_WhenDisabledDraftHasNoName_ShowsValidationAndDoesNotPersist()
+    {
+        var service = new FakeMcpSettingsService();
+        var viewModel = CreateViewModel(service);
+        await viewModel.LoadCommand.ExecuteAsync(null);
+        viewModel.AddServerCommand.Execute(null);
+        Assert.NotNull(viewModel.EditingServer);
+        var row = viewModel.EditingServer!;
+        row.Enabled = false;
+        var savesBeforeBlankName = service.SaveCount;
+        row.Name = string.Empty;
+
+        await row.SaveCommand.ExecuteAsync(null);
+
+        Assert.Equal(savesBeforeBlankName, service.SaveCount);
+        Assert.Equal("McpSettings_SaveValidationNameRequired", row.StatusMessage);
+        Assert.Equal("McpSettings_SaveValidationNameRequired", viewModel.StatusMessage);
+    }
+
+    [Fact]
+    public async Task EnabledChanged_PersistsSingleServerImmediately()
+    {
+        var service = new FakeMcpSettingsService
+        {
+            Settings = new McpSettings
+            {
+                Servers =
+                {
+                    new HttpMcpServer("search", "https://example.com/mcp")
+                    {
+                        Enabled = false
+                    }
+                }
+            }
+        };
+        var viewModel = CreateViewModel(service);
+        await viewModel.LoadCommand.ExecuteAsync(null);
+
+        viewModel.Servers[0].Enabled = true;
+
+        Assert.NotNull(service.SavedSettings);
+        Assert.True(Assert.Single(service.SavedSettings!.Servers).Enabled);
+        Assert.Equal("McpSettings_RowSaved", viewModel.Servers[0].StatusMessage);
+    }
+
+    [Fact]
+    public async Task EnabledChanged_WhenServerIncomplete_RevertsToDisabledAndShowsRowValidation()
+    {
+        var service = new FakeMcpSettingsService
+        {
+            Settings = new McpSettings
+            {
+                Servers =
+                {
+                    new StdioMcpServer("draft", string.Empty)
+                    {
+                        Enabled = false
+                    }
+                }
+            }
+        };
+        var viewModel = CreateViewModel(service);
+        await viewModel.LoadCommand.ExecuteAsync(null);
+        var row = Assert.Single(viewModel.Servers);
+
+        row.Enabled = true;
+
+        Assert.False(row.Enabled);
+        Assert.Equal("McpSettings_SaveValidationCommandRequired", row.StatusMessage);
+    }
+
+    [Fact]
+    public async Task EditingSavedRow_MarksOnlyThatRowUnsaved()
+    {
+        var service = new FakeMcpSettingsService
+        {
+            Settings = new McpSettings
+            {
+                Servers =
+                {
+                    new HttpMcpServer("search", "https://example.com/mcp"),
+                    new HttpMcpServer("docs", "https://docs.example.com/mcp")
+                }
+            }
+        };
+        var viewModel = CreateViewModel(service);
+        await viewModel.LoadCommand.ExecuteAsync(null);
+
+        viewModel.Servers[0].EditCommand.Execute(null);
+        viewModel.EditingServer!.Url = "https://new.example.com/mcp";
+
+        Assert.Equal("McpSettings_RowUnsaved", viewModel.EditingServer.StatusMessage);
+        Assert.Equal("McpSettings_RowSaved", viewModel.Servers[0].StatusMessage);
+        Assert.Equal("McpSettings_RowSaved", viewModel.Servers[1].StatusMessage);
+    }
+
+    private static McpSettingsViewModel CreateViewModel(
+        IMcpSettingsService settingsService,
+        IPlatformShellService? platformShell = null)
+        => new(
+            settingsService,
+            platformShell ?? new FakePlatformShellService(),
+            new TestCoreStringLocalizer(),
+            Mock.Of<ILogger<McpSettingsViewModel>>());
+
+    private sealed class FakePlatformShellService : IPlatformShellService
+    {
+        public string? ClipboardText { get; set; }
+
+        public Task<bool> OpenFolderAsync(string path) => Task.FromResult(false);
+
+        public Task<bool> OpenFileAsync(string path) => Task.FromResult(false);
+
+        public Task<bool> OpenUriAsync(Uri uri) => Task.FromResult(false);
+
+        public Task<bool> CopyToClipboardAsync(string text) => Task.FromResult(true);
+
+        public Task<string?> ReadClipboardTextAsync() => Task.FromResult(ClipboardText);
     }
 
     private sealed class FakeMcpSettingsService : IMcpSettingsService
@@ -321,11 +577,14 @@ public sealed class McpSettingsViewModelTests
 
         public McpSettings? SavedSettings { get; private set; }
 
+        public int SaveCount { get; private set; }
+
         public Task<McpSettings> LoadAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(Settings);
 
         public Task SaveAsync(McpSettings settings, CancellationToken cancellationToken = default)
         {
+            SaveCount++;
             SavedSettings = settings;
             return Task.CompletedTask;
         }

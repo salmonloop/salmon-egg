@@ -29,6 +29,7 @@ internal static class McpServerYamlMapper
                     {
                         Transport = StdioTransport,
                         Name = stdio.Name ?? string.Empty,
+                        Enabled = stdio.Enabled,
                         Meta = McpServerJsonConverter.CloneMeta(stdio.Meta),
                         Command = stdio.Command ?? string.Empty,
                         Args = stdio.Args ?? new List<string>(),
@@ -40,6 +41,7 @@ internal static class McpServerYamlMapper
                     {
                         Transport = HttpTransport,
                         Name = http.Name ?? string.Empty,
+                        Enabled = http.Enabled,
                         Meta = McpServerJsonConverter.CloneMeta(http.Meta),
                         Url = http.Url ?? string.Empty,
                         Headers = ToYamlNameValues(http.Headers)
@@ -50,6 +52,7 @@ internal static class McpServerYamlMapper
                     {
                         Transport = SseTransport,
                         Name = sse.Name ?? string.Empty,
+                        Enabled = sse.Enabled,
                         Meta = McpServerJsonConverter.CloneMeta(sse.Meta),
                         Url = sse.Url ?? string.Empty,
                         Headers = ToYamlNameValues(sse.Headers)
@@ -85,6 +88,7 @@ internal static class McpServerYamlMapper
                         yamlServer.Url ?? string.Empty,
                         FromYamlHeaders(yamlServer.Headers))
                     {
+                        Enabled = yamlServer.Enabled,
                         Meta = McpServerJsonConverter.CloneMeta(yamlServer.Meta)
                     });
                     break;
@@ -94,6 +98,7 @@ internal static class McpServerYamlMapper
                         yamlServer.Url ?? string.Empty,
                         FromYamlHeaders(yamlServer.Headers))
                     {
+                        Enabled = yamlServer.Enabled,
                         Meta = McpServerJsonConverter.CloneMeta(yamlServer.Meta)
                     });
                     break;
@@ -104,6 +109,7 @@ internal static class McpServerYamlMapper
                         yamlServer.Args ?? new List<string>(),
                         FromYamlEnv(yamlServer.Env))
                     {
+                        Enabled = yamlServer.Enabled,
                         Meta = McpServerJsonConverter.CloneMeta(yamlServer.Meta)
                     });
                     break;
