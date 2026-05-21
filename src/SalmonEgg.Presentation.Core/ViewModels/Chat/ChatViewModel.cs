@@ -1110,6 +1110,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         IUiDispatcher uiDispatcher,
         IConversationPreviewStore previewStore,
         ILogger<ChatViewModel> logger,
+        IAcpMcpServerResolver mcpServerResolver,
         IConversationAttentionStore? conversationAttentionStore = null,
         IAcpConnectionCommands? acpConnectionCommands = null,
         IConversationActivationCoordinator? conversationActivationCoordinator = null,
@@ -1127,8 +1128,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         IConversationActivationOrchestrator? conversationActivationOrchestrator = null,
         ISlashCommandSource? localSlashCommandSource = null,
         IConversationMutationPipeline? conversationMutationPipeline = null,
-        IPlatformShellService? platformShell = null,
-        IAcpMcpServerResolver? mcpServerResolver = null)
+        IPlatformShellService? platformShell = null)
         : base(logger)
     {
         _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
@@ -1160,7 +1160,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _sessionUpdateRouter = new ChatSessionUpdateRouter(_acpSessionUpdateProjector);
         _outgoingUserMessageProjector = new OutgoingUserMessageProjector();
         _chatConnectionStore = chatConnectionStore ?? throw new ArgumentNullException(nameof(chatConnectionStore));
-        _mcpServerResolver = mcpServerResolver ?? SinkSnapshotAcpMcpServerResolver.Instance;
+        _mcpServerResolver = mcpServerResolver ?? throw new ArgumentNullException(nameof(mcpServerResolver));
         _conversationAttentionStore = conversationAttentionStore;
         _authoritativeConnectionResolver = new AcpAuthoritativeConnectionResolver(connectionSessionRegistry);
         _sessionUpdateWorkQueue = sessionUpdateWorkQueue ?? new SerialAsyncWorkQueue();

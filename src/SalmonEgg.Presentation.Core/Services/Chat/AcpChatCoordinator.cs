@@ -39,13 +39,14 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         IAcpChatServiceFactory chatServiceFactory,
         ILogger<AcpChatCoordinator> logger,
         ITransportSupportPolicy transportSupportPolicy,
+        IAcpMcpServerProvider mcpServerProvider,
         IAcpConnectionCoordinator? connectionCoordinator = null,
         IAcpConnectionSessionRegistry? sessionRegistry = null,
         IAcpConnectionSessionCleaner? sessionCleaner = null,
         IAcpConnectionPoolManager? connectionPoolManager = null,
         IAcpConnectionDependencySnapshotProvider? connectionDependencySnapshotProvider = null,
         IAcpSessionCommandOrchestrator? sessionCommandOrchestrator = null,
-        IAcpMcpServerProvider? mcpServerProvider = null,
+        IAcpMcpServerResolver? mcpServerResolver = null,
         int sessionUpdateBufferLimit = DefaultSessionUpdateBufferLimit)
     {
         _chatServiceFactory = chatServiceFactory ?? throw new ArgumentNullException(nameof(chatServiceFactory));
@@ -70,9 +71,10 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             NullLogger<AcpConnectionPoolManager>.Instance);
         _connectionDependencySnapshotProvider = connectionDependencySnapshotProvider
             ?? NoopAcpConnectionDependencySnapshotProvider.Instance;
+        _mcpServerProvider = mcpServerProvider ?? throw new ArgumentNullException(nameof(mcpServerProvider));
         _sessionCommandOrchestrator = sessionCommandOrchestrator ?? new AcpSessionCommandOrchestrator(
-            NullLogger<AcpSessionCommandOrchestrator>.Instance);
-        _mcpServerProvider = mcpServerProvider ?? EmptyAcpMcpServerProvider.Instance;
+            NullLogger<AcpSessionCommandOrchestrator>.Instance,
+            mcpServerResolver ?? new AcpMcpServerResolver(_mcpServerProvider));
         _transportSupportPolicy = transportSupportPolicy ?? throw new ArgumentNullException(nameof(transportSupportPolicy));
         _sessionUpdateBufferLimit = sessionUpdateBufferLimit;
     }

@@ -343,13 +343,13 @@ public static class DependencyInjection
                 sp.GetRequiredService<IAcpChatServiceFactory>(),
                 sp.GetRequiredService<ILogger<AcpChatCoordinator>>(),
                 sp.GetRequiredService<ITransportSupportPolicy>(),
+                sp.GetRequiredService<IAcpMcpServerProvider>(),
                 sp.GetRequiredService<IAcpConnectionCoordinator>(),
                 sp.GetRequiredService<IAcpConnectionSessionRegistry>(),
                 sp.GetRequiredService<IAcpConnectionSessionCleaner>(),
                 sp.GetRequiredService<IAcpConnectionPoolManager>(),
                 sp.GetRequiredService<IAcpConnectionDependencySnapshotProvider>(),
-                sp.GetRequiredService<IAcpSessionCommandOrchestrator>(),
-                sp.GetRequiredService<IAcpMcpServerProvider>());
+                sp.GetRequiredService<IAcpSessionCommandOrchestrator>());
         });
         services.AddSingleton<IErrorRecoveryService>(sp =>
         {

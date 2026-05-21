@@ -27,6 +27,9 @@ public sealed class AcpChatCoordinatorTests
     private static ITransportSupportPolicy CreateTransportSupportPolicy(bool supportsStdioTransport = true)
         => new TransportSupportPolicy(new TestPlatformCapabilities(supportsStdioTransport));
 
+    private static IAcpMcpServerProvider EmptyMcpServerProvider { get; } =
+        new StaticMcpServerProvider([]);
+
     private static List<PlanEntry> CreatePlanEntries(string content)
         =>
         [
@@ -56,7 +59,8 @@ public sealed class AcpChatCoordinatorTests
             factory.Object,
             logger.Object,
             connectionCoordinator: connectionCoordinator.Object,
-            transportSupportPolicy: CreateTransportSupportPolicy());
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
         var profile = new ServerConfiguration
         {
             Id = "profile-1",
@@ -122,7 +126,8 @@ public sealed class AcpChatCoordinatorTests
             logger.Object,
             connectionPoolManager: poolManager,
             connectionDependencySnapshotProvider: snapshotProvider.Object,
-            transportSupportPolicy: CreateTransportSupportPolicy());
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
         var profile = new ServerConfiguration
         {
             Id = "profile-1",
@@ -162,7 +167,7 @@ public sealed class AcpChatCoordinatorTests
             .Setup(x => x.CreateChatService(TransportType.Stdio, "agent-2.exe", "--serve-2", null))
             .Returns(profile2Service.Object);
 
-        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy());
+        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
         var profile1 = new ServerConfiguration
         {
@@ -223,7 +228,7 @@ public sealed class AcpChatCoordinatorTests
             .Setup(x => x.CreateChatService(TransportType.WebSocket, null, null, "wss://agent.test"))
             .Returns(chatService.Object);
 
-        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy());
+        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
         await sut.ApplyTransportConfigurationAsync(transport, sink, preserveConversation: false);
 
@@ -271,7 +276,8 @@ public sealed class AcpChatCoordinatorTests
             sessionRegistry: registry,
             sessionCleaner: cleaner,
             connectionPoolManager: poolManager,
-            transportSupportPolicy: CreateTransportSupportPolicy());
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
         var profile = new ServerConfiguration
         {
             Id = "profile-1",
@@ -308,7 +314,7 @@ public sealed class AcpChatCoordinatorTests
             .Setup(x => x.CreateChatService(TransportType.Stdio, "agent.exe", "--serve", null))
             .Returns(service.Object);
 
-        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy());
+        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
         var profile = new ServerConfiguration
         {
             Id = "profile-1",
@@ -345,7 +351,7 @@ public sealed class AcpChatCoordinatorTests
             .Setup(x => x.CreateChatService(TransportType.Stdio, "  agent.exe  ", " --serve   --mode   plan ", null))
             .Returns(service.Object);
 
-        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy());
+        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
         var profileWithSpacing = new ServerConfiguration
         {
@@ -421,7 +427,8 @@ public sealed class AcpChatCoordinatorTests
             sessionRegistry: registry,
             sessionCleaner: cleaner,
             connectionPoolManager: poolManager,
-            transportSupportPolicy: CreateTransportSupportPolicy());
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
 
         var oldProfile = new ServerConfiguration
         {
@@ -478,7 +485,7 @@ public sealed class AcpChatCoordinatorTests
             .Returns(staleService.Object)
             .Returns(freshService.Object);
 
-        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy());
+        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
         var profile = new ServerConfiguration
         {
             Id = "profile-1",
@@ -525,7 +532,8 @@ public sealed class AcpChatCoordinatorTests
             logger.Object,
             sessionRegistry: registry,
             sessionCleaner: cleaner,
-            transportSupportPolicy: CreateTransportSupportPolicy());
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
         var profile = new ServerConfiguration
         {
             Id = "profile-1",
@@ -578,7 +586,7 @@ public sealed class AcpChatCoordinatorTests
             .Setup(x => x.CreateChatService(TransportType.Stdio, "agent-2.exe", "--serve-2", null))
             .Returns(activeService.Object);
 
-        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy());
+        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
         var profile1 = new ServerConfiguration
         {
@@ -634,7 +642,7 @@ public sealed class AcpChatCoordinatorTests
             .Setup(x => x.CreateChatService(TransportType.WebSocket, null, null, "wss://agent.test"))
             .Returns(newService.Object);
 
-        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy());
+        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
         var result = await sut.ApplyTransportConfigurationAsync(transport, sink, preserveConversation: true);
 
@@ -707,7 +715,8 @@ public sealed class AcpChatCoordinatorTests
             factory.Object,
             logger.Object,
             connectionCoordinator: connectionCoordinator.Object,
-            transportSupportPolicy: CreateTransportSupportPolicy());
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
         using var cancellation = new CancellationTokenSource();
 
         var applyTask = sut.ApplyTransportConfigurationAsync(
@@ -777,7 +786,8 @@ public sealed class AcpChatCoordinatorTests
             factory.Object,
             logger.Object,
             connectionCoordinator: connectionCoordinator.Object,
-            transportSupportPolicy: CreateTransportSupportPolicy());
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
         using var cancellation = new CancellationTokenSource();
 
         var applyTask = sut.ApplyTransportConfigurationAsync(
@@ -853,7 +863,8 @@ public sealed class AcpChatCoordinatorTests
             factory.Object,
             logger.Object,
             connectionCoordinator: connectionCoordinator.Object,
-            transportSupportPolicy: CreateTransportSupportPolicy());
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
 
         var firstApplyTask = sut.ApplyTransportConfigurationAsync(
             transport,
@@ -923,7 +934,8 @@ public sealed class AcpChatCoordinatorTests
             factory.Object,
             logger.Object,
             connectionCoordinator: connectionCoordinator.Object,
-            transportSupportPolicy: CreateTransportSupportPolicy());
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
 
         var firstApplyTask = sut.ApplyTransportConfigurationAsync(
             transport,
@@ -991,7 +1003,8 @@ public sealed class AcpChatCoordinatorTests
             factory.Object,
             logger.Object,
             connectionCoordinator: connectionCoordinator.Object,
-            transportSupportPolicy: CreateTransportSupportPolicy());
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
 
         var firstApplyTask = sut.ApplyTransportConfigurationAsync(
             transport,
@@ -1043,8 +1056,10 @@ public sealed class AcpChatCoordinatorTests
             logger.Object,
             connectionCoordinator: new AcpConnectionCoordinator(
                 Mock.Of<IChatConnectionStore>(),
-                Mock.Of<ILogger<AcpConnectionCoordinator>>()),
-            transportSupportPolicy: CreateTransportSupportPolicy());
+                Mock.Of<ILogger<AcpConnectionCoordinator>>(),
+                new StaticMcpResolver([])),
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
 
         await sut.ApplyTransportConfigurationAsync(transport, sink, preserveConversation: true);
 
@@ -1083,8 +1098,10 @@ public sealed class AcpChatCoordinatorTests
             logger.Object,
             connectionCoordinator: new AcpConnectionCoordinator(
                 Mock.Of<IChatConnectionStore>(),
-                Mock.Of<ILogger<AcpConnectionCoordinator>>()),
-            transportSupportPolicy: CreateTransportSupportPolicy());
+                Mock.Of<ILogger<AcpConnectionCoordinator>>(),
+                new StaticMcpResolver([])),
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
 
         await sut.ApplyTransportConfigurationAsync(transport, sink, preserveConversation: true);
 
@@ -1113,7 +1130,7 @@ public sealed class AcpChatCoordinatorTests
             .Setup(x => x.CreateSessionAsync(It.IsAny<SessionNewParams>()))
             .ReturnsAsync(new SessionNewResponse("remote-session-1"));
 
-        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy());
+        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
         var result = await sut.EnsureRemoteSessionAsync(sink, _ => Task.FromResult(true));
 
@@ -1125,7 +1142,7 @@ public sealed class AcpChatCoordinatorTests
     }
 
     [Fact]
-    public async Task EnsureRemoteSessionAsync_UsesCurrentMcpServers()
+    public async Task EnsureRemoteSessionAsync_UsesResolvedMcpServers()
     {
         var service = CreateChatService();
         var sink = new FakeSink
@@ -1139,7 +1156,7 @@ public sealed class AcpChatCoordinatorTests
             SelectedProfileId = "profile-1",
             CurrentMcpServers =
             [
-                new HttpMcpServer("api", "https://api.example.com/mcp")
+                new HttpMcpServer("stale", "https://stale.example.com/mcp")
             ]
         };
         var factory = new Mock<IAcpChatServiceFactory>();
@@ -1151,7 +1168,15 @@ public sealed class AcpChatCoordinatorTests
             .Callback<SessionNewParams>(parameters => capturedParams = parameters)
             .ReturnsAsync(new SessionNewResponse("remote-session-1"));
 
-        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy());
+        var sut = new AcpChatCoordinator(
+            factory.Object,
+            logger.Object,
+            CreateTransportSupportPolicy(),
+            EmptyMcpServerProvider,
+            mcpServerResolver: new StaticMcpResolver(
+            [
+                new HttpMcpServer("api", "https://api.example.com/mcp")
+            ]));
 
         await sut.EnsureRemoteSessionAsync(sink, _ => Task.FromResult(true));
 
@@ -1194,6 +1219,7 @@ public sealed class AcpChatCoordinatorTests
             factory.Object,
             logger.Object,
             CreateTransportSupportPolicy(),
+            EmptyMcpServerProvider,
             sessionCommandOrchestrator: orchestrator);
 
         await sut.EnsureRemoteSessionAsync(sink, _ => Task.FromResult(true));
@@ -1364,7 +1390,7 @@ public sealed class AcpChatCoordinatorTests
             .Setup(x => x.CreateSessionAsync(It.IsAny<SessionNewParams>()))
             .Returns(createSessionTcs.Task);
 
-        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy());
+        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
         var ensureTask = sut.EnsureRemoteSessionAsync(sink, _ => Task.FromResult(true));
 
         sink.SelectedProfileId = "profile-2";
@@ -1431,7 +1457,8 @@ public sealed class AcpChatCoordinatorTests
             factory.Object,
             logger.Object,
             connectionCoordinator: connectionCoordinator.Object,
-            transportSupportPolicy: CreateTransportSupportPolicy());
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
 
         var applyTask = sut.ApplyTransportConfigurationAsync(
             transport,
@@ -1470,7 +1497,7 @@ public sealed class AcpChatCoordinatorTests
             .Setup(x => x.SendPromptAsync(It.IsAny<SessionPromptParams>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SessionPromptResponse());
 
-        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy());
+        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
         await sut.DispatchPromptToRemoteSessionAsync("remote-123", "hi", promptMessageId: null, sink, _ => Task.FromResult(true));
 
@@ -1496,7 +1523,7 @@ public sealed class AcpChatCoordinatorTests
             .Callback<SessionPromptParams, CancellationToken>((parameters, _) => captured = parameters)
             .ReturnsAsync(new SessionPromptResponse(StopReason.EndTurn, "user-message-1"));
 
-        IAcpConnectionCommands sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy());
+        IAcpConnectionCommands sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
         var result = await sut.DispatchPromptToRemoteSessionAsync(
             "remote-123",
@@ -1528,7 +1555,7 @@ public sealed class AcpChatCoordinatorTests
             .Setup(x => x.SendPromptAsync(It.IsAny<SessionPromptParams>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SessionPromptResponse(StopReason.EndTurn, "user-message-42"));
 
-        IAcpConnectionCommands sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy());
+        IAcpConnectionCommands sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
         var result = await sut.DispatchPromptToRemoteSessionAsync(
             "remote-123",
@@ -1559,7 +1586,7 @@ public sealed class AcpChatCoordinatorTests
             .Setup(x => x.SendPromptAsync(It.IsAny<SessionPromptParams>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SessionPromptResponse(expected));
 
-        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy());
+        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
         var result = await sut.DispatchPromptToRemoteSessionAsync("remote-123", "hi", promptMessageId: null, sink, _ => Task.FromResult(true));
 
@@ -1598,7 +1625,7 @@ public sealed class AcpChatCoordinatorTests
             .Setup(x => x.CreateSessionAsync(It.IsAny<SessionNewParams>()))
             .ReturnsAsync(new SessionNewResponse("remote-new"));
 
-        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy());
+        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
         IAcpConnectionCommands commands = sut;
 
         var ex = await Assert.ThrowsAsync<AcpException>(() =>
@@ -1638,7 +1665,7 @@ public sealed class AcpChatCoordinatorTests
             .Setup(x => x.SendPromptAsync(It.IsAny<SessionPromptParams>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SessionPromptResponse());
 
-        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy());
+        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
         var result = await sut.SendPromptAsync("hi", promptMessageId: null, sink, _ => Task.FromResult(true));
 
@@ -1666,7 +1693,7 @@ public sealed class AcpChatCoordinatorTests
             .Callback<SessionCancelParams>(parameters => captured = parameters)
             .ReturnsAsync(new SessionCancelResponse(true));
 
-        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy());
+        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
         await sut.CancelPromptAsync(sink, "User cancelled");
 
@@ -1700,7 +1727,7 @@ public sealed class AcpChatCoordinatorTests
                 return Task.FromResult(new SessionPromptResponse());
             });
 
-        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy());
+        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
         var result = await sut.SendPromptAsync("hello", promptMessageId: null, sink, _ => Task.FromResult(true));
 
@@ -1727,7 +1754,7 @@ public sealed class AcpChatCoordinatorTests
             .Callback<SessionCancelParams>(parameters => captured = parameters)
             .ReturnsAsync(new SessionCancelResponse(true));
 
-        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy());
+        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
         await sut.CancelPromptAsync(sink, "User cancelled");
 
@@ -1761,7 +1788,8 @@ public sealed class AcpChatCoordinatorTests
             factory.Object,
             logger.Object,
             connectionCoordinator: connectionCoordinator.Object,
-            transportSupportPolicy: CreateTransportSupportPolicy());
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
 
         await sut.DisconnectAsync(sink);
 
@@ -1801,7 +1829,8 @@ public sealed class AcpChatCoordinatorTests
             logger.Object,
             connectionCoordinator: connectionCoordinator.Object,
             sessionUpdateBufferLimit: 1,
-            transportSupportPolicy: CreateTransportSupportPolicy());
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
 
         await sut.ApplyTransportConfigurationAsync(transport, sink, preserveConversation: true);
 
@@ -1866,7 +1895,8 @@ public sealed class AcpChatCoordinatorTests
             logger.Object,
             connectionCoordinator: connectionCoordinator.Object,
             sessionUpdateBufferLimit: 1,
-            transportSupportPolicy: CreateTransportSupportPolicy());
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
 
         var firstApplyTask = sut.ApplyTransportConfigurationAsync(
             transport,
@@ -1919,7 +1949,8 @@ public sealed class AcpChatCoordinatorTests
             factory.Object,
             logger.Object,
             connectionCoordinator: connectionCoordinator.Object,
-            transportSupportPolicy: CreateTransportSupportPolicy());
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
 
         var profile = new ServerConfiguration
         {
@@ -1952,7 +1983,7 @@ public sealed class AcpChatCoordinatorTests
             .Setup(x => x.CreateChatService(TransportType.Stdio, "agent.exe", "--serve", null))
             .Returns(service.Object);
 
-        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy());
+        var sut = new AcpChatCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
         var profile = new ServerConfiguration
         {
             Id = "profile-1",
@@ -1980,7 +2011,8 @@ public sealed class AcpChatCoordinatorTests
         var sut = new AcpChatCoordinator(
             factory.Object,
             logger.Object,
-            transportSupportPolicy: CreateTransportSupportPolicy(supportsStdioTransport: false));
+            transportSupportPolicy: CreateTransportSupportPolicy(supportsStdioTransport: false),
+            mcpServerProvider: EmptyMcpServerProvider);
         var profile = new ServerConfiguration
         {
             Id = "profile-1",
@@ -2013,7 +2045,8 @@ public sealed class AcpChatCoordinatorTests
         var sut = new AcpChatCoordinator(
             factory.Object,
             logger.Object,
-            transportSupportPolicy: CreateTransportSupportPolicy(supportsStdioTransport: false));
+            transportSupportPolicy: CreateTransportSupportPolicy(supportsStdioTransport: false),
+            mcpServerProvider: EmptyMcpServerProvider);
         var profile = new ServerConfiguration
         {
             Id = "profile-1",
@@ -2051,7 +2084,8 @@ public sealed class AcpChatCoordinatorTests
             factory.Object,
             logger.Object,
             sessionRegistry: registry,
-            transportSupportPolicy: CreateTransportSupportPolicy());
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
         var profile = new ServerConfiguration
         {
             Id = "profile-1",
@@ -2099,7 +2133,8 @@ public sealed class AcpChatCoordinatorTests
             factory.Object,
             logger.Object,
             connectionCoordinator: connectionCoordinator.Object,
-            transportSupportPolicy: CreateTransportSupportPolicy());
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
 
         await sut.ApplyTransportConfigurationAsync(transport, sink, preserveConversation: true);
         sink.CurrentChatService!.SessionUpdateReceived += (_, args) => updates.Add(args);
@@ -2199,6 +2234,25 @@ public sealed class AcpChatCoordinatorTests
 
         public Task SaveAsync(McpSettings settings, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
+    }
+
+    private sealed class StaticMcpServerProvider : IAcpMcpServerProvider
+    {
+        private readonly IReadOnlyList<McpServer> _servers;
+
+        public StaticMcpServerProvider(IReadOnlyList<McpServer> servers)
+        {
+            _servers = McpServerJsonConverter.CloneServers(servers);
+        }
+
+        public Task<IReadOnlyList<McpServer>> GetMcpServersAsync(
+            ServerConfiguration? profile,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult<IReadOnlyList<McpServer>>(
+                McpServerJsonConverter.CloneServers(_servers));
+        }
     }
 
     private sealed class StaticMcpResolver : IAcpMcpServerResolver

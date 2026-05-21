@@ -68,7 +68,8 @@ public sealed class AcpConnectionCoordinatorTests
 
         var coordinator = new AcpConnectionCoordinator(
             Mock.Of<IChatConnectionStore>(),
-            Mock.Of<ILogger<AcpConnectionCoordinator>>());
+            Mock.Of<ILogger<AcpConnectionCoordinator>>(),
+            new StaticMcpResolver(sink.CurrentMcpServers));
 
         await coordinator.ResyncAsync(sink);
 
@@ -104,7 +105,8 @@ public sealed class AcpConnectionCoordinatorTests
 
         var coordinator = new AcpConnectionCoordinator(
             Mock.Of<IChatConnectionStore>(),
-            Mock.Of<ILogger<AcpConnectionCoordinator>>());
+            Mock.Of<ILogger<AcpConnectionCoordinator>>(),
+            new StaticMcpResolver(sink.CurrentMcpServers));
 
         await coordinator.ResyncAsync(sink);
 
@@ -137,7 +139,8 @@ public sealed class AcpConnectionCoordinatorTests
 
         var coordinator = new AcpConnectionCoordinator(
             Mock.Of<IChatConnectionStore>(),
-            Mock.Of<ILogger<AcpConnectionCoordinator>>());
+            Mock.Of<ILogger<AcpConnectionCoordinator>>(),
+            new StaticMcpResolver(sink.CurrentMcpServers));
 
         await coordinator.ResyncAsync(sink);
 
@@ -207,7 +210,8 @@ public sealed class AcpConnectionCoordinatorTests
 
         var coordinator = new AcpConnectionCoordinator(
             Mock.Of<IChatConnectionStore>(),
-            Mock.Of<ILogger<AcpConnectionCoordinator>>());
+            Mock.Of<ILogger<AcpConnectionCoordinator>>(),
+            new StaticMcpResolver(sink.CurrentMcpServers));
 
         await coordinator.ResyncAsync(sink);
         current.Url = "mutated.example.com/mcp";
@@ -249,7 +253,8 @@ public sealed class AcpConnectionCoordinatorTests
 
         var coordinator = new AcpConnectionCoordinator(
             Mock.Of<IChatConnectionStore>(),
-            Mock.Of<ILogger<AcpConnectionCoordinator>>());
+            Mock.Of<ILogger<AcpConnectionCoordinator>>(),
+            new StaticMcpResolver(sink.CurrentMcpServers));
 
         await coordinator.ResyncAsync(sink);
 
@@ -290,7 +295,8 @@ public sealed class AcpConnectionCoordinatorTests
 
         var coordinator = new AcpConnectionCoordinator(
             Mock.Of<IChatConnectionStore>(),
-            Mock.Of<ILogger<AcpConnectionCoordinator>>());
+            Mock.Of<ILogger<AcpConnectionCoordinator>>(),
+            new StaticMcpResolver(sink.CurrentMcpServers));
 
         await coordinator.ResyncAsync(sink);
 
@@ -356,7 +362,8 @@ public sealed class AcpConnectionCoordinatorTests
 
         var coordinator = new AcpConnectionCoordinator(
             Mock.Of<IChatConnectionStore>(),
-            Mock.Of<ILogger<AcpConnectionCoordinator>>());
+            Mock.Of<ILogger<AcpConnectionCoordinator>>(),
+            new StaticMcpResolver(sink.CurrentMcpServers));
 
         await coordinator.ResyncAsync(sink);
 
@@ -406,7 +413,8 @@ public sealed class AcpConnectionCoordinatorTests
 
         var coordinator = new AcpConnectionCoordinator(
             Mock.Of<IChatConnectionStore>(),
-            Mock.Of<ILogger<AcpConnectionCoordinator>>());
+            Mock.Of<ILogger<AcpConnectionCoordinator>>(),
+            new StaticMcpResolver(sink.CurrentMcpServers));
 
         await coordinator.ResyncAsync(sink);
 
@@ -432,7 +440,8 @@ public sealed class AcpConnectionCoordinatorTests
 
         var coordinator = new AcpConnectionCoordinator(
             Mock.Of<IChatConnectionStore>(),
-            Mock.Of<ILogger<AcpConnectionCoordinator>>());
+            Mock.Of<ILogger<AcpConnectionCoordinator>>(),
+            new StaticMcpResolver(sink.CurrentMcpServers));
 
         await coordinator.ResyncAsync(sink);
 
@@ -466,7 +475,8 @@ public sealed class AcpConnectionCoordinatorTests
 
         var coordinator = new AcpConnectionCoordinator(
             Mock.Of<IChatConnectionStore>(),
-            Mock.Of<ILogger<AcpConnectionCoordinator>>());
+            Mock.Of<ILogger<AcpConnectionCoordinator>>(),
+            new StaticMcpResolver(sink.CurrentMcpServers));
 
         await coordinator.ResyncAsync(sink);
 
@@ -497,7 +507,8 @@ public sealed class AcpConnectionCoordinatorTests
 
         var coordinator = new AcpConnectionCoordinator(
             Mock.Of<IChatConnectionStore>(),
-            Mock.Of<ILogger<AcpConnectionCoordinator>>());
+            Mock.Of<ILogger<AcpConnectionCoordinator>>(),
+            new StaticMcpResolver(sink.CurrentMcpServers));
 
         await Assert.ThrowsAsync<OperationCanceledException>(() => coordinator.ResyncAsync(sink, cts.Token));
 
@@ -524,7 +535,8 @@ public sealed class AcpConnectionCoordinatorTests
 
         var coordinator = new AcpConnectionCoordinator(
             Mock.Of<IChatConnectionStore>(),
-            Mock.Of<ILogger<AcpConnectionCoordinator>>());
+            Mock.Of<ILogger<AcpConnectionCoordinator>>(),
+            new StaticMcpResolver(sink.CurrentMcpServers));
 
         await coordinator.ResyncAsync(sink);
 
@@ -548,7 +560,8 @@ public sealed class AcpConnectionCoordinatorTests
         var store = new ChatConnectionStore(connectionState);
         var coordinator = new AcpConnectionCoordinator(
             store,
-            Mock.Of<ILogger<AcpConnectionCoordinator>>());
+            Mock.Of<ILogger<AcpConnectionCoordinator>>(),
+            new StaticMcpResolver([]));
 
         await coordinator.SetConnectionInstanceIdAsync("conn-new");
 
@@ -575,7 +588,8 @@ public sealed class AcpConnectionCoordinatorTests
         var store = new ChatConnectionStore(connectionState);
         var coordinator = new AcpConnectionCoordinator(
             store,
-            Mock.Of<ILogger<AcpConnectionCoordinator>>());
+            Mock.Of<ILogger<AcpConnectionCoordinator>>(),
+            new StaticMcpResolver([]));
 
         await coordinator.SetDisconnectedAsync("network down");
 
@@ -602,7 +616,8 @@ public sealed class AcpConnectionCoordinatorTests
         var store = new ChatConnectionStore(connectionState);
         var coordinator = new AcpConnectionCoordinator(
             store,
-            Mock.Of<ILogger<AcpConnectionCoordinator>>());
+            Mock.Of<ILogger<AcpConnectionCoordinator>>(),
+            new StaticMcpResolver([]));
 
         await coordinator.ResetAsync();
 

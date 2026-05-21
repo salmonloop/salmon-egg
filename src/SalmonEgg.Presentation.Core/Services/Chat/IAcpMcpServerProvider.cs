@@ -15,19 +15,6 @@ public interface IAcpMcpServerProvider
         CancellationToken cancellationToken = default);
 }
 
-public sealed class EmptyAcpMcpServerProvider : IAcpMcpServerProvider
-{
-    public static EmptyAcpMcpServerProvider Instance { get; } = new();
-
-    public Task<IReadOnlyList<McpServer>> GetMcpServersAsync(
-        ServerConfiguration? profile,
-        CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult<IReadOnlyList<McpServer>>(Array.Empty<McpServer>());
-    }
-}
-
 public sealed class GlobalAcpMcpServerProvider : IAcpMcpServerProvider
 {
     private readonly IMcpSettingsService _settingsService;
@@ -75,20 +62,5 @@ public sealed class AcpMcpServerResolver : IAcpMcpServerResolver
         var snapshot = McpServerJsonConverter.CloneServers(servers);
         sink.SetCurrentMcpServers(snapshot);
         return snapshot;
-    }
-}
-
-public sealed class SinkSnapshotAcpMcpServerResolver : IAcpMcpServerResolver
-{
-    public static SinkSnapshotAcpMcpServerResolver Instance { get; } = new();
-
-    public Task<IReadOnlyList<McpServer>> ResolveCurrentMcpServersAsync(
-        IAcpChatCoordinatorSink sink,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(sink);
-        cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult<IReadOnlyList<McpServer>>(
-            McpServerJsonConverter.CloneServers(sink.CurrentMcpServers));
     }
 }

@@ -14,6 +14,7 @@ using SalmonEgg.Domain.Interfaces.Storage;
 using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Conversation;
+using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Models.Plan;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Models.Session;
@@ -1843,6 +1844,7 @@ public sealed class NavigationCoordinatorTests
                 uiDispatcher,
                 Mock.Of<IConversationPreviewStore>(),
                 vmLogger.Object,
+                new StaticMcpResolver([]),
                 shellNavigationRuntimeState: runtimeState,
                 conversationCatalogFacade: conversationCatalogFacade,
                 acpConnectionCommands: Mock.Of<IAcpConnectionCommands>());
@@ -1860,6 +1862,26 @@ public sealed class NavigationCoordinatorTests
         finally
         {
             SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    private sealed class StaticMcpResolver : IAcpMcpServerResolver
+    {
+        private readonly IReadOnlyList<McpServer> _servers;
+
+        public StaticMcpResolver(IReadOnlyList<McpServer> servers)
+        {
+            _servers = McpServerJsonConverter.CloneServers(servers);
+        }
+
+        public Task<IReadOnlyList<McpServer>> ResolveCurrentMcpServersAsync(
+            IAcpChatCoordinatorSink sink,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var snapshot = McpServerJsonConverter.CloneServers(_servers);
+            sink.SetCurrentMcpServers(snapshot);
+            return Task.FromResult<IReadOnlyList<McpServer>>(snapshot);
         }
     }
 

@@ -189,6 +189,7 @@ public partial class ChatViewModelTests
             NullLogger<ConversationCatalogFacade>.Instance);
         acpConnectionCommands ??= Mock.Of<IAcpConnectionCommands>();
         var vmLogger = new Mock<ILogger<ChatViewModel>>();
+        mcpServerResolver ??= new StaticMcpResolver([]);
 
         var originalContext = SynchronizationContext.Current;
         try
@@ -211,6 +212,7 @@ public partial class ChatViewModelTests
                 uiDispatcher,
                 previewStore ?? Mock.Of<IConversationPreviewStore>(),
                 vmLogger.Object,
+                mcpServerResolver,
                 conversationAttentionStore: attentionStore,
                 acpConnectionCommands: acpConnectionCommands,
                 conversationActivationCoordinator: conversationActivationCoordinator,
@@ -221,8 +223,7 @@ public partial class ChatViewModelTests
                 localTerminalPanelCoordinator: localTerminalPanelCoordinator,
                 conversationCatalogFacade: conversationCatalogFacade,
                 connectionSessionRegistry: connectionSessionRegistry,
-                localSlashCommandSource: localSlashCommandSource,
-                mcpServerResolver: mcpServerResolver);
+                localSlashCommandSource: localSlashCommandSource);
             conversationCatalogFacade.SetPanelCleanup(viewModel);
             return new ViewModelFixture(
                 viewModel,
@@ -2936,6 +2937,7 @@ public partial class ChatViewModelTests
             uiDispatcher,
             Mock.Of<IConversationPreviewStore>(),
             vmLogger.Object,
+            new StaticMcpResolver([]),
             conversationCatalogFacade: conversationCatalogFacade,
                 acpConnectionCommands: Mock.Of<IAcpConnectionCommands>());
 
@@ -3037,6 +3039,7 @@ public partial class ChatViewModelTests
             uiDispatcher,
             Mock.Of<IConversationPreviewStore>(),
             vmLogger.Object,
+            new StaticMcpResolver([]),
             conversationCatalogFacade: conversationCatalogFacade,
                 acpConnectionCommands: Mock.Of<IAcpConnectionCommands>());
 
@@ -3170,6 +3173,7 @@ public partial class ChatViewModelTests
                 uiDispatcher,
                 Mock.Of<IConversationPreviewStore>(),
                 vmLogger.Object,
+                new StaticMcpResolver([]),
                 conversationCatalogFacade: conversationCatalogFacade,
                 acpConnectionCommands: Mock.Of<IAcpConnectionCommands>());
 

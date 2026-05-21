@@ -62,10 +62,10 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
 
     public AcpSessionCommandOrchestrator(
         ILogger<AcpSessionCommandOrchestrator> logger,
-        IAcpMcpServerResolver? mcpServerResolver = null)
+        IAcpMcpServerResolver mcpServerResolver)
     {
         ArgumentNullException.ThrowIfNull(logger);
-        _mcpServerResolver = mcpServerResolver ?? SinkSnapshotAcpMcpServerResolver.Instance;
+        _mcpServerResolver = mcpServerResolver ?? throw new ArgumentNullException(nameof(mcpServerResolver));
     }
 
     public async Task<AcpRemoteSessionResult> EnsureRemoteSessionAsync(

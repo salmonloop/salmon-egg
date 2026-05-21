@@ -11,6 +11,7 @@ using SalmonEgg.Domain.Interfaces;
 using SalmonEgg.Domain.Interfaces.Storage;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Conversation;
+using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
@@ -1157,6 +1158,7 @@ public sealed class StartViewModelTests
                 effectiveUiDispatcher,
                 Mock.Of<IConversationPreviewStore>(),
                 vmLogger.Object,
+                new StaticMcpResolver([]),
                 voiceInputService: voiceInputService,
                 conversationCatalogFacade: conversationCatalogFacade,
                 acpConnectionCommands: Mock.Of<IAcpConnectionCommands>());
@@ -1417,6 +1419,26 @@ public sealed class StartViewModelTests
 
         public void Dispose()
         {
+        }
+    }
+
+    private sealed class StaticMcpResolver : IAcpMcpServerResolver
+    {
+        private readonly IReadOnlyList<McpServer> _servers;
+
+        public StaticMcpResolver(IReadOnlyList<McpServer> servers)
+        {
+            _servers = McpServerJsonConverter.CloneServers(servers);
+        }
+
+        public Task<IReadOnlyList<McpServer>> ResolveCurrentMcpServersAsync(
+            IAcpChatCoordinatorSink sink,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var snapshot = McpServerJsonConverter.CloneServers(_servers);
+            sink.SetCurrentMcpServers(snapshot);
+            return Task.FromResult<IReadOnlyList<McpServer>>(snapshot);
         }
     }
 

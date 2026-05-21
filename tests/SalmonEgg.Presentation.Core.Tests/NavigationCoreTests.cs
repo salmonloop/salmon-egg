@@ -171,6 +171,25 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
+    public void AcpMcpRuntime_DoesNotExposeFallbackCatalogSources()
+    {
+        var providerCode = LoadFile(@"src\SalmonEgg.Presentation.Core\Services\Chat\IAcpMcpServerProvider.cs");
+        var chatCoordinator = LoadFile(@"src\SalmonEgg.Presentation.Core\Services\Chat\AcpChatCoordinator.cs");
+        var commandOrchestrator = LoadFile(@"src\SalmonEgg.Presentation.Core\Services\Chat\AcpSessionCommandOrchestrator.cs");
+        var connectionCoordinator = LoadFile(@"src\SalmonEgg.Presentation.Core\Services\Chat\AcpConnectionCoordinator.cs");
+        var chatViewModel = LoadFile(@"src\SalmonEgg.Presentation.Core\ViewModels\Chat\ChatViewModel.cs");
+        var connectionState = LoadFile(@"src\SalmonEgg.Presentation.Core\Services\Chat\IAcpConnectionState.cs");
+
+        Assert.DoesNotContain("EmptyAcpMcpServerProvider", providerCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("SinkSnapshotAcpMcpServerResolver", providerCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("SinkSnapshotAcpMcpServerResolver", chatCoordinator, StringComparison.Ordinal);
+        Assert.DoesNotContain("SinkSnapshotAcpMcpServerResolver", commandOrchestrator, StringComparison.Ordinal);
+        Assert.DoesNotContain("SinkSnapshotAcpMcpServerResolver", connectionCoordinator, StringComparison.Ordinal);
+        Assert.DoesNotContain("SinkSnapshotAcpMcpServerResolver", chatViewModel, StringComparison.Ordinal);
+        Assert.DoesNotContain("ResolveCurrentMcpServersAsync(CancellationToken", connectionState, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MainPage_DoesNotBackWriteSelectionFromFrameNavigation()
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");

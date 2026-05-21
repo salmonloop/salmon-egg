@@ -39,11 +39,11 @@ public sealed class AcpConnectionCoordinator : IAcpConnectionCoordinator
     public AcpConnectionCoordinator(
         IChatConnectionStore store,
         ILogger<AcpConnectionCoordinator> logger,
-        IAcpMcpServerResolver? mcpServerResolver = null)
+        IAcpMcpServerResolver mcpServerResolver)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _mcpServerResolver = mcpServerResolver ?? SinkSnapshotAcpMcpServerResolver.Instance;
+        _mcpServerResolver = mcpServerResolver ?? throw new ArgumentNullException(nameof(mcpServerResolver));
     }
 
     public async Task SetConnectingAsync(string? profileId, CancellationToken cancellationToken = default)
