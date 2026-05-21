@@ -425,6 +425,23 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         [Fact]
+        public async Task LoadSessionAsync_WhenAgentDoesNotSupportLoadSession_DoesNotValidateMcpServers()
+        {
+            var client = await CreateInitializedClientAsync(
+                capabilities: new AgentCapabilities(loadSession: false));
+
+            var result = await client.LoadSessionAsync(new SessionLoadParams(
+                "session-123",
+                AbsoluteCwd,
+                new List<McpServer> { new HttpMcpServer("api", "https://api.example.com/mcp") }));
+
+            Assert.Same(SessionLoadResponse.Completed, result);
+            _transportMock.Verify(
+                t => t.SendMessageAsync(It.IsRegex("session/load"), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
         public async Task LoadSessionAsync_WhenAgentDoesNotAdvertiseLoadSession_DoesNotSendProtocolRequest()
         {
             var client = await CreateInitializedClientAsync(
@@ -530,6 +547,23 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 capabilities: new AgentCapabilities(loadSession: true));
 
             var result = await client.ResumeSessionAsync(new SessionResumeParams("session-123", AbsoluteCwd));
+
+            Assert.Same(SessionResumeResponse.Completed, result);
+            _transportMock.Verify(
+                t => t.SendMessageAsync(It.IsRegex("session/resume"), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
+        public async Task ResumeSessionAsync_WhenAgentDoesNotSupportSessionResume_DoesNotValidateMcpServers()
+        {
+            var client = await CreateInitializedClientAsync(
+                capabilities: new AgentCapabilities(loadSession: true));
+
+            var result = await client.ResumeSessionAsync(new SessionResumeParams(
+                "session-123",
+                AbsoluteCwd,
+                new List<McpServer> { new SseMcpServer("events", "https://events.example.com/mcp") }));
 
             Assert.Same(SessionResumeResponse.Completed, result);
             _transportMock.Verify(

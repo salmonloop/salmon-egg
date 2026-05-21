@@ -177,6 +177,39 @@ public sealed class SessionNewTypesTests
     }
 
     [Test]
+    public void McpServer_StdioWithoutEnv_Should_Deserialize_WithEmptyEnvironment()
+    {
+        var json = """
+        {
+          "name": "test-server",
+          "command": "/usr/local/bin/node",
+          "args": []
+        }
+        """;
+
+        var server = JsonSerializer.Deserialize<McpServer>(json);
+
+        Assert.That(server, Is.TypeOf<StdioMcpServer>());
+        var stdio = (StdioMcpServer)server!;
+        Assert.That(stdio.Env, Is.Empty);
+    }
+
+    [Test]
+    public void McpServer_StdioWithNullEnv_Should_NotDeserialize()
+    {
+        var json = """
+        {
+          "name": "test-server",
+          "command": "/usr/local/bin/node",
+          "args": [],
+          "env": null
+        }
+        """;
+
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<McpServer>(json));
+    }
+
+    [Test]
     public void McpServer_WithStdioTypeDiscriminator_Should_NotDeserialize()
     {
         var json = """

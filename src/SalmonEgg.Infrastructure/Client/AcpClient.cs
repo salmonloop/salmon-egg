@@ -296,9 +296,6 @@ namespace SalmonEgg.Infrastructure.Client
         public async Task<SessionLoadResponse> LoadSessionAsync(SessionLoadParams @params, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
-            ValidateRequiredAbsolutePath(@params.Cwd, "cwd", "session/load");
-            EnsureMcpServersSupported(@params.McpServers, "session/load");
-
             if (!SupportsSessionLoad)
             {
                 _errorLogger.LogError(new ErrorLogEntry(
@@ -309,6 +306,9 @@ namespace SalmonEgg.Infrastructure.Client
 
                 return SessionLoadResponse.Completed;
             }
+
+            ValidateRequiredAbsolutePath(@params.Cwd, "cwd", "session/load");
+            EnsureMcpServersSupported(@params.McpServers, "session/load");
 
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),
@@ -339,9 +339,6 @@ namespace SalmonEgg.Infrastructure.Client
         public async Task<SessionResumeResponse> ResumeSessionAsync(SessionResumeParams @params, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
-            ValidateRequiredAbsolutePath(@params.Cwd, "cwd", "session/resume");
-            EnsureMcpServersSupported(@params.McpServers, "session/resume");
-
             if (!SupportsSessionResume)
             {
                 _errorLogger.LogError(new ErrorLogEntry(
@@ -352,6 +349,9 @@ namespace SalmonEgg.Infrastructure.Client
 
                 return SessionResumeResponse.Completed;
             }
+
+            ValidateRequiredAbsolutePath(@params.Cwd, "cwd", "session/resume");
+            EnsureMcpServersSupported(@params.McpServers, "session/resume");
 
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),

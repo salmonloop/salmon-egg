@@ -381,7 +381,7 @@ namespace SalmonEgg.Domain.Models.Mcp
                 Name = ReadRequiredString(root, "name"),
                 Command = ReadRequiredString(root, "command"),
                 Args = ReadRequiredStringArray(root, "args"),
-                Env = ReadRequiredNameValueArray<McpEnvVariable>(
+                Env = ReadOptionalNameValueArray<McpEnvVariable>(
                     root,
                     "env",
                     (name, value, meta) => new McpEnvVariable(name, value) { Meta = meta }),
@@ -458,6 +458,19 @@ namespace SalmonEgg.Domain.Models.Mcp
             return result;
         }
 
+        private static List<TValue> ReadOptionalNameValueArray<TValue>(
+            JsonElement root,
+            string propertyName,
+            Func<string, string, Dictionary<string, object?>?, TValue> factory)
+        {
+            if (!root.TryGetProperty(propertyName, out var values))
+            {
+                return new List<TValue>();
+            }
+
+            return ReadNameValueArray(values, propertyName, factory);
+        }
+
         private static List<TValue> ReadRequiredNameValueArray<TValue>(
             JsonElement root,
             string propertyName,
@@ -468,6 +481,19 @@ namespace SalmonEgg.Domain.Models.Mcp
                 throw new JsonException($"MCP server is missing required '{propertyName}'.");
             }
 
+            if (values.ValueKind != JsonValueKind.Array)
+            {
+                throw new JsonException($"MCP server '{propertyName}' must be an array.");
+            }
+
+            return ReadNameValueArray(values, propertyName, factory);
+        }
+
+        private static List<TValue> ReadNameValueArray<TValue>(
+            JsonElement values,
+            string propertyName,
+            Func<string, string, Dictionary<string, object?>?, TValue> factory)
+        {
             if (values.ValueKind != JsonValueKind.Array)
             {
                 throw new JsonException($"MCP server '{propertyName}' must be an array.");
