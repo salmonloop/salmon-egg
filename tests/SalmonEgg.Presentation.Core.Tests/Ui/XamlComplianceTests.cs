@@ -46,8 +46,7 @@ public sealed class XamlComplianceTests
     [Theory]
     [InlineData("TitleBarBackButton")]
     [InlineData("TitleBarToggleLeftNavButton")]
-    [InlineData("DiffPanelButton")]
-    [InlineData("TodoPanelButton")]
+    [InlineData("TaskOverviewPanelButton")]
     public void MainPage_IconButtonsHaveAutomationName(string elementName)
     {
         var element = FindElementByName(@"SalmonEgg\SalmonEgg\MainPage.xaml", elementName);
@@ -398,9 +397,11 @@ public sealed class XamlComplianceTests
         Assert.Contains("x:Uid=\"SessionNavArchiveItem\"", xaml);
         Assert.Contains("x:Uid=\"SessionNavMoveItem\"", xaml);
         Assert.DoesNotContain("x:Uid=\"SessionNavRenameItem\"", xaml);
-        Assert.Contains("x:Uid=\"DiffPanelPlaceholder\"", xaml);
-        Assert.Contains("x:Uid=\"PlanEmptyTitle\"", xaml);
-        Assert.Contains("x:Uid=\"PlanEmptySubtitle\"", xaml);
+        Assert.DoesNotContain("x:Uid=\"DiffPanelPlaceholder\"", xaml);
+        Assert.DoesNotContain("x:Uid=\"PlanEmptyTitle\"", xaml);
+        Assert.DoesNotContain("x:Uid=\"PlanEmptySubtitle\"", xaml);
+        Assert.Contains("x:Uid=\"TaskOverviewEmptyTitle\"", xaml);
+        Assert.Contains("x:Uid=\"TaskOverviewEmptySubtitle\"", xaml);
     }
 
     [Fact]
@@ -419,7 +420,11 @@ public sealed class XamlComplianceTests
         Assert.Contains("AutomationProperties.AutomationId=\"RightPanel.Root\"", xaml);
         Assert.Contains("x:Name=\"RightPanelTitle\"", xaml);
         Assert.Contains("AutomationProperties.AutomationId=\"RightPanel.Title\"", xaml);
-        Assert.Contains("AutomationProperties.AutomationId=\"RightPanel.TodoEmptyTitle\"", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"RightPanel.TaskOverviewRoot\"", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"RightPanel.TaskOverview.PlanList\"", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"RightPanel.TaskOverview.EmptyTitle\"", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"RightPanel.TaskOverview.ChangesList\"", xaml);
+        Assert.DoesNotContain("AutomationProperties.AutomationId=\"RightPanel.TodoEmptyTitle\"", xaml);
         Assert.DoesNotContain("x:Name=\"RightPanelColumn\"", xaml);
         Assert.DoesNotContain("RightPanelColumnDefinition", xaml);
     }
@@ -1754,6 +1759,32 @@ public sealed class XamlComplianceTests
         Assert.DoesNotContain("SelectedItem =", adapterSection, StringComparison.Ordinal);
         Assert.Contains("ILogger<MainNavigationViewAdapter>", adapter, StringComparison.Ordinal);
         Assert.Contains("_logger.LogError", adapter, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MainPage_GamepadMainNavFocus_AllowsProjectChildrenToReceiveNativeFocus()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");
+
+        var navigationViewSection = ExtractSection(
+            xaml,
+            "<NavigationView x:Name=\"MainNavView\"",
+            "<NavigationView.Content>");
+        var projectTemplateSection = ExtractSection(
+            xaml,
+            "<DataTemplate x:Key=\"ProjectNavTemplate\"",
+            "<DataTemplate x:Key=\"SessionNavTemplate\"");
+        var sessionTemplateSection = ExtractSection(
+            xaml,
+            "<DataTemplate x:Key=\"SessionNavTemplate\"",
+            "<DataTemplate x:Key=\"MoreNavTemplate\"");
+
+        Assert.Contains("IsFocusEngagementEnabled=\"True\"", navigationViewSection, StringComparison.Ordinal);
+        Assert.Contains("XYFocusKeyboardNavigation=\"Enabled\"", navigationViewSection, StringComparison.Ordinal);
+        Assert.Contains("IsFocusEngagementEnabled=\"True\"", projectTemplateSection, StringComparison.Ordinal);
+        Assert.Contains("XYFocusKeyboardNavigation=\"Enabled\"", projectTemplateSection, StringComparison.Ordinal);
+        Assert.Contains("XYFocusKeyboardNavigation=\"Enabled\"", sessionTemplateSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("SelectedItem =", LoadText(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs"), StringComparison.Ordinal);
     }
 
     [Fact]

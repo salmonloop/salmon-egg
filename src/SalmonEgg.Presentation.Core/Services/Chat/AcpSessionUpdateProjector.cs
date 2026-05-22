@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Text.Json;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Domain.Models.Plan;
 using SalmonEgg.Domain.Models.Protocol;
@@ -118,12 +119,29 @@ public sealed class AcpSessionUpdateProjector : IAcpSessionUpdateProjector
         => string.Equals(valueType, "select", StringComparison.Ordinal);
 
     private static IReadOnlyList<ConversationPlanEntrySnapshot> MapPlanEntries(IReadOnlyList<PlanEntry>? entries)
-        => entries?.Select(static entry => new ConversationPlanEntrySnapshot
+    {
+        if (entries is null)
         {
-            Content = entry.Content ?? string.Empty,
+            throw new JsonException("Plan update entries must not be null.");
+        }
+
+        return entries.Select(MapPlanEntry).ToArray();
+    }
+
+    private static ConversationPlanEntrySnapshot MapPlanEntry(PlanEntry entry)
+    {
+        if (entry is null)
+        {
+            throw new JsonException("Plan update entries must not contain null items.");
+        }
+
+        return new ConversationPlanEntrySnapshot
+        {
+            Content = entry.Content,
             Status = entry.Status,
             Priority = entry.Priority
-        }).ToArray() ?? Array.Empty<ConversationPlanEntrySnapshot>();
+        };
+    }
 
     private static IReadOnlyList<AcpAvailableCommandSnapshot> MapAvailableCommands(
         IReadOnlyList<AvailableCommand>? commands)

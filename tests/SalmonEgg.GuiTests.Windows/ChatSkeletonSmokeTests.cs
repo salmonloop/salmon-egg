@@ -741,50 +741,50 @@ public sealed class ChatSkeletonSmokeTests
             $"Bottom panel reopened without terminal content. terminalName='{session.TryGetElementName("BottomPanel.TerminalWebView", TimeSpan.FromMilliseconds(150)) ?? string.Empty}'");
 
         var beforeRightPanelOpen = CaptureAuxiliaryPanelLayout(session);
-        ToggleButton(session, "TitleBar.TodoPanel");
+        ToggleButton(session, "TitleBar.TaskOverviewPanel");
         Assert.True(
             session.WaitUntilVisible("RightPanel.Title", TimeSpan.FromSeconds(5)),
-            "Todo panel title did not become visible after open toggle.");
+            "Task overview panel title did not become visible after open toggle.");
         Assert.True(
             WaitForAutomationNameContains(
                 session,
                 "RightPanel.Title",
-                "Todo",
+                "Task overview",
                 TimeSpan.FromSeconds(5)),
-            $"Todo panel title was blank after first open. titleName='{session.TryGetElementName("RightPanel.Title", TimeSpan.FromMilliseconds(150)) ?? string.Empty}'");
+            $"Task overview panel title was blank after first open. titleName='{session.TryGetElementName("RightPanel.Title", TimeSpan.FromMilliseconds(150)) ?? string.Empty}'");
         Assert.True(
-            session.WaitUntilVisible("RightPanel.TodoEmptyTitle", TimeSpan.FromSeconds(5)),
-            "Todo panel empty title did not render on first open.");
+            session.WaitUntilVisible("RightPanel.TaskOverview.EmptyTitle", TimeSpan.FromSeconds(5)),
+            "Task overview panel empty title did not render on first open.");
         var withRightPanelOpen = WaitForRightPanelLayoutToApply(
             session,
             beforeRightPanelOpen,
             TimeSpan.FromSeconds(5));
         AssertRightPanelLayoutApplied(beforeRightPanelOpen, withRightPanelOpen);
 
-        ToggleButton(session, "TitleBar.TodoPanel");
+        ToggleButton(session, "TitleBar.TaskOverviewPanel");
         Assert.True(
             WaitUntilOffscreenOrMissing(session, "RightPanel.Title", TimeSpan.FromSeconds(5)),
-            "Todo panel did not hide after close toggle.");
+            "Task overview panel did not hide after close toggle.");
         var afterRightPanelClose = WaitForBottomPanelWidthToRestore(
             session,
             beforeRightPanelOpen,
             TimeSpan.FromSeconds(5));
         AssertBottomPanelWidthRestored(beforeRightPanelOpen, afterRightPanelClose);
 
-        ToggleButton(session, "TitleBar.TodoPanel");
+        ToggleButton(session, "TitleBar.TaskOverviewPanel");
         Assert.True(
             session.WaitUntilVisible("RightPanel.Title", TimeSpan.FromSeconds(5)),
-            "Todo panel title did not become visible after reopen toggle.");
+            "Task overview panel title did not become visible after reopen toggle.");
         Assert.True(
             WaitForAutomationNameContains(
                 session,
                 "RightPanel.Title",
-                "Todo",
+                "Task overview",
                 TimeSpan.FromSeconds(5)),
-            $"Todo panel title was blank after reopen. titleName='{session.TryGetElementName("RightPanel.Title", TimeSpan.FromMilliseconds(150)) ?? string.Empty}'");
+            $"Task overview panel title was blank after reopen. titleName='{session.TryGetElementName("RightPanel.Title", TimeSpan.FromMilliseconds(150)) ?? string.Empty}'");
         Assert.True(
-            session.WaitUntilVisible("RightPanel.TodoEmptyTitle", TimeSpan.FromSeconds(5)),
-            "Todo panel reopened without empty-state content.");
+            session.WaitUntilVisible("RightPanel.TaskOverview.EmptyTitle", TimeSpan.FromSeconds(5)),
+            "Task overview panel reopened without empty-state content.");
     }
 
     [SkippableFact]

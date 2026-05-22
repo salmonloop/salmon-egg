@@ -499,9 +499,8 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
     {
         return mode switch
         {
-            RightPanelMode.Diff => "Diff",
-            RightPanelMode.Todo => "Todo",
-            _ => "Panel"
+            RightPanelMode.TaskOverview => ResolveResourceString("TaskOverviewPanelTitle.Text", "Task overview"),
+            _ => string.Empty
         };
     }
 
@@ -510,15 +509,10 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
             ? "BottomPanelTitleBarFilledIconTemplate"
             : "BottomPanelTitleBarRegularIconTemplate");
 
-    private DataTemplate GetDiffPanelButtonIconTemplate(RightPanelMode mode)
-        => GetAuxiliaryIconTemplate(mode == RightPanelMode.Diff
-            ? "DiffPanelTitleBarFilledIconTemplate"
-            : "DiffPanelTitleBarRegularIconTemplate");
-
-    private DataTemplate GetTodoPanelButtonIconTemplate(RightPanelMode mode)
-        => GetAuxiliaryIconTemplate(mode == RightPanelMode.Todo
-            ? "TodoPanelTitleBarFilledIconTemplate"
-            : "TodoPanelTitleBarRegularIconTemplate");
+    private DataTemplate GetTaskOverviewPanelButtonIconTemplate(RightPanelMode mode)
+        => GetAuxiliaryIconTemplate(mode == RightPanelMode.TaskOverview
+            ? "TaskOverviewPanelTitleBarFilledIconTemplate"
+            : "TaskOverviewPanelTitleBarRegularIconTemplate");
 
     private string GetBottomPanelButtonToolTip(bool canToggle)
         => GetAuxiliaryPanelButtonToolTip(
@@ -526,17 +520,11 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
             "BottomPanelButton.ToolTipService.ToolTip",
             "Bottom Panel");
 
-    private string GetDiffPanelButtonToolTip(bool canToggle)
+    private string GetTaskOverviewPanelButtonToolTip(bool canToggle)
         => GetAuxiliaryPanelButtonToolTip(
             canToggle,
-            "DiffPanelButton.ToolTipService.ToolTip",
-            "Diff");
-
-    private string GetTodoPanelButtonToolTip(bool canToggle)
-        => GetAuxiliaryPanelButtonToolTip(
-            canToggle,
-            "TodoPanelButton.ToolTipService.ToolTip",
-            "Todo");
+            "TaskOverviewPanelButton.ToolTipService.ToolTip",
+            "Task overview");
 
     private static string GetAuxiliaryPanelButtonToolTip(
         bool canToggle,

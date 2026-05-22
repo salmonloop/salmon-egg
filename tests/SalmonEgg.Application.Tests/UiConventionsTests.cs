@@ -425,26 +425,19 @@ public class UiConventionsTests
         var repoRoot = FindRepoRoot();
         var mainPageXaml = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "MainPage.xaml");
         var mainPage = ReadXml(mainPageXaml);
-        var diffButton = FindElementByXName(mainPage, "ToggleButton", "DiffPanelButton");
-        var todoButton = FindElementByXName(mainPage, "ToggleButton", "TodoPanelButton");
-        Assert.Equal("DiffPanelButton", GetAttributeValueByLocalName(diffButton, "Uid"));
-        Assert.Equal("TodoPanelButton", GetAttributeValueByLocalName(todoButton, "Uid"));
+        var mainPageText = File.ReadAllText(mainPageXaml);
+        var taskOverviewButton = FindElementByXName(mainPage, "ToggleButton", "TaskOverviewPanelButton");
+        Assert.Equal("TaskOverviewPanelButton", GetAttributeValueByLocalName(taskOverviewButton, "Uid"));
+        Assert.DoesNotContain("DiffPanelButton", mainPageText, StringComparison.Ordinal);
+        Assert.DoesNotContain("TodoPanelButton", mainPageText, StringComparison.Ordinal);
         Assert.Contains(
-            diffButton.Attributes(),
-            attribute => string.Equals(attribute.Name.LocalName, "AutomationProperties.Name", StringComparison.Ordinal)
-                && string.Equals(attribute.Value, string.Empty, StringComparison.Ordinal));
-        Assert.Contains(
-            todoButton.Attributes(),
+            taskOverviewButton.Attributes(),
             attribute => string.Equals(attribute.Name.LocalName, "AutomationProperties.Name", StringComparison.Ordinal)
                 && string.Equals(attribute.Value, string.Empty, StringComparison.Ordinal));
         Assert.DoesNotContain(
-            diffButton.Attributes(),
+            taskOverviewButton.Attributes(),
             attribute => string.Equals(attribute.Name.LocalName, "ToolTip", StringComparison.Ordinal)
-                && string.Equals(attribute.Value, "Diff", StringComparison.Ordinal));
-        Assert.DoesNotContain(
-            todoButton.Attributes(),
-            attribute => string.Equals(attribute.Name.LocalName, "ToolTip", StringComparison.Ordinal)
-                && string.Equals(attribute.Value, "Todo", StringComparison.Ordinal));
+                && string.Equals(attribute.Value, "Task overview", StringComparison.Ordinal));
 
         var reswFiles = new[]
         {
@@ -457,25 +450,31 @@ public class UiConventionsTests
         foreach (var file in reswFiles)
         {
             var keys = ReadReswKeys(file);
-            if (!keys.Contains("DiffPanelButton.ToolTipService.ToolTip"))
+            if (!keys.Contains("TaskOverviewPanelButton.ToolTipService.ToolTip"))
             {
-                failures.Add($"{file}: missing DiffPanelButton.ToolTipService.ToolTip");
+                failures.Add($"{file}: missing TaskOverviewPanelButton.ToolTipService.ToolTip");
             }
 
-            if (!keys.Contains("DiffPanelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name"))
+            if (!keys.Contains("TaskOverviewPanelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name"))
             {
-                failures.Add($"{file}: missing DiffPanelButton automation name");
+                failures.Add($"{file}: missing TaskOverviewPanelButton automation name");
             }
 
-            if (!keys.Contains("TodoPanelButton.ToolTipService.ToolTip"))
+            if (!keys.Contains("TaskOverviewPanelTitle.Text"))
             {
-                failures.Add($"{file}: missing TodoPanelButton.ToolTipService.ToolTip");
+                failures.Add($"{file}: missing TaskOverviewPanelTitle.Text");
             }
 
-            if (!keys.Contains("TodoPanelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name"))
+            if (!keys.Contains("TaskOverviewEmptyTitle.Text"))
             {
-                failures.Add($"{file}: missing TodoPanelButton automation name");
+                failures.Add($"{file}: missing TaskOverviewEmptyTitle.Text");
             }
+
+            Assert.DoesNotContain("DiffPanelButton.ToolTipService.ToolTip", keys);
+            Assert.DoesNotContain("TodoPanelButton.ToolTipService.ToolTip", keys);
+            Assert.DoesNotContain("DiffPanelPlaceholder.Text", keys);
+            Assert.DoesNotContain("PlanEmptyTitle.Text", keys);
+            Assert.DoesNotContain("PlanEmptySubtitle.Text", keys);
         }
 
         Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
@@ -502,8 +501,7 @@ public class UiConventionsTests
         var miniWindowButton = FindElementByXName(mainPage, "Button", "TitleBarMiniWindowButton");
         var miniReturnButton = FindElementByXName(miniChatView, "Button", "MiniTitleBarReturnButton");
         var bottomButton = FindElementByXName(mainPage, "ToggleButton", "BottomPanelButton");
-        var diffButton = FindElementByXName(mainPage, "ToggleButton", "DiffPanelButton");
-        var todoButton = FindElementByXName(mainPage, "ToggleButton", "TodoPanelButton");
+        var taskOverviewButton = FindElementByXName(mainPage, "ToggleButton", "TaskOverviewPanelButton");
 
         Assert.Equal("{StaticResource TitleBarCommandButtonStyle}", GetAttributeValueByLocalName(backButton, "Style"));
         Assert.Equal("{StaticResource TitleBarBackIconTemplate}", GetAttributeValueByLocalName(backButton, "ContentTemplate"));
@@ -516,10 +514,9 @@ public class UiConventionsTests
         Assert.Equal("{StaticResource TitleBarToggleButtonStyle}", GetAttributeValueByLocalName(bottomButton, "Style"));
         Assert.Equal("{x:Bind GetBottomPanelButtonIconTemplate(LayoutVM.BottomPanelMode), Mode=OneWay}", GetAttributeValueByLocalName(bottomButton, "ContentTemplate"));
         Assert.Equal("{x:Bind LayoutVM.BottomPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Dock}", GetAttributeValueByLocalName(bottomButton, "IsChecked"));
-        Assert.Equal("{x:Bind GetDiffPanelButtonIconTemplate(LayoutVM.RightPanelMode), Mode=OneWay}", GetAttributeValueByLocalName(diffButton, "ContentTemplate"));
-        Assert.Equal("{x:Bind LayoutVM.RightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Diff}", GetAttributeValueByLocalName(diffButton, "IsChecked"));
-        Assert.Equal("{x:Bind GetTodoPanelButtonIconTemplate(LayoutVM.RightPanelMode), Mode=OneWay}", GetAttributeValueByLocalName(todoButton, "ContentTemplate"));
-        Assert.Equal("{x:Bind LayoutVM.RightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Todo}", GetAttributeValueByLocalName(todoButton, "IsChecked"));
+        Assert.Equal("{StaticResource TitleBarToggleButtonStyle}", GetAttributeValueByLocalName(taskOverviewButton, "Style"));
+        Assert.Equal("{x:Bind GetTaskOverviewPanelButtonIconTemplate(LayoutVM.RightPanelMode), Mode=OneWay}", GetAttributeValueByLocalName(taskOverviewButton, "ContentTemplate"));
+        Assert.Equal("{x:Bind LayoutVM.RightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=TaskOverview}", GetAttributeValueByLocalName(taskOverviewButton, "IsChecked"));
 
         var allAttributeValues = mainPage
             .Descendants()
@@ -531,6 +528,8 @@ public class UiConventionsTests
         Assert.DoesNotContain("BottomPanelVectorIcon", allAttributeValues);
         Assert.DoesNotContain("DiffPanelVectorIcon", allAttributeValues);
         Assert.DoesNotContain("TodoPanelVectorIcon", allAttributeValues);
+        Assert.DoesNotContain("DiffPanelButton", allAttributeValues);
+        Assert.DoesNotContain("TodoPanelButton", allAttributeValues);
         Assert.DoesNotContain("PreferWindowsAuxiliaryGlyphs", allAttributeValues);
 
         var app = ReadXml(appXaml);
@@ -583,16 +582,19 @@ public class UiConventionsTests
         Assert.Contains("TitleBarToggleLeftNavIconTemplate", iconKeys);
         Assert.Contains("BottomPanelTitleBarRegularIconTemplate", iconKeys);
         Assert.Contains("BottomPanelTitleBarFilledIconTemplate", iconKeys);
-        Assert.Contains("DiffPanelTitleBarRegularIconTemplate", iconKeys);
-        Assert.Contains("DiffPanelTitleBarFilledIconTemplate", iconKeys);
-        Assert.Contains("TodoPanelTitleBarRegularIconTemplate", iconKeys);
-        Assert.Contains("TodoPanelTitleBarFilledIconTemplate", iconKeys);
+        Assert.Contains("TaskOverviewPanelTitleBarRegularIconTemplate", iconKeys);
+        Assert.Contains("TaskOverviewPanelTitleBarFilledIconTemplate", iconKeys);
+        Assert.DoesNotContain("DiffPanelTitleBarRegularIconTemplate", iconKeys);
+        Assert.DoesNotContain("DiffPanelTitleBarFilledIconTemplate", iconKeys);
+        Assert.DoesNotContain("TodoPanelTitleBarRegularIconTemplate", iconKeys);
+        Assert.DoesNotContain("TodoPanelTitleBarFilledIconTemplate", iconKeys);
         Assert.DoesNotContain("BottomPanelTitleBarToggleButtonStyle", iconKeys);
         Assert.DoesNotContain("DiffPanelTitleBarToggleButtonStyle", iconKeys);
         Assert.DoesNotContain("TodoPanelTitleBarToggleButtonStyle", iconKeys);
         Assert.Contains("GetBottomPanelButtonIconTemplate", codeBehindText);
-        Assert.Contains("GetDiffPanelButtonIconTemplate", codeBehindText);
-        Assert.Contains("GetTodoPanelButtonIconTemplate", codeBehindText);
+        Assert.Contains("GetTaskOverviewPanelButtonIconTemplate", codeBehindText);
+        Assert.DoesNotContain("GetDiffPanelButtonIconTemplate", codeBehindText);
+        Assert.DoesNotContain("GetTodoPanelButtonIconTemplate", codeBehindText);
         Assert.Contains("GetAuxiliaryIconTemplate", codeBehindText);
     }
 

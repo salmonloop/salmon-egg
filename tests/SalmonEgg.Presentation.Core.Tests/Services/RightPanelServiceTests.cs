@@ -19,7 +19,7 @@ public class RightPanelServiceTests
         using var signal = new ManualResetEventSlim(false);
         service.ModeChanged += (_, _) => signal.Set();
 
-        await store.Dispatch(new RightPanelModeChanged(RightPanelMode.Todo));
+        await store.Dispatch(new RightPanelModeChanged(RightPanelMode.TaskOverview));
         Assert.True(signal.Wait(TimeSpan.FromSeconds(5)));
 
         var disposeTask = Task.Run(service.Dispose);
@@ -39,10 +39,10 @@ public class RightPanelServiceTests
         service.ModeChanged += (_, _) => modeChangedCalled++;
         service.ModeChanged += (_, _) => signal.Set();
 
-        await store.Dispatch(new RightPanelModeChanged(RightPanelMode.Todo));
+        await store.Dispatch(new RightPanelModeChanged(RightPanelMode.TaskOverview));
         Assert.True(signal.Wait(TimeSpan.FromSeconds(5)));
 
-        Assert.Equal(RightPanelMode.Todo, service.CurrentMode);
+        Assert.Equal(RightPanelMode.TaskOverview, service.CurrentMode);
         Assert.Equal(1, modeChangedCalled);
     }
 
@@ -53,14 +53,14 @@ public class RightPanelServiceTests
         using var service = new RightPanelService(store);
         using var signal = new ManualResetEventSlim(false);
         service.ModeChanged += (_, _) => signal.Set();
-        await store.Dispatch(new RightPanelModeChanged(RightPanelMode.Diff));
-        await WaitForConditionAsync(() => service.CurrentMode == RightPanelMode.Diff);
+        await store.Dispatch(new RightPanelModeChanged(RightPanelMode.TaskOverview));
+        await WaitForConditionAsync(() => service.CurrentMode == RightPanelMode.TaskOverview);
         var modeChangedCalled = 0;
         service.ModeChanged += (_, _) => modeChangedCalled++;
 
-        await store.Dispatch(new RightPanelModeChanged(RightPanelMode.Diff));
+        await store.Dispatch(new RightPanelModeChanged(RightPanelMode.TaskOverview));
 
-        Assert.Equal(RightPanelMode.Diff, service.CurrentMode);
+        Assert.Equal(RightPanelMode.TaskOverview, service.CurrentMode);
         Assert.Equal(0, modeChangedCalled);
     }
 

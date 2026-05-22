@@ -4,7 +4,7 @@ public readonly record struct LayoutPadding(double Left, double Top, double Righ
 
 public enum NavigationPaneDisplayMode { Expanded, Compact, Minimal }
 
-public enum RightPanelMode { None, Diff, Todo }
+public enum RightPanelMode { None, TaskOverview }
 
 public enum BottomPanelMode { None, Dock }
 

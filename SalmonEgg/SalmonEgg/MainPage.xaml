@@ -18,6 +18,7 @@
     xmlns:navUi="using:SalmonEgg.Presentation.Navigation"
     xmlns:converters="using:SalmonEgg.Presentation.Converters"
     xmlns:chatVm="using:SalmonEgg.Presentation.ViewModels.Chat"
+    xmlns:taskOverview="using:SalmonEgg.Presentation.Core.ViewModels.Chat.TaskOverview"
     xmlns:behaviors="using:SalmonEgg.Presentation.Behaviors"
     mc:Ignorable="d"
     Background="Transparent"
@@ -117,6 +118,8 @@
             <NavigationViewItem MenuItemsSource="{x:Bind Children, Mode=OneWay}"
                                 IsExpanded="{x:Bind IsExpanded, Mode=TwoWay}"
                                 SelectsOnInvoked="False"
+                                IsFocusEngagementEnabled="True"
+                                XYFocusKeyboardNavigation="Enabled"
                                 HorizontalContentAlignment="Stretch"
                                 AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.ProjectItem(ProjectId)}"
                                 Tag="{x:Bind navModels:NavItemTag.Project(ProjectId)}">
@@ -144,6 +147,7 @@
 
         <DataTemplate x:Key="SessionNavTemplate" x:DataType="nav:SessionNavItemViewModel">
             <NavigationViewItem SelectsOnInvoked="True"
+                                XYFocusKeyboardNavigation="Enabled"
                                 AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.SessionItem(SessionId)}"
                                 AutomationProperties.Name="{x:Bind AutomationName, Mode=OneWay}"
                                 Tag="{x:Bind navModels:NavItemTag.Session(SessionId)}"
@@ -418,32 +422,19 @@
                                        Command="{x:Bind LayoutVM.ToggleBottomPanelCommand}"
                                        ContentTemplate="{x:Bind GetBottomPanelButtonIconTemplate(LayoutVM.BottomPanelMode), Mode=OneWay}"
                                        IsChecked="{x:Bind LayoutVM.BottomPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Dock}" />
-                        <ToggleButton x:Name="DiffPanelButton"
-                                      x:Uid="DiffPanelButton"
-                                      AutomationProperties.AutomationId="TitleBar.DiffPanel"
-                                      Tag="Diff"
+                        <ToggleButton x:Name="TaskOverviewPanelButton"
+                                      x:Uid="TaskOverviewPanelButton"
+                                      AutomationProperties.AutomationId="TitleBar.TaskOverviewPanel"
+                                      Tag="TaskOverview"
                                       Style="{StaticResource TitleBarToggleButtonStyle}"
                                       Visibility="{x:Bind LayoutVM.ShowAuxiliaryTitleBarButtons, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                       AutomationProperties.Name=""
-                                      IsEnabled="{x:Bind LayoutVM.CanToggleDiffPanel, Mode=OneWay}"
-                                      ToolTipService.ToolTip="{x:Bind GetDiffPanelButtonToolTip(LayoutVM.CanToggleDiffPanel), Mode=OneWay}"
+                                      IsEnabled="{x:Bind LayoutVM.CanToggleTaskOverviewPanel, Mode=OneWay}"
+                                      ToolTipService.ToolTip="{x:Bind GetTaskOverviewPanelButtonToolTip(LayoutVM.CanToggleTaskOverviewPanel), Mode=OneWay}"
                                       Content="Icon"
-                                      Command="{x:Bind LayoutVM.ToggleDiffPanelCommand}"
-                                      ContentTemplate="{x:Bind GetDiffPanelButtonIconTemplate(LayoutVM.RightPanelMode), Mode=OneWay}"
-                                      IsChecked="{x:Bind LayoutVM.RightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Diff}" />
-                        <ToggleButton x:Name="TodoPanelButton"
-                                      x:Uid="TodoPanelButton"
-                                      AutomationProperties.AutomationId="TitleBar.TodoPanel"
-                                      Tag="Todo"
-                                      Style="{StaticResource TitleBarToggleButtonStyle}"
-                                      Visibility="{x:Bind LayoutVM.ShowAuxiliaryTitleBarButtons, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                                      AutomationProperties.Name=""
-                                      IsEnabled="{x:Bind LayoutVM.CanToggleTodoPanel, Mode=OneWay}"
-                                      ToolTipService.ToolTip="{x:Bind GetTodoPanelButtonToolTip(LayoutVM.CanToggleTodoPanel), Mode=OneWay}"
-                                      Content="Icon"
-                                      Command="{x:Bind LayoutVM.ToggleTodoPanelCommand}"
-                                      ContentTemplate="{x:Bind GetTodoPanelButtonIconTemplate(LayoutVM.RightPanelMode), Mode=OneWay}"
-                                      IsChecked="{x:Bind LayoutVM.RightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Todo}" />
+                                      Command="{x:Bind LayoutVM.ToggleTaskOverviewPanelCommand}"
+                                      ContentTemplate="{x:Bind GetTaskOverviewPanelButtonIconTemplate(LayoutVM.RightPanelMode), Mode=OneWay}"
+                                      IsChecked="{x:Bind LayoutVM.RightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=TaskOverview}" />
                     </StackPanel>
                 </Grid>
             </Grid>
@@ -453,6 +444,8 @@
             <NavigationView x:Name="MainNavView"
                             Background="Transparent"
                             AutomationProperties.AutomationId="MainNavView"
+                            IsFocusEngagementEnabled="True"
+                            XYFocusKeyboardNavigation="Enabled"
                             CompactPaneLength="{x:Bind LayoutVM.NavCompactPaneLength, Mode=OneWay}"
                             OpenPaneLength="{x:Bind LayoutVM.NavOpenPaneLength, Mode=OneWay}"
                             PaneDisplayMode="Auto"
@@ -560,39 +553,93 @@
                                                Style="{ThemeResource BodyStrongTextBlockStyle}" />
                                 </Grid>
 
-                                <Grid Grid.Row="1">
-                                    <Grid Visibility="{x:Bind LayoutVM.RightPanelMode, Mode=OneWay, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=Diff}">
-                                         <TextBlock x:Uid="DiffPanelPlaceholder" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.6"/>
-                                    </Grid>
+                                <ScrollViewer Grid.Row="1"
+                                              AutomationProperties.AutomationId="RightPanel.TaskOverviewRoot">
+                                    <StackPanel Padding="16" Spacing="16">
+                                        <StackPanel Spacing="8">
+                                            <TextBlock x:Uid="TaskOverviewPlanSectionTitle"
+                                                       Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                                            <ListView AutomationProperties.AutomationId="RightPanel.TaskOverview.PlanList"
+                                                      ItemsSource="{x:Bind ChatVM.PlanEntries, Mode=OneWay}"
+                                                      SelectionMode="None"
+                                                      Visibility="{x:Bind ChatVM.TaskOverviewState.ShouldShowPlanList, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                <ListView.ItemTemplate>
+                                                    <DataTemplate x:DataType="chatVm:PlanEntryViewModel">
+                                                        <Grid Padding="0,8"
+                                                              ColumnDefinitions="Auto,*,Auto"
+                                                              ColumnSpacing="12">
+                                                            <Ellipse Width="8"
+                                                                     Height="8"
+                                                                     VerticalAlignment="Center"
+                                                                     Fill="{x:Bind Status, Converter={StaticResource PlanStatusToColorConverter}}" />
+                                                            <TextBlock Grid.Column="1"
+                                                                       Text="{x:Bind Content}"
+                                                                       TextWrapping="Wrap"
+                                                                       VerticalAlignment="Center" />
+                                                            <StackPanel Grid.Column="2"
+                                                                        VerticalAlignment="Center">
+                                                                <TextBlock Text="{x:Bind StatusDisplayName}"
+                                                                           Style="{ThemeResource CaptionTextBlockStyle}"
+                                                                           HorizontalAlignment="Right" />
+                                                                <TextBlock Text="{x:Bind PriorityDisplayName}"
+                                                                           Style="{ThemeResource CaptionTextBlockStyle}"
+                                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                           HorizontalAlignment="Right" />
+                                                            </StackPanel>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ListView.ItemTemplate>
+                                            </ListView>
+                                        </StackPanel>
 
-                                    <Grid Visibility="{x:Bind LayoutVM.RightPanelMode, Mode=OneWay, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=Todo}">
-                                        <ScrollViewer>
-                                            <Grid Padding="16">
-                                                <ListView ItemsSource="{x:Bind ChatVM.PlanEntries, Mode=OneWay}" SelectionMode="None">
-                                                    <ListView.ItemTemplate>
-                                                        <DataTemplate x:DataType="chatVm:PlanEntryViewModel">
-                                                            <Border Margin="0,0,0,8" Padding="12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
-                                                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
-                                                                    <Ellipse Width="8" Height="8" VerticalAlignment="Center" Fill="{x:Bind Status, Converter={StaticResource PlanStatusToColorConverter}}" />
-                                                                    <TextBlock Grid.Column="1" Text="{x:Bind Content}" TextWrapping="Wrap" VerticalAlignment="Center"/>
-                                                                    <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                                                                        <TextBlock Text="{x:Bind StatusDisplayName}" FontSize="11" Opacity="0.8" HorizontalAlignment="Right" />
-                                                                        <TextBlock Text="{x:Bind PriorityDisplayName}" FontSize="10" Opacity="0.5" HorizontalAlignment="Right" />
-                                                                    </StackPanel>
-                                                                </Grid>
-                                                            </Border>
-                                                        </DataTemplate>
-                                                    </ListView.ItemTemplate>
-                                                </ListView>
+                                        <StackPanel Spacing="8">
+                                            <TextBlock x:Uid="TaskOverviewChangesSectionTitle"
+                                                       Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                                            <ListView AutomationProperties.AutomationId="RightPanel.TaskOverview.ChangesList"
+                                                      ItemsSource="{x:Bind ChatVM.TaskOverviewChanges, Mode=OneWay}"
+                                                      SelectionMode="None"
+                                                      Visibility="{x:Bind ChatVM.TaskOverviewState.ShouldShowChangesList, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                <ListView.ItemTemplate>
+                                                    <DataTemplate x:DataType="taskOverview:TaskOverviewChangeViewModel">
+                                                        <Grid Padding="0,8"
+                                                              ColumnDefinitions="*,Auto"
+                                                              ColumnSpacing="12">
+                                                            <TextBlock Text="{x:Bind Path}"
+                                                                       TextTrimming="CharacterEllipsis"
+                                                                       VerticalAlignment="Center" />
+                                                            <StackPanel Grid.Column="1"
+                                                                        VerticalAlignment="Center">
+                                                                <TextBlock Text="{x:Bind KindDisplayName}"
+                                                                           Style="{ThemeResource CaptionTextBlockStyle}"
+                                                                           HorizontalAlignment="Right" />
+                                                                <TextBlock Text="{x:Bind LineSummary}"
+                                                                           Style="{ThemeResource CaptionTextBlockStyle}"
+                                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                           HorizontalAlignment="Right" />
+                                                            </StackPanel>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ListView.ItemTemplate>
+                                            </ListView>
+                                        </StackPanel>
 
-                                                <StackPanel Visibility="{x:Bind ChatVM.ShouldShowPlanEmpty, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,40">
-                                                    <TextBlock x:Uid="PlanEmptyTitle" AutomationProperties.AutomationId="RightPanel.TodoEmptyTitle" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                                                    <TextBlock x:Uid="PlanEmptySubtitle" Opacity="0.7" Margin="0,8,0,0" TextAlignment="Center" HorizontalAlignment="Center" />
-                                                </StackPanel>
-                                            </Grid>
-                                        </ScrollViewer>
-                                    </Grid>
-                                </Grid>
+                                        <StackPanel Visibility="{x:Bind ChatVM.TaskOverviewState.ShouldShowEmpty, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    Margin="0,40">
+                                            <TextBlock x:Uid="TaskOverviewEmptyTitle"
+                                                       AutomationProperties.AutomationId="RightPanel.TaskOverview.EmptyTitle"
+                                                       FontSize="16"
+                                                       FontWeight="SemiBold"
+                                                       HorizontalAlignment="Center" />
+                                            <TextBlock x:Uid="TaskOverviewEmptySubtitle"
+                                                       Opacity="0.7"
+                                                       Margin="0,8,0,0"
+                                                       TextAlignment="Center"
+                                                       HorizontalAlignment="Center" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </ScrollViewer>
 
                                 <controls:ResizeGrip x:Name="RightPanelResizer" 
                                                      Grid.Row="0"

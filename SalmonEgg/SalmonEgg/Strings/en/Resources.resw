@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!--
     Microsoft ResX Schema
@@ -189,35 +189,14 @@
   <data name="SessionProjectPickerDialogOptionsList.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Project list</value>
   </data>
-  <data name="DiffPanelPlaceholder.Text" xml:space="preserve">
-    <value>Diff panel placeholder</value>
-  </data>
-  <data name="PlanEmptyTitle.Text" xml:space="preserve">
-    <value>No plan yet</value>
-  </data>
-  <data name="PlanEmptySubtitle.Text" xml:space="preserve">
-    <value>Waiting for agent updates</value>
-  </data>
   <data name="BottomPanelButton.ToolTipService.ToolTip" xml:space="preserve">
     <value>Bottom Panel</value>
   </data>
   <data name="BottomPanelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Bottom Panel</value>
   </data>
-  <data name="DiffPanelButton.ToolTipService.ToolTip" xml:space="preserve">
-    <value>Diff</value>
-  </data>
-  <data name="DiffPanelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Diff Panel</value>
-  </data>
-  <data name="TodoPanelButton.ToolTipService.ToolTip" xml:space="preserve">
-    <value>Todo</value>
-  </data>
   <data name="TitleBarAuxiliaryPanelUnavailable.ToolTip" xml:space="preserve">
     <value>Unavailable at the current window size</value>
-  </data>
-  <data name="TodoPanelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Todo Panel</value>
   </data>
   <data name="BottomPanelPlaceholder.Text" xml:space="preserve">
     <value>Bottom panel placeholder</value>
@@ -1118,5 +1097,26 @@
   </data>
   <data name="Mcp_ServerHeadersHelp.Text" xml:space="preserve">
     <value>Use one header per line: Header: value.</value>
+  </data>
+  <data name="TaskOverviewPanelButton.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Task overview</value>
+  </data>
+  <data name="TaskOverviewPanelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Task overview panel</value>
+  </data>
+  <data name="TaskOverviewPanelTitle.Text" xml:space="preserve">
+    <value>Task overview</value>
+  </data>
+  <data name="TaskOverviewPlanSectionTitle.Text" xml:space="preserve">
+    <value>Plan</value>
+  </data>
+  <data name="TaskOverviewChangesSectionTitle.Text" xml:space="preserve">
+    <value>Changes</value>
+  </data>
+  <data name="TaskOverviewEmptyTitle.Text" xml:space="preserve">
+    <value>No task status yet</value>
+  </data>
+  <data name="TaskOverviewEmptySubtitle.Text" xml:space="preserve">
+    <value>Agent plan updates and file changes will appear here.</value>
   </data>
 </root>

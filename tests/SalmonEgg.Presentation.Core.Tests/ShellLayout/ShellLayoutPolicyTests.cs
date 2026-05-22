@@ -41,7 +41,7 @@ public class ShellLayoutPolicyTests
         var state = ShellLayoutState.Default with
         {
             IsChatContext = false,
-            DesiredRightPanelMode = RightPanelMode.Diff,
+            DesiredRightPanelMode = RightPanelMode.TaskOverview,
             DesiredBottomPanelMode = BottomPanelMode.Dock,
             WindowMetrics = new WindowMetrics(1280, 900, 1280, 900)
         };
@@ -52,8 +52,7 @@ public class ShellLayoutPolicyTests
         Assert.False(snapshot.BottomPanelVisible);
         Assert.Equal(RightPanelMode.None, snapshot.RightPanelMode);
         Assert.Equal(BottomPanelMode.None, snapshot.BottomPanelMode);
-        Assert.False(snapshot.CanToggleDiffPanel);
-        Assert.False(snapshot.CanToggleTodoPanel);
+        Assert.False(snapshot.CanToggleTaskOverviewPanel);
         Assert.False(snapshot.CanToggleBottomPanel);
     }
 
@@ -93,7 +92,7 @@ public class ShellLayoutPolicyTests
     {
         var state = ShellLayoutState.Default with
         {
-            DesiredRightPanelMode = RightPanelMode.Todo,
+            DesiredRightPanelMode = RightPanelMode.TaskOverview,
             RightPanelPreferredWidth = 400,
             WindowMetrics = new WindowMetrics(1200, 700, 200, 700)
         };
@@ -132,8 +131,7 @@ public class ShellLayoutPolicyTests
 
         var snapshot = ShellLayoutPolicy.Compute(state);
 
-        Assert.False(snapshot.CanToggleDiffPanel);
-        Assert.False(snapshot.CanToggleTodoPanel);
+        Assert.False(snapshot.CanToggleTaskOverviewPanel);
     }
 
     [Fact]
@@ -147,8 +145,7 @@ public class ShellLayoutPolicyTests
         var snapshot = ShellLayoutPolicy.Compute(state);
 
         Assert.Equal(NavigationPaneDisplayMode.Minimal, snapshot.NavPaneDisplayMode);
-        Assert.False(snapshot.CanToggleDiffPanel);
-        Assert.False(snapshot.CanToggleTodoPanel);
+        Assert.False(snapshot.CanToggleTaskOverviewPanel);
     }
 
     [Fact]
@@ -170,7 +167,7 @@ public class ShellLayoutPolicyTests
     {
         var state = ShellLayoutState.Default with
         {
-            DesiredRightPanelMode = RightPanelMode.Diff,
+            DesiredRightPanelMode = RightPanelMode.TaskOverview,
             WindowMetrics = new WindowMetrics(620, 700, 620, 700)
         };
 
@@ -259,7 +256,7 @@ public class ShellLayoutPolicyTests
         var state = ShellLayoutState.Default with
         {
             IsChatContext = true,
-            DesiredRightPanelMode = RightPanelMode.Todo,
+            DesiredRightPanelMode = RightPanelMode.TaskOverview,
             DesiredBottomPanelMode = BottomPanelMode.Dock,
             LastAuxiliaryPanelArea = AuxiliaryPanelArea.Bottom,
             WindowMetrics = new WindowMetrics(1000, 680, 1000, 680)
@@ -280,7 +277,7 @@ public class ShellLayoutPolicyTests
         var state = ShellLayoutState.Default with
         {
             IsChatContext = true,
-            DesiredRightPanelMode = RightPanelMode.Diff,
+            DesiredRightPanelMode = RightPanelMode.TaskOverview,
             DesiredBottomPanelMode = BottomPanelMode.Dock,
             WindowMetrics = new WindowMetrics(1280, 900, 1280, 900)
         };
@@ -290,7 +287,7 @@ public class ShellLayoutPolicyTests
         Assert.True(snapshot.CanShowSimultaneousAuxiliaryPanels);
         Assert.True(snapshot.RightPanelVisible);
         Assert.True(snapshot.BottomPanelVisible);
-        Assert.Equal(RightPanelMode.Diff, snapshot.RightPanelMode);
+        Assert.Equal(RightPanelMode.TaskOverview, snapshot.RightPanelMode);
         Assert.Equal(BottomPanelMode.Dock, snapshot.BottomPanelMode);
     }
 
@@ -300,7 +297,7 @@ public class ShellLayoutPolicyTests
         var state = ShellLayoutState.Default with
         {
             IsChatContext = true,
-            DesiredRightPanelMode = RightPanelMode.Diff,
+            DesiredRightPanelMode = RightPanelMode.TaskOverview,
             DesiredBottomPanelMode = BottomPanelMode.Dock,
             LastAuxiliaryPanelArea = AuxiliaryPanelArea.Bottom,
             WindowMetrics = new WindowMetrics(1000, 680, 1000, 680)
@@ -321,7 +318,7 @@ public class ShellLayoutPolicyTests
         var state = ShellLayoutState.Default with
         {
             IsChatContext = true,
-            DesiredRightPanelMode = RightPanelMode.Diff,
+            DesiredRightPanelMode = RightPanelMode.TaskOverview,
             DesiredBottomPanelMode = BottomPanelMode.Dock,
             LastAuxiliaryPanelArea = AuxiliaryPanelArea.Right,
             WindowMetrics = new WindowMetrics(1000, 680, 1000, 680)
@@ -332,7 +329,7 @@ public class ShellLayoutPolicyTests
         Assert.False(snapshot.CanShowSimultaneousAuxiliaryPanels);
         Assert.True(snapshot.RightPanelVisible);
         Assert.False(snapshot.BottomPanelVisible);
-        Assert.Equal(RightPanelMode.Diff, snapshot.RightPanelMode);
+        Assert.Equal(RightPanelMode.TaskOverview, snapshot.RightPanelMode);
         Assert.Equal(BottomPanelMode.None, snapshot.BottomPanelMode);
     }
 
@@ -342,7 +339,7 @@ public class ShellLayoutPolicyTests
         var state = ShellLayoutState.Default with
         {
             IsChatContext = true,
-            DesiredRightPanelMode = RightPanelMode.Diff,
+            DesiredRightPanelMode = RightPanelMode.TaskOverview,
             DesiredBottomPanelMode = BottomPanelMode.Dock,
             LastAuxiliaryPanelArea = AuxiliaryPanelArea.Right,
             WindowMetrics = new WindowMetrics(800, 800, 200, 800)
@@ -363,7 +360,7 @@ public class ShellLayoutPolicyTests
         var state = ShellLayoutState.Default with
         {
             IsChatContext = true,
-            DesiredRightPanelMode = RightPanelMode.Diff,
+            DesiredRightPanelMode = RightPanelMode.TaskOverview,
             DesiredBottomPanelMode = BottomPanelMode.Dock,
             LastAuxiliaryPanelArea = AuxiliaryPanelArea.Bottom,
             WindowMetrics = new WindowMetrics(800, 600, 800, 400)
@@ -374,7 +371,7 @@ public class ShellLayoutPolicyTests
         Assert.False(snapshot.CanShowSimultaneousAuxiliaryPanels);
         Assert.True(snapshot.RightPanelVisible);
         Assert.False(snapshot.BottomPanelVisible);
-        Assert.Equal(RightPanelMode.Diff, snapshot.RightPanelMode);
+        Assert.Equal(RightPanelMode.TaskOverview, snapshot.RightPanelMode);
         Assert.Equal(BottomPanelMode.None, snapshot.BottomPanelMode);
     }
 
@@ -402,7 +399,7 @@ public class ShellLayoutPolicyTests
         var state = ShellLayoutState.Default with
         {
             IsChatContext = true,
-            DesiredRightPanelMode = RightPanelMode.Diff,
+            DesiredRightPanelMode = RightPanelMode.TaskOverview,
             DesiredBottomPanelMode = BottomPanelMode.Dock,
             LastAuxiliaryPanelArea = AuxiliaryPanelArea.Bottom,
             WindowMetrics = new WindowMetrics(1000, 360, 1000, 360)
@@ -413,7 +410,7 @@ public class ShellLayoutPolicyTests
         Assert.False(snapshot.CanShowSimultaneousAuxiliaryPanels);
         Assert.True(snapshot.RightPanelVisible);
         Assert.False(snapshot.BottomPanelVisible);
-        Assert.Equal(RightPanelMode.Diff, snapshot.RightPanelMode);
+        Assert.Equal(RightPanelMode.TaskOverview, snapshot.RightPanelMode);
         Assert.Equal(BottomPanelMode.None, snapshot.BottomPanelMode);
     }
 }
@@ -426,7 +423,7 @@ public class ShellLayoutReducerBehaviorTests
         var state = ShellLayoutState.Default with
         {
             IsChatContext = true,
-            DesiredRightPanelMode = RightPanelMode.Diff,
+            DesiredRightPanelMode = RightPanelMode.TaskOverview,
             DesiredBottomPanelMode = BottomPanelMode.Dock,
             LastAuxiliaryPanelArea = AuxiliaryPanelArea.Bottom,
             WindowMetrics = new WindowMetrics(1280, 900, 1280, 900)
@@ -449,7 +446,7 @@ public class ShellLayoutReducerBehaviorTests
         {
             IsChatContext = true,
             ContentContextVersion = 2,
-            DesiredRightPanelMode = RightPanelMode.Diff,
+            DesiredRightPanelMode = RightPanelMode.TaskOverview,
             DesiredBottomPanelMode = BottomPanelMode.Dock,
             LastAuxiliaryPanelArea = AuxiliaryPanelArea.Bottom,
             WindowMetrics = new WindowMetrics(1280, 900, 1280, 900)
@@ -459,7 +456,7 @@ public class ShellLayoutReducerBehaviorTests
 
         Assert.True(reduced.State.IsChatContext);
         Assert.Equal(2, reduced.State.ContentContextVersion);
-        Assert.Equal(RightPanelMode.Diff, reduced.State.DesiredRightPanelMode);
+        Assert.Equal(RightPanelMode.TaskOverview, reduced.State.DesiredRightPanelMode);
         Assert.Equal(BottomPanelMode.Dock, reduced.State.DesiredBottomPanelMode);
         Assert.Equal(AuxiliaryPanelArea.Bottom, reduced.State.LastAuxiliaryPanelArea);
     }
@@ -471,7 +468,7 @@ public class ShellLayoutReducerBehaviorTests
         {
             IsChatContext = true,
             ContentContextVersion = 2,
-            DesiredRightPanelMode = RightPanelMode.Diff,
+            DesiredRightPanelMode = RightPanelMode.TaskOverview,
             DesiredBottomPanelMode = BottomPanelMode.Dock,
             LastAuxiliaryPanelArea = AuxiliaryPanelArea.Bottom,
             WindowMetrics = new WindowMetrics(1280, 900, 1280, 900)
@@ -495,7 +492,7 @@ public class ShellLayoutReducerBehaviorTests
             WindowMetrics = new WindowMetrics(1280, 900, 1280, 900)
         };
 
-        var rightReduced = ShellLayoutReducer.Reduce(state, new ToggleRightPanelRequested(RightPanelMode.Diff));
+        var rightReduced = ShellLayoutReducer.Reduce(state, new ToggleRightPanelRequested(RightPanelMode.TaskOverview));
         var bottomReduced = ShellLayoutReducer.Reduce(state, new ToggleBottomPanelRequested());
 
         Assert.Equal(RightPanelMode.None, rightReduced.State.DesiredRightPanelMode);
@@ -510,7 +507,7 @@ public class ShellLayoutReducerBehaviorTests
         var state = ShellLayoutState.Default with
         {
             IsChatContext = true,
-            DesiredRightPanelMode = RightPanelMode.Diff,
+            DesiredRightPanelMode = RightPanelMode.TaskOverview,
             LastAuxiliaryPanelArea = AuxiliaryPanelArea.Right,
             WindowMetrics = new WindowMetrics(1000, 680, 1000, 680)
         };

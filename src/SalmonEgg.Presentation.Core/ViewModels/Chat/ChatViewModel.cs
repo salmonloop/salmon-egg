@@ -44,6 +44,7 @@ using SalmonEgg.Presentation.Core.ViewModels.Chat.PlanPanel;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.ProfileSelection;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.ProjectAffinity;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.SessionOptions;
+using SalmonEgg.Presentation.Core.ViewModels.Chat.TaskOverview;
 using SalmonEgg.Presentation.ViewModels.Chat.Activation;
 using SalmonEgg.Presentation.ViewModels.Chat.Transcript;
 using SalmonEgg.Presentation.ViewModels.Chat.Panels;
@@ -102,6 +103,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly ChatAskUserStatePresenter _askUserStatePresenter;
     private readonly ChatPlanPanelStatePresenter _planPanelStatePresenter;
     private readonly ChatPlanEntriesProjectionCoordinator _planEntriesProjectionCoordinator;
+    private readonly TaskOverviewPanelStatePresenter _taskOverviewPanelStatePresenter;
+    private readonly TaskOverviewChangeProjectionCoordinator _taskOverviewChangeProjectionCoordinator;
     private readonly ChatAcpProfileSelectionResolver _profileSelectionResolver;
     private readonly ChatConversationProfileConnectionGateway _conversationProfileConnectionGateway;
     private readonly ChatConversationPanelStateCoordinator _panelStateCoordinator;
@@ -839,6 +842,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     public bool ShouldShowPlanEmpty => ResolvePlanPanelState().ShouldShowPlanEmpty;
 
+    public TaskOverviewPanelState TaskOverviewState
+        => _taskOverviewPanelStatePresenter.Present(PlanEntries.Count, TaskOverviewChanges.Count);
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ComposerState))]
     [NotifyPropertyChangedFor(nameof(CanSendPromptUi))]
@@ -1047,6 +1053,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private ObservableCollection<PlanEntryViewModel> _planEntries = new();
 
     [ObservableProperty]
+    private ObservableCollection<TaskOverviewChangeViewModel> _taskOverviewChanges = new();
+
+    [ObservableProperty]
     private bool _showPlanPanel;
 
     [ObservableProperty]
@@ -1171,6 +1180,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _askUserStatePresenter = new ChatAskUserStatePresenter();
         _planPanelStatePresenter = new ChatPlanPanelStatePresenter();
         _planEntriesProjectionCoordinator = new ChatPlanEntriesProjectionCoordinator();
+        _taskOverviewPanelStatePresenter = new TaskOverviewPanelStatePresenter();
+        _taskOverviewChangeProjectionCoordinator = new TaskOverviewChangeProjectionCoordinator();
         _profileSelectionResolver = new ChatAcpProfileSelectionResolver();
         _conversationProfileConnectionGateway = new ChatConversationProfileConnectionGateway();
         _panelStateCoordinator = new ChatConversationPanelStateCoordinator();
@@ -1625,6 +1636,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     {
         _planEntriesProjectionCoordinator.Observe(value, RaisePlanEntryDerivedPropertyNotifications);
         RaisePlanEntryDerivedPropertyNotifications();
+    }
+
+    partial void OnTaskOverviewChangesChanged(ObservableCollection<TaskOverviewChangeViewModel> value)
+    {
+        OnPropertyChanged(nameof(TaskOverviewState));
     }
 
     private void OnCurrentSessionIdChanged(string? value)
@@ -3057,5 +3073,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         OnPropertyChanged(nameof(HasPlanEntries));
         OnPropertyChanged(nameof(ShouldShowPlanList));
         OnPropertyChanged(nameof(ShouldShowPlanEmpty));
+        OnPropertyChanged(nameof(TaskOverviewState));
+    }
+
+    private void RefreshTaskOverviewChanges(IReadOnlyList<ConversationMessageSnapshot> transcript)
+    {
+        TaskOverviewChanges = new ObservableCollection<TaskOverviewChangeViewModel>(
+            _taskOverviewChangeProjectionCoordinator.Project(transcript));
     }
 }

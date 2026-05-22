@@ -140,7 +140,6 @@ public static class ShellLayoutPolicy
             isOpen && mode == NavigationPaneDisplayMode.Expanded,
             isOpen ? state.NavOpenPaneLength - 6 : state.NavCompactPaneLength - 6,
             canToggleRightPanels,
-            canToggleRightPanels,
             canToggleBottomPanel,
             showAuxiliaryTitleBarButtons,
             titleBarInteractiveRegionToken,

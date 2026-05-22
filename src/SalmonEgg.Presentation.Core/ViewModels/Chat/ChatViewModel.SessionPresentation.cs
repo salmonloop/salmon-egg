@@ -201,6 +201,7 @@ public partial class ChatViewModel
             projection.Transcript,
             sessionChanged: true);
         ReplacePlanEntries(projection.PlanEntries);
+        RefreshTaskOverviewChanges(projection.Transcript);
     }
 
     private void ApplyPromptAndProfileProjection(ChatUiProjection projection)
@@ -240,6 +241,8 @@ public partial class ChatViewModel
         {
             SyncPlanEntries(projection.PlanEntries);
         }
+
+        RefreshTaskOverviewChanges(projection.Transcript);
     }
 
     private void PublishProjectionRestoreReady(ChatUiProjection projection)

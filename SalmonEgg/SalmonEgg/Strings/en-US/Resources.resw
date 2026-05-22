@@ -165,7 +165,6 @@
   <data name="Appearance_Notice.Message" xml:space="preserve">
     <value>Theme, animation, and backdrop take effect immediately (some platforms may require restart).</value>
   </data>
-
   <data name="General_PageTitle.Text" xml:space="preserve">
     <value>General</value>
   </data>
@@ -250,7 +249,6 @@
   <data name="General_ClearCacheAction.Content" xml:space="preserve">
     <value>Clear</value>
   </data>
-
   <data name="DataStorage_PageTitle.Text" xml:space="preserve">
     <value>Data and storage</value>
   </data>
@@ -341,7 +339,6 @@
   <data name="DataStorage_ClearAllDataHint.Text" xml:space="preserve">
     <value>Deletes configuration, logs, caches, exports, and other local files. This cannot be undone.</value>
   </data>
-
   <data name="Diagnostics_PageTitle.Text" xml:space="preserve">
     <value>Diagnostics and logs</value>
   </data>
@@ -423,7 +420,6 @@
   <data name="Diagnostics_CreateBundle.Content" xml:space="preserve">
     <value>Generate diagnostics (ZIP)</value>
   </data>
-
   <data name="Shortcuts_PageTitle.Text" xml:space="preserve">
     <value>Shortcuts</value>
   </data>
@@ -460,7 +456,6 @@
   <data name="Shortcuts_RestoreAll.Content" xml:space="preserve">
     <value>Restore all defaults</value>
   </data>
-
   <data name="About_PageTitle.Text" xml:space="preserve">
     <value>About</value>
   </data>
@@ -530,7 +525,6 @@
   <data name="About_AcknowledgementSourceFallback" xml:space="preserve">
     <value>Source not listed</value>
   </data>
-
   <data name="Conn_Title.Text" xml:space="preserve">
     <value>Connection and services</value>
   </data>
@@ -594,7 +588,6 @@
   <data name="Conn_PresetDelete.ToolTipService.ToolTip" xml:space="preserve">
     <value>Delete</value>
   </data>
-
   <data name="Acp_OverviewTitle.Text" xml:space="preserve">
     <value>Current connection</value>
   </data>
@@ -757,35 +750,14 @@
   <data name="SessionProjectPickerDialogOptionsList.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Project list</value>
   </data>
-  <data name="DiffPanelPlaceholder.Text" xml:space="preserve">
-    <value>Diff panel placeholder</value>
-  </data>
-  <data name="PlanEmptyTitle.Text" xml:space="preserve">
-    <value>No plan yet</value>
-  </data>
-  <data name="PlanEmptySubtitle.Text" xml:space="preserve">
-    <value>Waiting for agent updates</value>
-  </data>
   <data name="BottomPanelButton.ToolTipService.ToolTip" xml:space="preserve">
     <value>Bottom Panel</value>
   </data>
   <data name="BottomPanelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Bottom Panel</value>
   </data>
-  <data name="DiffPanelButton.ToolTipService.ToolTip" xml:space="preserve">
-    <value>Diff</value>
-  </data>
-  <data name="DiffPanelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Diff Panel</value>
-  </data>
-  <data name="TodoPanelButton.ToolTipService.ToolTip" xml:space="preserve">
-    <value>Todo</value>
-  </data>
   <data name="TitleBarAuxiliaryPanelUnavailable.ToolTip" xml:space="preserve">
     <value>Unavailable at the current window size</value>
-  </data>
-  <data name="TodoPanelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Todo Panel</value>
   </data>
   <data name="BottomPanelPlaceholder.Text" xml:space="preserve">
     <value>Bottom panel placeholder</value>
@@ -1200,5 +1172,26 @@
   </data>
   <data name="Mcp_ServerHeadersHelp.Text" xml:space="preserve">
     <value>Use one header per line: Header: value.</value>
+  </data>
+  <data name="TaskOverviewPanelButton.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Task overview</value>
+  </data>
+  <data name="TaskOverviewPanelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Task overview panel</value>
+  </data>
+  <data name="TaskOverviewPanelTitle.Text" xml:space="preserve">
+    <value>Task overview</value>
+  </data>
+  <data name="TaskOverviewPlanSectionTitle.Text" xml:space="preserve">
+    <value>Plan</value>
+  </data>
+  <data name="TaskOverviewChangesSectionTitle.Text" xml:space="preserve">
+    <value>Changes</value>
+  </data>
+  <data name="TaskOverviewEmptyTitle.Text" xml:space="preserve">
+    <value>No task status yet</value>
+  </data>
+  <data name="TaskOverviewEmptySubtitle.Text" xml:space="preserve">
+    <value>Agent plan updates and file changes will appear here.</value>
   </data>
 </root>

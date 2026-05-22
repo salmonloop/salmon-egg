@@ -11,12 +11,21 @@ namespace SalmonEgg.Domain.Models.Plan
     /// </summary>
     public class Plan
     {
+        private List<PlanEntry> _entries = new List<PlanEntry>();
+
         /// <summary>
         /// 计划条目列表。
         /// </summary>
         [JsonRequired]
         [JsonPropertyName("entries")]
-        public List<PlanEntry> Entries { get; set; } = new List<PlanEntry>();
+        public List<PlanEntry> Entries
+        {
+            get => _entries;
+            set => _entries = ValidateEntries(value);
+        }
+
+        [JsonPropertyName("_meta")]
+        public Dictionary<string, object?>? Meta { get; set; }
 
         /// <summary>
         /// 创建新的计划实例。
@@ -31,7 +40,7 @@ namespace SalmonEgg.Domain.Models.Plan
         /// <param name="entries">计划条目列表</param>
         public Plan(List<PlanEntry> entries)
         {
-            Entries = entries ?? throw new JsonException("Plan entries must not be null.");
+            Entries = entries;
         }
 
         /// <summary>
@@ -73,6 +82,24 @@ namespace SalmonEgg.Domain.Models.Plan
         {
             return Entries.FindAll(e => e.Status == PlanEntryStatus.Completed);
         }
+
+        private static List<PlanEntry> ValidateEntries(List<PlanEntry>? entries)
+        {
+            if (entries is null)
+            {
+                throw new JsonException("Plan entries must not be null.");
+            }
+
+            foreach (var entry in entries)
+            {
+                if (entry is null)
+                {
+                    throw new JsonException("Plan entries must not contain null items.");
+                }
+            }
+
+            return entries;
+        }
     }
 
     /// <summary>
@@ -81,12 +108,21 @@ namespace SalmonEgg.Domain.Models.Plan
     /// </summary>
     public class PlanEntry
     {
+        private string _content = string.Empty;
+
+        [JsonPropertyName("_meta")]
+        public Dictionary<string, object?>? Meta { get; set; }
+
         /// <summary>
         /// 条目的内容描述。
         /// </summary>
         [JsonRequired]
         [JsonPropertyName("content")]
-        public string Content { get; set; } = string.Empty;
+        public string Content
+        {
+            get => _content;
+            set => _content = value ?? throw new JsonException("Plan entry content must not be null.");
+        }
 
         /// <summary>
         /// 条目的当前状态。

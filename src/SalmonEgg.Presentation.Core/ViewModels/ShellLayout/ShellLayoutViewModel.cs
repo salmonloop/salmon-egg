@@ -40,8 +40,7 @@ public sealed partial class ShellLayoutViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _bottomPanelVisible;
     [ObservableProperty] private double _bottomPanelHeight;
     [ObservableProperty] private BottomPanelMode _bottomPanelMode;
-    [ObservableProperty] private bool _canToggleDiffPanel;
-    [ObservableProperty] private bool _canToggleTodoPanel;
+    [ObservableProperty] private bool _canToggleTaskOverviewPanel;
     [ObservableProperty] private bool _canToggleBottomPanel;
     [ObservableProperty] private bool _showAuxiliaryTitleBarButtons;
     [ObservableProperty] private bool _supportsLocalTerminal;
@@ -132,8 +131,7 @@ public sealed partial class ShellLayoutViewModel : ObservableObject, IDisposable
         BottomPanelVisible = snapshot.BottomPanelVisible;
         BottomPanelHeight = snapshot.BottomPanelHeight;
         BottomPanelMode = snapshot.BottomPanelMode;
-        CanToggleDiffPanel = snapshot.CanToggleDiffPanel;
-        CanToggleTodoPanel = snapshot.CanToggleTodoPanel;
+        CanToggleTaskOverviewPanel = snapshot.CanToggleTaskOverviewPanel;
         CanToggleBottomPanel = snapshot.CanToggleBottomPanel;
         ShowAuxiliaryTitleBarButtons = snapshot.ShowAuxiliaryTitleBarButtons;
         SupportsLocalTerminal = snapshot.SupportsLocalTerminal;
@@ -148,26 +146,15 @@ public sealed partial class ShellLayoutViewModel : ObservableObject, IDisposable
         DesiredBottomPanelMode = state.DesiredBottomPanelMode;
     }
 
-    [RelayCommand(CanExecute = nameof(CanToggleDiffPanel))]
-    private async Task ToggleDiffPanelAsync()
+    [RelayCommand(CanExecute = nameof(CanToggleTaskOverviewPanel))]
+    private async Task ToggleTaskOverviewPanelAsync()
     {
-        if (!CanToggleDiffPanel)
+        if (!CanToggleTaskOverviewPanel)
         {
             return;
         }
 
-        await _store.Dispatch(new ToggleRightPanelRequested(RightPanelMode.Diff));
-    }
-
-    [RelayCommand(CanExecute = nameof(CanToggleTodoPanel))]
-    private async Task ToggleTodoPanelAsync()
-    {
-        if (!CanToggleTodoPanel)
-        {
-            return;
-        }
-
-        await _store.Dispatch(new ToggleRightPanelRequested(RightPanelMode.Todo));
+        await _store.Dispatch(new ToggleRightPanelRequested(RightPanelMode.TaskOverview));
     }
 
     [RelayCommand(CanExecute = nameof(CanToggleBottomPanel))]
@@ -181,8 +168,7 @@ public sealed partial class ShellLayoutViewModel : ObservableObject, IDisposable
         await _store.Dispatch(new ToggleBottomPanelRequested());
     }
 
-    partial void OnCanToggleDiffPanelChanged(bool value) => ToggleDiffPanelCommand.NotifyCanExecuteChanged();
-    partial void OnCanToggleTodoPanelChanged(bool value) => ToggleTodoPanelCommand.NotifyCanExecuteChanged();
+    partial void OnCanToggleTaskOverviewPanelChanged(bool value) => ToggleTaskOverviewPanelCommand.NotifyCanExecuteChanged();
     partial void OnCanToggleBottomPanelChanged(bool value) => ToggleBottomPanelCommand.NotifyCanExecuteChanged();
 
     public void Dispose()

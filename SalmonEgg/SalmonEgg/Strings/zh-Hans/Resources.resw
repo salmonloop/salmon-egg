@@ -78,7 +78,6 @@
   <data name="Appearance_Notice.Message" xml:space="preserve">
     <value>主题、动画和材质设置会立即生效（部分平台可能需要重启）。</value>
   </data>
-
   <data name="General_PageTitle.Text" xml:space="preserve">
     <value>常规</value>
   </data>
@@ -163,7 +162,6 @@
   <data name="General_ClearCacheAction.Content" xml:space="preserve">
     <value>清理</value>
   </data>
-
   <data name="DataStorage_PageTitle.Text" xml:space="preserve">
     <value>数据与存储</value>
   </data>
@@ -254,7 +252,6 @@
   <data name="DataStorage_ClearAllDataHint.Text" xml:space="preserve">
     <value>删除配置、日志、缓存、导出等文件。此操作不可撤销。</value>
   </data>
-
   <data name="Diagnostics_PageTitle.Text" xml:space="preserve">
     <value>诊断与日志</value>
   </data>
@@ -336,7 +333,6 @@
   <data name="Diagnostics_CreateBundle.Content" xml:space="preserve">
     <value>生成诊断包（ZIP）</value>
   </data>
-
   <data name="Shortcuts_PageTitle.Text" xml:space="preserve">
     <value>快捷键</value>
   </data>
@@ -373,7 +369,6 @@
   <data name="Shortcuts_RestoreAll.Content" xml:space="preserve">
     <value>全部恢复默认</value>
   </data>
-
   <data name="About_PageTitle.Text" xml:space="preserve">
     <value>关于</value>
   </data>
@@ -443,7 +438,6 @@
   <data name="About_AcknowledgementSourceFallback" xml:space="preserve">
     <value>来源未列出</value>
   </data>
-
   <data name="Conn_Title.Text" xml:space="preserve">
     <value>连接与服务配置</value>
   </data>
@@ -507,7 +501,6 @@
   <data name="Conn_PresetDelete.ToolTipService.ToolTip" xml:space="preserve">
     <value>删除</value>
   </data>
-
   <data name="Acp_OverviewTitle.Text" xml:space="preserve">
     <value>当前连接状态</value>
   </data>
@@ -700,35 +693,14 @@
   <data name="SessionProjectPickerDialogOptionsList.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>项目列表</value>
   </data>
-  <data name="DiffPanelPlaceholder.Text" xml:space="preserve">
-    <value>Diff 面板占位</value>
-  </data>
-  <data name="PlanEmptyTitle.Text" xml:space="preserve">
-    <value>暂无计划</value>
-  </data>
-  <data name="PlanEmptySubtitle.Text" xml:space="preserve">
-    <value>等待 Agent 更新</value>
-  </data>
   <data name="BottomPanelButton.ToolTipService.ToolTip" xml:space="preserve">
     <value>底栏</value>
   </data>
   <data name="BottomPanelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>底栏</value>
   </data>
-  <data name="DiffPanelButton.ToolTipService.ToolTip" xml:space="preserve">
-    <value>差异</value>
-  </data>
-  <data name="DiffPanelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>差异面板</value>
-  </data>
-  <data name="TodoPanelButton.ToolTipService.ToolTip" xml:space="preserve">
-    <value>待办</value>
-  </data>
   <data name="TitleBarAuxiliaryPanelUnavailable.ToolTip" xml:space="preserve">
     <value>当前窗口尺寸下不可用</value>
-  </data>
-  <data name="TodoPanelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>待办面板</value>
   </data>
   <data name="BottomPanelPlaceholder.Text" xml:space="preserve">
     <value>底栏占位</value>
@@ -1200,5 +1172,26 @@
   </data>
   <data name="ToolCallPillSummaryAudioContent" xml:space="preserve">
     <value>音频内容</value>
+  </data>
+  <data name="TaskOverviewPanelButton.ToolTipService.ToolTip" xml:space="preserve">
+    <value>任务概览</value>
+  </data>
+  <data name="TaskOverviewPanelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>任务概览面板</value>
+  </data>
+  <data name="TaskOverviewPanelTitle.Text" xml:space="preserve">
+    <value>任务概览</value>
+  </data>
+  <data name="TaskOverviewPlanSectionTitle.Text" xml:space="preserve">
+    <value>计划</value>
+  </data>
+  <data name="TaskOverviewChangesSectionTitle.Text" xml:space="preserve">
+    <value>改动</value>
+  </data>
+  <data name="TaskOverviewEmptyTitle.Text" xml:space="preserve">
+    <value>暂无任务状态</value>
+  </data>
+  <data name="TaskOverviewEmptySubtitle.Text" xml:space="preserve">
+    <value>Agent 更新计划或文件改动后会显示在这里。</value>
   </data>
 </root>

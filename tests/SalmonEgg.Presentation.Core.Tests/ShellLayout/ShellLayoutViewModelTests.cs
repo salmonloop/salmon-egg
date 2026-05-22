@@ -106,7 +106,7 @@ public class ShellLayoutViewModelTests
         {
             WindowMetrics = new WindowMetrics(500, 900, 500, 900),
             IsChatContext = true,
-            DesiredRightPanelMode = RightPanelMode.Todo,
+            DesiredRightPanelMode = RightPanelMode.TaskOverview,
             RightPanelPreferredWidth = 400
         };
         await using var store = new FakeShellLayoutStore(initialState);
@@ -145,33 +145,30 @@ public class ShellLayoutViewModelTests
         {
             IsChatContext = true,
             WindowMetrics = new WindowMetrics(1000, 650, 1000, 650),
-            DesiredRightPanelMode = RightPanelMode.Diff,
+            DesiredRightPanelMode = RightPanelMode.TaskOverview,
             DesiredBottomPanelMode = BottomPanelMode.Dock,
             LastAuxiliaryPanelArea = AuxiliaryPanelArea.Right
         };
         await using var store = new FakeShellLayoutStore(desired);
         using var vm = new ShellLayoutViewModel(store, new ImmediateUiDispatcher());
 
-        Assert.Equal(RightPanelMode.Diff, vm.DesiredRightPanelMode);
+        Assert.Equal(RightPanelMode.TaskOverview, vm.DesiredRightPanelMode);
         Assert.Equal(BottomPanelMode.Dock, vm.DesiredBottomPanelMode);
-        Assert.Equal(RightPanelMode.Diff, vm.RightPanelMode);
+        Assert.Equal(RightPanelMode.TaskOverview, vm.RightPanelMode);
         Assert.Equal(BottomPanelMode.None, vm.BottomPanelMode);
         Assert.False(vm.BottomPanelVisible);
     }
 
     [Fact]
-    public async Task ViewModel_ToggleRightPanelCommands_DispatchExpectedIntent()
+    public async Task ViewModel_ToggleTaskOverviewPanelCommand_DispatchExpectedIntent()
     {
         await using var store = new FakeShellLayoutStore(ShellLayoutState.Default with { IsChatContext = true });
         using var vm = new ShellLayoutViewModel(store, new ImmediateUiDispatcher());
 
-        await vm.ToggleDiffPanelCommand.ExecuteAsync(null);
-        await vm.ToggleTodoPanelCommand.ExecuteAsync(null);
+        await vm.ToggleTaskOverviewPanelCommand.ExecuteAsync(null);
 
         Assert.Contains(store.DispatchedActions, action =>
-            action is ToggleRightPanelRequested { TargetMode: RightPanelMode.Diff });
-        Assert.Contains(store.DispatchedActions, action =>
-            action is ToggleRightPanelRequested { TargetMode: RightPanelMode.Todo });
+            action is ToggleRightPanelRequested { TargetMode: RightPanelMode.TaskOverview });
     }
 
     [Fact]
@@ -198,12 +195,10 @@ public class ShellLayoutViewModelTests
             false, false, false), default);
 
         await WaitForConditionAsync(
-            () => !vm.CanToggleDiffPanel
-                  && !vm.CanToggleTodoPanel
+            () => !vm.CanToggleTaskOverviewPanel
                   && !vm.CanToggleBottomPanel);
 
-        Assert.False(vm.CanToggleDiffPanel);
-        Assert.False(vm.CanToggleTodoPanel);
+        Assert.False(vm.CanToggleTaskOverviewPanel);
         Assert.False(vm.CanToggleBottomPanel);
     }
 
@@ -217,7 +212,7 @@ public class ShellLayoutViewModelTests
             NavigationPaneDisplayMode.Compact, false, 300, 72,
             false, 0, 0, new LayoutPadding(4, 0, 4, 0), new LayoutPadding(0, 0, 0, 0), 60,
             false, false, 0, 0, RightPanelMode.None, false, 0, BottomPanelMode.None, false, 0,
-            false, false, false,
+            false, false,
             true,
             42), default);
 
@@ -240,12 +235,10 @@ public class ShellLayoutViewModelTests
             false, false, false), default);
 
         await WaitForConditionAsync(
-            () => !vm.CanToggleDiffPanel
-                  && !vm.CanToggleTodoPanel
+            () => !vm.CanToggleTaskOverviewPanel
                   && !vm.CanToggleBottomPanel);
 
-        await vm.ToggleDiffPanelCommand.ExecuteAsync(null);
-        await vm.ToggleTodoPanelCommand.ExecuteAsync(null);
+        await vm.ToggleTaskOverviewPanelCommand.ExecuteAsync(null);
         await vm.ToggleBottomPanelCommand.ExecuteAsync(null);
 
         Assert.Empty(store.DispatchedActions);
