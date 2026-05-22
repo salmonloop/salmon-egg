@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,6 +13,7 @@ using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
+using SalmonEgg.Presentation.Core.ViewModels.Chat.Selectors;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Settings;
@@ -27,6 +29,10 @@ public sealed partial class StartViewModel : ObservableObject
     private readonly IChatLaunchWorkflow _chatLaunchWorkflow;
     private readonly IConversationCatalogReadModel _conversationCatalog;
     private readonly ILogger<StartViewModel> _logger;
+    private readonly SelectorProjectionPresenter _selectorProjectionPresenter = new();
+    private readonly ModeSelectorPolicy _modeSelectorPolicy = new();
+    private readonly AgentSelectorPolicy _agentSelectorPolicy = new();
+    private readonly ProjectSelectorPolicy _projectSelectorPolicy = new();
     private readonly ObservableCollection<StartProjectOptionViewModel> _startProjectOptions = new();
     private StartSessionModeSnapshot _startSessionModeSnapshot = StartSessionModePolicy.Compute(new StartSessionModeState(
         IsStarting: false,
@@ -58,6 +64,7 @@ public sealed partial class StartViewModel : ObservableObject
                 OnPropertyChanged(nameof(IsInputEnabled));
                 OnPropertyChanged(nameof(CanStartSessionAndSendUi));
                 RefreshStartModeState();
+                RefreshAllSelectorProjections();
                 RefreshVoiceProjection();
                 StartSessionAndSendCommand.NotifyCanExecuteChanged();
             }
@@ -90,6 +97,30 @@ public sealed partial class StartViewModel : ObservableObject
 
     public ReadOnlyObservableCollection<SessionModeViewModel> StartModeOptions => Chat.NewSessionDraftModeOptions;
 
+    public SelectorProjectionResult StartAgentSelectorProjection => ResolveStartAgentSelectorProjection();
+
+    public SelectorProjectionResult StartModeSelectorProjection => ResolveStartModeSelectorProjection();
+
+    public SelectorProjectionResult StartProjectSelectorProjection => ResolveStartProjectSelectorProjection();
+
+    public IReadOnlyList<ComposerSelectorItemViewModel> StartAgentSelectorItems
+        => StartAgentSelectorProjection.DisplayItems;
+
+    public IReadOnlyList<ComposerSelectorItemViewModel> StartModeSelectorItems
+        => StartModeSelectorProjection.DisplayItems;
+
+    public IReadOnlyList<ComposerSelectorItemViewModel> StartProjectSelectorItems
+        => StartProjectSelectorProjection.DisplayItems;
+
+    public ComposerSelectorItemViewModel? SelectedStartAgentSelectorItem
+        => StartAgentSelectorProjection.SelectedDisplayItem;
+
+    public ComposerSelectorItemViewModel? SelectedStartModeSelectorItem
+        => StartModeSelectorProjection.SelectedDisplayItem;
+
+    public ComposerSelectorItemViewModel? SelectedStartProjectSelectorItem
+        => StartProjectSelectorProjection.SelectedDisplayItem;
+
     public IRelayCommand<QuickSuggestionViewModel> ExecuteSuggestionCommand { get; }
 
     public IRelayCommand<SessionModeViewModel?> SelectStartModeCommand { get; }
@@ -112,6 +143,9 @@ public sealed partial class StartViewModel : ObservableObject
             _selectedStartProjectIdOverride = normalizedSelection;
             _nav.ClearPendingProjectForNewSession();
             OnPropertyChanged(nameof(SelectedStartProjectId));
+            RefreshAllSelectorProjections();
+            StartSessionAndSendCommand.NotifyCanExecuteChanged();
+            OnPropertyChanged(nameof(CanStartSessionAndSendUi));
             QueueEnsureNewSessionDraft();
         }
     }
@@ -290,13 +324,108 @@ public sealed partial class StartViewModel : ObservableObject
 
     private bool CanStartSessionAndSend()
         => _startSessionModeSnapshot.CanSubmitPrompt
+            && !StartAgentSelectorProjection.IsSubmitBlocked
+            && !StartModeSelectorProjection.IsSubmitBlocked
+            && !StartProjectSelectorProjection.IsSubmitBlocked
             && !string.IsNullOrWhiteSpace(StartPrompt);
+
+    private SelectorProjectionResult ResolveStartAgentSelectorProjection()
+    {
+        var identity = $"agent|{Chat.SelectedAcpProfile?.Id ?? string.Empty}|{Chat.ConnectionInstanceId ?? string.Empty}";
+        var hasAgentSlot = Chat.AcpProfileList.Count > 0;
+        var policy = _agentSelectorPolicy.Project(new AgentSelectorPolicyInput(
+            identity,
+            Chat.AcpProfileList,
+            Chat.SelectedAcpProfile?.Id,
+            Chat.IsConnecting || Chat.IsInitializing,
+            Chat.HasConnectionError,
+            !hasAgentSlot || (Chat.SelectedAcpProfile is not null && Chat.IsConnected)));
+
+        return _selectorProjectionPresenter.Present(new SelectorProjectionInput(
+            ComposerSelectorKind.Agent,
+            policy.RealItems,
+            policy.SelectedSemanticValue,
+            policy.Placeholder,
+            policy.ReplaceSelectionWithPlaceholder,
+            policy.DisableRealItems,
+            policy.SelectorEnabled && IsInputEnabled));
+    }
+
+    private SelectorProjectionResult ResolveStartModeSelectorProjection()
+    {
+        var identity = BuildStartModeIdentity();
+        var policy = _modeSelectorPolicy.Project(new ModeSelectorPolicyInput(
+            identity,
+            identity,
+            StartModeOptions,
+            SelectedStartMode?.ModeId,
+            Chat.IsNewSessionDraftReady,
+            _isNewSessionDraftRefreshPending || Chat.IsNewSessionDraftLoading,
+            Chat.HasNewSessionDraftError,
+            StartModeOptions.Count > 0 || Chat.HasNewSessionDraftError));
+
+        return _selectorProjectionPresenter.Present(new SelectorProjectionInput(
+            ComposerSelectorKind.Mode,
+            policy.RealItems,
+            policy.SelectedSemanticValue,
+            policy.Placeholder,
+            policy.ReplaceSelectionWithPlaceholder,
+            policy.DisableRealItems,
+            policy.SelectorEnabled && IsStartModeSelectorEnabled && IsInputEnabled));
+    }
+
+    private SelectorProjectionResult ResolveStartProjectSelectorProjection()
+    {
+        var selectedProjectId = SelectedStartProjectId;
+        var hasLegalFallback = StartProjectOptions.Any(option =>
+            string.Equals(option.ProjectId, NavigationProjectIds.Unclassified, StringComparison.Ordinal));
+        var policy = _projectSelectorPolicy.Project(new ProjectSelectorPolicyInput(
+            $"project|{selectedProjectId}",
+            StartProjectOptions,
+            selectedProjectId,
+            PendingProjectIntentResolved: HasSelectableProject(selectedProjectId)
+                || string.Equals(selectedProjectId, NavigationProjectIds.Unclassified, StringComparison.Ordinal),
+            hasLegalFallback));
+
+        return _selectorProjectionPresenter.Present(new SelectorProjectionInput(
+            ComposerSelectorKind.Project,
+            policy.RealItems,
+            policy.SelectedSemanticValue,
+            policy.Placeholder,
+            policy.ReplaceSelectionWithPlaceholder,
+            policy.DisableRealItems,
+            policy.SelectorEnabled && IsInputEnabled));
+    }
+
+    private string BuildStartModeIdentity()
+        => string.Join(
+            "|",
+            Chat.SelectedAcpProfile?.Id ?? string.Empty,
+            Chat.ConnectionInstanceId ?? string.Empty,
+            ResolvePreviewCwd() ?? string.Empty,
+            StartModeOptions.Count.ToString(CultureInfo.InvariantCulture));
+
+    private void RefreshAllSelectorProjections()
+    {
+        OnPropertyChanged(nameof(StartAgentSelectorProjection));
+        OnPropertyChanged(nameof(StartModeSelectorProjection));
+        OnPropertyChanged(nameof(StartProjectSelectorProjection));
+        OnPropertyChanged(nameof(StartAgentSelectorItems));
+        OnPropertyChanged(nameof(StartModeSelectorItems));
+        OnPropertyChanged(nameof(StartProjectSelectorItems));
+        OnPropertyChanged(nameof(SelectedStartAgentSelectorItem));
+        OnPropertyChanged(nameof(SelectedStartModeSelectorItem));
+        OnPropertyChanged(nameof(SelectedStartProjectSelectorItem));
+    }
 
     private void OnPreferencesPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (string.Equals(e.PropertyName, nameof(AppPreferencesViewModel.LastSelectedProjectId), StringComparison.Ordinal))
         {
             OnPropertyChanged(nameof(SelectedStartProjectId));
+            RefreshAllSelectorProjections();
+            StartSessionAndSendCommand.NotifyCanExecuteChanged();
+            OnPropertyChanged(nameof(CanStartSessionAndSendUi));
         }
     }
 
@@ -345,6 +474,7 @@ public sealed partial class StartViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(SelectedStartProjectId));
+        RefreshAllSelectorProjections();
     }
 
     private IReadOnlyList<StartProjectOptionViewModel> BuildStartProjectOptions()
@@ -433,6 +563,9 @@ public sealed partial class StartViewModel : ObservableObject
     {
         if (string.Equals(e.PropertyName, nameof(ChatViewModel.SelectedAcpProfile), StringComparison.Ordinal))
         {
+            RefreshAllSelectorProjections();
+            StartSessionAndSendCommand.NotifyCanExecuteChanged();
+            OnPropertyChanged(nameof(CanStartSessionAndSendUi));
             if (_isComposerLoaded)
             {
                 QueueEnsureNewSessionDraft();
@@ -443,6 +576,7 @@ public sealed partial class StartViewModel : ObservableObject
         if (string.Equals(e.PropertyName, nameof(ChatViewModel.SelectedNewSessionDraftMode), StringComparison.Ordinal))
         {
             OnPropertyChanged(nameof(SelectedStartMode));
+            RefreshAllSelectorProjections();
             return;
         }
 
@@ -530,6 +664,7 @@ public sealed partial class StartViewModel : ObservableObject
             if (!HasSelectableProject(_selectedStartProjectIdOverride))
             {
                 OnPropertyChanged(nameof(SelectedStartProjectId));
+                RefreshAllSelectorProjections();
             }
         }
     }
@@ -541,6 +676,7 @@ public sealed partial class StartViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(StartModeOptions));
         OnPropertyChanged(nameof(SelectedStartMode));
+        RefreshAllSelectorProjections();
         RefreshStartModeState();
     }
 
@@ -548,6 +684,7 @@ public sealed partial class StartViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(HasStartSessionDraftError));
         OnPropertyChanged(nameof(StartSessionDraftErrorMessage));
+        RefreshAllSelectorProjections();
     }
 
     private void QueueEnsureNewSessionDraft()
@@ -615,10 +752,12 @@ public sealed partial class StartViewModel : ObservableObject
 
         _isNewSessionDraftRefreshPending = value;
         RefreshStartModeState();
+        RefreshAllSelectorProjections();
     }
 
     private void RefreshStartModeState()
     {
+        RefreshAllSelectorProjections();
         var nextSnapshot = StartSessionModePolicy.Compute(new StartSessionModeState(
             IsStarting: IsStarting,
             IsConnectionReady: Chat.IsConnected && !Chat.IsConnecting && !Chat.IsInitializing,

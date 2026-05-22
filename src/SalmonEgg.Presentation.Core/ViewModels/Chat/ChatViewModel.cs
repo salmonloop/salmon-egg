@@ -43,6 +43,7 @@ using SalmonEgg.Presentation.Core.ViewModels.Chat.Overlay;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.PlanPanel;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.ProfileSelection;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.ProjectAffinity;
+using SalmonEgg.Presentation.Core.ViewModels.Chat.Selectors;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.SessionOptions;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.TaskOverview;
 using SalmonEgg.Presentation.ViewModels.Chat.Activation;
@@ -102,6 +103,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly ChatProjectAffinityCorrectionCoordinator _projectAffinityCorrectionCoordinator;
     private readonly ChatConversationSurfaceProjectionCoordinator _conversationSurfaceProjectionCoordinator;
     private readonly ChatInputStatePresenter _inputStatePresenter;
+    private readonly SelectorProjectionPresenter _selectorProjectionPresenter = new();
+    private readonly ModeSelectorPolicy _modeSelectorPolicy = new();
     private readonly ChatAskUserStatePresenter _askUserStatePresenter;
     private readonly ChatPlanPanelStatePresenter _planPanelStatePresenter;
     private readonly ChatPlanEntriesProjectionCoordinator _planEntriesProjectionCoordinator;
@@ -795,6 +798,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     public ChatComposerPresentationState ComposerState => ResolveInputState();
 
+    public SelectorProjectionResult ChatModeSelectorProjection => ResolveChatModeSelectorProjection();
+
+    public IReadOnlyList<ComposerSelectorItemViewModel> ChatModeSelectorItems
+        => ChatModeSelectorProjection.DisplayItems;
+
+    public ComposerSelectorItemViewModel? SelectedChatModeSelectorItem
+        => ChatModeSelectorProjection.SelectedDisplayItem;
+
     public bool IsInputEnabled => ResolveInputState().IsInputEnabled;
 
     public bool IsTextInputEnabled => ResolveInputState().IsTextInputEnabled;
@@ -1479,6 +1490,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private void NotifyComposerProjectionChanged()
     {
         OnPropertyChanged(nameof(ComposerState));
+        OnPropertyChanged(nameof(ChatModeSelectorProjection));
+        OnPropertyChanged(nameof(ChatModeSelectorItems));
+        OnPropertyChanged(nameof(SelectedChatModeSelectorItem));
         OnPropertyChanged(nameof(IsInputEnabled));
         OnPropertyChanged(nameof(IsTextInputEnabled));
         OnPropertyChanged(nameof(AreComposerToolsEnabled));

@@ -163,6 +163,7 @@ public partial class ChatViewModel
         ShowConfigOptionsPanel = projection.ShowConfigOptionsPanel;
         _modeConfigId = projection.ModeConfigId;
         SetSelectedModeWithoutDispatch(_sessionOptionsPresenter.ResolveSelectedMode(AvailableModes, projection.SelectedModeId));
+        NotifyComposerProjectionChanged();
     }
 
     private void OnAcpProfilesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -394,6 +395,8 @@ public partial class ChatViewModel
 
     partial void OnSelectedModeChanged(SessionModeViewModel? value)
     {
+        NotifyComposerProjectionChanged();
+
         if (_suppressModeSelectionDispatch || value is null || _disposed)
         {
             return;

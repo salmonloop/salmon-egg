@@ -41,6 +41,7 @@ using SalmonEgg.Presentation.ViewModels.Chat.Interactions;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.Overlay;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.PlanPanel;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.ProjectAffinity;
+using SalmonEgg.Presentation.Core.ViewModels.Chat.Selectors;
 using SalmonEgg.Presentation.ViewModels.Chat.Activation;
 using SalmonEgg.Presentation.ViewModels.Chat.Transcript;
 using SalmonEgg.Presentation.ViewModels.Chat.Panels;
@@ -360,6 +361,45 @@ public partial class ChatViewModel
             HasCurrentSessionId: !string.IsNullOrWhiteSpace(CurrentSessionId),
             HasPromptText: !string.IsNullOrWhiteSpace(CurrentPrompt),
             IsVoiceInputSupported: IsVoiceInputSupported));
+
+    private SelectorProjectionResult ResolveChatModeSelectorProjection()
+    {
+        var identity = BuildModeSelectorIdentity(
+            SelectedProfileId,
+            ConnectionInstanceId,
+            GetActiveSessionCwdOrDefault(),
+            version: AvailableModes.Count);
+        var policy = _modeSelectorPolicy.Project(new ModeSelectorPolicyInput(
+            Identity: identity,
+            CurrentIdentity: identity,
+            Modes: AvailableModes,
+            SelectedModeId: SelectedMode?.ModeId,
+            IsAuthoritative: IsSessionActive,
+            IsLoading: IsConnecting || IsInitializing,
+            HasError: HasConnectionError,
+            HasModeCapabilitySignal: AvailableModes.Count > 0));
+
+        return _selectorProjectionPresenter.Present(new SelectorProjectionInput(
+            ComposerSelectorKind.Mode,
+            policy.RealItems,
+            policy.SelectedSemanticValue,
+            policy.Placeholder,
+            policy.ReplaceSelectionWithPlaceholder,
+            policy.DisableRealItems,
+            policy.SelectorEnabled && AreComposerToolsEnabled));
+    }
+
+    private static string BuildModeSelectorIdentity(
+        string? profileId,
+        string? connectionInstanceId,
+        string? cwd,
+        long version)
+        => string.Join(
+            "|",
+            profileId ?? string.Empty,
+            connectionInstanceId ?? string.Empty,
+            cwd ?? string.Empty,
+            version.ToString(CultureInfo.InvariantCulture));
 
     private ChatAskUserState ResolveAskUserState()
         => _askUserStatePresenter.Present(PendingAskUserRequest, _emptyAskUserQuestions);

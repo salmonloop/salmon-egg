@@ -38,6 +38,7 @@ using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Core.Services.Chat.Slash;
 using SalmonEgg.Presentation.Core.Services.Input;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.Input;
+using SalmonEgg.Presentation.Core.ViewModels.Chat.Selectors;
 using SalmonEgg.Presentation.Core.ViewModels.ShellLayout;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.ViewModels.Chat;
@@ -294,6 +295,28 @@ public partial class ChatViewModelTests
             new ProjectAffinityResolver(),
             new ImmediateUiDispatcher(),
             Mock.Of<IStringLocalizer<CoreStrings>>());
+    }
+
+    [Fact]
+    public async Task ChatSelectorProjection_ExposesModeOnlySubsetWithoutAgentOrProjectSubmitBlocks()
+    {
+        await using var fixture = CreateViewModel();
+        fixture.ViewModel.IsConnected = true;
+        fixture.ViewModel.IsSessionActive = true;
+        SetCurrentSessionId(fixture.ViewModel, "conv-1");
+        fixture.ViewModel.AvailableModes.Add(new SessionModeViewModel
+        {
+            ModeId = "code",
+            ModeName = "Code",
+            Description = string.Empty
+        });
+        fixture.ViewModel.SelectedMode = fixture.ViewModel.AvailableModes.Single();
+
+        var projection = fixture.ViewModel.ChatModeSelectorProjection;
+
+        Assert.False(projection.IsSubmitBlocked);
+        Assert.Equal("code", projection.SelectedDisplayItem?.SemanticValue);
+        Assert.Equal(SelectorPlaceholderKind.None, projection.PlaceholderKind);
     }
 
     private static StartViewModel CreateStartViewModelForChatFixture(

@@ -19,6 +19,7 @@ using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Core.Services.Input;
 using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
+using SalmonEgg.Presentation.Core.ViewModels.Chat.Selectors;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.Core.Resources;
@@ -580,7 +581,6 @@ public sealed class StartViewModelTests
                 nav,
                 workflow.Object);
 
-            startViewModel.OnComposerLoaded();
             startViewModel.StartPrompt = "draft";
             Assert.False(startViewModel.StartSessionAndSendCommand.CanExecute(null));
 
@@ -636,6 +636,77 @@ public sealed class StartViewModelTests
             Assert.DoesNotContain("session/new failed", startViewModel.StartSessionDraftErrorMessage, StringComparison.Ordinal);
             Assert.False(startViewModel.IsStartModeSelectorEnabled);
             Assert.False(startViewModel.StartSessionAndSendCommand.CanExecute(null));
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task StartSelectorProjection_WhenModeDraftFails_ShowsBlockingModePlaceholderWithoutClearingAgentAndProject()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            preferences.Projects.Add(new ProjectDefinition { ProjectId = "project-a", Name = "Alpha", RootPath = @"C:\Repo\Alpha" });
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration { Id = "profile-1", Name = "Agent One", Transport = TransportType.HttpSse, ServerUrl = "https://example.test" });
+            chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[0];
+            var chatService = CreateConnectedChatService();
+            chatService
+                .Setup(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+                .ThrowsAsync(new InvalidOperationException("session/new failed"));
+            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+
+            await chat.DispatchConnectionAsync(new SetSettingsSelectedProfileAction("profile-1"));
+            await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
+            await chat.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+            await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+            startViewModel.OnComposerLoaded();
+
+            await WaitForConditionAsync(() => startViewModel.HasStartSessionDraftError);
+
+            Assert.Equal(SelectorPlaceholderKind.Error, startViewModel.StartModeSelectorProjection.PlaceholderKind);
+            Assert.True(startViewModel.StartModeSelectorProjection.IsSubmitBlocked);
+            Assert.Contains("Agent One", startViewModel.StartAgentSelectorProjection.DisplayItems.Select(item => item.DisplayName));
+            Assert.Contains("Alpha", startViewModel.StartProjectSelectorProjection.DisplayItems.Select(item => item.DisplayName));
+            Assert.False(startViewModel.StartSessionAndSendCommand.CanExecute(null));
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task StartSelectorProjection_WhenUnclassifiedProjectSelected_DoesNotBlockSubmit()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+
+            await MakeStartDraftReadyAsync(chat, startViewModel);
+            startViewModel.StartPrompt = "launch";
+
+            Assert.Equal(NavigationProjectIds.Unclassified, startViewModel.StartProjectSelectorProjection.SelectedDisplayItem?.SemanticValue);
+            Assert.False(startViewModel.StartProjectSelectorProjection.IsSubmitBlocked);
+            Assert.True(startViewModel.StartSessionAndSendCommand.CanExecute(null));
         }
         finally
         {
