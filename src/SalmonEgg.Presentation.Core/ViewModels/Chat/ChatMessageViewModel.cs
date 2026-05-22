@@ -606,9 +606,11 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
         private string _content = string.Empty;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(StatusDisplayName))]
         private Domain.Models.Plan.PlanEntryStatus _status;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(PriorityDisplayName))]
         private Domain.Models.Plan.PlanEntryPriority _priority;
 
         public string StatusDisplayName => Status switch

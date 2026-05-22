@@ -33,6 +33,8 @@ public sealed class TaskOverviewChangeProjectionCoordinatorTests
         var change = Assert.Single(coordinator.Project(new[] { message }));
 
         Assert.Equal(path, change.Path);
+        Assert.Equal("App.cs", change.FileName);
+        Assert.EndsWith(Path.Combine("src"), change.DirectoryPath);
         Assert.Equal(TaskOverviewChangeKind.Modified, change.Kind);
         Assert.Equal("Modified", change.KindDisplayName);
         Assert.Equal("+3 / -2", change.LineSummary);

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,6 +19,7 @@ using SalmonEgg.Presentation.Core.Mvux.ShellLayout;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Input;
 using SalmonEgg.Presentation.Core.Services.Shortcuts;
+using SalmonEgg.Presentation.Core.ViewModels.Chat.TaskOverview;
 using SalmonEgg.Presentation.Core.ViewModels.ShellLayout;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Models.Search;
@@ -503,6 +505,24 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
             _ => string.Empty
         };
     }
+
+    private string GetTaskOverviewSummaryText(TaskOverviewPanelState state)
+        => string.Format(
+            CultureInfo.CurrentCulture,
+            ResolveResourceString("TaskOverviewSummaryFormat.Text", "{0} active · {1} completed · {2} files changed"),
+            state.ActivePlanCount,
+            state.CompletedPlanCount,
+            state.ChangeCount);
+
+    private string GetTaskOverviewSummaryAutomationName(TaskOverviewPanelState state)
+        => string.Format(
+            CultureInfo.CurrentCulture,
+            ResolveResourceString(
+                "TaskOverviewSummaryAutomationFormat.Text",
+                "Task overview summary: {0} active, {1} completed, {2} files changed"),
+            state.ActivePlanCount,
+            state.CompletedPlanCount,
+            state.ChangeCount);
 
     private DataTemplate GetBottomPanelButtonIconTemplate(BottomPanelMode mode)
         => GetAuxiliaryIconTemplate(mode == BottomPanelMode.Dock

@@ -1194,4 +1194,43 @@
   <data name="TaskOverviewEmptySubtitle.Text" xml:space="preserve">
     <value>Agent plan updates and file changes will appear here.</value>
   </data>
+  <data name="TaskOverviewSummaryFormat.Text" xml:space="preserve">
+    <value>{0} active · {1} completed · {2} files changed</value>
+  </data>
+  <data name="TaskOverviewSummaryAutomationFormat.Text" xml:space="preserve">
+    <value>Task overview summary: {0} active, {1} completed, {2} files changed</value>
+  </data>
+  <data name="TaskOverviewPlanStatusPending.Text" xml:space="preserve">
+    <value>Pending</value>
+  </data>
+  <data name="TaskOverviewPlanStatusInProgress.Text" xml:space="preserve">
+    <value>In progress</value>
+  </data>
+  <data name="TaskOverviewPlanStatusCompleted.Text" xml:space="preserve">
+    <value>Completed</value>
+  </data>
+  <data name="TaskOverviewPlanStatusUnknown.Text" xml:space="preserve">
+    <value>Unknown</value>
+  </data>
+  <data name="TaskOverviewPlanPriorityLow.Text" xml:space="preserve">
+    <value>Low</value>
+  </data>
+  <data name="TaskOverviewPlanPriorityMedium.Text" xml:space="preserve">
+    <value>Medium</value>
+  </data>
+  <data name="TaskOverviewPlanPriorityHigh.Text" xml:space="preserve">
+    <value>High</value>
+  </data>
+  <data name="TaskOverviewPlanPriorityUnknown.Text" xml:space="preserve">
+    <value>Unknown</value>
+  </data>
+  <data name="TaskOverviewChangeKindAdded.Text" xml:space="preserve">
+    <value>Added</value>
+  </data>
+  <data name="TaskOverviewChangeKindModified.Text" xml:space="preserve">
+    <value>Modified</value>
+  </data>
+  <data name="TaskOverviewChangeKindChanged.Text" xml:space="preserve">
+    <value>Changed</value>
+  </data>
 </root>

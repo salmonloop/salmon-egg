@@ -843,7 +843,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     public bool ShouldShowPlanEmpty => ResolvePlanPanelState().ShouldShowPlanEmpty;
 
     public TaskOverviewPanelState TaskOverviewState
-        => _taskOverviewPanelStatePresenter.Present(PlanEntries.Count, TaskOverviewChanges.Count);
+        => _taskOverviewPanelStatePresenter.Present(
+            PlanEntries.Count,
+            TaskOverviewChanges.Count,
+            PlanEntries.Count(static entry => entry.Status == Domain.Models.Plan.PlanEntryStatus.InProgress),
+            PlanEntries.Count(static entry => entry.Status == Domain.Models.Plan.PlanEntryStatus.Completed));
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ComposerState))]

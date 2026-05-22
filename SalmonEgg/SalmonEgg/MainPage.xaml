@@ -30,6 +30,9 @@
         <converters:InverseBoolConverter x:Key="InverseBoolToVisibilityConverter"/>
         <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
         <converters:PlanStatusToColorConverter x:Key="PlanStatusToColorConverter" />
+        <converters:PlanStatusLabelConverter x:Key="PlanStatusLabelConverter" />
+        <converters:PlanPriorityLabelConverter x:Key="PlanPriorityLabelConverter" />
+        <converters:TaskOverviewChangeKindLabelConverter x:Key="TaskOverviewChangeKindLabelConverter" />
         <converters:EnumToBooleanConverter x:Key="EnumToBoolConverter" />
         <converters:EnumToVisibilityConverter x:Key="EnumToVisibilityConverter" />
         <converters:LayoutPaddingConverter x:Key="PaddingConverter" />
@@ -428,7 +431,6 @@
                                       Tag="TaskOverview"
                                       Style="{StaticResource TitleBarToggleButtonStyle}"
                                       Visibility="{x:Bind LayoutVM.ShowAuxiliaryTitleBarButtons, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                                      AutomationProperties.Name=""
                                       IsEnabled="{x:Bind LayoutVM.CanToggleTaskOverviewPanel, Mode=OneWay}"
                                       ToolTipService.ToolTip="{x:Bind GetTaskOverviewPanelButtonToolTip(LayoutVM.CanToggleTaskOverviewPanel), Mode=OneWay}"
                                       Content="Icon"
@@ -545,12 +547,19 @@
                                     <RowDefinition Height="*" />
                                 </Grid.RowDefinitions>
 
-                                <Grid Grid.Row="0" Height="48" Padding="16,0,8,0">
-                                    <TextBlock x:Name="RightPanelTitle"
-                                               AutomationProperties.AutomationId="RightPanel.Title"
-                                               Text="{x:Bind GetRightPanelTitle(LayoutVM.RightPanelMode), Mode=OneWay}"
-                                               VerticalAlignment="Center" 
-                                               Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                                <Grid Grid.Row="0" MinHeight="64" Padding="16,8,8,8">
+                                    <StackPanel VerticalAlignment="Center"
+                                                Spacing="2">
+                                        <TextBlock x:Name="RightPanelTitle"
+                                                   AutomationProperties.AutomationId="RightPanel.Title"
+                                                   Text="{x:Bind GetRightPanelTitle(LayoutVM.RightPanelMode), Mode=OneWay}"
+                                                   Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                                        <TextBlock AutomationProperties.AutomationId="RightPanel.TaskOverviewSummary"
+                                                   AutomationProperties.Name="{x:Bind GetTaskOverviewSummaryAutomationName(ChatVM.TaskOverviewState), Mode=OneWay}"
+                                                   Text="{x:Bind GetTaskOverviewSummaryText(ChatVM.TaskOverviewState), Mode=OneWay}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                   Style="{ThemeResource CaptionTextBlockStyle}" />
+                                    </StackPanel>
                                 </Grid>
 
                                 <ScrollViewer Grid.Row="1"
@@ -571,17 +580,17 @@
                                                             <Ellipse Width="8"
                                                                      Height="8"
                                                                      VerticalAlignment="Center"
-                                                                     Fill="{x:Bind Status, Converter={StaticResource PlanStatusToColorConverter}}" />
+                                                                     Fill="{x:Bind Status, Mode=OneWay, Converter={StaticResource PlanStatusToColorConverter}}" />
                                                             <TextBlock Grid.Column="1"
-                                                                       Text="{x:Bind Content}"
+                                                                       Text="{x:Bind Content, Mode=OneWay}"
                                                                        TextWrapping="Wrap"
                                                                        VerticalAlignment="Center" />
                                                             <StackPanel Grid.Column="2"
                                                                         VerticalAlignment="Center">
-                                                                <TextBlock Text="{x:Bind StatusDisplayName}"
+                                                                <TextBlock Text="{x:Bind Status, Mode=OneWay, Converter={StaticResource PlanStatusLabelConverter}}"
                                                                            Style="{ThemeResource CaptionTextBlockStyle}"
                                                                            HorizontalAlignment="Right" />
-                                                                <TextBlock Text="{x:Bind PriorityDisplayName}"
+                                                                <TextBlock Text="{x:Bind Priority, Mode=OneWay, Converter={StaticResource PlanPriorityLabelConverter}}"
                                                                            Style="{ThemeResource CaptionTextBlockStyle}"
                                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                                            HorizontalAlignment="Right" />
@@ -604,15 +613,21 @@
                                                         <Grid Padding="0,8"
                                                               ColumnDefinitions="*,Auto"
                                                               ColumnSpacing="12">
-                                                            <TextBlock Text="{x:Bind Path}"
-                                                                       TextTrimming="CharacterEllipsis"
-                                                                       VerticalAlignment="Center" />
+                                                            <StackPanel VerticalAlignment="Center"
+                                                                        ToolTipService.ToolTip="{x:Bind Path, Mode=OneWay}">
+                                                                <TextBlock Text="{x:Bind FileName, Mode=OneWay}"
+                                                                           TextTrimming="CharacterEllipsis" />
+                                                                <TextBlock Text="{x:Bind DirectoryPath, Mode=OneWay}"
+                                                                           TextTrimming="CharacterEllipsis"
+                                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                           Style="{ThemeResource CaptionTextBlockStyle}" />
+                                                            </StackPanel>
                                                             <StackPanel Grid.Column="1"
                                                                         VerticalAlignment="Center">
-                                                                <TextBlock Text="{x:Bind KindDisplayName}"
+                                                                <TextBlock Text="{x:Bind Kind, Mode=OneWay, Converter={StaticResource TaskOverviewChangeKindLabelConverter}}"
                                                                            Style="{ThemeResource CaptionTextBlockStyle}"
                                                                            HorizontalAlignment="Right" />
-                                                                <TextBlock Text="{x:Bind LineSummary}"
+                                                                <TextBlock Text="{x:Bind LineSummary, Mode=OneWay}"
                                                                            Style="{ThemeResource CaptionTextBlockStyle}"
                                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                                            HorizontalAlignment="Right" />

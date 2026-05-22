@@ -421,12 +421,33 @@ public sealed class XamlComplianceTests
         Assert.Contains("x:Name=\"RightPanelTitle\"", xaml);
         Assert.Contains("AutomationProperties.AutomationId=\"RightPanel.Title\"", xaml);
         Assert.Contains("AutomationProperties.AutomationId=\"RightPanel.TaskOverviewRoot\"", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"RightPanel.TaskOverviewSummary\"", xaml);
         Assert.Contains("AutomationProperties.AutomationId=\"RightPanel.TaskOverview.PlanList\"", xaml);
         Assert.Contains("AutomationProperties.AutomationId=\"RightPanel.TaskOverview.EmptyTitle\"", xaml);
         Assert.Contains("AutomationProperties.AutomationId=\"RightPanel.TaskOverview.ChangesList\"", xaml);
+        Assert.DoesNotContain("AutomationProperties.Name=\"\"", xaml);
         Assert.DoesNotContain("AutomationProperties.AutomationId=\"RightPanel.TodoEmptyTitle\"", xaml);
         Assert.DoesNotContain("x:Name=\"RightPanelColumn\"", xaml);
         Assert.DoesNotContain("RightPanelColumnDefinition", xaml);
+    }
+
+    [Fact]
+    public void MainPage_TaskOverviewRowsUseLocalizedDynamicBindings()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");
+
+        Assert.Contains("Text=\"{x:Bind GetTaskOverviewSummaryText(ChatVM.TaskOverviewState), Mode=OneWay}\"", xaml);
+        Assert.Contains("AutomationProperties.Name=\"{x:Bind GetTaskOverviewSummaryAutomationName(ChatVM.TaskOverviewState), Mode=OneWay}\"", xaml);
+        Assert.Contains("Fill=\"{x:Bind Status, Mode=OneWay, Converter={StaticResource PlanStatusToColorConverter}}\"", xaml);
+        Assert.Contains("Text=\"{x:Bind Status, Mode=OneWay, Converter={StaticResource PlanStatusLabelConverter}}\"", xaml);
+        Assert.Contains("Text=\"{x:Bind Priority, Mode=OneWay, Converter={StaticResource PlanPriorityLabelConverter}}\"", xaml);
+        Assert.Contains("Text=\"{x:Bind FileName, Mode=OneWay}\"", xaml);
+        Assert.Contains("Text=\"{x:Bind DirectoryPath, Mode=OneWay}\"", xaml);
+        Assert.Contains("Text=\"{x:Bind Kind, Mode=OneWay, Converter={StaticResource TaskOverviewChangeKindLabelConverter}}\"", xaml);
+        Assert.DoesNotContain("Text=\"{x:Bind StatusDisplayName}\"", xaml);
+        Assert.DoesNotContain("Text=\"{x:Bind PriorityDisplayName}\"", xaml);
+        Assert.DoesNotContain("Text=\"{x:Bind KindDisplayName}\"", xaml);
+        Assert.DoesNotContain("Text=\"{x:Bind Path}\"", xaml);
     }
 
     [Fact]

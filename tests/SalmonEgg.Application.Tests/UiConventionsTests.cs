@@ -430,7 +430,7 @@ public class UiConventionsTests
         Assert.Equal("TaskOverviewPanelButton", GetAttributeValueByLocalName(taskOverviewButton, "Uid"));
         Assert.DoesNotContain("DiffPanelButton", mainPageText, StringComparison.Ordinal);
         Assert.DoesNotContain("TodoPanelButton", mainPageText, StringComparison.Ordinal);
-        Assert.Contains(
+        Assert.DoesNotContain(
             taskOverviewButton.Attributes(),
             attribute => string.Equals(attribute.Name.LocalName, "AutomationProperties.Name", StringComparison.Ordinal)
                 && string.Equals(attribute.Value, string.Empty, StringComparison.Ordinal));
@@ -468,6 +468,32 @@ public class UiConventionsTests
             if (!keys.Contains("TaskOverviewEmptyTitle.Text"))
             {
                 failures.Add($"{file}: missing TaskOverviewEmptyTitle.Text");
+            }
+
+            if (!keys.Contains("TaskOverviewSummaryFormat.Text"))
+            {
+                failures.Add($"{file}: missing TaskOverviewSummaryFormat.Text");
+            }
+
+            if (!keys.Contains("TaskOverviewPlanStatusPending.Text")
+                || !keys.Contains("TaskOverviewPlanStatusInProgress.Text")
+                || !keys.Contains("TaskOverviewPlanStatusCompleted.Text"))
+            {
+                failures.Add($"{file}: missing task overview plan status labels");
+            }
+
+            if (!keys.Contains("TaskOverviewPlanPriorityLow.Text")
+                || !keys.Contains("TaskOverviewPlanPriorityMedium.Text")
+                || !keys.Contains("TaskOverviewPlanPriorityHigh.Text"))
+            {
+                failures.Add($"{file}: missing task overview plan priority labels");
+            }
+
+            if (!keys.Contains("TaskOverviewChangeKindAdded.Text")
+                || !keys.Contains("TaskOverviewChangeKindModified.Text")
+                || !keys.Contains("TaskOverviewChangeKindChanged.Text"))
+            {
+                failures.Add($"{file}: missing task overview change kind labels");
             }
 
             Assert.DoesNotContain("DiffPanelButton.ToolTipService.ToolTip", keys);

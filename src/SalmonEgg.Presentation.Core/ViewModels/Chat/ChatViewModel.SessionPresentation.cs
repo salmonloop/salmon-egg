@@ -61,7 +61,10 @@ public partial class ChatViewModel
     public event EventHandler<ProjectionRestoreReadyEventArgs>? ProjectionRestoreReady;
 
     private void SyncPlanEntries(IReadOnlyList<ConversationPlanEntrySnapshot> planEntries)
-        => _planEntriesProjectionCoordinator.Sync(PlanEntries, planEntries);
+    {
+        _planEntriesProjectionCoordinator.Sync(PlanEntries, planEntries);
+        RaisePlanEntryDerivedPropertyNotifications();
+    }
 
     private void ApplyResolvedProfileSelection(
         ServerConfiguration? selectedProfile,

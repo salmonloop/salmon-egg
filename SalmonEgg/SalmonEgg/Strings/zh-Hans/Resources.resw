@@ -1194,4 +1194,43 @@
   <data name="TaskOverviewEmptySubtitle.Text" xml:space="preserve">
     <value>Agent 更新计划或文件改动后会显示在这里。</value>
   </data>
+  <data name="TaskOverviewSummaryFormat.Text" xml:space="preserve">
+    <value>{0} 个进行中 · {1} 个已完成 · {2} 个文件改动</value>
+  </data>
+  <data name="TaskOverviewSummaryAutomationFormat.Text" xml:space="preserve">
+    <value>任务概览摘要：{0} 个进行中，{1} 个已完成，{2} 个文件改动</value>
+  </data>
+  <data name="TaskOverviewPlanStatusPending.Text" xml:space="preserve">
+    <value>待处理</value>
+  </data>
+  <data name="TaskOverviewPlanStatusInProgress.Text" xml:space="preserve">
+    <value>进行中</value>
+  </data>
+  <data name="TaskOverviewPlanStatusCompleted.Text" xml:space="preserve">
+    <value>已完成</value>
+  </data>
+  <data name="TaskOverviewPlanStatusUnknown.Text" xml:space="preserve">
+    <value>未知</value>
+  </data>
+  <data name="TaskOverviewPlanPriorityLow.Text" xml:space="preserve">
+    <value>低</value>
+  </data>
+  <data name="TaskOverviewPlanPriorityMedium.Text" xml:space="preserve">
+    <value>中</value>
+  </data>
+  <data name="TaskOverviewPlanPriorityHigh.Text" xml:space="preserve">
+    <value>高</value>
+  </data>
+  <data name="TaskOverviewPlanPriorityUnknown.Text" xml:space="preserve">
+    <value>未知</value>
+  </data>
+  <data name="TaskOverviewChangeKindAdded.Text" xml:space="preserve">
+    <value>新增</value>
+  </data>
+  <data name="TaskOverviewChangeKindModified.Text" xml:space="preserve">
+    <value>修改</value>
+  </data>
+  <data name="TaskOverviewChangeKindChanged.Text" xml:space="preserve">
+    <value>改动</value>
+  </data>
 </root>

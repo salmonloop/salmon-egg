@@ -14,10 +14,12 @@ public sealed class TaskOverviewPanelStatePresenterTests
     {
         var presenter = new TaskOverviewPanelStatePresenter();
 
-        var state = presenter.Present(planCount, changeCount);
+        var state = presenter.Present(planCount, changeCount, activePlanCount: 1, completedPlanCount: 2);
 
         Assert.Equal(planCount, state.PlanCount);
         Assert.Equal(changeCount, state.ChangeCount);
+        Assert.Equal(1, state.ActivePlanCount);
+        Assert.Equal(2, state.CompletedPlanCount);
         Assert.Equal(empty, state.ShouldShowEmpty);
         Assert.Equal(planList, state.ShouldShowPlanList);
         Assert.Equal(changesList, state.ShouldShowChangesList);
