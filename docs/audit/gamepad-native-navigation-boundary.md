@@ -24,6 +24,7 @@ GUI 复现显示，同一 `NavigationView` 层级路径中：
 - `WindowsGamepadDiagnosticsService` 暴露标准 gamepad 数量、Raw controller 数量、active input source、active intents、thumbstick、VID/PID、button labels、switch 与 axis values。
 - `MainShellGamepadNavigationDispatcher` 不再调用 `FocusManager.TryMoveFocus`、AutomationPeer invoke/toggle/expand、`SelectedItem` 回写、AutomationId/Tag 匹配或具体控件导航。
 - `MainPage` 不实现 `INavigationIntentConsumer`，也不拦截 `NavigationView` activation。
+- GUI 自动化不再提供合成 `gamepad-intent` 输入服务；`SALMONEGG_GUI_CONTROL_FILE` 仅保留给现有后台消息 smoke 使用，不能替代物理手柄兼容性验证。
 
 ## 验证
 
@@ -31,13 +32,21 @@ GUI 复现显示，同一 `NavigationView` 层级路径中：
 
 - `9f5397bd fix: stop synthesizing gamepad focus navigation`
 - `7b1485db docs: document native gamepad navigation boundary`
+- `320d24ec refactor: remove synthetic gui gamepad input service`
 
 已运行：
 
 - `dotnet test tests\SalmonEgg.Presentation.Core.Tests\SalmonEgg.Presentation.Core.Tests.csproj -m:1 -nr:false -v:minimal`
 - `$env:SALMONEGG_GUI='1'; dotnet test tests\SalmonEgg.GuiTests.Windows\SalmonEgg.GuiTests.Windows.csproj --filter "FullyQualifiedName~ShellFocusedActivationSmokeTests" -m:1 -nr:false -v:minimal`
+- `$env:SALMONEGG_GUI='1'; dotnet test tests\SalmonEgg.GuiTests.Windows\SalmonEgg.GuiTests.Windows.csproj --filter "FullyQualifiedName=SalmonEgg.GuiTests.Windows.DiagnosticsSettingsSmokeTests.GamepadDiagnosticsMonitor_CanRefreshAndStartFromDiagnosticsSettings" -m:1 -nr:false -v:minimal`
 - `dotnet build SalmonEgg\SalmonEgg\SalmonEgg.csproj -f net10.0-desktop -p:SalmonEggTargetFrameworks=net10.0-desktop -p:SalmonEggAllTargetFrameworks=net10.0-desktop -m:1 -nr:false -v:minimal`
 - `.tools\run-winui3-msix.ps1 -Configuration Debug`
+
+最新安装证据：
+
+- commit: `320d24ec5b89e49285d88cda95b5fc375836cd10`
+- MSIX SHA256: `3B48DCC8839E2E87678CF22E24D118A731C91FB7D7462EA38D426CD0F7831120`
+- installed executable SHA256: `C8885B67BCAD0D7BFA71A73E913E75491D183D73898267F0F1556845A699F94C`
 
 ## 真机收口 Checklist
 
