@@ -1881,13 +1881,20 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
-    public void MainShellGamepadNavigationDispatcher_UsesNativeActivationPatternsWithoutManualSelection()
+    public void MainShellGamepadNavigationDispatcher_UsesNativeFocusAndActivationForPhysicalGamepadIntents()
     {
         var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\MainShellGamepadNavigationDispatcher.cs");
 
+        Assert.Contains("IShellBackNavigationService", code);
+        Assert.Contains("TryConsumeNavigationIntent", code);
+        Assert.Contains("GamepadNavigationIntent.Back", code);
+        Assert.Contains("XamlFocusManager.TryMoveFocus", code, StringComparison.Ordinal);
+        Assert.Contains("FindNextElementOptions", code, StringComparison.Ordinal);
+        Assert.Contains("SearchRoot = searchRoot", code, StringComparison.Ordinal);
+        Assert.Contains("FrameworkElementAutomationPeer", code, StringComparison.Ordinal);
+        Assert.Contains("IInvokeProvider", code);
         Assert.Contains("IToggleProvider", code);
         Assert.Contains("IExpandCollapseProvider", code);
-        Assert.Contains("IShellBackNavigationService", code);
         Assert.DoesNotContain("ISelectionItemProvider", code);
         Assert.DoesNotContain(".Select()", code, StringComparison.Ordinal);
         Assert.DoesNotContain("SelectedItem =", code, StringComparison.Ordinal);
@@ -1900,35 +1907,21 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
-    public void MainPage_GamepadMainNavActivation_DelegatesToNavigationAdapterWithoutSelectionWriteback()
+    public void MainPage_DoesNotDuplicateNativeNavigationViewGamepadActivation()
     {
         var mainPage = LoadText(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
         var adapter = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Navigation\MainNavigationViewAdapter.cs");
-        var mainPageSection = ExtractSection(
-            mainPage,
-            "public bool TryConsumeNavigationIntent",
-            "private NavigationViewItem?");
-        var adapterSection = ExtractSection(
-            adapter,
-            "public bool TryHandleFocusedItemActivation",
-            "public Task<bool> HandleItemInvokedAsync");
 
-        Assert.Contains("MainPage : Page, INavigationIntentConsumer", mainPage, StringComparison.Ordinal);
-        Assert.Contains("GamepadNavigationIntent.Activate", mainPageSection, StringComparison.Ordinal);
-        Assert.Contains("TryFindFocusedMainNavItem()", mainPageSection, StringComparison.Ordinal);
-        Assert.Contains("_mainNavigationViewAdapter.TryHandleFocusedItemActivation", mainPageSection, StringComparison.Ordinal);
-        Assert.Contains("focusedItem ??= navItem", mainPage, StringComparison.Ordinal);
-        Assert.DoesNotContain("SelectedItem =", mainPageSection, StringComparison.Ordinal);
-
-        Assert.Contains("TryHandleFocusedItemActivation", adapter, StringComparison.Ordinal);
-        Assert.Contains("if (NavItemTag.TryParseProject", adapterSection, StringComparison.Ordinal);
-        Assert.Contains("return false;", adapterSection, StringComparison.Ordinal);
-        Assert.Contains("ObserveFocusedActivationAsync", adapterSection, StringComparison.Ordinal);
-        Assert.DoesNotContain("_ = activationTask;", adapterSection, StringComparison.Ordinal);
-        Assert.DoesNotContain("SelectionChanged", adapterSection, StringComparison.Ordinal);
-        Assert.DoesNotContain("SelectedItem =", adapterSection, StringComparison.Ordinal);
-        Assert.Contains("ILogger<MainNavigationViewAdapter>", adapter, StringComparison.Ordinal);
-        Assert.Contains("_logger.LogError", adapter, StringComparison.Ordinal);
+        Assert.Contains("MainPage : Page", mainPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("MainPage : Page, INavigationIntentConsumer", mainPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("public bool TryConsumeNavigationIntent", mainPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("TryFindFocusedMainNavItem", mainPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("_mainNavigationViewAdapter.TryHandleFocusedItemActivation", mainPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("TryHandleFocusedItemActivation", adapter, StringComparison.Ordinal);
+        Assert.DoesNotContain("ObserveFocusedActivationAsync", adapter, StringComparison.Ordinal);
+        Assert.Contains("HandleItemInvokedAsync", adapter, StringComparison.Ordinal);
+        Assert.DoesNotContain("SelectionChanged", adapter, StringComparison.Ordinal);
+        Assert.DoesNotContain("SelectedItem =", adapter, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1949,12 +1942,34 @@ public sealed class XamlComplianceTests
             "<DataTemplate x:Key=\"SessionNavTemplate\"",
             "<DataTemplate x:Key=\"MoreNavTemplate\"");
 
-        Assert.Contains("IsFocusEngagementEnabled=\"True\"", navigationViewSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsFocusEngagementEnabled=\"True\"", navigationViewSection, StringComparison.Ordinal);
         Assert.Contains("XYFocusKeyboardNavigation=\"Enabled\"", navigationViewSection, StringComparison.Ordinal);
         Assert.Contains("IsFocusEngagementEnabled=\"True\"", projectTemplateSection, StringComparison.Ordinal);
         Assert.Contains("XYFocusKeyboardNavigation=\"Enabled\"", projectTemplateSection, StringComparison.Ordinal);
         Assert.Contains("XYFocusKeyboardNavigation=\"Enabled\"", sessionTemplateSection, StringComparison.Ordinal);
         Assert.DoesNotContain("SelectedItem =", LoadText(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MainPage_TitleBarCommands_DoNotTrapGamepadDirectionalNavigation()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");
+        var leftCommandsSection = ExtractSection(
+            xaml,
+            "<StackPanel x:Name=\"TitleBarLeftButtons\"",
+            "</StackPanel>");
+        var rightCommandsSection = ExtractSection(
+            xaml,
+            "<StackPanel x:Name=\"TitleBarRightButtons\"",
+            "</StackPanel>");
+
+        Assert.DoesNotContain("XYFocusKeyboardNavigation", leftCommandsSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("XYFocusKeyboardNavigation", rightCommandsSection, StringComparison.Ordinal);
+        AssertTitleBarCommandTargetsMainNavigationOnGamepadDown(xaml, "TitleBarBackButton");
+        AssertTitleBarCommandTargetsMainNavigationOnGamepadDown(xaml, "TitleBarToggleLeftNavButton");
+        AssertTitleBarCommandTargetsMainNavigationOnGamepadDown(xaml, "TitleBarMiniWindowButton");
+        AssertTitleBarCommandTargetsMainNavigationOnGamepadDown(xaml, "BottomPanelButton");
+        AssertTitleBarCommandTargetsMainNavigationOnGamepadDown(xaml, "TaskOverviewPanelButton");
     }
 
     [Fact]
@@ -2011,12 +2026,17 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
-    public void MainShellGamepadNavigationDispatcher_BoundsDirectionalNavigationToTheFocusedVisualTree()
+    public void MainShellGamepadNavigationDispatcher_DirectionalNavigationStaysControlAgnostic()
     {
         var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\MainShellGamepadNavigationDispatcher.cs");
 
+        Assert.Contains("TryConsumeNavigationIntent", code);
+        Assert.Contains("GamepadNavigationIntent.MoveDown => TryMoveFocus", code);
+        Assert.Contains("XamlFocusManager.TryMoveFocus", code);
         Assert.Contains("GetNavigationSearchRoot()", code);
-        Assert.Contains("VisualTreeHelper.GetParent", code);
+        Assert.DoesNotContain("TitleBar", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("MainNav", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("ContentFrame", code, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2159,6 +2179,16 @@ public sealed class XamlComplianceTests
         }
 
         return content.Substring(start, end - start);
+    }
+
+    private static void AssertTitleBarCommandTargetsMainNavigationOnGamepadDown(string xaml, string controlName)
+    {
+        var controlSection = ExtractSection(
+            xaml,
+            $"x:Name=\"{controlName}\"",
+            ">");
+
+        Assert.Contains("XYFocusDown=\"{x:Bind MainNavView, Mode=OneWay}\"", controlSection, StringComparison.Ordinal);
     }
 
     private static string FindRepoRoot()

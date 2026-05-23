@@ -40,7 +40,7 @@ using Windows.ApplicationModel.Resources;
 
 namespace SalmonEgg;
 
-public sealed partial class MainPage : Page, INavigationIntentConsumer
+public sealed partial class MainPage : Page
 {
     private static readonly ResourceLoader ResourceLoader = ResourceLoader.GetForViewIndependentUse();
     private const double NavPaneMinWidth = 240;
@@ -113,8 +113,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
         _contentNavigation = new ContentFrameNavigationAdapter(ContentFrame);
         _mainNavigationViewAdapter = new MainNavigationViewAdapter(
             NavVM,
-            navigationCoordinator,
-            App.ServiceProvider.GetRequiredService<ILogger<MainNavigationViewAdapter>>());
+            navigationCoordinator);
         _titleBarAdapter = new MainWindowTitleBarAdapter(
             AppTitleBar,
             AppTitleBarLayoutRoot,
@@ -732,48 +731,9 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
         _ = _gamepadNavigationDispatcher.TryDispatch(intent);
     }
 
-    public bool TryConsumeNavigationIntent(GamepadNavigationIntent intent)
-    {
-        if (intent != GamepadNavigationIntent.Activate)
-        {
-            return false;
-        }
-
-        var focusedItem = TryFindFocusedMainNavItem();
-        return focusedItem is not null
-            && _mainNavigationViewAdapter.TryHandleFocusedItemActivation(focusedItem);
-    }
-
     public bool TryGoBack()
     {
         return _titleBarAdapter.TryGoBack();
-    }
-
-    private NavigationViewItem? TryFindFocusedMainNavItem()
-    {
-        if (MainNavView.XamlRoot is null)
-        {
-            return null;
-        }
-
-        var current = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(MainNavView.XamlRoot) as DependencyObject;
-        NavigationViewItem? focusedItem = null;
-        while (current is not null)
-        {
-            if (ReferenceEquals(current, MainNavView))
-            {
-                return focusedItem;
-            }
-
-            if (current is NavigationViewItem navItem)
-            {
-                focusedItem ??= navItem;
-            }
-
-            current = VisualTreeHelper.GetParent(current);
-        }
-
-        return null;
     }
 
     private void OnAppTitleBarLoaded(object sender, RoutedEventArgs e)

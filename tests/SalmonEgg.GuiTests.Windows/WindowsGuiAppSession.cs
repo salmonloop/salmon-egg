@@ -21,6 +21,8 @@ namespace SalmonEgg.GuiTests.Windows;
 internal sealed class WindowsGuiAppSession : IDisposable
 {
     private const string ProcessName = "SalmonEgg";
+    // Windows.System.VirtualKey.GamepadDPadDown; this does not exercise Windows.Gaming.Input polling.
+    private const VirtualKeyShort VirtualGamepadDPadDown = (VirtualKeyShort)204;
     private static readonly string[] MainShellWindowAnchorAutomationIds =
     [
         "TitleBar.OpenMiniWindow",
@@ -486,6 +488,11 @@ internal sealed class WindowsGuiAppSession : IDisposable
     public void PressDown()
     {
         PressKey(VirtualKeyShort.DOWN);
+    }
+
+    public void PressVirtualGamepadDPadDown()
+    {
+        PressKey(VirtualGamepadDPadDown);
     }
 
     public void PressLeft()
