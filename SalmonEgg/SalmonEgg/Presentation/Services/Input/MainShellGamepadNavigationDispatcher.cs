@@ -10,15 +10,24 @@ namespace SalmonEgg.Presentation.Services.Input;
 public sealed class MainShellGamepadNavigationDispatcher : IGamepadNavigationDispatcher
 {
     private readonly IShellBackNavigationService _shellBackNavigation;
+    private readonly IGamepadNativeInputBridge _nativeInputBridge;
 
-    public MainShellGamepadNavigationDispatcher(IShellBackNavigationService shellBackNavigation)
+    public MainShellGamepadNavigationDispatcher(
+        IShellBackNavigationService shellBackNavigation,
+        IGamepadNativeInputBridge nativeInputBridge)
     {
         _shellBackNavigation = shellBackNavigation ?? throw new ArgumentNullException(nameof(shellBackNavigation));
+        _nativeInputBridge = nativeInputBridge ?? throw new ArgumentNullException(nameof(nativeInputBridge));
     }
 
     public bool TryDispatch(GamepadNavigationIntent intent)
     {
         if (TryConsumeNavigationIntent(intent))
+        {
+            return true;
+        }
+
+        if (_nativeInputBridge.TryDispatch(intent))
         {
             return true;
         }

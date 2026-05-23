@@ -1929,8 +1929,11 @@ public sealed class XamlComplianceTests
         var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\MainShellGamepadNavigationDispatcher.cs");
 
         Assert.Contains("IShellBackNavigationService", code);
+        Assert.Contains("IGamepadNativeInputBridge", code);
         Assert.Contains("TryConsumeNavigationIntent", code);
         Assert.Contains("GamepadNavigationIntent.Back", code);
+        Assert.Contains("_nativeInputBridge.TryDispatch(intent)", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("SendInput", code, StringComparison.Ordinal);
         Assert.DoesNotContain("XamlFocusManager.TryMoveFocus", code, StringComparison.Ordinal);
         Assert.DoesNotContain("FindNextElementOptions", code, StringComparison.Ordinal);
         Assert.DoesNotContain("SearchRoot = searchRoot", code, StringComparison.Ordinal);
@@ -2136,12 +2139,47 @@ public sealed class XamlComplianceTests
         var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\MainShellGamepadNavigationDispatcher.cs");
 
         Assert.Contains("TryConsumeNavigationIntent", code);
+        Assert.Contains("_nativeInputBridge.TryDispatch(intent)", code, StringComparison.Ordinal);
         Assert.DoesNotContain("GamepadNavigationIntent.MoveDown => TryMoveFocus", code);
         Assert.DoesNotContain("XamlFocusManager.TryMoveFocus", code);
         Assert.DoesNotContain("GetNavigationSearchRoot()", code);
         Assert.DoesNotContain("TitleBar", code, StringComparison.Ordinal);
         Assert.DoesNotContain("MainNav", code, StringComparison.Ordinal);
         Assert.DoesNotContain("ContentFrame", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void GamepadNativeInputBridge_IsReplaceableAndPlatformBounded()
+    {
+        var contract = LoadText(@"src\SalmonEgg.Presentation.Core\Services\Input\IGamepadNativeInputBridge.cs");
+        var noOp = LoadText(@"src\SalmonEgg.Presentation.Core\Services\Input\NoOpGamepadNativeInputBridge.cs");
+        var windowsBridge = LoadText(@"SalmonEgg\SalmonEgg\Platforms\Windows\WindowsGamepadNativeInputBridge.cs");
+        var dependencyInjection = LoadText(@"SalmonEgg\SalmonEgg\DependencyInjection.cs");
+        var projectFile = LoadText(@"SalmonEgg\SalmonEgg\SalmonEgg.csproj");
+
+        Assert.Contains("interface IGamepadNativeInputBridge", contract, StringComparison.Ordinal);
+        Assert.Contains("bool TryDispatch(GamepadNavigationIntent intent)", contract, StringComparison.Ordinal);
+        Assert.Contains("sealed class NoOpGamepadNativeInputBridge : IGamepadNativeInputBridge", noOp, StringComparison.Ordinal);
+        Assert.Contains("return false;", noOp, StringComparison.Ordinal);
+
+        Assert.Contains("sealed class WindowsGamepadNativeInputBridge : IGamepadNativeInputBridge", windowsBridge, StringComparison.Ordinal);
+        Assert.Contains("SendInput", windowsBridge, StringComparison.Ordinal);
+        Assert.Contains("GetForegroundWindow", windowsBridge, StringComparison.Ordinal);
+        Assert.Contains("IsAppWindowForeground()", windowsBridge, StringComparison.Ordinal);
+        Assert.Contains("Marshal.GetLastPInvokeError()", windowsBridge, StringComparison.Ordinal);
+        Assert.Contains("SendKeyUp(virtualKey)", windowsBridge, StringComparison.Ordinal);
+        Assert.Contains("MOUSEINPUT", windowsBridge, StringComparison.Ordinal);
+        Assert.Contains("HARDWAREINPUT", windowsBridge, StringComparison.Ordinal);
+        Assert.Contains("KEYEVENTF_KEYUP", windowsBridge, StringComparison.Ordinal);
+        Assert.DoesNotContain("NavigationView", windowsBridge, StringComparison.Ordinal);
+        Assert.DoesNotContain("FocusManager", windowsBridge, StringComparison.Ordinal);
+        Assert.DoesNotContain("SelectedItem", windowsBridge, StringComparison.Ordinal);
+        Assert.DoesNotContain("AutomationPeer", windowsBridge, StringComparison.Ordinal);
+        Assert.DoesNotContain("MainPage", windowsBridge, StringComparison.Ordinal);
+
+        Assert.Contains("services.AddSingleton<IGamepadNativeInputBridge, WindowsGamepadNativeInputBridge>();", dependencyInjection, StringComparison.Ordinal);
+        Assert.Contains("services.AddSingleton<IGamepadNativeInputBridge, NoOpGamepadNativeInputBridge>();", dependencyInjection, StringComparison.Ordinal);
+        Assert.Contains(@"<Compile Remove=""Platforms/Windows/**/*.cs"" />", projectFile, StringComparison.Ordinal);
     }
 
     [Fact]

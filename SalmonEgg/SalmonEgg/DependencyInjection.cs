@@ -145,6 +145,7 @@ public static class DependencyInjection
         });
 #if WINDOWS
         services.AddSingleton<WindowsRawGameControllerMapper>();
+        services.AddSingleton<IGamepadNativeInputBridge, WindowsGamepadNativeInputBridge>();
         services.AddSingleton<WindowsGamepadInputService>();
         services.AddSingleton<WindowsGamepadDiagnosticsService>();
         services.AddSingleton<NoOpGamepadInputService>();
@@ -160,9 +161,11 @@ public static class DependencyInjection
 #elif __ANDROID__
         services.AddSingleton<IGamepadInputService, NoOpGamepadInputService>();
         services.AddSingleton<IGamepadDiagnosticsService, NoOpGamepadDiagnosticsService>();
+        services.AddSingleton<IGamepadNativeInputBridge, NoOpGamepadNativeInputBridge>();
 #else
         services.AddSingleton<IGamepadInputService, NoOpGamepadInputService>();
         services.AddSingleton<IGamepadDiagnosticsService, NoOpGamepadDiagnosticsService>();
+        services.AddSingleton<IGamepadNativeInputBridge, NoOpGamepadNativeInputBridge>();
 #endif
 
 #if WINDOWS
