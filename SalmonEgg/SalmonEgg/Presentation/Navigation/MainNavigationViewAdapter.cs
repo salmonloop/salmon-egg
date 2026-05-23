@@ -29,15 +29,6 @@ public sealed class MainNavigationViewAdapter
     public Task<bool> HandleItemInvokedAsync(NavigationViewItemInvokedEventArgs args)
         => HandleItemInvokedCoreAsync(args);
 
-    public Task<bool>? CreateFocusedItemActivationTask(NavigationViewItem navItem)
-    {
-        ArgumentNullException.ThrowIfNull(navItem);
-
-        return navItem.Tag is string tag
-            ? HandleActivatableTagAsync(navItem, tag)
-            : null;
-    }
-
     private Task<bool> HandleItemInvokedCoreAsync(NavigationViewItemInvokedEventArgs args)
     {
         if (args.InvokedItemContainer is not NavigationViewItem navItem || navItem.Tag is not string tag)

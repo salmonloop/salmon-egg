@@ -40,7 +40,7 @@ using Windows.ApplicationModel.Resources;
 
 namespace SalmonEgg;
 
-public sealed partial class MainPage : Page, INavigationIntentConsumer
+public sealed partial class MainPage : Page
 {
     private static readonly ResourceLoader ResourceLoader = ResourceLoader.GetForViewIndependentUse();
     private const double NavPaneMinWidth = 240;
@@ -394,71 +394,6 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
         }
 
         BootLogDebug("MainNav ItemInvoked: no adapter route matched.");
-    }
-
-    public bool TryConsumeNavigationIntent(GamepadNavigationIntent intent)
-    {
-        if (intent != GamepadNavigationIntent.Activate)
-        {
-            return false;
-        }
-
-        var navItem = ResolveFocusedMainNavigationItem();
-        if (navItem is null)
-        {
-            return false;
-        }
-
-        var activationTask = _mainNavigationViewAdapter.CreateFocusedItemActivationTask(navItem);
-        if (activationTask is null)
-        {
-            return false;
-        }
-
-        _ = ObserveMainNavigationGamepadActivationAsync(activationTask);
-        return true;
-    }
-
-    private NavigationViewItem? ResolveFocusedMainNavigationItem()
-    {
-        if (MainNavView.XamlRoot is null)
-        {
-            return null;
-        }
-
-        var current = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(MainNavView.XamlRoot) as DependencyObject;
-        NavigationViewItem? navItem = null;
-        while (current is not null)
-        {
-            if (ReferenceEquals(current, MainNavView))
-            {
-                return navItem;
-            }
-
-            if (current is NavigationViewItem currentNavItem)
-            {
-                navItem = currentNavItem;
-            }
-
-            current = VisualTreeHelper.GetParent(current);
-        }
-
-        return null;
-    }
-
-    private async Task ObserveMainNavigationGamepadActivationAsync(Task<bool> activationTask)
-    {
-        try
-        {
-            if (!await activationTask.ConfigureAwait(true))
-            {
-                _logger.LogDebug("Gamepad main navigation activation completed without a handled route.");
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Gamepad main navigation activation failed.");
-        }
     }
 
     private void OnSessionArchiveMenuItemClick(object sender, RoutedEventArgs e)

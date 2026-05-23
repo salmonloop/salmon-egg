@@ -123,26 +123,6 @@ public sealed class ShellFocusedActivationSmokeTests
     }
 
     [SkippableFact]
-    public void DiscoverSessions_InjectedGamepadActivate_CanInvokeFocusedNavigationItem()
-    {
-        GuiTestGate.RequireEnabled();
-
-        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
-        appData.EnableGuiControlFile();
-        using var session = WindowsGuiAppSession.LaunchFresh();
-
-        var discoverItem = session.FindByAutomationId("MainNav.DiscoverSessions", TimeSpan.FromSeconds(10));
-        FocusAndAssert(session, discoverItem, "MainNav.DiscoverSessions", "discover navigation item");
-        appData.TriggerGamepadIntent("Activate");
-
-        Assert.True(
-            session.WaitUntilVisible("DiscoverSessions.Title", TimeSpan.FromSeconds(10)),
-            $"Discover sessions page did not become visible through injected gamepad activation."
-            + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
-            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
-    }
-
-    [SkippableFact]
     public void RightTitleBarCommand_VirtualGamepadDPadDown_CanReachApplicationBody()
     {
         GuiTestGate.RequireEnabled();

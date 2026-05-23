@@ -1951,19 +1951,18 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
-    public void MainPage_GamepadNavigationActivation_ReusesNavigationAdapterWithoutSelectionMutation()
+    public void MainPage_GamepadNavigation_DoesNotInterceptNavigationViewActivation()
     {
         var mainPage = LoadText(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
         var adapter = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Navigation\MainNavigationViewAdapter.cs");
 
-        Assert.Contains("MainPage : Page, INavigationIntentConsumer", mainPage, StringComparison.Ordinal);
-        Assert.Contains("public bool TryConsumeNavigationIntent(GamepadNavigationIntent intent)", mainPage, StringComparison.Ordinal);
-        Assert.Contains("intent != GamepadNavigationIntent.Activate", mainPage, StringComparison.Ordinal);
-        Assert.Contains("ResolveFocusedMainNavigationItem", mainPage, StringComparison.Ordinal);
-        Assert.Contains("_mainNavigationViewAdapter.CreateFocusedItemActivationTask(navItem)", mainPage, StringComparison.Ordinal);
-        Assert.Contains("CreateFocusedItemActivationTask", adapter, StringComparison.Ordinal);
-        Assert.Contains("HandleActivatableTagAsync(navItem, tag)", adapter, StringComparison.Ordinal);
         Assert.Contains("HandleItemInvokedAsync", adapter, StringComparison.Ordinal);
+        Assert.Contains("HandleActivatableTagAsync(navItem, tag)", adapter, StringComparison.Ordinal);
+        Assert.DoesNotContain("MainPage : Page, INavigationIntentConsumer", mainPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("public bool TryConsumeNavigationIntent(GamepadNavigationIntent intent)", mainPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("ResolveFocusedMainNavigationItem", mainPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("CreateFocusedItemActivationTask", adapter, StringComparison.Ordinal);
+        Assert.DoesNotContain("_mainNavigationViewAdapter.CreateFocusedItemActivationTask", mainPage, StringComparison.Ordinal);
         Assert.DoesNotContain("MainNav.Start", mainPage, StringComparison.Ordinal);
         Assert.DoesNotContain("MainNav.DiscoverSessions", mainPage, StringComparison.Ordinal);
         Assert.DoesNotContain("SelectionChanged", adapter, StringComparison.Ordinal);
