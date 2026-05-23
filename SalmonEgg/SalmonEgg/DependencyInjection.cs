@@ -55,7 +55,6 @@ namespace SalmonEgg;
 public static class DependencyInjection
 {
     private const string GuiEnabledEnvVar = "SALMONEGG_GUI";
-    private const string GuiControlFileEnvVar = "SALMONEGG_GUI_CONTROL_FILE";
     private const string GuiSlowSessionLoadMsEnvVar = "SALMONEGG_GUI_SLOW_SESSION_LOAD_MS";
 
     /// <summary>
@@ -148,20 +147,12 @@ public static class DependencyInjection
         services.AddSingleton<WindowsRawGameControllerMapper>();
         services.AddSingleton<WindowsGamepadInputService>();
         services.AddSingleton<WindowsGamepadDiagnosticsService>();
-        services.AddSingleton<GuiGamepadInputService>();
         services.AddSingleton<NoOpGamepadInputService>();
         services.AddSingleton<NoOpGamepadDiagnosticsService>();
         services.AddSingleton<IGamepadInputService>(sp =>
-        {
-            if (IsGuiGamepadInputEnabled())
-            {
-                return sp.GetRequiredService<GuiGamepadInputService>();
-            }
-
-            return sp.GetRequiredService<IPlatformCapabilityService>().SupportsGamepadInput
+            sp.GetRequiredService<IPlatformCapabilityService>().SupportsGamepadInput
                 ? sp.GetRequiredService<WindowsGamepadInputService>()
-                : sp.GetRequiredService<NoOpGamepadInputService>();
-        });
+                : sp.GetRequiredService<NoOpGamepadInputService>());
         services.AddSingleton<IGamepadDiagnosticsService>(sp =>
             sp.GetRequiredService<IPlatformCapabilityService>().SupportsGamepadInput
                 ? sp.GetRequiredService<WindowsGamepadDiagnosticsService>()
@@ -703,9 +694,5 @@ public static class DependencyInjection
 
     private static bool IsGuiAutomationEnabled()
         => string.Equals(Environment.GetEnvironmentVariable(GuiEnabledEnvVar), "1", StringComparison.Ordinal);
-
-    private static bool IsGuiGamepadInputEnabled()
-        => IsGuiAutomationEnabled()
-            && !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(GuiControlFileEnvVar));
 
 }

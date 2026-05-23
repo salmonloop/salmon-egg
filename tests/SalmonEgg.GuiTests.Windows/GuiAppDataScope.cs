@@ -789,37 +789,6 @@ internal sealed class GuiAppDataScope : IDisposable
             Encoding.UTF8);
     }
 
-    public void EnableGuiControlFile()
-    {
-        var controlFilePath = Path.Combine(_appDataRoot, "control", "agent-control.json");
-        Directory.CreateDirectory(Path.GetDirectoryName(controlFilePath)!);
-        if (File.Exists(controlFilePath))
-        {
-            File.Delete(controlFilePath);
-        }
-
-        Environment.SetEnvironmentVariable(GuiControlFileEnvVar, controlFilePath);
-    }
-
-    public void TriggerGamepadIntent(string intent)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(intent);
-
-        var controlPath = Environment.GetEnvironmentVariable(GuiControlFileEnvVar)
-            ?? throw new InvalidOperationException("SALMONEGG_GUI_CONTROL_FILE was not set.");
-
-        Directory.CreateDirectory(Path.GetDirectoryName(controlPath)!);
-        File.WriteAllText(
-            controlPath,
-            JsonSerializer.Serialize(new
-            {
-                kind = "gamepad-intent",
-                id = Guid.NewGuid().ToString("N"),
-                intent
-            }),
-            Encoding.UTF8);
-    }
-
     private void SeedMarkdownRenderScenario()
     {
         Directory.CreateDirectory(_configDirectory);

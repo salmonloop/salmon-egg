@@ -1319,13 +1319,12 @@ public sealed class XamlComplianceTests
         Assert.Contains("IGamepadInputService", code);
         Assert.Contains("IGamepadDiagnosticsService", code);
         Assert.Contains("SupportsGamepadInput", code);
-        Assert.Contains("GuiGamepadInputService", code);
         Assert.Contains("IsGuiAutomationEnabled()", code);
-        Assert.Contains("IsGuiGamepadInputEnabled()", code);
-        Assert.Contains("SALMONEGG_GUI_CONTROL_FILE", code);
         Assert.DoesNotContain("new WindowsGamepadInputService(", code, StringComparison.Ordinal);
         Assert.DoesNotContain("new NoOpGamepadInputService(", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("new GuiGamepadInputService(", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("GuiGamepadInputService", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsGuiGamepadInputEnabled", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("SALMONEGG_GUI_CONTROL_FILE", code, StringComparison.Ordinal);
         Assert.DoesNotContain("new WindowsGamepadDiagnosticsService(", code, StringComparison.Ordinal);
     }
 
