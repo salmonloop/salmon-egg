@@ -4,7 +4,7 @@ public sealed record GamepadDiagnosticsSnapshot(
     bool IsSupported,
     int ConnectedGamepadCount,
     int ConnectedRawControllerCount,
-    string InputSource,
+    GamepadDiagnosticsInputSource InputSource,
     GamepadInputReading Reading,
     IReadOnlyCollection<GamepadNavigationIntent> ActiveIntents,
     IReadOnlyList<RawGameControllerDiagnostics> RawControllers)
@@ -13,7 +13,7 @@ public sealed record GamepadDiagnosticsSnapshot(
         IsSupported: false,
         ConnectedGamepadCount: 0,
         ConnectedRawControllerCount: 0,
-        InputSource: "Unsupported",
+        InputSource: GamepadDiagnosticsInputSource.None,
         Reading: default,
         ActiveIntents: [],
         RawControllers: []);

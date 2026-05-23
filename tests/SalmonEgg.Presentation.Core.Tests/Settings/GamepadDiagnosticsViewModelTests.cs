@@ -19,7 +19,7 @@ public sealed class GamepadDiagnosticsViewModelTests
             IsSupported: true,
             ConnectedGamepadCount: 1,
             ConnectedRawControllerCount: 2,
-            InputSource: "RawGameController",
+            InputSource: GamepadDiagnosticsInputSource.RawGameController,
             Reading: new GamepadInputReading(
                 MoveUp: false,
                 MoveDown: true,
@@ -84,7 +84,7 @@ public sealed class GamepadDiagnosticsViewModelTests
             IsSupported: true,
             ConnectedGamepadCount: 1,
             ConnectedRawControllerCount: 0,
-            InputSource: "Gamepad",
+            InputSource: GamepadDiagnosticsInputSource.Gamepad,
             Reading: default,
             ActiveIntents: [],
             RawControllers: []));

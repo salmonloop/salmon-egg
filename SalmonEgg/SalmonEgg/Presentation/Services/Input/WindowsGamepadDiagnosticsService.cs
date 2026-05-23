@@ -21,7 +21,7 @@ public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsServic
         var gamepads = Gamepad.Gamepads.ToArray();
         var rawControllers = RawGameController.RawGameControllers.ToArray();
 
-        var source = "None";
+        var source = GamepadDiagnosticsInputSource.None;
         var reading = default(GamepadInputReading);
 
         foreach (var gamepad in gamepads)
@@ -29,19 +29,19 @@ public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsServic
             reading = GetInputReading(gamepad.GetCurrentReading());
             if (GamepadIntentProcessor.GetActiveIntents(reading).Count > 0)
             {
-                source = "Gamepad";
+                source = GamepadDiagnosticsInputSource.Gamepad;
                 break;
             }
         }
 
-        if (string.Equals(source, "None", StringComparison.Ordinal))
+        if (source == GamepadDiagnosticsInputSource.None)
         {
             foreach (var controller in rawControllers)
             {
                 reading = _rawMapper.GetInputReading(controller);
                 if (GamepadIntentProcessor.GetActiveIntents(reading).Count > 0)
                 {
-                    source = "RawGameController";
+                    source = GamepadDiagnosticsInputSource.RawGameController;
                     break;
                 }
             }

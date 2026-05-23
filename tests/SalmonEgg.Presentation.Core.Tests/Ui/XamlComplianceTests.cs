@@ -2110,6 +2110,22 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void GamepadDiagnosticsSnapshot_UsesTypedInputSourceContract()
+    {
+        var snapshot = LoadText(@"src\SalmonEgg.Presentation.Core\Services\Input\GamepadDiagnosticsSnapshot.cs");
+        var viewModel = LoadText(@"src\SalmonEgg.Presentation.Core\ViewModels\Settings\GamepadDiagnosticsViewModel.cs");
+        var windowsService = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\WindowsGamepadDiagnosticsService.cs");
+
+        Assert.Contains("GamepadDiagnosticsInputSource InputSource", snapshot, StringComparison.Ordinal);
+        Assert.Contains("GamepadDiagnosticsInputSource.Gamepad", windowsService, StringComparison.Ordinal);
+        Assert.Contains("GamepadDiagnosticsInputSource.RawGameController", windowsService, StringComparison.Ordinal);
+        Assert.Contains("FormatInputSource(GamepadDiagnosticsInputSource inputSource)", viewModel, StringComparison.Ordinal);
+        Assert.DoesNotContain("string InputSource", snapshot, StringComparison.Ordinal);
+        Assert.DoesNotContain("FormatInputSource(string", viewModel, StringComparison.Ordinal);
+        Assert.DoesNotContain("InputSource: \"", windowsService, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MainShellGamepadNavigationDispatcher_DirectionalNavigationStaysControlAgnostic()
     {
         var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\MainShellGamepadNavigationDispatcher.cs");

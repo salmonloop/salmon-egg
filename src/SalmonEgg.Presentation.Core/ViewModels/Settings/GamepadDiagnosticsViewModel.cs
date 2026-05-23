@@ -106,7 +106,7 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject
 
         var cancellationTokenSource = new CancellationTokenSource();
         _monitoringCancellationTokenSource = cancellationTokenSource;
-        _monitoringTask = ObserveMonitoringAsync(cancellationTokenSource);
+        _monitoringTask = Task.Run(() => ObserveMonitoringAsync(cancellationTokenSource));
         await Task.CompletedTask;
     }
 
@@ -127,12 +127,14 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject
 
         try
         {
-            ApplySnapshot(_service.GetCurrentSnapshot());
+            var snapshot = await Task.Run(_service.GetCurrentSnapshot).ConfigureAwait(false);
+            await _uiDispatcher.EnqueueAsync(() => ApplySnapshot(snapshot)).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Gamepad diagnostics snapshot refresh failed.");
-            StatusText = _localizer["GamepadDiagnostics_StatusFailed"];
+            await _uiDispatcher.EnqueueAsync(() => StatusText = _localizer["GamepadDiagnostics_StatusFailed"])
+                .ConfigureAwait(false);
         }
     }
 
@@ -244,11 +246,11 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject
         StatusText = _localizer["GamepadDiagnostics_StatusUnsupported"];
     }
 
-    private string FormatInputSource(string inputSource)
+    private string FormatInputSource(GamepadDiagnosticsInputSource inputSource)
         => inputSource switch
         {
-            "Gamepad" => _localizer["GamepadDiagnostics_InputSourceGamepad"],
-            "RawGameController" => _localizer["GamepadDiagnostics_InputSourceRawController"],
+            GamepadDiagnosticsInputSource.Gamepad => _localizer["GamepadDiagnostics_InputSourceGamepad"],
+            GamepadDiagnosticsInputSource.RawGameController => _localizer["GamepadDiagnostics_InputSourceRawController"],
             _ => _localizer["GamepadDiagnostics_InputSourceNone"]
         };
 
