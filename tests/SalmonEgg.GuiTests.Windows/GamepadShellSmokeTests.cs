@@ -73,51 +73,29 @@ public sealed class ShellFocusedActivationSmokeTests
     }
 
     [SkippableFact]
-    public void TitleBarCommand_InjectedGamepadIntent_CanReachMainNavigation()
+    public void MainNavigationProjectItem_KeyboardDown_CanReachSessionChild()
     {
         GuiTestGate.RequireEnabled();
 
-        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
-        appData.EnableGuiControlFile();
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData(withContent: true);
         using var session = WindowsGuiAppSession.LaunchFresh();
 
-        var titleBarToggle = session.FindByAutomationId("TitleBar.ToggleSidebar", TimeSpan.FromSeconds(10));
-        FocusAndAssert(session, titleBarToggle, "TitleBar.ToggleSidebar", "title bar command");
+        Assert.True(
+            session.WaitUntilOnscreen("MainNav.Session.gui-session-01", TimeSpan.FromSeconds(15)),
+            $"Session nav child did not become visible before keyboard focus navigation.{Environment.NewLine}{appData.ReadBootLogTail()}");
 
-        var reachedMainNavigation = MoveFocusUntil(
+        var projectItem = session.FindByAutomationId("MainNav.Project.project-1", TimeSpan.FromSeconds(10));
+        FocusAndAssert(session, projectItem, "MainNav.Project.project-1", "project navigation item");
+
+        var reachedSessionChild = MoveFocusUntil(
             session,
-            () => appData.TriggerGamepadIntent("MoveDown"),
-            () => session.IsFocusWithinAutomationId("MainNavView"),
-            attempts: 10);
+            session.PressDown,
+            () => session.IsFocusWithinAutomationId("MainNav.Session.gui-session-01"),
+            attempts: 8);
 
         Assert.True(
-            reachedMainNavigation,
-            $"Injected gamepad intent did not leave the title bar command group for main navigation."
-            + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
-            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
-    }
-
-    [SkippableFact]
-    public void MainNavigationStartItem_InjectedGamepadIntent_CanReachAnotherNavigationItem()
-    {
-        GuiTestGate.RequireEnabled();
-
-        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
-        appData.EnableGuiControlFile();
-        using var session = WindowsGuiAppSession.LaunchFresh();
-
-        var startItem = session.FindByAutomationId("MainNav.Start", TimeSpan.FromSeconds(10));
-        FocusAndAssert(session, startItem, "MainNav.Start", "start navigation item");
-
-        var reachedNavigationItem = MoveFocusUntil(
-            session,
-            () => appData.TriggerGamepadIntent("MoveDown"),
-            () => IsFocusOnConcreteMainNavigationItemOtherThan(session, "MainNav.Start"),
-            attempts: 10);
-
-        Assert.True(
-            reachedNavigationItem,
-            $"Injected gamepad intent did not move focus past the Start navigation item."
+            reachedSessionChild,
+            $"Keyboard down focus did not move from a project item into its session child."
             + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }

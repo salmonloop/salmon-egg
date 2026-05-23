@@ -1,28 +1,18 @@
 using System;
-using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation.Peers;
-using Microsoft.UI.Xaml.Automation.Provider;
-using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using SalmonEgg.Presentation.Core.Services.Input;
 using SalmonEgg.Presentation.Core.Services.Navigation;
-using ExpandCollapseState = Microsoft.UI.Xaml.Automation.ExpandCollapseState;
-using FocusDirection = Microsoft.UI.Xaml.Input.FocusNavigationDirection;
 using XamlFocusManager = Microsoft.UI.Xaml.Input.FocusManager;
 
 namespace SalmonEgg.Presentation.Services.Input;
 
 public sealed class MainShellGamepadNavigationDispatcher : IGamepadNavigationDispatcher
 {
-    private readonly ILogger<MainShellGamepadNavigationDispatcher> _logger;
     private readonly IShellBackNavigationService _shellBackNavigation;
 
-    public MainShellGamepadNavigationDispatcher(
-        ILogger<MainShellGamepadNavigationDispatcher> logger,
-        IShellBackNavigationService shellBackNavigation)
+    public MainShellGamepadNavigationDispatcher(IShellBackNavigationService shellBackNavigation)
     {
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _shellBackNavigation = shellBackNavigation ?? throw new ArgumentNullException(nameof(shellBackNavigation));
     }
 
@@ -33,16 +23,8 @@ public sealed class MainShellGamepadNavigationDispatcher : IGamepadNavigationDis
             return true;
         }
 
-        return intent switch
-        {
-            GamepadNavigationIntent.MoveUp => TryMoveFocus(FocusDirection.Up),
-            GamepadNavigationIntent.MoveDown => TryMoveFocus(FocusDirection.Down),
-            GamepadNavigationIntent.MoveLeft => TryMoveFocus(FocusDirection.Left),
-            GamepadNavigationIntent.MoveRight => TryMoveFocus(FocusDirection.Right),
-            GamepadNavigationIntent.Activate => TryActivateFocusedElement(),
-            GamepadNavigationIntent.Back => _shellBackNavigation.TryGoBack(),
-            _ => false
-        };
+        return intent == GamepadNavigationIntent.Back
+            && _shellBackNavigation.TryGoBack();
     }
 
     private static bool TryConsumeNavigationIntent(GamepadNavigationIntent intent)
@@ -62,39 +44,6 @@ public sealed class MainShellGamepadNavigationDispatcher : IGamepadNavigationDis
         return false;
     }
 
-    private bool TryActivateFocusedElement()
-    {
-        var focusedElement = GetFocusedElement();
-        if (focusedElement is null)
-        {
-            return false;
-        }
-
-        if (TryInvoke(focusedElement))
-        {
-            return true;
-        }
-
-        if (TryToggle(focusedElement))
-        {
-            return true;
-        }
-
-        if (TryExpandOrCollapse(focusedElement))
-        {
-            return true;
-        }
-
-        if (focusedElement is FrameworkElement frameworkElement)
-        {
-            _logger.LogDebug(
-                "Gamepad activate ignored because focused element {ElementType} does not expose invoke, toggle, or expand/collapse patterns.",
-                frameworkElement.GetType().Name);
-        }
-
-        return false;
-    }
-
     private static DependencyObject? GetFocusedElement()
     {
         var root = GetRootElement();
@@ -106,108 +55,9 @@ public sealed class MainShellGamepadNavigationDispatcher : IGamepadNavigationDis
         return XamlFocusManager.GetFocusedElement(root.XamlRoot) as DependencyObject;
     }
 
-    private static bool TryInvoke(DependencyObject element)
-    {
-        if (element is not FrameworkElement frameworkElement)
-        {
-            return false;
-        }
-
-        var peer = FrameworkElementAutomationPeer.FromElement(frameworkElement)
-            ?? FrameworkElementAutomationPeer.CreatePeerForElement(frameworkElement);
-        if (peer?.GetPattern(PatternInterface.Invoke) is IInvokeProvider invokeProvider)
-        {
-            invokeProvider.Invoke();
-            return true;
-        }
-
-        return false;
-    }
-
-    private static bool TryToggle(DependencyObject element)
-    {
-        if (element is not FrameworkElement frameworkElement)
-        {
-            return false;
-        }
-
-        var peer = FrameworkElementAutomationPeer.FromElement(frameworkElement)
-            ?? FrameworkElementAutomationPeer.CreatePeerForElement(frameworkElement);
-        if (peer?.GetPattern(PatternInterface.Toggle) is IToggleProvider toggleProvider)
-        {
-            toggleProvider.Toggle();
-            return true;
-        }
-
-        return false;
-    }
-
-    private static bool TryExpandOrCollapse(DependencyObject element)
-    {
-        if (element is not FrameworkElement frameworkElement)
-        {
-            return false;
-        }
-
-        var peer = FrameworkElementAutomationPeer.FromElement(frameworkElement)
-            ?? FrameworkElementAutomationPeer.CreatePeerForElement(frameworkElement);
-        if (peer?.GetPattern(PatternInterface.ExpandCollapse) is not IExpandCollapseProvider expandCollapseProvider)
-        {
-            return false;
-        }
-
-        switch (expandCollapseProvider.ExpandCollapseState)
-        {
-            case ExpandCollapseState.Collapsed:
-            case ExpandCollapseState.PartiallyExpanded:
-                expandCollapseProvider.Expand();
-                return true;
-            case ExpandCollapseState.Expanded:
-                expandCollapseProvider.Collapse();
-                return true;
-            default:
-                return false;
-        }
-    }
-
     private static FrameworkElement? GetRootElement()
     {
         return App.MainWindowInstance?.Content as FrameworkElement;
-    }
-
-    private static bool TryMoveFocus(FocusDirection direction)
-    {
-        var searchRoot = GetNavigationSearchRoot();
-        if (searchRoot is null)
-        {
-            return false;
-        }
-
-        var options = new FindNextElementOptions
-        {
-            SearchRoot = searchRoot
-        };
-        return XamlFocusManager.TryMoveFocus(direction, options);
-    }
-
-    private static DependencyObject? GetNavigationSearchRoot()
-    {
-        var current = GetFocusedElement() ?? GetRootElement();
-        if (current is null)
-        {
-            return null;
-        }
-
-        while (true)
-        {
-            var parent = VisualTreeHelper.GetParent(current);
-            if (parent is null)
-            {
-                return current;
-            }
-
-            current = parent;
-        }
     }
 
 }

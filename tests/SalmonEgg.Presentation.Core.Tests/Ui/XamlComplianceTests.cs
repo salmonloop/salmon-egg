@@ -1925,20 +1925,20 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
-    public void MainShellGamepadNavigationDispatcher_UsesNativeFocusAndActivationForPhysicalGamepadIntents()
+    public void MainShellGamepadNavigationDispatcher_DoesNotSynthesizeNativeControlFocusOrActivation()
     {
         var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\MainShellGamepadNavigationDispatcher.cs");
 
         Assert.Contains("IShellBackNavigationService", code);
         Assert.Contains("TryConsumeNavigationIntent", code);
         Assert.Contains("GamepadNavigationIntent.Back", code);
-        Assert.Contains("XamlFocusManager.TryMoveFocus", code, StringComparison.Ordinal);
-        Assert.Contains("FindNextElementOptions", code, StringComparison.Ordinal);
-        Assert.Contains("SearchRoot = searchRoot", code, StringComparison.Ordinal);
-        Assert.Contains("FrameworkElementAutomationPeer", code, StringComparison.Ordinal);
-        Assert.Contains("IInvokeProvider", code);
-        Assert.Contains("IToggleProvider", code);
-        Assert.Contains("IExpandCollapseProvider", code);
+        Assert.DoesNotContain("XamlFocusManager.TryMoveFocus", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("FindNextElementOptions", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("SearchRoot = searchRoot", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("FrameworkElementAutomationPeer", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("IInvokeProvider", code);
+        Assert.DoesNotContain("IToggleProvider", code);
+        Assert.DoesNotContain("IExpandCollapseProvider", code);
         Assert.DoesNotContain("ISelectionItemProvider", code);
         Assert.DoesNotContain(".Select()", code, StringComparison.Ordinal);
         Assert.DoesNotContain("SelectedItem =", code, StringComparison.Ordinal);
@@ -2130,9 +2130,9 @@ public sealed class XamlComplianceTests
         var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\MainShellGamepadNavigationDispatcher.cs");
 
         Assert.Contains("TryConsumeNavigationIntent", code);
-        Assert.Contains("GamepadNavigationIntent.MoveDown => TryMoveFocus", code);
-        Assert.Contains("XamlFocusManager.TryMoveFocus", code);
-        Assert.Contains("GetNavigationSearchRoot()", code);
+        Assert.DoesNotContain("GamepadNavigationIntent.MoveDown => TryMoveFocus", code);
+        Assert.DoesNotContain("XamlFocusManager.TryMoveFocus", code);
+        Assert.DoesNotContain("GetNavigationSearchRoot()", code);
         Assert.DoesNotContain("TitleBar", code, StringComparison.Ordinal);
         Assert.DoesNotContain("MainNav", code, StringComparison.Ordinal);
         Assert.DoesNotContain("ContentFrame", code, StringComparison.Ordinal);
