@@ -24,9 +24,12 @@ internal sealed class WindowsGuiAppSession : IDisposable
     // Windows.System.VirtualKey.GamepadDPadDown; this does not exercise Windows.Gaming.Input polling.
     // Windows.System.VirtualKey mapping:
     // GamepadA = 195, GamepadDPadUp = 203, GamepadDPadDown = 204.
+    // GamepadDPadLeft = 205, GamepadDPadRight = 206.
     private const VirtualKeyShort VirtualGamepadA = (VirtualKeyShort)195;
     private const VirtualKeyShort VirtualGamepadDPadDown = (VirtualKeyShort)204;
     private const VirtualKeyShort VirtualGamepadDPadUp = (VirtualKeyShort)203;
+    private const VirtualKeyShort VirtualGamepadDPadLeft = (VirtualKeyShort)205;
+    private const VirtualKeyShort VirtualGamepadDPadRight = (VirtualKeyShort)206;
     private static readonly string[] MainShellWindowAnchorAutomationIds =
     [
         "TitleBar.OpenMiniWindow",
@@ -502,6 +505,16 @@ internal sealed class WindowsGuiAppSession : IDisposable
     public void PressVirtualGamepadDPadUp()
     {
         PressKey(VirtualGamepadDPadUp);
+    }
+
+    public void PressVirtualGamepadDPadLeft()
+    {
+        PressKey(VirtualGamepadDPadLeft);
+    }
+
+    public void PressVirtualGamepadDPadRight()
+    {
+        PressKey(VirtualGamepadDPadRight);
     }
 
     public void PressVirtualGamepadA()

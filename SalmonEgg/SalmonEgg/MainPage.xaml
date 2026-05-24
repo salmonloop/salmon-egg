@@ -297,7 +297,8 @@
 
     </Page.Resources>
 
-    <Grid x:Name="LayoutRoot">
+    <Grid x:Name="LayoutRoot"
+          XYFocusKeyboardNavigation="Enabled">
         <VisualStateManager.VisualStateGroups>
         </VisualStateManager.VisualStateGroups>
         <Grid.RowDefinitions>
@@ -447,6 +448,8 @@
                             Background="Transparent"
                             AutomationProperties.AutomationId="MainNavView"
                             XYFocusKeyboardNavigation="Enabled"
+                            XYFocusRight="{x:Bind ContentFrame, Mode=OneWay}"
+                            XYFocusUp="{x:Bind TitleBarToggleLeftNavButton, Mode=OneWay}"
                             CompactPaneLength="{x:Bind LayoutVM.NavCompactPaneLength, Mode=OneWay}"
                             OpenPaneLength="{x:Bind LayoutVM.NavOpenPaneLength, Mode=OneWay}"
                             PaneDisplayMode="Auto"

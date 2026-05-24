@@ -332,6 +332,18 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer
                 RegisterUserViewportIntent);
         }
 
+        public bool TryFocusPrimaryContentTarget()
+        {
+            if (MessagesList is not null
+                && ViewModel.ShouldShowTranscriptSurface
+                && ViewModel.MessageHistory.Count > 0)
+            {
+                return MessagesList.Focus(FocusState.Programmatic);
+            }
+
+            return false;
+        }
+
         private void FocusTranscriptScroller()
         {
             if (MessagesList is not null)

@@ -40,7 +40,7 @@ using Windows.ApplicationModel.Resources;
 
 namespace SalmonEgg;
 
-public sealed partial class MainPage : Page
+public sealed partial class MainPage : Page, INavigationIntentConsumer
 {
     private static readonly ResourceLoader ResourceLoader = ResourceLoader.GetForViewIndependentUse();
     private const double NavPaneMinWidth = 240;
@@ -696,6 +696,16 @@ public sealed partial class MainPage : Page
         BootLogDebug("MainPage: initial shell content activated");
         InitializeTray();
         await _chatViewModel.RestoreAsync();
+
+        _ = DispatcherQueue.TryEnqueue(
+            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+            () =>
+            {
+                if (MainNavView.XamlRoot is not null)
+                {
+                    MainNavView.Focus(FocusState.Programmatic);
+                }
+            });
     }
 
     private void AttachGamepadInput()
@@ -733,9 +743,60 @@ public sealed partial class MainPage : Page
         _ = _gamepadNavigationDispatcher.TryDispatch(intent);
     }
 
+    public bool TryConsumeNavigationIntent(GamepadNavigationIntent intent)
+    {
+        if (intent != GamepadNavigationIntent.MoveRight)
+        {
+            return false;
+        }
+
+        if (!IsFocusWithinMainNavigation())
+        {
+            return false;
+        }
+
+        return TryMoveFocusFromMainNavigationIntoCurrentContent();
+    }
+
     public bool TryGoBack()
     {
         return _titleBarAdapter.TryGoBack();
+    }
+
+    private bool IsFocusWithinMainNavigation()
+    {
+        if (MainNavView.XamlRoot is null)
+        {
+            return false;
+        }
+
+        var current = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(MainNavView.XamlRoot) as DependencyObject;
+        while (current is not null)
+        {
+            if (ReferenceEquals(current, MainNavView))
+            {
+                return true;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return false;
+    }
+
+    private bool TryMoveFocusFromMainNavigationIntoCurrentContent()
+    {
+        if (ContentFrame.Content is SalmonEgg.Presentation.Views.Chat.ChatView chatView)
+        {
+            return chatView.TryFocusPrimaryContentTarget();
+        }
+
+        if (ContentFrame.Content is FrameworkElement element)
+        {
+            return element.Focus(FocusState.Programmatic);
+        }
+
+        return false;
     }
 
     private void OnAppTitleBarLoaded(object sender, RoutedEventArgs e)

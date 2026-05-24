@@ -213,6 +213,61 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
+    [SkippableFact]
+    public void MainNavigationTopItem_VirtualGamepadDPadUp_CanReachTitleBar()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var startItem = session.FindByAutomationId("MainNav.Start", TimeSpan.FromSeconds(10));
+        FocusAndAssert(session, startItem, "MainNav.Start", "top navigation item");
+
+        var reachedTitleBar = MoveFocusUntil(
+            session,
+            session.PressVirtualGamepadDPadUp,
+            () => session.IsFocusWithinAutomationId("TitleBar.ToggleSidebar")
+                || session.IsFocusWithinAutomationId("TitleBar.BottomPanel")
+                || session.IsFocusWithinAutomationId("TopSearchBox"),
+            attempts: 6);
+
+        Assert.True(
+            reachedTitleBar,
+            $"Virtual gamepad D-pad focus did not leave the top MainNav item for the title bar."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
+    [SkippableFact]
+    public void MainNavigationSessionItem_VirtualGamepadDPadRight_CanReachChatBody()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        Assert.True(
+            session.WaitUntilOnscreen("MainNav.Session.gui-session-01", TimeSpan.FromSeconds(15)),
+            $"Session nav item did not become onscreen before rightward gamepad navigation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-session-01", TimeSpan.FromSeconds(10));
+        FocusAndAssert(session, sessionItem, "MainNav.Session.gui-session-01", "session navigation item");
+
+        var reachedChatBody = MoveFocusUntil(
+            session,
+            session.PressVirtualGamepadDPadRight,
+            () => session.IsFocusWithinAutomationId("ChatView.MessagesList")
+                || session.IsFocusWithinAutomationId("InputBox"),
+            attempts: 6);
+
+        Assert.True(
+            reachedChatBody,
+            $"Virtual gamepad D-pad focus did not leave MainNav for the chat body."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
     private static bool MoveFocusUntil(
         WindowsGuiAppSession session,
         Action move,

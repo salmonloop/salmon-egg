@@ -1960,8 +1960,8 @@ public sealed class XamlComplianceTests
 
         Assert.Contains("HandleItemInvokedAsync", adapter, StringComparison.Ordinal);
         Assert.Contains("HandleActivatableTagAsync(navItem, tag)", adapter, StringComparison.Ordinal);
-        Assert.DoesNotContain("MainPage : Page, INavigationIntentConsumer", mainPage, StringComparison.Ordinal);
-        Assert.DoesNotContain("public bool TryConsumeNavigationIntent(GamepadNavigationIntent intent)", mainPage, StringComparison.Ordinal);
+        Assert.Contains("MainPage : Page, INavigationIntentConsumer", mainPage, StringComparison.Ordinal);
+        Assert.Contains("public bool TryConsumeNavigationIntent(GamepadNavigationIntent intent)", mainPage, StringComparison.Ordinal);
         Assert.DoesNotContain("TryHandleFocusedMainNavigationActivationAsync", mainPage, StringComparison.Ordinal);
         Assert.DoesNotContain("ResolveFocusedMainNavigationItem", mainPage, StringComparison.Ordinal);
         Assert.DoesNotContain("CreateFocusedItemActivationTask", adapter, StringComparison.Ordinal);
@@ -1972,6 +1972,7 @@ public sealed class XamlComplianceTests
         Assert.DoesNotContain("SelectionChanged", adapter, StringComparison.Ordinal);
         Assert.DoesNotContain("SelectedItem =", adapter, StringComparison.Ordinal);
         Assert.DoesNotContain("SelectedItem =", mainPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("GamepadNavigationIntent.Activate", mainPage, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1994,6 +1995,8 @@ public sealed class XamlComplianceTests
 
         Assert.DoesNotContain("IsFocusEngagementEnabled=\"True\"", navigationViewSection, StringComparison.Ordinal);
         Assert.Contains("XYFocusKeyboardNavigation=\"Enabled\"", navigationViewSection, StringComparison.Ordinal);
+        Assert.Contains("XYFocusRight=\"{x:Bind ContentFrame, Mode=OneWay}\"", navigationViewSection, StringComparison.Ordinal);
+        Assert.Contains("XYFocusUp=\"{x:Bind TitleBarToggleLeftNavButton, Mode=OneWay}\"", navigationViewSection, StringComparison.Ordinal);
         Assert.DoesNotContain("IsFocusEngagementEnabled=\"True\"", projectTemplateSection, StringComparison.Ordinal);
         Assert.DoesNotContain("XYFocusKeyboardNavigation=\"Enabled\"", projectTemplateSection, StringComparison.Ordinal);
         Assert.DoesNotContain("Loaded=\"OnMainNavItemLoaded\"", projectTemplateSection, StringComparison.Ordinal);
@@ -2002,6 +2005,8 @@ public sealed class XamlComplianceTests
         var mainPageCode = LoadText(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
         Assert.DoesNotContain("UpdateMainNavHierarchicalFocusRoutes", mainPageCode, StringComparison.Ordinal);
         Assert.DoesNotContain("OnMainNavItemLoaded", mainPageCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("RefreshNavGamepadFocusRoutes", mainPageCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("EnumerateNavigationViewItems", mainPageCode, StringComparison.Ordinal);
         Assert.DoesNotContain("SelectedItem =", LoadText(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs"), StringComparison.Ordinal);
     }
 
