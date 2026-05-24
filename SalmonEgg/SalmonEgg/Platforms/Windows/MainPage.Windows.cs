@@ -1,6 +1,8 @@
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Input;
 using SalmonEgg.Platforms.Windows;
+using SalmonEgg.Presentation.Core.Services.Input;
+using Microsoft.Extensions.DependencyInjection;
 using WinUIKeyEventArgs = Microsoft.UI.Input.KeyEventArgs;
 
 namespace SalmonEgg;
@@ -9,6 +11,7 @@ public sealed partial class MainPage
 {
     private TrayIconManager? _trayIcon;
     private InputKeyboardSource? _debugKeyboardSource;
+    private IGamepadNavigationDispatcher? _virtualGamepadNavigationDispatcher;
     private bool _allowClose;
 
     partial void InitializeTray()
@@ -155,6 +158,7 @@ public sealed partial class MainPage
         }
 
         _debugKeyboardSource ??= InputKeyboardSource.GetForIsland(XamlRoot.ContentIsland);
+        _virtualGamepadNavigationDispatcher ??= App.ServiceProvider.GetRequiredService<IGamepadNavigationDispatcher>();
         _debugKeyboardSource.KeyDown -= OnPlatformGamepadDirectionalBridgeKeyDown;
         _debugKeyboardSource.KeyDown += OnPlatformGamepadDirectionalBridgeKeyDown;
     }
@@ -171,19 +175,25 @@ public sealed partial class MainPage
 
     private void OnPlatformGamepadDirectionalBridgeKeyDown(InputKeyboardSource sender, WinUIKeyEventArgs args)
     {
-        if (args.VirtualKey != Windows.System.VirtualKey.GamepadDPadRight)
+        GamepadNavigationIntent? intent = args.VirtualKey switch
+        {
+            Windows.System.VirtualKey.GamepadDPadLeft => GamepadNavigationIntent.MoveLeft,
+            Windows.System.VirtualKey.GamepadDPadRight => GamepadNavigationIntent.MoveRight,
+            Windows.System.VirtualKey.GamepadDPadDown => GamepadNavigationIntent.MoveDown,
+            Windows.System.VirtualKey.GamepadDPadUp => GamepadNavigationIntent.MoveUp,
+            Windows.System.VirtualKey.GamepadA => GamepadNavigationIntent.Activate,
+            Windows.System.VirtualKey.GamepadB => GamepadNavigationIntent.Back,
+            _ => null
+        };
+
+        if (intent is null)
         {
             return;
         }
 
         _ = DispatcherQueue.TryEnqueue(() =>
         {
-            if (!IsFocusWithinMainNavigation())
-            {
-                return;
-            }
-
-            _ = TryMoveFocusFromMainNavigationIntoCurrentContent();
+            _ = _virtualGamepadNavigationDispatcher?.TryDispatchWithoutNativeFallback(intent.Value);
         });
     }
 }

@@ -769,6 +769,29 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
         return _titleBarAdapter.TryGoBack();
     }
 
+    private bool TryConsumeFocusedNavigationIntent(GamepadNavigationIntent intent)
+    {
+        var root = App.MainWindowInstance?.Content as FrameworkElement;
+        if (root?.XamlRoot is null)
+        {
+            return false;
+        }
+
+        var current = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(root.XamlRoot) as DependencyObject;
+        while (current is not null)
+        {
+            if (current is INavigationIntentConsumer consumer
+                && consumer.TryConsumeNavigationIntent(intent))
+            {
+                return true;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return false;
+    }
+
     private bool IsFocusWithinMainNavigation()
     {
         if (MainNavView.XamlRoot is null)

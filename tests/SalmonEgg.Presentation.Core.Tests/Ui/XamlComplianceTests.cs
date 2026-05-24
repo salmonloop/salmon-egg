@@ -2283,6 +2283,24 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void MainPage_WindowsPlatformBridge_DelegatesToFocusedConsumerBeforeShellFallbacks()
+    {
+        var windowsPage = LoadText(@"SalmonEgg\SalmonEgg\Platforms\Windows\MainPage.Windows.cs");
+        var dispatcher = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\MainShellGamepadNavigationDispatcher.cs");
+        var contract = LoadText(@"src\SalmonEgg.Presentation.Core\Services\Input\IGamepadNavigationDispatcher.cs");
+
+        Assert.Contains("bool TryDispatchWithoutNativeFallback(GamepadNavigationIntent intent);", contract, StringComparison.Ordinal);
+        Assert.Contains("public bool TryDispatchWithoutNativeFallback(GamepadNavigationIntent intent)", dispatcher, StringComparison.Ordinal);
+        Assert.Contains("TryDispatchCore(intent, allowNativeFallback: false)", dispatcher, StringComparison.Ordinal);
+        Assert.Contains("_virtualGamepadNavigationDispatcher?.TryDispatchWithoutNativeFallback(intent.Value)", windowsPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("XamlFocusManager.TryMoveFocus", windowsPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("AutomationPeer", windowsPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("TryConsumeFocusedNavigationIntent(intent.Value)", windowsPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("intent == GamepadNavigationIntent.MoveRight && IsFocusWithinMainNavigation()", windowsPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("intent == GamepadNavigationIntent.Back", windowsPage, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void WindowMetricsProvider_DoesNotExposeAppWindowTitleBar()
     {
         var provider = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\WindowMetricsProvider.cs");

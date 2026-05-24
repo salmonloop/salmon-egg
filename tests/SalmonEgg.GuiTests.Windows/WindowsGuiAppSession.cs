@@ -242,6 +242,16 @@ internal sealed class WindowsGuiAppSession : IDisposable
             .ToArray();
     }
 
+    public IReadOnlyList<string> GetVisibleButtons(AutomationElement? scope = null)
+    {
+        return (scope ?? MainWindow)
+            .FindAllDescendants(cf => cf.ByControlType(ControlType.Button))
+            .Where(element => !TryGetIsOffscreen(element))
+            .Select(element => $"{SafeAutomationId(element)}|{SafeName(element)}")
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+    }
+
     public bool WaitUntilHidden(string automationId, TimeSpan timeout)
     {
         var deadline = DateTime.UtcNow + timeout;
@@ -925,6 +935,23 @@ internal sealed class WindowsGuiAppSession : IDisposable
         return path;
     }
 
+    public bool IsFocusedElement(AutomationElement element)
+    {
+        ArgumentNullException.ThrowIfNull(element);
+
+        try
+        {
+            var focused = _automation.FocusedElement();
+            return focused is not null
+                && string.Equals(SafeAutomationId(focused), SafeAutomationId(element), StringComparison.Ordinal)
+                && string.Equals(focused.Name, element.Name, StringComparison.Ordinal);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public string DescribeFocusedElement(int maxDepth = 8)
     {
         if (maxDepth < 1)
@@ -1362,6 +1389,18 @@ internal sealed class WindowsGuiAppSession : IDisposable
         catch
         {
             return "Unknown";
+        }
+    }
+
+    private static string SafeName(AutomationElement element)
+    {
+        try
+        {
+            return NormalizeVisibleText(element.Name);
+        }
+        catch
+        {
+            return "<name-error>";
         }
     }
 

@@ -21,13 +21,19 @@ public sealed class MainShellGamepadNavigationDispatcher : IGamepadNavigationDis
     }
 
     public bool TryDispatch(GamepadNavigationIntent intent)
+        => TryDispatchCore(intent, allowNativeFallback: true);
+
+    public bool TryDispatchWithoutNativeFallback(GamepadNavigationIntent intent)
+        => TryDispatchCore(intent, allowNativeFallback: false);
+
+    private bool TryDispatchCore(GamepadNavigationIntent intent, bool allowNativeFallback)
     {
         if (TryConsumeNavigationIntent(intent))
         {
             return true;
         }
 
-        if (_nativeInputBridge.TryDispatch(intent))
+        if (allowNativeFallback && _nativeInputBridge.TryDispatch(intent))
         {
             return true;
         }

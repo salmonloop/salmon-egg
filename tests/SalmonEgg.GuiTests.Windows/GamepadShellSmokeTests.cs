@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.Threading;
+using FlaUI.Core.Definitions;
 using FlaUI.Core.AutomationElements;
 
 namespace SalmonEgg.GuiTests.Windows;
@@ -274,6 +275,57 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
+    [SkippableFact]
+    public void StartHeroSuggestions_VirtualGamepad_CanTraverseCards_AndActivateSelection()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        const string firstId = "StartView.Suggestion.AnalyzeCodebase";
+        const string secondId = "StartView.Suggestion.RecommendTasks";
+        const string thirdId = "StartView.Suggestion.ResolveErrors";
+
+        var firstCard = session.TryFindByAutomationId(firstId, TimeSpan.FromSeconds(10));
+        var secondCard = session.TryFindByAutomationId(secondId, TimeSpan.FromSeconds(10));
+        var thirdCard = session.TryFindByAutomationId(thirdId, TimeSpan.FromSeconds(10));
+
+        Assert.True(
+            firstCard is not null && secondCard is not null && thirdCard is not null,
+            $"Expected all three start suggestion automation ids to be exposed. Buttons=[{string.Join(" | ", session.GetVisibleButtons())}]{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        FocusElementAndWait(session, firstCard!, "first start hero suggestion");
+
+        Assert.True(
+            MoveFocusUntil(
+                session,
+                session.PressVirtualGamepadDPadRight,
+                () => session.IsFocusWithinAutomationId(secondId)
+                    || session.TryGetIsSelected(secondId) == true,
+                attempts: 4),
+            $"Virtual gamepad focus did not move to the second start suggestion.{Environment.NewLine}Focus={session.DescribeFocusedElement()}{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        FocusElementAndWait(session, secondCard!, "second start hero suggestion");
+
+        Assert.True(
+            MoveFocusUntil(
+                session,
+                session.PressVirtualGamepadDPadRight,
+                () => session.IsFocusWithinAutomationId(thirdId)
+                    || session.TryGetIsSelected(thirdId) == true,
+                attempts: 4),
+            $"Virtual gamepad focus did not move to the third start suggestion.{Environment.NewLine}Focus={session.DescribeFocusedElement()}{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        FocusElementAndWait(session, thirdCard!, "third start hero suggestion");
+
+        session.PressVirtualGamepadA();
+
+        var promptBox = session.FindByAutomationId("StartView.PromptBox", TimeSpan.FromSeconds(5)).AsTextBox();
+        var promptText = promptBox.Text ?? string.Empty;
+        Assert.Contains("我刚才遇到了一些报错", promptText, StringComparison.Ordinal);
+    }
+
     private static bool MoveFocusUntil(
         WindowsGuiAppSession session,
         Action move,
@@ -305,6 +357,26 @@ public sealed class ShellFocusedActivationSmokeTests
             if (WaitUntil(
                     () => session.IsFocusWithinAutomationId(automationId),
                     TimeSpan.FromMilliseconds(250)))
+            {
+                return;
+            }
+        }
+
+        Assert.Fail(
+            $"Unable to establish {description} focus before directional navigation."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}");
+    }
+
+    private static void FocusElementAndWait(
+        WindowsGuiAppSession session,
+        AutomationElement element,
+        string description)
+    {
+        session.BringMainWindowToFront();
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            session.FocusElement(element);
+            if (WaitUntil(() => session.IsFocusedElement(element), TimeSpan.FromMilliseconds(250)))
             {
                 return;
             }
