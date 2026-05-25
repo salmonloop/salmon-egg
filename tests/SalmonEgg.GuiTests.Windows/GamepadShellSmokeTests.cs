@@ -295,29 +295,63 @@ public sealed class ShellFocusedActivationSmokeTests
             firstCard is not null && secondCard is not null && thirdCard is not null,
             $"Expected all three start suggestion automation ids to be exposed. Buttons=[{string.Join(" | ", session.GetVisibleButtons())}]{Environment.NewLine}{appData.ReadBootLogTail()}");
 
-        FocusElementAndWait(session, firstCard!, "first start hero suggestion");
+        var startItem = session.FindByAutomationId("MainNav.Start", TimeSpan.FromSeconds(10));
+        FocusAndAssert(session, startItem, "MainNav.Start", "start navigation item");
 
         Assert.True(
             MoveFocusUntil(
                 session,
                 session.PressVirtualGamepadDPadRight,
-                () => session.IsFocusWithinAutomationId(secondId)
-                    || session.TryGetIsSelected(secondId) == true,
+                () => session.IsFocusWithinAutomationId(firstId)
+                    || session.IsFocusWithinAutomationId(secondId)
+                    || session.IsFocusWithinAutomationId(thirdId),
                 attempts: 4),
-            $"Virtual gamepad focus did not move to the second start suggestion.{Environment.NewLine}Focus={session.DescribeFocusedElement()}{Environment.NewLine}{appData.ReadBootLogTail()}");
+            $"Virtual gamepad D-pad focus did not leave MainNav for the start suggestion strip.{Environment.NewLine}Focus={session.DescribeFocusedElement()}{Environment.NewLine}{appData.ReadBootLogTail()}");
 
-        FocusElementAndWait(session, secondCard!, "second start hero suggestion");
+        var lastFocusedSuggestion = GetFocusedSuggestionId(session, firstId, secondId, thirdId);
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            session.PressVirtualGamepadDPadLeft();
+            Thread.Sleep(180);
+
+            var currentFocusedSuggestion = GetFocusedSuggestionId(session, firstId, secondId, thirdId);
+            if (string.Equals(currentFocusedSuggestion, lastFocusedSuggestion, StringComparison.Ordinal))
+            {
+                break;
+            }
+
+            lastFocusedSuggestion = currentFocusedSuggestion;
+        }
+
+        var timeline = new System.Collections.Generic.List<string>
+        {
+            $"initial focus={session.DescribeFocusedElement()}",
+            DescribeSuggestionState(session, firstId, secondId, thirdId)
+        };
+
+        var reachedSecond = false;
+        var reachedThird = false;
+        for (var attempt = 0; attempt < 6; attempt++)
+        {
+            session.PressVirtualGamepadDPadRight();
+            Thread.Sleep(180);
+
+            reachedSecond |= session.IsFocusWithinAutomationId(secondId) || session.TryGetIsSelected(secondId) == true;
+            reachedThird |= session.IsFocusWithinAutomationId(thirdId) || session.TryGetIsSelected(thirdId) == true;
+            timeline.Add($"after right {attempt + 1}: focus={session.DescribeFocusedElement()} ; {DescribeSuggestionState(session, firstId, secondId, thirdId)}");
+
+            if (reachedSecond && reachedThird)
+            {
+                break;
+            }
+        }
 
         Assert.True(
-            MoveFocusUntil(
-                session,
-                session.PressVirtualGamepadDPadRight,
-                () => session.IsFocusWithinAutomationId(thirdId)
-                    || session.TryGetIsSelected(thirdId) == true,
-                attempts: 4),
-            $"Virtual gamepad focus did not move to the third start suggestion.{Environment.NewLine}Focus={session.DescribeFocusedElement()}{Environment.NewLine}{appData.ReadBootLogTail()}");
-
-        FocusElementAndWait(session, thirdCard!, "third start hero suggestion");
+            reachedSecond,
+            $"Virtual gamepad focus never covered the second start suggestion.{Environment.NewLine}{string.Join(Environment.NewLine, timeline)}{Environment.NewLine}{appData.ReadBootLogTail()}");
+        Assert.True(
+            reachedThird,
+            $"Virtual gamepad focus never covered the third start suggestion.{Environment.NewLine}{string.Join(Environment.NewLine, timeline)}{Environment.NewLine}{appData.ReadBootLogTail()}");
 
         session.PressVirtualGamepadA();
 
@@ -391,6 +425,41 @@ public sealed class ShellFocusedActivationSmokeTests
         => session.IsFocusWithinAutomationId("MainNavView")
             || session.IsFocusWithinAutomationId("ChatView.MessagesList")
             || session.IsFocusWithinAutomationId("InputBox");
+
+    private static string DescribeSuggestionState(
+        WindowsGuiAppSession session,
+        string firstId,
+        string secondId,
+        string thirdId)
+        => string.Join(
+            "; ",
+            $"{firstId}=selected:{session.TryGetIsSelected(firstId)?.ToString() ?? "<null>"} focus:{session.IsFocusWithinAutomationId(firstId)}",
+            $"{secondId}=selected:{session.TryGetIsSelected(secondId)?.ToString() ?? "<null>"} focus:{session.IsFocusWithinAutomationId(secondId)}",
+            $"{thirdId}=selected:{session.TryGetIsSelected(thirdId)?.ToString() ?? "<null>"} focus:{session.IsFocusWithinAutomationId(thirdId)}");
+
+    private static string? GetFocusedSuggestionId(
+        WindowsGuiAppSession session,
+        string firstId,
+        string secondId,
+        string thirdId)
+    {
+        if (session.IsFocusWithinAutomationId(firstId))
+        {
+            return firstId;
+        }
+
+        if (session.IsFocusWithinAutomationId(secondId))
+        {
+            return secondId;
+        }
+
+        if (session.IsFocusWithinAutomationId(thirdId))
+        {
+            return thirdId;
+        }
+
+        return null;
+    }
 
     private static bool IsFocusOnConcreteMainNavigationItemOtherThan(
         WindowsGuiAppSession session,

@@ -175,25 +175,23 @@ public sealed partial class MainPage
 
     private void OnPlatformGamepadDirectionalBridgeKeyDown(InputKeyboardSource sender, WinUIKeyEventArgs args)
     {
-        GamepadNavigationIntent? intent = args.VirtualKey switch
+        switch (args.VirtualKey)
         {
-            Windows.System.VirtualKey.GamepadDPadLeft => GamepadNavigationIntent.MoveLeft,
-            Windows.System.VirtualKey.GamepadDPadRight => GamepadNavigationIntent.MoveRight,
-            Windows.System.VirtualKey.GamepadDPadDown => GamepadNavigationIntent.MoveDown,
-            Windows.System.VirtualKey.GamepadDPadUp => GamepadNavigationIntent.MoveUp,
-            Windows.System.VirtualKey.GamepadA => GamepadNavigationIntent.Activate,
-            Windows.System.VirtualKey.GamepadB => GamepadNavigationIntent.Back,
-            _ => null
-        };
-
-        if (intent is null)
-        {
-            return;
+            case Windows.System.VirtualKey.GamepadDPadRight:
+                _ = DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (IsFocusWithinMainNavigation())
+                    {
+                        _ = TryMoveFocusFromMainNavigationIntoCurrentContent();
+                    }
+                });
+                break;
+            case Windows.System.VirtualKey.GamepadB:
+                _ = DispatcherQueue.TryEnqueue(() =>
+                {
+                    _ = _virtualGamepadNavigationDispatcher?.TryDispatchWithoutNativeFallback(GamepadNavigationIntent.Back);
+                });
+                break;
         }
-
-        _ = DispatcherQueue.TryEnqueue(() =>
-        {
-            _ = _virtualGamepadNavigationDispatcher?.TryDispatchWithoutNativeFallback(intent.Value);
-        });
     }
 }

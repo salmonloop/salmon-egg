@@ -532,6 +532,11 @@ internal sealed class WindowsGuiAppSession : IDisposable
         PressKey(VirtualGamepadA);
     }
 
+    public void PressTab()
+    {
+        PressKey(VirtualKeyShort.TAB);
+    }
+
     public void PressLeft()
     {
         PressKey(VirtualKeyShort.LEFT);

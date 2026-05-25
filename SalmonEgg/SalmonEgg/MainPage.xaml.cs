@@ -800,6 +800,11 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
         }
 
         var current = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(MainNavView.XamlRoot) as DependencyObject;
+        if (IsDescendantOf(current, ContentFrame))
+        {
+            return false;
+        }
+
         while (current is not null)
         {
             if (ReferenceEquals(current, MainNavView))
@@ -813,11 +818,26 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
         return false;
     }
 
+    private static bool IsDescendantOf(DependencyObject? current, DependencyObject target)
+    {
+        while (current is not null)
+        {
+            if (ReferenceEquals(current, target))
+            {
+                return true;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return false;
+    }
+
     private bool TryMoveFocusFromMainNavigationIntoCurrentContent()
     {
-        if (ContentFrame.Content is SalmonEgg.Presentation.Views.Chat.ChatView chatView)
+        if (ContentFrame.Content is IPrimaryContentFocusTarget focusTarget)
         {
-            return chatView.TryFocusPrimaryContentTarget();
+            return focusTarget.TryFocusPrimaryContentTarget();
         }
 
         if (ContentFrame.Content is FrameworkElement element)

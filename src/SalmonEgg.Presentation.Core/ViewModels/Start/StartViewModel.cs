@@ -242,9 +242,9 @@ public sealed partial class StartViewModel : ObservableObject
 
     private void InitializeSuggestions()
     {
-        Suggestions.Add(new QuickSuggestionViewModel("\uE943", "分析代码库", "深入理解项目架构与逻辑", "请帮我分析一下当前代码库的架构和核心逻辑。", ExecuteSuggestionCommand));
-        Suggestions.Add(new QuickSuggestionViewModel("\uE762", "推荐开发任务", "明确接下来该做什么", "根据当前进度，推荐几个接下来可以进行的开发任务或优化点。", ExecuteSuggestionCommand));
-        Suggestions.Add(new QuickSuggestionViewModel("\uEBE8", "解决最近报错", "提交错误日志让我看看", "我刚才遇到了一些报错，请帮我分析并解决它们。", ExecuteSuggestionCommand));
+        Suggestions.Add(new QuickSuggestionViewModel("StartView.Suggestion.AnalyzeCodebase", "\uE943", "分析代码库", "深入理解项目架构与逻辑", "请帮我分析一下当前代码库的架构和核心逻辑。", ExecuteSuggestionCommand));
+        Suggestions.Add(new QuickSuggestionViewModel("StartView.Suggestion.RecommendTasks", "\uE762", "推荐开发任务", "明确接下来该做什么", "根据当前进度，推荐几个接下来可以进行的开发任务或优化点。", ExecuteSuggestionCommand));
+        Suggestions.Add(new QuickSuggestionViewModel("StartView.Suggestion.ResolveErrors", "\uEBE8", "解决最近报错", "提交错误日志让我看看", "我刚才遇到了一些报错，请帮我分析并解决它们。", ExecuteSuggestionCommand));
     }
 
     private void ExecuteSuggestion(QuickSuggestionViewModel? suggestion)

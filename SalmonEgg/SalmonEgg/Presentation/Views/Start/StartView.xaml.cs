@@ -2,15 +2,16 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Automation;
-using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using SalmonEgg.Presentation.Core.Services.Input;
 using SalmonEgg.Presentation.ViewModels.Start;
 
 namespace SalmonEgg.Presentation.Views.Start;
 
-public sealed partial class StartView : Page, INavigationIntentConsumer
+public sealed partial class StartView : Page, INavigationIntentConsumer, IPrimaryContentFocusTarget
 {
+    private int _activeSuggestionIndex = -1;
+
     public StartViewModel ViewModel { get; }
 
     public StartView()
@@ -41,31 +42,37 @@ public sealed partial class StartView : Page, INavigationIntentConsumer
         ViewModel.OnComposerUnloaded();
     }
 
-    private void OnHeroSuggestionItemClick(object sender, ItemClickEventArgs e)
+    private void OnHeroSuggestionButtonLoaded(object sender, RoutedEventArgs e)
     {
-        if (e.ClickedItem is QuickSuggestionViewModel suggestion)
+        if (sender is Button button)
         {
-            ViewModel.ExecuteSuggestionCommand.Execute(suggestion);
+            button.GotFocus -= OnHeroSuggestionButtonGotFocus;
+            button.GotFocus += OnHeroSuggestionButtonGotFocus;
         }
+
+        RefreshHeroSuggestionFocusTargets();
     }
 
-    private void OnHeroSuggestionsContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+    private void OnHeroSuggestionButtonGotFocus(object sender, RoutedEventArgs e)
     {
-        if (args.ItemContainer is ListViewItem container
-            && args.Item is QuickSuggestionViewModel suggestion)
+        if (sender is not Button button)
         {
-            AutomationProperties.SetAutomationId(container, suggestion.AutomationId);
-            AutomationProperties.SetName(container, suggestion.Title);
+            return;
+        }
 
-            var itemCount = sender.Items.Count;
-            var index = args.ItemIndex;
-            container.XYFocusLeft = index > 0
-                ? sender.ContainerFromIndex(index - 1) as DependencyObject
-                : null;
-            container.XYFocusRight = index + 1 < itemCount
-                ? sender.ContainerFromIndex(index + 1) as DependencyObject
-                : null;
-            container.XYFocusDown = FindPromptBox();
+        var automationId = AutomationProperties.GetAutomationId(button);
+        if (string.IsNullOrWhiteSpace(automationId))
+        {
+            return;
+        }
+
+        for (var i = 0; i < ViewModel.Suggestions.Count; i++)
+        {
+            if (string.Equals(ViewModel.Suggestions[i].AutomationId, automationId, StringComparison.Ordinal))
+            {
+                _activeSuggestionIndex = i;
+                return;
+            }
         }
     }
 
@@ -76,30 +83,45 @@ public sealed partial class StartView : Page, INavigationIntentConsumer
             return false;
         }
 
-        var consumed = intent switch
+        return intent switch
         {
-            GamepadNavigationIntent.MoveLeft => TryMoveHeroSuggestionSelection(-1),
-            GamepadNavigationIntent.MoveRight => TryMoveHeroSuggestionSelection(1),
+            GamepadNavigationIntent.MoveLeft => TryMoveFocusedSuggestion(-1),
+            GamepadNavigationIntent.MoveRight => TryMoveFocusedSuggestion(1),
             GamepadNavigationIntent.MoveDown => TryFocusPromptBox(),
-            GamepadNavigationIntent.Activate => TryActivateSelectedHeroSuggestion(),
             _ => false
         };
+    }
 
-        App.BootLog($"StartView.TryConsumeNavigationIntent intent={intent} consumed={consumed}");
-        return consumed;
+    public bool TryFocusPrimaryContentTarget()
+    {
+        if (ViewModel.Suggestions.Count > 0
+            && FindSuggestionButton(ViewModel.Suggestions[0].AutomationId) is Button firstSuggestion)
+        {
+            _activeSuggestionIndex = 0;
+            var focused = firstSuggestion.Focus(FocusState.Programmatic);
+            App.BootLog($"StartView.TryFocusPrimaryContentTarget target={ViewModel.Suggestions[0].AutomationId} focused={focused}");
+            _ = DispatcherQueue.TryEnqueue(() =>
+            {
+                var reaffirmed = firstSuggestion.Focus(FocusState.Programmatic);
+                App.BootLog($"StartView.TryFocusPrimaryContentTarget.Reaffirm target={ViewModel.Suggestions[0].AutomationId} focused={reaffirmed}");
+            });
+            return focused;
+        }
+
+        return TryFocusPromptBox();
     }
 
     private bool IsFocusWithinHeroSuggestions()
     {
-        if (HeroSuggestionsList.XamlRoot is null)
+        if (HeroSuggestionsHost.XamlRoot is null)
         {
             return false;
         }
 
-        var current = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(HeroSuggestionsList.XamlRoot) as DependencyObject;
+        var current = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(HeroSuggestionsHost.XamlRoot) as DependencyObject;
         while (current is not null)
         {
-            if (ReferenceEquals(current, HeroSuggestionsList))
+            if (ReferenceEquals(current, HeroSuggestionsHost))
             {
                 return true;
             }
@@ -110,58 +132,104 @@ public sealed partial class StartView : Page, INavigationIntentConsumer
         return false;
     }
 
-    private bool TryMoveHeroSuggestionSelection(int delta)
+    private bool TryFocusPromptBox()
     {
-        if (HeroSuggestionsList.Items.Count == 0)
-        {
-            return false;
-        }
-
-        var currentIndex = HeroSuggestionsList.SelectedIndex;
-        if (currentIndex < 0)
-        {
-            currentIndex = ResolveFocusedHeroSuggestionIndex();
-        }
-
-        if (currentIndex < 0)
-        {
-            currentIndex = 0;
-        }
-
-        var nextIndex = Math.Clamp(currentIndex + delta, 0, HeroSuggestionsList.Items.Count - 1);
-        if (nextIndex == currentIndex && HeroSuggestionsList.SelectedIndex == nextIndex)
-        {
-            App.BootLog($"StartView.TryMoveHeroSuggestionSelection noop current={currentIndex} selected={HeroSuggestionsList.SelectedIndex}");
-            return false;
-        }
-
-        HeroSuggestionsList.SelectedIndex = nextIndex;
-        HeroSuggestionsList.ScrollIntoView(HeroSuggestionsList.Items[nextIndex]);
-        if (HeroSuggestionsList.ContainerFromIndex(nextIndex) is ListViewItem container)
-        {
-            var focused = container.Focus(FocusState.Programmatic);
-            App.BootLog($"StartView.TryMoveHeroSuggestionSelection current={currentIndex} next={nextIndex} containerFocus={focused}");
-            return focused;
-        }
-
-        var fallbackFocused = HeroSuggestionsList.Focus(FocusState.Programmatic);
-        App.BootLog($"StartView.TryMoveHeroSuggestionSelection current={currentIndex} next={nextIndex} listFallback={fallbackFocused}");
-        return fallbackFocused;
+        return FindPromptBox() is TextBox promptBox
+            && promptBox.Focus(FocusState.Programmatic);
     }
 
-    private int ResolveFocusedHeroSuggestionIndex()
+    private DependencyObject? FindPromptBox()
     {
-        if (HeroSuggestionsList.XamlRoot is null)
+        return FindDescendant<TextBox>(ComposerShell, static textBox =>
+            string.Equals(AutomationProperties.GetAutomationId(textBox), "StartView.PromptBox", StringComparison.Ordinal)
+            || string.Equals(textBox.Name, "InputBox", StringComparison.Ordinal));
+    }
+
+    private Button? FindSuggestionButton(string automationId)
+    {
+        return FindDescendant<Button>(HeroSuggestionsHost, button =>
+            string.Equals(AutomationProperties.GetAutomationId(button), automationId, StringComparison.Ordinal));
+    }
+
+    private bool TryMoveFocusedSuggestion(int delta)
+    {
+        if (ViewModel.Suggestions.Count == 0)
+        {
+            return false;
+        }
+
+        var currentIndex = _activeSuggestionIndex >= 0
+            ? _activeSuggestionIndex
+            : ResolveFocusedSuggestionIndex();
+        if (currentIndex < 0)
+        {
+            return false;
+        }
+
+        var nextIndex = Math.Clamp(currentIndex + delta, 0, ViewModel.Suggestions.Count - 1);
+        if (nextIndex == currentIndex)
+        {
+            return false;
+        }
+
+        var targetId = ViewModel.Suggestions[nextIndex].AutomationId;
+        App.BootLog($"StartView.TryMoveFocusedSuggestion current={currentIndex} next={nextIndex} target={targetId}");
+        if (FindSuggestionButton(targetId) is not Button nextButton)
+        {
+            return false;
+        }
+
+        var focused = nextButton.Focus(FocusState.Programmatic);
+        if (focused)
+        {
+            _activeSuggestionIndex = nextIndex;
+        }
+
+        return focused;
+    }
+
+    private void RefreshHeroSuggestionFocusTargets()
+    {
+        for (var i = 0; i < ViewModel.Suggestions.Count; i++)
+        {
+            if (FindSuggestionButton(ViewModel.Suggestions[i].AutomationId) is not Button button)
+            {
+                continue;
+            }
+
+            button.XYFocusLeft = i > 0
+                ? FindSuggestionButton(ViewModel.Suggestions[i - 1].AutomationId)
+                : null;
+            button.XYFocusRight = i + 1 < ViewModel.Suggestions.Count
+                ? FindSuggestionButton(ViewModel.Suggestions[i + 1].AutomationId)
+                : null;
+            button.XYFocusDown = FindPromptBox();
+
+            App.BootLog(
+                $"StartView.RefreshHeroSuggestionFocusTargets target={ViewModel.Suggestions[i].AutomationId} left={DescribeTarget(button.XYFocusLeft)} right={DescribeTarget(button.XYFocusRight)}");
+        }
+    }
+
+    private int ResolveFocusedSuggestionIndex()
+    {
+        if (HeroSuggestionsHost.XamlRoot is null)
         {
             return -1;
         }
 
-        var current = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(HeroSuggestionsList.XamlRoot) as DependencyObject;
+        var current = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(HeroSuggestionsHost.XamlRoot) as DependencyObject;
         while (current is not null)
         {
-            if (current is ListViewItem item)
+            if (current is Button button)
             {
-                return HeroSuggestionsList.IndexFromContainer(item);
+                var automationId = AutomationProperties.GetAutomationId(button);
+                for (var i = 0; i < ViewModel.Suggestions.Count; i++)
+                {
+                    if (string.Equals(ViewModel.Suggestions[i].AutomationId, automationId, StringComparison.Ordinal))
+                    {
+                        return i;
+                    }
+                }
             }
 
             current = VisualTreeHelper.GetParent(current);
@@ -170,38 +238,11 @@ public sealed partial class StartView : Page, INavigationIntentConsumer
         return -1;
     }
 
-    private bool TryFocusPromptBox()
+    private static string DescribeTarget(DependencyObject? target)
     {
-        return FindPromptBox() is TextBox promptBox
-            && promptBox.Focus(FocusState.Programmatic);
-    }
-
-    private bool TryActivateSelectedHeroSuggestion()
-    {
-        var selectedSuggestion = HeroSuggestionsList.SelectedItem as QuickSuggestionViewModel;
-        if (selectedSuggestion is null)
-        {
-            var focusedIndex = ResolveFocusedHeroSuggestionIndex();
-            if (focusedIndex >= 0 && focusedIndex < HeroSuggestionsList.Items.Count)
-            {
-                selectedSuggestion = HeroSuggestionsList.Items[focusedIndex] as QuickSuggestionViewModel;
-            }
-        }
-
-        if (selectedSuggestion is null)
-        {
-            return false;
-        }
-
-        ViewModel.ExecuteSuggestionCommand.Execute(selectedSuggestion);
-        return true;
-    }
-
-    private DependencyObject? FindPromptBox()
-    {
-        return FindDescendant<TextBox>(ComposerShell, static textBox =>
-            string.Equals(AutomationProperties.GetAutomationId(textBox), "StartView.PromptBox", StringComparison.Ordinal)
-            || string.Equals(textBox.Name, "InputBox", StringComparison.Ordinal));
+        return target is Button button
+            ? AutomationProperties.GetAutomationId(button) ?? "<button>"
+            : target?.GetType().Name ?? "<null>";
     }
 
     private static T? FindDescendant<T>(DependencyObject root, Func<T, bool> predicate)

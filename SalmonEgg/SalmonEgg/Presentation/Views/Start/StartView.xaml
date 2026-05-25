@@ -21,6 +21,7 @@
             <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CornerRadius" Value="14"/>
+            <Setter Property="Margin" Value="0,0,14,0"/>
             <Setter Property="Padding" Value="18,14"/>
             <Setter Property="MinWidth" Value="216"/>
             <Setter Property="MinHeight" Value="112"/>
@@ -75,43 +76,24 @@
                                TextAlignment="Center"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </StackPanel>
-                <ListView x:Name="HeroSuggestionsList"
-                          AutomationProperties.AutomationId="StartView.Suggestions"
-                          HorizontalAlignment="Center"
-                          ItemsSource="{x:Bind ViewModel.Suggestions, Mode=OneWay}"
-                          SelectionMode="Single"
-                          IsItemClickEnabled="True"
-                          XYFocusKeyboardNavigation="Enabled"
-                          IsTabStop="False"
-                          ContainerContentChanging="OnHeroSuggestionsContainerContentChanging"
-                          ScrollViewer.HorizontalScrollMode="Enabled"
-                          ScrollViewer.HorizontalScrollBarVisibility="Hidden"
-                          ScrollViewer.VerticalScrollMode="Disabled"
-                          ScrollViewer.VerticalScrollBarVisibility="Disabled"
-                          ItemClick="OnHeroSuggestionItemClick">
-                    <ListView.ItemsPanel>
+                <ItemsControl x:Name="HeroSuggestionsHost"
+                              AutomationProperties.AutomationId="StartView.Suggestions"
+                              HorizontalAlignment="Center"
+                              XYFocusKeyboardNavigation="Enabled"
+                              ItemsSource="{x:Bind ViewModel.Suggestions, Mode=OneWay}">
+                    <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <ItemsStackPanel Orientation="Horizontal" />
+                            <StackPanel Orientation="Horizontal" />
                         </ItemsPanelTemplate>
-                    </ListView.ItemsPanel>
-                    <ListView.ItemContainerStyle>
-                        <Style TargetType="ListViewItem">
-                            <Setter Property="Margin" Value="0,0,14,0" />
-                            <Setter Property="Padding" Value="0" />
-                            <Setter Property="MinHeight" Value="0" />
-                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                            <Setter Property="VerticalContentAlignment" Value="Stretch" />
-                        </Style>
-                    </ListView.ItemContainerStyle>
-                    <ListView.ItemTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="local_vm:QuickSuggestionViewModel">
-                            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="14"
-                                    Padding="18,14"
-                                    MinWidth="216"
-                                    MinHeight="112">
+                            <Button Style="{StaticResource HeroSuggestionButtonStyle}"
+                                    Command="{x:Bind ActionCommand}"
+                                    CommandParameter="{x:Bind}"
+                                    Loaded="OnHeroSuggestionButtonLoaded"
+                                    AutomationProperties.AutomationId="{x:Bind AutomationId, Mode=OneWay}"
+                                    AutomationProperties.Name="{x:Bind Title, Mode=OneWay}">
                                 <StackPanel Spacing="10">
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <FontIcon Glyph="{x:Bind Icon, Mode=OneWay}"
@@ -133,10 +115,10 @@
                                                TextWrapping="WrapWholeWords"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 </StackPanel>
-                            </Border>
+                            </Button>
                         </DataTemplate>
-                    </ListView.ItemTemplate>
-                </ListView>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </StackPanel>
         </Grid>
 

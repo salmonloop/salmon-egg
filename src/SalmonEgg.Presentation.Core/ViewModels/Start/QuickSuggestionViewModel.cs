@@ -22,31 +22,13 @@ public sealed partial class QuickSuggestionViewModel : ObservableObject
 
     public IRelayCommand ActionCommand { get; }
 
-    public QuickSuggestionViewModel(string icon, string title, string subtitle, string prompt, IRelayCommand actionCommand)
+    public QuickSuggestionViewModel(string automationId, string icon, string title, string subtitle, string prompt, IRelayCommand actionCommand)
     {
+        AutomationId = automationId;
         Icon = icon;
         Title = title;
         Subtitle = subtitle;
         Prompt = prompt;
-        AutomationId = $"StartView.Suggestion.{CreateSlug(title)}";
         ActionCommand = actionCommand;
-    }
-
-    private static string CreateSlug(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return "unknown";
-        }
-
-        return value
-            .Trim()
-            .Replace(" ", string.Empty, StringComparison.Ordinal)
-            .Replace("代码库", "Codebase", StringComparison.Ordinal)
-            .Replace("分析", "Analyze", StringComparison.Ordinal)
-            .Replace("推荐", "Recommend", StringComparison.Ordinal)
-            .Replace("开发任务", "Tasks", StringComparison.Ordinal)
-            .Replace("解决", "Resolve", StringComparison.Ordinal)
-            .Replace("最近报错", "Errors", StringComparison.Ordinal);
     }
 }

@@ -14,7 +14,7 @@ using SalmonEgg.Presentation.Core.Services.Input;
 
 namespace SalmonEgg.Presentation.Views.Chat;
 
-public sealed partial class ChatView : Page, INavigationIntentConsumer
+public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimaryContentFocusTarget
 {
         public ChatShellViewModel ShellViewModel { get; }
         public ChatViewModel ViewModel => ShellViewModel.Chat;

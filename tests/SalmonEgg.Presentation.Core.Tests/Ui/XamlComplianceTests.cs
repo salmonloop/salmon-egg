@@ -2292,12 +2292,59 @@ public sealed class XamlComplianceTests
         Assert.Contains("bool TryDispatchWithoutNativeFallback(GamepadNavigationIntent intent);", contract, StringComparison.Ordinal);
         Assert.Contains("public bool TryDispatchWithoutNativeFallback(GamepadNavigationIntent intent)", dispatcher, StringComparison.Ordinal);
         Assert.Contains("TryDispatchCore(intent, allowNativeFallback: false)", dispatcher, StringComparison.Ordinal);
-        Assert.Contains("_virtualGamepadNavigationDispatcher?.TryDispatchWithoutNativeFallback(intent.Value)", windowsPage, StringComparison.Ordinal);
+        Assert.Contains("case Windows.System.VirtualKey.GamepadDPadRight:", windowsPage, StringComparison.Ordinal);
+        Assert.Contains("if (IsFocusWithinMainNavigation())", windowsPage, StringComparison.Ordinal);
+        Assert.Contains("TryMoveFocusFromMainNavigationIntoCurrentContent()", windowsPage, StringComparison.Ordinal);
+        Assert.Contains("case Windows.System.VirtualKey.GamepadB:", windowsPage, StringComparison.Ordinal);
+        Assert.Contains("_virtualGamepadNavigationDispatcher?.TryDispatchWithoutNativeFallback(GamepadNavigationIntent.Back)", windowsPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("Windows.System.VirtualKey.GamepadDPadLeft", windowsPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("Windows.System.VirtualKey.GamepadDPadUp", windowsPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("Windows.System.VirtualKey.GamepadDPadDown", windowsPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("Windows.System.VirtualKey.GamepadA", windowsPage, StringComparison.Ordinal);
         Assert.DoesNotContain("XamlFocusManager.TryMoveFocus", windowsPage, StringComparison.Ordinal);
         Assert.DoesNotContain("AutomationPeer", windowsPage, StringComparison.Ordinal);
         Assert.DoesNotContain("TryConsumeFocusedNavigationIntent(intent.Value)", windowsPage, StringComparison.Ordinal);
-        Assert.DoesNotContain("intent == GamepadNavigationIntent.MoveRight && IsFocusWithinMainNavigation()", windowsPage, StringComparison.Ordinal);
-        Assert.DoesNotContain("intent == GamepadNavigationIntent.Back", windowsPage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MainPage_ContentEntryFocus_UsesSharedPrimaryContentTargetContract()
+    {
+        var sharedPage = LoadText(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
+        var contract = LoadText(@"src\SalmonEgg.Presentation.Core\Services\Input\IPrimaryContentFocusTarget.cs");
+        var chatView = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
+
+        Assert.Contains("interface IPrimaryContentFocusTarget", contract, StringComparison.Ordinal);
+        Assert.Contains("ContentFrame.Content is IPrimaryContentFocusTarget focusTarget", sharedPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("ContentFrame.Content is SalmonEgg.Presentation.Views.Chat.ChatView chatView", sharedPage, StringComparison.Ordinal);
+        Assert.Contains("public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimaryContentFocusTarget", chatView, StringComparison.Ordinal);
+        Assert.Contains("IsDescendantOf(current, ContentFrame)", sharedPage, StringComparison.Ordinal);
+        Assert.Contains("ReferenceEquals(current, MainNavView)", sharedPage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StartView_HeroSuggestions_UseStableButtonIdsInsteadOfListSelectionState()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Start\StartView.xaml");
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Start\StartView.xaml.cs");
+        var suggestionVm = LoadText(@"src\SalmonEgg.Presentation.Core\ViewModels\Start\QuickSuggestionViewModel.cs");
+        var startVm = LoadText(@"src\SalmonEgg.Presentation.Core\ViewModels\Start\StartViewModel.cs");
+
+        Assert.Contains("ItemsControl x:Name=\"HeroSuggestionsHost\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<ListView x:Name=\"HeroSuggestionsList\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"{x:Bind AutomationId, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("IPrimaryContentFocusTarget", code, StringComparison.Ordinal);
+        Assert.Contains("FindSuggestionButton(ViewModel.Suggestions[0].AutomationId)", code, StringComparison.Ordinal);
+        Assert.Contains("_activeSuggestionIndex = 0;", code, StringComparison.Ordinal);
+        Assert.Contains("GamepadNavigationIntent.MoveLeft => TryMoveFocusedSuggestion(-1)", code, StringComparison.Ordinal);
+        Assert.Contains("GamepadNavigationIntent.MoveRight => TryMoveFocusedSuggestion(1)", code, StringComparison.Ordinal);
+        Assert.Contains("GamepadNavigationIntent.MoveDown => TryFocusPromptBox()", code, StringComparison.Ordinal);
+        Assert.Contains("ResolveFocusedSuggestionIndex()", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("TryActivateSelectedHeroSuggestion", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("HeroSuggestionsList.SelectedIndex", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("CreateSlug(", suggestionVm, StringComparison.Ordinal);
+        Assert.Contains("StartView.Suggestion.AnalyzeCodebase", startVm, StringComparison.Ordinal);
+        Assert.Contains("StartView.Suggestion.RecommendTasks", startVm, StringComparison.Ordinal);
+        Assert.Contains("StartView.Suggestion.ResolveErrors", startVm, StringComparison.Ordinal);
     }
 
     [Fact]
