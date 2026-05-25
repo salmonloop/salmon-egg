@@ -1,6 +1,9 @@
 using System;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
+using SalmonEgg.Presentation.Core.Services.Input;
 using SalmonEgg.Presentation.Models;
 using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.Navigation;
@@ -14,7 +17,7 @@ namespace SalmonEgg.Presentation.Views;
 /// - Secondary navigation as a Top NavigationView below the breadcrumb.
 /// - Section content hosted in an inner Frame.
 /// </summary>
-public sealed partial class SettingsShellPage : Page
+public sealed partial class SettingsShellPage : Page, INavigationIntentConsumer
 {
     private SettingsSectionNavigationAdapter? _sectionNavigation;
 
@@ -104,5 +107,82 @@ public sealed partial class SettingsShellPage : Page
         SettingsSectionCatalog.AboutKey => typeof(Settings.AboutPage),
         _ => typeof(GeneralSettingsPage)
     };
+
+    public bool TryConsumeNavigationIntent(GamepadNavigationIntent intent)
+    {
+        if (intent != GamepadNavigationIntent.MoveDown)
+        {
+            return false;
+        }
+
+        if (!IsFocusWithinSettingsNav())
+        {
+            return false;
+        }
+
+        return TryFocusCurrentSectionContent();
+    }
+
+    private bool IsFocusWithinSettingsNav()
+    {
+        if (SettingsNavView.XamlRoot is null)
+        {
+            return false;
+        }
+
+        var current = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(SettingsNavView.XamlRoot) as DependencyObject;
+        while (current is not null)
+        {
+            if (ReferenceEquals(current, SettingsNavView))
+            {
+                return true;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return false;
+    }
+
+    private bool TryFocusCurrentSectionContent()
+    {
+        if (SettingsFrame.Content is null)
+        {
+            return false;
+        }
+
+        if (FindDescendant<Button>(SettingsFrame, static button =>
+                string.Equals(Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(button), "Diagnostics.GamepadStart", StringComparison.Ordinal)) is { } diagnosticsStart)
+        {
+            return diagnosticsStart.Focus(FocusState.Programmatic);
+        }
+
+        return FindDescendant<Control>(SettingsFrame, static control =>
+                control is ComboBox or ToggleSwitch or TextBox or Button)
+            is { } firstInteractive
+            && firstInteractive.Focus(FocusState.Programmatic);
+    }
+
+    private static T? FindDescendant<T>(DependencyObject root, Func<T, bool> predicate)
+        where T : DependencyObject
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is T match && predicate(match))
+            {
+                return match;
+            }
+
+            var nested = FindDescendant(child, predicate);
+            if (nested is not null)
+            {
+                return nested;
+            }
+        }
+
+        return null;
+    }
 
 }

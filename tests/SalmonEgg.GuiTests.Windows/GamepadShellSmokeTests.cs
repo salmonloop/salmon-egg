@@ -416,6 +416,41 @@ public sealed class ShellFocusedActivationSmokeTests
     }
 
     [SkippableFact]
+    public void SettingsSectionNavigation_VirtualGamepadDPadDown_CanReachDiagnosticsActions()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var settingsItem = session.FindByAutomationId("SettingsItem", TimeSpan.FromSeconds(10));
+        session.ClickElement(settingsItem);
+        Assert.True(
+            session.WaitUntilOnscreen("SettingsNav.Diagnostics", TimeSpan.FromSeconds(10)),
+            $"Settings navigation did not become visible before diagnostics gamepad validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var diagnosticsItem = session.FindByAutomationId("SettingsNav.Diagnostics", TimeSpan.FromSeconds(10));
+        ClickAndAssertFocus(session, diagnosticsItem, "SettingsNav.Diagnostics", "diagnostics settings navigation item");
+        Assert.True(
+            session.WaitUntilOnscreen("Diagnostics.GamepadMonitorHeader", TimeSpan.FromSeconds(10)),
+            $"Diagnostics settings page did not become visible before diagnostics action validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var reachedDiagnosticsAction = MoveFocusUntil(
+            session,
+            session.PressVirtualGamepadDPadDown,
+            () => session.IsFocusWithinAutomationId("Diagnostics.GamepadStart")
+                || session.IsFocusWithinAutomationId("Diagnostics.GamepadRefresh")
+                || session.IsFocusWithinAutomationId("Diagnostics.GamepadStop"),
+            attempts: 10);
+
+        Assert.True(
+            reachedDiagnosticsAction,
+            $"Virtual gamepad D-pad focus did not move from settings section navigation into diagnostics action buttons."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
+    [SkippableFact]
     public void DiscoverSessions_VirtualGamepadDPadRight_CanReachProfilesList()
     {
         GuiTestGate.RequireEnabled();
@@ -435,6 +470,55 @@ public sealed class ShellFocusedActivationSmokeTests
         Assert.True(
             reachedProfiles,
             $"Virtual gamepad D-pad focus did not leave Discover nav item for the profiles list."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
+    [SkippableFact]
+    public void DiscoverProfilesSelection_VirtualGamepadDPadRight_CanReachImportAction()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var appData = GuiAppDataScope.CreateDeterministicSlowRemoteReplayData(
+            cachedMessageCount: 1,
+            replayMessageCount: 12,
+            includeLocalConversation: false,
+            remoteConversationCount: 1);
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var discoverItem = session.FindByAutomationId("MainNav.DiscoverSessions", TimeSpan.FromSeconds(10));
+        session.ClickElement(discoverItem);
+        Assert.True(
+            session.WaitUntilVisible("DiscoverSessions.Title", TimeSpan.FromSeconds(10)),
+            $"Discover sessions page did not become visible before import-action validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var profilesList = session.FindByAutomationId("DiscoverSessions.ProfilesList", TimeSpan.FromSeconds(10));
+        var profileItems = profilesList
+            .FindAllDescendants(cf => cf.ByControlType(ControlType.ListItem))
+            .ToArray();
+        Assert.True(profileItems.Length >= 1, $"Discover profiles list did not expose any child items.{Environment.NewLine}{appData.ReadBootLogTail()}");
+        session.ClickElement(profileItems[0]);
+
+        Assert.True(
+            session.WaitUntilOnscreen("DiscoverSessions.SessionsList", TimeSpan.FromSeconds(10)),
+            $"Discover sessions list did not become visible before import-action validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var sessionsList = session.FindByAutomationId("DiscoverSessions.SessionsList", TimeSpan.FromSeconds(10));
+        var sessionItems = sessionsList
+            .FindAllDescendants(cf => cf.ByControlType(ControlType.ListItem))
+            .ToArray();
+        Assert.True(sessionItems.Length >= 1, $"Discover sessions list did not expose any session items.{Environment.NewLine}{appData.ReadBootLogTail()}");
+        session.ClickElement(sessionItems[0]);
+
+        var reachedImport = MoveFocusUntil(
+            session,
+            session.PressVirtualGamepadDPadRight,
+            () => session.IsFocusWithinAutomationId("DiscoverSessions.ImportButton"),
+            attempts: 10);
+
+        Assert.True(
+            reachedImport,
+            $"Virtual gamepad D-pad focus did not reach the Discover import action."
             + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
