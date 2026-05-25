@@ -45,6 +45,9 @@ public sealed class MainShellGamepadNavigationDispatcher : IGamepadNavigationDis
     private static bool TryConsumeNavigationIntent(GamepadNavigationIntent intent)
     {
         var current = GetFocusedElement();
+#if DEBUG
+        App.BootLog($"GamepadDispatcher intent={intent} focusedChain={DescribeChain(current)}");
+#endif
         while (current != null)
         {
             if (current is INavigationIntentConsumer consumer
@@ -57,6 +60,23 @@ public sealed class MainShellGamepadNavigationDispatcher : IGamepadNavigationDis
         }
 
         return false;
+    }
+
+    private static string DescribeChain(DependencyObject? current)
+    {
+        if (current is null)
+        {
+            return "<null>";
+        }
+
+        var segments = new System.Collections.Generic.List<string>();
+        while (current != null)
+        {
+            segments.Add(current.GetType().Name);
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return string.Join(">", segments);
     }
 
     private static DependencyObject? GetFocusedElement()

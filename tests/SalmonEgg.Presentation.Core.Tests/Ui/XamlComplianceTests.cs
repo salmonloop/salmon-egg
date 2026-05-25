@@ -2209,6 +2209,7 @@ public sealed class XamlComplianceTests
     public void ChatInputArea_NavigationIntentSupport_PreservesKeyboardAndSlashHandlers()
     {
         var code = LoadText(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml.cs");
+        var policy = LoadText(@"src\SalmonEgg.Presentation.Core\Services\Input\ChatInputNavigationPolicy.cs");
 
         Assert.Contains("INavigationIntentConsumer", code);
         Assert.Contains("OnInputKeyDown", code);
@@ -2216,6 +2217,11 @@ public sealed class XamlComplianceTests
         Assert.Contains("OnNewLineAcceleratorInvoked", code);
         Assert.Contains("_isImeComposing", code);
         Assert.Contains("IsPromptEditingAvailable()", code);
+        Assert.Contains("MoveUpEscapeHandler", code);
+        Assert.Contains("ChatInputNavigationAction.EscapeMoveUp", code);
+        Assert.Contains("GamepadNavigationIntent.MoveUp when focusContext == ChatInputFocusContext.InputBox", policy, StringComparison.Ordinal);
+        Assert.Contains("GamepadNavigationIntent.MoveUp when focusContext == ChatInputFocusContext.ModeSelector", policy, StringComparison.Ordinal);
+        Assert.Contains("ChatInputNavigationAction.ReturnToInputBox", policy, StringComparison.Ordinal);
         Assert.DoesNotContain("InputBox.IsEnabled && ViewModel.IsInputEnabled", code, StringComparison.Ordinal);
     }
 

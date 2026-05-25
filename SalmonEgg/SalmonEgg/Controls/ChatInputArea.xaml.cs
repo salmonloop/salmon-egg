@@ -206,6 +206,7 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
             new PropertyMetadata(null));
 
     private bool _isImeComposing;
+    private ComboBox? _openSelectorHost;
     public event EventHandler? SelectorDropDownOpened;
 
     public event EventHandler? SelectorDropDownClosed;
@@ -375,10 +376,17 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
     public ChatInputArea()
     {
         InitializeComponent();
+        Loaded += OnLoaded;
 #if WINDOWS
         InputBox.TextCompositionStarted += OnInputTextCompositionStarted;
         InputBox.TextCompositionEnded += OnInputTextCompositionEnded;
 #endif
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        RefreshVerticalFocusTargets();
+        _ = DispatcherQueue.TryEnqueue(RefreshVerticalFocusTargets);
     }
 
     private static void OnViewModelChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -406,6 +414,11 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
 
         if (!ViewModel.ShowSlashCommands)
         {
+            if (e.Key == Windows.System.VirtualKey.Up && MoveUpEscapeHandler?.Invoke() == true)
+            {
+                e.Handled = true;
+            }
+
             return;
         }
 
@@ -530,6 +543,7 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
             ChatInputNavigationAction.MoveSlashDown => ViewModel.TryMoveSlashSelection(1),
             ChatInputNavigationAction.AcceptSlashCommand => TryAcceptSelectedSlashCommandAndMoveCaretToEnd(),
             ChatInputNavigationAction.EscapeMoveUp => MoveUpEscapeHandler?.Invoke() == true,
+            ChatInputNavigationAction.ReturnToInputBox => TryFocusInputBox(),
             _ => false
         };
 
@@ -569,6 +583,43 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
         InputBox.SelectionStart = InputBox.Text?.Length ?? 0;
         InputBox.SelectionLength = 0;
         return true;
+    }
+
+    private void RefreshVerticalFocusTargets()
+    {
+        var selectors = GetVisibleSelectors().ToArray();
+        var firstSelector = selectors.FirstOrDefault();
+        if (firstSelector is null)
+        {
+            return;
+        }
+
+        InputBox.XYFocusDown = firstSelector;
+        for (var i = 0; i < selectors.Length; i++)
+        {
+            selectors[i].XYFocusUp = InputBox;
+            selectors[i].XYFocusDown = null;
+            selectors[i].XYFocusLeft = i > 0 ? selectors[i - 1] : null;
+            selectors[i].XYFocusRight = i + 1 < selectors.Length ? selectors[i + 1] : null;
+        }
+    }
+
+    private ComboBox? GetFirstVisibleSelector()
+        => GetVisibleSelectors().FirstOrDefault();
+
+    private IEnumerable<ComboBox> GetVisibleSelectors()
+    {
+        if (AgentSelectorHost.XamlRoot is null)
+        {
+            return Enumerable.Empty<ComboBox>();
+        }
+
+        return new[] { AgentSelectorHost, ModeSelectorHost, ProjectSelectorHost }
+            .Where(selector => selector is not null
+                               && selector.Visibility == Visibility.Visible
+                               && selector.ActualWidth > 0
+                               && selector.ActualHeight > 0
+                               && selector.IsEnabled);
     }
 
     private void OnSlashCommandsListSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -615,10 +666,20 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
     }
 
     private void OnSelectorDropDownOpened(object sender, object e)
-        => SelectorDropDownOpened?.Invoke(this, EventArgs.Empty);
+    {
+        _openSelectorHost = sender as ComboBox;
+        SelectorDropDownOpened?.Invoke(this, EventArgs.Empty);
+    }
 
     private void OnSelectorDropDownClosed(object sender, object e)
-        => SelectorDropDownClosed?.Invoke(this, EventArgs.Empty);
+    {
+        if (ReferenceEquals(_openSelectorHost, sender))
+        {
+            _openSelectorHost = null;
+        }
+
+        SelectorDropDownClosed?.Invoke(this, EventArgs.Empty);
+    }
 
     private ChatInputFocusContext ResolveFocusContext(DependencyObject? focusedElement)
     {
@@ -627,7 +688,7 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
             return ChatInputFocusContext.Other;
         }
 
-        var focusedComboBox = FindAncestorOrSelf<ComboBox>(focusedElement);
+        var focusedComboBox = ResolveOwningComboBox(focusedElement);
         if (focusedComboBox != null)
         {
             return ChatInputFocusContext.ModeSelector;
@@ -649,6 +710,22 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
         }
 
         return ChatInputFocusContext.Other;
+    }
+
+    private ComboBox? ResolveOwningComboBox(DependencyObject? focusedElement)
+    {
+        var comboBox = FindAncestorOrSelf<ComboBox>(focusedElement);
+        if (comboBox is not null)
+        {
+            return comboBox;
+        }
+
+        if (focusedElement is ComboBoxItem && _openSelectorHost is not null)
+        {
+            return _openSelectorHost;
+        }
+
+        return null;
     }
 
     private bool IsInControlSubtree(DependencyObject? element)

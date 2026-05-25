@@ -93,7 +93,9 @@ public sealed partial class StartView : Page, INavigationIntentConsumer, IPrimar
             return true;
         }
 
-        var inComposerShell = IsDescendantOrSelf(current, ComposerShell);
+        var inComposerShell = IsDescendantOrSelf(current, ComposerShell)
+                              && promptBox is not null
+                              && IsDescendantOrSelf(current, promptBox);
 #if DEBUG
         App.BootLog($"StartGamepad prompt focus source=ComposerShell current={current.GetType().Name} inComposerShell={inComposerShell}");
 #endif

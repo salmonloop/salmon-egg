@@ -11,9 +11,12 @@ public static class ChatInputNavigationPolicy
     {
         if (!slashCommandsVisible || !inputEnabled || isImeComposing)
         {
-            return intent == GamepadNavigationIntent.MoveUp && focusContext == ChatInputFocusContext.InputBox
-                ? ChatInputNavigationAction.EscapeMoveUp
-                : ChatInputNavigationAction.None;
+            return intent switch
+            {
+                GamepadNavigationIntent.MoveUp when focusContext == ChatInputFocusContext.InputBox => ChatInputNavigationAction.EscapeMoveUp,
+                GamepadNavigationIntent.MoveUp when focusContext == ChatInputFocusContext.ModeSelector => ChatInputNavigationAction.ReturnToInputBox,
+                _ => ChatInputNavigationAction.None
+            };
         }
 
         if (focusContext != ChatInputFocusContext.InputBox)
@@ -47,5 +50,6 @@ public enum ChatInputNavigationAction
     MoveSlashDown,
     AcceptSlashCommand
     ,
-    EscapeMoveUp
+    EscapeMoveUp,
+    ReturnToInputBox
 }

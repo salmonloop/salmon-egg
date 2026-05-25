@@ -346,7 +346,7 @@ public sealed class ShellFocusedActivationSmokeTests
     }
 
     [SkippableFact]
-    public void StartPrompt_VirtualGamepadDPadUp_CanReturnToSuggestionCards()
+    public void StartChatInputSelectors_VirtualGamepadDPadUp_CanReturnToInputBox()
     {
         GuiTestGate.RequireEnabled();
 
@@ -354,21 +354,19 @@ public sealed class ShellFocusedActivationSmokeTests
         using var session = WindowsGuiAppSession.LaunchFresh();
 
         Assert.True(
-            session.WaitUntilVisible("StartView.PromptBox", TimeSpan.FromSeconds(10)),
-            $"Start prompt box did not become visible before prompt return validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+            session.WaitUntilVisible("StartView.AgentSelector", TimeSpan.FromSeconds(10)),
+            $"Start selectors did not become visible before selector return validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
 
-        var promptBox = session.FindByAutomationId("StartView.PromptBox", TimeSpan.FromSeconds(5));
-        ClickAndAssertFocus(session, promptBox, "StartView.PromptBox", "start prompt box");
+        var agentSelector = session.FindByAutomationId("StartView.AgentSelector", TimeSpan.FromSeconds(5));
+        ClickAndAssertFocus(session, agentSelector, "StartView.AgentSelector", "start agent selector");
 
         session.PressVirtualGamepadDPadUp();
 
         Assert.True(
             WaitUntil(
-                () => session.IsFocusWithinAutomationId("StartView.Suggestion.AnalyzeCodebase")
-                    || session.IsFocusWithinAutomationId("StartView.Suggestion.RecommendTasks")
-                    || session.IsFocusWithinAutomationId("StartView.Suggestion.ResolveErrors"),
+                () => session.IsFocusWithinAutomationId("StartView.PromptBox"),
                 TimeSpan.FromSeconds(3)),
-            $"Virtual gamepad D-pad Up did not return from Start prompt to suggestion cards."
+            $"Virtual gamepad D-pad Up did not return from Start selectors to the prompt box."
             + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
