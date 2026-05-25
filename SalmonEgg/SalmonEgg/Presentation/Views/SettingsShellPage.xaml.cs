@@ -225,13 +225,20 @@ public sealed partial class SettingsShellPage : Page, INavigationIntentConsumer
             return;
         }
 
+        var interactiveControls = FindDescendants<Control>(SettingsFrame, static control =>
+                control is ComboBox or ToggleSwitch or TextBox or Button)
+            .ToArray();
+
         navItem.XYFocusDown = firstInteractive;
         firstInteractive.XYFocusUp = navItem;
 
-        foreach (var control in FindDescendants<Control>(SettingsFrame, static control =>
-                     control is ComboBox or ToggleSwitch or TextBox or Button))
+        for (var i = 0; i < interactiveControls.Length; i++)
         {
-            control.XYFocusUp = navItem;
+            var current = interactiveControls[i];
+            current.XYFocusUp = i == 0 ? navItem : interactiveControls[i - 1];
+            current.XYFocusDown = i + 1 < interactiveControls.Length
+                ? interactiveControls[i + 1]
+                : null;
         }
     }
 

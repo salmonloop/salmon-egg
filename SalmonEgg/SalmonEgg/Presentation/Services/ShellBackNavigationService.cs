@@ -7,7 +7,9 @@ public sealed class ShellBackNavigationService : IShellBackNavigationService
 {
     public bool TryGoBack()
     {
-        return GetShell()?.TryGoBack() == true;
+        // Gamepad Back is intentionally routed through the shell's custom product semantics
+        // instead of being treated as a generic title-bar back-button click.
+        return GetShell()?.TryHandleGamepadBack() == true;
     }
 
     private static MainPage? GetShell()

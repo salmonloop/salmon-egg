@@ -770,6 +770,25 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
         return _titleBarAdapter.TryGoBack();
     }
 
+    public bool TryHandleGamepadBack()
+    {
+        // Product-specific gamepad Back semantics:
+        // 1. Let the currently focused page/content consume a local back action first.
+        // 2. If the user is in page content, return focus to the authoritative left-nav target.
+        // 3. Only then fall back to the shell/page back owner.
+        if (TryConsumeFocusedNavigationIntent(GamepadNavigationIntent.Back))
+        {
+            return true;
+        }
+
+        if (TryMoveFocusFromCurrentContentIntoMainNavigation())
+        {
+            return true;
+        }
+
+        return TryGoBack();
+    }
+
     private bool TryConsumeFocusedNavigationIntent(GamepadNavigationIntent intent)
     {
         var root = App.MainWindowInstance?.Content as FrameworkElement;
@@ -847,6 +866,49 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
         }
 
         return false;
+    }
+
+    private bool TryMoveFocusFromCurrentContentIntoMainNavigation()
+    {
+        if (MainNavView.XamlRoot is null || IsFocusWithinMainNavigation())
+        {
+            return false;
+        }
+
+        var navigationTarget = ResolveCurrentNavigationFocusTarget();
+        if (navigationTarget is not null
+            && MainNavView.ContainerFromMenuItem(navigationTarget) is Control selectedContainer
+            && selectedContainer.Focus(FocusState.Programmatic))
+        {
+            return true;
+        }
+
+        return MainNavView.Focus(FocusState.Programmatic);
+    }
+
+    private object? ResolveCurrentNavigationFocusTarget()
+    {
+        if (NavVM.ProjectedControlSelectedItem is not null)
+        {
+            return NavVM.ProjectedControlSelectedItem;
+        }
+
+        if (NavVM.IsSettingsSelected)
+        {
+            return NavVM.SettingsItem;
+        }
+
+        if (NavVM.CurrentSelection == NavigationSelectionState.StartSelection)
+        {
+            return NavVM.StartItem;
+        }
+
+        if (NavVM.CurrentSelection == NavigationSelectionState.DiscoverSessionsSelection)
+        {
+            return NavVM.DiscoverSessionsItem;
+        }
+
+        return MainNavView.SelectedItem;
     }
 
     private void OnAppTitleBarLoaded(object sender, RoutedEventArgs e)

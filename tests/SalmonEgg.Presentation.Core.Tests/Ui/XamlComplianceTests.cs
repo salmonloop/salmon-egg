@@ -2064,6 +2064,8 @@ public sealed class XamlComplianceTests
         Assert.Contains("public sealed class ShellBackNavigationService : IShellBackNavigationService", service, StringComparison.Ordinal);
         Assert.DoesNotContain("IShellBackNavigationService", mainPage, StringComparison.Ordinal);
         Assert.Contains("rootFrame.Content as MainPage", service, StringComparison.Ordinal);
+        Assert.Contains("TryHandleGamepadBack()", service, StringComparison.Ordinal);
+        Assert.Contains("public bool TryHandleGamepadBack()", mainPage, StringComparison.Ordinal);
         Assert.Contains("public bool TryGoBack()", mainPage, StringComparison.Ordinal);
         Assert.Contains("_titleBarAdapter.TryGoBack()", mainPage, StringComparison.Ordinal);
         Assert.DoesNotContain("TitleBarBackButton", service, StringComparison.Ordinal);
