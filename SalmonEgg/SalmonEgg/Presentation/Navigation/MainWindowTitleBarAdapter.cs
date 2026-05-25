@@ -12,7 +12,10 @@ using Microsoft.UI.Windowing;
 using Windows.Foundation;
 using Windows.Graphics;
 #endif
+using SalmonEgg.Presentation.Core.Services;
+using SalmonEgg.Presentation.Core.Services.Input;
 using SalmonEgg.Presentation.Services;
+using SalmonEgg.Presentation.Views.Start;
 
 namespace SalmonEgg.Presentation.Navigation;
 
@@ -33,6 +36,7 @@ public sealed class MainWindowTitleBarAdapter : ITitleBarInsetProvider, IDisposa
     private readonly Button _titleBarBackButton;
     private readonly Frame _contentFrame;
     private readonly DispatcherQueue _dispatcherQueue;
+    private readonly INavigationCoordinator _navigationCoordinator;
     private readonly ILogger _logger;
 
 #if WINDOWS
@@ -54,6 +58,7 @@ public sealed class MainWindowTitleBarAdapter : ITitleBarInsetProvider, IDisposa
         Button titleBarBackButton,
         Frame contentFrame,
         DispatcherQueue dispatcherQueue,
+        INavigationCoordinator navigationCoordinator,
         ILogger logger)
     {
         _appTitleBar = appTitleBar ?? throw new ArgumentNullException(nameof(appTitleBar));
@@ -67,6 +72,7 @@ public sealed class MainWindowTitleBarAdapter : ITitleBarInsetProvider, IDisposa
         _titleBarBackButton = titleBarBackButton ?? throw new ArgumentNullException(nameof(titleBarBackButton));
         _contentFrame = contentFrame ?? throw new ArgumentNullException(nameof(contentFrame));
         _dispatcherQueue = dispatcherQueue ?? throw new ArgumentNullException(nameof(dispatcherQueue));
+        _navigationCoordinator = navigationCoordinator ?? throw new ArgumentNullException(nameof(navigationCoordinator));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -162,7 +168,7 @@ public sealed class MainWindowTitleBarAdapter : ITitleBarInsetProvider, IDisposa
 
     public void UpdateBackButtonState()
     {
-        var canGoBack = _contentFrame.CanGoBack;
+        var canGoBack = CanNavigateBack();
         // Better UX than a permanently-disabled button in the title bar.
         _titleBarBackButton.Visibility = canGoBack ? Visibility.Visible : Visibility.Collapsed;
         _titleBarBackButton.IsEnabled = canGoBack;
@@ -170,6 +176,20 @@ public sealed class MainWindowTitleBarAdapter : ITitleBarInsetProvider, IDisposa
 
     public bool TryGoBack()
     {
+        if (_contentFrame.Content is INavigationIntentConsumer consumer
+            && consumer.TryConsumeNavigationIntent(GamepadNavigationIntent.Back))
+        {
+            UpdateBackButtonState();
+            return true;
+        }
+
+        if (_contentFrame.Content is not null
+            && _contentFrame.Content is not StartView)
+        {
+            _ = _navigationCoordinator.ActivateStartAsync();
+            return true;
+        }
+
         if (!_contentFrame.CanGoBack)
         {
             return false;
@@ -177,6 +197,16 @@ public sealed class MainWindowTitleBarAdapter : ITitleBarInsetProvider, IDisposa
 
         _contentFrame.GoBack();
         return true;
+    }
+
+    private bool CanNavigateBack()
+    {
+        if (_contentFrame.Content is null)
+        {
+            return _contentFrame.CanGoBack;
+        }
+
+        return _contentFrame.Content is not StartView;
     }
 
     public void UpdateNavToggleToolTip(string tooltipText)

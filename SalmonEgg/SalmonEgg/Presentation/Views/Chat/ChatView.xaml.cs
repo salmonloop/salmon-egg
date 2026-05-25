@@ -342,41 +342,18 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
             }
 
             if (ViewModel.ShouldShowConversationInputSurface
-                && FindDescendant<TextBox>(this, static textBox => string.Equals(textBox.Name, "InputBox", StringComparison.Ordinal)) is { } inputBox)
+                && ConversationInputArea.TryFocusInputBox())
             {
-                return inputBox.Focus(FocusState.Programmatic);
+                return true;
             }
 
             if (ViewModel.ShouldShowSessionHeader
-                && FindDescendant<TextBlock>(this, static textBlock =>
-                    string.Equals(AutomationProperties.GetAutomationId(textBlock), "ChatView.CurrentSessionTitle", StringComparison.Ordinal)) is { } sessionTitle)
+                && CurrentSessionTitleBlock is not null)
             {
-                return sessionTitle.Focus(FocusState.Programmatic);
+                return CurrentSessionTitleBlock.Focus(FocusState.Programmatic);
             }
 
             return false;
-        }
-
-        private static T? FindDescendant<T>(DependencyObject root, Func<T, bool> predicate)
-            where T : DependencyObject
-        {
-            var count = VisualTreeHelper.GetChildrenCount(root);
-            for (var i = 0; i < count; i++)
-            {
-                var child = VisualTreeHelper.GetChild(root, i);
-                if (child is T match && predicate(match))
-                {
-                    return match;
-                }
-
-                var nested = FindDescendant(child, predicate);
-                if (nested is not null)
-                {
-                    return nested;
-                }
-            }
-
-            return null;
         }
 
         private void FocusTranscriptScroller()

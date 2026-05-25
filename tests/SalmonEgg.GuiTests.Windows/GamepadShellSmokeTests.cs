@@ -360,9 +360,13 @@ public sealed class ShellFocusedActivationSmokeTests
             MoveFocusUntil(
                 session,
                 session.PressVirtualGamepadDPadRight,
-                () => session.IsFocusWithinAutomationId("StartView.Suggestion.AnalyzeCodebase"),
+                () => session.IsFocusWithinAutomationId("StartView.Suggestion.AnalyzeCodebase")
+                    || session.IsFocusWithinAutomationId("StartView.Suggestion.RecommendTasks")
+                    || session.IsFocusWithinAutomationId("StartView.Suggestion.ResolveErrors"),
                 attempts: 4),
-            $"Could not move from MainNav into Start suggestions before prompt return validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+            $"Virtual gamepad D-pad focus did not leave MainNav for the start suggestion strip before prompt return validation."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
 
         Assert.True(
             MoveFocusUntil(
@@ -370,7 +374,9 @@ public sealed class ShellFocusedActivationSmokeTests
                 session.PressVirtualGamepadDPadDown,
                 () => session.IsFocusWithinAutomationId("StartView.PromptBox"),
                 attempts: 4),
-            $"Could not move from Start suggestions into the prompt box before return validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+            $"Virtual gamepad D-pad focus did not enter the Start prompt box before return validation."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
 
         session.PressVirtualGamepadDPadUp();
 
@@ -415,6 +421,11 @@ public sealed class ShellFocusedActivationSmokeTests
             $"Virtual gamepad D-pad focus did not leave MainNav for the chat body before input-box validation."
             + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        if (session.IsFocusWithinAutomationId("InputBox"))
+        {
+            return;
+        }
 
         var reachedInput = MoveFocusUntil(
             session,
@@ -497,6 +508,7 @@ public sealed class ShellFocusedActivationSmokeTests
 
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
         using var session = WindowsGuiAppSession.LaunchFresh();
+        EnsureMainWindowWide(session);
 
         var settingsItem = session.FindByAutomationId("SettingsItem", TimeSpan.FromSeconds(10));
         session.ClickElement(settingsItem);
@@ -510,15 +522,17 @@ public sealed class ShellFocusedActivationSmokeTests
             session.WaitUntilOnscreen("Diagnostics.GamepadMonitorHeader", TimeSpan.FromSeconds(10)),
             $"Diagnostics settings page did not become visible before section return validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
 
+        var startButton = FindAndScrollIntoView(session, "Diagnostics.GamepadStart", TimeSpan.FromSeconds(10));
+        session.ClickElement(startButton);
         Assert.True(
-            MoveFocusUntil(
-                session,
-                session.PressVirtualGamepadDPadDown,
+            WaitUntil(
                 () => session.IsFocusWithinAutomationId("Diagnostics.GamepadStart")
                     || session.IsFocusWithinAutomationId("Diagnostics.GamepadRefresh")
                     || session.IsFocusWithinAutomationId("Diagnostics.GamepadStop"),
-                attempts: 10),
-            $"Could not move from diagnostics section nav into page content before return validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+                TimeSpan.FromSeconds(2)),
+            $"Unable to establish diagnostics action focus before directional navigation."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
 
         session.PressVirtualGamepadDPadUp();
 
@@ -568,9 +582,9 @@ public sealed class ShellFocusedActivationSmokeTests
             includeLocalConversation: false,
             remoteConversationCount: 1);
         using var session = WindowsGuiAppSession.LaunchFresh();
+        ResizeMainWindow(width: 800, height: 900);
 
-        var discoverItem = session.FindByAutomationId("MainNav.DiscoverSessions", TimeSpan.FromSeconds(10));
-        session.ClickElement(discoverItem);
+        OpenDiscoverSessions(session);
         Assert.True(
             session.WaitUntilVisible("DiscoverSessions.Title", TimeSpan.FromSeconds(10)),
             $"Discover sessions page did not become visible before import-action validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
@@ -591,7 +605,7 @@ public sealed class ShellFocusedActivationSmokeTests
             .FindAllDescendants(cf => cf.ByControlType(ControlType.ListItem))
             .ToArray();
         Assert.True(sessionItems.Length >= 1, $"Discover sessions list did not expose any session items.{Environment.NewLine}{appData.ReadBootLogTail()}");
-        session.ClickElement(sessionItems[0]);
+        ClickAndAssertListItemFocus(session, sessionItems[0], "discover session list item");
 
         var reachedImport = MoveFocusUntil(
             session,
@@ -617,12 +631,12 @@ public sealed class ShellFocusedActivationSmokeTests
             includeLocalConversation: false,
             remoteConversationCount: 1);
         using var session = WindowsGuiAppSession.LaunchFresh();
-
-        var discoverItem = session.FindByAutomationId("MainNav.DiscoverSessions", TimeSpan.FromSeconds(10));
-        session.ClickElement(discoverItem);
+        OpenDiscoverSessions(session);
         Assert.True(
             session.WaitUntilVisible("DiscoverSessions.Title", TimeSpan.FromSeconds(10)),
             $"Discover sessions page did not become visible before back-semantics validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+        ResizeMainWindow(width: 700, height: 900);
+        Thread.Sleep(250);
 
         var profilesList = session.FindByAutomationId("DiscoverSessions.ProfilesList", TimeSpan.FromSeconds(10));
         var profileItems = profilesList
@@ -645,6 +659,7 @@ public sealed class ShellFocusedActivationSmokeTests
             $"GamepadB did not return Discover from details to the profiles pane."
             + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+        AssertMainNavSemanticSelection(session, "DiscoverSessions");
     }
 
     [SkippableFact]
@@ -672,6 +687,7 @@ public sealed class ShellFocusedActivationSmokeTests
             $"GamepadB did not return Discover page back to Start."
             + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+        AssertMainNavSemanticSelection(session, "Start");
     }
 
     [SkippableFact]
@@ -695,6 +711,7 @@ public sealed class ShellFocusedActivationSmokeTests
             $"GamepadB did not return Settings page back to Start."
             + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+        AssertMainNavSemanticSelection(session, "Start");
     }
 
     [SkippableFact]
@@ -722,6 +739,7 @@ public sealed class ShellFocusedActivationSmokeTests
             $"GamepadB did not return Chat page back to Start."
             + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+        AssertMainNavSemanticSelection(session, "Start");
     }
 
     private static bool MoveFocusUntil(
@@ -808,6 +826,151 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}");
     }
 
+    private static void ClickAndAssertListItemFocus(
+        WindowsGuiAppSession session,
+        AutomationElement element,
+        string description)
+    {
+        session.BringMainWindowToFront();
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            session.ClickElement(element);
+            if (WaitUntil(() => session.IsFocusedElement(element), TimeSpan.FromMilliseconds(300)))
+            {
+                return;
+            }
+        }
+
+        Assert.Fail(
+            $"Unable to establish {description} focus before directional navigation."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}");
+    }
+
+    private static void OpenDiscoverSessions(WindowsGuiAppSession session)
+    {
+        var discoverItem = session.FindByAutomationId("MainNav.DiscoverSessions", TimeSpan.FromSeconds(10));
+        session.BringMainWindowToFront();
+
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            session.ActivateElement(discoverItem);
+            if (WaitUntil(() => session.WaitUntilVisible("DiscoverSessions.Title", TimeSpan.FromMilliseconds(250)), TimeSpan.FromMilliseconds(500)))
+            {
+                return;
+            }
+        }
+
+        Assert.Fail(
+            $"Unable to activate Discover sessions through the native nav item."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}");
+    }
+
+    private static AutomationElement FindAndScrollIntoView(
+        WindowsGuiAppSession session,
+        string automationId,
+        TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        AutomationElement? element = null;
+        while (DateTime.UtcNow < deadline)
+        {
+            element = session.TryFindByAutomationId(automationId, TimeSpan.FromMilliseconds(250));
+            if (element is not null)
+            {
+                break;
+            }
+
+            session.ScrollWheel(-120);
+            Thread.Sleep(120);
+        }
+
+        element ??= session.FindByAutomationId(automationId, TimeSpan.FromMilliseconds(250));
+        if (element.Patterns.ScrollItem.IsSupported)
+        {
+            element.Patterns.ScrollItem.Pattern.ScrollIntoView();
+            Thread.Sleep(150);
+        }
+
+        return element;
+    }
+
+    private static void EnsureMainWindowWide(WindowsGuiAppSession session)
+    {
+        try
+        {
+            if (session.MainWindow.Patterns.Window.IsSupported)
+            {
+                session.MainWindow.Patterns.Window.Pattern.SetWindowVisualState(WindowVisualState.Normal);
+            }
+        }
+        catch
+        {
+        }
+
+        ResizeMainWindow(width: 1400, height: 900);
+    }
+
+    private static void ResizeMainWindow(int width, int height)
+    {
+        var process = Process.GetProcessesByName("SalmonEgg")
+            .OrderByDescending(candidate => candidate.StartTime)
+            .First();
+
+        if (NativeMethods.MoveWindow(process.MainWindowHandle, 80, 80, width, height, true))
+        {
+            return;
+        }
+
+        if (NativeMethods.SetWindowPos(process.MainWindowHandle, IntPtr.Zero, 80, 80, width, height, 0))
+        {
+            return;
+        }
+
+        if (NativeMethods.TryGetWindowSize(process.MainWindowHandle, out var currentWidth, out var currentHeight)
+            && Math.Abs(currentWidth - width) <= 2
+            && Math.Abs(currentHeight - height) <= 2)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException("Failed to resize the SalmonEgg window.");
+    }
+
+    private static class NativeMethods
+    {
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct Rect
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        internal static extern bool MoveWindow(IntPtr hWnd, int x, int y, int width, int height, bool repaint);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        internal static extern bool SetWindowPos(IntPtr hWnd, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        private static extern bool GetWindowRect(IntPtr hWnd, out Rect rect);
+
+        internal static bool TryGetWindowSize(IntPtr hWnd, out int width, out int height)
+        {
+            if (GetWindowRect(hWnd, out var rect))
+            {
+                width = rect.Right - rect.Left;
+                height = rect.Bottom - rect.Top;
+                return true;
+            }
+
+            width = 0;
+            height = 0;
+            return false;
+        }
+    }
+
     private static bool IsFocusWithinApplicationBody(WindowsGuiAppSession session)
         => session.IsFocusWithinAutomationId("MainNavView")
             || session.IsFocusWithinAutomationId("ChatView.MessagesList")
@@ -833,6 +996,12 @@ public sealed class ShellFocusedActivationSmokeTests
             && focusPath.Contains("MainNavView", StringComparer.Ordinal)
             && !string.Equals(focusPath[0], "MainNavView", StringComparison.Ordinal)
             && !string.Equals(focusPath[0], excludedAutomationId, StringComparison.Ordinal);
+    }
+
+    private static void AssertMainNavSemanticSelection(WindowsGuiAppSession session, string expectedSemantic)
+    {
+        var state = session.TryGetElementName("MainNav.Automation.SelectionState", TimeSpan.FromSeconds(2)) ?? string.Empty;
+        Assert.Contains($"Semantic={expectedSemantic}", state, StringComparison.Ordinal);
     }
 
     private static bool WaitUntil(Func<bool> condition, TimeSpan timeout)

@@ -20,6 +20,7 @@ public sealed partial class DiscoverSessionsPage : Page, INavigationIntentConsum
         DataContext = ViewModel;
 
         Loaded += OnLoaded;
+        SessionsList.ContainerContentChanging += OnSessionsListContainerContentChanging;
     }
 
     private async void OnLoaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
@@ -50,8 +51,26 @@ public sealed partial class DiscoverSessionsPage : Page, INavigationIntentConsum
         {
             GamepadNavigationIntent.MoveRight => TryMoveFocusBetweenSessionAndImport(true),
             GamepadNavigationIntent.MoveLeft => TryMoveFocusBetweenSessionAndImport(false),
+            GamepadNavigationIntent.Back => TryReturnToProfilesPane(),
             _ => false
         };
+    }
+
+    private void OnSessionsListContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+    {
+        if (args.ItemContainer is not ListViewItem container)
+        {
+            return;
+        }
+
+        if (FindDescendant<Button>(container, button =>
+                string.Equals(AutomationProperties.GetAutomationId(button), "DiscoverSessions.ImportButton", StringComparison.Ordinal)) is not { } actionButton)
+        {
+            return;
+        }
+
+        container.XYFocusRight = actionButton;
+        actionButton.XYFocusLeft = container;
     }
 
     private bool TryMoveFocusBetweenSessionAndImport(bool moveRight)
@@ -92,6 +111,29 @@ public sealed partial class DiscoverSessionsPage : Page, INavigationIntentConsum
         }
 
         return false;
+    }
+
+    private bool TryReturnToProfilesPane()
+    {
+        if (!ViewModel.ShowCompactBackButton || !ViewModel.BackToProfilesCommand.CanExecute(null))
+        {
+            return false;
+        }
+
+        ViewModel.BackToProfilesCommand.Execute(null);
+        _ = DispatcherQueue.TryEnqueue(() =>
+        {
+            if (ViewModel.SelectedProfile is not null
+                && ProfilesList.ContainerFromItem(ViewModel.SelectedProfile) is Control selectedProfileContainer
+                && selectedProfileContainer.Focus(FocusState.Programmatic))
+            {
+                return;
+            }
+
+            _ = ProfilesList.Focus(FocusState.Programmatic);
+        });
+
+        return true;
     }
 
     private static T? FindAncestorOrSelf<T>(DependencyObject? start, Func<T, bool>? predicate = null)

@@ -126,6 +126,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
             TitleBarBackButton,
             ContentFrame,
             DispatcherQueue,
+            navigationCoordinator,
             _logger);
         BootLogDebug("MainPage: InitializeComponent done");
 

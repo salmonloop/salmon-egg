@@ -24,6 +24,8 @@ public sealed partial class StartView : Page, INavigationIntentConsumer, IPrimar
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         ViewModel.OnComposerLoaded();
+        RefreshHeroSuggestionFocusTargets();
+        _ = DispatcherQueue.TryEnqueue(RefreshHeroSuggestionFocusTargets);
 
         try
         {
@@ -74,17 +76,7 @@ public sealed partial class StartView : Page, INavigationIntentConsumer, IPrimar
         }
 
         var current = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(HeroSuggestionsHost.XamlRoot) as DependencyObject;
-        while (current is not null)
-        {
-            if (ReferenceEquals(current, promptBox) || current is TextBox)
-            {
-                return true;
-            }
-
-            current = VisualTreeHelper.GetParent(current);
-        }
-
-        return false;
+        return ReferenceEquals(FindAncestorOrSelf<TextBox>(current), promptBox);
     }
 
     public bool TryFocusPrimaryContentTarget()
@@ -183,6 +175,22 @@ public sealed partial class StartView : Page, INavigationIntentConsumer, IPrimar
             {
                 return nested;
             }
+        }
+
+        return null;
+    }
+
+    private static T? FindAncestorOrSelf<T>(DependencyObject? current)
+        where T : DependencyObject
+    {
+        while (current is not null)
+        {
+            if (current is T match)
+            {
+                return match;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
         }
 
         return null;

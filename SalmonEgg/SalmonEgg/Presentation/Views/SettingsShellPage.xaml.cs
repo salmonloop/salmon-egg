@@ -28,6 +28,7 @@ public sealed partial class SettingsShellPage : Page, INavigationIntentConsumer
         ViewModel = App.ServiceProvider.GetRequiredService<SettingsShellViewModel>();
         InitializeComponent();
         AttachSectionNavigation();
+        SettingsFrame.Navigated += OnSettingsFrameNavigated;
     }
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
@@ -48,12 +49,14 @@ public sealed partial class SettingsShellPage : Page, INavigationIntentConsumer
         var section = ViewModel.SelectSection(key);
         AttachSectionNavigation();
         NavigateFrameToSection(section.Key);
+        _ = DispatcherQueue.TryEnqueue(RefreshCurrentSectionFocusTargets);
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
     {
         base.OnNavigatedFrom(e);
 
+        SettingsFrame.Navigated -= OnSettingsFrameNavigated;
         DetachSectionNavigation();
     }
 
@@ -93,6 +96,13 @@ public sealed partial class SettingsShellPage : Page, INavigationIntentConsumer
         {
             SettingsFrame.Navigate(pageType, null, UiMotionController.Current.CreateNavigationTransitionInfo());
         }
+
+        _ = DispatcherQueue.TryEnqueue(RefreshCurrentSectionFocusTargets);
+    }
+
+    private void OnSettingsFrameNavigated(object sender, NavigationEventArgs e)
+    {
+        _ = DispatcherQueue.TryEnqueue(RefreshCurrentSectionFocusTargets);
     }
 
     private static Type GetSettingsSectionPageType(string key) => key switch
@@ -112,8 +122,7 @@ public sealed partial class SettingsShellPage : Page, INavigationIntentConsumer
     {
         if (intent == GamepadNavigationIntent.MoveDown && IsFocusWithinSettingsNav())
         {
-            var consumed = TryFocusCurrentSectionContent();
-            return consumed;
+            return TryFocusCurrentSectionContent();
         }
 
         if (intent == GamepadNavigationIntent.MoveUp && IsFocusWithinSettingsContent())
@@ -194,6 +203,38 @@ public sealed partial class SettingsShellPage : Page, INavigationIntentConsumer
             && selectedItem.Focus(FocusState.Programmatic);
     }
 
+    private void RefreshCurrentSectionFocusTargets()
+    {
+        if (SettingsFrame.Content is null)
+        {
+            return;
+        }
+
+        var automationId = ViewModel.SelectedSection.AutomationId;
+        var navItem = FindDescendant<NavigationViewItem>(SettingsNavView, item =>
+            string.Equals(Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(item), automationId, StringComparison.Ordinal));
+        if (navItem is null)
+        {
+            return;
+        }
+
+        var firstInteractive = FindDescendant<Control>(SettingsFrame, static control =>
+            control is ComboBox or ToggleSwitch or TextBox or Button);
+        if (firstInteractive is null)
+        {
+            return;
+        }
+
+        navItem.XYFocusDown = firstInteractive;
+        firstInteractive.XYFocusUp = navItem;
+
+        foreach (var control in FindDescendants<Control>(SettingsFrame, static control =>
+                     control is ComboBox or ToggleSwitch or TextBox or Button))
+        {
+            control.XYFocusUp = navItem;
+        }
+    }
+
     private static T? FindDescendant<T>(DependencyObject root, Func<T, bool> predicate)
         where T : DependencyObject
     {
@@ -214,6 +255,25 @@ public sealed partial class SettingsShellPage : Page, INavigationIntentConsumer
         }
 
         return null;
+    }
+
+    private static System.Collections.Generic.IEnumerable<T> FindDescendants<T>(DependencyObject root, Func<T, bool> predicate)
+        where T : DependencyObject
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is T match && predicate(match))
+            {
+                yield return match;
+            }
+
+            foreach (var nested in FindDescendants(child, predicate))
+            {
+                yield return nested;
+            }
+        }
     }
 
 }

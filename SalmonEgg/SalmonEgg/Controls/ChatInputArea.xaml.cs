@@ -538,6 +538,19 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
         return true;
     }
 
+    public bool TryFocusInputBox()
+    {
+        if (!IsPromptEditingAvailable())
+        {
+            return false;
+        }
+
+        InputBox.Focus(FocusState.Programmatic);
+        InputBox.SelectionStart = InputBox.Text?.Length ?? 0;
+        InputBox.SelectionLength = 0;
+        return true;
+    }
+
     private void OnSlashCommandsListSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (SlashCommandsList.SelectedItem == null)

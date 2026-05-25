@@ -930,7 +930,8 @@ public sealed class XamlComplianceTests
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml");
 
-        Assert.Contains("<controls:ChatInputArea ViewModel=\"{x:Bind ViewModel, Mode=OneWay}\"", xaml);
+        Assert.Contains("<controls:ChatInputArea x:Name=\"ConversationInputArea\"", xaml);
+        Assert.Contains("ViewModel=\"{x:Bind ViewModel, Mode=OneWay}\"", xaml);
         Assert.Contains("ModeSelectorItemsSource=\"{x:Bind ViewModel.ChatModeSelectorItems, Mode=OneWay}\"", xaml);
         Assert.Contains("SelectedModeSelectorItem=\"{x:Bind ViewModel.SelectedChatModeSelectorItem, Mode=OneWay}\"", xaml);
         Assert.DoesNotContain("ShowAgentSelector=\"True\"", xaml);
@@ -2314,6 +2315,7 @@ public sealed class XamlComplianceTests
         var sharedPage = LoadText(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
         var contract = LoadText(@"src\SalmonEgg.Presentation.Core\Services\Input\IPrimaryContentFocusTarget.cs");
         var chatView = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
+        var titleBarAdapter = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Navigation\MainWindowTitleBarAdapter.cs");
 
         Assert.Contains("interface IPrimaryContentFocusTarget", contract, StringComparison.Ordinal);
         Assert.Contains("ContentFrame.Content is IPrimaryContentFocusTarget focusTarget", sharedPage, StringComparison.Ordinal);
@@ -2321,6 +2323,9 @@ public sealed class XamlComplianceTests
         Assert.Contains("public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimaryContentFocusTarget", chatView, StringComparison.Ordinal);
         Assert.Contains("IsDescendantOf(current, ContentFrame)", sharedPage, StringComparison.Ordinal);
         Assert.Contains("ReferenceEquals(current, MainNavView)", sharedPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("SyncShellSelectionFromCurrentContent", sharedPage, StringComparison.Ordinal);
+        Assert.Contains("consumer.TryConsumeNavigationIntent(GamepadNavigationIntent.Back)", titleBarAdapter, StringComparison.Ordinal);
+        Assert.Contains("_ = _navigationCoordinator.ActivateStartAsync();", titleBarAdapter, StringComparison.Ordinal);
     }
 
     [Fact]

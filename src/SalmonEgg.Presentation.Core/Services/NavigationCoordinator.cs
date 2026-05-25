@@ -438,7 +438,8 @@ public sealed class NavigationCoordinator : INavigationCoordinator
     public void SyncSelectionFromShellContent(ShellNavigationContent content)
     {
         _runtimeState.CurrentShellContent = content;
-        if (_runtimeState.ActiveSessionActivation is { } activeActivation
+        if (content == ShellNavigationContent.Chat
+            && _runtimeState.ActiveSessionActivation is { } activeActivation
             && !IsTerminalPhase(activeActivation.Phase))
         {
             return;

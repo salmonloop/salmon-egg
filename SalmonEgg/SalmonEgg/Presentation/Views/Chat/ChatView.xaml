@@ -136,7 +136,8 @@
                             <Grid Grid.Column="1"
                                   MinWidth="0"
                                   VerticalAlignment="Center">
-                                <TextBlock AutomationProperties.AutomationId="ChatView.CurrentSessionTitle"
+                                <TextBlock x:Name="CurrentSessionTitleBlock"
+                                           AutomationProperties.AutomationId="ChatView.CurrentSessionTitle"
                                            AutomationProperties.Name="{x:Bind ViewModel.PresentedSessionHeaderDisplayName, Mode=OneWay}"
                                            ToolTipService.ToolTip="{x:Bind ViewModel.PresentedSessionHeaderDisplayName, Mode=OneWay}"
                                            Text="{x:Bind ViewModel.PresentedSessionHeaderDisplayName, Mode=OneWay}"
@@ -305,7 +306,8 @@
                                                 MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}"
                                                 Visibility="{x:Bind ViewModel.ShouldShowConversationInputSurface, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                     <controls:ResponsiveContentHost.Child>
-                        <controls:ChatInputArea ViewModel="{x:Bind ViewModel, Mode=OneWay}"
+                        <controls:ChatInputArea x:Name="ConversationInputArea"
+                                                ViewModel="{x:Bind ViewModel, Mode=OneWay}"
                                                 SubmitCommand="{x:Bind ViewModel.SendPromptCommand}"
                                                 IsSubmitButtonEnabled="{x:Bind ViewModel.CanSendPromptUi, Mode=OneWay}"
                                                 ModeSelectorItemsSource="{x:Bind ViewModel.ChatModeSelectorItems, Mode=OneWay}"
