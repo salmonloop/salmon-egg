@@ -17,6 +17,7 @@ public sealed partial class StartView : Page, INavigationIntentConsumer, IPrimar
         ViewModel = App.ServiceProvider.GetRequiredService<StartViewModel>();
 
         InitializeComponent();
+        ComposerShell.MoveUpEscapeHandler = HandlePromptMoveUpEscape;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
     }
@@ -51,32 +52,52 @@ public sealed partial class StartView : Page, INavigationIntentConsumer, IPrimar
     {
         if (intent == GamepadNavigationIntent.MoveDown && IsFocusWithinHeroSuggestions())
         {
-            return TryFocusPromptBox();
+            var consumed = TryFocusPromptBox();
+#if DEBUG
+            App.BootLog($"StartGamepad intent=MoveDown scope=suggestions consumed={consumed}");
+#endif
+            return consumed;
         }
 
-        if (intent == GamepadNavigationIntent.MoveUp && IsFocusWithinPromptBox())
+        if (intent == GamepadNavigationIntent.MoveUp && IsFocusWithinComposerShellButNotSuggestions())
         {
-            return TryFocusPrimaryContentTarget();
+            var consumed = TryFocusPrimaryContentTarget();
+#if DEBUG
+            App.BootLog($"StartGamepad intent=MoveUp scope=prompt consumed={consumed}");
+#endif
+            return consumed;
         }
 
         return false;
     }
 
-    private bool IsFocusWithinPromptBox()
+    private bool IsFocusWithinComposerShellButNotSuggestions()
     {
         if (HeroSuggestionsHost.XamlRoot is null)
         {
             return false;
         }
 
-        var promptBox = FindPromptBox();
-        if (promptBox is null)
+        var current = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(HeroSuggestionsHost.XamlRoot) as DependencyObject;
+        if (current is null || IsFocusWithinHeroSuggestions())
         {
             return false;
         }
 
-        var current = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(HeroSuggestionsHost.XamlRoot) as DependencyObject;
-        return ReferenceEquals(FindAncestorOrSelf<TextBox>(current), promptBox);
+        var promptBox = FindPromptBox();
+        if (promptBox is not null && IsDescendantOrSelf(current, promptBox))
+        {
+#if DEBUG
+            App.BootLog("StartGamepad prompt focus source=PromptBoxDescendant");
+#endif
+            return true;
+        }
+
+        var inComposerShell = IsDescendantOrSelf(current, ComposerShell);
+#if DEBUG
+        App.BootLog($"StartGamepad prompt focus source=ComposerShell current={current.GetType().Name} inComposerShell={inComposerShell}");
+#endif
+        return inComposerShell;
     }
 
     public bool TryFocusPrimaryContentTarget()
@@ -88,6 +109,11 @@ public sealed partial class StartView : Page, INavigationIntentConsumer, IPrimar
         }
 
         return TryFocusPromptBox();
+    }
+
+    public bool HandlePromptMoveUpEscape()
+    {
+        return TryFocusPrimaryContentTarget();
     }
 
     private bool IsFocusWithinHeroSuggestions()
@@ -194,5 +220,20 @@ public sealed partial class StartView : Page, INavigationIntentConsumer, IPrimar
         }
 
         return null;
+    }
+
+    private static bool IsDescendantOrSelf(DependencyObject? current, DependencyObject target)
+    {
+        while (current is not null)
+        {
+            if (ReferenceEquals(current, target))
+            {
+                return true;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return false;
     }
 }

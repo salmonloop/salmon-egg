@@ -228,23 +228,34 @@
                                     <MenuFlyoutSeparator Margin="16,0" Visibility="Visible"/>
 
                                     <StackPanel Spacing="8"
+                                                XYFocusKeyboardNavigation="Enabled"
                                                 Padding="{StaticResource SettingsRowPadding}">
-                                        <Button x:Uid="Diagnostics_GamepadStart"
+                                        <Button x:Name="DiagnosticsGamepadStartButton"
+                                                x:Uid="Diagnostics_GamepadStart"
                                                 AutomationProperties.AutomationId="Diagnostics.GamepadStart"
                                                 Content="开始监测"
+                                                GotFocus="OnGamepadActionGotFocus"
                                                 Command="{x:Bind ViewModel.GamepadDiagnostics.StartMonitoringCommand}"
                                                 IsEnabled="{x:Bind ViewModel.GamepadDiagnostics.CanStartMonitoring, Mode=OneWay}"
+                                                XYFocusDown="{x:Bind DiagnosticsGamepadStopButton, Mode=OneWay}"
                                                 HorizontalAlignment="Stretch" />
-                                        <Button x:Uid="Diagnostics_GamepadStop"
+                                        <Button x:Name="DiagnosticsGamepadStopButton"
+                                                x:Uid="Diagnostics_GamepadStop"
                                                 AutomationProperties.AutomationId="Diagnostics.GamepadStop"
                                                 Content="停止监测"
+                                                GotFocus="OnGamepadActionGotFocus"
                                                 Command="{x:Bind ViewModel.GamepadDiagnostics.StopMonitoringCommand}"
                                                 IsEnabled="{x:Bind ViewModel.GamepadDiagnostics.CanStopMonitoring, Mode=OneWay}"
+                                                XYFocusUp="{x:Bind DiagnosticsGamepadStartButton, Mode=OneWay}"
+                                                XYFocusDown="{x:Bind DiagnosticsGamepadRefreshButton, Mode=OneWay}"
                                                 HorizontalAlignment="Stretch" />
-                                        <Button x:Uid="Diagnostics_GamepadRefresh"
+                                        <Button x:Name="DiagnosticsGamepadRefreshButton"
+                                                x:Uid="Diagnostics_GamepadRefresh"
                                                 AutomationProperties.AutomationId="Diagnostics.GamepadRefresh"
                                                 Content="刷新一次"
+                                                GotFocus="OnGamepadActionGotFocus"
                                                 Command="{x:Bind ViewModel.GamepadDiagnostics.RefreshSnapshotCommand}"
+                                                XYFocusUp="{x:Bind DiagnosticsGamepadStopButton, Mode=OneWay}"
                                                 HorizontalAlignment="Stretch" />
                                     </StackPanel>
                                 </StackPanel>

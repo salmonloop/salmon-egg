@@ -11,7 +11,9 @@ public static class ChatInputNavigationPolicy
     {
         if (!slashCommandsVisible || !inputEnabled || isImeComposing)
         {
-            return ChatInputNavigationAction.None;
+            return intent == GamepadNavigationIntent.MoveUp && focusContext == ChatInputFocusContext.InputBox
+                ? ChatInputNavigationAction.EscapeMoveUp
+                : ChatInputNavigationAction.None;
         }
 
         if (focusContext != ChatInputFocusContext.InputBox)
@@ -44,4 +46,6 @@ public enum ChatInputNavigationAction
     MoveSlashUp,
     MoveSlashDown,
     AcceptSlashCommand
+    ,
+    EscapeMoveUp
 }

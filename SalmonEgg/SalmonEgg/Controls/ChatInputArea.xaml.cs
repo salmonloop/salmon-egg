@@ -198,6 +198,13 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
             typeof(ChatInputArea),
             new PropertyMetadata("ChatInputArea.ProjectSelector"));
 
+    public static readonly DependencyProperty MoveUpEscapeHandlerProperty =
+        DependencyProperty.Register(
+            nameof(MoveUpEscapeHandler),
+            typeof(Func<bool>),
+            typeof(ChatInputArea),
+            new PropertyMetadata(null));
+
     private bool _isImeComposing;
     public event EventHandler? SelectorDropDownOpened;
 
@@ -359,6 +366,12 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
         set => SetValue(ProjectSelectorAutomationIdProperty, value);
     }
 
+    public Func<bool>? MoveUpEscapeHandler
+    {
+        get => (Func<bool>?)GetValue(MoveUpEscapeHandlerProperty);
+        set => SetValue(MoveUpEscapeHandlerProperty, value);
+    }
+
     public ChatInputArea()
     {
         InitializeComponent();
@@ -511,13 +524,20 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
             IsPromptEditingAvailable(),
             _isImeComposing);
 
-        return action switch
+        var consumed = action switch
         {
             ChatInputNavigationAction.MoveSlashUp => ViewModel.TryMoveSlashSelection(-1),
             ChatInputNavigationAction.MoveSlashDown => ViewModel.TryMoveSlashSelection(1),
             ChatInputNavigationAction.AcceptSlashCommand => TryAcceptSelectedSlashCommandAndMoveCaretToEnd(),
+            ChatInputNavigationAction.EscapeMoveUp => MoveUpEscapeHandler?.Invoke() == true,
             _ => false
         };
+
+#if DEBUG
+        App.BootLog($"ChatInputGamepad intent={intent} focus={focusContext} action={action} consumed={consumed}");
+#endif
+
+        return consumed;
     }
 
     private bool TryAcceptSelectedSlashCommandAndMoveCaretToEnd()
