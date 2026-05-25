@@ -30,6 +30,7 @@ internal sealed class WindowsGuiAppSession : IDisposable
     private const VirtualKeyShort VirtualGamepadDPadUp = (VirtualKeyShort)203;
     private const VirtualKeyShort VirtualGamepadDPadLeft = (VirtualKeyShort)205;
     private const VirtualKeyShort VirtualGamepadDPadRight = (VirtualKeyShort)206;
+    private const VirtualKeyShort VirtualGamepadB = (VirtualKeyShort)196;
     private static readonly string[] MainShellWindowAnchorAutomationIds =
     [
         "TitleBar.OpenMiniWindow",
@@ -530,6 +531,11 @@ internal sealed class WindowsGuiAppSession : IDisposable
     public void PressVirtualGamepadA()
     {
         PressKey(VirtualGamepadA);
+    }
+
+    public void PressVirtualGamepadB()
+    {
+        PressKey(VirtualGamepadB);
     }
 
     public void PressTab()

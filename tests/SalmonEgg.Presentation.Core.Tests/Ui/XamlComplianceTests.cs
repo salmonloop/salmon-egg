@@ -2334,11 +2334,9 @@ public sealed class XamlComplianceTests
         Assert.Contains("AutomationProperties.AutomationId=\"{x:Bind AutomationId, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("IPrimaryContentFocusTarget", code, StringComparison.Ordinal);
         Assert.Contains("FindSuggestionButton(ViewModel.Suggestions[0].AutomationId)", code, StringComparison.Ordinal);
-        Assert.Contains("_activeSuggestionIndex = 0;", code, StringComparison.Ordinal);
-        Assert.Contains("GamepadNavigationIntent.MoveLeft => TryMoveFocusedSuggestion(-1)", code, StringComparison.Ordinal);
-        Assert.Contains("GamepadNavigationIntent.MoveRight => TryMoveFocusedSuggestion(1)", code, StringComparison.Ordinal);
-        Assert.Contains("GamepadNavigationIntent.MoveDown => TryFocusPromptBox()", code, StringComparison.Ordinal);
-        Assert.Contains("ResolveFocusedSuggestionIndex()", code, StringComparison.Ordinal);
+        Assert.Contains("intent == GamepadNavigationIntent.MoveDown", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("TryMoveFocusedSuggestion", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("ResolveFocusedSuggestionIndex", code, StringComparison.Ordinal);
         Assert.DoesNotContain("TryActivateSelectedHeroSuggestion", code, StringComparison.Ordinal);
         Assert.DoesNotContain("HeroSuggestionsList.SelectedIndex", code, StringComparison.Ordinal);
         Assert.DoesNotContain("CreateSlug(", suggestionVm, StringComparison.Ordinal);

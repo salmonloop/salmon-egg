@@ -259,7 +259,7 @@ public sealed class ShellFocusedActivationSmokeTests
             session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10)),
             $"Chat view did not become visible before testing MainNav -> chat directional navigation.{Environment.NewLine}{appData.ReadBootLogTail()}");
 
-        FocusAndAssert(session, sessionItem, "MainNav.Session.gui-session-01", "session navigation item");
+        ClickAndAssertFocus(session, sessionItem, "MainNav.Session.gui-session-01", "session navigation item");
 
         var reachedChatBody = MoveFocusUntil(
             session,
@@ -296,7 +296,7 @@ public sealed class ShellFocusedActivationSmokeTests
             $"Expected all three start suggestion automation ids to be exposed. Buttons=[{string.Join(" | ", session.GetVisibleButtons())}]{Environment.NewLine}{appData.ReadBootLogTail()}");
 
         var startItem = session.FindByAutomationId("MainNav.Start", TimeSpan.FromSeconds(10));
-        FocusAndAssert(session, startItem, "MainNav.Start", "start navigation item");
+        ClickAndAssertFocus(session, startItem, "MainNav.Start", "start navigation item");
 
         Assert.True(
             MoveFocusUntil(
@@ -308,21 +308,6 @@ public sealed class ShellFocusedActivationSmokeTests
                 attempts: 4),
             $"Virtual gamepad D-pad focus did not leave MainNav for the start suggestion strip.{Environment.NewLine}Focus={session.DescribeFocusedElement()}{Environment.NewLine}{appData.ReadBootLogTail()}");
 
-        var lastFocusedSuggestion = GetFocusedSuggestionId(session, firstId, secondId, thirdId);
-        for (var attempt = 0; attempt < 4; attempt++)
-        {
-            session.PressVirtualGamepadDPadLeft();
-            Thread.Sleep(180);
-
-            var currentFocusedSuggestion = GetFocusedSuggestionId(session, firstId, secondId, thirdId);
-            if (string.Equals(currentFocusedSuggestion, lastFocusedSuggestion, StringComparison.Ordinal))
-            {
-                break;
-            }
-
-            lastFocusedSuggestion = currentFocusedSuggestion;
-        }
-
         var timeline = new System.Collections.Generic.List<string>
         {
             $"initial focus={session.DescribeFocusedElement()}",
@@ -333,7 +318,7 @@ public sealed class ShellFocusedActivationSmokeTests
         var reachedThird = false;
         for (var attempt = 0; attempt < 6; attempt++)
         {
-            session.PressVirtualGamepadDPadRight();
+            session.PressRight();
             Thread.Sleep(180);
 
             reachedSecond |= session.IsFocusWithinAutomationId(secondId) || session.TryGetIsSelected(secondId) == true;
@@ -358,6 +343,218 @@ public sealed class ShellFocusedActivationSmokeTests
         var promptBox = session.FindByAutomationId("StartView.PromptBox", TimeSpan.FromSeconds(5)).AsTextBox();
         var promptText = promptBox.Text ?? string.Empty;
         Assert.Contains("我刚才遇到了一些报错", promptText, StringComparison.Ordinal);
+    }
+
+    [SkippableFact]
+    public void ChatInputArea_VirtualGamepadDPadDown_CanReachInputBox()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        Assert.True(
+            session.WaitUntilOnscreen("MainNav.Session.gui-session-01", TimeSpan.FromSeconds(15)),
+            $"Session nav item did not become onscreen before chat input gamepad navigation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-session-01", TimeSpan.FromSeconds(10));
+        session.ClickElement(sessionItem);
+        Assert.True(
+            session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10)),
+            $"Chat view did not become visible before chat input gamepad navigation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var reachedChatBody = MoveFocusUntil(
+            session,
+            session.PressVirtualGamepadDPadRight,
+            () => session.IsFocusWithinAutomationId("ChatView.MessagesList")
+                || session.IsFocusWithinAutomationId("InputBox"),
+            attempts: 6);
+
+        Assert.True(
+            reachedChatBody,
+            $"Virtual gamepad D-pad focus did not leave MainNav for the chat body before input-box validation."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var reachedInput = MoveFocusUntil(
+            session,
+            session.PressVirtualGamepadDPadDown,
+            () => session.IsFocusWithinAutomationId("InputBox"),
+            attempts: 8);
+
+        Assert.True(
+            reachedInput,
+            $"Virtual gamepad D-pad focus did not reach the chat input box."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
+    [SkippableFact]
+    public void SettingsCenter_VirtualGamepadDPadRight_CanReachSectionNavigation()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var settingsItem = session.FindByAutomationId("SettingsItem", TimeSpan.FromSeconds(10));
+        ClickAndAssertFocus(session, settingsItem, "SettingsItem", "settings navigation item");
+
+        var reachedSettingsSection = MoveFocusUntil(
+            session,
+            session.PressVirtualGamepadDPadRight,
+            () => session.IsFocusWithinAutomationId("SettingsNav.General")
+                || session.IsFocusWithinAutomationId("SettingsNav.Appearance")
+                || session.IsFocusWithinAutomationId("SettingsNav.AgentAcp"),
+            attempts: 6);
+
+        Assert.True(
+            reachedSettingsSection,
+            $"Virtual gamepad D-pad focus did not leave Settings nav item for the settings section navigation."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
+    [SkippableFact]
+    public void DiscoverSessions_VirtualGamepadDPadRight_CanReachProfilesList()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var discoverItem = session.FindByAutomationId("MainNav.DiscoverSessions", TimeSpan.FromSeconds(10));
+        ClickAndAssertFocus(session, discoverItem, "MainNav.DiscoverSessions", "discover navigation item");
+
+        var reachedProfiles = MoveFocusUntil(
+            session,
+            session.PressVirtualGamepadDPadRight,
+            () => session.IsFocusWithinAutomationId("DiscoverSessions.ProfilesList"),
+            attempts: 6);
+
+        Assert.True(
+            reachedProfiles,
+            $"Virtual gamepad D-pad focus did not leave Discover nav item for the profiles list."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
+    [SkippableFact]
+    public void GamepadB_FromDiscoverDetails_ReturnsToProfilesPane()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var appData = GuiAppDataScope.CreateDeterministicSlowRemoteReplayData(
+            cachedMessageCount: 1,
+            replayMessageCount: 12,
+            includeLocalConversation: false,
+            remoteConversationCount: 1);
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var discoverItem = session.FindByAutomationId("MainNav.DiscoverSessions", TimeSpan.FromSeconds(10));
+        session.ClickElement(discoverItem);
+        Assert.True(
+            session.WaitUntilVisible("DiscoverSessions.Title", TimeSpan.FromSeconds(10)),
+            $"Discover sessions page did not become visible before back-semantics validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var profilesList = session.FindByAutomationId("DiscoverSessions.ProfilesList", TimeSpan.FromSeconds(10));
+        var profileItems = profilesList
+            .FindAllDescendants(cf => cf.ByControlType(ControlType.ListItem))
+            .ToArray();
+        Assert.True(profileItems.Length >= 1, $"Discover profiles list did not expose any child items.{Environment.NewLine}{appData.ReadBootLogTail()}");
+        session.ClickElement(profileItems[0]);
+
+        Assert.True(
+            session.WaitUntilOnscreen("DiscoverSessions.SessionsList", TimeSpan.FromSeconds(10)),
+            $"Discover sessions list did not become visible before GamepadB validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        session.PressVirtualGamepadB();
+
+        Assert.True(
+            WaitUntil(
+                () => session.IsFocusWithinAutomationId("DiscoverSessions.ProfilesList")
+                    || session.TryFindByAutomationId("DiscoverSessions.SessionsList", TimeSpan.FromMilliseconds(100)) is null,
+                TimeSpan.FromSeconds(5)),
+            $"GamepadB did not return Discover from details to the profiles pane."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
+    [SkippableFact]
+    public void GamepadB_FromDiscoverPage_ReturnsToStartPage()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var appData = GuiAppDataScope.CreateDeterministicSlowRemoteReplayData(
+            cachedMessageCount: 1,
+            replayMessageCount: 12,
+            includeLocalConversation: false,
+            remoteConversationCount: 1);
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var discoverItem = session.FindByAutomationId("MainNav.DiscoverSessions", TimeSpan.FromSeconds(10));
+        session.ClickElement(discoverItem);
+        Assert.True(
+            session.WaitUntilVisible("DiscoverSessions.Title", TimeSpan.FromSeconds(10)),
+            $"Discover sessions page did not become visible before page-level GamepadB validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        session.PressVirtualGamepadB();
+
+        Assert.True(
+            session.WaitUntilVisible("StartView.Title", TimeSpan.FromSeconds(10)),
+            $"GamepadB did not return Discover page back to Start."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
+    [SkippableFact]
+    public void GamepadB_FromSettingsPage_ReturnsToStartPage()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var settingsItem = session.FindByAutomationId("SettingsItem", TimeSpan.FromSeconds(10));
+        session.ClickElement(settingsItem);
+        Assert.True(
+            session.WaitUntilOnscreen("SettingsNav.General", TimeSpan.FromSeconds(10)),
+            $"Settings page did not become visible before page-level GamepadB validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        session.PressVirtualGamepadB();
+
+        Assert.True(
+            session.WaitUntilVisible("StartView.Title", TimeSpan.FromSeconds(10)),
+            $"GamepadB did not return Settings page back to Start."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
+    [SkippableFact]
+    public void GamepadB_FromChatPage_ReturnsToStartPage()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        Assert.True(
+            session.WaitUntilOnscreen("MainNav.Session.gui-session-01", TimeSpan.FromSeconds(15)),
+            $"Session nav item did not become onscreen before chat back validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-session-01", TimeSpan.FromSeconds(10));
+        session.ClickElement(sessionItem);
+        Assert.True(
+            session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10)),
+            $"Chat view did not become visible before GamepadB validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        session.PressVirtualGamepadB();
+
+        Assert.True(
+            session.WaitUntilVisible("StartView.Title", TimeSpan.FromSeconds(10)),
+            $"GamepadB did not return Chat page back to Start."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
     private static bool MoveFocusUntil(
@@ -421,6 +618,29 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}");
     }
 
+    private static void ClickAndAssertFocus(
+        WindowsGuiAppSession session,
+        AutomationElement element,
+        string automationId,
+        string description)
+    {
+        session.BringMainWindowToFront();
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            session.ClickElement(element);
+            if (WaitUntil(
+                    () => session.IsFocusWithinAutomationId(automationId),
+                    TimeSpan.FromMilliseconds(300)))
+            {
+                return;
+            }
+        }
+
+        Assert.Fail(
+            $"Unable to establish {description} focus before directional navigation."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}");
+    }
+
     private static bool IsFocusWithinApplicationBody(WindowsGuiAppSession session)
         => session.IsFocusWithinAutomationId("MainNavView")
             || session.IsFocusWithinAutomationId("ChatView.MessagesList")
@@ -436,30 +656,6 @@ public sealed class ShellFocusedActivationSmokeTests
             $"{firstId}=selected:{session.TryGetIsSelected(firstId)?.ToString() ?? "<null>"} focus:{session.IsFocusWithinAutomationId(firstId)}",
             $"{secondId}=selected:{session.TryGetIsSelected(secondId)?.ToString() ?? "<null>"} focus:{session.IsFocusWithinAutomationId(secondId)}",
             $"{thirdId}=selected:{session.TryGetIsSelected(thirdId)?.ToString() ?? "<null>"} focus:{session.IsFocusWithinAutomationId(thirdId)}");
-
-    private static string? GetFocusedSuggestionId(
-        WindowsGuiAppSession session,
-        string firstId,
-        string secondId,
-        string thirdId)
-    {
-        if (session.IsFocusWithinAutomationId(firstId))
-        {
-            return firstId;
-        }
-
-        if (session.IsFocusWithinAutomationId(secondId))
-        {
-            return secondId;
-        }
-
-        if (session.IsFocusWithinAutomationId(thirdId))
-        {
-            return thirdId;
-        }
-
-        return null;
-    }
 
     private static bool IsFocusOnConcreteMainNavigationItemOtherThan(
         WindowsGuiAppSession session,
