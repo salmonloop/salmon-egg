@@ -50,6 +50,7 @@ public sealed partial class SettingsShellPage : Page, INavigationIntentConsumer
         AttachSectionNavigation();
         NavigateFrameToSection(section.Key);
         _ = DispatcherQueue.TryEnqueue(RefreshCurrentSectionFocusTargets);
+        QueueFocusCurrentSectionNavigationItem();
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
@@ -87,6 +88,12 @@ public sealed partial class SettingsShellPage : Page, INavigationIntentConsumer
     {
         var section = ViewModel.SelectSection(args.Key);
         NavigateFrameToSection(section.Key);
+        QueueFocusCurrentSectionNavigationItem();
+    }
+
+    private void QueueFocusCurrentSectionNavigationItem()
+    {
+        _ = DispatcherQueue.TryEnqueue(() => _ = TryFocusCurrentSectionNavigationItem());
     }
 
     private void NavigateFrameToSection(string key)
@@ -161,6 +168,13 @@ public sealed partial class SettingsShellPage : Page, INavigationIntentConsumer
         if (SettingsFrame.Content is null)
         {
             return false;
+        }
+
+        if (ViewModel.SelectedSection.Key == SettingsSectionCatalog.AppearanceKey
+            && FindDescendant<ComboBox>(SettingsFrame, static comboBox =>
+                string.Equals(Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(comboBox), "Appearance.Theme", StringComparison.Ordinal)) is { } appearanceTheme)
+        {
+            return appearanceTheme.Focus(FocusState.Programmatic);
         }
 
         if (FindDescendant<Button>(SettingsFrame, static button =>

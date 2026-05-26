@@ -54,10 +54,14 @@
                                 </StackPanel>
 
                                 <ComboBox Grid.Column="1"
+                                          x:Name="AppearanceThemeComboBox"
+                                          AutomationProperties.AutomationId="Appearance.Theme"
                                           SelectedValue="{x:Bind Preferences.Theme, Mode=TwoWay}"
                                           SelectedValuePath="Tag"
                                           MinWidth="{StaticResource SettingsRowControlMinWidth}"
                                           HorizontalAlignment="Stretch"
+                                          PreviewKeyDown="OnThemeComboBoxPreviewKeyDown"
+                                          XYFocusDown="{x:Bind AppearanceAnimationToggle, Mode=OneWay}"
                                           VerticalAlignment="Center">
                                     <ComboBoxItem x:Uid="Appearance_ThemeSystem" Content="跟随系统" Tag="System" />
                                     <ComboBoxItem x:Uid="Appearance_ThemeLight" Content="浅色" Tag="Light" />
@@ -89,10 +93,15 @@
                                 </StackPanel>
 
                                 <ToggleSwitch Grid.Column="1"
+                                              x:Name="AppearanceAnimationToggle"
+                                              AutomationProperties.AutomationId="Appearance.Animation"
                                               IsOn="{x:Bind Preferences.IsAnimationEnabled, Mode=TwoWay}"
                                               x:Uid="Appearance_MotionToggle"
                                               OnContent="已开启"
                                               OffContent="已禁用"
+                                              KeyDown="OnAnimationToggleKeyDown"
+                                              XYFocusUp="{x:Bind AppearanceThemeComboBox, Mode=OneWay}"
+                                              XYFocusDown="{x:Bind AppearanceBackdropComboBox, Mode=OneWay}"
                                               MinWidth="0"
                                               VerticalAlignment="Center"/>
                             </Grid>
@@ -121,10 +130,14 @@
                                 </StackPanel>
 
                                 <ComboBox Grid.Column="1"
+                                          x:Name="AppearanceBackdropComboBox"
+                                          AutomationProperties.AutomationId="Appearance.Backdrop"
                                           SelectedValue="{x:Bind Preferences.Backdrop, Mode=TwoWay}"
                                           SelectedValuePath="Tag"
                                           MinWidth="{StaticResource SettingsRowControlMinWidth}"
                                           HorizontalAlignment="Stretch"
+                                          PreviewKeyDown="OnBackdropComboBoxPreviewKeyDown"
+                                          XYFocusUp="{x:Bind AppearanceAnimationToggle, Mode=OneWay}"
                                           VerticalAlignment="Center">
                                     <ComboBoxItem x:Uid="Appearance_BackdropSystem" Content="自动（系统推荐）" Tag="System" />
                                     <ComboBoxItem x:Uid="Appearance_BackdropMica" Content="Mica" Tag="Mica" />

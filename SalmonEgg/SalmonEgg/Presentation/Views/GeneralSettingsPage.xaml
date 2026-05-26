@@ -56,6 +56,7 @@
 
                                     <ToggleSwitch Grid.Column="1"
                                                   x:Uid="General_AutoStartSwitch"
+                                                  AutomationProperties.AutomationId="GeneralSettings.AutoStart"
                                                   IsOn="{x:Bind ViewModel.Preferences.LaunchOnStartup, Mode=TwoWay}"
                                                   IsEnabled="{x:Bind ViewModel.Preferences.IsLaunchOnStartupSupported, Mode=OneWay}"
                                                   OnContent="开启"
@@ -83,6 +84,7 @@
 
                                     <ToggleSwitch Grid.Column="1"
                                                   x:Uid="General_MinimizeToTraySwitch"
+                                                  AutomationProperties.AutomationId="GeneralSettings.MinimizeToTray"
                                                   IsOn="{x:Bind ViewModel.Preferences.MinimizeToTray, Mode=TwoWay}"
                                                   IsEnabled="{x:Bind ViewModel.Preferences.IsMinimizeToTraySupported, Mode=OneWay}"
                                                   OnContent="开启"
@@ -119,6 +121,7 @@
                                 </StackPanel>
 
                                 <ComboBox Grid.Column="1"
+                                          AutomationProperties.AutomationId="GeneralSettings.Language"
                                           ItemsSource="{x:Bind ViewModel.Preferences.LanguageOptions, Mode=OneWay}"
                                           SelectedValue="{x:Bind ViewModel.Preferences.Language, Mode=TwoWay}"
                                           SelectedValuePath="Tag"

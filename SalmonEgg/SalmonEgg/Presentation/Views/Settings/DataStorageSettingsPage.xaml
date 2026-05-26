@@ -52,6 +52,7 @@
 
                                 <ToggleSwitch Grid.Column="1"
                                               x:Uid="DataStorage_SaveLocalHistorySwitch"
+                                              AutomationProperties.AutomationId="DataStorage.SaveLocalHistory"
                                               IsOn="{x:Bind ViewModel.Preferences.SaveLocalHistory, Mode=TwoWay}"
                                               OnContent="开启"
                                               OffContent="关闭"
@@ -83,6 +84,7 @@
                                     </StackPanel>
 
                                     <NumberBox Grid.Column="1"
+                                               AutomationProperties.AutomationId="DataStorage.CacheRetention"
                                                Value="{x:Bind ViewModel.Preferences.CacheRetentionDays, Mode=TwoWay}"
                                                Minimum="1"
                                                Maximum="60"
@@ -114,11 +116,13 @@
                                                 Margin="0,12,0,0"
                                                 HorizontalAlignment="Stretch">
                                         <Button x:Uid="DataStorage_ClearCache"
+                                                AutomationProperties.AutomationId="DataStorage.ClearCache"
                                                 Content="清理缓存"
                                                 Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                                                 Click="OnClearCacheClick"
                                                 HorizontalAlignment="Stretch"/>
                                         <Button x:Uid="DataStorage_OpenCacheFolder"
+                                                AutomationProperties.AutomationId="DataStorage.OpenCacheFolder"
                                                 Content="打开缓存目录"
                                                 Command="{x:Bind ViewModel.OpenCacheFolderCommand}"
                                                 IsEnabled="{x:Bind ViewModel.CanOpenExternalFiles, Mode=OneWay}"
