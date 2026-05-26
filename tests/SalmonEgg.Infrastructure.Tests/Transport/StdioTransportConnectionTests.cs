@@ -41,12 +41,20 @@ public sealed class StdioTransportConnectionTests
         var (command, args) = CreateImmediateFailureCommand("ssh config permissions are invalid");
         using var transport = new StdioTransport(command, args);
         var errors = new List<string>();
-        transport.ErrorOccurred += (_, error) => errors.Add(error.ErrorMessage);
+        var stderrObserved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        transport.ErrorOccurred += (_, error) =>
+        {
+            errors.Add(error.ErrorMessage);
+            if (error.ErrorMessage.Contains("ssh config permissions are invalid", StringComparison.Ordinal))
+            {
+                stderrObserved.TrySetResult();
+            }
+        };
 
         var connected = await transport.ConnectAsync();
-        await Task.Delay(200);
 
         Assert.False(connected);
+        await stderrObserved.Task.WaitAsync(TimeSpan.FromSeconds(1));
         Assert.Contains(
             errors,
             message => message.Contains("ssh config permissions are invalid", StringComparison.Ordinal));

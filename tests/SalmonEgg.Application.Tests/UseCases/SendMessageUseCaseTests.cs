@@ -136,20 +136,21 @@ namespace SalmonEgg.Application.Tests.UseCases
         {
             // Arrange
             string? messageId = null;
+            var messageSent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
             _mockConnectionManager
                 .Setup(x => x.SendMessageAsync(It.IsAny<AcpMessage>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((AcpMessage msg, CancellationToken ct) =>
                 {
                     messageId = msg.Id;
+                    messageSent.TrySetResult();
                     return SendResult.Success(msg.Id);
                 });
 
             // Act
             var resultTask = _useCase.ExecuteAsync("test.method", null, 5);
-
-            // 等待一小段时间确保消息已发送
-            await Task.Delay(100);
+            await messageSent.Task;
+            await WaitForResponseObserverAsync();
 
             // 发送错误响应
             Assert.NotNull(messageId);
@@ -178,6 +179,7 @@ namespace SalmonEgg.Application.Tests.UseCases
         {
             // Arrange
             string? messageId = null;
+            var messageSent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             using var parametersDocument = JsonDocument.Parse("""{"name":"test","value":123}""");
             var parameters = parametersDocument.RootElement.Clone();
 
@@ -186,14 +188,14 @@ namespace SalmonEgg.Application.Tests.UseCases
                 .ReturnsAsync((AcpMessage msg, CancellationToken ct) =>
                 {
                     messageId = msg.Id;
+                    messageSent.TrySetResult();
                     return SendResult.Success(msg.Id);
                 });
 
             // Act
             var resultTask = _useCase.ExecuteAsync("test.method", parameters, 5);
-
-            // 等待一小段时间确保消息已发送
-            await Task.Delay(100);
+            await messageSent.Task;
+            await WaitForResponseObserverAsync();
 
             // 发送成功响应
             Assert.NotNull(messageId);
@@ -228,28 +230,18 @@ namespace SalmonEgg.Application.Tests.UseCases
                 .ReturnsAsync((AcpMessage msg, CancellationToken ct) =>
                 {
                     capturedMessage = msg;
-
-                    // 立即发送响应以避免超时
-                    Task.Run(async () =>
-                    {
-                        await Task.Delay(50);
-                        _incomingMessagesSubject.OnNext(new AcpMessage
-                        {
-                            Id = msg.Id,
-                            Type = "response",
-                            Result = JsonSerializer.SerializeToElement(new { status = "ok" })
-                        });
-                    });
-
                     return SendResult.Success(msg.Id);
                 });
 
             // Act
-            var result = await _useCase.ExecuteAsync("test.method", parameters, 5);
+            var resultTask = _useCase.ExecuteAsync("test.method", parameters, 5);
+            await WaitForResponseObserverAsync();
+            Assert.NotNull(capturedMessage);
+            _incomingMessagesSubject.OnNext(CreateSuccessfulResponse(capturedMessage!.Id));
+            var result = await resultTask;
 
             // Assert
             Assert.True(result.IsSuccess);
-            Assert.NotNull(capturedMessage);
             Assert.NotNull(capturedMessage!.Id);
             Assert.NotEmpty(capturedMessage.Id);
             Assert.Equal("request", capturedMessage.Type);
@@ -270,28 +262,18 @@ namespace SalmonEgg.Application.Tests.UseCases
                 .ReturnsAsync((AcpMessage msg, CancellationToken ct) =>
                 {
                     capturedMessage = msg;
-
-                    // 立即发送响应以避免超时
-                    Task.Run(async () =>
-                    {
-                        await Task.Delay(50);
-                        _incomingMessagesSubject.OnNext(new AcpMessage
-                        {
-                            Id = msg.Id,
-                            Type = "response",
-                            Result = JsonSerializer.SerializeToElement(new { status = "ok" })
-                        });
-                    });
-
                     return SendResult.Success(msg.Id);
                 });
 
             // Act
-            var result = await _useCase.ExecuteAsync("test.method", null, 5);
+            var resultTask = _useCase.ExecuteAsync("test.method", null, 5);
+            await WaitForResponseObserverAsync();
+            Assert.NotNull(capturedMessage);
+            _incomingMessagesSubject.OnNext(CreateSuccessfulResponse(capturedMessage!.Id));
+            var result = await resultTask;
 
             // Assert
             Assert.True(result.IsSuccess);
-            Assert.NotNull(capturedMessage);
             Assert.Null(capturedMessage!.Params);
         }
 
@@ -306,24 +288,15 @@ namespace SalmonEgg.Application.Tests.UseCases
                 .ReturnsAsync((AcpMessage msg, CancellationToken ct) =>
                 {
                     messageId = msg.Id;
-
-                    // 立即发送响应
-                    Task.Run(async () =>
-                    {
-                        await Task.Delay(50);
-                        _incomingMessagesSubject.OnNext(new AcpMessage
-                        {
-                            Id = msg.Id,
-                            Type = "response",
-                            Result = JsonSerializer.SerializeToElement(new { status = "ok" })
-                        });
-                    });
-
                     return SendResult.Success(msg.Id);
                 });
 
             // Act
-            var result = await _useCase.ExecuteAsync("test.method", null, 5);
+            var resultTask = _useCase.ExecuteAsync("test.method", null, 5);
+            await WaitForResponseObserverAsync();
+            Assert.NotNull(messageId);
+            _incomingMessagesSubject.OnNext(CreateSuccessfulResponse(messageId!));
+            var result = await resultTask;
 
             // Assert
             Assert.True(result.IsSuccess);
@@ -344,6 +317,26 @@ namespace SalmonEgg.Application.Tests.UseCases
             _mockConnectionManager.Verify(
                 x => x.IncomingMessages,
                 Times.AtLeastOnce);
+        }
+
+        private async Task WaitForResponseObserverAsync()
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            while (!_incomingMessagesSubject.HasObservers)
+            {
+                await Task.Yield();
+                cts.Token.ThrowIfCancellationRequested();
+            }
+        }
+
+        private static AcpMessage CreateSuccessfulResponse(string id)
+        {
+            return new AcpMessage
+            {
+                Id = id,
+                Type = "response",
+                Result = JsonSerializer.SerializeToElement(new { status = "ok" })
+            };
         }
     }
 }

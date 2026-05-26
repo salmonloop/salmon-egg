@@ -104,17 +104,20 @@ namespace SalmonEgg.Application.Tests.Services
             using var parametersDocument = JsonDocument.Parse("""{"value":"test"}""");
             var parameters = parametersDocument.RootElement.Clone();
             var messageId = string.Empty;
+            var messageSent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
             _mockConnectionManager
                 .Setup(x => x.SendMessageAsync(It.IsAny<AcpMessage>(), It.IsAny<CancellationToken>()))
-                .Callback<AcpMessage, CancellationToken>((msg, ct) => messageId = msg.Id)
+                .Callback<AcpMessage, CancellationToken>((msg, ct) =>
+                {
+                    messageId = msg.Id;
+                    messageSent.TrySetResult();
+                })
                 .ReturnsAsync(() => SendResult.Success(messageId));
 
-            // 模拟响应消息
+            // Act
             var responseTask = _service.SendRequestAsync(method, parameters);
-
-            // 等待一小段时间确保消息已发送
-            await Task.Delay(100);
+            await messageSent.Task;
 
             // 发送响应
             _incomingMessagesSubject.OnNext(new AcpMessage
@@ -216,7 +219,6 @@ namespace SalmonEgg.Application.Tests.Services
 
             // Act
             _incomingMessagesSubject.OnNext(notification);
-            await Task.Delay(100); // 等待订阅处理
 
             // Assert
             Assert.NotNull(receivedNotification);
@@ -240,7 +242,6 @@ namespace SalmonEgg.Application.Tests.Services
 
             // Act
             _incomingMessagesSubject.OnNext(response);
-            await Task.Delay(100); // 等待订阅处理
 
             // Assert
             Assert.Equal(0, notificationCount);
@@ -262,7 +263,6 @@ namespace SalmonEgg.Application.Tests.Services
 
             // Act
             _incomingMessagesSubject.OnNext(request);
-            await Task.Delay(100); // 等待订阅处理
 
             // Assert
             Assert.Equal(0, notificationCount);
@@ -300,7 +300,6 @@ namespace SalmonEgg.Application.Tests.Services
             _incomingMessagesSubject.OnNext(notification1);
             _incomingMessagesSubject.OnNext(notification2);
             _incomingMessagesSubject.OnNext(notification3);
-            await Task.Delay(100); // 等待订阅处理
 
             // Assert
             Assert.Equal(3, receivedNotifications.Count);
@@ -327,14 +326,19 @@ namespace SalmonEgg.Application.Tests.Services
                 """);
             var parameters = parametersDocument.RootElement.Clone();
             var messageId = string.Empty;
+            var messageSent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
             _mockConnectionManager
                 .Setup(x => x.SendMessageAsync(It.IsAny<AcpMessage>(), It.IsAny<CancellationToken>()))
-                .Callback<AcpMessage, CancellationToken>((msg, ct) => messageId = msg.Id)
+                .Callback<AcpMessage, CancellationToken>((msg, ct) =>
+                {
+                    messageId = msg.Id;
+                    messageSent.TrySetResult();
+                })
                 .ReturnsAsync(() => SendResult.Success(messageId));
 
             var responseTask = _service.SendRequestAsync(method, parameters);
-            await Task.Delay(100);
+            await messageSent.Task;
 
             _incomingMessagesSubject.OnNext(new AcpMessage
             {
@@ -360,14 +364,19 @@ namespace SalmonEgg.Application.Tests.Services
             // Arrange
             var method = "test.method";
             var messageId = string.Empty;
+            var messageSent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
             _mockConnectionManager
                 .Setup(x => x.SendMessageAsync(It.IsAny<AcpMessage>(), It.IsAny<CancellationToken>()))
-                .Callback<AcpMessage, CancellationToken>((msg, ct) => messageId = msg.Id)
+                .Callback<AcpMessage, CancellationToken>((msg, ct) =>
+                {
+                    messageId = msg.Id;
+                    messageSent.TrySetResult();
+                })
                 .ReturnsAsync(() => SendResult.Success(messageId));
 
             var responseTask = _service.SendRequestAsync(method, null);
-            await Task.Delay(100);
+            await messageSent.Task;
 
             // 发送错误响应
             _incomingMessagesSubject.OnNext(new AcpMessage
@@ -406,7 +415,6 @@ namespace SalmonEgg.Application.Tests.Services
 
             // Act
             _incomingMessagesSubject.OnNext(notification);
-            await Task.Delay(100);
 
             // Assert
             Assert.NotNull(receivedNotification);

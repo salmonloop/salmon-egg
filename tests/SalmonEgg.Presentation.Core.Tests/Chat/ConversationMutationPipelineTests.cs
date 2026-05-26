@@ -15,6 +15,8 @@ public sealed class ConversationMutationPipelineTests
         var pipeline = new ConversationMutationPipeline();
         var order = new List<int>();
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var firstEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         var first = pipeline.RunAsync(
             "conv-1",
@@ -25,6 +27,7 @@ public sealed class ConversationMutationPipelineTests
                     order.Add(1);
                 }
 
+                firstEntered.TrySetResult();
                 await gate.Task;
 
                 lock (order)
@@ -33,7 +36,7 @@ public sealed class ConversationMutationPipelineTests
                 }
             });
 
-        await Task.Delay(30);
+        await firstEntered.Task.WaitAsync(TimeSpan.FromSeconds(1));
 
         var secondCompleted = false;
         var second = pipeline.RunAsync(
@@ -46,10 +49,11 @@ public sealed class ConversationMutationPipelineTests
                 }
 
                 secondCompleted = true;
+                secondEntered.TrySetResult();
                 return Task.CompletedTask;
             });
 
-        await Task.Delay(30);
+        Assert.False(secondEntered.Task.IsCompleted);
         Assert.False(secondCompleted);
 
         gate.SetResult();
@@ -65,12 +69,17 @@ public sealed class ConversationMutationPipelineTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
         var started = 0;
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var bothStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         var first = pipeline.RunAsync(
             "conv-a",
             async _ =>
             {
-                Interlocked.Increment(ref started);
+                if (Interlocked.Increment(ref started) == 2)
+                {
+                    bothStarted.TrySetResult();
+                }
+
                 await release.Task;
             },
             cts.Token);
@@ -79,17 +88,16 @@ public sealed class ConversationMutationPipelineTests
             "conv-b",
             async _ =>
             {
-                Interlocked.Increment(ref started);
+                if (Interlocked.Increment(ref started) == 2)
+                {
+                    bothStarted.TrySetResult();
+                }
+
                 await release.Task;
             },
             cts.Token);
 
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(1);
-        while (Volatile.Read(ref started) < 2 && DateTime.UtcNow < deadline)
-        {
-            await Task.Delay(10, cts.Token);
-        }
-
+        await bothStarted.Task.WaitAsync(cts.Token);
         Assert.Equal(2, Volatile.Read(ref started));
 
         release.SetResult();
