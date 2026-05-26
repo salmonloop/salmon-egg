@@ -1666,7 +1666,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             return;
         }
 
-        var keepLayoutLoading = false;
         await SetLayoutLoadingAsync(true).ConfigureAwait(false);
         try
         {
@@ -1679,19 +1678,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             }
 
             await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
-
-            // Re-evaluate if we should keep loading after projection applied.
-            // Layout loading is only a bridge until the active conversation is fully
-            // projected. Once hydration/pending replay has ended, visible transcript
-            // content should not keep the layout overlay alive on its own.
-            keepLayoutLoading = IsSessionActive && (IsHydrating || IsRemoteHydrationPending);
         }
         finally
         {
-            if (!keepLayoutLoading)
-            {
-                await SetLayoutLoadingAsync(false).ConfigureAwait(false);
-            }
+            await SetLayoutLoadingAsync(false).ConfigureAwait(false);
         }
     }
 
