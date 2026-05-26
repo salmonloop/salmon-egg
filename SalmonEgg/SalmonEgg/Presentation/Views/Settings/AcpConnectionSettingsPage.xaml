@@ -297,6 +297,7 @@
                                     <ComboBox ItemsSource="{x:Bind ViewModel.HydrationCompletionModeOptions, Mode=OneWay}"
                                               SelectedItem="{x:Bind ViewModel.SelectedHydrationCompletionMode, Mode=TwoWay}"
                                               MinWidth="{StaticResource SettingsRowControlMinWidth}"
+                                              IsFocusEngagementEnabled="True"
                                               HorizontalAlignment="Stretch">
                                         <ComboBox.ItemTemplate>
                                             <DataTemplate x:DataType="vm:HydrationCompletionModeOptionViewModel">

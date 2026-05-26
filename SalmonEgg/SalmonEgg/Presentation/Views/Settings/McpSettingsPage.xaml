@@ -135,6 +135,7 @@
                                                                       DisplayMemberPath="Name"
                                                                       SelectedValuePath="Transport"
                                                                       SelectedValue="{x:Bind Transport, Mode=TwoWay}"
+                                                                      IsFocusEngagementEnabled="True"
                                                                       HorizontalAlignment="Stretch"/>
                                                         </StackPanel>
 

@@ -30,7 +30,8 @@
 
             <ComboBox x:Uid="ConfigurationEditorDialogTransport"
                       ItemsSource="{x:Bind ViewModel.TransportOptions, Mode=OneWay}"
-                      SelectedItem="{x:Bind ViewModel.SelectedTransportOption, Mode=TwoWay}">
+                      SelectedItem="{x:Bind ViewModel.SelectedTransportOption, Mode=TwoWay}"
+                      IsFocusEngagementEnabled="True">
                 <ComboBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:TransportOption">
                         <TextBlock Text="{x:Bind Name, Mode=OneWay}"/>

@@ -64,6 +64,7 @@
                               Background="Transparent"
                               ToolTipService.ToolTip="{x:Bind ViewModel.CurrentSessionDisplayName, Mode=OneWay}"
                               AutomationProperties.Name="{x:Bind ViewModel.CurrentSessionDisplayName, Mode=OneWay}"
+                              IsFocusEngagementEnabled="True"
                               VerticalAlignment="Center">
                         <ComboBox.ItemTemplate>
                             <DataTemplate x:DataType="vm:MiniWindowConversationItemViewModel">

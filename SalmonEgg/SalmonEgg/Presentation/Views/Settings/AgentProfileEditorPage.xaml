@@ -42,6 +42,7 @@
                             <ComboBox x:Uid="AgentProfileEditorTransport"
                                       ItemsSource="{x:Bind ViewModel.TransportOptions, Mode=OneWay}"
                                       SelectedItem="{x:Bind ViewModel.SelectedTransportOption, Mode=TwoWay}"
+                                      IsFocusEngagementEnabled="True"
                                       MinWidth="240">
                                 <ComboBox.ItemTemplate>
                                     <DataTemplate x:DataType="vm:TransportOption">

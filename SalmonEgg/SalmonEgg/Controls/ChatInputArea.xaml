@@ -183,7 +183,7 @@
                                           ItemsSource="{x:Bind AgentSelectorItemsSource, Mode=OneWay}"
                                           SelectedItem="{x:Bind SelectedAgentSelectorItem, Mode=OneWay}"
                                           SelectionChanged="OnAgentSelectorSelectionChanged"
-                                          PreviewKeyDown="OnSelectorHostPreviewKeyDown"
+                                          IsFocusEngagementEnabled="True"
                                           DropDownOpened="OnSelectorDropDownOpened"
                                           DropDownClosed="OnSelectorDropDownClosed">
                                     <ComboBox.ItemTemplate>
@@ -210,7 +210,7 @@
                                           ItemsSource="{x:Bind ModeSelectorItemsSource, Mode=OneWay}"
                                           SelectedItem="{x:Bind SelectedModeSelectorItem, Mode=OneWay}"
                                           SelectionChanged="OnModeSelectorSelectionChanged"
-                                          PreviewKeyDown="OnSelectorHostPreviewKeyDown"
+                                          IsFocusEngagementEnabled="True"
                                           DropDownOpened="OnSelectorDropDownOpened"
                                           DropDownClosed="OnSelectorDropDownClosed">
                                     <ComboBox.ItemTemplate>
@@ -235,7 +235,7 @@
                                           Background="Transparent"
                                           BorderThickness="0"
                                           HorizontalAlignment="Stretch"
-                                          PreviewKeyDown="OnSelectorHostPreviewKeyDown"
+                                          IsFocusEngagementEnabled="True"
                                           DropDownOpened="OnSelectorDropDownOpened"
                                           DropDownClosed="OnSelectorDropDownClosed">
                                     <ComboBox.ItemTemplate>

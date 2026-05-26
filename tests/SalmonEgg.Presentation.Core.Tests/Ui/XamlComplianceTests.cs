@@ -2237,26 +2237,36 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
-    public void ChatInputArea_SelectorGamepadDPadDown_IsConsumedBeforeKeyboardFallback()
+    public void ComboBoxSelectors_UseNativeFocusEngagementForGamepadTraversal()
     {
-        var code = LoadText(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml.cs");
-        var previewKeyDown = ExtractSection(code, "private void OnSelectorHostPreviewKeyDown", "private static void ExecuteSelectorCommand");
+        var root = Path.Combine(FindRepoRoot(), "SalmonEgg", "SalmonEgg");
+        var failures = new List<string>();
 
-        Assert.Contains("Windows.System.VirtualKey.GamepadDPadDown", previewKeyDown, StringComparison.Ordinal);
-        Assert.Contains("TryFocusNextVisibleSelectorOrInputBox(comboBox)", code, StringComparison.Ordinal);
-        Assert.Contains("comboBox.IsDropDownOpen", previewKeyDown, StringComparison.Ordinal);
-        Assert.Contains("e.Handled = true;", previewKeyDown, StringComparison.Ordinal);
-    }
+        foreach (var xamlFile in Directory.EnumerateFiles(root, "*.xaml", SearchOption.AllDirectories))
+        {
+            if (xamlFile.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+                || xamlFile.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
 
-    [Fact]
-    public void AppearanceSettingsPage_ComboboxGamepadDPad_UsesFocusTraversalNotValueMutation()
-    {
-        var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AppearanceSettingsPage.xaml.cs");
+            var document = XDocument.Parse(File.ReadAllText(xamlFile));
+            foreach (var comboBox in document.Descendants().Where(element => string.Equals(element.Name.LocalName, "ComboBox", StringComparison.Ordinal)))
+            {
+                if (string.Equals(comboBox.Attribute("IsFocusEngagementEnabled")?.Value, "True", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
 
-        Assert.Contains("Windows.System.VirtualKey.GamepadDPadDown", code, StringComparison.Ordinal);
-        Assert.Contains("Windows.System.VirtualKey.GamepadDPadUp", code, StringComparison.Ordinal);
-        Assert.Contains("comboBox.IsDropDownOpen", code, StringComparison.Ordinal);
-        Assert.Contains("AppearanceAnimationToggle.Focus(FocusState.Programmatic)", code, StringComparison.Ordinal);
+                var id = comboBox.Attribute(XNamespace.Get("http://schemas.microsoft.com/winfx/2006/xaml") + "Name")?.Value
+                         ?? comboBox.Attributes().FirstOrDefault(attribute => attribute.Name.LocalName == "AutomationProperties.AutomationId")?.Value
+                         ?? comboBox.Attribute(XNamespace.Get("http://schemas.microsoft.com/winfx/2006/xaml") + "Uid")?.Value
+                         ?? "<unnamed>";
+                failures.Add($"{Path.GetRelativePath(FindRepoRoot(), xamlFile)} ComboBox {id}");
+            }
+        }
+
+        Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
     }
 
     [Fact]

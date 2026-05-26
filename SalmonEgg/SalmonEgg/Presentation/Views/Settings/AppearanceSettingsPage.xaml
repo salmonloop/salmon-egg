@@ -60,7 +60,7 @@
                                           SelectedValuePath="Tag"
                                           MinWidth="{StaticResource SettingsRowControlMinWidth}"
                                           HorizontalAlignment="Stretch"
-                                          PreviewKeyDown="OnThemeComboBoxPreviewKeyDown"
+                                          IsFocusEngagementEnabled="True"
                                           XYFocusDown="{x:Bind AppearanceAnimationToggle, Mode=OneWay}"
                                           VerticalAlignment="Center">
                                     <ComboBoxItem x:Uid="Appearance_ThemeSystem" Content="跟随系统" Tag="System" />
@@ -99,7 +99,6 @@
                                               x:Uid="Appearance_MotionToggle"
                                               OnContent="已开启"
                                               OffContent="已禁用"
-                                              KeyDown="OnAnimationToggleKeyDown"
                                               XYFocusUp="{x:Bind AppearanceThemeComboBox, Mode=OneWay}"
                                               XYFocusDown="{x:Bind AppearanceBackdropComboBox, Mode=OneWay}"
                                               MinWidth="0"
@@ -136,7 +135,7 @@
                                           SelectedValuePath="Tag"
                                           MinWidth="{StaticResource SettingsRowControlMinWidth}"
                                           HorizontalAlignment="Stretch"
-                                          PreviewKeyDown="OnBackdropComboBoxPreviewKeyDown"
+                                          IsFocusEngagementEnabled="True"
                                           XYFocusUp="{x:Bind AppearanceAnimationToggle, Mode=OneWay}"
                                           VerticalAlignment="Center">
                                     <ComboBoxItem x:Uid="Appearance_BackdropSystem" Content="自动（系统推荐）" Tag="System" />

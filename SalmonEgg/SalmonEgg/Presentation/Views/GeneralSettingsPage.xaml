@@ -128,6 +128,7 @@
                                           MinWidth="{StaticResource SettingsRowControlMinWidth}"
                                           HorizontalAlignment="Stretch"
                                           IsEnabled="{x:Bind ViewModel.Preferences.IsLanguageOverrideSupported, Mode=OneWay}"
+                                          IsFocusEngagementEnabled="True"
                                           VerticalAlignment="Center">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate x:DataType="settings:AppLanguageOptionViewModel">
