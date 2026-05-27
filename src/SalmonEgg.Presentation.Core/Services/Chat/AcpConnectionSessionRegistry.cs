@@ -53,6 +53,7 @@ public sealed class InMemoryAcpConnectionSessionRegistry : IAcpConnectionSession
 {
     private readonly object _gate = new();
     private readonly Dictionary<string, AcpConnectionSession> _sessionsByProfile = new(StringComparer.Ordinal);
+    private readonly Dictionary<IChatService, string> _profileIdByService = new();
 
     /// <inheritdoc />
     public event Action<string, bool>? ProfileConnectionChanged;
@@ -70,13 +71,10 @@ public sealed class InMemoryAcpConnectionSessionRegistry : IAcpConnectionSession
         ArgumentNullException.ThrowIfNull(service);
         lock (_gate)
         {
-            foreach (var pair in _sessionsByProfile)
+            if (_profileIdByService.TryGetValue(service, out var foundProfileId))
             {
-                if (ReferenceEquals(pair.Value.Service, service))
-                {
-                    profileId = pair.Key;
-                    return true;
-                }
+                profileId = foundProfileId;
+                return true;
             }
         }
 
@@ -93,6 +91,7 @@ public sealed class InMemoryAcpConnectionSessionRegistry : IAcpConnectionSession
             {
                 LastUsedUtc = session.LastUsedUtc == default ? DateTime.UtcNow : session.LastUsedUtc
             };
+            _profileIdByService[session.Service] = session.ProfileId;
         }
 
         // Raise outside the lock to avoid potential deadlocks from re-entrant subscribers.
@@ -104,7 +103,15 @@ public sealed class InMemoryAcpConnectionSessionRegistry : IAcpConnectionSession
         bool removed;
         lock (_gate)
         {
-            removed = _sessionsByProfile.Remove(profileId);
+            if (_sessionsByProfile.TryGetValue(profileId, out var session))
+            {
+                _profileIdByService.Remove(session.Service);
+                removed = _sessionsByProfile.Remove(profileId);
+            }
+            else
+            {
+                removed = false;
+            }
         }
 
         if (removed)
@@ -123,15 +130,12 @@ public sealed class InMemoryAcpConnectionSessionRegistry : IAcpConnectionSession
 
         lock (_gate)
         {
-            foreach (var pair in _sessionsByProfile)
+            if (_profileIdByService.TryGetValue(service, out var foundProfileId))
             {
-                if (ReferenceEquals(pair.Value.Service, service))
-                {
-                    profileId = pair.Key;
-                    _sessionsByProfile.Remove(pair.Key);
-                    removed = true;
-                    break;
-                }
+                profileId = foundProfileId;
+                _profileIdByService.Remove(service);
+                _sessionsByProfile.Remove(profileId);
+                removed = true;
             }
         }
 
@@ -164,7 +168,11 @@ public sealed class InMemoryAcpConnectionSessionRegistry : IAcpConnectionSession
 
             foreach (var key in keysToRemove)
             {
-                _sessionsByProfile.Remove(key);
+                if (_sessionsByProfile.TryGetValue(key, out var session))
+                {
+                    _profileIdByService.Remove(session.Service);
+                    _sessionsByProfile.Remove(key);
+                }
             }
         }
 
