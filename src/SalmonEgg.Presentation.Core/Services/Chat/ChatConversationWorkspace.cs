@@ -1305,6 +1305,15 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             return sanitized;
         }
 
+        if (!RemoteConversationPersistencePolicy.IsRemoteBacked(conversation.RemoteSessionId, conversation.BoundProfileId))
+        {
+            var localDisplayName = SessionNamePolicy.Sanitize(conversation.DisplayName);
+            if (!string.IsNullOrWhiteSpace(localDisplayName))
+            {
+                return localDisplayName;
+            }
+        }
+
         return SessionNamePolicy.CreateDefault(conversation.ConversationId);
     }
 

@@ -357,6 +357,15 @@ internal sealed class WindowsGuiAppSession : IDisposable
             return;
         }
 
+        var valueElement = element
+            .FindAllDescendants()
+            .FirstOrDefault(descendant => descendant.Patterns.Value.IsSupported);
+        if (valueElement is not null)
+        {
+            valueElement.Patterns.Value.Pattern.SetValue(text);
+            return;
+        }
+
         throw new InvalidOperationException(
             $"Element '{automationId}' does not support ValuePattern for text entry.");
     }

@@ -104,6 +104,40 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
+    public async Task RestoreAsync_LocalConversationPreservesPersistedDisplayName()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore
+        {
+            LoadResult = new ConversationDocument
+            {
+                Conversations =
+                {
+                    new ConversationRecord
+                    {
+                        ConversationId = "session-1",
+                        DisplayName = "Session One",
+                        CreatedAt = new DateTime(2026, 3, 3, 0, 0, 0, DateTimeKind.Utc),
+                        LastUpdatedAt = new DateTime(2026, 3, 4, 0, 0, 0, DateTimeKind.Utc),
+                        Cwd = @"C:\repo\one"
+                    }
+                }
+            }
+        };
+
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+
+        await workspace.RestoreAsync();
+
+        var session = sessionManager.GetSession("session-1");
+        Assert.NotNull(session);
+        Assert.Equal("Session One", session!.DisplayName);
+        Assert.Equal("Session One", workspace.GetCatalog().Single(item => item.ConversationId == "session-1").DisplayName);
+    }
+
+    [Fact]
     public async Task RestoreAsync_WithLegacyNullTranscriptEntries_SkipsNullsAndStillSaves()
     {
         var syncContext = new ImmediateSynchronizationContext();
