@@ -10,6 +10,10 @@ public sealed class WindowsGamepadNativeInputBridge : IGamepadNativeInputBridge
     private const uint INPUT_KEYBOARD = 1;
     private const uint KEYEVENTF_KEYUP = 0x0002;
     private const ushort VK_RETURN = 0x0D;
+    private const ushort VK_GAMEPAD_DPAD_UP = 0xCB;
+    private const ushort VK_GAMEPAD_DPAD_DOWN = 0xCC;
+    private const ushort VK_GAMEPAD_DPAD_LEFT = 0xCD;
+    private const ushort VK_GAMEPAD_DPAD_RIGHT = 0xCE;
 
     private readonly ILogger<WindowsGamepadNativeInputBridge> _logger;
 
@@ -62,6 +66,10 @@ public sealed class WindowsGamepadNativeInputBridge : IGamepadNativeInputBridge
     {
         virtualKey = intent switch
         {
+            GamepadNavigationIntent.MoveUp => VK_GAMEPAD_DPAD_UP,
+            GamepadNavigationIntent.MoveDown => VK_GAMEPAD_DPAD_DOWN,
+            GamepadNavigationIntent.MoveLeft => VK_GAMEPAD_DPAD_LEFT,
+            GamepadNavigationIntent.MoveRight => VK_GAMEPAD_DPAD_RIGHT,
             GamepadNavigationIntent.Activate => VK_RETURN,
             _ => 0
         };

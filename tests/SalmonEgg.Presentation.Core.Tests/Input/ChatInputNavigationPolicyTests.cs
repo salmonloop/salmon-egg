@@ -32,6 +32,12 @@ public sealed class ChatInputNavigationPolicyTests
     }
 
     [Fact]
+    public void Decide_ReturnsNone_WhenSlashHidden_AndFocusIsInput_AndIntentIsMoveUp()
+    {
+        Assert.Equal("None", Decide(GamepadNavigationIntent.MoveUp, "InputBox", slashCommandsVisible: false, inputEnabled: true, isImeComposing: false));
+    }
+
+    [Fact]
     public void Decide_ReturnsNone_WhenInputIsDisabled()
     {
         Assert.Equal("None", Decide(GamepadNavigationIntent.MoveDown, "InputBox", slashCommandsVisible: true, inputEnabled: false, isImeComposing: false));

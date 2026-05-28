@@ -1,8 +1,5 @@
 using System;
-using System.Diagnostics;
 using System.IO;
-using System.Linq;
-using System.Runtime.InteropServices;
 using System.Threading;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
@@ -24,7 +21,7 @@ public sealed class ResponsiveNavigationAncestorTests
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
         using var session = WindowsGuiAppSession.LaunchFresh();
 
-        ResizeMainWindow(width: 1400, height: 900);
+        session.ResizeMainWindow(width: 1400, height: 900);
 
         var sessionItem = EnsureSessionItemReadyForInteraction(session);
         session.ActivateElement(sessionItem);
@@ -32,7 +29,7 @@ public sealed class ResponsiveNavigationAncestorTests
             session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10)),
             "Chat header did not appear after selecting deterministic session gui-session-01.");
 
-        DragMainWindowToCompact(widths: [1280, 1160, 1040, 960, 900, 860, 820, 800], height: 900);
+        DragMainWindowToCompact(session, widths: [1280, 1160, 1040, 960, 900, 860, 820, 800], height: 900);
 
         if (WaitForCompactSelectionContext(session, SessionAutomationId, ProjectAutomationId, StartAutomationId, TimeSpan.FromSeconds(4), out _))
         {
@@ -57,7 +54,7 @@ public sealed class ResponsiveNavigationAncestorTests
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
         using var session = WindowsGuiAppSession.LaunchFresh();
 
-        ResizeMainWindow(width: 1400, height: 900);
+        session.ResizeMainWindow(width: 1400, height: 900);
 
         var sessionItem = EnsureSessionItemReadyForInteraction(session);
         session.ActivateElement(sessionItem);
@@ -65,7 +62,7 @@ public sealed class ResponsiveNavigationAncestorTests
             session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10)),
             "Chat header did not appear after selecting deterministic session gui-session-01.");
 
-        DragMainWindowToCompact(widths: [1280, 1160, 1040, 960, 900, 860, 820, 800], height: 900);
+        DragMainWindowToCompact(session, widths: [1280, 1160, 1040, 960, 900, 860, 820, 800], height: 900);
         Assert.True(
             WaitForCompactSelectionContext(session, SessionAutomationId, ProjectAutomationId, StartAutomationId, TimeSpan.FromSeconds(4), out _),
             $"Expected compact resize path to settle ancestor context before restoring expanded mode. {DumpSelectionSnapshot(session, SessionAutomationId, ProjectAutomationId, StartAutomationId)}");
@@ -86,7 +83,7 @@ public sealed class ResponsiveNavigationAncestorTests
                 pollInterval: TimeSpan.FromMilliseconds(120)),
             $"Expected compact mode to retain ancestor projection with semantic session selection. {DumpSelectionSnapshot(session, SessionAutomationId, ProjectAutomationId, StartAutomationId)}");
 
-        ResizeMainWindow(width: 1400, height: 900);
+        session.ResizeMainWindow(width: 1400, height: 900);
         Assert.True(
             WaitUntil(
                 () =>
@@ -108,7 +105,7 @@ public sealed class ResponsiveNavigationAncestorTests
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
         using var session = WindowsGuiAppSession.LaunchFresh();
 
-        ResizeMainWindow(width: 1400, height: 900);
+        session.ResizeMainWindow(width: 1400, height: 900);
         var sessionItem = EnsureSessionItemReadyForInteraction(session);
         session.ActivateElement(sessionItem);
         Assert.True(
@@ -116,6 +113,7 @@ public sealed class ResponsiveNavigationAncestorTests
             "Chat header did not appear after selecting deterministic session gui-session-01.");
 
         DragMainWindowToCompact(
+            session,
             widths: [1280, 1220, 1160, 1100, 1040, 980, 920, 860, 820, 800],
             height: 900,
             delayMs: 260);
@@ -166,7 +164,7 @@ public sealed class ResponsiveNavigationAncestorTests
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
         using var session = WindowsGuiAppSession.LaunchFresh();
 
-        ResizeMainWindow(width: 1400, height: 900);
+        session.ResizeMainWindow(width: 1400, height: 900);
         var sessionItem = EnsureSessionItemReadyForInteraction(session);
         session.ActivateElement(sessionItem);
         Assert.True(
@@ -175,6 +173,7 @@ public sealed class ResponsiveNavigationAncestorTests
 
         // Simulate manual slow dragging around the Expanded/Compact threshold before settling compact.
         DragMainWindowToCompact(
+            session,
             widths: [1120, 1060, 1020, 1008, 1002, 999, 1001, 998, 996, 980, 940, 900, 860, 820, 800],
             height: 900,
             delayMs: 260);
@@ -269,25 +268,11 @@ public sealed class ResponsiveNavigationAncestorTests
         return session.FindByAutomationId(SessionAutomationId, TimeSpan.FromSeconds(2));
     }
 
-    private static void ResizeMainWindow(int width, int height)
-    {
-        var process = Process.GetProcessesByName("SalmonEgg")
-            .OrderByDescending(candidate => candidate.StartTime)
-            .First();
-
-        if (NativeMethods.MoveWindow(process.MainWindowHandle, 80, 80, width, height, true))
-        {
-            return;
-        }
-
-        throw new InvalidOperationException("Failed to resize the SalmonEgg window.");
-    }
-
-    private static void DragMainWindowToCompact(int[] widths, int height, int delayMs = 90)
+    private static void DragMainWindowToCompact(WindowsGuiAppSession session, int[] widths, int height, int delayMs = 90)
     {
         foreach (var width in widths)
         {
-            ResizeMainWindow(width, height);
+            session.ResizeMainWindow(width, height);
             Thread.Sleep(delayMs);
         }
     }
@@ -434,9 +419,4 @@ public sealed class ResponsiveNavigationAncestorTests
         }
     }
 
-    private static class NativeMethods
-    {
-        [DllImport("user32.dll", SetLastError = true)]
-        internal static extern bool MoveWindow(IntPtr hWnd, int x, int y, int width, int height, bool repaint);
-    }
 }

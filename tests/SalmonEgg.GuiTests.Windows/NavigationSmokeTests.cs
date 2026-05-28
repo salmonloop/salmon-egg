@@ -1,8 +1,5 @@
 using System;
-using System.Diagnostics;
 using System.IO;
-using System.Linq;
-using System.Runtime.InteropServices;
 using System.Threading;
 using FlaUI.Core.Definitions;
 using FlaUI.Core.AutomationElements;
@@ -45,6 +42,7 @@ public sealed class NavigationSmokeTests
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
         using var session = WindowsGuiAppSession.LaunchFresh();
+        session.ResizeMainWindow(width: 1400, height: 900);
 
         Assert.True(
             session.WaitUntilOnscreen("StartView.AgentSelector", TimeSpan.FromSeconds(6)),
@@ -256,7 +254,7 @@ public sealed class NavigationSmokeTests
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
         using var session = WindowsGuiAppSession.LaunchFresh();
 
-        ResizeMainWindow(width: 800, height: 900);
+        session.ResizeMainWindow(width: 800, height: 900);
         Thread.Sleep(1500);
 
         Assert.True(
@@ -301,7 +299,7 @@ public sealed class NavigationSmokeTests
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
         using var session = WindowsGuiAppSession.LaunchFresh();
 
-        ResizeMainWindow(width: 500, height: 900);
+        session.ResizeMainWindow(width: 500, height: 900);
         Thread.Sleep(1500);
 
         var startItem = session.TryFindByAutomationId("MainNav.Start", TimeSpan.FromSeconds(2));
@@ -331,7 +329,7 @@ public sealed class NavigationSmokeTests
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
         using var session = WindowsGuiAppSession.LaunchFresh();
 
-        ResizeMainWindow(width: 1400, height: 900);
+        session.ResizeMainWindow(width: 1400, height: 900);
         Thread.Sleep(1500);
         session.InvokeButton("TitleBar.ToggleSidebar");
         Thread.Sleep(1500);
@@ -352,7 +350,7 @@ public sealed class NavigationSmokeTests
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
         using var session = WindowsGuiAppSession.LaunchFresh();
 
-        ResizeMainWindow(width: 1400, height: 900);
+        session.ResizeMainWindow(width: 1400, height: 900);
         Thread.Sleep(1500);
 
         var sessionItem = session.FindByAutomationId("MainNav.Session.gui-session-01");
@@ -388,7 +386,7 @@ public sealed class NavigationSmokeTests
         var timeline = new System.Collections.Generic.List<string>();
         static string Stamp() => DateTime.UtcNow.ToString("HH:mm:ss.fff", System.Globalization.CultureInfo.InvariantCulture);
 
-        ResizeMainWindow(width: 1400, height: 900);
+        session.ResizeMainWindow(width: 1400, height: 900);
         Thread.Sleep(1200);
 
         var sessionItem = session.FindByAutomationId(sessionId, TimeSpan.FromSeconds(10));
@@ -414,11 +412,11 @@ public sealed class NavigationSmokeTests
             $"Expected a visible selected nav item after expanded restore. winner={winnerExpandedBack ?? "<null>"}{Environment.NewLine}{DumpSelectionSnapshot(session, sessionId, projectId, startId)}{Environment.NewLine}{appData.ReadBootLogTail()}");
         Assert.Equal(sessionId, winnerExpandedBack);
 
-        ResizeMainWindow(width: 500, height: 900);
+        session.ResizeMainWindow(width: 500, height: 900);
         Thread.Sleep(1400);
         timeline.Add($"{Stamp()} resized to minimal");
 
-        ResizeMainWindow(width: 800, height: 900);
+        session.ResizeMainWindow(width: 800, height: 900);
         Thread.Sleep(1400);
         timeline.Add($"{Stamp()} resized to compact");
 
@@ -452,16 +450,16 @@ public sealed class NavigationSmokeTests
         const string projectId = "MainNav.Project.project-1";
         const string startId = "MainNav.Start";
 
-        ResizeMainWindow(width: 1400, height: 900);
+        session.ResizeMainWindow(width: 1400, height: 900);
         Thread.Sleep(1200);
 
         session.ActivateElement(session.FindByAutomationId(sessionId, TimeSpan.FromSeconds(10)));
         session.FindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10));
 
-        ResizeMainWindow(width: 500, height: 900);
+        session.ResizeMainWindow(width: 500, height: 900);
         Thread.Sleep(1400);
 
-        ResizeMainWindow(width: 1400, height: 900);
+        session.ResizeMainWindow(width: 1400, height: 900);
         Thread.Sleep(1600);
 
         Assert.True(
@@ -480,7 +478,7 @@ public sealed class NavigationSmokeTests
         const string projectId = "MainNav.Project.project-1";
         const string startId = "MainNav.Start";
 
-        ResizeMainWindow(width: 1400, height: 900);
+        session.ResizeMainWindow(width: 1400, height: 900);
         Thread.Sleep(1200);
 
         session.ActivateElement(session.FindByAutomationId(sessionId, TimeSpan.FromSeconds(10)));
@@ -491,7 +489,7 @@ public sealed class NavigationSmokeTests
         session.InvokeButton("TitleBar.ToggleSidebar");
         Thread.Sleep(1200);
 
-        ResizeMainWindow(width: 800, height: 900);
+        session.ResizeMainWindow(width: 800, height: 900);
         Thread.Sleep(1500);
 
         AssertCompactNativeSelection(
@@ -523,13 +521,13 @@ public sealed class NavigationSmokeTests
         const string projectId = "MainNav.Project.project-1";
         const string startId = "MainNav.Start";
 
-        ResizeMainWindow(width: 1400, height: 900);
+        session.ResizeMainWindow(width: 1400, height: 900);
         Thread.Sleep(1200);
 
         session.ActivateElement(session.FindByAutomationId(sessionId, TimeSpan.FromSeconds(10)));
         session.FindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10));
 
-        ResizeMainWindow(width: 800, height: 900);
+        session.ResizeMainWindow(width: 800, height: 900);
         Thread.Sleep(1600);
 
         AssertCompactNativeSelection(
@@ -540,67 +538,6 @@ public sealed class NavigationSmokeTests
             TimeSpan.FromSeconds(6),
             "pure resize path",
             appData.ReadBootLogTail());
-    }
-
-    private static void ResizeMainWindow(int width, int height)
-    {
-        var process = Process.GetProcessesByName("SalmonEgg")
-            .OrderByDescending(candidate => candidate.StartTime)
-            .First();
-
-        if (NativeMethods.MoveWindow(process.MainWindowHandle, 80, 80, width, height, true))
-        {
-            return;
-        }
-
-        if (NativeMethods.SetWindowPos(process.MainWindowHandle, IntPtr.Zero, 80, 80, width, height, 0))
-        {
-            return;
-        }
-
-        if (NativeMethods.TryGetWindowSize(process.MainWindowHandle, out var currentWidth, out var currentHeight)
-            && Math.Abs(currentWidth - width) <= 2
-            && Math.Abs(currentHeight - height) <= 2)
-        {
-            return;
-        }
-
-        throw new InvalidOperationException("Failed to resize the SalmonEgg window.");
-    }
-
-    private static class NativeMethods
-    {
-        [StructLayout(LayoutKind.Sequential)]
-        private struct Rect
-        {
-            public int Left;
-            public int Top;
-            public int Right;
-            public int Bottom;
-        }
-
-        [DllImport("user32.dll", SetLastError = true)]
-        internal static extern bool MoveWindow(IntPtr hWnd, int x, int y, int width, int height, bool repaint);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        internal static extern bool SetWindowPos(IntPtr hWnd, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool GetWindowRect(IntPtr hWnd, out Rect rect);
-
-        internal static bool TryGetWindowSize(IntPtr hWnd, out int width, out int height)
-        {
-            if (GetWindowRect(hWnd, out var rect))
-            {
-                width = rect.Right - rect.Left;
-                height = rect.Bottom - rect.Top;
-                return true;
-            }
-
-            width = 0;
-            height = 0;
-            return false;
-        }
     }
 
     private static bool IsVisibleAffordanceElement(AutomationElement element)

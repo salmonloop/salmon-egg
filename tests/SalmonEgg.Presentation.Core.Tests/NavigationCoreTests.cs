@@ -136,7 +136,7 @@ public sealed class NavigationCoreTests
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
         var constructorSection = ExtractSection(code, "public MainPage()", "private async void OnAutomationArchiveSelectedClick");
-        var loadedSection = ExtractSection(code, "private async void OnMainPageLoaded", "public bool TryConsumeNavigationIntent");
+        var loadedSection = ExtractSection(code, "private async void OnMainPageLoaded", "private void AttachGamepadInput");
 
         Assert.DoesNotContain("EnsureStartContent", constructorSection, StringComparison.Ordinal);
         Assert.Contains("await _startupNavigation.ActivateInitialContentAsync().ConfigureAwait(true);", loadedSection, StringComparison.Ordinal);

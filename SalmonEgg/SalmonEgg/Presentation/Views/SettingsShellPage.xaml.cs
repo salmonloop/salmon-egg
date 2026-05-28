@@ -20,6 +20,7 @@ namespace SalmonEgg.Presentation.Views;
 public sealed partial class SettingsShellPage : Page, IPrimaryContentFocusTarget
 {
     private SettingsSectionNavigationAdapter? _sectionNavigation;
+    private FrameworkElement? _pendingFocusTargetRefreshRoot;
 
     public SettingsShellViewModel ViewModel { get; }
 
@@ -49,7 +50,7 @@ public sealed partial class SettingsShellPage : Page, IPrimaryContentFocusTarget
         var section = ViewModel.SelectSection(key);
         AttachSectionNavigation();
         NavigateFrameToSection(section.Key);
-        _ = DispatcherQueue.TryEnqueue(RefreshCurrentSectionFocusTargets);
+        _ = DispatcherQueue.TryEnqueue(RefreshOrDeferCurrentSectionFocusTargets);
         QueueFocusCurrentSectionNavigationItem();
     }
 
@@ -58,6 +59,7 @@ public sealed partial class SettingsShellPage : Page, IPrimaryContentFocusTarget
         base.OnNavigatedFrom(e);
 
         SettingsFrame.Navigated -= OnSettingsFrameNavigated;
+        DetachDeferredFocusTargetRefresh();
         DetachSectionNavigation();
     }
 
@@ -104,12 +106,12 @@ public sealed partial class SettingsShellPage : Page, IPrimaryContentFocusTarget
             SettingsFrame.Navigate(pageType, null, UiMotionController.Current.CreateNavigationTransitionInfo());
         }
 
-        _ = DispatcherQueue.TryEnqueue(RefreshCurrentSectionFocusTargets);
+        _ = DispatcherQueue.TryEnqueue(RefreshOrDeferCurrentSectionFocusTargets);
     }
 
     private void OnSettingsFrameNavigated(object sender, NavigationEventArgs e)
     {
-        _ = DispatcherQueue.TryEnqueue(RefreshCurrentSectionFocusTargets);
+        _ = DispatcherQueue.TryEnqueue(RefreshOrDeferCurrentSectionFocusTargets);
     }
 
     private static Type GetSettingsSectionPageType(string key) => key switch
@@ -127,17 +129,16 @@ public sealed partial class SettingsShellPage : Page, IPrimaryContentFocusTarget
 
     private bool TryFocusCurrentSectionNavigationItem()
     {
-        if (SettingsNavView.ContainerFromMenuItem(ViewModel.SelectedSection) is Control selectedContainer
-            && selectedContainer.Focus(FocusState.Keyboard))
+        SettingsNavView.UpdateLayout();
+        if (SettingsNavView.ContainerFromMenuItem(ViewModel.SelectedSection) is Control selectedContainer)
         {
-            return true;
+            if (selectedContainer.Focus(FocusState.Keyboard))
+            {
+                return true;
+            }
         }
 
-        var automationId = ViewModel.SelectedSection.AutomationId;
-        return FindDescendant<NavigationViewItem>(SettingsNavView, item =>
-                string.Equals(Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(item), automationId, StringComparison.Ordinal))
-            is { } selectedItem
-            && selectedItem.Focus(FocusState.Keyboard);
+        return false;
     }
 
     internal bool TryFocusSelectedSectionNavigationItemForChildPage()
@@ -146,11 +147,25 @@ public sealed partial class SettingsShellPage : Page, IPrimaryContentFocusTarget
     public bool TryFocusPrimaryContentTarget()
         => TryFocusCurrentSectionNavigationItem();
 
-    private void RefreshCurrentSectionFocusTargets()
+    private void RefreshOrDeferCurrentSectionFocusTargets()
+    {
+        if (TryRefreshCurrentSectionFocusTargets())
+        {
+            DetachDeferredFocusTargetRefresh();
+            return;
+        }
+
+        if (SettingsFrame.Content is FrameworkElement root)
+        {
+            AttachDeferredFocusTargetRefresh(root);
+        }
+    }
+
+    private bool TryRefreshCurrentSectionFocusTargets()
     {
         if (SettingsFrame.Content is null)
         {
-            return;
+            return false;
         }
 
         var automationId = ViewModel.SelectedSection.AutomationId;
@@ -158,14 +173,14 @@ public sealed partial class SettingsShellPage : Page, IPrimaryContentFocusTarget
             string.Equals(Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(item), automationId, StringComparison.Ordinal));
         if (navItem is null)
         {
-            return;
+            return false;
         }
 
         var interactiveControls = GetInteractiveControlsInTraversalOrder().ToArray();
         var firstInteractive = interactiveControls.FirstOrDefault();
         if (firstInteractive is null)
         {
-            return;
+            return false;
         }
 
         navItem.XYFocusDown = firstInteractive;
@@ -179,6 +194,48 @@ public sealed partial class SettingsShellPage : Page, IPrimaryContentFocusTarget
                 ? interactiveControls[i + 1]
                 : null;
         }
+
+        return true;
+    }
+
+    private void AttachDeferredFocusTargetRefresh(FrameworkElement root)
+    {
+        if (ReferenceEquals(_pendingFocusTargetRefreshRoot, root))
+        {
+            return;
+        }
+
+        DetachDeferredFocusTargetRefresh();
+        _pendingFocusTargetRefreshRoot = root;
+        root.Loaded += OnDeferredFocusTargetRefreshLoaded;
+        root.LayoutUpdated += OnDeferredFocusTargetRefreshLayoutUpdated;
+    }
+
+    private void DetachDeferredFocusTargetRefresh()
+    {
+        if (_pendingFocusTargetRefreshRoot is null)
+        {
+            return;
+        }
+
+        _pendingFocusTargetRefreshRoot.Loaded -= OnDeferredFocusTargetRefreshLoaded;
+        _pendingFocusTargetRefreshRoot.LayoutUpdated -= OnDeferredFocusTargetRefreshLayoutUpdated;
+        _pendingFocusTargetRefreshRoot = null;
+    }
+
+    private void OnDeferredFocusTargetRefreshLoaded(object sender, RoutedEventArgs e)
+    {
+        _ = DispatcherQueue.TryEnqueue(RefreshOrDeferCurrentSectionFocusTargets);
+    }
+
+    private void OnDeferredFocusTargetRefreshLayoutUpdated(object sender, object e)
+    {
+        if (!ReferenceEquals(sender, _pendingFocusTargetRefreshRoot))
+        {
+            return;
+        }
+
+        RefreshOrDeferCurrentSectionFocusTargets();
     }
 
     private IEnumerable<Control> GetInteractiveControlsInTraversalOrder()

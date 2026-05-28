@@ -3,15 +3,20 @@ using Microsoft.UI.Input;
 using SalmonEgg.Platforms.Windows;
 using SalmonEgg.Presentation.Core.Services.Input;
 using Microsoft.Extensions.DependencyInjection;
+using System.Diagnostics;
 using WinUIKeyEventArgs = Microsoft.UI.Input.KeyEventArgs;
 
 namespace SalmonEgg;
 
 public sealed partial class MainPage
 {
+    private static readonly TimeSpan PolledGamepadSuppressionWindow = TimeSpan.FromMilliseconds(150);
+
     private TrayIconManager? _trayIcon;
     private InputKeyboardSource? _debugKeyboardSource;
     private IGamepadNavigationDispatcher? _virtualGamepadNavigationDispatcher;
+    private GamepadNavigationIntent? _lastNativeGamepadIntent;
+    private long _lastNativeGamepadIntentTimestamp;
     private bool _allowClose;
 
     partial void InitializeTray()
@@ -175,10 +180,24 @@ public sealed partial class MainPage
 
     private void OnPlatformGamepadDirectionalBridgeKeyDown(InputKeyboardSource sender, WinUIKeyEventArgs args)
     {
+        RecordNativeGamepadIntent(args.VirtualKey);
+
         switch (args.VirtualKey)
         {
             case Windows.System.VirtualKey.GamepadDPadRight:
                 if (IsFocusWithinMainNavigation() && TryMoveFocusFromMainNavigationIntoCurrentContent())
+                {
+                    args.Handled = true;
+                }
+                break;
+            case Windows.System.VirtualKey.GamepadDPadUp:
+                if ((_virtualGamepadNavigationDispatcher?.TryDispatchWithoutNativeFallback(GamepadNavigationIntent.MoveUp)).GetValueOrDefault())
+                {
+                    args.Handled = true;
+                }
+                break;
+            case Windows.System.VirtualKey.GamepadDPadDown:
+                if ((_virtualGamepadNavigationDispatcher?.TryDispatchWithoutNativeFallback(GamepadNavigationIntent.MoveDown)).GetValueOrDefault())
                 {
                     args.Handled = true;
                 }
@@ -190,5 +209,38 @@ public sealed partial class MainPage
                 }
                 break;
         }
+    }
+
+    private bool ShouldSuppressPolledGamepadIntentForWindows(GamepadNavigationIntent intent)
+    {
+        if (_lastNativeGamepadIntent != intent || _lastNativeGamepadIntentTimestamp == 0)
+        {
+            return false;
+        }
+
+        var elapsed = Stopwatch.GetElapsedTime(_lastNativeGamepadIntentTimestamp);
+        return elapsed <= PolledGamepadSuppressionWindow;
+    }
+
+    private void RecordNativeGamepadIntent(Windows.System.VirtualKey virtualKey)
+    {
+        var intent = virtualKey switch
+        {
+            Windows.System.VirtualKey.GamepadDPadUp => GamepadNavigationIntent.MoveUp,
+            Windows.System.VirtualKey.GamepadDPadDown => GamepadNavigationIntent.MoveDown,
+            Windows.System.VirtualKey.GamepadDPadLeft => GamepadNavigationIntent.MoveLeft,
+            Windows.System.VirtualKey.GamepadDPadRight => GamepadNavigationIntent.MoveRight,
+            Windows.System.VirtualKey.GamepadA => GamepadNavigationIntent.Activate,
+            Windows.System.VirtualKey.GamepadB => GamepadNavigationIntent.Back,
+            _ => (GamepadNavigationIntent?)null
+        };
+
+        if (intent is null)
+        {
+            return;
+        }
+
+        _lastNativeGamepadIntent = intent.Value;
+        _lastNativeGamepadIntentTimestamp = Stopwatch.GetTimestamp();
     }
 }

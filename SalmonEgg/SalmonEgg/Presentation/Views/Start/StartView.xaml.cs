@@ -8,7 +8,7 @@ using SalmonEgg.Presentation.ViewModels.Start;
 
 namespace SalmonEgg.Presentation.Views.Start;
 
-public sealed partial class StartView : Page, INavigationIntentConsumer, IPrimaryContentFocusTarget
+public sealed partial class StartView : Page, IPrimaryContentFocusTarget
 {
     public StartViewModel ViewModel { get; }
 
@@ -48,52 +48,12 @@ public sealed partial class StartView : Page, INavigationIntentConsumer, IPrimar
         RefreshHeroSuggestionFocusTargets();
     }
 
-    public bool TryConsumeNavigationIntent(GamepadNavigationIntent intent)
-    {
-        if (intent == GamepadNavigationIntent.MoveDown && IsFocusWithinHeroSuggestions())
-        {
-            return TryFocusPromptBox();
-        }
-
-        if (intent == GamepadNavigationIntent.MoveUp && IsFocusWithinComposerShellButNotSuggestions())
-        {
-            return TryFocusPrimaryContentTarget();
-        }
-
-        return false;
-    }
-
-    private bool IsFocusWithinComposerShellButNotSuggestions()
-    {
-        if (HeroSuggestionsHost.XamlRoot is null)
-        {
-            return false;
-        }
-
-        var current = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(HeroSuggestionsHost.XamlRoot) as DependencyObject;
-        if (current is null || IsFocusWithinHeroSuggestions())
-        {
-            return false;
-        }
-
-        var promptBox = FindPromptBox();
-        if (promptBox is not null && IsDescendantOrSelf(current, promptBox))
-        {
-            return true;
-        }
-
-        var inComposerShell = IsDescendantOrSelf(current, ComposerShell)
-                              && promptBox is not null
-                              && IsDescendantOrSelf(current, promptBox);
-        return inComposerShell;
-    }
-
     public bool TryFocusPrimaryContentTarget()
     {
         if (ViewModel.Suggestions.Count > 0
             && FindSuggestionButton(ViewModel.Suggestions[0].AutomationId) is Button firstSuggestion)
         {
-            return firstSuggestion.Focus(FocusState.Keyboard);
+            return firstSuggestion.Focus(FocusState.Programmatic);
         }
 
         return TryFocusPromptBox();
@@ -104,31 +64,10 @@ public sealed partial class StartView : Page, INavigationIntentConsumer, IPrimar
         return TryFocusPrimaryContentTarget();
     }
 
-    private bool IsFocusWithinHeroSuggestions()
-    {
-        if (HeroSuggestionsHost.XamlRoot is null)
-        {
-            return false;
-        }
-
-        var current = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(HeroSuggestionsHost.XamlRoot) as DependencyObject;
-        while (current is not null)
-        {
-            if (ReferenceEquals(current, HeroSuggestionsHost))
-            {
-                return true;
-            }
-
-            current = VisualTreeHelper.GetParent(current);
-        }
-
-        return false;
-    }
-
     private bool TryFocusPromptBox()
     {
         return FindPromptBox() is TextBox promptBox
-            && promptBox.Focus(FocusState.Keyboard);
+            && promptBox.Focus(FocusState.Programmatic);
     }
 
     private DependencyObject? FindPromptBox()
@@ -192,36 +131,5 @@ public sealed partial class StartView : Page, INavigationIntentConsumer, IPrimar
         }
 
         return null;
-    }
-
-    private static T? FindAncestorOrSelf<T>(DependencyObject? current)
-        where T : DependencyObject
-    {
-        while (current is not null)
-        {
-            if (current is T match)
-            {
-                return match;
-            }
-
-            current = VisualTreeHelper.GetParent(current);
-        }
-
-        return null;
-    }
-
-    private static bool IsDescendantOrSelf(DependencyObject? current, DependencyObject target)
-    {
-        while (current is not null)
-        {
-            if (ReferenceEquals(current, target))
-            {
-                return true;
-            }
-
-            current = VisualTreeHelper.GetParent(current);
-        }
-
-        return false;
     }
 }

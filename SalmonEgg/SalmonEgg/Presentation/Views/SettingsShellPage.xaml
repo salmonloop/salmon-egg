@@ -37,6 +37,7 @@
                         Grid.Row="0"
                         Margin="0,0,0,16"
                         XYFocusKeyboardNavigation="Enabled"
+                        AutomationProperties.AutomationId="SettingsNavView"
                         MenuItemsSource="{x:Bind ViewModel.Sections, Mode=OneWay}"
                         MenuItemTemplate="{StaticResource SettingsSectionNavItemTemplate}"
                         SelectedItem="{x:Bind ViewModel.SelectedSection, Mode=OneWay}" />

@@ -560,7 +560,7 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
             return false;
         }
 
-        InputBox.Focus(FocusState.Keyboard);
+        InputBox.Focus(FocusState.Programmatic);
         InputBox.SelectionStart = InputBox.Text?.Length ?? 0;
         InputBox.SelectionLength = 0;
         return true;
@@ -573,7 +573,7 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
             return false;
         }
 
-        InputBox.Focus(FocusState.Keyboard);
+        InputBox.Focus(FocusState.Programmatic);
         InputBox.SelectionStart = InputBox.Text?.Length ?? 0;
         InputBox.SelectionLength = 0;
         return true;

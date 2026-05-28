@@ -338,7 +338,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
                 && ViewModel.ShouldShowTranscriptSurface
                 && ViewModel.MessageHistory.Count > 0)
             {
-                return MessagesList.Focus(FocusState.Keyboard);
+                return MessagesList.Focus(FocusState.Programmatic);
             }
 
             if (ViewModel.ShouldShowConversationInputSurface
@@ -350,7 +350,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
             if (ViewModel.ShouldShowSessionHeader
                 && CurrentSessionTitleBlock is not null)
             {
-                return CurrentSessionTitleBlock.Focus(FocusState.Keyboard);
+                return CurrentSessionTitleBlock.Focus(FocusState.Programmatic);
             }
 
             return false;
@@ -360,7 +360,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
         {
             if (MessagesList is not null)
             {
-                _ = MessagesList.Focus(FocusState.Keyboard);
+                _ = MessagesList.Focus(FocusState.Programmatic);
             }
         }
 

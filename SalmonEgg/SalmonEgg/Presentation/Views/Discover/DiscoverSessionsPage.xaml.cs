@@ -92,7 +92,7 @@ public sealed partial class DiscoverSessionsPage : Page, INavigationIntentConsum
         {
             if (!moveRight && FindAncestorOrSelf<ListViewItem>(current) is { } focusedItemContainer)
             {
-                return focusedItemContainer.Focus(FocusState.Keyboard);
+                return focusedItemContainer.Focus(FocusState.Programmatic);
             }
 
             return false;
@@ -107,7 +107,7 @@ public sealed partial class DiscoverSessionsPage : Page, INavigationIntentConsum
         if (moveRight && FindDescendant<Button>(sessionItemContainer, button =>
                 string.Equals(AutomationProperties.GetAutomationId(button), "DiscoverSessions.ImportButton", StringComparison.Ordinal)) is { } actionButton)
         {
-            return actionButton.Focus(FocusState.Keyboard);
+            return actionButton.Focus(FocusState.Programmatic);
         }
 
         return false;
@@ -125,12 +125,12 @@ public sealed partial class DiscoverSessionsPage : Page, INavigationIntentConsum
         {
             if (ViewModel.SelectedProfile is not null
                 && ProfilesList.ContainerFromItem(ViewModel.SelectedProfile) is Control selectedProfileContainer
-                && selectedProfileContainer.Focus(FocusState.Keyboard))
+                && selectedProfileContainer.Focus(FocusState.Programmatic))
             {
                 return;
             }
 
-            _ = ProfilesList.Focus(FocusState.Keyboard);
+            _ = ProfilesList.Focus(FocusState.Programmatic);
         });
 
         return true;

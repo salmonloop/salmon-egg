@@ -181,6 +181,15 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
 
     partial void DetachPlatformGamepadDirectionalBridge();
 
+    private bool ShouldSuppressPolledGamepadIntent(GamepadNavigationIntent intent)
+    {
+#if WINDOWS
+        return ShouldSuppressPolledGamepadIntentForWindows(intent);
+#else
+        return false;
+#endif
+    }
+
     private void OnMainPageUnloaded(object sender, RoutedEventArgs e)
     {
         DetachGamepadInput();
@@ -710,11 +719,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
             {
                 if (MainNavView.XamlRoot is not null)
                 {
-                    var focusedElement = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(MainNavView.XamlRoot);
-                    if (focusedElement is null)
-                    {
-                        MainNavView.Focus(FocusState.Keyboard);
-                    }
+                    MainNavView.Focus(FocusState.Programmatic);
                 }
             });
     }
@@ -751,7 +756,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
             return;
         }
 
-        if (intent is GamepadNavigationIntent.MoveUp or GamepadNavigationIntent.MoveDown)
+        if (ShouldSuppressPolledGamepadIntent(intent))
         {
             return;
         }
@@ -761,16 +766,17 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
 
     public bool TryConsumeNavigationIntent(GamepadNavigationIntent intent)
     {
+        if (intent != GamepadNavigationIntent.MoveRight)
+        {
+            return false;
+        }
+
         if (!IsFocusWithinMainNavigation())
         {
             return false;
         }
 
-        return intent switch
-        {
-            GamepadNavigationIntent.MoveRight => TryMoveFocusFromMainNavigationIntoCurrentContent(),
-            _ => false
-        };
+        return TryMoveFocusFromMainNavigationIntoCurrentContent();
     }
 
     public bool TryGoBack()
@@ -870,7 +876,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
 
         if (ContentFrame.Content is FrameworkElement element)
         {
-            return element.Focus(FocusState.Keyboard);
+            return element.Focus(FocusState.Programmatic);
         }
 
         return false;
@@ -886,12 +892,12 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
         var navigationTarget = ResolveCurrentNavigationFocusTarget();
         if (navigationTarget is not null
             && MainNavView.ContainerFromMenuItem(navigationTarget) is Control selectedContainer
-            && selectedContainer.Focus(FocusState.Keyboard))
+            && selectedContainer.Focus(FocusState.Programmatic))
         {
             return true;
         }
 
-        return MainNavView.Focus(FocusState.Keyboard);
+        return MainNavView.Focus(FocusState.Programmatic);
     }
 
     private object? ResolveCurrentNavigationFocusTarget()

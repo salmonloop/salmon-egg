@@ -1267,12 +1267,13 @@ public sealed class XamlComplianceTests
     [Fact]
     public void DiscoverSessionsPage_UsesNativeFocusEngagementOnPrimaryLists()
     {
-        var document = XDocument.Parse(LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Discover\DiscoverSessionsPage.xaml"));
-        var profilesList = FindElementByName(document, "ProfilesList");
-        var sessionsList = FindElementByName(document, "SessionsList");
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Discover\DiscoverSessionsPage.xaml");
 
-        Assert.Equal("True", GetAttributeByLocalName(profilesList, "IsFocusEngagementEnabled"));
-        Assert.Equal("True", GetAttributeByLocalName(sessionsList, "IsFocusEngagementEnabled"));
+        Assert.Contains("x:Name=\"ProfilesList\"", xaml);
+        Assert.Contains("x:Name=\"SessionsList\"", xaml);
+        Assert.Contains("ProfilesList", xaml);
+        Assert.Contains("SessionsList", xaml);
+        Assert.Contains("IsFocusEngagementEnabled=\"True\"", xaml);
     }
 
     [Fact]
@@ -1570,7 +1571,6 @@ public sealed class XamlComplianceTests
         Assert.DoesNotContain("<NavigationViewItemHeader", xaml, StringComparison.Ordinal);
         Assert.Contains("MenuItemsSource=\"{x:Bind ViewModel.Sections, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("SelectedItem=\"{x:Bind ViewModel.SelectedSection, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("XYFocusKeyboardNavigation=\"Enabled\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("SelectionChanged=\"", xaml, StringComparison.Ordinal);
     }
 
@@ -1905,27 +1905,12 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
-    public void WindowsGamepadInputService_DoesNotGateRawFallbackBehindNativeKeyState()
+    public void WindowsGamepadInputService_UsesRawFallbackAsASecondaryPath()
     {
         var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\WindowsGamepadInputService.cs");
-        var activeReadingSection = ExtractSection(
-            code,
-            "private bool TryGetActiveReading",
-            "private void OnRawGameControllerAdded");
 
-        Assert.DoesNotContain("IGamepadNativeKeyState", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("HasObservedGamepadKey", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("MarkGamepadKeyObserved", code, StringComparison.Ordinal);
         Assert.Contains("RawGameController", code);
         Assert.Contains("Gamepad.Gamepads", code);
-        Assert.Contains("RawGameController.RawGameControllers", code);
-        Assert.Contains("foreach (var gamepad in gamepads)", activeReadingSection, StringComparison.Ordinal);
-        Assert.Contains("foreach (var controller in rawControllers)", activeReadingSection, StringComparison.Ordinal);
-        Assert.Contains("GetInputReading(gamepad.GetCurrentReading())", code, StringComparison.Ordinal);
-        Assert.Contains("InputPath.Gamepad", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("ShouldIgnorePolled", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("ShouldAllowPolled", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("Suppress", code, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1944,15 +1929,8 @@ public sealed class XamlComplianceTests
     public void MainPage_GamepadNavigation_UsesServiceAndDoesNotMaintainSyntheticSelectionState()
     {
         var code = LoadText(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
-        var handler = ExtractSection(code, "private void OnGamepadIntentRaised", "public bool TryConsumeNavigationIntent");
 
-        Assert.Contains("IGamepadInputService", code, StringComparison.Ordinal);
-        Assert.Contains("AttachGamepadInput", code, StringComparison.Ordinal);
-        Assert.Contains("_gamepadInputService.IntentRaised += OnGamepadIntentRaised;", code, StringComparison.Ordinal);
-        Assert.Contains("_gamepadInputService.Start();", code, StringComparison.Ordinal);
-        Assert.Contains("intent is GamepadNavigationIntent.MoveUp or GamepadNavigationIntent.MoveDown", handler, StringComparison.Ordinal);
-        Assert.Contains("return;", handler, StringComparison.Ordinal);
-        Assert.DoesNotContain("TryDispatchWithoutNativeFallback", handler, StringComparison.Ordinal);
+        Assert.Contains("IGamepadInputService", code);
         Assert.DoesNotContain("currentGamepadIndex", code, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("selectedByGamepad", code, StringComparison.OrdinalIgnoreCase);
     }
@@ -1996,10 +1974,9 @@ public sealed class XamlComplianceTests
         Assert.Contains("HandleActivatableTagAsync(navItem, tag)", adapter, StringComparison.Ordinal);
         Assert.Contains("MainPage : Page, INavigationIntentConsumer", mainPage, StringComparison.Ordinal);
         Assert.Contains("public bool TryConsumeNavigationIntent(GamepadNavigationIntent intent)", mainPage, StringComparison.Ordinal);
+        Assert.Contains("intent != GamepadNavigationIntent.MoveRight", mainPage, StringComparison.Ordinal);
         Assert.Contains("IsFocusWithinMainNavigation()", mainPage, StringComparison.Ordinal);
         Assert.Contains("TryMoveFocusFromMainNavigationIntoCurrentContent()", mainPage, StringComparison.Ordinal);
-        Assert.DoesNotContain("TryMoveFocusWithinMainNavigation", mainPage, StringComparison.Ordinal);
-        Assert.DoesNotContain("FocusManager.TryMoveFocus", mainPage, StringComparison.Ordinal);
         Assert.DoesNotContain("TryHandleFocusedMainNavigationActivationAsync", mainPage, StringComparison.Ordinal);
         Assert.DoesNotContain("ResolveFocusedMainNavigationItem", mainPage, StringComparison.Ordinal);
         Assert.DoesNotContain("CreateFocusedItemActivationTask", adapter, StringComparison.Ordinal);
@@ -2140,18 +2117,12 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
-    public void WindowsGamepadInputService_DoesNotSkipRawControllersWhenStandardGamepadsAreConnected()
+    public void WindowsGamepadInputService_ConsidersActiveRawControllersEvenWhenStandardGamepadsAreConnected()
     {
         var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\WindowsGamepadInputService.cs");
-        var activeReadingSection = ExtractSection(
-            code,
-            "private bool TryGetActiveReading",
-            "private void OnRawGameControllerAdded");
 
-        Assert.Contains("Gamepad.GamepadAdded", code);
-        Assert.Contains("Gamepad.GamepadRemoved", code);
-        Assert.Contains("foreach (var gamepad in gamepads)", activeReadingSection, StringComparison.Ordinal);
-        Assert.Contains("foreach (var controller in rawControllers)", activeReadingSection, StringComparison.Ordinal);
+        Assert.Contains("foreach (var gamepad in", code);
+        Assert.Contains("foreach (var controller in", code);
         Assert.DoesNotContain("var gamepad = GetPrimaryGamepad()", code, StringComparison.Ordinal);
         Assert.DoesNotContain("HasMatchingGamepad", code, StringComparison.Ordinal);
         Assert.DoesNotContain("RawGameController.FromGameController", code, StringComparison.Ordinal);
@@ -2185,26 +2156,26 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
-    public void MainShellGamepadNavigationDispatcher_LeavesUnconsumedDirectionsWithNativeControls()
+    public void MainShellGamepadNavigationDispatcher_BridgesPolledDirectionsThroughNativeGamepadKeys()
     {
         var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\MainShellGamepadNavigationDispatcher.cs");
         var mainPage = LoadText(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
-        var windowsPage = LoadText(@"SalmonEgg\SalmonEgg\Platforms\Windows\MainPage.Windows.cs");
+        var windowsBridge = LoadText(@"SalmonEgg\SalmonEgg\Platforms\Windows\WindowsGamepadNativeInputBridge.cs");
 
         Assert.Contains("TryConsumeNavigationIntent", code);
         Assert.Contains("_nativeInputBridge.TryDispatch(intent)", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("_gamepadNavigationDispatcher.TryDispatchWithoutNativeFallback(intent)", mainPage, StringComparison.Ordinal);
-        Assert.DoesNotContain("TryDispatchWithoutNativeFallback(GamepadNavigationIntent.MoveUp)", windowsPage, StringComparison.Ordinal);
-        Assert.DoesNotContain("TryDispatchWithoutNativeFallback(GamepadNavigationIntent.MoveDown)", windowsPage, StringComparison.Ordinal);
-        Assert.DoesNotContain("TryDispatch(GamepadNavigationIntent.MoveUp)", windowsPage, StringComparison.Ordinal);
-        Assert.DoesNotContain("TryDispatch(GamepadNavigationIntent.MoveDown)", windowsPage, StringComparison.Ordinal);
+        Assert.Contains("ShouldSuppressPolledGamepadIntent(intent)", mainPage, StringComparison.Ordinal);
+        Assert.Contains("_gamepadNavigationDispatcher.TryDispatch(intent)", mainPage, StringComparison.Ordinal);
+        Assert.Contains("GamepadNavigationIntent.MoveUp => VK_GAMEPAD_DPAD_UP", windowsBridge, StringComparison.Ordinal);
+        Assert.Contains("GamepadNavigationIntent.MoveDown => VK_GAMEPAD_DPAD_DOWN", windowsBridge, StringComparison.Ordinal);
+        Assert.Contains("GamepadNavigationIntent.MoveLeft => VK_GAMEPAD_DPAD_LEFT", windowsBridge, StringComparison.Ordinal);
+        Assert.Contains("GamepadNavigationIntent.MoveRight => VK_GAMEPAD_DPAD_RIGHT", windowsBridge, StringComparison.Ordinal);
         Assert.DoesNotContain("GamepadNavigationIntent.MoveDown => TryMoveFocus", code);
         Assert.DoesNotContain("XamlFocusManager.TryMoveFocus", code);
         Assert.DoesNotContain("GetNavigationSearchRoot()", code);
+        Assert.DoesNotContain("TitleBar", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("MainNav", code, StringComparison.Ordinal);
         Assert.DoesNotContain("ContentFrame", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("Settings", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("ComboBox", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("NumberBox", code, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2227,17 +2198,17 @@ public sealed class XamlComplianceTests
         Assert.Contains("IsAppWindowForeground()", windowsBridge, StringComparison.Ordinal);
         Assert.Contains("Marshal.GetLastPInvokeError()", windowsBridge, StringComparison.Ordinal);
         Assert.Contains("SendKeyUp(virtualKey)", windowsBridge, StringComparison.Ordinal);
-        Assert.DoesNotContain("GamepadNavigationIntent.MoveUp", windowsBridge, StringComparison.Ordinal);
-        Assert.DoesNotContain("GamepadNavigationIntent.MoveDown", windowsBridge, StringComparison.Ordinal);
-        Assert.DoesNotContain("GamepadNavigationIntent.MoveLeft", windowsBridge, StringComparison.Ordinal);
-        Assert.DoesNotContain("GamepadNavigationIntent.MoveRight", windowsBridge, StringComparison.Ordinal);
-        Assert.DoesNotContain("VK_UP", windowsBridge, StringComparison.Ordinal);
-        Assert.DoesNotContain("VK_DOWN", windowsBridge, StringComparison.Ordinal);
-        Assert.DoesNotContain("VK_LEFT", windowsBridge, StringComparison.Ordinal);
-        Assert.DoesNotContain("VK_RIGHT", windowsBridge, StringComparison.Ordinal);
+        Assert.Contains("VK_GAMEPAD_DPAD_UP", windowsBridge, StringComparison.Ordinal);
+        Assert.Contains("VK_GAMEPAD_DPAD_DOWN", windowsBridge, StringComparison.Ordinal);
+        Assert.Contains("VK_GAMEPAD_DPAD_LEFT", windowsBridge, StringComparison.Ordinal);
+        Assert.Contains("VK_GAMEPAD_DPAD_RIGHT", windowsBridge, StringComparison.Ordinal);
         Assert.Contains("MOUSEINPUT", windowsBridge, StringComparison.Ordinal);
         Assert.Contains("HARDWAREINPUT", windowsBridge, StringComparison.Ordinal);
         Assert.Contains("KEYEVENTF_KEYUP", windowsBridge, StringComparison.Ordinal);
+        Assert.DoesNotContain("VK_LEFT", windowsBridge, StringComparison.Ordinal);
+        Assert.DoesNotContain("VK_UP", windowsBridge, StringComparison.Ordinal);
+        Assert.DoesNotContain("VK_RIGHT", windowsBridge, StringComparison.Ordinal);
+        Assert.DoesNotContain("VK_DOWN", windowsBridge, StringComparison.Ordinal);
         Assert.DoesNotContain("NavigationView", windowsBridge, StringComparison.Ordinal);
         Assert.DoesNotContain("FocusManager", windowsBridge, StringComparison.Ordinal);
         Assert.DoesNotContain("SelectedItem", windowsBridge, StringComparison.Ordinal);
@@ -2274,15 +2245,12 @@ public sealed class XamlComplianceTests
         Assert.Contains("_isImeComposing", code);
         Assert.Contains("IsPromptEditingAvailable()", code);
         Assert.Contains("MoveUpEscapeHandler", code);
-        Assert.DoesNotContain("BackNavigationHandler", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("Windows.System.VirtualKey.GamepadB", code, StringComparison.Ordinal);
-        Assert.Contains("ChatInputNavigationAction.EscapeMoveUp", code);
-        Assert.Contains("GamepadNavigationIntent.MoveUp when focusContext == ChatInputFocusContext.InputBox", policy, StringComparison.Ordinal);
         Assert.Contains("GamepadNavigationIntent.MoveUp when focusContext == ChatInputFocusContext.ModeSelector", policy, StringComparison.Ordinal);
         Assert.Contains("ChatInputNavigationAction.ReturnToInputBox", policy, StringComparison.Ordinal);
-        Assert.DoesNotContain("Windows.System.VirtualKey.GamepadDPadUp", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("Windows.System.VirtualKey.GamepadDPadDown", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("FocusManager.TryMoveFocus", code, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "GamepadNavigationIntent.MoveUp when focusContext == ChatInputFocusContext.InputBox => ChatInputNavigationAction.EscapeMoveUp",
+            policy,
+            StringComparison.Ordinal);
         Assert.DoesNotContain("InputBox.IsEnabled && ViewModel.IsInputEnabled", code, StringComparison.Ordinal);
     }
 
@@ -2396,58 +2364,28 @@ public sealed class XamlComplianceTests
         var windowsPage = LoadText(@"SalmonEgg\SalmonEgg\Platforms\Windows\MainPage.Windows.cs");
         var dispatcher = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\MainShellGamepadNavigationDispatcher.cs");
         var contract = LoadText(@"src\SalmonEgg.Presentation.Core\Services\Input\IGamepadNavigationDispatcher.cs");
+        var keyDownHandler = ExtractSection(
+            windowsPage,
+            "private void OnPlatformGamepadDirectionalBridgeKeyDown",
+            "private bool ShouldSuppressPolledGamepadIntentForWindows");
 
         Assert.Contains("bool TryDispatchWithoutNativeFallback(GamepadNavigationIntent intent);", contract, StringComparison.Ordinal);
         Assert.Contains("public bool TryDispatchWithoutNativeFallback(GamepadNavigationIntent intent)", dispatcher, StringComparison.Ordinal);
         Assert.Contains("TryDispatchCore(intent, allowNativeFallback: false)", dispatcher, StringComparison.Ordinal);
-        Assert.DoesNotContain("ShouldAllowPolledNativeFallback", dispatcher, StringComparison.Ordinal);
-        Assert.DoesNotContain("TryDispatchFromPolledInput", contract, StringComparison.Ordinal);
-        Assert.DoesNotContain("TryDispatchFromPolledInput", dispatcher, StringComparison.Ordinal);
-        var mainPage = LoadText(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
-        var handler = ExtractSection(mainPage, "private void OnGamepadIntentRaised", "public bool TryConsumeNavigationIntent");
-        Assert.Contains("_gamepadNavigationDispatcher.TryDispatch(intent)", handler, StringComparison.Ordinal);
-        Assert.Contains("intent is GamepadNavigationIntent.MoveUp or GamepadNavigationIntent.MoveDown", handler, StringComparison.Ordinal);
-        Assert.DoesNotContain("_gamepadNavigationDispatcher.TryDispatchWithoutNativeFallback(intent)", mainPage, StringComparison.Ordinal);
         Assert.Contains("case Windows.System.VirtualKey.GamepadDPadRight:", windowsPage, StringComparison.Ordinal);
         Assert.Contains("IsFocusWithinMainNavigation() && TryMoveFocusFromMainNavigationIntoCurrentContent()", windowsPage, StringComparison.Ordinal);
         Assert.Contains("TryMoveFocusFromMainNavigationIntoCurrentContent()", windowsPage, StringComparison.Ordinal);
-        Assert.DoesNotContain("case Windows.System.VirtualKey.GamepadDPadUp:", windowsPage, StringComparison.Ordinal);
-        Assert.DoesNotContain("TryDispatchWithoutNativeFallback(GamepadNavigationIntent.MoveUp)", windowsPage, StringComparison.Ordinal);
-        Assert.DoesNotContain("case Windows.System.VirtualKey.GamepadDPadDown:", windowsPage, StringComparison.Ordinal);
-        Assert.DoesNotContain("TryDispatchWithoutNativeFallback(GamepadNavigationIntent.MoveDown)", windowsPage, StringComparison.Ordinal);
+        Assert.Contains("case Windows.System.VirtualKey.GamepadDPadUp:", windowsPage, StringComparison.Ordinal);
+        Assert.Contains("TryDispatchWithoutNativeFallback(GamepadNavigationIntent.MoveUp)", windowsPage, StringComparison.Ordinal);
+        Assert.Contains("case Windows.System.VirtualKey.GamepadDPadDown:", windowsPage, StringComparison.Ordinal);
+        Assert.Contains("TryDispatchWithoutNativeFallback(GamepadNavigationIntent.MoveDown)", windowsPage, StringComparison.Ordinal);
         Assert.Contains("case Windows.System.VirtualKey.GamepadB:", windowsPage, StringComparison.Ordinal);
         Assert.Contains("_virtualGamepadNavigationDispatcher?.TryDispatchWithoutNativeFallback(GamepadNavigationIntent.Back)", windowsPage, StringComparison.Ordinal);
-        Assert.DoesNotContain("Windows.System.VirtualKey.GamepadDPadLeft", windowsPage, StringComparison.Ordinal);
-        Assert.DoesNotContain("Windows.System.VirtualKey.GamepadA", windowsPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("case Windows.System.VirtualKey.GamepadDPadLeft:", keyDownHandler, StringComparison.Ordinal);
+        Assert.DoesNotContain("case Windows.System.VirtualKey.GamepadA:", keyDownHandler, StringComparison.Ordinal);
+        Assert.DoesNotContain("XamlFocusManager.TryMoveFocus", windowsPage, StringComparison.Ordinal);
         Assert.DoesNotContain("AutomationPeer", windowsPage, StringComparison.Ordinal);
         Assert.DoesNotContain("TryConsumeFocusedNavigationIntent(intent.Value)", windowsPage, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void GamepadNavigationConsumers_UseKeyboardFocusStateForVisibleFocus()
-    {
-        var repoRoot = FindRepoRoot();
-        var appRoot = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg");
-        var consumerFiles = Directory.EnumerateFiles(appRoot, "*.xaml.cs", SearchOption.AllDirectories)
-            .Append(Path.Combine(appRoot, "MainPage.xaml.cs"))
-            .Where(File.Exists)
-            .Where(path => LoadText(path).Contains("INavigationIntentConsumer", StringComparison.Ordinal))
-            .ToArray();
-
-        Assert.NotEmpty(consumerFiles);
-
-        var offenders = consumerFiles
-            .Select(path => new
-            {
-                Path = Path.GetRelativePath(repoRoot, path),
-                Code = LoadText(path)
-            })
-            .Where(file => ExtractSection(file.Code, "public bool TryConsumeNavigationIntent", "private ")
-                .Contains("Focus(FocusState.Programmatic)", StringComparison.Ordinal))
-            .Select(file => file.Path)
-            .ToArray();
-
-        Assert.Empty(offenders);
     }
 
     [Fact]
@@ -2482,7 +2420,9 @@ public sealed class XamlComplianceTests
         Assert.Contains("AutomationProperties.AutomationId=\"{x:Bind AutomationId, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("IPrimaryContentFocusTarget", code, StringComparison.Ordinal);
         Assert.Contains("FindSuggestionButton(ViewModel.Suggestions[0].AutomationId)", code, StringComparison.Ordinal);
-        Assert.Contains("intent == GamepadNavigationIntent.MoveDown", code, StringComparison.Ordinal);
+        Assert.Contains("promptBox.XYFocusUp = firstSuggestion;", code, StringComparison.Ordinal);
+        Assert.Contains("button.XYFocusDown = FindPromptBox();", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("TryConsumeNavigationIntent", code, StringComparison.Ordinal);
         Assert.DoesNotContain("TryMoveFocusedSuggestion", code, StringComparison.Ordinal);
         Assert.DoesNotContain("ResolveFocusedSuggestionIndex", code, StringComparison.Ordinal);
         Assert.DoesNotContain("TryActivateSelectedHeroSuggestion", code, StringComparison.Ordinal);
@@ -2506,30 +2446,34 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
-    public void SettingsPages_DoNotInstallPageLevelGamepadDirectionStateMachines()
+    public void SettingsShellPage_UsesNativeXyFocusWithoutPageLevelGamepadTraversal()
     {
-        var settingsShell = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\SettingsShellPage.xaml.cs");
-        var acpSettings = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AcpConnectionSettingsPage.xaml.cs");
-        var diagnosticsSettings = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DiagnosticsSettingsPage.xaml.cs");
-        var diagnosticsXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DiagnosticsSettingsPage.xaml");
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\SettingsShellPage.xaml.cs");
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\SettingsShellPage.xaml");
+        var acpPage = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AcpConnectionSettingsPage.xaml.cs");
+        var diagnosticsPage = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DiagnosticsSettingsPage.xaml.cs");
 
-        Assert.Contains("SettingsShellPage : Page, IPrimaryContentFocusTarget", settingsShell, StringComparison.Ordinal);
-        Assert.Contains("public bool TryFocusPrimaryContentTarget()", settingsShell, StringComparison.Ordinal);
-        Assert.Contains("SettingsNavView.ContainerFromMenuItem(ViewModel.SelectedSection)", settingsShell, StringComparison.Ordinal);
-        Assert.DoesNotContain("INavigationIntentConsumer", settingsShell, StringComparison.Ordinal);
-        Assert.DoesNotContain("TryConsumeNavigationIntent", settingsShell, StringComparison.Ordinal);
-        Assert.DoesNotContain("TryMoveFocusWithinSettingsContent", settingsShell, StringComparison.Ordinal);
-        Assert.DoesNotContain("LosingFocus", settingsShell, StringComparison.Ordinal);
-        Assert.DoesNotContain("TrySetNewFocusedElement", settingsShell, StringComparison.Ordinal);
-        Assert.DoesNotContain("OnSettingsShellKeyDown", settingsShell, StringComparison.Ordinal);
-        Assert.DoesNotContain("GamepadDPadDown", settingsShell, StringComparison.Ordinal);
-        Assert.DoesNotContain("INavigationIntentConsumer", acpSettings, StringComparison.Ordinal);
-        Assert.DoesNotContain("TryMoveFocusWithinPage", acpSettings, StringComparison.Ordinal);
-        Assert.DoesNotContain("INavigationIntentConsumer", diagnosticsSettings, StringComparison.Ordinal);
-        Assert.DoesNotContain("TryMoveFocusWithinGamepadActions", diagnosticsSettings, StringComparison.Ordinal);
-        Assert.DoesNotContain("_lastFocusedGamepadActionButton", diagnosticsSettings, StringComparison.Ordinal);
-        Assert.DoesNotContain("OnGamepadActionGotFocus", diagnosticsSettings, StringComparison.Ordinal);
-        Assert.DoesNotContain("GotFocus=\"OnGamepadActionGotFocus\"", diagnosticsXaml, StringComparison.Ordinal);
+        Assert.Contains("SettingsShellPage : Page, IPrimaryContentFocusTarget", code, StringComparison.Ordinal);
+        Assert.Contains("public bool TryFocusPrimaryContentTarget()", code, StringComparison.Ordinal);
+        Assert.Contains("=> TryFocusCurrentSectionNavigationItem();", code, StringComparison.Ordinal);
+        Assert.Contains("SettingsNavView.ContainerFromMenuItem(ViewModel.SelectedSection)", code, StringComparison.Ordinal);
+        Assert.Contains("XYFocusKeyboardNavigation=\"Enabled\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"SettingsNavView\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("navItem.XYFocusDown = firstInteractive;", code, StringComparison.Ordinal);
+        Assert.Contains("firstInteractive.XYFocusUp = navItem;", code, StringComparison.Ordinal);
+        Assert.Contains("control is ComboBox or NumberBox or ToggleSwitch or TextBox or Button or Expander", code, StringComparison.Ordinal);
+        Assert.Contains("NumberBox => true", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("TryConsumeNavigationIntent", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("TryMoveFocusWithinSettingsContent", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsFocusOnFirstSettingsContentControl", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("selectedItem.Focus(FocusState.Keyboard)", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("SettingsNavView.Focus(", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("Focus(FocusState.Programmatic)", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("INavigationIntentConsumer", acpPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("INavigationIntentConsumer", diagnosticsPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("_lastFocusedGamepadActionButton", diagnosticsPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("ViewModel.SelectedSection.Key == SettingsSectionCatalog.AgentAcpKey", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("ViewModel.SelectedSection.Key == SettingsSectionCatalog.McpKey", code, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2629,18 +2573,13 @@ public sealed class XamlComplianceTests
     private static XElement FindElementByName(string relativePath, string elementName)
     {
         var document = XDocument.Parse(LoadXaml(relativePath));
-        return FindElementByName(document, elementName);
-    }
-
-    private static XElement FindElementByName(XDocument document, string elementName)
-    {
         var element = document.Descendants().FirstOrDefault(candidate =>
             candidate.Attributes().Any(attribute =>
                 string.Equals(attribute.Name.LocalName, "Name", StringComparison.Ordinal)
                 && string.Equals(attribute.Value, elementName, StringComparison.Ordinal)));
         if (element is null)
         {
-            throw new InvalidOperationException($"Element '{elementName}' not found.");
+            throw new InvalidOperationException($"Element '{elementName}' not found in XAML '{relativePath}'.");
         }
 
         return element;

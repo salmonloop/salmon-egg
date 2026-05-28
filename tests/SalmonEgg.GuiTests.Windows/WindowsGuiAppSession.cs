@@ -768,11 +768,42 @@ internal sealed class WindowsGuiAppSession : IDisposable
         }
         catch (Exception ex) when (ex is COMException or Win32Exception or InvalidOperationException or ArgumentException)
         {
-            if (!TryCaptureWindowWithScreenCopy(path))
-            {
-                throw;
-            }
+            _ = TryCaptureWindowWithScreenCopy(path);
         }
+    }
+
+    public void ResizeMainWindow(int width, int height, int x = 80, int y = 80)
+    {
+        if (width <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(width));
+        }
+
+        if (height <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(height));
+        }
+
+        BringMainWindowToFront();
+
+        if (!TryGetMainWindowHandle(out var hwnd) || hwnd == IntPtr.Zero)
+        {
+            throw new InvalidOperationException("Failed to resolve the SalmonEgg window handle.");
+        }
+
+        _ = NativeMethods.MoveWindow(hwnd, x, y, width, height, true);
+        if (WaitForWindowSize(hwnd, width, height, TimeSpan.FromSeconds(2)))
+        {
+            return;
+        }
+
+        _ = NativeMethods.SetWindowPos(hwnd, IntPtr.Zero, x, y, width, height, 0);
+        if (WaitForWindowSize(hwnd, width, height, TimeSpan.FromSeconds(2)))
+        {
+            return;
+        }
+
+        throw new InvalidOperationException("Failed to resize the SalmonEgg window.");
     }
 
     private Window ResolveMainWindow()
@@ -945,9 +976,7 @@ internal sealed class WindowsGuiAppSession : IDisposable
     {
         try
         {
-            using var process = Process.GetProcessById(_application.ProcessId);
-            var hwnd = process.MainWindowHandle;
-            if (hwnd == IntPtr.Zero || !NativeMethods.TryGetWindowRect(hwnd, out var rect))
+            if (!TryGetMainWindowHandle(out var hwnd) || hwnd == IntPtr.Zero || !NativeMethods.TryGetWindowRect(hwnd, out var rect))
             {
                 return false;
             }
@@ -968,6 +997,41 @@ internal sealed class WindowsGuiAppSession : IDisposable
         {
             return false;
         }
+    }
+
+    private bool TryGetMainWindowHandle(out IntPtr hwnd)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(_application.ProcessId);
+            hwnd = process.MainWindowHandle;
+            return hwnd != IntPtr.Zero;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or Win32Exception)
+        {
+            hwnd = IntPtr.Zero;
+            return false;
+        }
+    }
+
+    private static bool WaitForWindowSize(IntPtr hwnd, int width, int height, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (NativeMethods.TryGetWindowSize(hwnd, out var currentWidth, out var currentHeight)
+                && Math.Abs(currentWidth - width) <= 2
+                && Math.Abs(currentHeight - height) <= 2)
+            {
+                return true;
+            }
+
+            Thread.Sleep(50);
+        }
+
+        return NativeMethods.TryGetWindowSize(hwnd, out var finalWidth, out var finalHeight)
+            && Math.Abs(finalWidth - width) <= 2
+            && Math.Abs(finalHeight - height) <= 2;
     }
 
     public bool IsFocusWithinAutomationId(string automationId, int maxDepth = 16)
@@ -1502,6 +1566,12 @@ internal sealed class WindowsGuiAppSession : IDisposable
     private static class NativeMethods
     {
         [DllImport("user32.dll", SetLastError = true)]
+        internal static extern bool MoveWindow(IntPtr hWnd, int x, int y, int width, int height, bool repaint);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        internal static extern bool SetWindowPos(IntPtr hWnd, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
+
+        [DllImport("user32.dll", SetLastError = true)]
         private static extern bool GetWindowRect(IntPtr hWnd, out Rect rect);
 
         public static bool TryGetWindowRect(IntPtr hWnd, out Rect rect)
@@ -1512,6 +1582,20 @@ internal sealed class WindowsGuiAppSession : IDisposable
             }
 
             rect = default;
+            return false;
+        }
+
+        public static bool TryGetWindowSize(IntPtr hWnd, out int width, out int height)
+        {
+            if (TryGetWindowRect(hWnd, out var rect))
+            {
+                width = rect.Right - rect.Left;
+                height = rect.Bottom - rect.Top;
+                return true;
+            }
+
+            width = 0;
+            height = 0;
             return false;
         }
 

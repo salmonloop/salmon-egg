@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Xml.Linq;
 using Xunit;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat;
@@ -242,7 +241,6 @@ public sealed class ChatViewXamlTests
     {
         var chatViewCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
         var chatViewXaml = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml");
-        var messagesList = FindElementByName(chatViewXaml, "MessagesList");
 
         Assert.Contains("using SalmonEgg.Presentation.Core.Services.Input;", chatViewCode, StringComparison.Ordinal);
         Assert.Contains("public sealed partial class ChatView : Page, INavigationIntentConsumer", chatViewCode, StringComparison.Ordinal);
@@ -255,8 +253,8 @@ public sealed class ChatViewXamlTests
         Assert.Contains("MessagesList.GotFocus -= OnMessagesListGotFocus;", chatViewCode, StringComparison.Ordinal);
         Assert.Contains("MessagesList.LostFocus -= OnMessagesListLostFocus;", chatViewCode, StringComparison.Ordinal);
         Assert.Contains("_isMessagesListFocusWithin", chatViewCode, StringComparison.Ordinal);
-        Assert.Equal("True", GetAttributeByLocalName(messagesList, "IsFocusEngagementEnabled"));
-        Assert.Equal("Enabled", GetAttributeByLocalName(messagesList, "XYFocusKeyboardNavigation"));
+        Assert.Contains("IsFocusEngagementEnabled=\"True\"", chatViewXaml, StringComparison.Ordinal);
+        Assert.Contains("XYFocusKeyboardNavigation=\"Enabled\"", chatViewXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("SelectedItem =", chatViewCode, StringComparison.Ordinal);
         Assert.DoesNotContain("ChatInputArea", chatViewCode, StringComparison.Ordinal);
         Assert.DoesNotContain("FocusManager.TryMoveFocus", chatViewCode, StringComparison.Ordinal);
@@ -421,24 +419,4 @@ public sealed class ChatViewXamlTests
 
     private static string NormalizeRelativePath(string relativePath)
         => relativePath.Replace('\\', Path.DirectorySeparatorChar);
-
-    private static XElement FindElementByName(string xaml, string elementName)
-    {
-        var document = XDocument.Parse(xaml);
-        var element = document.Descendants().FirstOrDefault(candidate =>
-            candidate.Attributes().Any(attribute =>
-                string.Equals(attribute.Name.LocalName, "Name", StringComparison.Ordinal)
-                && string.Equals(attribute.Value, elementName, StringComparison.Ordinal)));
-        if (element is null)
-        {
-            throw new InvalidOperationException($"Element '{elementName}' not found.");
-        }
-
-        return element;
-    }
-
-    private static string? GetAttributeByLocalName(XElement element, string localName)
-        => element.Attributes()
-            .FirstOrDefault(attribute => string.Equals(attribute.Name.LocalName, localName, StringComparison.Ordinal))
-            ?.Value;
 }

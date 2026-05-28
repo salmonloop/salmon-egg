@@ -1,8 +1,5 @@
 using System;
-using System.Diagnostics;
 using System.IO;
-using System.Linq;
-using System.Runtime.InteropServices;
 using FlaUI.Core.Definitions;
 using Xunit.Sdk;
 
@@ -171,41 +168,6 @@ public sealed class McpSettingsSmokeTests
         {
         }
 
-        ResizeMainWindow(width: 1400, height: 900);
-    }
-
-    private static void ResizeMainWindow(int width, int height)
-    {
-        var process = Process.GetProcessesByName("SalmonEgg")
-            .OrderByDescending(candidate => candidate.StartTime)
-            .First();
-
-        if (NativeMethods.MoveWindow(process.MainWindowHandle, 80, 80, width, height, true))
-        {
-            return;
-        }
-
-        if (NativeMethods.SetWindowPos(process.MainWindowHandle, IntPtr.Zero, 80, 80, width, height, 0))
-        {
-            return;
-        }
-
-        throw new InvalidOperationException("Failed to resize the SalmonEgg window.");
-    }
-
-    private static class NativeMethods
-    {
-        [DllImport("user32.dll", SetLastError = true)]
-        internal static extern bool MoveWindow(IntPtr hWnd, int x, int y, int width, int height, bool repaint);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        internal static extern bool SetWindowPos(
-            IntPtr hWnd,
-            IntPtr hWndInsertAfter,
-            int x,
-            int y,
-            int cx,
-            int cy,
-            uint uFlags);
+        session.ResizeMainWindow(width: 1400, height: 900);
     }
 }
