@@ -98,6 +98,7 @@ public sealed class ShellFocusedActivationSmokeTests
 
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData(withContent: true);
         using var session = WindowsGuiAppSession.LaunchFresh();
+        var gamepad = session.CreateGamepadInput();
 
         Assert.True(
             session.WaitUntilOnscreen("MainNav.Session.gui-session-01", TimeSpan.FromSeconds(15)),
@@ -108,7 +109,7 @@ public sealed class ShellFocusedActivationSmokeTests
 
         var reachedSessionChild = MoveFocusUntil(
             session,
-            session.PressVirtualGamepadDPadDown,
+            gamepad.PressDown,
             () => session.IsFocusWithinAutomationId("MainNav.Session.gui-session-01"),
             attempts: 8);
 
@@ -786,7 +787,7 @@ public sealed class ShellFocusedActivationSmokeTests
             $"Settings navigation did not become visible before diagnostics traversal validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
 
         var diagnosticsItem = session.FindByAutomationId("SettingsNav.Diagnostics", TimeSpan.FromSeconds(10));
-        session.ClickElement(diagnosticsItem);
+        session.ActivateElement(diagnosticsItem);
         Assert.True(
             session.WaitUntilOnscreen("Diagnostics.GamepadMonitorHeader", TimeSpan.FromSeconds(10)),
             $"Diagnostics settings page did not become visible before diagnostics traversal validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
@@ -808,6 +809,43 @@ public sealed class ShellFocusedActivationSmokeTests
                     || session.IsFocusWithinAutomationId("Diagnostics.GamepadRefresh"),
                 attempts: 6),
             $"Virtual gamepad D-pad Down did not advance beyond the first diagnostics action."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
+    [SkippableFact]
+    public void DiagnosticsGamepadActions_VirtualGamepadDPadDown_CanAdvanceWhenStopIsDisabled()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+        EnsureMainWindowWide(session);
+
+        _ = OpenSettingsAndWaitForSectionNavigation(session, appData, "diagnostics action traversal validation");
+
+        var diagnosticsItem = session.FindByAutomationId("SettingsNav.Diagnostics", TimeSpan.FromSeconds(10));
+        FocusAndAssert(session, diagnosticsItem, "SettingsNav.Diagnostics", "diagnostics settings navigation item");
+        session.PressEnter();
+        Assert.True(
+            session.WaitUntilOnscreen("Diagnostics.GamepadMonitorHeader", TimeSpan.FromSeconds(10)),
+            $"Diagnostics settings page did not become visible before disabled-stop traversal validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var startButton = FindAndScrollIntoView(session, "Diagnostics.GamepadStart", TimeSpan.FromSeconds(10));
+        var stopButton = FindAndScrollIntoView(session, "Diagnostics.GamepadStop", TimeSpan.FromSeconds(10));
+        Assert.False(
+            stopButton.IsEnabled,
+            $"Diagnostics stop action should be disabled before monitoring starts.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        FocusElementAndWait(session, startButton, "diagnostics start action");
+        session.PressVirtualGamepadDPadDown();
+
+        Assert.True(
+            WaitUntil(
+                () => session.IsFocusWithinAutomationId("Diagnostics.GamepadStop")
+                    || session.IsFocusWithinAutomationId("Diagnostics.GamepadRefresh"),
+                TimeSpan.FromSeconds(3)),
+            $"Virtual gamepad D-pad Down did not advance beyond the first diagnostics action while stop was disabled."
             + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
@@ -1045,26 +1083,23 @@ public sealed class ShellFocusedActivationSmokeTests
 
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
         using var session = WindowsGuiAppSession.LaunchFresh();
+        var gamepad = session.CreateGamepadInput();
         EnsureMainWindowWide(session);
 
-        var settingsItem = session.FindByAutomationId("SettingsItem", TimeSpan.FromSeconds(10));
-        session.ClickElement(settingsItem);
-        Assert.True(
-            session.WaitUntilOnscreen("SettingsNav.General", TimeSpan.FromSeconds(10)),
-            $"Settings navigation did not become visible before section activation traversal validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+        var settingsItem = OpenSettingsAndWaitForSectionNavigation(session, appData, "section activation traversal validation");
         FocusAndAssert(session, settingsItem, "SettingsItem", "settings navigation item");
 
         Assert.True(
             MoveFocusUntil(
                 session,
-                session.PressVirtualGamepadDPadRight,
+                gamepad.PressRight,
                 () => session.IsFocusWithinAutomationId("SettingsNav.Appearance"),
                 attempts: 8),
             $"Virtual gamepad D-pad Right did not move focus to the Appearance settings section navigation item."
             + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
 
-        session.PressVirtualGamepadA();
+        gamepad.PressActivate();
         Assert.True(
             session.WaitUntilOnscreen("Appearance.Theme", TimeSpan.FromSeconds(10)),
             $"Appearance settings content did not become visible after virtual gamepad activation."
@@ -1074,7 +1109,7 @@ public sealed class ShellFocusedActivationSmokeTests
         Thread.Sleep(500);
         var focusAfterActivationSettled = session.DescribeFocusedElement();
 
-        session.PressVirtualGamepadDPadDown();
+        gamepad.PressDown();
         Thread.Sleep(150);
         var focusAfterDown = session.DescribeFocusedElement();
         Assert.True(
@@ -1129,6 +1164,7 @@ public sealed class ShellFocusedActivationSmokeTests
 
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
         using var session = WindowsGuiAppSession.LaunchFresh();
+        var gamepad = session.CreateGamepadInput();
         EnsureMainWindowWide(session);
 
         var settingsItem = session.FindByAutomationId("SettingsItem", TimeSpan.FromSeconds(10));
@@ -1151,7 +1187,7 @@ public sealed class ShellFocusedActivationSmokeTests
         Assert.True(
             MoveFocusUntil(
                 session,
-                session.PressVirtualGamepadDPadDown,
+                gamepad.PressDown,
                 () => session.IsFocusWithinAutomationId("DataStorage.CacheRetention"),
                 attempts: 6),
             $"Virtual gamepad D-pad Down did not naturally reach the data-storage NumberBox from the preceding control."
@@ -1160,7 +1196,7 @@ public sealed class ShellFocusedActivationSmokeTests
         Assert.Equal(valueBefore, session.TryGetValue(numberBox));
 
         var focusOnNumberBox = session.DescribeFocusedElement();
-        session.PressVirtualGamepadDPadDown();
+        gamepad.PressDown();
         Assert.True(
             WaitUntil(
                 () => !session.IsFocusWithinAutomationId("DataStorage.CacheRetention"),
@@ -1251,11 +1287,7 @@ public sealed class ShellFocusedActivationSmokeTests
         string firstControlAutomationId,
         string sectionDescription)
     {
-        var settingsItem = session.FindByAutomationId("SettingsItem", TimeSpan.FromSeconds(10));
-        session.ClickElement(settingsItem);
-        Assert.True(
-            session.WaitUntilOnscreen(sectionAutomationId, TimeSpan.FromSeconds(10)),
-            $"Settings navigation did not become visible before {sectionDescription} traversal validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+        _ = OpenSettingsAndWaitForSectionNavigation(session, appData, $"{sectionDescription} traversal validation");
 
         var sectionItem = session.FindByAutomationId(sectionAutomationId, TimeSpan.FromSeconds(10));
         FocusAndAssert(session, sectionItem, sectionAutomationId, $"{sectionDescription} settings navigation item");

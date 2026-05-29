@@ -43,11 +43,13 @@
                             <StackPanel Orientation="Horizontal"
                                         Spacing="8"
                                         HorizontalAlignment="Left">
-                                <Button x:Uid="Mcp_Reload"
+                                <Button x:Name="McpReloadButton"
+                                        x:Uid="Mcp_Reload"
                                         Content="刷新"
                                         Command="{x:Bind ViewModel.LoadCommand}"
                                         IsEnabled="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"/>
-                                <Button x:Uid="Mcp_AddServer"
+                                <Button x:Name="McpAddServerButton"
+                                        x:Uid="Mcp_AddServer"
                                         Content="新建"
                                         Command="{x:Bind ViewModel.AddServerCommand}"
                                         AutomationProperties.AutomationId="Mcp.AddServer"

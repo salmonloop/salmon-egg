@@ -19,6 +19,9 @@ public sealed partial class DataStorageSettingsPage : SettingsPageBase
         SetSettingsBreadcrumbForSection(SettingsSectionCatalog.DataStorageKey);
     }
 
+    protected override Control? GetSectionEntryFocusTarget()
+        => DataStorageSaveLocalHistoryToggle;
+
     private async void OnClearCacheClick(object sender, RoutedEventArgs e)
     {
         var dialog = new ContentDialog

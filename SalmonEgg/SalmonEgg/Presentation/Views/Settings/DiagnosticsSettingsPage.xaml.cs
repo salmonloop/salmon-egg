@@ -26,6 +26,12 @@ public sealed partial class DiagnosticsSettingsPage : SettingsPageBase
         Unloaded += OnUnloaded;
     }
 
+    protected override Control? GetSectionEntryFocusTarget()
+        => FirstAvailableSectionEntryTarget(
+            DiagnosticsGamepadStartButton,
+            DiagnosticsGamepadStopButton,
+            DiagnosticsGamepadRefreshButton);
+
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         _liveLogScrollViewer = null;

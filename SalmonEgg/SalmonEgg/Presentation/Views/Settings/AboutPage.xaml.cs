@@ -15,4 +15,11 @@ public sealed partial class AboutPage : SettingsPageBase
         InitializeComponent();
         SetSettingsBreadcrumbForSection(SettingsSectionCatalog.AboutKey);
     }
+
+    protected override Control? GetSectionEntryFocusTarget()
+        => FirstAvailableSectionEntryTarget(
+            AboutOpenAppDataButton,
+            AboutOpenReleaseNotesButton,
+            AboutOpenPrivacyPolicyButton,
+            AboutCopyVersionInfoButton);
 }

@@ -43,6 +43,9 @@ public sealed partial class AgentProfileEditorPage : SettingsPageBase
         UpdateBreadcrumb();
     }
 
+    protected override Control? GetSectionEntryFocusTarget()
+        => AgentProfileEditorNameBox;
+
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);

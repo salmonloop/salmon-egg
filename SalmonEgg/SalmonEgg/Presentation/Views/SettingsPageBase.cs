@@ -1,7 +1,10 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using Microsoft.Extensions.Localization;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Models.Settings;
@@ -56,5 +59,54 @@ public class SettingsPageBase : Page
     {
         var value = ResourceLoader.GetString(resourceKey);
         return string.IsNullOrWhiteSpace(value) ? fallbackText : value;
+    }
+
+    protected virtual Control? GetSectionEntryFocusTarget() => null;
+
+    internal Control? TryGetSectionEntryFocusTarget()
+        => GetSectionEntryFocusTarget();
+
+    protected Control? FirstAvailableSectionEntryTarget(params Control?[] candidates)
+        => candidates.FirstOrDefault(CanReceiveSectionEntryFocus);
+
+    protected T? FindDescendantControl<T>(Func<T, bool>? predicate = null)
+        where T : Control
+        => FindDescendant(this, predicate);
+
+    private static bool CanReceiveSectionEntryFocus(Control? candidate)
+    {
+        if (candidate is null)
+        {
+            return false;
+        }
+
+        if (candidate.Visibility != Visibility.Visible)
+        {
+            return false;
+        }
+
+        return candidate.IsEnabled || candidate.AllowFocusWhenDisabled;
+    }
+
+    private static T? FindDescendant<T>(DependencyObject root, Func<T, bool>? predicate)
+        where T : DependencyObject
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is T match && (predicate is null || predicate(match)))
+            {
+                return match;
+            }
+
+            var nested = FindDescendant(child, predicate);
+            if (nested is not null)
+            {
+                return nested;
+            }
+        }
+
+        return null;
     }
 }

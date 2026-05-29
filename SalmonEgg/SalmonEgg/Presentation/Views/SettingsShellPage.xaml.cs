@@ -176,26 +176,26 @@ public sealed partial class SettingsShellPage : Page, IPrimaryContentFocusTarget
             return false;
         }
 
-        var interactiveControls = GetInteractiveControlsInTraversalOrder().ToArray();
-        var firstInteractive = interactiveControls.FirstOrDefault();
-        if (firstInteractive is null)
+        var sectionEntryTarget = TryResolveCurrentSectionEntryFocusTarget();
+        if (sectionEntryTarget is null)
         {
             return false;
         }
 
-        navItem.XYFocusDown = firstInteractive;
-        firstInteractive.XYFocusUp = navItem;
-
-        for (var i = 0; i < interactiveControls.Length; i++)
-        {
-            var current = interactiveControls[i];
-            current.XYFocusUp = i == 0 ? navItem : interactiveControls[i - 1];
-            current.XYFocusDown = i + 1 < interactiveControls.Length
-                ? interactiveControls[i + 1]
-                : null;
-        }
+        navItem.XYFocusDown = sectionEntryTarget;
+        sectionEntryTarget.XYFocusUp = navItem;
 
         return true;
+    }
+
+    private Control? TryResolveCurrentSectionEntryFocusTarget()
+    {
+        if (SettingsFrame.Content is SettingsPageBase settingsPage)
+        {
+            return settingsPage.TryGetSectionEntryFocusTarget();
+        }
+
+        return null;
     }
 
     private void AttachDeferredFocusTargetRefresh(FrameworkElement root)
@@ -238,61 +238,6 @@ public sealed partial class SettingsShellPage : Page, IPrimaryContentFocusTarget
         RefreshOrDeferCurrentSectionFocusTargets();
     }
 
-    private IEnumerable<Control> GetInteractiveControlsInTraversalOrder()
-    {
-        if (SettingsFrame.Content is null)
-        {
-            return Enumerable.Empty<Control>();
-        }
-
-        return FindDescendants<Control>(SettingsFrame, static control =>
-                control is ComboBox or NumberBox or ToggleSwitch or TextBox or Button or Expander)
-            .Where(control => !HasInteractiveAncestor(control))
-            .Where(IsUserMeaningfulInteractiveControl)
-            .ToArray();
-    }
-
-    private static bool HasInteractiveAncestor(DependencyObject control)
-    {
-        var current = VisualTreeHelper.GetParent(control);
-        while (current is not null)
-        {
-            if (current is Control parentControl
-                && parentControl is ComboBox or NumberBox or ToggleSwitch or TextBox or Button)
-            {
-                return true;
-            }
-
-            current = VisualTreeHelper.GetParent(current);
-        }
-
-        return false;
-    }
-
-    private static bool IsUserMeaningfulInteractiveControl(Control control)
-    {
-        if (control.Visibility != Visibility.Visible
-            || !control.IsEnabled
-            || control.ActualWidth <= 0
-            || control.ActualHeight <= 0)
-        {
-            return false;
-        }
-
-        return control switch
-        {
-            TextBox => true,
-            ComboBox => true,
-            NumberBox => true,
-            ToggleSwitch => true,
-            Expander => true,
-            Button button => !string.IsNullOrWhiteSpace(Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(button))
-                             || !string.IsNullOrWhiteSpace(button.Name)
-                             || !string.IsNullOrWhiteSpace(button.Content?.ToString()),
-            _ => false
-        };
-    }
-
     private static T? FindDescendant<T>(DependencyObject root, Func<T, bool> predicate)
         where T : DependencyObject
     {
@@ -310,42 +255,6 @@ public sealed partial class SettingsShellPage : Page, IPrimaryContentFocusTarget
             {
                 return nested;
             }
-        }
-
-        return null;
-    }
-
-    private static System.Collections.Generic.IEnumerable<T> FindDescendants<T>(DependencyObject root, Func<T, bool> predicate)
-        where T : DependencyObject
-    {
-        var count = VisualTreeHelper.GetChildrenCount(root);
-        for (var i = 0; i < count; i++)
-        {
-            var child = VisualTreeHelper.GetChild(root, i);
-            if (child is T match && predicate(match))
-            {
-                yield return match;
-            }
-
-            foreach (var nested in FindDescendants(child, predicate))
-            {
-                yield return nested;
-            }
-        }
-    }
-
-    private static T? FindAncestorOrSelf<T>(DependencyObject? start, Func<T, bool>? predicate = null)
-        where T : DependencyObject
-    {
-        var current = start;
-        while (current is not null)
-        {
-            if (current is T match && (predicate is null || predicate(match)))
-            {
-                return match;
-            }
-
-            current = VisualTreeHelper.GetParent(current);
         }
 
         return null;

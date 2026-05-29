@@ -1,3 +1,4 @@
+using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.ViewModels.Settings;
 
@@ -13,4 +14,7 @@ public sealed partial class AppearanceSettingsPage : SalmonEgg.Presentation.View
         InitializeComponent();
         SetSettingsBreadcrumbForSection(SettingsSectionCatalog.AppearanceKey);
     }
+
+    protected override Control? GetSectionEntryFocusTarget()
+        => AppearanceThemeComboBox;
 }

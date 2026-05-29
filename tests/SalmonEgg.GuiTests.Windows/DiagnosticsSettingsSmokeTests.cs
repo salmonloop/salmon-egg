@@ -42,11 +42,59 @@ public sealed class DiagnosticsSettingsSmokeTests
         Assert.True(stopButton.IsEnabled, "Gamepad diagnostics stop button should become enabled after starting the monitor.");
     }
 
+    [SkippableFact]
+    public void GamepadDiagnosticsMonitor_NativeDeviceBackend_ReflectsVirtualControllerInput()
+    {
+        GuiTestGate.RequireEnabled();
+        Skip.IfNot(
+            NativeDeviceGamepadTestInput.IsBridgeConfigured(out var failureReason),
+            failureReason);
+
+        using var backendScope = new EnvironmentVariableScope("SALMONEGG_GUI_GAMEPAD_INPUT_BACKEND", "native-device");
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        EnsureMainWindowWide(session);
+        NavigateToDiagnosticsSettings(session);
+
+        var startButton = FindAndScrollIntoView(session, "Diagnostics.GamepadStart", TimeSpan.FromSeconds(10));
+        session.ActivateElement(startButton);
+
+        Assert.True(
+            session.WaitUntilEnabled("Diagnostics.GamepadStop", TimeSpan.FromSeconds(5)),
+            $"Gamepad diagnostics stop button did not become enabled after starting native-device monitoring.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var gamepad = session.CreateGamepadInput();
+        var standardCount = session.FindByAutomationId("Diagnostics.GamepadStandardCount", TimeSpan.FromSeconds(5));
+
+        Assert.True(
+            session.WaitUntil(
+                () => !string.Equals(ReadElementText(standardCount), "0", StringComparison.Ordinal),
+                TimeSpan.FromSeconds(5)),
+            $"Native-device bridge did not surface a connected virtual controller in diagnostics."
+            + $"{Environment.NewLine}StandardCount={ReadElementText(standardCount)}"
+            + $"{Environment.NewLine}RawCount={ReadElementText(session.FindByAutomationId("Diagnostics.GamepadRawCount", TimeSpan.FromSeconds(2)))}"
+            + $"{Environment.NewLine}InputSource={ReadElementText(session.FindByAutomationId("Diagnostics.GamepadInputSource", TimeSpan.FromSeconds(2)))}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        gamepad.PressDown();
+        var activeInputs = session.FindByAutomationId("Diagnostics.GamepadActiveInputs", TimeSpan.FromSeconds(5));
+
+        Assert.True(
+            session.WaitUntil(
+                () => ReadElementText(activeInputs).Contains("MoveDown", StringComparison.Ordinal),
+                TimeSpan.FromSeconds(5)),
+            $"Native-device bridge did not project D-pad input into the diagnostics active-intents text."
+            + $"{Environment.NewLine}ActiveInputs={ReadElementText(activeInputs)}"
+            + $"{Environment.NewLine}InputSource={ReadElementText(session.FindByAutomationId("Diagnostics.GamepadInputSource", TimeSpan.FromSeconds(2)))}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
     private static void NavigateToDiagnosticsSettings(WindowsGuiAppSession session)
     {
         var settingsItem = session.FindByAutomationId("SettingsItem", TimeSpan.FromSeconds(10));
-        session.ActivateElement(settingsItem);
-        session.ClickElement(settingsItem);
+        session.FocusElement(settingsItem);
+        session.PressEnter();
 
         var diagnosticsItem = session.TryFindByAutomationId("SettingsNav.Diagnostics", TimeSpan.FromSeconds(10));
         if (diagnosticsItem is null)
@@ -54,7 +102,8 @@ public sealed class DiagnosticsSettingsSmokeTests
             throw CreateNavigationFailure(session, "Diagnostics settings entry did not become visible after opening settings.");
         }
 
-        session.ActivateElement(diagnosticsItem);
+        session.FocusElement(diagnosticsItem);
+        session.PressEnter();
         if (!session.WaitUntilOnscreen("Diagnostics.GamepadMonitorHeader", TimeSpan.FromSeconds(10)))
         {
             throw CreateNavigationFailure(session, "Gamepad diagnostics monitor header did not become visible.");
@@ -72,6 +121,13 @@ public sealed class DiagnosticsSettingsSmokeTests
             $"{message}{Environment.NewLine}" +
             $"Screenshot: {capturePath}{Environment.NewLine}" +
             $"Visible texts: [{visibleTexts}]");
+    }
+
+    private static string ReadElementText(FlaUI.Core.AutomationElements.AutomationElement element)
+    {
+        return element.Patterns.Value.IsSupported
+            ? element.Patterns.Value.Pattern.Value ?? string.Empty
+            : element.Name ?? string.Empty;
     }
 
     private static FlaUI.Core.AutomationElements.AutomationElement FindAndScrollIntoView(
@@ -154,5 +210,23 @@ public sealed class DiagnosticsSettingsSmokeTests
             int cx,
             int cy,
             uint uFlags);
+    }
+
+    private sealed class EnvironmentVariableScope : IDisposable
+    {
+        private readonly string _name;
+        private readonly string? _previousValue;
+
+        public EnvironmentVariableScope(string name, string? value)
+        {
+            _name = name;
+            _previousValue = Environment.GetEnvironmentVariable(name);
+            Environment.SetEnvironmentVariable(name, value);
+        }
+
+        public void Dispose()
+        {
+            Environment.SetEnvironmentVariable(_name, _previousValue);
+        }
     }
 }

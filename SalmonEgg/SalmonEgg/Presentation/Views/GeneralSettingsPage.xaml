@@ -55,6 +55,7 @@
                                     </StackPanel>
 
                                     <ToggleSwitch Grid.Column="1"
+                                                  x:Name="GeneralAutoStartToggle"
                                                   x:Uid="General_AutoStartSwitch"
                                                   AutomationProperties.AutomationId="GeneralSettings.AutoStart"
                                                   IsOn="{x:Bind ViewModel.Preferences.LaunchOnStartup, Mode=TwoWay}"

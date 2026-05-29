@@ -20,6 +20,9 @@ public sealed partial class AcpConnectionSettingsPage : SettingsPageBase
         SetSettingsBreadcrumbForSection(SettingsSectionCatalog.AgentAcpKey);
     }
 
+    protected override Control? GetSectionEntryFocusTarget()
+        => AcpGlobalEnabledToggle;
+
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         await ViewModel.Profiles.RefreshCommand.ExecuteAsync(null);

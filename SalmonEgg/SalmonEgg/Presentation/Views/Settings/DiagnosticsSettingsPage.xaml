@@ -236,7 +236,6 @@
                                                 Content="开始监测"
                                                 Command="{x:Bind ViewModel.GamepadDiagnostics.StartMonitoringCommand}"
                                                 IsEnabled="{x:Bind ViewModel.GamepadDiagnostics.CanStartMonitoring, Mode=OneWay}"
-                                                XYFocusDown="{x:Bind DiagnosticsGamepadStopButton, Mode=OneWay}"
                                                 HorizontalAlignment="Stretch" />
                                         <Button x:Name="DiagnosticsGamepadStopButton"
                                                 x:Uid="Diagnostics_GamepadStop"
@@ -244,15 +243,13 @@
                                                 Content="停止监测"
                                                 Command="{x:Bind ViewModel.GamepadDiagnostics.StopMonitoringCommand}"
                                                 IsEnabled="{x:Bind ViewModel.GamepadDiagnostics.CanStopMonitoring, Mode=OneWay}"
-                                                XYFocusUp="{x:Bind DiagnosticsGamepadStartButton, Mode=OneWay}"
-                                                XYFocusDown="{x:Bind DiagnosticsGamepadRefreshButton, Mode=OneWay}"
+                                                AllowFocusWhenDisabled="True"
                                                 HorizontalAlignment="Stretch" />
                                         <Button x:Name="DiagnosticsGamepadRefreshButton"
                                                 x:Uid="Diagnostics_GamepadRefresh"
                                                 AutomationProperties.AutomationId="Diagnostics.GamepadRefresh"
                                                 Content="刷新一次"
                                                 Command="{x:Bind ViewModel.GamepadDiagnostics.RefreshSnapshotCommand}"
-                                                XYFocusUp="{x:Bind DiagnosticsGamepadStopButton, Mode=OneWay}"
                                                 HorizontalAlignment="Stretch" />
                                     </StackPanel>
                                 </StackPanel>

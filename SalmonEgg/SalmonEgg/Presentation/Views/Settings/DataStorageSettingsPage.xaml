@@ -51,6 +51,7 @@
                                 </StackPanel>
 
                                 <ToggleSwitch Grid.Column="1"
+                                              x:Name="DataStorageSaveLocalHistoryToggle"
                                               x:Uid="DataStorage_SaveLocalHistorySwitch"
                                               AutomationProperties.AutomationId="DataStorage.SaveLocalHistory"
                                               IsOn="{x:Bind ViewModel.Preferences.SaveLocalHistory, Mode=TwoWay}"

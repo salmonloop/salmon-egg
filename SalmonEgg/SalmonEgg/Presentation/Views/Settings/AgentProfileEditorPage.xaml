@@ -36,7 +36,8 @@
                             CornerRadius="8"
                             Padding="16">
                         <StackPanel Spacing="14">
-                            <TextBox x:Uid="AgentProfileEditorName"
+                            <TextBox x:Name="AgentProfileEditorNameBox"
+                                     x:Uid="AgentProfileEditorName"
                                      Text="{x:Bind ViewModel.Name, Mode=TwoWay}"/>
 
                             <ComboBox x:Uid="AgentProfileEditorTransport"

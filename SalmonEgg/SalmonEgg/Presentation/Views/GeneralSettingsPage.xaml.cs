@@ -14,5 +14,8 @@ public sealed partial class GeneralSettingsPage : SettingsPageBase
         this.InitializeComponent();
         SetSettingsBreadcrumbForSection(SettingsSectionCatalog.GeneralKey);
     }
+
+    protected override Control? GetSectionEntryFocusTarget()
+        => GeneralAutoStartToggle;
 }
 }

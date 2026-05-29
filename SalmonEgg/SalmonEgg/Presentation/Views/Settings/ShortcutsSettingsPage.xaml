@@ -55,7 +55,8 @@
 
                                 <MenuFlyoutSeparator Margin="16,0" Visibility="Visible"/>
 
-                                <ListView ItemsSource="{x:Bind ViewModel.Shortcuts, Mode=OneWay}"
+                                <ListView x:Name="ShortcutsListView"
+                                          ItemsSource="{x:Bind ViewModel.Shortcuts, Mode=OneWay}"
                                           SelectionMode="None">
                                     <ListView.ItemTemplate>
                                         <DataTemplate x:DataType="vm:ShortcutEntryViewModel">

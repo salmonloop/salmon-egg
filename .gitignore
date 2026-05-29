@@ -35,6 +35,7 @@ bld/
 publish/
 .obj/
 .artifacts/
+.tmp/
 
 # Visual Studio cache/options directory
 .vs/

@@ -1,4 +1,5 @@
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.Views;
@@ -16,6 +17,9 @@ public sealed partial class McpSettingsPage : SettingsPageBase
         Loaded += OnLoaded;
         SetSettingsBreadcrumbForSection(SettingsSectionCatalog.McpKey);
     }
+
+    protected override Control? GetSectionEntryFocusTarget()
+        => FirstAvailableSectionEntryTarget(McpReloadButton, McpAddServerButton);
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {

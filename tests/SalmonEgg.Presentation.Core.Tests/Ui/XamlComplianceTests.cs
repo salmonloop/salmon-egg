@@ -2450,6 +2450,7 @@ public sealed class XamlComplianceTests
     {
         var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\SettingsShellPage.xaml.cs");
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\SettingsShellPage.xaml");
+        var pageBase = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\SettingsPageBase.cs");
         var acpPage = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AcpConnectionSettingsPage.xaml.cs");
         var diagnosticsPage = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DiagnosticsSettingsPage.xaml.cs");
 
@@ -2459,13 +2460,16 @@ public sealed class XamlComplianceTests
         Assert.Contains("SettingsNavView.ContainerFromMenuItem(ViewModel.SelectedSection)", code, StringComparison.Ordinal);
         Assert.Contains("XYFocusKeyboardNavigation=\"Enabled\"", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"SettingsNavView\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("navItem.XYFocusDown = firstInteractive;", code, StringComparison.Ordinal);
-        Assert.Contains("firstInteractive.XYFocusUp = navItem;", code, StringComparison.Ordinal);
-        Assert.Contains("control is ComboBox or NumberBox or ToggleSwitch or TextBox or Button or Expander", code, StringComparison.Ordinal);
-        Assert.Contains("NumberBox => true", code, StringComparison.Ordinal);
+        Assert.Contains("TryResolveCurrentSectionEntryFocusTarget", code, StringComparison.Ordinal);
+        Assert.Contains("navItem.XYFocusDown = sectionEntryTarget;", code, StringComparison.Ordinal);
+        Assert.Contains("sectionEntryTarget.XYFocusUp = navItem;", code, StringComparison.Ordinal);
+        Assert.Contains("protected virtual Control? GetSectionEntryFocusTarget()", pageBase, StringComparison.Ordinal);
         Assert.DoesNotContain("TryConsumeNavigationIntent", code, StringComparison.Ordinal);
         Assert.DoesNotContain("TryMoveFocusWithinSettingsContent", code, StringComparison.Ordinal);
         Assert.DoesNotContain("IsFocusOnFirstSettingsContentControl", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetInteractiveControlsInTraversalOrder", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("FindDescendants<Control>", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("control is ComboBox or NumberBox or ToggleSwitch or TextBox or Button or Expander", code, StringComparison.Ordinal);
         Assert.DoesNotContain("selectedItem.Focus(FocusState.Keyboard)", code, StringComparison.Ordinal);
         Assert.DoesNotContain("SettingsNavView.Focus(", code, StringComparison.Ordinal);
         Assert.DoesNotContain("Focus(FocusState.Programmatic)", code, StringComparison.Ordinal);
@@ -2474,6 +2478,28 @@ public sealed class XamlComplianceTests
         Assert.DoesNotContain("_lastFocusedGamepadActionButton", diagnosticsPage, StringComparison.Ordinal);
         Assert.DoesNotContain("ViewModel.SelectedSection.Key == SettingsSectionCatalog.AgentAcpKey", code, StringComparison.Ordinal);
         Assert.DoesNotContain("ViewModel.SelectedSection.Key == SettingsSectionCatalog.McpKey", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SettingsPages_KeepSectionTraversalOnNativeDirectionalNavigation()
+    {
+        var diagnosticsXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DiagnosticsSettingsPage.xaml");
+        var appearanceXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AppearanceSettingsPage.xaml");
+        var pageBase = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\SettingsPageBase.cs");
+        var diagnosticsCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DiagnosticsSettingsPage.xaml.cs");
+        var mcpCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\McpSettingsPage.xaml.cs");
+        var aboutCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AboutPage.xaml.cs");
+
+        Assert.Contains("protected Control? FirstAvailableSectionEntryTarget", pageBase, StringComparison.Ordinal);
+
+        Assert.DoesNotContain("XYFocusUp=", diagnosticsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("XYFocusDown=", diagnosticsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("XYFocusUp=", appearanceXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("XYFocusDown=", appearanceXaml, StringComparison.Ordinal);
+
+        Assert.Contains("FirstAvailableSectionEntryTarget(", diagnosticsCode, StringComparison.Ordinal);
+        Assert.Contains("FirstAvailableSectionEntryTarget(", mcpCode, StringComparison.Ordinal);
+        Assert.Contains("FirstAvailableSectionEntryTarget(", aboutCode, StringComparison.Ordinal);
     }
 
     [Fact]

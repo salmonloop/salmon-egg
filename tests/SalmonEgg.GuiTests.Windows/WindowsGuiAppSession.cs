@@ -43,6 +43,7 @@ internal sealed class WindowsGuiAppSession : IDisposable
     private readonly Application _application;
     private readonly bool _ownsProcess;
     private Window _mainWindow;
+    private IGamepadTestInput? _gamepadInput;
 
     private WindowsGuiAppSession(Application application, UIA3Automation automation, Window mainWindow, bool ownsProcess)
     {
@@ -589,34 +590,74 @@ internal sealed class WindowsGuiAppSession : IDisposable
         PressKey(VirtualKeyShort.DOWN);
     }
 
-    public void PressVirtualGamepadDPadDown()
+    public IGamepadTestInput CreateSyntheticGamepadInput()
+    {
+        return new SyntheticVirtualKeyGamepadTestInput(this);
+    }
+
+    public IGamepadTestInput CreateGamepadInput()
+    {
+        return _gamepadInput ??= GamepadTestInputFactory.Create(this);
+    }
+
+    internal void PressSyntheticGamepadDown()
     {
         PressKey(VirtualGamepadDPadDown);
     }
 
-    public void PressVirtualGamepadDPadUp()
+    public void PressVirtualGamepadDPadDown()
+    {
+        CreateGamepadInput().PressDown();
+    }
+
+    internal void PressSyntheticGamepadUp()
     {
         PressKey(VirtualGamepadDPadUp);
     }
 
-    public void PressVirtualGamepadDPadLeft()
+    public void PressVirtualGamepadDPadUp()
+    {
+        CreateGamepadInput().PressUp();
+    }
+
+    internal void PressSyntheticGamepadLeft()
     {
         PressKey(VirtualGamepadDPadLeft);
     }
 
-    public void PressVirtualGamepadDPadRight()
+    public void PressVirtualGamepadDPadLeft()
+    {
+        CreateGamepadInput().PressLeft();
+    }
+
+    internal void PressSyntheticGamepadRight()
     {
         PressKey(VirtualGamepadDPadRight);
     }
 
-    public void PressVirtualGamepadA()
+    public void PressVirtualGamepadDPadRight()
+    {
+        CreateGamepadInput().PressRight();
+    }
+
+    internal void PressSyntheticGamepadActivate()
     {
         PressKey(VirtualGamepadA);
     }
 
-    public void PressVirtualGamepadB()
+    public void PressVirtualGamepadA()
+    {
+        CreateGamepadInput().PressActivate();
+    }
+
+    internal void PressSyntheticGamepadBack()
     {
         PressKey(VirtualGamepadB);
+    }
+
+    public void PressVirtualGamepadB()
+    {
+        CreateGamepadInput().PressBack();
     }
 
     public void PressTab()
@@ -1141,6 +1182,7 @@ internal sealed class WindowsGuiAppSession : IDisposable
 
     public void Dispose()
     {
+        _gamepadInput?.Dispose();
         _automation.Dispose();
         _application.Dispose();
         if (_ownsProcess)
