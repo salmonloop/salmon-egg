@@ -2247,7 +2247,7 @@ public sealed class XamlComplianceTests
         Assert.Contains("MoveUpEscapeHandler", code);
         Assert.Contains("GamepadNavigationIntent.MoveUp when focusContext == ChatInputFocusContext.ModeSelector", policy, StringComparison.Ordinal);
         Assert.Contains("ChatInputNavigationAction.ReturnToInputBox", policy, StringComparison.Ordinal);
-        Assert.DoesNotContain(
+        Assert.Contains(
             "GamepadNavigationIntent.MoveUp when focusContext == ChatInputFocusContext.InputBox => ChatInputNavigationAction.EscapeMoveUp",
             policy,
             StringComparison.Ordinal);

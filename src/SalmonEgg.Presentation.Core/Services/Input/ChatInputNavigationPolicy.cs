@@ -13,6 +13,7 @@ public static class ChatInputNavigationPolicy
         {
             return intent switch
             {
+                GamepadNavigationIntent.MoveUp when focusContext == ChatInputFocusContext.InputBox => ChatInputNavigationAction.EscapeMoveUp,
                 GamepadNavigationIntent.MoveUp when focusContext == ChatInputFocusContext.ModeSelector => ChatInputNavigationAction.ReturnToInputBox,
                 _ => ChatInputNavigationAction.None
             };

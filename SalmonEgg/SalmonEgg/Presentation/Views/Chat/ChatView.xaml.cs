@@ -201,10 +201,11 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
             MessagesList?.RemoveHandler(UIElement.KeyDownEvent, _messagesListHandledKeyDownHandler);
             MessagesList?.RemoveHandler(UIElement.PointerPressedEvent, _messagesListHandledPointerPressedHandler);
             MessagesList?.RemoveHandler(UIElement.PointerWheelChangedEvent, _messagesListHandledPointerWheelChangedHandler);
-            if (MessagesList is not null)
+            var messagesList = MessagesList;
+            if (messagesList is not null)
             {
-                MessagesList.GotFocus -= OnMessagesListGotFocus;
-                MessagesList.LostFocus -= OnMessagesListLostFocus;
+                messagesList.GotFocus -= OnMessagesListGotFocus;
+                messagesList.LostFocus -= OnMessagesListLostFocus;
             }
 
             _isMessagesListFocusWithin = false;
@@ -238,8 +239,9 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
 
         private void OnMessagesListPointerPressed(object sender, PointerRoutedEventArgs e)
         {
-            if (MessagesList is not null
-                && !TranscriptPointerIntentFilter.ShouldTrackViewportIntent(e.OriginalSource, MessagesList))
+            var messagesList = MessagesList;
+            if (messagesList is not null
+                && !TranscriptPointerIntentFilter.ShouldTrackViewportIntent(e.OriginalSource, messagesList))
             {
                 return;
             }
@@ -262,8 +264,9 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
 
         private void OnMessagesListPointerReleased(object sender, PointerRoutedEventArgs e)
         {
-            if (MessagesList is not null
-                && !TranscriptPointerIntentFilter.ShouldTrackViewportIntent(e.OriginalSource, MessagesList))
+            var messagesList = MessagesList;
+            if (messagesList is not null
+                && !TranscriptPointerIntentFilter.ShouldTrackViewportIntent(e.OriginalSource, messagesList))
             {
                 return;
             }
@@ -285,8 +288,9 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
 
         private void OnMessagesListPointerWheelChanged(object sender, PointerRoutedEventArgs e)
         {
-            if (MessagesList is not null
-                && !TranscriptPointerIntentFilter.ShouldTrackViewportIntent(e.OriginalSource, MessagesList))
+            var messagesList = MessagesList;
+            if (messagesList is not null
+                && !TranscriptPointerIntentFilter.ShouldTrackViewportIntent(e.OriginalSource, messagesList))
             {
                 return;
             }
@@ -334,15 +338,13 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
 
         public bool TryFocusPrimaryContentTarget()
         {
-            if (MessagesList is not null
-                && ViewModel.ShouldShowTranscriptSurface
-                && ViewModel.MessageHistory.Count > 0)
-            {
-                return MessagesList.Focus(FocusState.Programmatic);
-            }
-
             if (ViewModel.ShouldShowConversationInputSurface
                 && ConversationInputArea.TryFocusInputBox())
+            {
+                return true;
+            }
+
+            if (TryFocusTranscriptViewport())
             {
                 return true;
             }
@@ -356,11 +358,25 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
             return false;
         }
 
+        private bool TryFocusTranscriptViewport()
+        {
+            var messagesList = MessagesList;
+            if (messagesList is null
+                || !ViewModel.ShouldShowTranscriptSurface
+                || ViewModel.MessageHistory.Count <= 0)
+            {
+                return false;
+            }
+
+            return messagesList.Focus(FocusState.Programmatic);
+        }
+
         private void FocusTranscriptScroller()
         {
-            if (MessagesList is not null)
+            var messagesList = MessagesList;
+            if (messagesList is not null)
             {
-                _ = MessagesList.Focus(FocusState.Programmatic);
+                _ = messagesList.Focus(FocusState.Programmatic);
             }
         }
 

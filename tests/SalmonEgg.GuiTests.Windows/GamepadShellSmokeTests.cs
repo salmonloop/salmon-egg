@@ -242,7 +242,7 @@ public sealed class ShellFocusedActivationSmokeTests
     }
 
     [SkippableFact]
-    public void MainNavigationSessionItem_VirtualGamepadDPadRight_CanReachChatBody()
+    public void MainNavigationSessionItem_VirtualGamepadDPadRight_CanReachChatInputBox()
     {
         GuiTestGate.RequireEnabled();
 
@@ -262,16 +262,15 @@ public sealed class ShellFocusedActivationSmokeTests
 
         ClickAndAssertFocus(session, sessionItem, "MainNav.Session.gui-session-01", "session navigation item");
 
-        var reachedChatBody = MoveFocusUntil(
+        var reachedChatInputBox = MoveFocusUntil(
             session,
             session.PressVirtualGamepadDPadRight,
-            () => session.IsFocusWithinAutomationId("ChatView.MessagesList")
-                || session.IsFocusWithinAutomationId("InputBox"),
+            () => session.IsFocusWithinAutomationId("InputBox"),
             attempts: 6);
 
         Assert.True(
-            reachedChatBody,
-            $"Virtual gamepad D-pad focus did not leave MainNav for the chat body."
+            reachedChatInputBox,
+            $"Virtual gamepad D-pad focus did not leave MainNav for the chat input box."
             + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }

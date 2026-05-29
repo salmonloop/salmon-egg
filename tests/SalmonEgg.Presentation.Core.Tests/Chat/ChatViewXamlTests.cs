@@ -262,6 +262,18 @@ public sealed class ChatViewXamlTests
     }
 
     [Fact]
+    public void ChatView_GamepadEntry_PrefersInputBox_AndWiresEscapeUpToTranscriptViewport()
+    {
+        var xaml = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml");
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
+
+        Assert.Contains("MoveUpEscapeHandler=\"{x:Bind TryFocusTranscriptViewport, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ConversationInputArea.TryFocusInputBox()", code, StringComparison.Ordinal);
+        Assert.Contains("private bool TryFocusTranscriptViewport()", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("if (MessagesList is not null", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ChatTranscriptViewportHost_ExposesRelativeItemScrollWithoutOwningViewportState()
     {
         var hostInterface = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Transcript\ITranscriptViewportHost.cs");
