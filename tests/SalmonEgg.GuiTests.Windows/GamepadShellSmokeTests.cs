@@ -1311,6 +1311,58 @@ public sealed class ShellFocusedActivationSmokeTests
     }
 
     [SkippableFact]
+    public void SettingsMcpReload_KeyboardDown_ReachesFirstServerToggleWithoutHiddenStops()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
+        appData.WriteMcpYaml(
+            """
+            schema_version: 1
+            servers:
+            - transport: http
+              name: search
+              enabled: false
+              url: https://example.com/mcp
+            """);
+        using var session = WindowsGuiAppSession.LaunchFresh();
+        EnsureMainWindowWide(session);
+
+        _ = OpenSettingsAndWaitForSectionNavigation(session, appData, "MCP keyboard-down traversal validation");
+
+        var mcpItem = session.FindByAutomationId("SettingsNav.Mcp", TimeSpan.FromSeconds(10));
+        FocusAndAssert(session, mcpItem, "SettingsNav.Mcp", "MCP settings navigation item");
+        session.PressEnter();
+        Assert.True(
+            session.WaitUntilOnscreen("Mcp.AddServer", TimeSpan.FromSeconds(10))
+            && session.WaitUntilOnscreen("Mcp.Server.Enabled", TimeSpan.FromSeconds(10)),
+            $"MCP settings page did not become visible before keyboard-down traversal validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var addServerButton = session.FindByAutomationId("Mcp.AddServer", TimeSpan.FromSeconds(10));
+        FocusAndAssert(session, addServerButton, "Mcp.AddServer", "MCP add server action");
+        session.PressLeft();
+        Assert.True(
+            WaitUntil(
+                () => session.IsFocusWithinAutomationId("Mcp.Reload"),
+                TimeSpan.FromSeconds(2)),
+            $"Keyboard Left did not move from the MCP add-server action to the reload action."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
+            + $"{Environment.NewLine}DetailedFocus={session.DescribeFocusedElementDetailed()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        session.PressDown();
+
+        Assert.True(
+            WaitUntil(
+                () => session.IsFocusWithinAutomationId("Mcp.Server.Enabled"),
+                TimeSpan.FromSeconds(2)),
+            $"Keyboard Down from the MCP reload action should land on the first server toggle."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
+            + $"{Environment.NewLine}DetailedFocus={session.DescribeFocusedElementDetailed()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
+    [SkippableFact]
     public void SettingsShortcutsContent_VirtualGamepadDPadDown_CanReachSubsequentControls()
     {
         GuiTestGate.RequireEnabled();

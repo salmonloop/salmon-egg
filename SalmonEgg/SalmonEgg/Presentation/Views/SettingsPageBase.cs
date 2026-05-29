@@ -92,7 +92,7 @@ public class SettingsPageBase : Page
             return false;
         }
 
-        if (candidate.Visibility != Visibility.Visible)
+        if (!IsEffectivelyVisible(candidate))
         {
             return false;
         }
@@ -107,7 +107,23 @@ public class SettingsPageBase : Page
             return false;
         }
 
-        return candidate.Visibility == Visibility.Visible;
+        return IsEffectivelyVisible(candidate);
+    }
+
+    private static bool IsEffectivelyVisible(Control candidate)
+    {
+        DependencyObject? current = candidate;
+        while (current is not null)
+        {
+            if (current is UIElement element && element.Visibility != Visibility.Visible)
+            {
+                return false;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return true;
     }
 
     private static T? FindDescendant<T>(DependencyObject root, Func<T, bool>? predicate)

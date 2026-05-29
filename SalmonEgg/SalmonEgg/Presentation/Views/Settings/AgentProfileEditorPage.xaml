@@ -112,6 +112,7 @@
                                            Maximum="60"
                                            SpinButtonPlacementMode="Inline"
                                            IsFocusEngagementEnabled="True"
+                                           UseSystemFocusVisuals="True"
                                            Value="{x:Bind ViewModel.ConnectionTimeout, Mode=TwoWay}"/>
                             </StackPanel>
                         </Expander>

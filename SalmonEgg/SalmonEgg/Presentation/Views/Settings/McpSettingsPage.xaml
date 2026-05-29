@@ -234,7 +234,8 @@
                                     </StackPanel>
                                 </Border>
 
-                                <ItemsControl ItemsSource="{x:Bind ViewModel.Servers, Mode=OneWay}"
+                                <ItemsControl x:Name="McpServersList"
+                                              ItemsSource="{x:Bind ViewModel.Servers, Mode=OneWay}"
                                               MinHeight="160"
                                               AutomationProperties.AutomationId="Mcp.Servers.List">
                                     <ItemsControl.ItemsPanel>

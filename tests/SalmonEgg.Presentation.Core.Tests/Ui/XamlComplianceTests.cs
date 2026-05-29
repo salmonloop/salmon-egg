@@ -2293,6 +2293,55 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void NumberBoxes_UseSystemFocusVisuals_ForGamepadFocusVisibility()
+    {
+        var root = Path.Combine(FindRepoRoot(), "SalmonEgg", "SalmonEgg");
+        var failures = new List<string>();
+
+        foreach (var xamlFile in Directory.EnumerateFiles(root, "*.xaml", SearchOption.AllDirectories))
+        {
+            if (xamlFile.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+                || xamlFile.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var document = XDocument.Parse(File.ReadAllText(xamlFile));
+            foreach (var control in document.Descendants().Where(element => element.Name.LocalName == "NumberBox"))
+            {
+                if (string.Equals(control.Attribute("UseSystemFocusVisuals")?.Value, "True", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var id = control.Attribute(XNamespace.Get("http://schemas.microsoft.com/winfx/2006/xaml") + "Name")?.Value
+                         ?? control.Attribute(XNamespace.Get("http://schemas.microsoft.com/winfx/2006/xaml") + "Uid")?.Value
+                         ?? "<unnamed>";
+                failures.Add($"{Path.GetRelativePath(FindRepoRoot(), xamlFile)} NumberBox {id}");
+            }
+        }
+
+        Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
+    }
+
+    [Fact]
+    public void SettingsPages_DoNotUseMenuFlyoutSeparator_AsSectionDividers()
+    {
+        var xamlFiles = new[]
+        {
+            @"SalmonEgg\SalmonEgg\Presentation\Views\GeneralSettingsPage.xaml",
+            @"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DataStorageSettingsPage.xaml",
+            @"SalmonEgg\SalmonEgg\Presentation\Views\Settings\McpSettingsPage.xaml"
+        };
+
+        foreach (var relativePath in xamlFiles)
+        {
+            var xaml = LoadXaml(relativePath);
+            Assert.DoesNotContain("MenuFlyoutSeparator", xaml, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public void ShortcutRecorder_TracksModifiersWithoutPlatformKeyStateFallback()
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Controls\ShortcutRecorder.xaml");
