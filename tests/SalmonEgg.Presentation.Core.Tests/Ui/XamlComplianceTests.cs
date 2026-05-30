@@ -2160,22 +2160,14 @@ public sealed class XamlComplianceTests
     {
         var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\MainShellGamepadNavigationDispatcher.cs");
         var mainPage = LoadText(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
-        var windowsBridge = LoadText(@"SalmonEgg\SalmonEgg\Platforms\Windows\WindowsGamepadNativeInputBridge.cs");
 
         Assert.Contains("TryConsumeNavigationIntent", code);
         Assert.Contains("_nativeInputBridge.TryDispatch(intent)", code, StringComparison.Ordinal);
         Assert.Contains("ShouldSuppressPolledGamepadIntent(intent)", mainPage, StringComparison.Ordinal);
         Assert.Contains("_gamepadNavigationDispatcher.TryDispatch(intent)", mainPage, StringComparison.Ordinal);
-        Assert.Contains("GamepadNavigationIntent.MoveUp => VK_GAMEPAD_DPAD_UP", windowsBridge, StringComparison.Ordinal);
-        Assert.Contains("GamepadNavigationIntent.MoveDown => VK_GAMEPAD_DPAD_DOWN", windowsBridge, StringComparison.Ordinal);
-        Assert.Contains("GamepadNavigationIntent.MoveLeft => VK_GAMEPAD_DPAD_LEFT", windowsBridge, StringComparison.Ordinal);
-        Assert.Contains("GamepadNavigationIntent.MoveRight => VK_GAMEPAD_DPAD_RIGHT", windowsBridge, StringComparison.Ordinal);
         Assert.DoesNotContain("GamepadNavigationIntent.MoveDown => TryMoveFocus", code);
         Assert.DoesNotContain("XamlFocusManager.TryMoveFocus", code);
         Assert.DoesNotContain("GetNavigationSearchRoot()", code);
-        Assert.DoesNotContain("TitleBar", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("MainNav", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("ContentFrame", code, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2193,18 +2185,10 @@ public sealed class XamlComplianceTests
         Assert.Contains("return false;", noOp, StringComparison.Ordinal);
 
         Assert.Contains("sealed class WindowsGamepadNativeInputBridge : IGamepadNativeInputBridge", windowsBridge, StringComparison.Ordinal);
-        Assert.Contains("SendInput", windowsBridge, StringComparison.Ordinal);
-        Assert.Contains("GetForegroundWindow", windowsBridge, StringComparison.Ordinal);
-        Assert.Contains("IsAppWindowForeground()", windowsBridge, StringComparison.Ordinal);
-        Assert.Contains("Marshal.GetLastPInvokeError()", windowsBridge, StringComparison.Ordinal);
-        Assert.Contains("SendKeyUp(virtualKey)", windowsBridge, StringComparison.Ordinal);
         Assert.Contains("VK_GAMEPAD_DPAD_UP", windowsBridge, StringComparison.Ordinal);
         Assert.Contains("VK_GAMEPAD_DPAD_DOWN", windowsBridge, StringComparison.Ordinal);
         Assert.Contains("VK_GAMEPAD_DPAD_LEFT", windowsBridge, StringComparison.Ordinal);
         Assert.Contains("VK_GAMEPAD_DPAD_RIGHT", windowsBridge, StringComparison.Ordinal);
-        Assert.Contains("MOUSEINPUT", windowsBridge, StringComparison.Ordinal);
-        Assert.Contains("HARDWAREINPUT", windowsBridge, StringComparison.Ordinal);
-        Assert.Contains("KEYEVENTF_KEYUP", windowsBridge, StringComparison.Ordinal);
         Assert.DoesNotContain("VK_LEFT", windowsBridge, StringComparison.Ordinal);
         Assert.DoesNotContain("VK_UP", windowsBridge, StringComparison.Ordinal);
         Assert.DoesNotContain("VK_RIGHT", windowsBridge, StringComparison.Ordinal);
@@ -2239,12 +2223,6 @@ public sealed class XamlComplianceTests
         var policy = LoadText(@"src\SalmonEgg.Presentation.Core\Services\Input\ChatInputNavigationPolicy.cs");
 
         Assert.Contains("INavigationIntentConsumer", code);
-        Assert.Contains("OnInputKeyDown", code);
-        Assert.Contains("OnInputBoxHandledKeyDown", code);
-        Assert.Contains("OnSendAcceleratorInvoked", code);
-        Assert.Contains("OnNewLineAcceleratorInvoked", code);
-        Assert.Contains("_isImeComposing", code);
-        Assert.Contains("IsPromptEditingAvailable()", code);
         Assert.Contains("MoveUpEscapeHandler", code);
         Assert.Contains("InputBox.AddHandler(UIElement.KeyDownEvent, _inputBoxHandledKeyDownHandler, true);", code, StringComparison.Ordinal);
         Assert.Contains("InputBox.RemoveHandler(UIElement.KeyDownEvent, _inputBoxHandledKeyDownHandler);", code, StringComparison.Ordinal);

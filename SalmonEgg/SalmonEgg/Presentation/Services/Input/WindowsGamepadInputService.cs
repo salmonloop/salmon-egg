@@ -182,28 +182,13 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
             rawControllers = _connectedRawControllers.ToArray();
         }
 
-        foreach (var gamepad in gamepads)
-        {
-            reading = GetInputReading(gamepad.GetCurrentReading());
-            if (GamepadIntentProcessor.GetActiveIntents(reading).Count > 0)
-            {
-                UpdateInputPath(InputPath.Gamepad);
-                return true;
-            }
-        }
+        var gamepadReadings = Array.ConvertAll(gamepads, static gamepad => GetInputReading(gamepad.GetCurrentReading()));
+        var rawReadings = Array.ConvertAll(rawControllers, _rawMapper.GetInputReading);
+        var selected = GamepadActiveReadingSelector.TrySelectActiveReading(gamepadReadings, rawReadings, out var selection);
 
-        foreach (var controller in rawControllers)
-        {
-            reading = _rawMapper.GetInputReading(controller);
-            if (GamepadIntentProcessor.GetActiveIntents(reading).Count > 0)
-            {
-                UpdateInputPath(InputPath.RawGameController);
-                return true;
-            }
-        }
-
-        reading = default;
-        return false;
+        UpdateInputPath(selection.InputPath);
+        reading = selection.Reading;
+        return selected;
     }
 
     private void OnRawGameControllerAdded(object? sender, RawGameController controller)
@@ -263,13 +248,6 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
     private void ThrowIfDisposed()
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
-    }
-
-    private enum InputPath
-    {
-        None,
-        Gamepad,
-        RawGameController
     }
 }
 #endif
