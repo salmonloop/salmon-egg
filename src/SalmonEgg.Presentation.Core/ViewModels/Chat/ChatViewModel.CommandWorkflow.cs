@@ -470,7 +470,6 @@ public partial class ChatViewModel
 
         TryDisposeVoiceInputCts();
         _voiceInputCts = new CancellationTokenSource();
-        SetVoiceInputTransportState(VoiceInputTransportState.Starting);
         string? requestId = null;
 
         try
@@ -497,6 +496,7 @@ public partial class ChatViewModel
                 return;
             }
 
+            SetVoiceInputTransportState(VoiceInputTransportState.Starting);
             requestId = Guid.NewGuid().ToString("N");
             _transportVoiceInputRequestId = requestId;
             _activeVoiceInputRequestId = requestId;
@@ -576,9 +576,6 @@ public partial class ChatViewModel
         }
 
         SetVoiceInputTransportState(VoiceInputTransportState.Stopping);
-        IsVoiceInputListening = false;
-        _activeVoiceInputRequestId = null;
-        _voiceInputBasePrompt = CurrentPrompt ?? string.Empty;
 
         try
         {
@@ -591,6 +588,13 @@ public partial class ChatViewModel
             }
 
             await _voiceInputService.StopAsync();
+            if (IsCurrentVoiceInputRequest(requestId))
+            {
+                IsVoiceInputListening = false;
+                _activeVoiceInputRequestId = null;
+                _voiceInputBasePrompt = CurrentPrompt ?? string.Empty;
+            }
+
             ClearVoiceInputTransport(requestId, disposeCts: true);
         }
         catch (OperationCanceledException)

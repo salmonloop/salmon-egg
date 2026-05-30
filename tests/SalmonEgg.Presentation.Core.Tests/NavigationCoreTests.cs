@@ -614,6 +614,16 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
+    public void StartView_ComposerMoveUpEscapeHandler_ReturnsInputFocusToHeroSuggestions()
+    {
+        var code = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Start\StartView.xaml.cs");
+
+        Assert.Contains("ComposerShell.MoveUpEscapeHandler = HandlePromptMoveUpEscape;", code, StringComparison.Ordinal);
+        Assert.Contains("promptBox.XYFocusUp = firstSuggestion;", code, StringComparison.Ordinal);
+        Assert.Contains("button.XYFocusDown = FindPromptBox();", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ChatViewXaml_ExposesStableAutomationIds_ForGuiTesting()
     {
         var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml");

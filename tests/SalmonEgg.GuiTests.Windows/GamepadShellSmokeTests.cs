@@ -359,23 +359,20 @@ public sealed class ShellFocusedActivationSmokeTests
             session.WaitUntilVisible("StartView.PromptBox", TimeSpan.FromSeconds(10)),
             $"Start prompt box did not become visible before selector return validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
 
-        var selectorIds = new[] { "StartView.AgentSelector", "StartView.ModeSelector", "StartView.ProjectSelector" };
-        AutomationElement? focusedSelector = null;
-        string? focusedSelectorId = null;
-        foreach (var selectorId in selectorIds)
-        {
-            var selector = session.FindByAutomationId(selectorId, TimeSpan.FromSeconds(5));
-            if (TryFocus(session, selector, selectorId))
-            {
-                focusedSelector = selector;
-                focusedSelectorId = selectorId;
-                break;
-            }
-        }
+        var promptBox = session.FindByAutomationId("StartView.PromptBox", TimeSpan.FromSeconds(10));
+        FocusAndAssert(session, promptBox, "StartView.PromptBox", "start prompt box");
+
+        session.PressVirtualGamepadDPadDown();
 
         Assert.True(
-            focusedSelector is not null && focusedSelectorId is not null,
-            $"Unable to establish any Start selector focus before directional navigation.{Environment.NewLine}Focus={session.DescribeFocusedElement()}{Environment.NewLine}{appData.ReadBootLogTail()}");
+            WaitUntil(
+                () => session.IsFocusWithinAutomationId("StartView.AgentSelector")
+                    || session.IsFocusWithinAutomationId("StartView.ModeSelector")
+                    || session.IsFocusWithinAutomationId("StartView.ProjectSelector"),
+                TimeSpan.FromSeconds(3)),
+            $"Virtual gamepad D-pad Down did not reach any start composer selector before return validation."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
 
         session.PressVirtualGamepadDPadUp();
 
@@ -383,7 +380,55 @@ public sealed class ShellFocusedActivationSmokeTests
             WaitUntil(
                 () => session.IsFocusWithinAutomationId("StartView.PromptBox"),
                 TimeSpan.FromSeconds(3)),
-            $"Virtual gamepad D-pad Up did not return from selector '{focusedSelectorId}' to the prompt box."
+            $"Virtual gamepad D-pad Up did not return from the start selector row to the prompt box."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
+    [SkippableFact]
+    public void StartPromptBox_VirtualGamepadDPadUp_CanReturnToFirstHeroSuggestion()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+        EnsureMainWindowWide(session);
+
+        var promptBox = session.FindByAutomationId("StartView.PromptBox", TimeSpan.FromSeconds(10));
+        FocusAndAssert(session, promptBox, "StartView.PromptBox", "start prompt box");
+
+        session.PressVirtualGamepadDPadUp();
+
+        Assert.True(
+            WaitUntil(
+                () => session.IsFocusWithinAutomationId("StartView.Suggestion.AnalyzeCodebase"),
+                TimeSpan.FromSeconds(3)),
+            $"Virtual gamepad D-pad Up did not return from the start prompt box to the first hero suggestion."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
+    [SkippableFact]
+    public void StartPromptBox_VirtualGamepadDPadDown_CanReachFirstSelector()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+        EnsureMainWindowWide(session);
+
+        var promptBox = session.FindByAutomationId("StartView.PromptBox", TimeSpan.FromSeconds(10));
+        FocusAndAssert(session, promptBox, "StartView.PromptBox", "start prompt box");
+
+        session.PressVirtualGamepadDPadDown();
+
+        Assert.True(
+            WaitUntil(
+                () => session.IsFocusWithinAutomationId("StartView.AgentSelector")
+                    || session.IsFocusWithinAutomationId("StartView.ModeSelector")
+                    || session.IsFocusWithinAutomationId("StartView.ProjectSelector"),
+                TimeSpan.FromSeconds(3)),
+            $"Virtual gamepad D-pad Down did not leave the start prompt box for the composer selectors."
             + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }

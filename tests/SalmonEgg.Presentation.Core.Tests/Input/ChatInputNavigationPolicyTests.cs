@@ -26,54 +26,27 @@ public sealed class ChatInputNavigationPolicyTests
     }
 
     [Fact]
-    public void Decide_ReturnsNone_WhenSlashHidden()
+    public void Decide_ReturnsNone_WhenSlashHidden_AndIntentIsBack()
     {
-        Assert.Equal("None", Decide(GamepadNavigationIntent.MoveDown, "InputBox", slashCommandsVisible: false, inputEnabled: true, isImeComposing: false));
+        Assert.Equal("None", Decide(GamepadNavigationIntent.Back, "InputBox", slashCommandsVisible: false, inputEnabled: true, isImeComposing: false));
     }
 
     [Fact]
-    public void Decide_ReturnsEscapeMoveUp_WhenSlashHidden_AndFocusIsInput_AndIntentIsMoveUp()
+    public void Decide_ReturnsEscapeMoveUp_WhenSlashHidden_AndFocusIsInput()
     {
-        Assert.Equal(
-            "EscapeMoveUp",
-            Decide(
-                GamepadNavigationIntent.MoveUp,
-                "InputBox",
-                slashCommandsVisible: false,
-                inputEnabled: true,
-                isImeComposing: false));
+        Assert.Equal("EscapeMoveUp", Decide(GamepadNavigationIntent.MoveUp, "InputBox", slashCommandsVisible: false, inputEnabled: true, isImeComposing: false));
     }
 
     [Fact]
-    public void Decide_ReturnsNone_WhenInputIsDisabled_AndIntentIsMoveUp()
+    public void Decide_ReturnsMoveToFirstSelector_WhenSlashHidden_AndFocusIsInput_AndIntentIsMoveDown()
     {
-        Assert.Equal(
-            "None",
-            Decide(
-                GamepadNavigationIntent.MoveUp,
-                "InputBox",
-                slashCommandsVisible: false,
-                inputEnabled: false,
-                isImeComposing: false));
+        Assert.Equal("MoveToFirstSelector", Decide(GamepadNavigationIntent.MoveDown, "InputBox", slashCommandsVisible: false, inputEnabled: true, isImeComposing: false));
     }
 
     [Fact]
     public void Decide_ReturnsNone_WhenInputIsDisabled()
     {
         Assert.Equal("None", Decide(GamepadNavigationIntent.MoveDown, "InputBox", slashCommandsVisible: true, inputEnabled: false, isImeComposing: false));
-    }
-
-    [Fact]
-    public void Decide_ReturnsNone_WhenImeCompositionIsActive_AndIntentIsMoveUp()
-    {
-        Assert.Equal(
-            "None",
-            Decide(
-                GamepadNavigationIntent.MoveUp,
-                "InputBox",
-                slashCommandsVisible: false,
-                inputEnabled: true,
-                isImeComposing: true));
     }
 
     [Fact]
@@ -86,6 +59,12 @@ public sealed class ChatInputNavigationPolicyTests
     public void Decide_ReturnsNone_WhenFocusIsOnModeSelector_AndIntentIsMoveDown()
     {
         Assert.Equal("None", Decide(GamepadNavigationIntent.MoveDown, "ModeSelector", slashCommandsVisible: true, inputEnabled: true, isImeComposing: false));
+    }
+
+    [Fact]
+    public void Decide_ReturnsNone_WhenFocusIsOnModeSelector_AndIntentIsMoveUp()
+    {
+        Assert.Equal("None", Decide(GamepadNavigationIntent.MoveUp, "ModeSelector", slashCommandsVisible: false, inputEnabled: true, isImeComposing: false));
     }
 
     [Fact]

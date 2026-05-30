@@ -314,7 +314,6 @@
                                                 SelectedModeSelectorItem="{x:Bind ViewModel.SelectedChatModeSelectorItem, Mode=OneWay}"
                                                 ModeSelectionCommand="{x:Bind ViewModel.SelectChatModeDisplayCommand}"
                                                 IsModeSelectorEnabled="{x:Bind ViewModel.AreComposerToolsEnabled, Mode=OneWay}"
-                                                MoveUpEscapeHandler="{x:Bind TryFocusTranscriptViewport, Mode=OneWay}"
                                                 HorizontalAlignment="Stretch" />
                         </controls:ResponsiveContentHost.Child>
                 </controls:ResponsiveContentHost>

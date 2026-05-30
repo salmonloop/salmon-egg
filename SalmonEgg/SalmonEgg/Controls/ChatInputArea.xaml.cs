@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Windows.Input;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -11,6 +14,8 @@ using SalmonEgg.Presentation.Core.Services.Input;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.Selectors;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using XamlFocusManager = Microsoft.UI.Xaml.Input.FocusManager;
+using WindowActivationState = Microsoft.UI.Xaml.WindowActivationState;
+using WindowActivatedEventArgs = Microsoft.UI.Xaml.WindowActivatedEventArgs;
 
 namespace SalmonEgg.Controls;
 
@@ -49,7 +54,7 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
             nameof(ShowAgentSelector),
             typeof(bool),
             typeof(ChatInputArea),
-            new PropertyMetadata(false));
+            new PropertyMetadata(false, OnComposerFocusTopologyPropertyChanged));
 
     public static readonly DependencyProperty AgentItemsSourceProperty =
         DependencyProperty.Register(
@@ -91,7 +96,7 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
             nameof(ShowModeSelector),
             typeof(bool),
             typeof(ChatInputArea),
-            new PropertyMetadata(true));
+            new PropertyMetadata(true, OnComposerFocusTopologyPropertyChanged));
 
     public static readonly DependencyProperty ModeItemsSourceProperty =
         DependencyProperty.Register(
@@ -133,14 +138,14 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
             nameof(IsModeSelectorEnabled),
             typeof(bool),
             typeof(ChatInputArea),
-            new PropertyMetadata(false));
+            new PropertyMetadata(false, OnComposerFocusTopologyPropertyChanged));
 
     public static readonly DependencyProperty ShowProjectSelectorProperty =
         DependencyProperty.Register(
             nameof(ShowProjectSelector),
             typeof(bool),
             typeof(ChatInputArea),
-            new PropertyMetadata(false));
+            new PropertyMetadata(false, OnComposerFocusTopologyPropertyChanged));
 
     public static readonly DependencyProperty ProjectItemsSourceProperty =
         DependencyProperty.Register(
@@ -207,6 +212,17 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
 
     private bool _isImeComposing;
     private ComboBox? _openSelectorHost;
+    private readonly List<(DependencyObject Target, DependencyProperty Property, long Token)> _focusRefreshCallbackTokens = [];
+    private bool _focusRefreshCallbacksRegistered;
+    private Button? _pendingActionBoundaryContinuationSource;
+    private readonly Microsoft.UI.Xaml.Input.KeyEventHandler _inputBoxHandledKeyDownHandler;
+    private bool _windowActivationHandlerAttached;
+    private const int PendingActionActivationRestoreAttempts = 6;
+    private DispatcherQueueTimer? _pendingActionActivationRestoreTimer;
+    private Button? _pendingActionActivationRestoreButton;
+    private int _pendingActionActivationRestoreRemainingAttempts;
+    private ChatViewModel? _observedViewModel;
+
     public event EventHandler? SelectorDropDownOpened;
 
     public event EventHandler? SelectorDropDownClosed;
@@ -376,7 +392,14 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
     public ChatInputArea()
     {
         InitializeComponent();
+        _inputBoxHandledKeyDownHandler = OnInputBoxHandledKeyDown;
         Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
+        foreach (var button in EnumerateComposerActionButtons())
+        {
+            button.GotFocus += OnComposerActionButtonGotFocus;
+            button.Click += OnComposerActionButtonClick;
+        }
 #if WINDOWS
         InputBox.TextCompositionStarted += OnInputTextCompositionStarted;
         InputBox.TextCompositionEnded += OnInputTextCompositionEnded;
@@ -385,8 +408,162 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        RefreshVerticalFocusTargets();
-        _ = DispatcherQueue.TryEnqueue(RefreshVerticalFocusTargets);
+        InputBox.AddHandler(UIElement.KeyDownEvent, _inputBoxHandledKeyDownHandler, true);
+        AttachWindowActivationHandler();
+        EnsureFocusRefreshCallbacksRegistered();
+        ScheduleRefreshVerticalFocusTargets();
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        InputBox.RemoveHandler(UIElement.KeyDownEvent, _inputBoxHandledKeyDownHandler);
+        DetachWindowActivationHandler();
+        StopPendingActionActivationRestore();
+        DetachFocusRefreshCallbacks();
+    }
+
+    private void AttachWindowActivationHandler()
+    {
+        if (_windowActivationHandlerAttached || App.MainWindowInstance is null)
+        {
+            return;
+        }
+
+        App.MainWindowInstance.Activated += OnMainWindowActivated;
+        _windowActivationHandlerAttached = true;
+    }
+
+    private void DetachWindowActivationHandler()
+    {
+        if (!_windowActivationHandlerAttached || App.MainWindowInstance is null)
+        {
+            return;
+        }
+
+        App.MainWindowInstance.Activated -= OnMainWindowActivated;
+        _windowActivationHandlerAttached = false;
+    }
+
+    private void OnMainWindowActivated(object sender, WindowActivatedEventArgs args)
+    {
+        if (args.WindowActivationState == WindowActivationState.Deactivated
+            || _pendingActionBoundaryContinuationSource is not Button pendingActionButton)
+        {
+            return;
+        }
+
+        SchedulePendingActionActivationRestore(pendingActionButton, PendingActionActivationRestoreAttempts);
+    }
+
+    private void SchedulePendingActionActivationRestore(Button pendingActionButton, int remainingAttempts)
+    {
+        var continuationTarget = ResolvePendingActionContinuationTarget(pendingActionButton);
+
+        if (!ReferenceEquals(_pendingActionBoundaryContinuationSource, pendingActionButton)
+            || continuationTarget is null
+            || remainingAttempts <= 0)
+        {
+            StopPendingActionActivationRestore();
+            return;
+        }
+
+        EnsurePendingActionActivationRestoreTimer();
+        _pendingActionActivationRestoreButton = pendingActionButton;
+        _pendingActionActivationRestoreRemainingAttempts = remainingAttempts;
+        _pendingActionActivationRestoreTimer?.Stop();
+        _pendingActionActivationRestoreTimer?.Start();
+    }
+
+    private void EnsurePendingActionActivationRestoreTimer()
+    {
+        if (_pendingActionActivationRestoreTimer is not null)
+        {
+            return;
+        }
+
+        _pendingActionActivationRestoreTimer = DispatcherQueue.CreateTimer();
+        _pendingActionActivationRestoreTimer.Interval = TimeSpan.FromMilliseconds(50);
+        _pendingActionActivationRestoreTimer.IsRepeating = true;
+        _pendingActionActivationRestoreTimer.Tick += OnPendingActionActivationRestoreTick;
+    }
+
+    private void OnPendingActionActivationRestoreTick(object? sender, object e)
+    {
+        if (_pendingActionActivationRestoreButton is not Button pendingActionButton
+            || !ReferenceEquals(_pendingActionBoundaryContinuationSource, pendingActionButton)
+            || _pendingActionActivationRestoreRemainingAttempts <= 0)
+        {
+            StopPendingActionActivationRestore();
+            return;
+        }
+
+        var continuationTarget = ResolvePendingActionContinuationTarget(pendingActionButton);
+        if (continuationTarget is null)
+        {
+            StopPendingActionActivationRestore();
+            return;
+        }
+
+        _pendingActionActivationRestoreRemainingAttempts--;
+        var focused = continuationTarget.Focus(FocusState.Programmatic);
+
+        if (focused)
+        {
+            ClearPendingActionBoundaryContinuation(pendingActionButton);
+            StopPendingActionActivationRestore();
+        }
+    }
+
+    private void StopPendingActionActivationRestore()
+    {
+        _pendingActionActivationRestoreTimer?.Stop();
+        _pendingActionActivationRestoreButton = null;
+        _pendingActionActivationRestoreRemainingAttempts = 0;
+    }
+
+    private void EnsureFocusRefreshCallbacksRegistered()
+    {
+        if (_focusRefreshCallbacksRegistered)
+        {
+            return;
+        }
+
+        foreach (var button in EnumerateComposerActionButtons())
+        {
+            _focusRefreshCallbackTokens.Add((
+                button,
+                UIElement.VisibilityProperty,
+                button.RegisterPropertyChangedCallback(UIElement.VisibilityProperty, OnFocusBoundaryPropertyChanged)));
+        }
+
+        _focusRefreshCallbacksRegistered = true;
+    }
+
+    private void DetachFocusRefreshCallbacks()
+    {
+        foreach (var (target, property, token) in _focusRefreshCallbackTokens)
+        {
+            target.UnregisterPropertyChangedCallback(property, token);
+        }
+
+        _focusRefreshCallbackTokens.Clear();
+        _focusRefreshCallbacksRegistered = false;
+    }
+
+    private void OnFocusBoundaryPropertyChanged(DependencyObject sender, DependencyProperty dependencyProperty)
+    {
+        TryRestoreFocusAfterActionBoundaryChange(sender);
+        ScheduleRefreshVerticalFocusTargets();
+    }
+
+    private void OnComposerActionButtonGotFocus(object sender, RoutedEventArgs e)
+    {
+        _pendingActionBoundaryContinuationSource = sender as Button;
+    }
+
+    private void OnComposerActionButtonClick(object sender, RoutedEventArgs e)
+    {
+        _pendingActionBoundaryContinuationSource = sender as Button;
     }
 
     private static void OnViewModelChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -396,10 +573,50 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
             return;
         }
 
+        if (e.OldValue is ChatViewModel oldViewModel)
+        {
+            oldViewModel.PropertyChanged -= control.OnViewModelPropertyChanged;
+            if (ReferenceEquals(control._observedViewModel, oldViewModel))
+            {
+                control._observedViewModel = null;
+            }
+        }
+
         if (control.ViewModel != null && control.SubmitCommand == null)
         {
             control.SubmitCommand = control.ViewModel.SendPromptCommand;
         }
+
+        if (e.NewValue is ChatViewModel newViewModel)
+        {
+            newViewModel.PropertyChanged += control.OnViewModelPropertyChanged;
+            control._observedViewModel = newViewModel;
+        }
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (!ReferenceEquals(sender, _observedViewModel)
+            || _pendingActionBoundaryContinuationSource is not Button pendingActionButton)
+        {
+            return;
+        }
+
+        if (!string.Equals(e.PropertyName, nameof(ChatViewModel.CanStartVoiceInput), StringComparison.Ordinal)
+            && !string.Equals(e.PropertyName, nameof(ChatViewModel.ShowVoiceInputStartButton), StringComparison.Ordinal)
+            && !string.Equals(e.PropertyName, nameof(ChatViewModel.CanStopVoiceInput), StringComparison.Ordinal)
+            && !string.Equals(e.PropertyName, nameof(ChatViewModel.ShowVoiceInputStopButton), StringComparison.Ordinal)
+            && !string.Equals(e.PropertyName, nameof(ChatViewModel.VoiceInputErrorMessage), StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (TryContinuePendingActionBoundaryChange(pendingActionButton))
+        {
+            return;
+        }
+
+        SchedulePendingActionActivationRestore(pendingActionButton, PendingActionActivationRestoreAttempts);
     }
 
     private bool IsPromptEditingAvailable()
@@ -412,13 +629,14 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
             return;
         }
 
+        if (TryHandleInputDirectionalKey(e.Key))
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (!ViewModel.ShowSlashCommands)
         {
-            if (e.Key == Windows.System.VirtualKey.Up && MoveUpEscapeHandler?.Invoke() == true)
-            {
-                e.Handled = true;
-            }
-
             return;
         }
 
@@ -432,6 +650,7 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
                 }
                 break;
             case Windows.System.VirtualKey.Up:
+            case Windows.System.VirtualKey.GamepadDPadUp:
                 if (ViewModel.TryMoveSlashSelection(-1))
                 {
                     e.Handled = true;
@@ -439,6 +658,7 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
                 }
                 break;
             case Windows.System.VirtualKey.Down:
+            case Windows.System.VirtualKey.GamepadDPadDown:
                 if (ViewModel.TryMoveSlashSelection(1))
                 {
                     e.Handled = true;
@@ -453,6 +673,52 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
                 }
                 break;
         }
+    }
+
+    private void OnInputBoxHandledKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (!e.Handled)
+        {
+            return;
+        }
+
+        if (ReferenceEquals(FindAncestorOrSelf<TextBox>(e.OriginalSource as DependencyObject), InputBox)
+            && TryHandleInputDirectionalKey(e.Key))
+        {
+            e.Handled = true;
+        }
+    }
+
+    private bool TryHandleInputDirectionalKey(Windows.System.VirtualKey key)
+    {
+        if (_isImeComposing || ViewModel == null || !IsPromptEditingAvailable())
+        {
+            return false;
+        }
+
+        if (!ViewModel.ShowSlashCommands)
+        {
+            if ((key == Windows.System.VirtualKey.Up || key == Windows.System.VirtualKey.GamepadDPadUp)
+                && MoveUpEscapeHandler?.Invoke() == true)
+            {
+                return true;
+            }
+
+            if ((key == Windows.System.VirtualKey.Down || key == Windows.System.VirtualKey.GamepadDPadDown)
+                && TryFocusFirstVisibleSelector())
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        return key switch
+        {
+            Windows.System.VirtualKey.Up or Windows.System.VirtualKey.GamepadDPadUp => ViewModel.TryMoveSlashSelection(-1),
+            Windows.System.VirtualKey.Down or Windows.System.VirtualKey.GamepadDPadDown => ViewModel.TryMoveSlashSelection(1),
+            _ => false
+        };
     }
 
     private void OnSendAcceleratorInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
@@ -543,7 +809,7 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
             ChatInputNavigationAction.MoveSlashDown => ViewModel.TryMoveSlashSelection(1),
             ChatInputNavigationAction.AcceptSlashCommand => TryAcceptSelectedSlashCommandAndMoveCaretToEnd(),
             ChatInputNavigationAction.EscapeMoveUp => ConsumeOrEscapeMoveUp(),
-            ChatInputNavigationAction.ReturnToInputBox => TryFocusInputBox(),
+            ChatInputNavigationAction.MoveToFirstSelector => TryFocusFirstVisibleSelector(),
             _ => false
         };
     }
@@ -573,10 +839,10 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
             return false;
         }
 
-        InputBox.Focus(FocusState.Programmatic);
+        var focused = InputBox.Focus(FocusState.Programmatic);
         InputBox.SelectionStart = InputBox.Text?.Length ?? 0;
         InputBox.SelectionLength = 0;
-        return true;
+        return focused;
     }
 
     private bool ConsumeOrEscapeMoveUp()
@@ -611,10 +877,188 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
                 selectors[i].XYFocusRight = selectors[i + 1];
             }
         }
+
+        var trailingSelector = GetTrailingVisibleSelector();
+        var leadingActionButton = GetLeadingVisibleActionButton();
+        if (trailingSelector is null || leadingActionButton is null)
+        {
+            return;
+        }
+
+        trailingSelector.XYFocusRight = leadingActionButton;
+        leadingActionButton.XYFocusLeft = trailingSelector;
+    }
+
+    private void ScheduleRefreshVerticalFocusTargets()
+    {
+        RefreshVerticalFocusTargets();
+        _ = DispatcherQueue.TryEnqueue(RefreshVerticalFocusTargets);
     }
 
     private ComboBox? GetFirstVisibleSelector()
         => GetVisibleSelectors().FirstOrDefault();
+
+    private bool TryFocusFirstVisibleSelector()
+    {
+        var firstSelector = GetFirstVisibleSelector();
+        var result = firstSelector is ComboBox comboBox
+            && comboBox.Focus(FocusState.Programmatic);
+        return result;
+    }
+
+    private ComboBox? GetTrailingVisibleSelector()
+        => GetVisibleSelectors().LastOrDefault();
+
+    private Button? GetLeadingVisibleActionButton()
+    {
+        return EnumerateComposerActionButtons()
+            .FirstOrDefault(button => button.Visibility == Visibility.Visible
+                                      && button.IsEnabled);
+    }
+
+    private IEnumerable<Button> EnumerateComposerActionButtons()
+    {
+        return
+        [
+            VoiceInputStartButton,
+            VoiceInputStopButton,
+            SendButton,
+            CancelButton
+        ];
+    }
+
+    private void TryRestoreFocusAfterActionBoundaryChange(DependencyObject sender)
+    {
+        if (sender is not Button actionButton
+            || XamlRoot is null)
+        {
+            return;
+        }
+
+        var focusedElement = XamlFocusManager.GetFocusedElement(XamlRoot) as DependencyObject;
+        var focusedButton = FindAncestorOrSelf<Button>(focusedElement);
+        if (_pendingActionBoundaryContinuationSource is Button pendingActionButton
+            && !IsVisibleAndEnabled(pendingActionButton))
+        {
+            if (TryContinuePendingActionBoundaryChange(pendingActionButton))
+            {
+                return;
+            }
+
+            ScheduleReplacementActionContinuation(pendingActionButton, remainingAttempts: 6);
+            return;
+        }
+
+        if (!ReferenceEquals(focusedButton, actionButton))
+        {
+            return;
+        }
+
+        if (IsVisibleAndEnabled(actionButton))
+        {
+            return;
+        }
+
+        if (TryContinuePendingActionBoundaryChange(actionButton))
+        {
+            return;
+        }
+
+        ScheduleReplacementActionContinuation(actionButton, remainingAttempts: 6);
+    }
+
+    private bool TryContinuePendingActionBoundaryChange(Button pendingActionButton)
+    {
+        var continuationTarget = ResolvePendingActionContinuationTarget(pendingActionButton);
+        if (continuationTarget is null)
+        {
+            return false;
+        }
+
+        var focusedButton = XamlRoot is null
+            ? null
+            : FindAncestorOrSelf<Button>(XamlFocusManager.GetFocusedElement(XamlRoot) as DependencyObject);
+
+        if (ReferenceEquals(focusedButton, pendingActionButton)
+            && ReferenceEquals(continuationTarget, pendingActionButton))
+        {
+            return false;
+        }
+
+        if (ReferenceEquals(focusedButton, continuationTarget)
+            || continuationTarget.Focus(FocusState.Programmatic))
+        {
+            ClearPendingActionBoundaryContinuation(pendingActionButton);
+            StopPendingActionActivationRestore();
+            return true;
+        }
+
+        return false;
+    }
+
+    private Button? ResolvePendingActionContinuationTarget(Button pendingActionButton)
+    {
+        if (IsVisibleAndEnabled(pendingActionButton))
+        {
+            return pendingActionButton;
+        }
+
+        return EnumerateComposerActionButtons()
+            .FirstOrDefault(button => !ReferenceEquals(button, pendingActionButton) && IsVisibleAndEnabled(button));
+    }
+
+    private bool FocusReplacementActionButton(Button previousActionButton)
+    {
+        var replacementActionButton = ResolvePendingActionContinuationTarget(previousActionButton);
+        if (replacementActionButton is not null
+            && !ReferenceEquals(replacementActionButton, previousActionButton)
+            && replacementActionButton.Focus(FocusState.Programmatic))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private void ScheduleReplacementActionContinuation(Button previousActionButton, int remainingAttempts)
+    {
+        if (remainingAttempts <= 0)
+        {
+            ClearPendingActionBoundaryContinuation(previousActionButton);
+            return;
+        }
+
+        _ = DispatcherQueue.TryEnqueue(() =>
+        {
+            if (FocusReplacementActionButton(previousActionButton))
+            {
+                ClearPendingActionBoundaryContinuation(previousActionButton);
+                return;
+            }
+
+            ScheduleReplacementActionContinuation(previousActionButton, remainingAttempts - 1);
+        });
+    }
+
+    private void ClearPendingActionBoundaryContinuation(Button actionButton)
+    {
+        if (ReferenceEquals(_pendingActionBoundaryContinuationSource, actionButton))
+        {
+            _pendingActionBoundaryContinuationSource = null;
+        }
+    }
+
+    private static void OnComposerFocusTopologyPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is ChatInputArea control)
+        {
+            control.ScheduleRefreshVerticalFocusTargets();
+        }
+    }
+
+    private static bool IsVisibleAndEnabled(Control control)
+        => control.Visibility == Visibility.Visible
+           && control.IsEnabled;
 
     private IEnumerable<ComboBox> GetVisibleSelectors()
     {

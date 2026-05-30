@@ -47,6 +47,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
             _messagesListHandledPointerWheelChangedHandler = OnMessagesListPointerWheelChanged;
 
             this.InitializeComponent();
+            ConversationInputArea.MoveUpEscapeHandler = TryFocusTranscriptViewport;
 
             Loaded += OnLoaded;
             Unloaded += OnUnloaded;
@@ -201,11 +202,10 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
             MessagesList?.RemoveHandler(UIElement.KeyDownEvent, _messagesListHandledKeyDownHandler);
             MessagesList?.RemoveHandler(UIElement.PointerPressedEvent, _messagesListHandledPointerPressedHandler);
             MessagesList?.RemoveHandler(UIElement.PointerWheelChangedEvent, _messagesListHandledPointerWheelChangedHandler);
-            var messagesList = MessagesList;
-            if (messagesList is not null)
+            if (MessagesList is not null)
             {
-                messagesList.GotFocus -= OnMessagesListGotFocus;
-                messagesList.LostFocus -= OnMessagesListLostFocus;
+                MessagesList.GotFocus -= OnMessagesListGotFocus;
+                MessagesList.LostFocus -= OnMessagesListLostFocus;
             }
 
             _isMessagesListFocusWithin = false;
@@ -239,9 +239,8 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
 
         private void OnMessagesListPointerPressed(object sender, PointerRoutedEventArgs e)
         {
-            var messagesList = MessagesList;
-            if (messagesList is not null
-                && !TranscriptPointerIntentFilter.ShouldTrackViewportIntent(e.OriginalSource, messagesList))
+            if (MessagesList is not null
+                && !TranscriptPointerIntentFilter.ShouldTrackViewportIntent(e.OriginalSource, MessagesList))
             {
                 return;
             }
@@ -264,9 +263,8 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
 
         private void OnMessagesListPointerReleased(object sender, PointerRoutedEventArgs e)
         {
-            var messagesList = MessagesList;
-            if (messagesList is not null
-                && !TranscriptPointerIntentFilter.ShouldTrackViewportIntent(e.OriginalSource, messagesList))
+            if (MessagesList is not null
+                && !TranscriptPointerIntentFilter.ShouldTrackViewportIntent(e.OriginalSource, MessagesList))
             {
                 return;
             }
@@ -288,9 +286,8 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
 
         private void OnMessagesListPointerWheelChanged(object sender, PointerRoutedEventArgs e)
         {
-            var messagesList = MessagesList;
-            if (messagesList is not null
-                && !TranscriptPointerIntentFilter.ShouldTrackViewportIntent(e.OriginalSource, messagesList))
+            if (MessagesList is not null
+                && !TranscriptPointerIntentFilter.ShouldTrackViewportIntent(e.OriginalSource, MessagesList))
             {
                 return;
             }
@@ -344,9 +341,11 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
                 return true;
             }
 
-            if (TryFocusTranscriptViewport())
+            if (MessagesList is not null
+                && ViewModel.ShouldShowTranscriptSurface
+                && ViewModel.MessageHistory.Count > 0)
             {
-                return true;
+                return MessagesList.Focus(FocusState.Programmatic);
             }
 
             if (ViewModel.ShouldShowSessionHeader
@@ -360,23 +359,21 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
 
         private bool TryFocusTranscriptViewport()
         {
-            var messagesList = MessagesList;
-            if (messagesList is null
-                || !ViewModel.ShouldShowTranscriptSurface
-                || ViewModel.MessageHistory.Count <= 0)
+            if (MessagesList is not null
+                && ViewModel.ShouldShowTranscriptSurface
+                && ViewModel.MessageHistory.Count > 0)
             {
-                return false;
+                return MessagesList.Focus(FocusState.Programmatic);
             }
 
-            return messagesList.Focus(FocusState.Programmatic);
+            return false;
         }
 
         private void FocusTranscriptScroller()
         {
-            var messagesList = MessagesList;
-            if (messagesList is not null)
+            if (MessagesList is not null)
             {
-                _ = messagesList.Focus(FocusState.Programmatic);
+                _ = MessagesList.Focus(FocusState.Programmatic);
             }
         }
 

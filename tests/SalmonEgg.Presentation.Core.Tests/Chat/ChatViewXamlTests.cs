@@ -262,18 +262,6 @@ public sealed class ChatViewXamlTests
     }
 
     [Fact]
-    public void ChatView_GamepadEntry_PrefersInputBox_AndWiresEscapeUpToTranscriptViewport()
-    {
-        var xaml = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml");
-        var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
-
-        Assert.Contains("MoveUpEscapeHandler=\"{x:Bind TryFocusTranscriptViewport, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("ConversationInputArea.TryFocusInputBox()", code, StringComparison.Ordinal);
-        Assert.Contains("private bool TryFocusTranscriptViewport()", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("if (MessagesList is not null", code, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void ChatTranscriptViewportHost_ExposesRelativeItemScrollWithoutOwningViewportState()
     {
         var hostInterface = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Transcript\ITranscriptViewportHost.cs");
@@ -284,6 +272,30 @@ public sealed class ChatViewXamlTests
         Assert.Contains("TryGetFirstVisibleIndex(_listView.Items.Count, out var firstVisibleIndex)", hostCode, StringComparison.Ordinal);
         Assert.Contains("ScrollItemIntoView(targetIndex, TranscriptItemScrollAlignment.Leading);", hostCode, StringComparison.Ordinal);
         Assert.DoesNotContain("ChangeView", hostCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatView_PrimaryContentTarget_PrefersInputBoxBeforeTranscriptViewport()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
+        var inputFocus = code.IndexOf("ConversationInputArea.TryFocusInputBox()", StringComparison.Ordinal);
+        var transcriptFocus = code.IndexOf("return MessagesList.Focus(FocusState.Programmatic);", StringComparison.Ordinal);
+
+        Assert.True(inputFocus >= 0, "ChatView should attempt to focus the composer input box.");
+        Assert.True(transcriptFocus >= 0, "ChatView should still provide transcript viewport fallback focus.");
+        Assert.True(
+            inputFocus < transcriptFocus,
+            "ChatView should prefer the chat input box before falling back to the transcript viewport.");
+    }
+
+    [Fact]
+    public void ChatView_ComposerMoveUpEscapeHandler_ReturnsInputFocusToTranscriptViewport()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
+
+        Assert.Contains("ConversationInputArea.MoveUpEscapeHandler = TryFocusTranscriptViewport;", code, StringComparison.Ordinal);
+        Assert.Contains("private bool TryFocusTranscriptViewport()", code, StringComparison.Ordinal);
+        Assert.Contains("return MessagesList.Focus(FocusState.Programmatic);", code, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -180,6 +180,11 @@ public sealed partial class MainPage
 
     private void OnPlatformGamepadDirectionalBridgeKeyDown(InputKeyboardSource sender, WinUIKeyEventArgs args)
     {
+        if (args.Handled)
+        {
+            return;
+        }
+
         RecordNativeGamepadIntent(args.VirtualKey);
 
         switch (args.VirtualKey)

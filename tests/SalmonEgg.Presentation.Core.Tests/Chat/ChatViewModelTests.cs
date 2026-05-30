@@ -649,6 +649,36 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task StartVoiceInputCommand_WhilePermissionCheckIsPending_DoesNotEnterTransportStartingState()
+    {
+        var voiceInput = new FakeVoiceInputService
+        {
+            IsSupported = true,
+            BlockPermissionUntilReleased = true,
+            PermissionResult = new VoiceInputPermissionResult(VoiceInputPermissionStatus.Denied, "Microphone denied")
+        };
+
+        await using var fixture = CreateViewModel(voiceInputService: voiceInput);
+        fixture.ViewModel.IsSessionActive = true;
+
+        var startTask = fixture.ViewModel.StartVoiceInputCommand.ExecuteAsync(null);
+
+        await WaitForConditionAsync(() => Task.FromResult(voiceInput.PermissionRequestCount == 1));
+
+        Assert.False(fixture.ViewModel.IsVoiceInputTransportBusy);
+        Assert.True(fixture.ViewModel.CanStartVoiceInput);
+        Assert.True(fixture.ViewModel.ShowVoiceInputStartButton);
+        Assert.False(fixture.ViewModel.ShowVoiceInputStopButton);
+
+        voiceInput.ReleasePermissionRequest();
+        await startTask;
+
+        Assert.False(fixture.ViewModel.IsVoiceInputTransportBusy);
+        Assert.Equal(0, voiceInput.StartCount);
+        Assert.Contains("Microphone denied", fixture.ViewModel.VoiceInputErrorMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task StartVoiceInputCommand_WhenVoiceInputIsUnsupported_DoesNotRequestPermissionOrStart()
     {
         var voiceInput = new FakeVoiceInputService
@@ -807,13 +837,17 @@ public partial class ChatViewModelTests
 
         var stopTask = fixture.ViewModel.StopVoiceInputCommand.ExecuteAsync(null);
 
-        Assert.False(fixture.ViewModel.IsVoiceInputListening);
-        Assert.False(fixture.ViewModel.ComposerState.ShowVoiceListeningStatus);
+        Assert.True(fixture.ViewModel.IsVoiceInputListening);
+        Assert.True(fixture.ViewModel.ComposerState.ShowVoiceListeningStatus);
         Assert.True(fixture.ViewModel.IsTextInputEnabled);
         Assert.False(fixture.ViewModel.CanStartVoiceInput);
+        Assert.True(fixture.ViewModel.CanStopVoiceInput);
 
         voiceInput.ReleaseStop();
         await stopTask;
+
+        Assert.False(fixture.ViewModel.IsVoiceInputListening);
+        Assert.False(fixture.ViewModel.ComposerState.ShowVoiceListeningStatus);
     }
 
     [Fact]
@@ -862,6 +896,8 @@ public partial class ChatViewModelTests
 
         Assert.True(fixture.ViewModel.IsTextInputEnabled);
         Assert.False(fixture.ViewModel.CanStartVoiceInput);
+        Assert.True(fixture.ViewModel.IsVoiceInputListening);
+        Assert.True(fixture.ViewModel.CanStopVoiceInput);
 
         voiceInput.ReleaseStop();
         await stopTask;
@@ -896,10 +932,12 @@ public partial class ChatViewModelTests
         Assert.False(fixture.ViewModel.IsVoiceInputListening);
         Assert.True(fixture.ViewModel.IsVoiceInputTransportBusy);
         Assert.False(fixture.ViewModel.CanStartVoiceInput);
+        Assert.False(fixture.ViewModel.CanStopVoiceInput);
 
         voiceInput.ReleaseStop();
         await stopTask;
 
+        Assert.False(fixture.ViewModel.IsVoiceInputListening);
         Assert.False(fixture.ViewModel.IsVoiceInputTransportBusy);
         Assert.True(fixture.ViewModel.CanStartVoiceInput);
     }
@@ -6569,6 +6607,8 @@ public partial class ChatViewModelTests
 
         public bool BlockStartUntilCancellation { get; set; }
 
+        public bool BlockPermissionUntilReleased { get; set; }
+
         public bool DelayStopUntilReleased { get; set; }
 
         public Exception? StopException { get; set; }
@@ -6577,6 +6617,8 @@ public partial class ChatViewModelTests
 
         public VoiceInputPermissionResult PermissionResult { get; set; } =
             new(VoiceInputPermissionStatus.Unsupported, "Not configured");
+
+        private TaskCompletionSource<object?>? PermissionCompletion { get; set; }
 
         public event EventHandler<VoiceInputPartialResult>? PartialResultReceived;
 
@@ -6589,7 +6631,19 @@ public partial class ChatViewModelTests
         public Task<VoiceInputPermissionResult> EnsurePermissionAsync(CancellationToken cancellationToken = default)
         {
             PermissionRequestCount++;
+            if (BlockPermissionUntilReleased)
+            {
+                PermissionCompletion ??= new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+                return WaitForPermissionAsync(cancellationToken);
+            }
+
             return Task.FromResult(PermissionResult);
+        }
+
+        private async Task<VoiceInputPermissionResult> WaitForPermissionAsync(CancellationToken cancellationToken)
+        {
+            await PermissionCompletion!.Task.WaitAsync(cancellationToken);
+            return PermissionResult;
         }
 
         public Task StartAsync(VoiceInputSessionOptions options, CancellationToken cancellationToken = default)
@@ -6644,6 +6698,11 @@ public partial class ChatViewModelTests
         {
             IsListening = false;
             SessionEnded?.Invoke(this, result);
+        }
+
+        public void ReleasePermissionRequest()
+        {
+            PermissionCompletion?.TrySetResult(null);
         }
 
         public void ReleaseStop()

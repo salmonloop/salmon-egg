@@ -11,11 +11,7 @@ public static class ChatInputNavigationPolicy
     {
         if (!inputEnabled || isImeComposing)
         {
-            return intent switch
-            {
-                GamepadNavigationIntent.MoveUp when focusContext == ChatInputFocusContext.ModeSelector => ChatInputNavigationAction.ReturnToInputBox,
-                _ => ChatInputNavigationAction.None
-            };
+            return ChatInputNavigationAction.None;
         }
 
         if (!slashCommandsVisible)
@@ -23,7 +19,7 @@ public static class ChatInputNavigationPolicy
             return intent switch
             {
                 GamepadNavigationIntent.MoveUp when focusContext == ChatInputFocusContext.InputBox => ChatInputNavigationAction.EscapeMoveUp,
-                GamepadNavigationIntent.MoveUp when focusContext == ChatInputFocusContext.ModeSelector => ChatInputNavigationAction.ReturnToInputBox,
+                GamepadNavigationIntent.MoveDown when focusContext == ChatInputFocusContext.InputBox => ChatInputNavigationAction.MoveToFirstSelector,
                 _ => ChatInputNavigationAction.None
             };
         }
@@ -57,8 +53,7 @@ public enum ChatInputNavigationAction
     None,
     MoveSlashUp,
     MoveSlashDown,
-    AcceptSlashCommand
-    ,
+    AcceptSlashCommand,
     EscapeMoveUp,
-    ReturnToInputBox
+    MoveToFirstSelector
 }

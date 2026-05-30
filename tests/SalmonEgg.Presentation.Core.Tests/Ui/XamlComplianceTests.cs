@@ -2240,18 +2240,59 @@ public sealed class XamlComplianceTests
 
         Assert.Contains("INavigationIntentConsumer", code);
         Assert.Contains("OnInputKeyDown", code);
+        Assert.Contains("OnInputBoxHandledKeyDown", code);
         Assert.Contains("OnSendAcceleratorInvoked", code);
         Assert.Contains("OnNewLineAcceleratorInvoked", code);
         Assert.Contains("_isImeComposing", code);
         Assert.Contains("IsPromptEditingAvailable()", code);
         Assert.Contains("MoveUpEscapeHandler", code);
-        Assert.Contains("GamepadNavigationIntent.MoveUp when focusContext == ChatInputFocusContext.ModeSelector", policy, StringComparison.Ordinal);
-        Assert.Contains("ChatInputNavigationAction.ReturnToInputBox", policy, StringComparison.Ordinal);
-        Assert.Contains(
-            "GamepadNavigationIntent.MoveUp when focusContext == ChatInputFocusContext.InputBox => ChatInputNavigationAction.EscapeMoveUp",
-            policy,
-            StringComparison.Ordinal);
+        Assert.Contains("InputBox.AddHandler(UIElement.KeyDownEvent, _inputBoxHandledKeyDownHandler, true);", code, StringComparison.Ordinal);
+        Assert.Contains("InputBox.RemoveHandler(UIElement.KeyDownEvent, _inputBoxHandledKeyDownHandler);", code, StringComparison.Ordinal);
+        Assert.Contains("Windows.System.VirtualKey.GamepadDPadUp", code, StringComparison.Ordinal);
+        Assert.Contains("Windows.System.VirtualKey.GamepadDPadDown", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("GamepadNavigationIntent.MoveUp when focusContext == ChatInputFocusContext.ModeSelector", policy, StringComparison.Ordinal);
         Assert.DoesNotContain("InputBox.IsEnabled && ViewModel.IsInputEnabled", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatInputArea_ComposerDirectionalNavigation_UsesNativeBoundaryAnchorsForActions()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml.cs");
+
+        Assert.Contains("GetTrailingVisibleSelector()", code, StringComparison.Ordinal);
+        Assert.Contains("GetLeadingVisibleActionButton()", code, StringComparison.Ordinal);
+        Assert.Contains("trailingSelector.XYFocusRight = leadingActionButton;", code, StringComparison.Ordinal);
+        Assert.Contains("leadingActionButton.XYFocusLeft = trailingSelector;", code, StringComparison.Ordinal);
+        Assert.Contains("RegisterPropertyChangedCallback(UIElement.VisibilityProperty", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("RegisterPropertyChangedCallback(Control.IsEnabledProperty", code, StringComparison.Ordinal);
+        Assert.Contains("OnComposerFocusTopologyPropertyChanged", code, StringComparison.Ordinal);
+        Assert.Contains("nameof(ShowAgentSelector)", code, StringComparison.Ordinal);
+        Assert.Contains("nameof(ShowModeSelector)", code, StringComparison.Ordinal);
+        Assert.Contains("nameof(IsModeSelectorEnabled)", code, StringComparison.Ordinal);
+        Assert.Contains("nameof(ShowProjectSelector)", code, StringComparison.Ordinal);
+        Assert.Contains("ResolvePendingActionContinuationTarget", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("FocusManager.TryMoveFocus", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatInputArea_VoiceActionContinuation_DoesNotRequireOriginalButtonToRemainFocusable()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml.cs");
+
+        Assert.Contains("ResolvePendingActionContinuationTarget", code, StringComparison.Ordinal);
+        Assert.Contains("TryContinuePendingActionBoundaryChange", code, StringComparison.Ordinal);
+        Assert.Contains("var continuationTarget = ResolvePendingActionContinuationTarget(pendingActionButton);", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("|| !IsVisibleAndEnabled(pendingActionButton)", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatInputArea_LeadingVoiceActionBoundary_DoesNotRequireMeasuredSize()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml.cs");
+
+        Assert.Contains("private Button? GetLeadingVisibleActionButton()", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("button.ActualWidth > 0", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("button.ActualHeight > 0", code, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2421,6 +2462,7 @@ public sealed class XamlComplianceTests
         Assert.Contains("bool TryDispatchWithoutNativeFallback(GamepadNavigationIntent intent);", contract, StringComparison.Ordinal);
         Assert.Contains("public bool TryDispatchWithoutNativeFallback(GamepadNavigationIntent intent)", dispatcher, StringComparison.Ordinal);
         Assert.Contains("TryDispatchCore(intent, allowNativeFallback: false)", dispatcher, StringComparison.Ordinal);
+        Assert.Contains("if (args.Handled)", keyDownHandler, StringComparison.Ordinal);
         Assert.Contains("case Windows.System.VirtualKey.GamepadDPadRight:", windowsPage, StringComparison.Ordinal);
         Assert.Contains("IsFocusWithinMainNavigation() && TryMoveFocusFromMainNavigationIntoCurrentContent()", windowsPage, StringComparison.Ordinal);
         Assert.Contains("TryMoveFocusFromMainNavigationIntoCurrentContent()", windowsPage, StringComparison.Ordinal);
