@@ -39,12 +39,12 @@ namespace SalmonEgg.Infrastructure.Client
             string? SessionId = null,
             AskUserRequest? AskUserRequest = null);
 
-        private sealed class PendingSessionLoadReplayTracker
+        private sealed class PendingSessionActivityTracker
         {
             private long _lastRelevantUpdateUnixMs;
             private int _graceConsumed;
 
-            public PendingSessionLoadReplayTracker(string sessionId, long requestSentUnixMs)
+            public PendingSessionActivityTracker(string sessionId, long requestSentUnixMs)
             {
                 SessionId = sessionId;
                 RequestSentUnixMs = requestSentUnixMs;
@@ -103,7 +103,7 @@ namespace SalmonEgg.Infrastructure.Client
         private readonly ConcurrentDictionary<string, TaskCompletionSource<JsonRpcResponse>> _pendingRequests = new();
         // Inbound tool requests (agent -> client) are correlated by request id so we can format responses correctly.
         private readonly ConcurrentDictionary<string, PendingInboundRequest> _pendingInboundRequests = new();
-        private readonly ConcurrentDictionary<string, PendingSessionLoadReplayTracker> _pendingSessionLoadReplayTrackers = new();
+        private readonly ConcurrentDictionary<string, PendingSessionActivityTracker> _pendingSessionActivityTrackers = new();
 
         private readonly object _lock = new();
         private bool _disposed;
@@ -825,7 +825,7 @@ namespace SalmonEgg.Infrastructure.Client
             var requestIdStr = request.Id?.ToString() ?? string.Empty;
             var tcs = new TaskCompletionSource<JsonRpcResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
             _pendingRequests[requestIdStr] = tcs;
-            PendingSessionLoadReplayTracker? replayTracker = null;
+            PendingSessionActivityTracker? activityTracker = null;
 
             try
             {
@@ -839,10 +839,10 @@ namespace SalmonEgg.Infrastructure.Client
                 var json = _parser.SerializeMessage(request);
                await _transport.SendMessageAsync(json, cancellationToken).ConfigureAwait(false);
                var requestSentUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-               replayTracker = CreateSessionLoadReplayTracker(request, requestSentUnixMs);
-               if (replayTracker is not null)
+               activityTracker = CreateSessionActivityTracker(request, requestSentUnixMs);
+               if (activityTracker is not null)
                {
-                   _pendingSessionLoadReplayTrackers[requestIdStr] = replayTracker;
+                   _pendingSessionActivityTrackers[requestIdStr] = activityTracker;
                }
 
                var nextWait = effectiveTimeout;
@@ -862,9 +862,9 @@ namespace SalmonEgg.Infrastructure.Client
                         throw new OperationCanceledException(cancellationToken);
                     }
 
-                    // ACP does not correlate session/update notifications to a specific session/load
+                    // ACP does not correlate session/update notifications to a specific in-flight
                     // request, so we allow only a single bounded same-session grace window here.
-                    if (replayTracker?.TryConsumeReplayGrace(effectiveTimeout, out nextWait) == true)
+                    if (activityTracker?.TryConsumeReplayGrace(effectiveTimeout, out nextWait) == true)
                     {
                         continue;
                     }
@@ -890,27 +890,32 @@ namespace SalmonEgg.Infrastructure.Client
             }
             finally
             {
-                if (replayTracker is not null)
+                if (activityTracker is not null)
                 {
-                    _pendingSessionLoadReplayTrackers.TryRemove(requestIdStr, out _);
+                    _pendingSessionActivityTrackers.TryRemove(requestIdStr, out _);
                 }
             }
         }
 
-        private static PendingSessionLoadReplayTracker? CreateSessionLoadReplayTracker(
+        private static PendingSessionActivityTracker? CreateSessionActivityTracker(
             JsonRpcRequest request,
             long requestSentUnixMs)
         {
-            if (!string.Equals(request.Method, "session/load", StringComparison.Ordinal)
-                || !request.Params.HasValue)
+            if (!request.Params.HasValue)
             {
                 return null;
             }
 
-            var loadParams = FromElement(request.Params.Value, AcpJsonContext.Default.SessionLoadParams);
-            return string.IsNullOrWhiteSpace(loadParams?.SessionId)
+            string? sessionId = request.Method switch
+            {
+                "session/load" => FromElement(request.Params.Value, AcpJsonContext.Default.SessionLoadParams)?.SessionId,
+                "session/prompt" => FromElement(request.Params.Value, AcpJsonContext.Default.SessionPromptParams)?.SessionId,
+                _ => null
+            };
+
+            return string.IsNullOrWhiteSpace(sessionId)
                 ? null
-                : new PendingSessionLoadReplayTracker(loadParams.SessionId, requestSentUnixMs);
+                : new PendingSessionActivityTracker(sessionId, requestSentUnixMs);
         }
 
         /// <summary>
@@ -1168,11 +1173,11 @@ namespace SalmonEgg.Infrastructure.Client
                 }
 
                 var observedUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                foreach (var pendingReplayTracker in _pendingSessionLoadReplayTrackers.Values)
+                foreach (var pendingActivityTracker in _pendingSessionActivityTrackers.Values)
                 {
-                    if (string.Equals(pendingReplayTracker.SessionId, updateParams.SessionId, StringComparison.Ordinal))
+                    if (string.Equals(pendingActivityTracker.SessionId, updateParams.SessionId, StringComparison.Ordinal))
                     {
-                        pendingReplayTracker.RecordRelevantUpdate(observedUnixMs);
+                        pendingActivityTracker.RecordRelevantUpdate(observedUnixMs);
                     }
                 }
 

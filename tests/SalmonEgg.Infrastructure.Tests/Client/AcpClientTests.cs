@@ -967,6 +967,62 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         [Fact]
+        public async Task SendPromptAsync_WhenSameSessionStreamingContinues_DoesNotTimeoutBeforeResponse()
+        {
+            var parser = new MessageParser();
+            var timeouts = new AcpClient.AcpRequestTimeouts(
+                DefaultTimeout: TimeSpan.FromMilliseconds(50),
+                SessionNewTimeout: TimeSpan.FromSeconds(1),
+                SessionPromptTimeout: TimeSpan.FromMilliseconds(50),
+                SessionLoadTimeout: TimeSpan.FromSeconds(1));
+
+            var client = await CreateInitializedClientAsync(timeouts);
+
+            SetupJsonRpcResponse(
+                "session/new",
+                JsonSerializer.SerializeToElement(new SessionNewResponse("session-123"), parser.Options),
+                parser);
+            _transportMock.Setup(t => t.SendMessageAsync(It.IsRegex("session/prompt"), It.IsAny<CancellationToken>()))
+                .Returns<string, CancellationToken>((message, cancellationToken) =>
+                {
+                    var request = parser.ParseRequest(message);
+
+                    _ = Task.Run(async () =>
+                    {
+                        await Task.Delay(20, cancellationToken);
+                        var firstUpdate = new JsonRpcNotification(
+                            "session/update",
+                            JsonSerializer.SerializeToElement(
+                                new SessionUpdateParams(
+                                    "session-123",
+                                    new AgentThoughtUpdate
+                                    {
+                                        Content = new TextContentBlock("thinking")
+                                    }),
+                                parser.Options));
+                        RaiseTransportMessage(parser.SerializeMessage(firstUpdate));
+
+                        await Task.Delay(20, cancellationToken);
+                        var response = new JsonRpcResponse(
+                            request.Id,
+                            JsonSerializer.SerializeToElement(
+                                new SessionPromptResponse(StopReason.EndTurn),
+                                parser.Options));
+                        RaiseTransportMessage(parser.SerializeMessage(response));
+                    });
+
+                    return Task.FromResult(true);
+                });
+
+            var createResult = await client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null));
+
+            var result = await client.SendPromptAsync(
+                new SessionPromptParams(createResult.SessionId, new List<ContentBlock> { new TextContentBlock("hi") }));
+
+            Assert.Equal(StopReason.EndTurn, result.StopReason);
+        }
+
+        [Fact]
         public async Task SendPromptAsync_TimeoutAfterOtherSessionTraffic_PropagatesTimeout()
         {
             var parser = new MessageParser();
@@ -999,7 +1055,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         [Fact]
-        public async Task SendPromptAsync_TimeoutAfterSameSessionTraffic_StillPropagatesTimeout()
+        public async Task SendPromptAsync_WhenSameSessionStreamingNeverCompletes_StillPropagatesTimeout()
         {
             var parser = new MessageParser();
             var timeouts = new AcpClient.AcpRequestTimeouts(
@@ -1022,15 +1078,31 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var promptTask = client.SendPromptAsync(new SessionPromptParams(createResult.SessionId, new List<ContentBlock> { new TextContentBlock("hi") }));
 
             await Task.Delay(20);
-            var sameSessionUpdate = new JsonRpcNotification(
+            var firstSameSessionUpdate = new JsonRpcNotification(
                 "session/update",
-                JsonSerializer.SerializeToElement(new SessionUpdateParams(
-                    createResult.SessionId,
-                    new AgentThoughtUpdate
-                    {
-                        Content = new TextContentBlock("thinking")
-                    }), parser.Options));
-            _transportMock.Raise(t => t.MessageReceived += null, new MessageReceivedEventArgs(parser.SerializeMessage(sameSessionUpdate)));
+                JsonSerializer.SerializeToElement(
+                    new SessionUpdateParams(
+                        createResult.SessionId,
+                        new AgentThoughtUpdate
+                        {
+                            Content = new TextContentBlock("thinking")
+                        }),
+                    parser.Options));
+            _transportMock.Raise(
+                t => t.MessageReceived += null,
+                new MessageReceivedEventArgs(parser.SerializeMessage(firstSameSessionUpdate)));
+
+            await Task.Delay(20);
+            var secondSameSessionUpdate = new JsonRpcNotification(
+                "session/update",
+                JsonSerializer.SerializeToElement(
+                    new SessionUpdateParams(
+                        createResult.SessionId,
+                        new AgentMessageUpdate(new TextContentBlock("still streaming"))),
+                    parser.Options));
+            _transportMock.Raise(
+                t => t.MessageReceived += null,
+                new MessageReceivedEventArgs(parser.SerializeMessage(secondSameSessionUpdate)));
 
             await Assert.ThrowsAsync<TimeoutException>(() => promptTask);
         }
