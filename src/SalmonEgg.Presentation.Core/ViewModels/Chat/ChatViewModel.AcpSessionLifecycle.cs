@@ -298,7 +298,6 @@ public partial class ChatViewModel
         {
             await adapter
                 .WaitForBufferedUpdatesDrainedAsync(hydrationAttemptId.Value, cancellationToken)
-                .WaitAsync(RemoteReplayDrainTimeout, cancellationToken)
                 .ConfigureAwait(false);
 
             await PostToUiAsync(static () => { }).ConfigureAwait(false);

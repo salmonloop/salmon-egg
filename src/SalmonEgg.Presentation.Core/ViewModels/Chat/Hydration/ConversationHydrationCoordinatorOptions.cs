@@ -5,5 +5,4 @@ namespace SalmonEgg.Presentation.ViewModels.Chat.Hydration;
 internal sealed record ConversationHydrationCoordinatorOptions(
     TimeSpan ReplayStartTimeout,
     TimeSpan ReplaySettleQuietPeriod,
-    TimeSpan PollDelay,
-    TimeSpan ReplayDrainTimeout);
+    TimeSpan PollDelay);

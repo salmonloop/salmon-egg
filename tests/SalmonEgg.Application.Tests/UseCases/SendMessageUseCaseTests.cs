@@ -71,17 +71,6 @@ namespace SalmonEgg.Application.Tests.UseCases
         }
 
         [Fact]
-        public async Task ExecuteAsync_WithInvalidTimeout_ShouldReturnFailure()
-        {
-            // Act
-            var result = await _useCase.ExecuteAsync("test.method", null, -1);
-
-            // Assert
-            Assert.False(result.IsSuccess);
-            Assert.Contains("超时时间必须大于 0", result.Error);
-        }
-
-        [Fact]
         public async Task ExecuteAsync_WhenNotConnected_ShouldReturnFailure()
         {
             // Arrange
@@ -116,22 +105,6 @@ namespace SalmonEgg.Application.Tests.UseCases
         }
 
         [Fact]
-        public async Task ExecuteAsync_WhenResponseTimesOut_ShouldReturnFailure()
-        {
-            // Arrange
-            _mockConnectionManager
-                .Setup(x => x.SendMessageAsync(It.IsAny<AcpMessage>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(SendResult.Success("test-message-id"));
-
-            // Act - 使用 1 秒超时，不发送响应
-            var result = await _useCase.ExecuteAsync("test.method", null, 1);
-
-            // Assert
-            Assert.False(result.IsSuccess);
-            Assert.Contains("请求超时", result.Error);
-        }
-
-        [Fact]
         public async Task ExecuteAsync_WhenResponseContainsError_ShouldReturnFailure()
         {
             // Arrange
@@ -148,7 +121,7 @@ namespace SalmonEgg.Application.Tests.UseCases
                 });
 
             // Act
-            var resultTask = _useCase.ExecuteAsync("test.method", null, 5);
+            var resultTask = _useCase.ExecuteAsync("test.method", null);
             await messageSent.Task;
             await WaitForResponseObserverAsync();
 
@@ -193,7 +166,7 @@ namespace SalmonEgg.Application.Tests.UseCases
                 });
 
             // Act
-            var resultTask = _useCase.ExecuteAsync("test.method", parameters, 5);
+            var resultTask = _useCase.ExecuteAsync("test.method", parameters);
             await messageSent.Task;
             await WaitForResponseObserverAsync();
 
@@ -234,7 +207,7 @@ namespace SalmonEgg.Application.Tests.UseCases
                 });
 
             // Act
-            var resultTask = _useCase.ExecuteAsync("test.method", parameters, 5);
+            var resultTask = _useCase.ExecuteAsync("test.method", parameters);
             await WaitForResponseObserverAsync();
             Assert.NotNull(capturedMessage);
             _incomingMessagesSubject.OnNext(CreateSuccessfulResponse(capturedMessage!.Id));
@@ -266,7 +239,7 @@ namespace SalmonEgg.Application.Tests.UseCases
                 });
 
             // Act
-            var resultTask = _useCase.ExecuteAsync("test.method", null, 5);
+            var resultTask = _useCase.ExecuteAsync("test.method", null);
             await WaitForResponseObserverAsync();
             Assert.NotNull(capturedMessage);
             _incomingMessagesSubject.OnNext(CreateSuccessfulResponse(capturedMessage!.Id));
@@ -292,7 +265,7 @@ namespace SalmonEgg.Application.Tests.UseCases
                 });
 
             // Act
-            var resultTask = _useCase.ExecuteAsync("test.method", null, 5);
+            var resultTask = _useCase.ExecuteAsync("test.method", null);
             await WaitForResponseObserverAsync();
             Assert.NotNull(messageId);
             _incomingMessagesSubject.OnNext(CreateSuccessfulResponse(messageId!));

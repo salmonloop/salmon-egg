@@ -129,7 +129,6 @@ internal sealed class ConversationHydrationCoordinator
         if (hydrationAttemptId.HasValue)
         {
             await context.WaitForAdapterDrainAsync(hydrationAttemptId.Value, cancellationToken)
-                .WaitAsync(_options.ReplayDrainTimeout, cancellationToken)
                 .ConfigureAwait(false);
 
             await context.YieldToUiAsync().ConfigureAwait(false);

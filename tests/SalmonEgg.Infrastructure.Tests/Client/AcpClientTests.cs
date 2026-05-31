@@ -39,25 +39,17 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         private async Task<AcpClient> CreateInitializedClientAsync(
-            AcpClient.AcpRequestTimeouts? timeouts = null,
             AgentCapabilities? capabilities = null,
             ClientCapabilities? clientCapabilities = null,
             ITerminalSessionManager? terminalSessionManager = null)
         {
             var parser = new MessageParser(); // Use real parser for serialization
-            
-            var initTimeouts = timeouts ?? new AcpClient.AcpRequestTimeouts(
-                DefaultTimeout: TimeSpan.FromSeconds(5),
-                SessionNewTimeout: TimeSpan.FromSeconds(5),
-                SessionPromptTimeout: TimeSpan.FromSeconds(5),
-                SessionLoadTimeout: TimeSpan.FromSeconds(5));
 
             var client = new AcpClient(
                 _transportMock.Object,
                 parser,
                 null,
                 _errorLoggerMock.Object,
-                initTimeouts,
                 terminalSessionManager: terminalSessionManager);
 
             // Mock InitializeAsync response
@@ -80,18 +72,10 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         [Fact]
-        public async Task CreateSessionAsync_SlowButValidResponse_UsesSessionNewTimeoutBudget()
+        public async Task CreateSessionAsync_SlowButValidResponse_CompletesWhenResponseEventuallyArrives()
         {
-            var timeouts = new AcpClient.AcpRequestTimeouts(
-                DefaultTimeout: TimeSpan.FromMilliseconds(20),
-                SessionNewTimeout: TimeSpan.FromMilliseconds(500),
-                SessionPromptTimeout: TimeSpan.FromMilliseconds(500),
-                SessionLoadTimeout: TimeSpan.FromMilliseconds(500)
-            );
-
             var parser = new MessageParser();
             var client = await CreateInitializedClientAsync(
-                timeouts,
                 new AgentCapabilities(loadSession: true));
             
             SetupJsonRpcResponse(
@@ -369,17 +353,10 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         [Fact]
-        public async Task LoadSessionAsync_SlowButValidResponse_UsesSessionLoadTimeoutBudget()
+        public async Task LoadSessionAsync_SlowButValidResponse_CompletesWhenResponseEventuallyArrives()
         {
-            var timeouts = new AcpClient.AcpRequestTimeouts(
-                DefaultTimeout: TimeSpan.FromMilliseconds(50),
-                SessionNewTimeout: TimeSpan.FromMilliseconds(500),
-                SessionPromptTimeout: TimeSpan.FromMilliseconds(500),
-                SessionLoadTimeout: TimeSpan.FromMilliseconds(500)
-            );
-
             var parser = new MessageParser();
-            var client = await CreateInitializedClientAsync(timeouts);
+            var client = await CreateInitializedClientAsync();
 
             SetupJsonRpcResponse(
                 "session/load",
@@ -393,16 +370,10 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         [Fact]
-        public async Task LoadSessionAsync_WhenReplayTrafficContinues_DoesNotTimeoutBeforeResponse()
+        public async Task LoadSessionAsync_WhenReplayTrafficContinues_CompletesWhenResponseEventuallyArrives()
         {
             var parser = new MessageParser();
-            var timeouts = new AcpClient.AcpRequestTimeouts(
-                DefaultTimeout: TimeSpan.FromMilliseconds(50),
-                SessionNewTimeout: TimeSpan.FromMilliseconds(500),
-                SessionPromptTimeout: TimeSpan.FromMilliseconds(500),
-                SessionLoadTimeout: TimeSpan.FromMilliseconds(60));
-
-            var client = await CreateInitializedClientAsync(timeouts);
+            var client = await CreateInitializedClientAsync();
 
             _transportMock
                 .Setup(t => t.SendMessageAsync(It.IsRegex("session/load"), It.IsAny<CancellationToken>()))
@@ -435,91 +406,9 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         [Fact]
-        public async Task LoadSessionAsync_WhenOnlyOtherSessionTrafficArrives_StillTimesOut()
-        {
-            var parser = new MessageParser();
-            var timeouts = new AcpClient.AcpRequestTimeouts(
-                DefaultTimeout: TimeSpan.FromMilliseconds(50),
-                SessionNewTimeout: TimeSpan.FromMilliseconds(500),
-                SessionPromptTimeout: TimeSpan.FromMilliseconds(500),
-                SessionLoadTimeout: TimeSpan.FromMilliseconds(60));
-
-            var client = await CreateInitializedClientAsync(timeouts);
-
-            _transportMock
-                .Setup(t => t.SendMessageAsync(It.IsRegex("session/load"), It.IsAny<CancellationToken>()))
-                .Returns<string, CancellationToken>((message, cancellationToken) =>
-                {
-                    var unrelatedReplayUpdate = new JsonRpcNotification(
-                        "session/update",
-                        JsonSerializer.SerializeToElement(
-                            new SessionUpdateParams(
-                                "other-session",
-                                new AgentMessageUpdate(new TextContentBlock("other replay chunk"))),
-                            parser.Options));
-
-                    _ = Task.Run(async () =>
-                    {
-                        await Task.Delay(30, cancellationToken);
-                        RaiseTransportMessage(parser.SerializeMessage(unrelatedReplayUpdate));
-                    }, cancellationToken);
-
-                    return Task.FromResult(true);
-                });
-
-            await Assert.ThrowsAsync<TimeoutException>(() =>
-                client.LoadSessionAsync(new SessionLoadParams("session-123", AbsoluteCwd, null)));
-        }
-
-        [Fact]
-        public async Task LoadSessionAsync_WhenSameSessionReplayKeepsStreamingButResponseNeverArrives_StillTimesOut()
-        {
-            var parser = new MessageParser();
-            var timeouts = new AcpClient.AcpRequestTimeouts(
-                DefaultTimeout: TimeSpan.FromMilliseconds(50),
-                SessionNewTimeout: TimeSpan.FromMilliseconds(500),
-                SessionPromptTimeout: TimeSpan.FromMilliseconds(500),
-                SessionLoadTimeout: TimeSpan.FromMilliseconds(60));
-
-            var client = await CreateInitializedClientAsync(timeouts);
-
-            _transportMock
-                .Setup(t => t.SendMessageAsync(It.IsRegex("session/load"), It.IsAny<CancellationToken>()))
-                .Returns<string, CancellationToken>((message, cancellationToken) =>
-                {
-                    var replayUpdate = new JsonRpcNotification(
-                        "session/update",
-                        JsonSerializer.SerializeToElement(
-                            new SessionUpdateParams(
-                                "session-123",
-                                new AgentMessageUpdate(new TextContentBlock("replay chunk"))),
-                            parser.Options));
-
-                    _ = Task.Run(async () =>
-                    {
-                        await Task.Delay(30, cancellationToken);
-                        RaiseTransportMessage(parser.SerializeMessage(replayUpdate));
-                        await Task.Delay(50, cancellationToken);
-                        RaiseTransportMessage(parser.SerializeMessage(replayUpdate));
-                    }, cancellationToken);
-
-                    return Task.FromResult(true);
-                });
-
-            await Assert.ThrowsAsync<TimeoutException>(() =>
-                client.LoadSessionAsync(new SessionLoadParams("session-123", AbsoluteCwd, null)));
-        }
-
-        [Fact]
         public async Task LoadSessionAsync_WhenCallerCancels_ThrowsOperationCanceledException()
         {
-            var timeouts = new AcpClient.AcpRequestTimeouts(
-                DefaultTimeout: TimeSpan.FromSeconds(5),
-                SessionNewTimeout: TimeSpan.FromSeconds(5),
-                SessionPromptTimeout: TimeSpan.FromSeconds(5),
-                SessionLoadTimeout: TimeSpan.FromSeconds(5));
-
-            var client = await CreateInitializedClientAsync(timeouts);
+            var client = await CreateInitializedClientAsync();
 
             _transportMock.Setup(t => t.SendMessageAsync(It.IsRegex("session/load"), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(true);
@@ -921,25 +810,6 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             Assert.Equal("session-123", @params.GetProperty("sessionId").GetString());
         }
 
-        [Fact]
-        public async Task CreateSessionAsync_TimeoutMessage_ContainsMethodAndLastRx()
-        {
-            var timeouts = new AcpClient.AcpRequestTimeouts(
-                DefaultTimeout: TimeSpan.FromMilliseconds(20),
-                SessionNewTimeout: TimeSpan.FromMilliseconds(20),
-                SessionPromptTimeout: TimeSpan.FromMilliseconds(20),
-                SessionLoadTimeout: TimeSpan.FromMilliseconds(20)
-            );
-
-            var client = await CreateInitializedClientAsync(timeouts);
-            
-            var ex = await Assert.ThrowsAsync<TimeoutException>(() => client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null)));
-            
-            Assert.Contains("method=session/new", ex.Message);
-            Assert.Contains("timeout=", ex.Message);
-            Assert.Contains("lastRx=", ex.Message);
-        }
-
         [Theory]
         [InlineData(StopReason.MaxTurnRequests)]
         [InlineData(StopReason.Refusal)]
@@ -967,16 +837,10 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         [Fact]
-        public async Task SendPromptAsync_WhenSameSessionStreamingContinues_DoesNotTimeoutBeforeResponse()
+        public async Task SendPromptAsync_WhenSameSessionStreamingContinues_CompletesWhenResponseEventuallyArrives()
         {
             var parser = new MessageParser();
-            var timeouts = new AcpClient.AcpRequestTimeouts(
-                DefaultTimeout: TimeSpan.FromMilliseconds(50),
-                SessionNewTimeout: TimeSpan.FromSeconds(1),
-                SessionPromptTimeout: TimeSpan.FromMilliseconds(50),
-                SessionLoadTimeout: TimeSpan.FromSeconds(1));
-
-            var client = await CreateInitializedClientAsync(timeouts);
+            var client = await CreateInitializedClientAsync();
 
             SetupJsonRpcResponse(
                 "session/new",
@@ -1003,6 +867,26 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                         RaiseTransportMessage(parser.SerializeMessage(firstUpdate));
 
                         await Task.Delay(20, cancellationToken);
+                        var secondUpdate = new JsonRpcNotification(
+                            "session/update",
+                            JsonSerializer.SerializeToElement(
+                                new SessionUpdateParams(
+                                    "session-123",
+                                    new AgentMessageUpdate(new TextContentBlock("still streaming"))),
+                                parser.Options));
+                        RaiseTransportMessage(parser.SerializeMessage(secondUpdate));
+
+                        await Task.Delay(20, cancellationToken);
+                        var thirdUpdate = new JsonRpcNotification(
+                            "session/update",
+                            JsonSerializer.SerializeToElement(
+                                new SessionUpdateParams(
+                                    "session-123",
+                                    new AgentMessageUpdate(new TextContentBlock("more output"))),
+                                parser.Options));
+                        RaiseTransportMessage(parser.SerializeMessage(thirdUpdate));
+
+                        await Task.Delay(20, cancellationToken);
                         var response = new JsonRpcResponse(
                             request.Id,
                             JsonSerializer.SerializeToElement(
@@ -1020,91 +904,6 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 new SessionPromptParams(createResult.SessionId, new List<ContentBlock> { new TextContentBlock("hi") }));
 
             Assert.Equal(StopReason.EndTurn, result.StopReason);
-        }
-
-        [Fact]
-        public async Task SendPromptAsync_TimeoutAfterOtherSessionTraffic_PropagatesTimeout()
-        {
-            var parser = new MessageParser();
-            var timeouts = new AcpClient.AcpRequestTimeouts(
-                DefaultTimeout: TimeSpan.FromMilliseconds(50),
-                SessionNewTimeout: TimeSpan.FromSeconds(1),
-                SessionPromptTimeout: TimeSpan.FromMilliseconds(50),
-                SessionLoadTimeout: TimeSpan.FromSeconds(1));
-
-            var client = await CreateInitializedClientAsync(timeouts);
-
-            SetupJsonRpcResponse(
-                "session/new",
-                JsonSerializer.SerializeToElement(new SessionNewResponse("session-123"), parser.Options),
-                parser);
-            _transportMock.Setup(t => t.SendMessageAsync(It.IsRegex("session/prompt"), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(true);
-
-            var createResult = await client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null));
-
-            var promptTask = client.SendPromptAsync(new SessionPromptParams(createResult.SessionId, new List<ContentBlock> { new TextContentBlock("hi") }));
-
-            await Task.Delay(20);
-            var unrelatedUpdate = new JsonRpcNotification(
-                "session/update",
-                JsonSerializer.SerializeToElement(new SessionUpdateParams("other-session", new UsageUpdate { Used = 1 }), parser.Options));
-            _transportMock.Raise(t => t.MessageReceived += null, new MessageReceivedEventArgs(parser.SerializeMessage(unrelatedUpdate)));
-
-            await Assert.ThrowsAsync<TimeoutException>(() => promptTask);
-        }
-
-        [Fact]
-        public async Task SendPromptAsync_WhenSameSessionStreamingNeverCompletes_StillPropagatesTimeout()
-        {
-            var parser = new MessageParser();
-            var timeouts = new AcpClient.AcpRequestTimeouts(
-                DefaultTimeout: TimeSpan.FromMilliseconds(50),
-                SessionNewTimeout: TimeSpan.FromSeconds(1),
-                SessionPromptTimeout: TimeSpan.FromMilliseconds(50),
-                SessionLoadTimeout: TimeSpan.FromSeconds(1));
-
-            var client = await CreateInitializedClientAsync(timeouts);
-
-            SetupJsonRpcResponse(
-                "session/new",
-                JsonSerializer.SerializeToElement(new SessionNewResponse("session-123"), parser.Options),
-                parser);
-            _transportMock.Setup(t => t.SendMessageAsync(It.IsRegex("session/prompt"), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(true);
-
-            var createResult = await client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null));
-
-            var promptTask = client.SendPromptAsync(new SessionPromptParams(createResult.SessionId, new List<ContentBlock> { new TextContentBlock("hi") }));
-
-            await Task.Delay(20);
-            var firstSameSessionUpdate = new JsonRpcNotification(
-                "session/update",
-                JsonSerializer.SerializeToElement(
-                    new SessionUpdateParams(
-                        createResult.SessionId,
-                        new AgentThoughtUpdate
-                        {
-                            Content = new TextContentBlock("thinking")
-                        }),
-                    parser.Options));
-            _transportMock.Raise(
-                t => t.MessageReceived += null,
-                new MessageReceivedEventArgs(parser.SerializeMessage(firstSameSessionUpdate)));
-
-            await Task.Delay(20);
-            var secondSameSessionUpdate = new JsonRpcNotification(
-                "session/update",
-                JsonSerializer.SerializeToElement(
-                    new SessionUpdateParams(
-                        createResult.SessionId,
-                        new AgentMessageUpdate(new TextContentBlock("still streaming"))),
-                    parser.Options));
-            _transportMock.Raise(
-                t => t.MessageReceived += null,
-                new MessageReceivedEventArgs(parser.SerializeMessage(secondSameSessionUpdate)));
-
-            await Assert.ThrowsAsync<TimeoutException>(() => promptTask);
         }
 
         [Fact]

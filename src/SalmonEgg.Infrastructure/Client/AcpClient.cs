@@ -27,70 +27,11 @@ namespace SalmonEgg.Infrastructure.Client
     /// </summary>
     public class AcpClient : IAcpClient, IDisposable
     {
-        internal sealed record AcpRequestTimeouts(
-            TimeSpan DefaultTimeout,
-            TimeSpan SessionNewTimeout,
-            TimeSpan SessionPromptTimeout,
-            TimeSpan SessionLoadTimeout);
-
         private sealed record PendingInboundRequest(
             string Method,
             object? MessageId,
             string? SessionId = null,
             AskUserRequest? AskUserRequest = null);
-
-        private sealed class PendingSessionActivityTracker
-        {
-            private long _lastRelevantUpdateUnixMs;
-            private int _graceConsumed;
-
-            public PendingSessionActivityTracker(string sessionId, long requestSentUnixMs)
-            {
-                SessionId = sessionId;
-                RequestSentUnixMs = requestSentUnixMs;
-            }
-
-            public string SessionId { get; }
-
-            public long RequestSentUnixMs { get; }
-
-            public void RecordRelevantUpdate(long observedUnixMs)
-            {
-                if (observedUnixMs <= RequestSentUnixMs)
-                {
-                    return;
-                }
-
-                Interlocked.Exchange(ref _lastRelevantUpdateUnixMs, observedUnixMs);
-            }
-
-            public bool TryConsumeReplayGrace(TimeSpan timeout, out TimeSpan nextWait)
-            {
-                nextWait = timeout;
-                if (Interlocked.CompareExchange(ref _graceConsumed, 1, 0) != 0)
-                {
-                    return false;
-                }
-
-                var lastRelevantUpdateUnixMs = Interlocked.Read(ref _lastRelevantUpdateUnixMs);
-                if (lastRelevantUpdateUnixMs <= RequestSentUnixMs)
-                {
-                    return false;
-                }
-
-                var idleSinceLastReplay = TimeSpan.FromMilliseconds(
-                    DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - lastRelevantUpdateUnixMs);
-                if (idleSinceLastReplay >= timeout)
-                {
-                    return false;
-                }
-
-                nextWait = timeout - idleSinceLastReplay;
-                return nextWait > TimeSpan.Zero;
-            }
-        }
-
-        private readonly AcpRequestTimeouts _timeouts;
         private readonly ITransport _transport;
         private readonly IMessageParser _parser;
         private readonly IMessageValidator _validator;
@@ -103,7 +44,6 @@ namespace SalmonEgg.Infrastructure.Client
         private readonly ConcurrentDictionary<string, TaskCompletionSource<JsonRpcResponse>> _pendingRequests = new();
         // Inbound tool requests (agent -> client) are correlated by request id so we can format responses correctly.
         private readonly ConcurrentDictionary<string, PendingInboundRequest> _pendingInboundRequests = new();
-        private readonly ConcurrentDictionary<string, PendingSessionActivityTracker> _pendingSessionActivityTrackers = new();
 
         private readonly object _lock = new();
         private bool _disposed;
@@ -114,7 +54,6 @@ namespace SalmonEgg.Infrastructure.Client
         private AgentCapabilities? _agentCapabilities;
         private ClientCapabilities? _clientCapabilities;
         private long _nextMessageId;
-        private long _lastReceivedUnixMs;
         private bool SupportsSessionList => _agentCapabilities?.SupportsSessionList == true;
         private bool SupportsSessionLoad => _agentCapabilities?.SupportsSessionLoading == true;
         private bool SupportsSessionResume => _agentCapabilities?.SupportsSessionResume == true;
@@ -205,25 +144,6 @@ namespace SalmonEgg.Infrastructure.Client
             // 注册传输层事件
             _transport.MessageReceived += OnMessageReceived;
             _transport.ErrorOccurred += OnTransportError;
-
-            _timeouts = new AcpRequestTimeouts(
-                DefaultRequestTimeout,
-                TimeSpan.FromMinutes(2),  // session/new timeout
-                TimeSpan.FromMinutes(2),  // session/prompt timeout
-                TimeSpan.FromSeconds(45)); // session/load timeout
-        }
-
-        internal AcpClient(
-            ITransport transport,
-            IMessageParser? parser,
-            IMessageValidator? validator,
-            IErrorLogger? errorLogger,
-            AcpRequestTimeouts timeouts,
-            ISessionManager? sessionManager = null,
-            ITerminalSessionManager? terminalSessionManager = null)
-            : this(transport, parser, validator, errorLogger, sessionManager, terminalSessionManager)
-        {
-            _timeouts = timeouts ?? throw new ArgumentNullException(nameof(timeouts));
         }
 
         /// <summary>
@@ -367,7 +287,7 @@ namespace SalmonEgg.Infrastructure.Client
                 "session/load",
                 ToElement(@params, AcpJsonContext.Default.SessionLoadParams));
 
-            var response = await SendRequestAsync(request, cancellationToken, _timeouts.SessionLoadTimeout).ConfigureAwait(false);
+            var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
 
             if (response.IsError)
             {
@@ -410,7 +330,7 @@ namespace SalmonEgg.Infrastructure.Client
                 "session/resume",
                 ToElement(@params, AcpJsonContext.Default.SessionResumeParams));
 
-            var response = await SendRequestAsync(request, cancellationToken, _timeouts.SessionLoadTimeout).ConfigureAwait(false);
+            var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
 
             if (response.IsError)
             {
@@ -530,8 +450,7 @@ namespace SalmonEgg.Infrastructure.Client
                 ToElement(@params, AcpJsonContext.Default.SessionPromptParams));
 
             // ACP requires a real session/prompt response with a protocol stopReason.
-            // If the agent only streams session/update traffic and never replies, surface the timeout
-            // instead of fabricating a terminal stop reason on the client's behalf.
+            // The client must wait for the protocol response instead of fabricating a terminal result.
             var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
 
             if (response.IsError)
@@ -818,104 +737,31 @@ namespace SalmonEgg.Infrastructure.Client
         /// 发送请求并等待响应。
         /// </summary>
         
-        private static readonly TimeSpan DefaultRequestTimeout = TimeSpan.FromSeconds(30);
-
-        private async Task<JsonRpcResponse> SendRequestAsync(JsonRpcRequest request, CancellationToken cancellationToken, TimeSpan? timeout = null)
+        private async Task<JsonRpcResponse> SendRequestAsync(JsonRpcRequest request, CancellationToken cancellationToken)
         {
             var requestIdStr = request.Id?.ToString() ?? string.Empty;
             var tcs = new TaskCompletionSource<JsonRpcResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
             _pendingRequests[requestIdStr] = tcs;
-            PendingSessionActivityTracker? activityTracker = null;
 
             try
             {
-                var effectiveTimeout = timeout ?? request.Method switch
-                {
-                    "session/new" => _timeouts.SessionNewTimeout,
-                    "session/prompt" => _timeouts.SessionPromptTimeout,
-                    _ => _timeouts.DefaultTimeout
-                };
-
                 var json = _parser.SerializeMessage(request);
-               await _transport.SendMessageAsync(json, cancellationToken).ConfigureAwait(false);
-               var requestSentUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-               activityTracker = CreateSessionActivityTracker(request, requestSentUnixMs);
-               if (activityTracker is not null)
-               {
-                   _pendingSessionActivityTrackers[requestIdStr] = activityTracker;
-               }
-
-               var nextWait = effectiveTimeout;
-
-               while (true)
-               {
-                   using var timeoutCts = new CancellationTokenSource(nextWait);
-                   using var waitCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
-                   var completedTask = await Task.WhenAny(tcs.Task, Task.Delay(Timeout.Infinite, waitCts.Token)).ConfigureAwait(false);
-                    if (completedTask == tcs.Task)
-                    {
-                        return await tcs.Task.ConfigureAwait(false);
-                    }
-
-                    if (cancellationToken.IsCancellationRequested)
-                    {
-                        throw new OperationCanceledException(cancellationToken);
-                    }
-
-                    // ACP does not correlate session/update notifications to a specific in-flight
-                    // request, so we allow only a single bounded same-session grace window here.
-                    if (activityTracker?.TryConsumeReplayGrace(effectiveTimeout, out nextWait) == true)
-                    {
-                        continue;
-                    }
-
-                    var lastRxMs = Interlocked.Read(ref _lastReceivedUnixMs);
-                    var lastRxAge =
-                        lastRxMs <= 0
-                            ? "never"
-                            : $"{TimeSpan.FromMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - lastRxMs).TotalSeconds:0.0}s ago";
-
-                    var msg = $"Request timed out (method={request.Method}, id={requestIdStr}, timeout={effectiveTimeout.TotalSeconds:0}s, lastRx={lastRxAge}).";
-                    _errorLogger.LogError(new ErrorLogEntry("REQ_TIMEOUT", msg, ErrorSeverity.Warning, nameof(SendRequestAsync)));
-                    throw new TimeoutException(msg);
-               }
+                await _transport.SendMessageAsync(json, cancellationToken).ConfigureAwait(false);
+                using var cancellationRegistration = cancellationToken.Register(
+                    static state => ((TaskCompletionSource<JsonRpcResponse>)state!).TrySetCanceled(),
+                    tcs);
+                return await tcs.Task.ConfigureAwait(false);
             }
-            
-            
+            catch (TaskCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw new OperationCanceledException(cancellationToken);
+            }
             catch (Exception ex)
             {
                 _errorLogger.LogError(new ErrorLogEntry("REQ_ERROR", $"[AcpClient.SendRequestAsync] Request {requestIdStr} failed: {ex.Message}", ErrorSeverity.Error, "SendRequestAsync", null, ex));
                 _pendingRequests.TryRemove(requestIdStr, out _);
                 throw;
             }
-            finally
-            {
-                if (activityTracker is not null)
-                {
-                    _pendingSessionActivityTrackers.TryRemove(requestIdStr, out _);
-                }
-            }
-        }
-
-        private static PendingSessionActivityTracker? CreateSessionActivityTracker(
-            JsonRpcRequest request,
-            long requestSentUnixMs)
-        {
-            if (!request.Params.HasValue)
-            {
-                return null;
-            }
-
-            string? sessionId = request.Method switch
-            {
-                "session/load" => FromElement(request.Params.Value, AcpJsonContext.Default.SessionLoadParams)?.SessionId,
-                "session/prompt" => FromElement(request.Params.Value, AcpJsonContext.Default.SessionPromptParams)?.SessionId,
-                _ => null
-            };
-
-            return string.IsNullOrWhiteSpace(sessionId)
-                ? null
-                : new PendingSessionActivityTracker(sessionId, requestSentUnixMs);
         }
 
         /// <summary>
@@ -941,7 +787,6 @@ namespace SalmonEgg.Infrastructure.Client
         /// </summary>
         private void OnMessageReceived(object? sender, MessageReceivedEventArgs e)
         {
-            Interlocked.Exchange(ref _lastReceivedUnixMs, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
             try
             {
                 var message = _parser.ParseMessage(e.Message);
@@ -1003,7 +848,6 @@ namespace SalmonEgg.Infrastructure.Client
                     if (!string.IsNullOrWhiteSpace(requestIdStr))
                     {
                         TrackPendingInboundRequest(requestIdStr, request.Method, request.Id);
-                        ScheduleInboundRequestTimeout(request.Id, TimeSpan.FromSeconds(30), defaultKind: "permission");
                     }
                     HandlePermissionRequest(request);
                     break;
@@ -1018,7 +862,6 @@ namespace SalmonEgg.Infrastructure.Client
                     if (!string.IsNullOrWhiteSpace(requestIdStr))
                     {
                         TrackPendingInboundRequest(requestIdStr, request.Method, request.Id);
-                        ScheduleInboundRequestTimeout(request.Id, TimeSpan.FromSeconds(30), defaultKind: "fs");
                     }
                     HandleFileSystemRequest(request);
                     break;
@@ -1036,7 +879,6 @@ namespace SalmonEgg.Infrastructure.Client
                     if (!string.IsNullOrWhiteSpace(requestIdStr))
                     {
                         TrackPendingInboundRequest(requestIdStr, request.Method, request.Id);
-                        ScheduleInboundRequestTimeout(request.Id, TimeSpan.FromSeconds(30), defaultKind: "terminal");
                     }
                     _ = HandleTerminalRequestAsync(request);
                     break;
@@ -1050,7 +892,6 @@ namespace SalmonEgg.Infrastructure.Client
                     if (!string.IsNullOrWhiteSpace(requestIdStr))
                     {
                         TrackPendingInboundRequest(requestIdStr, request.Method, request.Id);
-                        ScheduleInboundRequestTimeout(request.Id, TimeSpan.FromSeconds(30), defaultKind: "ask_user");
                     }
                     HandleAskUserRequest(request);
                     break;
@@ -1103,57 +944,6 @@ namespace SalmonEgg.Infrastructure.Client
                 JsonRpcError.CreateMethodNotFound(request.Method)));
         }
 
-        private void ScheduleInboundRequestTimeout(object? messageId, TimeSpan timeout, string defaultKind)
-        {
-            _ = Task.Run(async () =>
-            {
-                if (messageId == null)
-                {
-                    return;
-                }
-
-                try
-                {
-                    await Task.Delay(timeout).ConfigureAwait(false);
-                }
-                catch
-                {
-                    return;
-                }
-
-                var idStr = messageId?.ToString() ?? string.Empty;
-                if (string.IsNullOrWhiteSpace(idStr))
-                {
-                    return;
-                }
-
-                if (!TryGetPendingInboundRequest(idStr, out _))
-                {
-                    return;
-                }
-
-                if (defaultKind == "permission")
-                {
-                    await TrySendPermissionOutcomeResponseAsync(messageId, "cancelled", null).ConfigureAwait(false);
-                    return;
-                }
-
-                // For other tool requests, return a JSON-RPC error so the agent can continue.
-                if (TryTakePendingInboundRequest(idStr, out var pending))
-                {
-                    if (pending.MessageId == null)
-                    {
-                        return;
-                    }
-
-                    var error = new JsonRpcError(
-                        JsonRpcErrorCode.CapabilityNotSupported,
-                        $"Client did not respond to {defaultKind} request in time.");
-                    await SendResponseAsync(new JsonRpcResponse(pending.MessageId, error)).ConfigureAwait(false);
-                }
-            });
-        }
-
         /// <summary>
         /// 处理会话更新通知。
         /// </summary>
@@ -1171,16 +961,6 @@ namespace SalmonEgg.Infrastructure.Client
                 {
                     return;
                 }
-
-                var observedUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                foreach (var pendingActivityTracker in _pendingSessionActivityTrackers.Values)
-                {
-                    if (string.Equals(pendingActivityTracker.SessionId, updateParams.SessionId, StringComparison.Ordinal))
-                    {
-                        pendingActivityTracker.RecordRelevantUpdate(observedUnixMs);
-                    }
-                }
-
                 SessionUpdateReceived?.Invoke(this, new SessionUpdateEventArgs(updateParams.SessionId, updateParams.Update));
             }
             catch (Exception ex)

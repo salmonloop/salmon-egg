@@ -29,9 +29,6 @@ public interface IAcpConnectionCoordinator
 
 public sealed class AcpConnectionCoordinator : IAcpConnectionCoordinator
 {
-    private static readonly TimeSpan SessionLoadTimeout = TimeSpan.FromSeconds(45);
-    private static readonly TimeSpan ReplayDrainTimeout = TimeSpan.FromSeconds(10);
-
     private readonly IChatConnectionStore _store;
     private readonly ILogger<AcpConnectionCoordinator> _logger;
     private readonly IAcpMcpServerResolver _mcpServerResolver;
@@ -156,7 +153,7 @@ public sealed class AcpConnectionCoordinator : IAcpConnectionCoordinator
                         McpServerJsonConverter.CloneServers(mcpServers)),
                     cancellationToken);
                 recoveryProjection = AcpSessionRecoveryProjection.FromLoad(
-                    await loadTask.WaitAsync(SessionLoadTimeout, cancellationToken).ConfigureAwait(false));
+                    await loadTask.WaitAsync(cancellationToken).ConfigureAwait(false));
                 if (adapter != null && hydrationAttemptId.HasValue)
                 {
                     if (!adapter.TryMarkHydrated(hydrationAttemptId.Value))
@@ -178,7 +175,7 @@ public sealed class AcpConnectionCoordinator : IAcpConnectionCoordinator
                         McpServerJsonConverter.CloneServers(mcpServers)),
                     cancellationToken);
                 recoveryProjection = AcpSessionRecoveryProjection.FromResume(
-                    await resumeTask.WaitAsync(SessionLoadTimeout, cancellationToken).ConfigureAwait(false));
+                    await resumeTask.WaitAsync(cancellationToken).ConfigureAwait(false));
             }
 
             await sink.ApplyConversationSessionLoadResponseAsync(
@@ -193,7 +190,6 @@ public sealed class AcpConnectionCoordinator : IAcpConnectionCoordinator
 
                 await adapter
                     .WaitForBufferedUpdatesDrainedAsync(hydrationAttemptId.Value, cancellationToken)
-                    .WaitAsync(ReplayDrainTimeout, cancellationToken)
                     .ConfigureAwait(false);
                 if (!adapter.TryMarkHydrated(hydrationAttemptId.Value, reason: "PostDrainVerification"))
                 {

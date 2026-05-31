@@ -20,8 +20,7 @@ public sealed class ConversationHydrationCoordinatorTests
             new ConversationHydrationCoordinatorOptions(
                 ReplayStartTimeout: TimeSpan.FromMilliseconds(300),
                 ReplaySettleQuietPeriod: TimeSpan.FromMilliseconds(20),
-                PollDelay: TimeSpan.FromMilliseconds(5),
-                ReplayDrainTimeout: TimeSpan.FromMilliseconds(200)));
+                PollDelay: TimeSpan.FromMilliseconds(5)));
 
         var context = new ConversationHydrationContext
         {
@@ -77,8 +76,7 @@ public sealed class ConversationHydrationCoordinatorTests
             new ConversationHydrationCoordinatorOptions(
                 ReplayStartTimeout: TimeSpan.FromMilliseconds(300),
                 ReplaySettleQuietPeriod: TimeSpan.FromMilliseconds(20),
-                PollDelay: TimeSpan.FromMilliseconds(5),
-                ReplayDrainTimeout: TimeSpan.FromMilliseconds(200)));
+                PollDelay: TimeSpan.FromMilliseconds(5)));
 
         var context = new ConversationHydrationContext
         {
@@ -121,8 +119,7 @@ public sealed class ConversationHydrationCoordinatorTests
             new ConversationHydrationCoordinatorOptions(
                 ReplayStartTimeout: TimeSpan.FromMilliseconds(300),
                 ReplaySettleQuietPeriod: TimeSpan.FromMilliseconds(40),
-                PollDelay: TimeSpan.FromMilliseconds(5),
-                ReplayDrainTimeout: TimeSpan.FromMilliseconds(200)));
+                PollDelay: TimeSpan.FromMilliseconds(5)));
         var context = new ConversationHydrationContext
         {
             SetHydrationPhaseAsync = static (_, _, _) => Task.CompletedTask,
@@ -154,8 +151,7 @@ public sealed class ConversationHydrationCoordinatorTests
             new ConversationHydrationCoordinatorOptions(
                 ReplayStartTimeout: TimeSpan.FromMilliseconds(300),
                 ReplaySettleQuietPeriod: TimeSpan.FromMilliseconds(50),
-                PollDelay: TimeSpan.FromMilliseconds(5),
-                ReplayDrainTimeout: TimeSpan.FromMilliseconds(200)));
+                PollDelay: TimeSpan.FromMilliseconds(5)));
         var context = new ConversationHydrationContext
         {
             SetHydrationPhaseAsync = static (_, _, _) => Task.CompletedTask,
@@ -186,8 +182,7 @@ public sealed class ConversationHydrationCoordinatorTests
             new ConversationHydrationCoordinatorOptions(
                 ReplayStartTimeout: TimeSpan.FromSeconds(1),
                 ReplaySettleQuietPeriod: TimeSpan.FromMilliseconds(20),
-                PollDelay: TimeSpan.FromMilliseconds(10),
-                ReplayDrainTimeout: TimeSpan.FromMilliseconds(200)));
+                PollDelay: TimeSpan.FromMilliseconds(10)));
         var context = new ConversationHydrationContext
         {
             SetHydrationPhaseAsync = static (_, _, _) => Task.CompletedTask,
@@ -223,8 +218,7 @@ public sealed class ConversationHydrationCoordinatorTests
             new ConversationHydrationCoordinatorOptions(
                 ReplayStartTimeout: TimeSpan.FromMilliseconds(300),
                 ReplaySettleQuietPeriod: TimeSpan.FromMilliseconds(20),
-                PollDelay: TimeSpan.FromMilliseconds(5),
-                ReplayDrainTimeout: TimeSpan.FromMilliseconds(200)));
+                PollDelay: TimeSpan.FromMilliseconds(5)));
         var context = new ConversationHydrationContext
         {
             SetHydrationPhaseAsync = static (_, _, _) => Task.CompletedTask,
@@ -272,8 +266,7 @@ public sealed class ConversationHydrationCoordinatorTests
             new ConversationHydrationCoordinatorOptions(
                 ReplayStartTimeout: TimeSpan.FromMilliseconds(300),
                 ReplaySettleQuietPeriod: TimeSpan.FromMilliseconds(20),
-                PollDelay: TimeSpan.FromMilliseconds(5),
-                ReplayDrainTimeout: TimeSpan.FromMilliseconds(200)));
+                PollDelay: TimeSpan.FromMilliseconds(5)));
         var context = new ConversationHydrationContext
         {
             SetHydrationPhaseAsync = static (_, _, _) => Task.CompletedTask,

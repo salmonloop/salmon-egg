@@ -134,17 +134,6 @@ public partial class ChatViewModel
             // User-cancelled; keep input cleared.
             await PreemptivelyCancelTurnAsync(promptContext.ConversationId, promptContext.TurnId).ConfigureAwait(true);
         }
-        catch (TimeoutException ex)
-        {
-            Logger.LogError(ex, "SendPrompt timed out");
-            SetError("Send timed out: Agent did not respond for a long time.");
-
-            await FailPromptSendAsync(promptContext, "Timed out").ConfigureAwait(true);
-
-            RestoreCurrentPromptOnUiThread(promptContext.PromptText);
-
-            ShowTransientNotificationToast("Agent no response (timeout). Please check if the agent needs login/initialization or try again later.");
-        }
         catch (Exception ex)
         {
             Logger.LogError(ex, "SendPrompt failed");

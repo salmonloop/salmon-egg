@@ -92,8 +92,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private static readonly TimeSpan RemoteReplayStartTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan RemoteReplaySettleQuietPeriod = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan RemoteReplayKnownTranscriptGrowthGracePeriod = TimeSpan.FromSeconds(5);
-    private static readonly TimeSpan RemoteSessionLoadTimeout = TimeSpan.FromSeconds(45);
-    private static readonly TimeSpan RemoteReplayDrainTimeout = TimeSpan.FromSeconds(10);
     private const int RemoteReplayPollDelayMilliseconds = 50;
     private AcpHydrationCompletionMode _hydrationCompletionMode = AcpHydrationCompletionMode.StrictReplay;
     private readonly ChatConversationWorkspace _conversationWorkspace;
@@ -1283,8 +1281,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             new ConversationHydrationCoordinatorOptions(
                 ReplayStartTimeout: RemoteReplayStartTimeout,
                 ReplaySettleQuietPeriod: RemoteReplaySettleQuietPeriod,
-                PollDelay: TimeSpan.FromMilliseconds(RemoteReplayPollDelayMilliseconds),
-                ReplayDrainTimeout: RemoteReplayDrainTimeout));
+                PollDelay: TimeSpan.FromMilliseconds(RemoteReplayPollDelayMilliseconds)));
         _hydrationContext = new ConversationHydrationContext
         {
             SetHydrationPhaseAsync = SetConversationHydrationPhaseAsync,

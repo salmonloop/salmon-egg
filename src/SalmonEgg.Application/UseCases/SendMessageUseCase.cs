@@ -18,7 +18,6 @@ namespace SalmonEgg.Application.UseCases
     {
         private readonly IConnectionManager _connectionManager;
         private readonly ILogger _logger;
-        private const int DefaultTimeoutSeconds = 30;
 
         /// <summary>
         /// 初始化 SendMessageUseCase 的新实例
@@ -41,18 +40,6 @@ namespace SalmonEgg.Application.UseCases
         /// <returns>包含响应消息的操作结果</returns>
         public async Task<Result<AcpMessage>> ExecuteAsync(string? method, JsonElement? parameters)
         {
-            return await ExecuteAsync(method, parameters, DefaultTimeoutSeconds);
-        }
-
-        /// <summary>
-        /// 执行发送消息的操作（带自定义超时）
-        /// </summary>
-        /// <param name="method">方法名</param>
-        /// <param name="parameters">已解析的 JSON 参数</param>
-        /// <param name="timeoutSeconds">超时时间（秒）</param>
-        /// <returns>包含响应消息的操作结果</returns>
-        public async Task<Result<AcpMessage>> ExecuteAsync(string? method, JsonElement? parameters, int timeoutSeconds)
-        {
             try
             {
                 // 1. 验证输入 (Requirement 2.5, 4.3)
@@ -62,19 +49,12 @@ namespace SalmonEgg.Application.UseCases
                     return Result<AcpMessage>.Failure("方法名不能为空");
                 }
 
-                if (timeoutSeconds <= 0)
-                {
-                    _logger.Warning("发送消息失败：超时时间无效 {Timeout}", timeoutSeconds);
-                    return Result<AcpMessage>.Failure("超时时间必须大于 0");
-                }
-
                 var methodValue = method!;
                 _logger.Information("开始发送消息，方法: {Method}", methodValue);
 
                 // 2. 检查连接状态 (Requirement 3.1)
                 var currentState = await _connectionManager.ConnectionStateChanges
-                    .FirstAsync()
-                    .Timeout(TimeSpan.FromSeconds(1));
+                    .FirstAsync();
 
                 if (currentState.Status != ConnectionStatus.Connected)
                 {
@@ -108,47 +88,27 @@ namespace SalmonEgg.Application.UseCases
 
                 _logger.Debug("消息已发送，等待响应...");
 
-                // 5. 等待响应（带超时机制 - 30 秒）(Requirement 4.3)
-                try
+                var response = await _connectionManager.IncomingMessages
+                    .Where(m => m.Id == message.Id && m.Type == "response")
+                    .FirstAsync();
+
+                // 检查响应是否包含错误
+                if (response.Error != null)
                 {
-                    var response = await _connectionManager.IncomingMessages
-                        .Where(m => m.Id == message.Id && m.Type == "response")
-                        .FirstAsync()
-                        .Timeout(TimeSpan.FromSeconds(timeoutSeconds));
+                    _logger.Warning(
+                        "收到错误响应，消息 ID: {MessageId}, 错误代码: {ErrorCode}, 错误消息: {ErrorMessage}",
+                        response.Id, response.Error.Code, response.Error.Message);
 
-                    // 检查响应是否包含错误
-                    if (response.Error != null)
-                    {
-                        _logger.Warning(
-                            "收到错误响应，消息 ID: {MessageId}, 错误代码: {ErrorCode}, 错误消息: {ErrorMessage}",
-                            response.Id, response.Error.Code, response.Error.Message);
-                        
-                        return Result<AcpMessage>.Failure(
-                            $"服务器返回错误 (代码 {response.Error.Code}): {response.Error.Message}");
-                    }
-
-                    // 6. 记录日志 (Requirement 6.1)
-                    _logger.Information(
-                        "成功接收响应，消息 ID: {MessageId}, 方法: {Method}",
-                        response.Id, methodValue);
-
-                    return Result<AcpMessage>.Success(response);
-                }
-                catch (TimeoutException)
-                {
-                    _logger.Error(
-                        "等待响应超时 ({Timeout} 秒)，消息 ID: {MessageId}, 方法: {Method}",
-                        timeoutSeconds, message.Id, methodValue);
-                    
                     return Result<AcpMessage>.Failure(
-                        $"请求超时（{timeoutSeconds} 秒）：未收到服务器响应");
+                        $"服务器返回错误 (代码 {response.Error.Code}): {response.Error.Message}");
                 }
-            }
-            catch (TimeoutException ex)
-            {
-                // 检查连接状态超时
-                _logger.Error(ex, "检查连接状态超时");
-                return Result<AcpMessage>.Failure("无法获取连接状态");
+
+                // 6. 记录日志 (Requirement 6.1)
+                _logger.Information(
+                    "成功接收响应，消息 ID: {MessageId}, 方法: {Method}",
+                    response.Id, methodValue);
+
+                return Result<AcpMessage>.Success(response);
             }
             catch (Exception ex)
             {

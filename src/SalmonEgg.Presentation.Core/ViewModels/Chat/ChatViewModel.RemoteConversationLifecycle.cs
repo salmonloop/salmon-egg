@@ -1958,28 +1958,20 @@ public partial class ChatViewModel
             requestToken);
         request.TrackTransportTask(resumeTask);
         _ = ObserveRemoteSessionRecoveryTransportTaskAsync(resumeTask, recoveryMode, remoteSessionId);
-        try
-        {
-            var projection = AcpSessionRecoveryProjection.FromResume(
-                await resumeTask
-                    .WaitAsync(RemoteSessionLoadTimeout, requestToken)
-                    .ConfigureAwait(false));
-            var wasPublished = await PublishRemoteSessionRecoveryProjectionAsync(
-                    conversationId,
-                    binding,
-                    connectionInstanceId,
-                    projection,
-                    adapter: null,
-                    hydrationAttemptId: null,
-                    requestToken)
-                .ConfigureAwait(false);
-            return projection with { WasPublished = wasPublished };
-        }
-        catch (TimeoutException)
-        {
-            request.CancelTransport();
-            throw;
-        }
+        var projection = AcpSessionRecoveryProjection.FromResume(
+            await resumeTask
+                .WaitAsync(requestToken)
+                .ConfigureAwait(false));
+        var wasPublished = await PublishRemoteSessionRecoveryProjectionAsync(
+                conversationId,
+                binding,
+                connectionInstanceId,
+                projection,
+                adapter: null,
+                hydrationAttemptId: null,
+                requestToken)
+            .ConfigureAwait(false);
+        return projection with { WasPublished = wasPublished };
     }
 
     private async Task<AcpSessionRecoveryProjection> RunRemoteSessionLoadRecoveryProjectionAsync(
@@ -2008,7 +2000,7 @@ public partial class ChatViewModel
         {
             var projection = AcpSessionRecoveryProjection.FromLoad(
                 await loadTask
-                    .WaitAsync(RemoteSessionLoadTimeout, requestToken)
+                    .WaitAsync(requestToken)
                     .ConfigureAwait(false));
             var wasPublished = await PublishRemoteSessionRecoveryProjectionAsync(
                     conversationId,
@@ -2020,16 +2012,6 @@ public partial class ChatViewModel
                     requestToken)
                 .ConfigureAwait(false);
             return projection with { WasPublished = wasPublished };
-        }
-        catch (TimeoutException)
-        {
-            request.CancelTransport();
-            ReleaseBufferedUpdatesAfterInterruptedHydration(
-                adapter,
-                hydrationAttemptId,
-                ownsHydrationScope: true,
-                "RemoteSessionRecoveryTimeout");
-            throw;
         }
         catch (OperationCanceledException) when (requestToken.IsCancellationRequested)
         {
