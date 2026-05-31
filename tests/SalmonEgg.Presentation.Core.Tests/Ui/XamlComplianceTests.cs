@@ -1311,6 +1311,15 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void MainPage_SearchBox_DoesNotOverrideNativeInputChrome()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");
+
+        Assert.DoesNotContain("Height=\"32\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("CornerRadius=\"8\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MainPage_SearchSuggestions_StayWithinNativeAutoSuggestBox()
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");
