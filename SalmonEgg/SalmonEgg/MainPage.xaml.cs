@@ -922,6 +922,17 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
         return false;
     }
 
+    private bool TryConsumeCurrentPageNavigationIntent(GamepadNavigationIntent intent)
+    {
+        if (ContentFrame.Content is INavigationIntentConsumer pageConsumer
+            && pageConsumer.TryConsumeNavigationIntent(intent))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
     private bool TryMoveFocusFromCurrentContentIntoMainNavigation()
     {
         if (MainNavView.XamlRoot is null || IsFocusWithinMainNavigation())

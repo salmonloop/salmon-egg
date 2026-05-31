@@ -93,7 +93,7 @@ public sealed class ChatTranscriptNavigationPolicyTests
             tryScrollByItems: _ => false,
             registerUserViewportIntent: () => registerCount++);
 
-        Assert.False(consumed);
+        Assert.True(consumed);
         Assert.Equal(0, registerCount);
     }
 

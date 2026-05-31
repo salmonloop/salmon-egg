@@ -14,7 +14,6 @@ using SalmonEgg.Presentation.Core.Services.Input;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.Selectors;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using XamlFocusManager = Microsoft.UI.Xaml.Input.FocusManager;
-using WindowActivationState = Microsoft.UI.Xaml.WindowActivationState;
 using WindowActivatedEventArgs = Microsoft.UI.Xaml.WindowActivatedEventArgs;
 
 namespace SalmonEgg.Controls;
@@ -446,7 +445,7 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
 
     private void OnMainWindowActivated(object sender, WindowActivatedEventArgs args)
     {
-        if (args.WindowActivationState == WindowActivationState.Deactivated
+        if (string.Equals(args.WindowActivationState.ToString(), "Deactivated", StringComparison.Ordinal)
             || _pendingActionBoundaryContinuationSource is not Button pendingActionButton)
         {
             return;
@@ -677,12 +676,15 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
 
     private void OnInputBoxHandledKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        if (!e.Handled)
+        var isGamepadDirectionalKey = e.Key is Windows.System.VirtualKey.GamepadDPadUp
+            or Windows.System.VirtualKey.GamepadDPadDown;
+
+        if (!e.Handled && !isGamepadDirectionalKey)
         {
             return;
         }
 
-        if (ReferenceEquals(FindAncestorOrSelf<TextBox>(e.OriginalSource as DependencyObject), InputBox)
+        if (ReferenceEquals(sender, InputBox)
             && TryHandleInputDirectionalKey(e.Key))
         {
             e.Handled = true;
@@ -839,7 +841,7 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
             return false;
         }
 
-        var focused = InputBox.Focus(FocusState.Programmatic);
+        var focused = InputBox.Focus(FocusState.Keyboard);
         InputBox.SelectionStart = InputBox.Text?.Length ?? 0;
         InputBox.SelectionLength = 0;
         return focused;

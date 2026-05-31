@@ -113,6 +113,17 @@ public sealed class ListViewTranscriptViewportHost : ITranscriptViewportHost
         return true;
     }
 
+    public bool TryFocusViewport(FocusState focusState)
+    {
+        AttachScrollViewer();
+        if (_scrollViewer?.Focus(focusState) == true)
+        {
+            return true;
+        }
+
+        return _listView.Focus(focusState);
+    }
+
     public bool IsAtBottom(int itemCount, double bottomThreshold, double bottomGeometryTolerance)
     {
         if (itemCount <= 0)

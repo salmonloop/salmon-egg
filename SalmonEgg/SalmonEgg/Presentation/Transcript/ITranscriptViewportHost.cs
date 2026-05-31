@@ -1,5 +1,7 @@
 namespace SalmonEgg.Presentation.Transcript;
 
+using Microsoft.UI.Xaml;
+
 public enum TranscriptItemScrollAlignment
 {
     Default = 0,
@@ -17,6 +19,8 @@ public interface ITranscriptViewportHost : IDisposable
     void ScrollItemIntoView(int index, TranscriptItemScrollAlignment alignment = TranscriptItemScrollAlignment.Default);
 
     bool TryScrollByItems(int itemDelta);
+
+    bool TryFocusViewport(FocusState focusState);
 
     bool IsAtBottom(int itemCount, double bottomThreshold, double bottomGeometryTolerance);
 

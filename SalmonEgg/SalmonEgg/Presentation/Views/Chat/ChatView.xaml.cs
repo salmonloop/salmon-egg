@@ -12,6 +12,8 @@ using SalmonEgg.Presentation.Utilities;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.Core.ViewModels.ShellLayout;
 using SalmonEgg.Presentation.Core.Services.Input;
+using Windows.Foundation;
+using XamlFocusManager = Microsoft.UI.Xaml.Input.FocusManager;
 
 namespace SalmonEgg.Presentation.Views.Chat;
 
@@ -31,14 +33,19 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
         private bool _restoreDetachedViewportAfterOverlay;
         private string? _restoreDetachedViewportConversationId;
         private bool _resumeViewportCoordinatorAfterOverlayPending;
+        private bool _isTranscriptViewportLayerActive;
+        private object? _activeTranscriptMessageAnchorItem;
+        private bool _isTranscriptChildControlLayerActive;
+        private int? _pendingTranscriptMessageFocusIndex;
         private readonly TranscriptProjectionRestoreController _projectionRestoreController = new(MaxRestoreAttempts);
         private string _transcriptViewportAutomationState = "inactive";
         private INotifyCollectionChanged? _trackedMessageHistory;
         private readonly Microsoft.UI.Xaml.Input.KeyEventHandler _messagesListHandledKeyDownHandler;
         private readonly PointerEventHandler _messagesListHandledPointerPressedHandler;
         private readonly PointerEventHandler _messagesListHandledPointerWheelChangedHandler;
+        private readonly TypedEventHandler<ListViewBase, ContainerContentChangingEventArgs> _messagesListContainerContentChangingHandler;
+        private readonly RoutedEventHandler _messagesListItemGotFocusHandler;
         private ITranscriptViewportHost? _transcriptViewportHost;
-        private bool _isMessagesListFocusWithin;
         public ChatView()
         {
             ShellViewModel = App.ServiceProvider.GetRequiredService<ChatShellViewModel>();
@@ -46,6 +53,8 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
             _messagesListHandledKeyDownHandler = OnMessagesListKeyDown;
             _messagesListHandledPointerPressedHandler = OnMessagesListPointerPressed;
             _messagesListHandledPointerWheelChangedHandler = OnMessagesListPointerWheelChanged;
+            _messagesListContainerContentChangingHandler = OnMessagesListContainerContentChanging;
+            _messagesListItemGotFocusHandler = OnMessagesListItemGotFocus;
 
             this.InitializeComponent();
 
@@ -76,6 +85,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
             _restoreDetachedViewportConversationId = null;
             _resumeViewportCoordinatorAfterOverlayPending = false;
             ClearPendingProjectionRestore();
+            ClearTranscriptMessageLayerState();
             _wasOverlayVisible = ViewModel.IsActivationOverlayVisible;
             _viewportController.Load(
                 CurrentViewportConversationId,
@@ -114,6 +124,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
             _resumeViewportCoordinatorAfterOverlayPending = false;
             DisposeTranscriptViewportHost();
             ClearPendingProjectionRestore();
+            ClearTranscriptMessageLayerState();
             UpdateTranscriptViewportAutomationState();
             if (_isTrackingMessages)
             {
@@ -195,17 +206,18 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
             }
 #endif
 
-            messagesList?.AddHandler(UIElement.KeyDownEvent, _messagesListHandledKeyDownHandler, true);
-            messagesList?.AddHandler(UIElement.PointerPressedEvent, _messagesListHandledPointerPressedHandler, true);
-            messagesList?.AddHandler(UIElement.PointerWheelChangedEvent, _messagesListHandledPointerWheelChangedHandler, true);
             if (messagesList is not null)
             {
-                messagesList.GotFocus += OnMessagesListGotFocus;
-                messagesList.LostFocus += OnMessagesListLostFocus;
+                messagesList.ContainerContentChanging -= _messagesListContainerContentChangingHandler;
+                messagesList.ContainerContentChanging += _messagesListContainerContentChangingHandler;
+                messagesList.AddHandler(UIElement.KeyDownEvent, _messagesListHandledKeyDownHandler, true);
+                messagesList.AddHandler(UIElement.PointerPressedEvent, _messagesListHandledPointerPressedHandler, true);
+                messagesList.AddHandler(UIElement.PointerWheelChangedEvent, _messagesListHandledPointerWheelChangedHandler, true);
             }
 
             ResumeViewportCoordinatorAfterOverlayIfNeeded();
             BeginLayoutLoadingIfPendingMessages();
+            TryApplyPendingTranscriptMessageFocus();
             TryApplyPendingProjectionRestore();
             TryIssueTranscriptScrollRequest();
             TryRefreshViewportCoordinatorFromView();
@@ -215,16 +227,13 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
         private void OnMessagesListUnloaded(object sender, RoutedEventArgs e)
         {
             DisposeTranscriptViewportHost();
+            if (MessagesList is not null)
+            {
+                MessagesList.ContainerContentChanging -= _messagesListContainerContentChangingHandler;
+            }
             MessagesList?.RemoveHandler(UIElement.KeyDownEvent, _messagesListHandledKeyDownHandler);
             MessagesList?.RemoveHandler(UIElement.PointerPressedEvent, _messagesListHandledPointerPressedHandler);
             MessagesList?.RemoveHandler(UIElement.PointerWheelChangedEvent, _messagesListHandledPointerWheelChangedHandler);
-            if (MessagesList is not null)
-            {
-                MessagesList.GotFocus -= OnMessagesListGotFocus;
-                MessagesList.LostFocus -= OnMessagesListLostFocus;
-            }
-
-            _isMessagesListFocusWithin = false;
             UpdateTranscriptViewportAutomationState();
         }
 
@@ -245,6 +254,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
             var lastItemContainerGenerated = HasLastItemContainerGenerated(ViewModel.MessageHistory.Count);
             RefreshLayoutLoadingState(lastItemContainerGenerated);
 
+            TryApplyPendingTranscriptMessageFocus();
             TryApplyPendingProjectionRestore();
             ApplyViewportActions(_viewportController.OnViewportChanged(
                 CreateViewportViewState(lastItemContainerGenerated),
@@ -324,29 +334,91 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
             }
         }
 
-        private void OnMessagesListGotFocus(object sender, RoutedEventArgs e)
+        private void OnMessagesListContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
         {
-            _isMessagesListFocusWithin = true;
+            if (args.ItemContainer is not ListViewItem container)
+            {
+                return;
+            }
+
+            container.GotFocus -= _messagesListItemGotFocusHandler;
+            container.GotFocus += _messagesListItemGotFocusHandler;
+            container.ClearValue(Control.XYFocusRightProperty);
+
+            if (FindFirstInteractiveTranscriptChild(container) is not Control firstInteractiveChild)
+            {
+                return;
+            }
+
+            container.XYFocusRight = firstInteractiveChild;
+            firstInteractiveChild.XYFocusLeft = container;
+            TryApplyPendingTranscriptMessageFocus();
         }
 
-        private void OnMessagesListLostFocus(object sender, RoutedEventArgs e)
+        private void OnMessagesListItemGotFocus(object sender, RoutedEventArgs e)
         {
-            _isMessagesListFocusWithin = false;
+            if (sender is not ListViewItem container || MessagesList is null)
+            {
+                return;
+            }
+
+            _activeTranscriptMessageAnchorItem = MessagesList.ItemFromContainer(container);
+            _isTranscriptViewportLayerActive = false;
+            _isTranscriptChildControlLayerActive = false;
         }
 
         public bool TryConsumeNavigationIntent(GamepadNavigationIntent intent)
         {
+            if (_isTranscriptViewportLayerActive && IsTranscriptMessageLayerFocusWithin())
+            {
+                _isTranscriptViewportLayerActive = false;
+            }
+
+            if (!_isTranscriptChildControlLayerActive
+                && IsTranscriptMessageLayerFocusWithin())
+            {
+                if (intent == GamepadNavigationIntent.MoveUp)
+                {
+                    return TryMoveFocusBetweenTranscriptMessages(-1);
+                }
+
+                if (intent == GamepadNavigationIntent.MoveDown)
+                {
+                    return TryMoveFocusBetweenTranscriptMessages(1);
+                }
+            }
+
+            if (intent == GamepadNavigationIntent.MoveRight)
+            {
+                return TryMoveFocusFromTranscriptMessageToChildControl();
+            }
+
+            if (intent == GamepadNavigationIntent.MoveLeft)
+            {
+                return TryMoveFocusFromTranscriptChildControlToMessage();
+            }
+
             if (_transcriptViewportHost is null)
             {
                 return false;
             }
 
-            return ChatTranscriptNavigationIntentHandler.TryConsume(
+            var consumed = ChatTranscriptNavigationIntentHandler.TryConsume(
                 intent,
-                _isMessagesListFocusWithin,
+                _isTranscriptViewportLayerActive || IsTranscriptViewportSurfaceFocusWithin(),
                 ViewModel.MessageHistory.Count,
                 _transcriptViewportHost.TryScrollByItems,
                 RegisterUserViewportIntent);
+            if (consumed)
+            {
+                _isTranscriptViewportLayerActive = true;
+                if (!IsTranscriptViewportSurfaceFocusWithin())
+                {
+                    _ = TryFocusTranscriptViewportSurface(FocusState.Keyboard);
+                }
+            }
+
+            return consumed;
         }
 
         public bool TryFocusPrimaryContentTarget()
@@ -355,6 +427,8 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
                 && ConversationInputArea is not null
                 && ConversationInputArea.TryFocusInputBox())
             {
+                _isTranscriptViewportLayerActive = false;
+                ClearTranscriptMessageLayerState();
                 return true;
             }
 
@@ -362,12 +436,13 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
                 && ViewModel.ShouldShowTranscriptSurface
                 && ViewModel.MessageHistory.Count > 0)
             {
-                return MessagesList.Focus(FocusState.Programmatic);
+                return TryFocusTranscriptViewportSurface(FocusState.Keyboard);
             }
 
             if (ViewModel.ShouldShowSessionHeader
                 && CurrentSessionTitleBlock is not null)
             {
+                _isTranscriptViewportLayerActive = false;
                 return CurrentSessionTitleBlock.Focus(FocusState.Programmatic);
             }
 
@@ -380,7 +455,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
                 && ViewModel.ShouldShowTranscriptSurface
                 && ViewModel.MessageHistory.Count > 0)
             {
-                return MessagesList.Focus(FocusState.Programmatic);
+                return TryFocusTranscriptViewportSurface(FocusState.Keyboard);
             }
 
             return false;
@@ -388,10 +463,293 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
 
         private void FocusTranscriptScroller()
         {
-            if (MessagesList is not null)
+            _ = TryFocusTranscriptViewportSurface(FocusState.Keyboard);
+        }
+
+        private bool TryFocusTranscriptViewportSurface(FocusState focusState)
+        {
+            _pendingTranscriptMessageFocusIndex = null;
+            if (_transcriptViewportHost?.TryFocusViewport(focusState) == true)
             {
-                _ = MessagesList.Focus(FocusState.Programmatic);
+                _isTranscriptViewportLayerActive = true;
+                _isTranscriptChildControlLayerActive = false;
+                return true;
             }
+
+            if (MessagesList?.Focus(focusState) == true)
+            {
+                _isTranscriptViewportLayerActive = true;
+                _isTranscriptChildControlLayerActive = false;
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool IsTranscriptViewportSurfaceFocusWithin()
+        {
+            if (MessagesList is null)
+            {
+                return false;
+            }
+
+            if (MessagesList.FocusState is FocusState.Keyboard or FocusState.Programmatic)
+            {
+                return true;
+            }
+
+            if (MessagesList.XamlRoot is null)
+            {
+                return false;
+            }
+
+            var current = XamlFocusManager.GetFocusedElement(MessagesList.XamlRoot) as DependencyObject;
+            if (FindAncestorOrSelf<ListViewItem>(current) is ListViewItem itemContainer
+                && IsDescendantOf(itemContainer, MessagesList))
+            {
+                return false;
+            }
+
+            while (current is not null)
+            {
+                if (ReferenceEquals(current, MessagesList))
+                {
+                    return true;
+                }
+
+                current = VisualTreeHelper.GetParent(current);
+            }
+
+            return false;
+        }
+
+        private bool IsTranscriptMessageLayerFocusWithin()
+        {
+            if (MessagesList?.XamlRoot is null)
+            {
+                return false;
+            }
+
+            var current = XamlFocusManager.GetFocusedElement(MessagesList.XamlRoot) as DependencyObject;
+            return FindAncestorOrSelf<ListViewItem>(current) is ListViewItem itemContainer
+                && IsDescendantOf(itemContainer, MessagesList);
+        }
+
+        private static Control? FindFirstInteractiveTranscriptChild(DependencyObject root)
+        {
+            var count = VisualTreeHelper.GetChildrenCount(root);
+            for (var index = 0; index < count; index++)
+            {
+                var child = VisualTreeHelper.GetChild(root, index);
+                if (child is Control control
+                    && control is not ListViewItem
+                    && control.Visibility == Visibility.Visible
+                    && control.IsEnabled
+                    && control.IsTabStop)
+                {
+                    return control;
+                }
+
+                var nested = FindFirstInteractiveTranscriptChild(child);
+                if (nested is not null)
+                {
+                    return nested;
+                }
+            }
+
+            return null;
+        }
+
+        private bool TryMoveFocusFromTranscriptMessageToChildControl()
+        {
+            if (MessagesList?.XamlRoot is null)
+            {
+                return false;
+            }
+
+            var current = XamlFocusManager.GetFocusedElement(MessagesList.XamlRoot) as DependencyObject;
+            var focusedItemContainer = FindAncestorOrSelf<ListViewItem>(current);
+            if (focusedItemContainer is null || !IsDescendantOf(focusedItemContainer, MessagesList))
+            {
+                return false;
+            }
+
+            if (!ReferenceEquals(current, focusedItemContainer))
+            {
+                return false;
+            }
+
+            if (FindFirstInteractiveTranscriptChild(focusedItemContainer) is not Control firstInteractiveChild)
+            {
+                return false;
+            }
+
+            _activeTranscriptMessageAnchorItem = MessagesList.ItemFromContainer(focusedItemContainer);
+            var focused = TryFocusTranscriptNavigationTarget(firstInteractiveChild);
+            _isTranscriptViewportLayerActive = false;
+            _isTranscriptChildControlLayerActive = focused;
+            return focused;
+        }
+
+        private bool TryMoveFocusBetweenTranscriptMessages(int itemDelta)
+        {
+            if (itemDelta == 0 || MessagesList?.XamlRoot is null || MessagesList.Items.Count <= 0)
+            {
+                return false;
+            }
+
+            var current = XamlFocusManager.GetFocusedElement(MessagesList.XamlRoot) as DependencyObject;
+            var focusedItemContainer = FindAncestorOrSelf<ListViewItem>(current);
+            var currentIndex = -1;
+            if (focusedItemContainer is not null && IsDescendantOf(focusedItemContainer, MessagesList))
+            {
+                currentIndex = MessagesList.IndexFromContainer(focusedItemContainer);
+            }
+
+            if (currentIndex < 0 && _activeTranscriptMessageAnchorItem is not null)
+            {
+                currentIndex = MessagesList.Items.IndexOf(_activeTranscriptMessageAnchorItem);
+            }
+
+            if (currentIndex < 0)
+            {
+                return false;
+            }
+
+            var targetIndex = Math.Clamp(currentIndex + itemDelta, 0, MessagesList.Items.Count - 1);
+            if (targetIndex == currentIndex)
+            {
+                _isTranscriptViewportLayerActive = false;
+                _isTranscriptChildControlLayerActive = false;
+                return true;
+            }
+
+            if (MessagesList.ContainerFromIndex(targetIndex) is not ListViewItem targetContainer)
+            {
+                if (MessagesList.Items[targetIndex] is not object item)
+                {
+                    return false;
+                }
+
+                _pendingTranscriptMessageFocusIndex = targetIndex;
+                MessagesList.ScrollIntoView(item, ScrollIntoViewAlignment.Leading);
+                _activeTranscriptMessageAnchorItem = item;
+                _isTranscriptViewportLayerActive = false;
+                _isTranscriptChildControlLayerActive = false;
+                _ = DispatcherQueue.TryEnqueue(TryApplyPendingTranscriptMessageFocus);
+                return true;
+            }
+
+            _pendingTranscriptMessageFocusIndex = null;
+            _activeTranscriptMessageAnchorItem = MessagesList.ItemFromContainer(targetContainer);
+            _isTranscriptViewportLayerActive = false;
+            _isTranscriptChildControlLayerActive = false;
+            return TryFocusTranscriptNavigationTarget(targetContainer);
+        }
+
+        private void TryApplyPendingTranscriptMessageFocus()
+        {
+            if (_pendingTranscriptMessageFocusIndex is not int pendingIndex
+                || MessagesList?.ContainerFromIndex(pendingIndex) is not ListViewItem pendingContainer)
+            {
+                return;
+            }
+
+            if (TryFocusTranscriptNavigationTarget(pendingContainer))
+            {
+                _pendingTranscriptMessageFocusIndex = null;
+            }
+        }
+
+        private bool TryMoveFocusFromTranscriptChildControlToMessage()
+        {
+            if (MessagesList?.XamlRoot is null)
+            {
+                return false;
+            }
+
+            var current = XamlFocusManager.GetFocusedElement(MessagesList.XamlRoot) as DependencyObject;
+            var focusedItemContainer = FindAncestorOrSelf<ListViewItem>(current);
+            if (focusedItemContainer is null || !IsDescendantOf(focusedItemContainer, MessagesList))
+            {
+                if (_isTranscriptChildControlLayerActive && TryFocusStoredTranscriptMessageAnchor())
+                {
+                    _isTranscriptChildControlLayerActive = false;
+                    return true;
+                }
+                return false;
+            }
+
+            if (ReferenceEquals(current, focusedItemContainer))
+            {
+                return false;
+            }
+
+            var focused = TryFocusTranscriptNavigationTarget(focusedItemContainer);
+            _isTranscriptViewportLayerActive = false;
+            _isTranscriptChildControlLayerActive = false;
+            return focused;
+        }
+
+        private bool TryFocusStoredTranscriptMessageAnchor()
+        {
+            if (MessagesList is null || _activeTranscriptMessageAnchorItem is null)
+            {
+                return false;
+            }
+
+            if (MessagesList.ContainerFromItem(_activeTranscriptMessageAnchorItem) is not ListViewItem container)
+            {
+                return false;
+            }
+
+            return TryFocusTranscriptNavigationTarget(container);
+        }
+
+        private void ClearTranscriptMessageLayerState()
+        {
+            _activeTranscriptMessageAnchorItem = null;
+            _isTranscriptChildControlLayerActive = false;
+            _pendingTranscriptMessageFocusIndex = null;
+        }
+
+        private static bool TryFocusTranscriptNavigationTarget(Control target)
+        {
+            return target.Focus(FocusState.Keyboard)
+                || target.Focus(FocusState.Programmatic);
+        }
+
+        private static T? FindAncestorOrSelf<T>(DependencyObject? start)
+            where T : class
+        {
+            var current = start;
+            while (current is not null)
+            {
+                if (current is T match)
+                {
+                    return match;
+                }
+
+                current = VisualTreeHelper.GetParent(current);
+            }
+
+            return default;
+        }
+
+        private static bool IsDescendantOf(DependencyObject? current, DependencyObject ancestor)
+        {
+            var node = current;
+            while (node is not null)
+            {
+                if (ReferenceEquals(node, ancestor))
+                {
+                    return true;
+                }
+
+                node = VisualTreeHelper.GetParent(node);
+            }
+
+            return false;
         }
 
         private void RegisterUserViewportIntent()

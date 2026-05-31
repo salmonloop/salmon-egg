@@ -408,6 +408,88 @@ public sealed class ShellFocusedActivationSmokeTests
     }
 
     [SkippableFact]
+    public void ChatInputArea_InputBox_KeyboardUp_CanReachTranscriptViewport()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData(withContent: true);
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        Assert.True(
+            session.WaitUntilOnscreen("MainNav.Session.gui-session-01", TimeSpan.FromSeconds(15)),
+            $"Session nav item did not become onscreen before chat transcript return validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-session-01", TimeSpan.FromSeconds(10));
+        session.ActivateElement(sessionItem);
+        Assert.True(
+            session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10)),
+            $"Chat view did not become visible before transcript return validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var inputBox = session.FindByAutomationId("InputBox", TimeSpan.FromSeconds(10));
+        FocusAndAssert(session, inputBox, "InputBox", "chat input box");
+
+        session.PressUp();
+
+        Assert.True(
+            WaitUntil(
+                () => session.IsFocusWithinAutomationId("ChatView.MessagesList"),
+                TimeSpan.FromSeconds(3)),
+            $"Keyboard Up did not move from the chat input box to the transcript viewport."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElementDetailed()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
+    [SkippableFact]
+    public void ChatTranscriptSurface_KeyboardUpThenVirtualGamepadVerticalNavigation_DoesNotEscapeToMainNavigation()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var appData = GuiAppDataScope.CreateDeterministicMarkdownHeavyTranscriptData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+        var focusTimeline = new List<string>();
+
+        Assert.True(
+            session.WaitUntilOnscreen("MainNav.Session.gui-markdown-heavy-session-01", TimeSpan.FromSeconds(15)),
+            $"Markdown-heavy session nav item did not become onscreen before transcript viewport stability validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-markdown-heavy-session-01", TimeSpan.FromSeconds(10));
+        session.ActivateElement(sessionItem);
+        Assert.True(
+            session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10)),
+            $"Chat view did not become visible before transcript viewport stability validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var inputBox = session.FindByAutomationId("InputBox", TimeSpan.FromSeconds(10));
+        FocusAndAssert(session, inputBox, "InputBox", "chat input box");
+
+        session.PressUp();
+
+        Assert.True(
+            WaitUntil(
+                () => session.IsFocusWithinAutomationId("ChatView.MessagesList"),
+                TimeSpan.FromSeconds(3)),
+            $"Keyboard Up did not move from the chat input box into the transcript surface before stability validation."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElementDetailed()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        focusTimeline.Add($"start: {session.DescribeFocusedElementDetailed()}");
+        for (var index = 0; index < 8; index++)
+        {
+            session.PressVirtualGamepadDPadDown();
+            focusTimeline.Add($"after down {index + 1}: {session.DescribeFocusedElementDetailed()}");
+
+            Assert.True(
+                WaitUntil(
+                    () => session.IsFocusWithinAutomationId("ChatView.MessagesList"),
+                    TimeSpan.FromSeconds(1)),
+                $"Virtual gamepad D-pad Down escaped the transcript viewport during markdown-heavy scrolling."
+                + $"{Environment.NewLine}Step={index + 1}"
+                + $"{Environment.NewLine}Focus={session.DescribeFocusedElementDetailed()}"
+                + $"{Environment.NewLine}Timeline={string.Join(Environment.NewLine, focusTimeline)}"
+                + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+        }
+    }
+
+    [SkippableFact]
     public void ChatInputArea_ComposerHorizontalTraversal_CanReachActionButtonAndReturnToTrailingVisibleSelector()
     {
         GuiTestGate.RequireEnabled();
@@ -534,6 +616,349 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
             + $"{Environment.NewLine}ExpectedReturn={expectedReturnSelectorAutomationId}"
             + $"{Environment.NewLine}Timeline={string.Join(Environment.NewLine, focusTimeline)}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
+    [SkippableFact]
+    public void ChatTranscriptViewport_KeyboardUpThenVirtualGamepadActivation_CanEnterFirstMessageListItem()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData(withContent: true);
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        Assert.True(
+            session.WaitUntilOnscreen("MainNav.Session.gui-session-01", TimeSpan.FromSeconds(15)),
+            $"Session nav item did not become onscreen before transcript activation validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-session-01", TimeSpan.FromSeconds(10));
+        session.ActivateElement(sessionItem);
+        Assert.True(
+            session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10)),
+            $"Chat view did not become visible before transcript activation validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var inputBox = session.FindByAutomationId("InputBox", TimeSpan.FromSeconds(10));
+        FocusAndAssert(session, inputBox, "InputBox", "chat input box");
+        session.PressUp();
+
+        Assert.True(
+            WaitUntil(
+                () => session.IsFocusWithinAutomationId("ChatView.MessagesList"),
+                TimeSpan.FromSeconds(3)),
+            $"Keyboard Up did not reach the transcript viewport before transcript activation."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElementDetailed()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var messagesList = session.FindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(5));
+        var firstMessageListItem = session.FindFirstDescendantByControlType(
+            messagesList,
+            ControlType.ListItem,
+            TimeSpan.FromSeconds(5));
+
+        Assert.NotNull(firstMessageListItem);
+
+        session.PressVirtualGamepadA();
+
+        Assert.True(
+            WaitUntil(
+                () => session.IsFocusedElement(firstMessageListItem!),
+                TimeSpan.FromSeconds(3)),
+            $"Virtual gamepad activation did not enter the first transcript message list item from the viewport."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElementDetailed()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
+    [SkippableFact]
+    public void ChatTranscriptMessageLayer_KeyboardUpThenVirtualGamepadDPadUp_DoesNotEscapeMessageLayerAtTopBoundary()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData(withContent: true);
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        Assert.True(
+            session.WaitUntilOnscreen("MainNav.Session.gui-session-01", TimeSpan.FromSeconds(15)),
+            $"Session nav item did not become onscreen before transcript message-layer top-boundary validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-session-01", TimeSpan.FromSeconds(10));
+        session.ActivateElement(sessionItem);
+        Assert.True(
+            session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10)),
+            $"Chat view did not become visible before transcript message-layer top-boundary validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var inputBox = session.FindByAutomationId("InputBox", TimeSpan.FromSeconds(10));
+        FocusAndAssert(session, inputBox, "InputBox", "chat input box");
+        session.PressUp();
+        Assert.True(
+            WaitUntil(
+                () => session.IsFocusWithinAutomationId("ChatView.MessagesList"),
+                TimeSpan.FromSeconds(3)),
+            $"Keyboard Up did not reach the transcript viewport before transcript message-layer top-boundary validation."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElementDetailed()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var messagesList = session.FindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(5));
+        var firstMessageListItem = session.FindFirstDescendantByControlType(
+            messagesList,
+            ControlType.ListItem,
+            TimeSpan.FromSeconds(5));
+        Assert.NotNull(firstMessageListItem);
+
+        session.PressVirtualGamepadA();
+        Assert.True(
+            WaitUntil(
+                () => session.IsFocusedElement(firstMessageListItem!),
+                TimeSpan.FromSeconds(3)),
+            $"Virtual gamepad activation did not enter the first transcript message list item before transcript message-layer top-boundary validation."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElementDetailed()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var firstMessageBounds = firstMessageListItem!.BoundingRectangle;
+        session.PressVirtualGamepadDPadUp();
+
+        Assert.True(
+            WaitUntil(
+                () => session.IsFocusWithinAutomationId("ChatView.MessagesList")
+                    && session.TryGetFocusedBoundingRectangle() is { } focusedBounds
+                    && focusedBounds.Y == firstMessageBounds.Y
+                    && focusedBounds.Height == firstMessageBounds.Height,
+                TimeSpan.FromSeconds(3)),
+            $"Virtual gamepad D-pad Up escaped the transcript message layer from the first message boundary."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElementDetailed()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
+    [SkippableFact]
+    public void ChatTranscriptMessageLayer_KeyboardUpThenVirtualGamepadBack_ReturnsToTranscriptViewport()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData(withContent: true);
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        Assert.True(
+            session.WaitUntilOnscreen("MainNav.Session.gui-session-01", TimeSpan.FromSeconds(15)),
+            $"Session nav item did not become onscreen before transcript back validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-session-01", TimeSpan.FromSeconds(10));
+        session.ActivateElement(sessionItem);
+        Assert.True(
+            session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10)),
+            $"Chat view did not become visible before transcript back validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var inputBox = session.FindByAutomationId("InputBox", TimeSpan.FromSeconds(10));
+        FocusAndAssert(session, inputBox, "InputBox", "chat input box");
+        session.PressUp();
+        Assert.True(
+            WaitUntil(
+                () => session.IsFocusWithinAutomationId("ChatView.MessagesList"),
+                TimeSpan.FromSeconds(3)),
+            $"Keyboard Up did not reach the transcript viewport before transcript back validation."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElementDetailed()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var messagesList = session.FindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(5));
+        var firstMessageListItem = session.FindFirstDescendantByControlType(
+            messagesList,
+            ControlType.ListItem,
+            TimeSpan.FromSeconds(5));
+        Assert.NotNull(firstMessageListItem);
+
+        session.PressVirtualGamepadA();
+        Assert.True(
+            WaitUntil(
+                () => session.IsFocusedElement(firstMessageListItem!),
+                TimeSpan.FromSeconds(3)),
+            $"Virtual gamepad activation did not enter the first transcript message list item before transcript back validation."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElementDetailed()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        session.PressVirtualGamepadB();
+
+        Assert.True(
+            WaitUntil(
+                () => session.IsFocusWithinAutomationId("ChatView.MessagesList"),
+                TimeSpan.FromSeconds(3)),
+            $"Virtual gamepad Back did not return from the transcript message layer to the transcript viewport."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElementDetailed()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
+    [SkippableFact]
+    public void ChatTranscriptMessageLayer_KeyboardUpThenVirtualGamepadDPadDown_CanReachNextMessage()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var appData = GuiAppDataScope.CreateDeterministicMarkdownHeavyTranscriptData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        Assert.True(
+            session.WaitUntilOnscreen("MainNav.Session.gui-markdown-heavy-session-01", TimeSpan.FromSeconds(15)),
+            $"Markdown-heavy session nav item did not become onscreen before transcript message-layer navigation validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-markdown-heavy-session-01", TimeSpan.FromSeconds(15));
+        session.ActivateElement(sessionItem);
+        Assert.True(
+            session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10)),
+            $"Chat view did not become visible before transcript message-layer navigation validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var inputBox = session.FindByAutomationId("InputBox", TimeSpan.FromSeconds(10));
+        FocusAndAssert(session, inputBox, "InputBox", "chat input box");
+        session.PressUp();
+        Assert.True(
+            WaitUntil(
+                () => session.IsFocusWithinAutomationId("ChatView.MessagesList"),
+                TimeSpan.FromSeconds(3)),
+            $"Keyboard Up did not reach the transcript viewport before transcript message-layer navigation validation."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElementDetailed()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var messagesList = session.FindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(5));
+        var messageItems = messagesList
+            .FindAllDescendants(cf => cf.ByControlType(ControlType.ListItem))
+            .ToArray();
+        Assert.True(
+            messageItems.Length >= 1,
+            $"Transcript message-layer navigation validation requires at least one realized message item."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElementDetailed()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var firstMessageListItem = messageItems[0];
+        var firstMessageBounds = firstMessageListItem.BoundingRectangle;
+
+        session.PressVirtualGamepadA();
+        Assert.True(
+            WaitUntil(
+                () => session.IsFocusedElement(firstMessageListItem),
+                TimeSpan.FromSeconds(3)),
+            $"Virtual gamepad activation did not enter the first transcript message list item before message-layer vertical navigation validation."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElementDetailed()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        session.PressVirtualGamepadDPadDown();
+        Assert.True(
+            WaitUntil(
+                () => session.IsFocusWithinAutomationId("ChatView.MessagesList")
+                    && session.TryGetFocusedBoundingRectangle() is { } focusedBounds
+                    && (focusedBounds.Y != firstMessageBounds.Y
+                        || focusedBounds.Height != firstMessageBounds.Height),
+                TimeSpan.FromSeconds(3)),
+            $"Virtual gamepad D-pad Down did not move away from the first transcript message while staying inside the transcript message layer."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElementDetailed()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
+    [SkippableFact]
+    public void ChatTranscriptMessageLayer_KeyboardUpThenVirtualGamepadRight_CanReachToolCallPill()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var appData = GuiAppDataScope.CreateDeterministicToolCallData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-toolcall-session-01", TimeSpan.FromSeconds(15));
+        session.ActivateElement(sessionItem);
+        Assert.True(
+            session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10)),
+            $"Chat view did not become visible before transcript child-control validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var inputBox = session.FindByAutomationId("InputBox", TimeSpan.FromSeconds(10));
+        FocusAndAssert(session, inputBox, "InputBox", "chat input box");
+        session.PressUp();
+        Assert.True(
+            WaitUntil(
+                () => session.IsFocusWithinAutomationId("ChatView.MessagesList"),
+                TimeSpan.FromSeconds(3)),
+            $"Keyboard Up did not reach the transcript viewport before transcript child-control validation."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElementDetailed()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var messagesList = session.FindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(5));
+        var firstMessageListItem = session.FindFirstDescendantByControlType(
+            messagesList,
+            ControlType.ListItem,
+            TimeSpan.FromSeconds(5));
+        Assert.NotNull(firstMessageListItem);
+
+        session.PressVirtualGamepadA();
+        Assert.True(
+            WaitUntil(
+                () => session.IsFocusedElement(firstMessageListItem!),
+                TimeSpan.FromSeconds(3)),
+            $"Virtual gamepad activation did not enter the first transcript message list item before transcript child-control validation."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElementDetailed()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        Assert.True(
+            MoveFocusUntil(
+                session,
+                session.PressVirtualGamepadDPadRight,
+                () => session.IsFocusWithinAutomationId("ToolCallPill.RootButton"),
+                attempts: 4),
+            $"Virtual gamepad Right did not leave the transcript message layer for the tool-call child control."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElementDetailed()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
+    [SkippableFact]
+    public void ChatTranscriptChildControl_KeyboardUpThenVirtualGamepadLeft_ReturnsToMessageLayer()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var appData = GuiAppDataScope.CreateDeterministicToolCallData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-toolcall-session-01", TimeSpan.FromSeconds(15));
+        session.ActivateElement(sessionItem);
+        Assert.True(
+            session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10)),
+            $"Chat view did not become visible before transcript child-return validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var inputBox = session.FindByAutomationId("InputBox", TimeSpan.FromSeconds(10));
+        FocusAndAssert(session, inputBox, "InputBox", "chat input box");
+        session.PressUp();
+        Assert.True(
+            WaitUntil(
+                () => session.IsFocusWithinAutomationId("ChatView.MessagesList"),
+                TimeSpan.FromSeconds(3)),
+            $"Keyboard Up did not reach the transcript viewport before transcript child-return validation."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElementDetailed()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var messagesList = session.FindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(5));
+        var firstMessageListItem = session.FindFirstDescendantByControlType(
+            messagesList,
+            ControlType.ListItem,
+            TimeSpan.FromSeconds(5));
+        Assert.NotNull(firstMessageListItem);
+
+        session.PressVirtualGamepadA();
+        Assert.True(
+            WaitUntil(
+                () => session.IsFocusedElement(firstMessageListItem!),
+                TimeSpan.FromSeconds(3)),
+            $"Virtual gamepad activation did not enter the first transcript message list item before transcript child-return validation."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElementDetailed()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        Assert.True(
+            MoveFocusUntil(
+                session,
+                session.PressVirtualGamepadDPadRight,
+                () => session.IsFocusWithinAutomationId("ToolCallPill.RootButton"),
+                attempts: 4),
+            $"Virtual gamepad Right did not reach the tool-call child control before transcript child-return validation."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElementDetailed()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        session.PressVirtualGamepadDPadLeft();
+
+        Assert.True(
+            WaitUntil(
+                () => session.IsFocusedElement(firstMessageListItem!),
+                TimeSpan.FromSeconds(3)),
+            $"Virtual gamepad Left did not return from the tool-call child control to the transcript message layer."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElementDetailed()}"
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 

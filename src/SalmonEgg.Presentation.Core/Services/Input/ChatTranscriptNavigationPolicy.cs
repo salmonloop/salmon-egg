@@ -57,12 +57,11 @@ public static class ChatTranscriptNavigationIntentHandler
             return false;
         }
 
-        if (!tryScrollByItems(decision.ItemDelta))
+        if (tryScrollByItems(decision.ItemDelta))
         {
-            return false;
+            registerUserViewportIntent();
         }
 
-        registerUserViewportIntent();
         return true;
     }
 }

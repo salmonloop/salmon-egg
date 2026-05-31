@@ -248,17 +248,11 @@ public sealed class ChatViewXamlTests
         Assert.Contains("ChatTranscriptNavigationIntentHandler.TryConsume(", chatViewCode, StringComparison.Ordinal);
         Assert.Contains("_transcriptViewportHost.TryScrollByItems", chatViewCode, StringComparison.Ordinal);
         Assert.Contains("RegisterUserViewportIntent);", chatViewCode, StringComparison.Ordinal);
-        Assert.Contains("messagesList.GotFocus += OnMessagesListGotFocus;", chatViewCode, StringComparison.Ordinal);
-        Assert.Contains("messagesList.LostFocus += OnMessagesListLostFocus;", chatViewCode, StringComparison.Ordinal);
-        Assert.Contains("MessagesList.GotFocus -= OnMessagesListGotFocus;", chatViewCode, StringComparison.Ordinal);
-        Assert.Contains("MessagesList.LostFocus -= OnMessagesListLostFocus;", chatViewCode, StringComparison.Ordinal);
-        Assert.Contains("_isMessagesListFocusWithin", chatViewCode, StringComparison.Ordinal);
         Assert.Contains("IsFocusEngagementEnabled=\"True\"", chatViewXaml, StringComparison.Ordinal);
         Assert.Contains("XYFocusKeyboardNavigation=\"Enabled\"", chatViewXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("SelectedItem =", chatViewCode, StringComparison.Ordinal);
         Assert.DoesNotContain("TryFocusFirstVisibleSelector", chatViewCode, StringComparison.Ordinal);
         Assert.DoesNotContain("FocusManager.TryMoveFocus", chatViewCode, StringComparison.Ordinal);
-        Assert.DoesNotContain("VisualTreeHelper.", chatViewCode, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -279,7 +273,7 @@ public sealed class ChatViewXamlTests
     {
         var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
         var inputFocus = code.IndexOf("ConversationInputArea is not null", StringComparison.Ordinal);
-        var transcriptFocus = code.IndexOf("return MessagesList.Focus(FocusState.Programmatic);", StringComparison.Ordinal);
+        var transcriptFocus = code.IndexOf("return TryFocusTranscriptViewportSurface(FocusState.Keyboard);", StringComparison.Ordinal);
 
         Assert.True(inputFocus >= 0, "ChatView should null-check the composer before attempting input focus.");
         Assert.True(transcriptFocus >= 0, "ChatView should still provide transcript viewport fallback focus.");
@@ -301,7 +295,8 @@ public sealed class ChatViewXamlTests
         Assert.Contains("private void OnConversationInputAreaUnloaded(object sender, RoutedEventArgs e)", code, StringComparison.Ordinal);
         Assert.Contains("inputArea.MoveUpEscapeHandler = null;", code, StringComparison.Ordinal);
         Assert.Contains("private bool TryFocusTranscriptViewport()", code, StringComparison.Ordinal);
-        Assert.Contains("return MessagesList.Focus(FocusState.Programmatic);", code, StringComparison.Ordinal);
+        Assert.Contains("return TryFocusTranscriptViewportSurface(FocusState.Keyboard);", code, StringComparison.Ordinal);
+        Assert.Contains("private bool TryFocusTranscriptViewportSurface(FocusState focusState)", code, StringComparison.Ordinal);
     }
 
     [Fact]

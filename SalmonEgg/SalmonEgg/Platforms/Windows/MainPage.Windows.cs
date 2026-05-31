@@ -180,6 +180,30 @@ public sealed partial class MainPage
 
     private void OnPlatformGamepadDirectionalBridgeKeyDown(InputKeyboardSource sender, WinUIKeyEventArgs args)
     {
+        var handledIntent = args.VirtualKey switch
+        {
+            Windows.System.VirtualKey.GamepadDPadUp => GamepadNavigationIntent.MoveUp,
+            Windows.System.VirtualKey.GamepadDPadDown => GamepadNavigationIntent.MoveDown,
+            Windows.System.VirtualKey.GamepadDPadLeft => GamepadNavigationIntent.MoveLeft,
+            Windows.System.VirtualKey.GamepadDPadRight => GamepadNavigationIntent.MoveRight,
+            _ => (GamepadNavigationIntent?)null
+        };
+
+        if (handledIntent == GamepadNavigationIntent.MoveRight
+            && IsFocusWithinMainNavigation()
+            && TryMoveFocusFromMainNavigationIntoCurrentContent())
+        {
+            args.Handled = true;
+            return;
+        }
+
+        if (args.Handled
+            && handledIntent is not null
+            && TryConsumeCurrentContentNavigationIntent(handledIntent.Value))
+        {
+            return;
+        }
+
         if (args.Handled)
         {
             return;
@@ -190,19 +214,17 @@ public sealed partial class MainPage
         switch (args.VirtualKey)
         {
             case Windows.System.VirtualKey.GamepadDPadRight:
-                if (IsFocusWithinMainNavigation() && TryMoveFocusFromMainNavigationIntoCurrentContent())
-                {
-                    args.Handled = true;
-                }
                 break;
             case Windows.System.VirtualKey.GamepadDPadUp:
-                if ((_virtualGamepadNavigationDispatcher?.TryDispatchWithoutNativeFallback(GamepadNavigationIntent.MoveUp)).GetValueOrDefault())
+                var upConsumed = (_virtualGamepadNavigationDispatcher?.TryDispatchWithoutNativeFallback(GamepadNavigationIntent.MoveUp)).GetValueOrDefault();
+                if (upConsumed)
                 {
                     args.Handled = true;
                 }
                 break;
             case Windows.System.VirtualKey.GamepadDPadDown:
-                if ((_virtualGamepadNavigationDispatcher?.TryDispatchWithoutNativeFallback(GamepadNavigationIntent.MoveDown)).GetValueOrDefault())
+                var downConsumed = (_virtualGamepadNavigationDispatcher?.TryDispatchWithoutNativeFallback(GamepadNavigationIntent.MoveDown)).GetValueOrDefault();
+                if (downConsumed)
                 {
                     args.Handled = true;
                 }
@@ -247,5 +269,10 @@ public sealed partial class MainPage
 
         _lastNativeGamepadIntent = intent.Value;
         _lastNativeGamepadIntentTimestamp = Stopwatch.GetTimestamp();
+    }
+
+    private bool TryConsumeCurrentContentNavigationIntent(GamepadNavigationIntent intent)
+    {
+        return TryConsumeCurrentPageNavigationIntent(intent);
     }
 }

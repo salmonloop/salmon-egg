@@ -1209,6 +1209,18 @@ internal sealed class WindowsGuiAppSession : IDisposable
             : string.Join(" > ", segments);
     }
 
+    public Rectangle? TryGetFocusedBoundingRectangle()
+    {
+        try
+        {
+            return _automation.FocusedElement()?.BoundingRectangle;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     public void Dispose()
     {
         _gamepadInput?.Dispose();
