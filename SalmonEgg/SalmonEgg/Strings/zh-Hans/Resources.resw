@@ -348,6 +348,54 @@
   <data name="Diagnostics_GamepadRefresh.Content" xml:space="preserve">
     <value>刷新一次</value>
   </data>
+  <data name="Diagnostics_VoiceTitle.Text" xml:space="preserve">
+    <value>语音输入</value>
+  </data>
+  <data name="Diagnostics_VoiceHeader.Text" xml:space="preserve">
+    <value>语音诊断</value>
+  </data>
+  <data name="Diagnostics_VoiceProbeHeader.Text" xml:space="preserve">
+    <value>独立触发诊断</value>
+  </data>
+  <data name="Diagnostics_VoiceSupportLabel.Text" xml:space="preserve">
+    <value>能力状态：</value>
+  </data>
+  <data name="Diagnostics_VoicePermissionLabel.Text" xml:space="preserve">
+    <value>权限检查：</value>
+  </data>
+  <data name="Diagnostics_VoiceLanguageLabel.Text" xml:space="preserve">
+    <value>识别语言：</value>
+  </data>
+  <data name="Diagnostics_VoiceSessionStatusLabel.Text" xml:space="preserve">
+    <value>最近会话：</value>
+  </data>
+  <data name="Diagnostics_VoiceTimelineLabel.Text" xml:space="preserve">
+    <value>时间线：</value>
+  </data>
+  <data name="Diagnostics_VoiceRecommendationLabel.Text" xml:space="preserve">
+    <value>建议：</value>
+  </data>
+  <data name="Diagnostics_VoiceProbeStatusLabel.Text" xml:space="preserve">
+    <value>独立诊断状态：</value>
+  </data>
+  <data name="Diagnostics_VoiceProbeTimelineLabel.Text" xml:space="preserve">
+    <value>独立诊断时间线：</value>
+  </data>
+  <data name="Diagnostics_VoiceProbeCapturedTextLabel.Text" xml:space="preserve">
+    <value>独立诊断识别文本：</value>
+  </data>
+  <data name="Diagnostics_VoiceRefresh.Content" xml:space="preserve">
+    <value>刷新语音诊断</value>
+  </data>
+  <data name="Diagnostics_VoiceOpenAuthorization.Content" xml:space="preserve">
+    <value>打开语音权限设置</value>
+  </data>
+  <data name="Diagnostics_VoiceProbeStart.Content" xml:space="preserve">
+    <value>开始独立诊断</value>
+  </data>
+  <data name="Diagnostics_VoiceProbeStop.Content" xml:space="preserve">
+    <value>停止独立诊断</value>
+  </data>
   <data name="Diagnostics_ConnectionTitle.Text" xml:space="preserve">
     <value>连接诊断</value>
   </data>

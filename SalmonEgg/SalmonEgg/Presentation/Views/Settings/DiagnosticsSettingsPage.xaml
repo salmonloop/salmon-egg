@@ -106,6 +106,241 @@
                     </StackPanel>
 
                     <StackPanel Spacing="12">
+                        <TextBlock x:Uid="Diagnostics_VoiceTitle"
+                                   Text="语音输入"
+                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <StackPanel>
+                                <Grid Padding="12,8" HorizontalAlignment="Stretch">
+                                    <TextBlock x:Uid="Diagnostics_VoiceHeader"
+                                               AutomationProperties.AutomationId="Diagnostics.VoiceHeader"
+                                               Text="语音诊断"
+                                               FontWeight="SemiBold" />
+                                </Grid>
+
+                                <StackPanel Spacing="8"
+                                            Padding="{StaticResource SettingsRowPadding}">
+                                    <Button x:Name="DiagnosticsVoiceRefreshButton"
+                                            x:Uid="Diagnostics_VoiceRefresh"
+                                            AutomationProperties.AutomationId="Diagnostics.VoiceRefresh"
+                                            Content="刷新语音诊断"
+                                            Command="{x:Bind ViewModel.VoiceInputDiagnostics.RefreshSnapshotCommand}"
+                                            HorizontalAlignment="Stretch" />
+                                    <Button x:Name="DiagnosticsVoiceOpenAuthorizationButton"
+                                            x:Uid="Diagnostics_VoiceOpenAuthorization"
+                                            AutomationProperties.AutomationId="Diagnostics.VoiceOpenAuthorization"
+                                            Content="打开语音权限设置"
+                                            Command="{x:Bind ViewModel.VoiceInputDiagnostics.OpenAuthorizationHelpCommand}"
+                                            IsEnabled="{x:Bind ViewModel.VoiceInputDiagnostics.CanOpenAuthorizationHelp, Mode=OneWay}"
+                                            Visibility="{x:Bind ViewModel.VoiceInputDiagnostics.CanOpenAuthorizationHelp, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                            HorizontalAlignment="Stretch" />
+                                </StackPanel>
+
+                                <Border Height="1"
+                                        Margin="16,0"
+                                        Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+
+                                <Grid Padding="12,8" HorizontalAlignment="Stretch">
+                                    <TextBlock x:Uid="Diagnostics_VoiceProbeHeader"
+                                               AutomationProperties.AutomationId="Diagnostics.VoiceProbeHeader"
+                                               Text="独立触发诊断"
+                                               FontWeight="SemiBold" />
+                                </Grid>
+
+                                <StackPanel Spacing="8"
+                                            Padding="{StaticResource SettingsRowPadding}">
+                                    <Button x:Name="DiagnosticsVoiceProbeStartButton"
+                                            x:Uid="Diagnostics_VoiceProbeStart"
+                                            AutomationProperties.AutomationId="Diagnostics.VoiceProbeStart"
+                                            Content="开始独立诊断"
+                                            Command="{x:Bind ViewModel.VoiceInputDiagnostics.Probe.StartProbeCommand}"
+                                            IsEnabled="{x:Bind ViewModel.VoiceInputDiagnostics.Probe.CanStartProbe, Mode=OneWay}"
+                                            HorizontalAlignment="Stretch" />
+                                    <Button x:Name="DiagnosticsVoiceProbeStopButton"
+                                            x:Uid="Diagnostics_VoiceProbeStop"
+                                            AutomationProperties.AutomationId="Diagnostics.VoiceProbeStop"
+                                            Content="停止独立诊断"
+                                            Command="{x:Bind ViewModel.VoiceInputDiagnostics.Probe.StopProbeCommand}"
+                                            IsEnabled="{x:Bind ViewModel.VoiceInputDiagnostics.Probe.CanStopProbe, Mode=OneWay}"
+                                            HorizontalAlignment="Stretch" />
+                                </StackPanel>
+
+                                <Border Height="1"
+                                        Margin="16,0"
+                                        Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+
+                                <StackPanel HorizontalAlignment="Stretch">
+                                    <controls:ResponsiveFormRow>
+                                        <controls:ResponsiveFormRow.Label>
+                                            <TextBlock x:Uid="Diagnostics_VoiceSupportLabel"
+                                                       Text="能力状态："
+                                                       Style="{StaticResource SettingsRowTitleTextStyle}"
+                                                       VerticalAlignment="Center"/>
+                                        </controls:ResponsiveFormRow.Label>
+                                        <controls:ResponsiveFormRow.Value>
+                                            <TextBlock Text="{x:Bind ViewModel.VoiceInputDiagnostics.SupportStatusText, Mode=OneWay}"
+                                                       AutomationProperties.AutomationId="Diagnostics.VoiceSupport"
+                                                       Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                        </controls:ResponsiveFormRow.Value>
+                                    </controls:ResponsiveFormRow>
+
+                                    <Border Height="1"
+                                            Margin="16,0"
+                                            Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+
+                                    <controls:ResponsiveFormRow>
+                                        <controls:ResponsiveFormRow.Label>
+                                            <TextBlock x:Uid="Diagnostics_VoicePermissionLabel"
+                                                       Text="权限检查："
+                                                       Style="{StaticResource SettingsRowTitleTextStyle}"
+                                                       VerticalAlignment="Center"/>
+                                        </controls:ResponsiveFormRow.Label>
+                                        <controls:ResponsiveFormRow.Value>
+                                            <TextBlock Text="{x:Bind ViewModel.VoiceInputDiagnostics.PermissionStatusText, Mode=OneWay}"
+                                                       AutomationProperties.AutomationId="Diagnostics.VoicePermission"
+                                                       Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                       TextWrapping="WrapWholeWords"/>
+                                        </controls:ResponsiveFormRow.Value>
+                                    </controls:ResponsiveFormRow>
+
+                                    <Border Height="1"
+                                            Margin="16,0"
+                                            Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+
+                                    <controls:ResponsiveFormRow>
+                                        <controls:ResponsiveFormRow.Label>
+                                            <TextBlock x:Uid="Diagnostics_VoiceLanguageLabel"
+                                                       Text="识别语言："
+                                                       Style="{StaticResource SettingsRowTitleTextStyle}"
+                                                       VerticalAlignment="Center"/>
+                                        </controls:ResponsiveFormRow.Label>
+                                        <controls:ResponsiveFormRow.Value>
+                                            <TextBlock Text="{x:Bind ViewModel.VoiceInputDiagnostics.CurrentLanguageTagText, Mode=OneWay}"
+                                                       AutomationProperties.AutomationId="Diagnostics.VoiceLanguage"
+                                                       Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                        </controls:ResponsiveFormRow.Value>
+                                    </controls:ResponsiveFormRow>
+
+                                    <Border Height="1"
+                                            Margin="16,0"
+                                            Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+
+                                    <controls:ResponsiveFormRow>
+                                        <controls:ResponsiveFormRow.Label>
+                                            <TextBlock x:Uid="Diagnostics_VoiceSessionStatusLabel"
+                                                       Text="最近会话："
+                                                       Style="{StaticResource SettingsRowTitleTextStyle}"
+                                                       VerticalAlignment="Center"/>
+                                        </controls:ResponsiveFormRow.Label>
+                                        <controls:ResponsiveFormRow.Value>
+                                            <TextBlock Text="{x:Bind ViewModel.VoiceInputDiagnostics.SessionStatusText, Mode=OneWay}"
+                                                       AutomationProperties.AutomationId="Diagnostics.VoiceSessionStatus"
+                                                       Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                       TextWrapping="WrapWholeWords"/>
+                                        </controls:ResponsiveFormRow.Value>
+                                    </controls:ResponsiveFormRow>
+
+                                    <Border Height="1"
+                                            Margin="16,0"
+                                            Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+
+                                    <controls:ResponsiveFormRow>
+                                        <controls:ResponsiveFormRow.Label>
+                                            <TextBlock x:Uid="Diagnostics_VoiceTimelineLabel"
+                                                       Text="时间线："
+                                                       Style="{StaticResource SettingsRowTitleTextStyle}"
+                                                       VerticalAlignment="Center"/>
+                                        </controls:ResponsiveFormRow.Label>
+                                        <controls:ResponsiveFormRow.Value>
+                                            <TextBlock Text="{x:Bind ViewModel.VoiceInputDiagnostics.TimelineText, Mode=OneWay}"
+                                                       AutomationProperties.AutomationId="Diagnostics.VoiceTimeline"
+                                                       Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                       TextWrapping="WrapWholeWords"/>
+                                        </controls:ResponsiveFormRow.Value>
+                                    </controls:ResponsiveFormRow>
+
+                                    <Border Height="1"
+                                            Margin="16,0"
+                                            Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+
+                                    <controls:ResponsiveFormRow>
+                                        <controls:ResponsiveFormRow.Label>
+                                            <TextBlock x:Uid="Diagnostics_VoiceRecommendationLabel"
+                                                       Text="建议："
+                                                       Style="{StaticResource SettingsRowTitleTextStyle}"
+                                                       VerticalAlignment="Center"/>
+                                        </controls:ResponsiveFormRow.Label>
+                                        <controls:ResponsiveFormRow.Value>
+                                            <TextBlock Text="{x:Bind ViewModel.VoiceInputDiagnostics.RecommendationText, Mode=OneWay}"
+                                                       AutomationProperties.AutomationId="Diagnostics.VoiceRecommendation"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                               TextWrapping="WrapWholeWords"/>
+                                        </controls:ResponsiveFormRow.Value>
+                                    </controls:ResponsiveFormRow>
+
+                                    <Border Height="1"
+                                            Margin="16,0"
+                                            Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+
+                                    <controls:ResponsiveFormRow>
+                                        <controls:ResponsiveFormRow.Label>
+                                            <TextBlock x:Uid="Diagnostics_VoiceProbeStatusLabel"
+                                                       Text="独立诊断状态："
+                                                       Style="{StaticResource SettingsRowTitleTextStyle}"
+                                                       VerticalAlignment="Center"/>
+                                        </controls:ResponsiveFormRow.Label>
+                                        <controls:ResponsiveFormRow.Value>
+                                            <TextBlock Text="{x:Bind ViewModel.VoiceInputDiagnostics.Probe.ProbeStatusText, Mode=OneWay}"
+                                                       AutomationProperties.AutomationId="Diagnostics.VoiceProbeStatus"
+                                                       Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                       TextWrapping="WrapWholeWords"/>
+                                        </controls:ResponsiveFormRow.Value>
+                                    </controls:ResponsiveFormRow>
+
+                                    <Border Height="1"
+                                            Margin="16,0"
+                                            Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+
+                                    <controls:ResponsiveFormRow>
+                                        <controls:ResponsiveFormRow.Label>
+                                            <TextBlock x:Uid="Diagnostics_VoiceProbeTimelineLabel"
+                                                       Text="独立诊断时间线："
+                                                       Style="{StaticResource SettingsRowTitleTextStyle}"
+                                                       VerticalAlignment="Center"/>
+                                        </controls:ResponsiveFormRow.Label>
+                                        <controls:ResponsiveFormRow.Value>
+                                            <TextBlock Text="{x:Bind ViewModel.VoiceInputDiagnostics.Probe.ProbeTimelineText, Mode=OneWay}"
+                                                       AutomationProperties.AutomationId="Diagnostics.VoiceProbeTimeline"
+                                                       Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                       TextWrapping="WrapWholeWords"/>
+                                        </controls:ResponsiveFormRow.Value>
+                                    </controls:ResponsiveFormRow>
+
+                                    <Border Height="1"
+                                            Margin="16,0"
+                                            Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+
+                                    <controls:ResponsiveFormRow>
+                                        <controls:ResponsiveFormRow.Label>
+                                            <TextBlock x:Uid="Diagnostics_VoiceProbeCapturedTextLabel"
+                                                       Text="独立诊断识别文本："
+                                                       Style="{StaticResource SettingsRowTitleTextStyle}"
+                                                       VerticalAlignment="Center"/>
+                                        </controls:ResponsiveFormRow.Label>
+                                        <controls:ResponsiveFormRow.Value>
+                                            <TextBlock Text="{x:Bind ViewModel.VoiceInputDiagnostics.Probe.ProbeCapturedText, Mode=OneWay}"
+                                                       AutomationProperties.AutomationId="Diagnostics.VoiceProbeCapturedText"
+                                                       Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                       TextWrapping="WrapWholeWords"/>
+                                        </controls:ResponsiveFormRow.Value>
+                                    </controls:ResponsiveFormRow>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel Spacing="12">
                         <TextBlock x:Uid="Diagnostics_GamepadTitle"
                                    Text="手柄输入"
                                    Style="{StaticResource SettingsSectionTitleTextStyle}"/>

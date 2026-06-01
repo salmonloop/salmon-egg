@@ -6,6 +6,7 @@ using SalmonEgg.Domain.Models.Diagnostics;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Tests.Localization;
 using SalmonEgg.Presentation.Core.Resources;
+using SalmonEgg.Presentation.Core.Services.Input;
 using SalmonEgg.Presentation.Core.Tests.Threading;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Chat;
@@ -32,6 +33,15 @@ public sealed class DiagnosticsSettingsViewModelTests
         var viewModel = CreateViewModel(gamepadDiagnostics: gamepadDiagnostics);
 
         Assert.Same(gamepadDiagnostics, viewModel.GamepadDiagnostics);
+    }
+
+    [Fact]
+    public void Constructor_ComposesVoiceInputDiagnostics()
+    {
+        var voiceInputDiagnostics = CreateVoiceInputDiagnostics();
+        var viewModel = CreateViewModel(voiceInputDiagnostics: voiceInputDiagnostics);
+
+        Assert.Same(voiceInputDiagnostics, viewModel.VoiceInputDiagnostics);
     }
 
     [Fact]
@@ -83,7 +93,8 @@ public sealed class DiagnosticsSettingsViewModelTests
         Mock<IStorageLocationService>? storageLocations = null,
         Mock<IUiInteractionService>? ui = null,
         LiveLogViewerViewModel? liveLogViewer = null,
-        GamepadDiagnosticsViewModel? gamepadDiagnostics = null)
+        GamepadDiagnosticsViewModel? gamepadDiagnostics = null,
+        VoiceInputDiagnosticsViewModel? voiceInputDiagnostics = null)
     {
         var chat = (ChatViewModel)RuntimeHelpers.GetUninitializedObject(typeof(ChatViewModel));
         var paths = new Mock<IAppDataService>();
@@ -103,6 +114,7 @@ public sealed class DiagnosticsSettingsViewModelTests
             Mock.Of<ILogFileCatalog>(),
             ui?.Object ?? Mock.Of<IUiInteractionService>(),
             liveLogViewer ?? CreateLiveLogViewer(),
+            voiceInputDiagnostics ?? CreateVoiceInputDiagnostics(),
             gamepadDiagnostics ?? CreateGamepadDiagnostics(),
             new TestCoreStringLocalizer(),
             Mock.Of<ILogger<DiagnosticsSettingsViewModel>>());
@@ -134,4 +146,15 @@ public sealed class DiagnosticsSettingsViewModelTests
             new TestCoreStringLocalizer(),
             Mock.Of<ILogger<GamepadDiagnosticsViewModel>>());
     }
+
+    private static VoiceInputDiagnosticsViewModel CreateVoiceInputDiagnostics()
+        => new(
+            Mock.Of<IVoiceInputDiagnosticsService>(),
+            new VoiceInputDiagnosticsProbeViewModel(
+                NoOpVoiceInputService.Instance,
+                new ImmediateUiDispatcher(),
+                new TestCoreStringLocalizer(),
+                Mock.Of<ILogger<VoiceInputDiagnosticsProbeViewModel>>()),
+            new TestCoreStringLocalizer(),
+            Mock.Of<ILogger<VoiceInputDiagnosticsViewModel>>());
 }

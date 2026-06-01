@@ -61,7 +61,18 @@ public sealed class LogFileCatalog : ILogFileCatalog
             return null;
         }
 
-        var text = await File.ReadAllTextAsync(filePath, Encoding.UTF8, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        await using var stream = new FileStream(
+            filePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete,
+            bufferSize: 4096,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        var text = await reader.ReadToEndAsync().ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
         return text.Length <= maxChars ? text : text.Substring(text.Length - maxChars, maxChars);
     }
 }

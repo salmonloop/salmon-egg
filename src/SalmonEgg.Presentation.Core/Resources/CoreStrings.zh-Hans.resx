@@ -358,6 +358,108 @@
   <data name="GamepadDiagnostics_ConnectionWireless" xml:space="preserve">
     <value>无线</value>
   </data>
+  <data name="VoiceDiagnostics_PendingRefresh" xml:space="preserve">
+    <value>等待刷新</value>
+  </data>
+  <data name="VoiceDiagnostics_RefreshFailed" xml:space="preserve">
+    <value>读取失败，请稍后重试</value>
+  </data>
+  <data name="VoiceDiagnostics_Supported" xml:space="preserve">
+    <value>已支持</value>
+  </data>
+  <data name="VoiceDiagnostics_Unsupported" xml:space="preserve">
+    <value>当前平台不支持语音输入</value>
+  </data>
+  <data name="VoiceDiagnostics_PermissionGranted" xml:space="preserve">
+    <value>已通过</value>
+  </data>
+  <data name="VoiceDiagnostics_PermissionDenied" xml:space="preserve">
+    <value>未通过</value>
+  </data>
+  <data name="VoiceDiagnostics_UnknownLanguage" xml:space="preserve">
+    <value>未知</value>
+  </data>
+  <data name="VoiceDiagnostics_NoRecentSession" xml:space="preserve">
+    <value>最近日志里还没有语音会话记录。</value>
+  </data>
+  <data name="VoiceDiagnostics_SessionStarting" xml:space="preserve">
+    <value>已发出启动请求，但识别器尚未 ready。</value>
+  </data>
+  <data name="VoiceDiagnostics_SessionReadyWithoutRecognition" xml:space="preserve">
+    <value>识别器已 ready，但整个会话没有收到任何识别结果。</value>
+  </data>
+  <data name="VoiceDiagnostics_SessionPartialOnly" xml:space="preserve">
+    <value>已收到 partial 结果，尚未收到 final 结果。</value>
+  </data>
+  <data name="VoiceDiagnostics_SessionFinalReceived" xml:space="preserve">
+    <value>已收到 final 结果。</value>
+  </data>
+  <data name="VoiceDiagnostics_SessionFailed" xml:space="preserve">
+    <value>最近一次语音会话失败。</value>
+  </data>
+  <data name="VoiceDiagnostics_SessionFailedWithMessage" xml:space="preserve">
+    <value>最近一次语音会话失败：{0}</value>
+  </data>
+  <data name="VoiceDiagnostics_SessionUnknown" xml:space="preserve">
+    <value>最近一次语音会话状态未知。</value>
+  </data>
+  <data name="VoiceDiagnostics_TimelineUnavailable" xml:space="preserve">
+    <value>暂无最近会话时间线。</value>
+  </data>
+  <data name="VoiceDiagnostics_TimelineStartToReadyFormat" xml:space="preserve">
+    <value>启动后 {0:0.00}s ready。</value>
+  </data>
+  <data name="VoiceDiagnostics_TimelineReadyWithoutRecognitionFormat" xml:space="preserve">
+    <value>启动后 {0:0.00}s ready；ready 后 {1:0.00}s 结束，期间没有识别结果。</value>
+  </data>
+  <data name="VoiceDiagnostics_TimelinePartialFormat" xml:space="preserve">
+    <value>启动后 {0:0.00}s ready；ready 后 {1:0.00}s 收到首个 partial。</value>
+  </data>
+  <data name="VoiceDiagnostics_TimelineFinalFormat" xml:space="preserve">
+    <value>启动后 {0:0.00}s ready；ready 后 {1:0.00}s 收到 final。</value>
+  </data>
+  <data name="VoiceDiagnostics_RecommendationNoRecentSession" xml:space="preserve">
+    <value>重新触发一次语音输入后再刷新，这里会显示最近一次启动、ready 和识别结果链路。</value>
+  </data>
+  <data name="VoiceDiagnostics_RecommendationRequiresAuthorization" xml:space="preserve">
+    <value>当前需要系统授权。使用下方按钮打开相关设置后，再重新尝试语音输入。</value>
+  </data>
+  <data name="VoiceDiagnostics_RecommendationReadyWithoutRecognitionFormat" xml:space="preserve">
+    <value>识别器已经 ready，但没有收到 partial/final。优先检查默认输入设备、麦克风电平，以及系统语音语言是否与当前识别语言一致（当前 {0}）。</value>
+  </data>
+  <data name="VoiceDiagnostics_RecommendationFailed" xml:space="preserve">
+    <value>优先处理最近一次语音错误，再重新尝试并观察 ready、partial、final 是否恢复。</value>
+  </data>
+  <data name="VoiceDiagnostics_RecommendationGeneric" xml:space="preserve">
+    <value>重新触发一次语音输入后刷新，确认链路是否停在启动、ready 或结果回调阶段。</value>
+  </data>
+  <data name="VoiceDiagnostics_RecommendationRefreshFailed" xml:space="preserve">
+    <value>语音诊断刷新失败，请稍后重试。</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeIdle" xml:space="preserve">
+    <value>尚未开始独立诊断。</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeAuthorizing" xml:space="preserve">
+    <value>正在检查语音权限...</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeStarting" xml:space="preserve">
+    <value>正在启动独立诊断...</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeListening" xml:space="preserve">
+    <value>诊断会话已 ready，正在监听语音。</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeStopping" xml:space="preserve">
+    <value>正在停止独立诊断...</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeBusy" xml:space="preserve">
+    <value>语音输入当前正被其它流程占用，请先结束现有语音会话。</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeTimelinePending" xml:space="preserve">
+    <value>开始独立诊断后，这里会显示 ready、partial、final 的时间线。</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeNoCapturedText" xml:space="preserve">
+    <value>暂无识别文本。</value>
+  </data>
 
   <!-- Settings: Shortcuts -->
   <data name="Shortcuts_InvalidGestureMessage" xml:space="preserve">

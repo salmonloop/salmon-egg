@@ -1393,6 +1393,34 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void DiagnosticsSettingsPage_ExposesVoiceDiagnosticsThroughViewModel()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DiagnosticsSettingsPage.xaml");
+        var viewModel = LoadText(@"src\SalmonEgg.Presentation.Core\ViewModels\Settings\VoiceInputDiagnosticsViewModel.cs");
+        var service = LoadText(@"src\SalmonEgg.Presentation.Core\Services\Input\VoiceInputDiagnosticsService.cs");
+        var voiceSection = ExtractSection(xaml, "Diagnostics_VoiceTitle", "Diagnostics_GamepadTitle");
+
+        Assert.Contains("AutomationProperties.AutomationId=\"Diagnostics.VoiceHeader\"", voiceSection, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.VoiceInputDiagnostics.SupportStatusText", xaml, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.VoiceInputDiagnostics.PermissionStatusText", xaml, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.VoiceInputDiagnostics.CurrentLanguageTagText", xaml, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.VoiceInputDiagnostics.SessionStatusText", xaml, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.VoiceInputDiagnostics.TimelineText", xaml, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.VoiceInputDiagnostics.RecommendationText", xaml, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.VoiceInputDiagnostics.RefreshSnapshotCommand", xaml, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.VoiceInputDiagnostics.OpenAuthorizationHelpCommand", xaml, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.VoiceInputDiagnostics.Probe.StartProbeCommand", xaml, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.VoiceInputDiagnostics.Probe.StopProbeCommand", xaml, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.VoiceInputDiagnostics.Probe.ProbeStatusText", xaml, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.VoiceInputDiagnostics.Probe.ProbeTimelineText", xaml, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.VoiceInputDiagnostics.Probe.ProbeCapturedText", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Windows.Media.SpeechRecognition", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Windows.Media.SpeechRecognition", viewModel, StringComparison.Ordinal);
+        Assert.DoesNotContain("Windows.Media.SpeechRecognition", LoadText(@"src\SalmonEgg.Presentation.Core\ViewModels\Settings\VoiceInputDiagnosticsProbeViewModel.cs"), StringComparison.Ordinal);
+        Assert.DoesNotContain("Microsoft.UI.Xaml", service, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SettingsSubPages_ExposePageTitlesAndSummaries()
     {
         string[] pages =
@@ -1496,6 +1524,22 @@ public sealed class XamlComplianceTests
             "Diagnostics_LiveLogResume.Content",
             "Diagnostics_LiveLogClear.Content",
             "Diagnostics_LiveLogHint.Text",
+            "Diagnostics_VoiceTitle.Text",
+            "Diagnostics_VoiceHeader.Text",
+            "Diagnostics_VoiceProbeHeader.Text",
+            "Diagnostics_VoiceSupportLabel.Text",
+            "Diagnostics_VoicePermissionLabel.Text",
+            "Diagnostics_VoiceLanguageLabel.Text",
+            "Diagnostics_VoiceSessionStatusLabel.Text",
+            "Diagnostics_VoiceTimelineLabel.Text",
+            "Diagnostics_VoiceRecommendationLabel.Text",
+            "Diagnostics_VoiceProbeStatusLabel.Text",
+            "Diagnostics_VoiceProbeTimelineLabel.Text",
+            "Diagnostics_VoiceProbeCapturedTextLabel.Text",
+            "Diagnostics_VoiceRefresh.Content",
+            "Diagnostics_VoiceOpenAuthorization.Content",
+            "Diagnostics_VoiceProbeStart.Content",
+            "Diagnostics_VoiceProbeStop.Content",
             "Diagnostics_GamepadTitle.Text",
             "Diagnostics_GamepadMonitorHeader.Text",
             "Diagnostics_GamepadStatusLabel.Text",

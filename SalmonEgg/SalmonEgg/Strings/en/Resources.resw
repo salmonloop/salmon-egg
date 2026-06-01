@@ -303,6 +303,54 @@
   <data name="Diagnostics_GamepadRefresh.Content" xml:space="preserve">
     <value>Refresh once</value>
   </data>
+  <data name="Diagnostics_VoiceTitle.Text" xml:space="preserve">
+    <value>Voice Input</value>
+  </data>
+  <data name="Diagnostics_VoiceHeader.Text" xml:space="preserve">
+    <value>Voice diagnostics</value>
+  </data>
+  <data name="Diagnostics_VoiceProbeHeader.Text" xml:space="preserve">
+    <value>Standalone probe</value>
+  </data>
+  <data name="Diagnostics_VoiceSupportLabel.Text" xml:space="preserve">
+    <value>Capability:</value>
+  </data>
+  <data name="Diagnostics_VoicePermissionLabel.Text" xml:space="preserve">
+    <value>Permission check:</value>
+  </data>
+  <data name="Diagnostics_VoiceLanguageLabel.Text" xml:space="preserve">
+    <value>Recognition language:</value>
+  </data>
+  <data name="Diagnostics_VoiceSessionStatusLabel.Text" xml:space="preserve">
+    <value>Latest session:</value>
+  </data>
+  <data name="Diagnostics_VoiceTimelineLabel.Text" xml:space="preserve">
+    <value>Timeline:</value>
+  </data>
+  <data name="Diagnostics_VoiceRecommendationLabel.Text" xml:space="preserve">
+    <value>Recommendation:</value>
+  </data>
+  <data name="Diagnostics_VoiceProbeStatusLabel.Text" xml:space="preserve">
+    <value>Probe status:</value>
+  </data>
+  <data name="Diagnostics_VoiceProbeTimelineLabel.Text" xml:space="preserve">
+    <value>Probe timeline:</value>
+  </data>
+  <data name="Diagnostics_VoiceProbeCapturedTextLabel.Text" xml:space="preserve">
+    <value>Probe recognized text:</value>
+  </data>
+  <data name="Diagnostics_VoiceRefresh.Content" xml:space="preserve">
+    <value>Refresh voice diagnostics</value>
+  </data>
+  <data name="Diagnostics_VoiceOpenAuthorization.Content" xml:space="preserve">
+    <value>Open voice permission settings</value>
+  </data>
+  <data name="Diagnostics_VoiceProbeStart.Content" xml:space="preserve">
+    <value>Start standalone probe</value>
+  </data>
+  <data name="Diagnostics_VoiceProbeStop.Content" xml:space="preserve">
+    <value>Stop standalone probe</value>
+  </data>
   <data name="Diagnostics_ConnectionTitle.Text" xml:space="preserve">
     <value>Connection diagnostics</value>
   </data>

@@ -173,6 +173,7 @@ public static class DependencyInjection
 #else
         services.AddSingleton<IVoiceInputService>(NoOpVoiceInputService.Instance);
 #endif
+        services.AddSingleton<IVoiceInputDiagnosticsService, VoiceInputDiagnosticsService>();
         services.AddSingleton<IShellBackNavigationService, ShellBackNavigationService>();
         services.AddSingleton<IGamepadNavigationDispatcher, MainShellGamepadNavigationDispatcher>();
         services.AddSingleton<IGamepadShortcutDispatcher, MainShellGamepadShortcutDispatcher>();
@@ -614,6 +615,8 @@ public static class DependencyInjection
                 sp.GetRequiredService<ILogger<LiveLogViewerViewModel>>(),
                 sp.GetRequiredService<IUiDispatcher>(),
                 sp.GetRequiredService<IStringLocalizer<CoreStrings>>()));
+        services.AddSingleton<VoiceInputDiagnosticsProbeViewModel>();
+        services.AddSingleton<VoiceInputDiagnosticsViewModel>();
         services.AddSingleton<GamepadDiagnosticsViewModel>();
         services.AddSingleton<DiagnosticsSettingsViewModel>();
         services.AddSingleton<IOpenSourceAcknowledgementsProvider, GeneratedOpenSourceAcknowledgementsProvider>();

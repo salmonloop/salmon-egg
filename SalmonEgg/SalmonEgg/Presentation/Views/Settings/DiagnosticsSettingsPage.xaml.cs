@@ -29,12 +29,18 @@ public sealed partial class DiagnosticsSettingsPage : SettingsPageBase
 
     protected override Control? GetSectionEntryFocusTarget()
         => FirstAvailableSectionEntryTarget(
+            DiagnosticsVoiceRefreshButton,
+            DiagnosticsVoiceOpenAuthorizationButton,
+            DiagnosticsVoiceProbeStartButton,
+            DiagnosticsVoiceProbeStopButton,
             DiagnosticsGamepadStartButton,
             DiagnosticsGamepadStopButton,
             DiagnosticsGamepadRefreshButton);
 
     protected override IEnumerable<Control?> GetSectionFocusReturnTargets()
     {
+        yield return DiagnosticsVoiceRefreshButton;
+        yield return DiagnosticsVoiceProbeStartButton;
         yield return DiagnosticsGamepadStartButton;
     }
 
@@ -88,6 +94,7 @@ public sealed partial class DiagnosticsSettingsPage : SettingsPageBase
     {
         try
         {
+            await ViewModel.VoiceInputDiagnostics.HandlePageUnloadedAsync();
             await ViewModel.LiveLogViewer.HandlePageUnloadedAsync();
             await ViewModel.GamepadDiagnostics.HandlePageUnloadedAsync();
         }

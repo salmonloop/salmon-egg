@@ -356,6 +356,108 @@ Create the corresponding Markdown file in:
   <data name="GamepadDiagnostics_ConnectionWireless" xml:space="preserve">
     <value>wireless</value>
   </data>
+  <data name="VoiceDiagnostics_PendingRefresh" xml:space="preserve">
+    <value>Waiting for refresh</value>
+  </data>
+  <data name="VoiceDiagnostics_RefreshFailed" xml:space="preserve">
+    <value>Refresh failed. Try again later.</value>
+  </data>
+  <data name="VoiceDiagnostics_Supported" xml:space="preserve">
+    <value>Supported</value>
+  </data>
+  <data name="VoiceDiagnostics_Unsupported" xml:space="preserve">
+    <value>Voice input is not supported on this platform.</value>
+  </data>
+  <data name="VoiceDiagnostics_PermissionGranted" xml:space="preserve">
+    <value>Granted</value>
+  </data>
+  <data name="VoiceDiagnostics_PermissionDenied" xml:space="preserve">
+    <value>Denied</value>
+  </data>
+  <data name="VoiceDiagnostics_UnknownLanguage" xml:space="preserve">
+    <value>Unknown</value>
+  </data>
+  <data name="VoiceDiagnostics_NoRecentSession" xml:space="preserve">
+    <value>No recent voice session was found in the latest log.</value>
+  </data>
+  <data name="VoiceDiagnostics_SessionStarting" xml:space="preserve">
+    <value>A voice start request was issued, but the recognizer is not ready yet.</value>
+  </data>
+  <data name="VoiceDiagnostics_SessionReadyWithoutRecognition" xml:space="preserve">
+    <value>The recognizer became ready, but the session produced no recognition results.</value>
+  </data>
+  <data name="VoiceDiagnostics_SessionPartialOnly" xml:space="preserve">
+    <value>A partial result arrived, but no final result was received.</value>
+  </data>
+  <data name="VoiceDiagnostics_SessionFinalReceived" xml:space="preserve">
+    <value>A final result was received.</value>
+  </data>
+  <data name="VoiceDiagnostics_SessionFailed" xml:space="preserve">
+    <value>The latest voice session failed.</value>
+  </data>
+  <data name="VoiceDiagnostics_SessionFailedWithMessage" xml:space="preserve">
+    <value>The latest voice session failed: {0}</value>
+  </data>
+  <data name="VoiceDiagnostics_SessionUnknown" xml:space="preserve">
+    <value>The latest voice session ended in an unknown state.</value>
+  </data>
+  <data name="VoiceDiagnostics_TimelineUnavailable" xml:space="preserve">
+    <value>No recent session timeline is available.</value>
+  </data>
+  <data name="VoiceDiagnostics_TimelineStartToReadyFormat" xml:space="preserve">
+    <value>Recognizer ready {0:0.00}s after start.</value>
+  </data>
+  <data name="VoiceDiagnostics_TimelineReadyWithoutRecognitionFormat" xml:space="preserve">
+    <value>Recognizer ready {0:0.00}s after start; session ended {1:0.00}s later with no recognition results.</value>
+  </data>
+  <data name="VoiceDiagnostics_TimelinePartialFormat" xml:space="preserve">
+    <value>Recognizer ready {0:0.00}s after start; first partial arrived {1:0.00}s later.</value>
+  </data>
+  <data name="VoiceDiagnostics_TimelineFinalFormat" xml:space="preserve">
+    <value>Recognizer ready {0:0.00}s after start; final result arrived {1:0.00}s later.</value>
+  </data>
+  <data name="VoiceDiagnostics_RecommendationNoRecentSession" xml:space="preserve">
+    <value>Trigger voice input once more, then refresh this panel to inspect the latest start, ready, and recognition callbacks.</value>
+  </data>
+  <data name="VoiceDiagnostics_RecommendationRequiresAuthorization" xml:space="preserve">
+    <value>System authorization is required. Use the button below to open the relevant settings, then try voice input again.</value>
+  </data>
+  <data name="VoiceDiagnostics_RecommendationReadyWithoutRecognitionFormat" xml:space="preserve">
+    <value>The recognizer became ready, but no partial or final callbacks arrived. Check the default input device, microphone level, and whether the system speech language matches the current recognition language ({0}).</value>
+  </data>
+  <data name="VoiceDiagnostics_RecommendationFailed" xml:space="preserve">
+    <value>Resolve the latest voice error first, then retry and confirm whether ready, partial, and final callbacks recover.</value>
+  </data>
+  <data name="VoiceDiagnostics_RecommendationGeneric" xml:space="preserve">
+    <value>Retry voice input, then refresh to see whether the flow stalls at start, ready, or result callbacks.</value>
+  </data>
+  <data name="VoiceDiagnostics_RecommendationRefreshFailed" xml:space="preserve">
+    <value>Voice diagnostics refresh failed. Try again later.</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeIdle" xml:space="preserve">
+    <value>No standalone diagnostic session has started yet.</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeAuthorizing" xml:space="preserve">
+    <value>Checking voice-input permissions...</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeStarting" xml:space="preserve">
+    <value>Starting the standalone diagnostic session...</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeListening" xml:space="preserve">
+    <value>The diagnostic session is ready and listening for speech.</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeStopping" xml:space="preserve">
+    <value>Stopping the standalone diagnostic session...</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeBusy" xml:space="preserve">
+    <value>Voice input is already being used by another flow. End the active voice session first.</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeTimelinePending" xml:space="preserve">
+    <value>Start a standalone diagnostic session to see the ready, partial, and final-result timeline here.</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeNoCapturedText" xml:space="preserve">
+    <value>No recognized text yet.</value>
+  </data>
   <data name="Shortcuts_InvalidGestureMessage" xml:space="preserve">
     <value>One or more shortcuts use an invalid format. Fix them before saving.</value>
   </data>

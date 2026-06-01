@@ -30,6 +30,8 @@ public sealed partial class DiagnosticsSettingsViewModel : ObservableObject
 
     public LiveLogViewerViewModel LiveLogViewer { get; }
 
+    public VoiceInputDiagnosticsViewModel VoiceInputDiagnostics { get; }
+
     public GamepadDiagnosticsViewModel GamepadDiagnostics { get; }
 
     public string AppVersion => System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString()
@@ -63,6 +65,7 @@ public sealed partial class DiagnosticsSettingsViewModel : ObservableObject
         ILogFileCatalog logFileCatalog,
         IUiInteractionService ui,
         LiveLogViewerViewModel liveLogViewer,
+        VoiceInputDiagnosticsViewModel voiceInputDiagnostics,
         GamepadDiagnosticsViewModel gamepadDiagnostics,
         IStringLocalizer<CoreStrings> localizer,
         ILogger<DiagnosticsSettingsViewModel> logger)
@@ -76,6 +79,7 @@ public sealed partial class DiagnosticsSettingsViewModel : ObservableObject
         _logFileCatalog = logFileCatalog ?? throw new ArgumentNullException(nameof(logFileCatalog));
         _ui = ui ?? throw new ArgumentNullException(nameof(ui));
         LiveLogViewer = liveLogViewer ?? throw new ArgumentNullException(nameof(liveLogViewer));
+        VoiceInputDiagnostics = voiceInputDiagnostics ?? throw new ArgumentNullException(nameof(voiceInputDiagnostics));
         GamepadDiagnostics = gamepadDiagnostics ?? throw new ArgumentNullException(nameof(gamepadDiagnostics));
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));

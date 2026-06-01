@@ -51,4 +51,21 @@ public sealed class LogFileCatalogTests : IDisposable
 
         Assert.Equal("6789", tail);
     }
+
+    [Fact]
+    public async Task ReadTailAsync_WhenLogFileIsOpenForWriting_StillReturnsTail()
+    {
+        Directory.CreateDirectory(_root);
+        var path = Path.Combine(_root, "app.log");
+        await File.WriteAllTextAsync(path, "0123456789");
+        await using var writer = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.ReadWrite);
+        writer.Seek(0, SeekOrigin.End);
+        await writer.WriteAsync("ABC"u8.ToArray());
+        await writer.FlushAsync();
+        var sut = new LogFileCatalog();
+
+        var tail = await sut.ReadTailAsync(path, 4);
+
+        Assert.Equal("9ABC", tail);
+    }
 }
