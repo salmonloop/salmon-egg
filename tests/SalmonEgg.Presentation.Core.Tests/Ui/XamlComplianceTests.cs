@@ -1404,7 +1404,9 @@ public sealed class XamlComplianceTests
         Assert.Contains("ViewModel.VoiceInputDiagnostics.SupportStatusText", xaml, StringComparison.Ordinal);
         Assert.Contains("ViewModel.VoiceInputDiagnostics.PermissionStatusText", xaml, StringComparison.Ordinal);
         Assert.Contains("ViewModel.VoiceInputDiagnostics.CurrentLanguageTagText", xaml, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.VoiceInputDiagnostics.InputDeviceText", xaml, StringComparison.Ordinal);
         Assert.Contains("ViewModel.VoiceInputDiagnostics.SessionStatusText", xaml, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.VoiceInputDiagnostics.CallbackObservationText", xaml, StringComparison.Ordinal);
         Assert.Contains("ViewModel.VoiceInputDiagnostics.TimelineText", xaml, StringComparison.Ordinal);
         Assert.Contains("ViewModel.VoiceInputDiagnostics.RecommendationText", xaml, StringComparison.Ordinal);
         Assert.Contains("ViewModel.VoiceInputDiagnostics.RefreshSnapshotCommand", xaml, StringComparison.Ordinal);
@@ -1530,7 +1532,9 @@ public sealed class XamlComplianceTests
             "Diagnostics_VoiceSupportLabel.Text",
             "Diagnostics_VoicePermissionLabel.Text",
             "Diagnostics_VoiceLanguageLabel.Text",
+            "Diagnostics_VoiceInputDeviceLabel.Text",
             "Diagnostics_VoiceSessionStatusLabel.Text",
+            "Diagnostics_VoiceCallbackStatusLabel.Text",
             "Diagnostics_VoiceTimelineLabel.Text",
             "Diagnostics_VoiceRecommendationLabel.Text",
             "Diagnostics_VoiceProbeStatusLabel.Text",

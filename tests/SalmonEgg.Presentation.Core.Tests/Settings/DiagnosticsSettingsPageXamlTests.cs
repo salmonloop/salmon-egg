@@ -43,10 +43,14 @@ public sealed class DiagnosticsSettingsPageXamlTests
         Assert.Contains("AutomationProperties.AutomationId=\"Diagnostics.VoiceHeader\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ViewModel.VoiceInputDiagnostics.SupportStatusText", xaml, StringComparison.Ordinal);
         Assert.Contains("ViewModel.VoiceInputDiagnostics.PermissionStatusText", xaml, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.VoiceInputDiagnostics.InputDeviceText", xaml, StringComparison.Ordinal);
         Assert.Contains("ViewModel.VoiceInputDiagnostics.SessionStatusText", xaml, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.VoiceInputDiagnostics.CallbackObservationText", xaml, StringComparison.Ordinal);
         Assert.Contains("ViewModel.VoiceInputDiagnostics.TimelineText", xaml, StringComparison.Ordinal);
         Assert.Contains("ViewModel.VoiceInputDiagnostics.RecommendationText", xaml, StringComparison.Ordinal);
         Assert.Contains("ViewModel.VoiceInputDiagnostics.RefreshSnapshotCommand", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"Diagnostics.VoiceInputDevice\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"Diagnostics.VoiceCallbackStatus\"", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"Diagnostics.VoiceProbeHeader\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ViewModel.VoiceInputDiagnostics.Probe.StartProbeCommand", xaml, StringComparison.Ordinal);
         Assert.Contains("ViewModel.VoiceInputDiagnostics.Probe.StopProbeCommand", xaml, StringComparison.Ordinal);

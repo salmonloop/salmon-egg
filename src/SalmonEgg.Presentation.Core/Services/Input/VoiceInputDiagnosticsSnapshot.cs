@@ -24,13 +24,20 @@ public sealed record VoiceInputDiagnosticSession(
     DateTimeOffset? ErrorAt,
     string? ErrorCode,
     string? ErrorMessage,
-    string? LanguageTag);
+    string? LanguageTag,
+    int PartialResultCount,
+    int FinalResultCount,
+    int EmptyPartialResultCount,
+    int EmptyFinalResultCount,
+    string? CompletionStatus);
 
 public sealed record VoiceInputDiagnosticsSnapshot(
     bool IsSupported,
     bool IsListening,
     string CurrentLanguageTag,
     VoiceInputPermissionResult Permission,
+    string? DefaultInputDeviceName,
+    string? DefaultInputDeviceId,
     string? LatestLogFilePath,
     DateTimeOffset? LatestLogTimestamp,
     VoiceInputDiagnosticSession? LatestSession);

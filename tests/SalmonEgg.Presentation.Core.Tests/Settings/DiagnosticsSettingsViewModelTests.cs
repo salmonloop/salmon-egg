@@ -155,6 +155,7 @@ public sealed class DiagnosticsSettingsViewModelTests
                 new ImmediateUiDispatcher(),
                 new TestCoreStringLocalizer(),
                 Mock.Of<ILogger<VoiceInputDiagnosticsProbeViewModel>>()),
+            new ImmediateUiDispatcher(),
             new TestCoreStringLocalizer(),
             Mock.Of<ILogger<VoiceInputDiagnosticsViewModel>>());
 }

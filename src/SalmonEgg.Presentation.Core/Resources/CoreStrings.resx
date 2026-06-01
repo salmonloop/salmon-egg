@@ -379,6 +379,9 @@
   <data name="VoiceDiagnostics_UnknownLanguage" xml:space="preserve">
     <value>Unknown</value>
   </data>
+  <data name="VoiceDiagnostics_InputDeviceUnavailable" xml:space="preserve">
+    <value>The current default input device could not be determined.</value>
+  </data>
   <data name="VoiceDiagnostics_NoRecentSession" xml:space="preserve">
     <value>No recent voice session was found in the latest log.</value>
   </data>
@@ -402,6 +405,18 @@
   </data>
   <data name="VoiceDiagnostics_SessionUnknown" xml:space="preserve">
     <value>The latest voice session ended in an unknown state.</value>
+  </data>
+  <data name="VoiceDiagnostics_CallbackObservationUnavailable" xml:space="preserve">
+    <value>No callback observation is available for the most recent session yet.</value>
+  </data>
+  <data name="VoiceDiagnostics_CallbackObservationNone" xml:space="preserve">
+    <value>No hypothesis/result callbacks were observed.</value>
+  </data>
+  <data name="VoiceDiagnostics_CallbackObservationEmptyOnlyFormat" xml:space="preserve">
+    <value>Only empty callbacks were observed: empty partial {0}, empty final {1}.</value>
+  </data>
+  <data name="VoiceDiagnostics_CallbackObservationFormat" xml:space="preserve">
+    <value>Valid partial {0}, final {1}; empty partial {2}, empty final {3}.</value>
   </data>
   <data name="VoiceDiagnostics_TimelineUnavailable" xml:space="preserve">
     <value>No recent session timeline is available.</value>

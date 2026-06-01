@@ -321,8 +321,14 @@
   <data name="Diagnostics_VoiceLanguageLabel.Text" xml:space="preserve">
     <value>Recognition language:</value>
   </data>
+  <data name="Diagnostics_VoiceInputDeviceLabel.Text" xml:space="preserve">
+    <value>Default input device:</value>
+  </data>
   <data name="Diagnostics_VoiceSessionStatusLabel.Text" xml:space="preserve">
     <value>Latest session:</value>
+  </data>
+  <data name="Diagnostics_VoiceCallbackStatusLabel.Text" xml:space="preserve">
+    <value>Callback observation:</value>
   </data>
   <data name="Diagnostics_VoiceTimelineLabel.Text" xml:space="preserve">
     <value>Timeline:</value>

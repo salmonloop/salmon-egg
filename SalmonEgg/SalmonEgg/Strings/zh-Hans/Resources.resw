@@ -366,8 +366,14 @@
   <data name="Diagnostics_VoiceLanguageLabel.Text" xml:space="preserve">
     <value>识别语言：</value>
   </data>
+  <data name="Diagnostics_VoiceInputDeviceLabel.Text" xml:space="preserve">
+    <value>默认输入设备：</value>
+  </data>
   <data name="Diagnostics_VoiceSessionStatusLabel.Text" xml:space="preserve">
     <value>最近会话：</value>
+  </data>
+  <data name="Diagnostics_VoiceCallbackStatusLabel.Text" xml:space="preserve">
+    <value>回调观测：</value>
   </data>
   <data name="Diagnostics_VoiceTimelineLabel.Text" xml:space="preserve">
     <value>时间线：</value>

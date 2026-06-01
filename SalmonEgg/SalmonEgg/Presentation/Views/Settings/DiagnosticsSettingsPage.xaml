@@ -228,6 +228,25 @@
 
                                     <controls:ResponsiveFormRow>
                                         <controls:ResponsiveFormRow.Label>
+                                            <TextBlock x:Uid="Diagnostics_VoiceInputDeviceLabel"
+                                                       Text="默认输入设备："
+                                                       Style="{StaticResource SettingsRowTitleTextStyle}"
+                                                       VerticalAlignment="Center"/>
+                                        </controls:ResponsiveFormRow.Label>
+                                        <controls:ResponsiveFormRow.Value>
+                                            <TextBlock Text="{x:Bind ViewModel.VoiceInputDiagnostics.InputDeviceText, Mode=OneWay}"
+                                                       AutomationProperties.AutomationId="Diagnostics.VoiceInputDevice"
+                                                       Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                       TextWrapping="WrapWholeWords"/>
+                                        </controls:ResponsiveFormRow.Value>
+                                    </controls:ResponsiveFormRow>
+
+                                    <Border Height="1"
+                                            Margin="16,0"
+                                            Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+
+                                    <controls:ResponsiveFormRow>
+                                        <controls:ResponsiveFormRow.Label>
                                             <TextBlock x:Uid="Diagnostics_VoiceSessionStatusLabel"
                                                        Text="最近会话："
                                                        Style="{StaticResource SettingsRowTitleTextStyle}"
@@ -236,6 +255,25 @@
                                         <controls:ResponsiveFormRow.Value>
                                             <TextBlock Text="{x:Bind ViewModel.VoiceInputDiagnostics.SessionStatusText, Mode=OneWay}"
                                                        AutomationProperties.AutomationId="Diagnostics.VoiceSessionStatus"
+                                                       Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                       TextWrapping="WrapWholeWords"/>
+                                        </controls:ResponsiveFormRow.Value>
+                                    </controls:ResponsiveFormRow>
+
+                                    <Border Height="1"
+                                            Margin="16,0"
+                                            Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+
+                                    <controls:ResponsiveFormRow>
+                                        <controls:ResponsiveFormRow.Label>
+                                            <TextBlock x:Uid="Diagnostics_VoiceCallbackStatusLabel"
+                                                       Text="回调观测："
+                                                       Style="{StaticResource SettingsRowTitleTextStyle}"
+                                                       VerticalAlignment="Center"/>
+                                        </controls:ResponsiveFormRow.Label>
+                                        <controls:ResponsiveFormRow.Value>
+                                            <TextBlock Text="{x:Bind ViewModel.VoiceInputDiagnostics.CallbackObservationText, Mode=OneWay}"
+                                                       AutomationProperties.AutomationId="Diagnostics.VoiceCallbackStatus"
                                                        Style="{StaticResource SettingsRowDescriptionTextStyle}"
                                                        TextWrapping="WrapWholeWords"/>
                                         </controls:ResponsiveFormRow.Value>

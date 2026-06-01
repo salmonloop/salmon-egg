@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Presentation.Core.Resources;
+using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Input;
 
 namespace SalmonEgg.Presentation.ViewModels.Settings;
@@ -13,6 +14,7 @@ namespace SalmonEgg.Presentation.ViewModels.Settings;
 public sealed partial class VoiceInputDiagnosticsViewModel : ObservableObject
 {
     private readonly IVoiceInputDiagnosticsService _service;
+    private readonly IUiDispatcher _uiDispatcher;
     private readonly IStringLocalizer<CoreStrings> _localizer;
     private readonly ILogger<VoiceInputDiagnosticsViewModel> _logger;
 
@@ -33,7 +35,13 @@ public sealed partial class VoiceInputDiagnosticsViewModel : ObservableObject
     private string _currentLanguageTagText;
 
     [ObservableProperty]
+    private string _inputDeviceText;
+
+    [ObservableProperty]
     private string _sessionStatusText;
+
+    [ObservableProperty]
+    private string _callbackObservationText;
 
     [ObservableProperty]
     private string _timelineText;
@@ -44,18 +52,22 @@ public sealed partial class VoiceInputDiagnosticsViewModel : ObservableObject
     public VoiceInputDiagnosticsViewModel(
         IVoiceInputDiagnosticsService service,
         VoiceInputDiagnosticsProbeViewModel probe,
+        IUiDispatcher uiDispatcher,
         IStringLocalizer<CoreStrings> localizer,
         ILogger<VoiceInputDiagnosticsViewModel> logger)
     {
         _service = service ?? throw new ArgumentNullException(nameof(service));
         Probe = probe ?? throw new ArgumentNullException(nameof(probe));
+        _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         _supportStatusText = _localizer["VoiceDiagnostics_PendingRefresh"];
         _permissionStatusText = _localizer["VoiceDiagnostics_PendingRefresh"];
         _currentLanguageTagText = CultureInfo.CurrentUICulture.Name;
+        _inputDeviceText = _localizer["VoiceDiagnostics_PendingRefresh"];
         _sessionStatusText = _localizer["VoiceDiagnostics_NoRecentSession"];
+        _callbackObservationText = _localizer["VoiceDiagnostics_CallbackObservationUnavailable"];
         _timelineText = _localizer["VoiceDiagnostics_TimelineUnavailable"];
         _recommendationText = _localizer["VoiceDiagnostics_RecommendationNoRecentSession"];
     }
@@ -71,17 +83,22 @@ public sealed partial class VoiceInputDiagnosticsViewModel : ObservableObject
         try
         {
             var snapshot = await _service.GetSnapshotAsync().ConfigureAwait(false);
-            ApplySnapshot(snapshot);
+            await RunOnUiAsync(() => ApplySnapshot(snapshot)).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Voice diagnostics refresh failed.");
-            SupportStatusText = _localizer["VoiceDiagnostics_RefreshFailed"];
-            PermissionStatusText = _localizer["VoiceDiagnostics_RefreshFailed"];
-            SessionStatusText = _localizer["VoiceDiagnostics_RefreshFailed"];
-            TimelineText = _localizer["VoiceDiagnostics_TimelineUnavailable"];
-            RecommendationText = _localizer["VoiceDiagnostics_RecommendationRefreshFailed"];
-            RequiresAuthorization = false;
+            await RunOnUiAsync(() =>
+            {
+                SupportStatusText = _localizer["VoiceDiagnostics_RefreshFailed"];
+                PermissionStatusText = _localizer["VoiceDiagnostics_RefreshFailed"];
+                InputDeviceText = _localizer["VoiceDiagnostics_RefreshFailed"];
+                SessionStatusText = _localizer["VoiceDiagnostics_RefreshFailed"];
+                CallbackObservationText = _localizer["VoiceDiagnostics_RefreshFailed"];
+                TimelineText = _localizer["VoiceDiagnostics_TimelineUnavailable"];
+                RecommendationText = _localizer["VoiceDiagnostics_RecommendationRefreshFailed"];
+                RequiresAuthorization = false;
+            }).ConfigureAwait(false);
         }
     }
 
@@ -100,12 +117,16 @@ public sealed partial class VoiceInputDiagnosticsViewModel : ObservableObject
         CurrentLanguageTagText = string.IsNullOrWhiteSpace(snapshot.CurrentLanguageTag)
             ? _localizer["VoiceDiagnostics_UnknownLanguage"]
             : snapshot.CurrentLanguageTag;
+        InputDeviceText = string.IsNullOrWhiteSpace(snapshot.DefaultInputDeviceName)
+            ? _localizer["VoiceDiagnostics_InputDeviceUnavailable"]
+            : snapshot.DefaultInputDeviceName!;
         RequiresAuthorization = snapshot.Permission.RequiresAuthorization;
 
         var session = snapshot.LatestSession;
         if (session is null)
         {
             SessionStatusText = _localizer["VoiceDiagnostics_NoRecentSession"];
+            CallbackObservationText = _localizer["VoiceDiagnostics_CallbackObservationUnavailable"];
             TimelineText = _localizer["VoiceDiagnostics_TimelineUnavailable"];
             RecommendationText = snapshot.Permission.RequiresAuthorization
                 ? _localizer["VoiceDiagnostics_RecommendationRequiresAuthorization"]
@@ -114,6 +135,7 @@ public sealed partial class VoiceInputDiagnosticsViewModel : ObservableObject
         }
 
         SessionStatusText = ResolveSessionStatus(session);
+        CallbackObservationText = ResolveCallbackObservation(session);
         TimelineText = ResolveTimelineText(session);
         RecommendationText = ResolveRecommendation(snapshot, session);
     }
@@ -198,6 +220,35 @@ public sealed partial class VoiceInputDiagnosticsViewModel : ObservableObject
         return _localizer["VoiceDiagnostics_TimelineUnavailable"];
     }
 
+    private string ResolveCallbackObservation(VoiceInputDiagnosticSession session)
+    {
+        if (session.PartialResultCount == 0
+            && session.FinalResultCount == 0
+            && session.EmptyPartialResultCount == 0
+            && session.EmptyFinalResultCount == 0)
+        {
+            return _localizer["VoiceDiagnostics_CallbackObservationNone"];
+        }
+
+        if (session.PartialResultCount == 0
+            && session.FinalResultCount == 0)
+        {
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                _localizer["VoiceDiagnostics_CallbackObservationEmptyOnlyFormat"],
+                session.EmptyPartialResultCount,
+                session.EmptyFinalResultCount);
+        }
+
+        return string.Format(
+            CultureInfo.InvariantCulture,
+            _localizer["VoiceDiagnostics_CallbackObservationFormat"],
+            session.PartialResultCount,
+            session.FinalResultCount,
+            session.EmptyPartialResultCount,
+            session.EmptyFinalResultCount);
+    }
+
     private string ResolveRecommendation(VoiceInputDiagnosticsSnapshot snapshot, VoiceInputDiagnosticSession session)
     {
         if (snapshot.Permission.RequiresAuthorization)
@@ -222,5 +273,18 @@ public sealed partial class VoiceInputDiagnosticsViewModel : ObservableObject
         }
 
         return _localizer["VoiceDiagnostics_RecommendationGeneric"];
+    }
+
+    private Task RunOnUiAsync(Action action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+
+        if (_uiDispatcher.HasThreadAccess)
+        {
+            action();
+            return Task.CompletedTask;
+        }
+
+        return _uiDispatcher.EnqueueAsync(action);
     }
 }

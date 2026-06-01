@@ -379,6 +379,9 @@
   <data name="VoiceDiagnostics_UnknownLanguage" xml:space="preserve">
     <value>未知</value>
   </data>
+  <data name="VoiceDiagnostics_InputDeviceUnavailable" xml:space="preserve">
+    <value>未能读取当前默认输入设备。</value>
+  </data>
   <data name="VoiceDiagnostics_NoRecentSession" xml:space="preserve">
     <value>最近日志里还没有语音会话记录。</value>
   </data>
@@ -402,6 +405,18 @@
   </data>
   <data name="VoiceDiagnostics_SessionUnknown" xml:space="preserve">
     <value>最近一次语音会话状态未知。</value>
+  </data>
+  <data name="VoiceDiagnostics_CallbackObservationUnavailable" xml:space="preserve">
+    <value>最近会话还没有回调观测结果。</value>
+  </data>
+  <data name="VoiceDiagnostics_CallbackObservationNone" xml:space="preserve">
+    <value>未观察到任何 hypothesis/result 回调。</value>
+  </data>
+  <data name="VoiceDiagnostics_CallbackObservationEmptyOnlyFormat" xml:space="preserve">
+    <value>只观察到空回调：empty partial {0} 次，empty final {1} 次。</value>
+  </data>
+  <data name="VoiceDiagnostics_CallbackObservationFormat" xml:space="preserve">
+    <value>有效 partial {0} 次，final {1} 次；空 partial {2} 次，empty final {3} 次。</value>
   </data>
   <data name="VoiceDiagnostics_TimelineUnavailable" xml:space="preserve">
     <value>暂无最近会话时间线。</value>

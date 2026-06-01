@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 
 namespace SalmonEgg.Presentation.Core.Services.Input;
 
-public sealed class NoOpVoiceInputService : IVoiceInputService
+public sealed class NoOpVoiceInputService : IVoiceInputService, IVoiceInputRuntimeDiagnosticsSource
 {
     public static NoOpVoiceInputService Instance { get; } = new();
 
@@ -51,6 +51,9 @@ public sealed class NoOpVoiceInputService : IVoiceInputService
 
     public Task StopAsync(CancellationToken cancellationToken = default)
         => Task.CompletedTask;
+
+    public Task<VoiceInputRuntimeDiagnostics> GetRuntimeDiagnosticsAsync(CancellationToken cancellationToken = default)
+        => Task.FromResult(new VoiceInputRuntimeDiagnostics(null, null, null));
 
     public void Dispose()
     {

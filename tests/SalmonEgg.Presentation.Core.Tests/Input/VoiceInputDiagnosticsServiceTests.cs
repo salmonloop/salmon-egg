@@ -34,6 +34,10 @@ public sealed class VoiceInputDiagnosticsServiceTests
         Assert.NotNull(snapshot.LatestSession.EndedAt);
         Assert.Null(snapshot.LatestSession.FirstPartialAt);
         Assert.Null(snapshot.LatestSession.FinalResultAt);
+        Assert.Equal(0, snapshot.LatestSession.PartialResultCount);
+        Assert.Equal(0, snapshot.LatestSession.FinalResultCount);
+        Assert.Equal(0, snapshot.LatestSession.EmptyPartialResultCount);
+        Assert.Equal(0, snapshot.LatestSession.EmptyFinalResultCount);
     }
 
     [Fact]
@@ -71,14 +75,63 @@ public sealed class VoiceInputDiagnosticsServiceTests
         Assert.Equal(VoiceInputDiagnosticSessionOutcome.FinalResultReceived, snapshot.LatestSession.Outcome);
         Assert.NotNull(snapshot.LatestSession.FirstPartialAt);
         Assert.NotNull(snapshot.LatestSession.FinalResultAt);
+        Assert.Equal(1, snapshot.LatestSession.PartialResultCount);
+        Assert.Equal(1, snapshot.LatestSession.FinalResultCount);
     }
 
-    private static VoiceInputDiagnosticsService CreateService(string logText, VoiceInputPermissionResult permission)
+    [Fact]
+    public async Task GetSnapshotAsync_WhenRuntimeDiagnosticsProvideDefaultDeviceAndCallbackCounts_MergesThemIntoLatestSession()
+    {
+        var logText = """
+            2026-06-02 02:13:59.340 +08:00 [INF] [Thread:2] Voice input start requested. RequestId=runtime-request LanguageTag=zh-CN
+            2026-06-02 02:14:02.074 +08:00 [INF] [Thread:2] Voice input recognizer ready. RequestId=runtime-request LanguageTag=zh-CN
+            2026-06-02 02:14:06.265 +08:00 [INF] [Thread:2] Voice input stop requested. RequestId=runtime-request WasListening=true
+            2026-06-02 02:14:06.270 +08:00 [INF] [Thread:12] Voice input session ended. RequestId=runtime-request
+            """;
+        var runtimeDiagnostics = new VoiceInputRuntimeDiagnostics(
+            DefaultInputDeviceName: "USB Microphone",
+            DefaultInputDeviceId: "device-1",
+            LatestSession: new VoiceInputDiagnosticSession(
+                "runtime-request",
+                VoiceInputDiagnosticSessionOutcome.ReadyWithoutRecognition,
+                StartRequestedAt: new DateTimeOffset(2026, 6, 2, 2, 13, 59, 340, TimeSpan.FromHours(8)),
+                RecognizerReadyAt: new DateTimeOffset(2026, 6, 2, 2, 14, 2, 74, TimeSpan.FromHours(8)),
+                FirstPartialAt: null,
+                FinalResultAt: null,
+                StopRequestedAt: new DateTimeOffset(2026, 6, 2, 2, 14, 6, 265, TimeSpan.FromHours(8)),
+                EndedAt: new DateTimeOffset(2026, 6, 2, 2, 14, 6, 270, TimeSpan.FromHours(8)),
+                ErrorAt: null,
+                ErrorCode: null,
+                ErrorMessage: null,
+                LanguageTag: "zh-CN",
+                PartialResultCount: 0,
+                FinalResultCount: 0,
+                EmptyPartialResultCount: 2,
+                EmptyFinalResultCount: 1,
+                CompletionStatus: "StoppedByApp"));
+        var sut = CreateService(logText, VoiceInputPermissionResult.Granted(), runtimeDiagnostics);
+
+        var snapshot = await sut.GetSnapshotAsync();
+
+        Assert.Equal("USB Microphone", snapshot.DefaultInputDeviceName);
+        Assert.Equal("device-1", snapshot.DefaultInputDeviceId);
+        Assert.NotNull(snapshot.LatestSession);
+        Assert.Equal("runtime-request", snapshot.LatestSession!.RequestId);
+        Assert.Equal(2, snapshot.LatestSession.EmptyPartialResultCount);
+        Assert.Equal(1, snapshot.LatestSession.EmptyFinalResultCount);
+        Assert.Equal("StoppedByApp", snapshot.LatestSession.CompletionStatus);
+    }
+
+    private static VoiceInputDiagnosticsService CreateService(
+        string logText,
+        VoiceInputPermissionResult permission,
+        VoiceInputRuntimeDiagnostics? runtimeDiagnostics = null)
     {
         var paths = new FakeAppDataService("C:/app/logs");
         var voiceInputService = new FakeVoiceInputService(permission);
         var logFileCatalog = new FakeLogFileCatalog(logText);
-        return new VoiceInputDiagnosticsService(voiceInputService, paths, logFileCatalog);
+        var runtimeSource = new FakeVoiceInputRuntimeDiagnosticsSource(runtimeDiagnostics ?? new VoiceInputRuntimeDiagnostics(null, null, null));
+        return new VoiceInputDiagnosticsService(voiceInputService, runtimeSource, paths, logFileCatalog);
     }
 
     private sealed class FakeAppDataService : IAppDataService
@@ -169,5 +222,18 @@ public sealed class VoiceInputDiagnosticsServiceTests
         public void Dispose()
         {
         }
+    }
+
+    private sealed class FakeVoiceInputRuntimeDiagnosticsSource : IVoiceInputRuntimeDiagnosticsSource
+    {
+        private readonly VoiceInputRuntimeDiagnostics _snapshot;
+
+        public FakeVoiceInputRuntimeDiagnosticsSource(VoiceInputRuntimeDiagnostics snapshot)
+        {
+            _snapshot = snapshot;
+        }
+
+        public Task<VoiceInputRuntimeDiagnostics> GetRuntimeDiagnosticsAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(_snapshot);
     }
 }

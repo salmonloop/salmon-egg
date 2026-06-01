@@ -169,9 +169,12 @@ public static class DependencyInjection
 #endif
 
 #if WINDOWS
-        services.AddSingleton<IVoiceInputService, NativeVoiceInputService>();
+        services.AddSingleton<NativeVoiceInputService>();
+        services.AddSingleton<IVoiceInputService>(sp => sp.GetRequiredService<NativeVoiceInputService>());
+        services.AddSingleton<IVoiceInputRuntimeDiagnosticsSource>(sp => sp.GetRequiredService<NativeVoiceInputService>());
 #else
         services.AddSingleton<IVoiceInputService>(NoOpVoiceInputService.Instance);
+        services.AddSingleton<IVoiceInputRuntimeDiagnosticsSource>(NoOpVoiceInputService.Instance);
 #endif
         services.AddSingleton<IVoiceInputDiagnosticsService, VoiceInputDiagnosticsService>();
         services.AddSingleton<IShellBackNavigationService, ShellBackNavigationService>();

@@ -13,15 +13,18 @@ public sealed class VoiceInputDiagnosticsService : IVoiceInputDiagnosticsService
     private const int MaxLogTailChars = 64000;
 
     private readonly IVoiceInputService _voiceInputService;
+    private readonly IVoiceInputRuntimeDiagnosticsSource _runtimeDiagnosticsSource;
     private readonly IAppDataService _paths;
     private readonly ILogFileCatalog _logFileCatalog;
 
     public VoiceInputDiagnosticsService(
         IVoiceInputService voiceInputService,
+        IVoiceInputRuntimeDiagnosticsSource runtimeDiagnosticsSource,
         IAppDataService paths,
         ILogFileCatalog logFileCatalog)
     {
         _voiceInputService = voiceInputService ?? throw new ArgumentNullException(nameof(voiceInputService));
+        _runtimeDiagnosticsSource = runtimeDiagnosticsSource ?? throw new ArgumentNullException(nameof(runtimeDiagnosticsSource));
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         _logFileCatalog = logFileCatalog ?? throw new ArgumentNullException(nameof(logFileCatalog));
     }
@@ -33,6 +36,7 @@ public sealed class VoiceInputDiagnosticsService : IVoiceInputDiagnosticsService
             : new VoiceInputPermissionResult(
                 VoiceInputPermissionStatus.Unsupported,
                 "Voice input is not supported on this platform.");
+        var runtimeDiagnostics = await _runtimeDiagnosticsSource.GetRuntimeDiagnosticsAsync(cancellationToken).ConfigureAwait(false);
         var latestLog = await _logFileCatalog.GetLatestAsync(_paths.LogsDirectoryPath, cancellationToken).ConfigureAwait(false);
         VoiceInputDiagnosticSession? latestSession = null;
         if (latestLog is not null)
@@ -40,12 +44,15 @@ public sealed class VoiceInputDiagnosticsService : IVoiceInputDiagnosticsService
             var logText = await _logFileCatalog.ReadTailAsync(latestLog.Path, MaxLogTailChars, cancellationToken).ConfigureAwait(false);
             latestSession = ParseLatestSession(logText);
         }
+        latestSession = MergeLatestSession(latestSession, runtimeDiagnostics.LatestSession);
 
         return new VoiceInputDiagnosticsSnapshot(
             IsSupported: _voiceInputService.IsSupported,
             IsListening: _voiceInputService.IsListening,
             CurrentLanguageTag: CultureInfo.CurrentUICulture.Name,
             Permission: permission,
+            DefaultInputDeviceName: runtimeDiagnostics.DefaultInputDeviceName,
+            DefaultInputDeviceId: runtimeDiagnostics.DefaultInputDeviceId,
             LatestLogFilePath: latestLog?.Path,
             LatestLogTimestamp: latestLog?.LastWriteTimeUtc,
             LatestSession: latestSession);
@@ -101,12 +108,15 @@ public sealed class VoiceInputDiagnosticsService : IVoiceInputDiagnosticsService
             if (rawLine.Contains("Voice input first partial received.", StringComparison.Ordinal))
             {
                 session.FirstPartialAt ??= timestamp;
+                session.PartialResultCount = Math.Max(session.PartialResultCount, 1);
                 continue;
             }
 
-            if (rawLine.Contains("Voice input final result received.", StringComparison.Ordinal))
+            if (rawLine.Contains("Voice input final result received.", StringComparison.Ordinal)
+                || rawLine.Contains("Voice input first final result received.", StringComparison.Ordinal))
             {
                 session.FinalResultAt ??= timestamp;
+                session.FinalResultCount = Math.Max(session.FinalResultCount, 1);
                 continue;
             }
 
@@ -119,6 +129,16 @@ public sealed class VoiceInputDiagnosticsService : IVoiceInputDiagnosticsService
             if (rawLine.Contains("Voice input session ended.", StringComparison.Ordinal))
             {
                 session.EndedAt ??= timestamp;
+                continue;
+            }
+
+            if (rawLine.Contains("Voice input session summary.", StringComparison.Ordinal))
+            {
+                session.PartialResultCount = ParseIntTokenValue(rawLine, "PartialCount=");
+                session.FinalResultCount = ParseIntTokenValue(rawLine, "FinalCount=");
+                session.EmptyPartialResultCount = ParseIntTokenValue(rawLine, "EmptyPartialCount=");
+                session.EmptyFinalResultCount = ParseIntTokenValue(rawLine, "EmptyFinalCount=");
+                session.CompletionStatus ??= ExtractTokenValue(rawLine, "CompletionStatus=");
                 continue;
             }
 
@@ -201,6 +221,66 @@ public sealed class VoiceInputDiagnosticsService : IVoiceInputDiagnosticsService
         return start >= line.Length ? null : line[start..].Trim();
     }
 
+    private static int ParseIntTokenValue(string line, string token)
+    {
+        var value = ExtractTokenValue(line, token);
+        return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : 0;
+    }
+
+    private static VoiceInputDiagnosticSession? MergeLatestSession(
+        VoiceInputDiagnosticSession? parsedLogSession,
+        VoiceInputDiagnosticSession? runtimeSession)
+    {
+        if (parsedLogSession is null)
+        {
+            return runtimeSession;
+        }
+
+        if (runtimeSession is null)
+        {
+            return parsedLogSession;
+        }
+
+        if (string.Equals(parsedLogSession.RequestId, runtimeSession.RequestId, StringComparison.Ordinal))
+        {
+            return parsedLogSession with
+            {
+                Outcome = runtimeSession.Outcome,
+                StartRequestedAt = runtimeSession.StartRequestedAt ?? parsedLogSession.StartRequestedAt,
+                RecognizerReadyAt = runtimeSession.RecognizerReadyAt ?? parsedLogSession.RecognizerReadyAt,
+                FirstPartialAt = runtimeSession.FirstPartialAt ?? parsedLogSession.FirstPartialAt,
+                FinalResultAt = runtimeSession.FinalResultAt ?? parsedLogSession.FinalResultAt,
+                StopRequestedAt = runtimeSession.StopRequestedAt ?? parsedLogSession.StopRequestedAt,
+                EndedAt = runtimeSession.EndedAt ?? parsedLogSession.EndedAt,
+                ErrorAt = runtimeSession.ErrorAt ?? parsedLogSession.ErrorAt,
+                ErrorCode = runtimeSession.ErrorCode ?? parsedLogSession.ErrorCode,
+                ErrorMessage = runtimeSession.ErrorMessage ?? parsedLogSession.ErrorMessage,
+                LanguageTag = runtimeSession.LanguageTag ?? parsedLogSession.LanguageTag,
+                PartialResultCount = runtimeSession.PartialResultCount,
+                FinalResultCount = runtimeSession.FinalResultCount,
+                EmptyPartialResultCount = runtimeSession.EmptyPartialResultCount,
+                EmptyFinalResultCount = runtimeSession.EmptyFinalResultCount,
+                CompletionStatus = runtimeSession.CompletionStatus ?? parsedLogSession.CompletionStatus
+            };
+        }
+
+        return GetLatestEventTimestamp(runtimeSession) >= GetLatestEventTimestamp(parsedLogSession)
+            ? runtimeSession
+            : parsedLogSession;
+    }
+
+    private static DateTimeOffset GetLatestEventTimestamp(VoiceInputDiagnosticSession session)
+        => session.EndedAt
+            ?? session.ErrorAt
+            ?? session.StopRequestedAt
+            ?? session.FinalResultAt
+            ?? session.FirstPartialAt
+            ?? session.RecognizerReadyAt
+            ?? session.StartRequestedAt
+            ?? DateTimeOffset.MinValue;
+
     private sealed class MutableVoiceInputSession
     {
         public MutableVoiceInputSession(string requestId)
@@ -230,6 +310,16 @@ public sealed class VoiceInputDiagnosticsService : IVoiceInputDiagnosticsService
 
         public string? LanguageTag { get; set; }
 
+        public int PartialResultCount { get; set; }
+
+        public int FinalResultCount { get; set; }
+
+        public int EmptyPartialResultCount { get; set; }
+
+        public int EmptyFinalResultCount { get; set; }
+
+        public string? CompletionStatus { get; set; }
+
         public DateTimeOffset LatestEventAt { get; private set; } = DateTimeOffset.MinValue;
 
         public void RegisterEvent(DateTimeOffset? timestamp)
@@ -253,7 +343,12 @@ public sealed class VoiceInputDiagnosticsService : IVoiceInputDiagnosticsService
                 ErrorAt,
                 ErrorCode,
                 ErrorMessage,
-                LanguageTag);
+                LanguageTag,
+                PartialResultCount,
+                FinalResultCount,
+                EmptyPartialResultCount,
+                EmptyFinalResultCount,
+                CompletionStatus);
 
         private VoiceInputDiagnosticSessionOutcome DetermineOutcome()
         {

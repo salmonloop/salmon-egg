@@ -3,14 +3,17 @@ using System;
 using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using SalmonEgg.Presentation.Core.Services.Input;
+using Windows.Devices.Enumeration;
 using Windows.Globalization;
+using Windows.Media.Devices;
 using Windows.Media.SpeechRecognition;
 using Windows.System;
 
 namespace SalmonEgg.Presentation.Services.Input;
 
-public sealed class NativeVoiceInputService : IVoiceInputService
+public sealed class NativeVoiceInputService : IVoiceInputService, IVoiceInputRuntimeDiagnosticsSource
 {
     private const int HResultPrivacyStatementDeclined = unchecked((int)0x80045509);
     private const int HResultNoCaptureDevices = -1072845856;
@@ -18,6 +21,8 @@ public sealed class NativeVoiceInputService : IVoiceInputService
 
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _sessionSignalSync = new();
+    private readonly object _runtimeDiagnosticsSync = new();
+    private readonly ILogger<NativeVoiceInputService> _logger;
     private SpeechRecognizer? _recognizer;
     private CancellationTokenSource? _sessionCts;
     private Task? _sessionTask;
@@ -29,6 +34,28 @@ public sealed class NativeVoiceInputService : IVoiceInputService
     private bool _isListening;
     private bool _disposed;
     private AuthorizationTarget _authorizationTarget;
+    private int _partialResultCount;
+    private int _finalResultCount;
+    private int _emptyPartialResultCount;
+    private int _emptyFinalResultCount;
+    private string? _runtimeRequestId;
+    private DateTimeOffset? _runtimeStartRequestedAt;
+    private DateTimeOffset? _runtimeRecognizerReadyAt;
+    private DateTimeOffset? _runtimeFirstPartialAt;
+    private DateTimeOffset? _runtimeFinalResultAt;
+    private DateTimeOffset? _runtimeStopRequestedAt;
+    private DateTimeOffset? _runtimeEndedAt;
+    private DateTimeOffset? _runtimeErrorAt;
+    private string? _runtimeErrorCode;
+    private string? _runtimeErrorMessage;
+    private string? _runtimeLanguageTag;
+    private string? _runtimeCompletionStatus;
+    private VoiceInputDiagnosticSession? _latestRuntimeSession;
+
+    public NativeVoiceInputService(ILogger<NativeVoiceInputService> logger)
+    {
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
 
     public bool IsSupported => true;
 
@@ -118,6 +145,8 @@ public sealed class NativeVoiceInputService : IVoiceInputService
             _activeRequestId = options.RequestId;
             _stoppingRequestId = null;
             _isListening = true;
+            ResetSessionCounters();
+            BeginRuntimeSession(options.RequestId, NormalizeLanguageTag(options.LanguageTag));
             _sessionTask = RunRecognitionAsync(options, _sessionCts.Token);
             sessionStartedTask = GetSessionStartedTask();
         }
@@ -147,6 +176,7 @@ public sealed class NativeVoiceInputService : IVoiceInputService
             recognizer = _recognizer;
             requestId = _activeRequestId;
             _stoppingRequestId = requestId;
+            MarkRuntimeStopRequested();
         }
         finally
         {
@@ -181,29 +211,62 @@ public sealed class NativeVoiceInputService : IVoiceInputService
             var compileResult = await recognizer.CompileConstraintsAsync().AsTask(cancellationToken).ConfigureAwait(false);
             if (compileResult.Status != SpeechRecognitionResultStatus.Success)
             {
-                TrySignalSessionStartFailure(
+                SetRuntimeFailure(
+                    CreateStartFailureException(compileResult.Status).Message,
+                    $"CompileConstraints:{compileResult.Status}");
+                _logger.LogWarning(
+                    "Voice input constraints compilation failed. RequestId={RequestId} Status={Status}",
                     requestId,
-                    CreateStartFailureException(compileResult.Status));
+                    compileResult.Status);
+                if (TrySignalSessionStartFailure(
+                    requestId,
+                    CreateStartFailureException(compileResult.Status)))
+                {
+                    LogSessionSummary(FinalizeRuntimeSession(requestId, null, null));
+                }
                 return;
             }
 
             var sessionCompletion = GetSessionCompletionTask();
             await recognizer.ContinuousRecognitionSession.StartAsync().AsTask(cancellationToken).ConfigureAwait(false);
+            MarkRuntimeRecognizerReady();
             TrySignalSessionStarted(requestId);
             await sessionCompletion.ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
+            SetRuntimeCompletionStatus("Canceled");
+            _logger.LogInformation(
+                "Voice input recognition session canceled. RequestId={RequestId} Started={Started}",
+                requestId,
+                HasSessionStarted(requestId));
             if (!TrySignalSessionStartCanceled(requestId))
             {
                 TrySignalSessionEnded(requestId);
             }
+            else
+            {
+                LogSessionSummary(FinalizeRuntimeSession(requestId, null, null));
+            }
         }
         catch (Exception ex)
         {
+            SetRuntimeFailure(
+                VoiceInputErrorMessageSanitizer.Normalize(ex.Message, "Voice input failed."),
+                $"Failed:{ex.GetType().Name}",
+                $"0x{unchecked((uint)ex.HResult):X8}");
+            _logger.LogWarning(
+                ex,
+                "Voice input recognition session failed. RequestId={RequestId} Started={Started}",
+                requestId,
+                HasSessionStarted(requestId));
             if (!TrySignalSessionStartFailure(requestId, CreateStartFailureException(requestId, ex)))
             {
                 TrySignalError(CreateErrorResult(requestId, ex));
+            }
+            else
+            {
+                LogSessionSummary(FinalizeRuntimeSession(requestId, null, null));
             }
         }
         finally
@@ -279,7 +342,25 @@ public sealed class NativeVoiceInputService : IVoiceInputService
         var text = args?.Hypothesis?.Text?.Trim();
         if (string.IsNullOrWhiteSpace(text))
         {
+            var emptyCount = Interlocked.Increment(ref _emptyPartialResultCount);
+            MarkRuntimeEmptyPartialObserved();
+            if (emptyCount == 1)
+            {
+                _logger.LogInformation(
+                    "Voice input hypothesis callback received without usable text. RequestId={RequestId}",
+                    requestId);
+            }
             return;
+        }
+
+        var partialCount = Interlocked.Increment(ref _partialResultCount);
+        MarkRuntimePartialObserved();
+        if (partialCount == 1)
+        {
+            _logger.LogInformation(
+                "Voice input first partial received. RequestId={RequestId} TextLength={TextLength}",
+                requestId,
+                text.Length);
         }
 
         PartialResultReceived?.Invoke(this, new VoiceInputPartialResult(requestId, text));
@@ -296,7 +377,27 @@ public sealed class NativeVoiceInputService : IVoiceInputService
         var text = args?.Result?.Text?.Trim();
         if (string.IsNullOrWhiteSpace(text))
         {
+            var emptyCount = Interlocked.Increment(ref _emptyFinalResultCount);
+            MarkRuntimeEmptyFinalObserved();
+            if (emptyCount == 1)
+            {
+                _logger.LogInformation(
+                    "Voice input final-result callback received without usable text. RequestId={RequestId} Status={Status}",
+                    requestId,
+                    args?.Result?.Status);
+            }
             return;
+        }
+
+        var finalCount = Interlocked.Increment(ref _finalResultCount);
+        MarkRuntimeFinalObserved();
+        if (finalCount == 1)
+        {
+            _logger.LogInformation(
+                "Voice input first final result received. RequestId={RequestId} TextLength={TextLength} Status={Status}",
+                requestId,
+                text.Length,
+                args?.Result?.Status);
         }
 
         FinalResultReceived?.Invoke(this, new VoiceInputFinalResult(requestId, text));
@@ -309,6 +410,17 @@ public sealed class NativeVoiceInputService : IVoiceInputService
         {
             return;
         }
+
+        SetRuntimeCompletionStatus(args.Status.ToString());
+        _logger.LogInformation(
+            "Voice input recognition completed. RequestId={RequestId} Status={Status} StopRequested={StopRequested} PartialCount={PartialCount} FinalCount={FinalCount} EmptyPartialCount={EmptyPartialCount} EmptyFinalCount={EmptyFinalCount}",
+            requestId,
+            args.Status,
+            string.Equals(_stoppingRequestId, requestId, StringComparison.Ordinal),
+            Volatile.Read(ref _partialResultCount),
+            Volatile.Read(ref _finalResultCount),
+            Volatile.Read(ref _emptyPartialResultCount),
+            Volatile.Read(ref _emptyFinalResultCount));
 
         if (string.Equals(_stoppingRequestId, requestId, StringComparison.Ordinal)
             || args.Status == SpeechRecognitionResultStatus.Success)
@@ -444,6 +556,16 @@ public sealed class NativeVoiceInputService : IVoiceInputService
         }
     }
 
+    private bool HasSessionStarted(string requestId)
+    {
+        lock (_sessionSignalSync)
+        {
+            return !string.IsNullOrWhiteSpace(requestId)
+                && string.Equals(_activeRequestId, requestId, StringComparison.Ordinal)
+                && _sessionStarted?.Task.IsCompletedSuccessfully == true;
+        }
+    }
+
     private bool TrySignalSessionStarted(string requestId)
     {
         lock (_sessionSignalSync)
@@ -494,6 +616,7 @@ public sealed class NativeVoiceInputService : IVoiceInputService
         var shouldRaise = TryCompleteSessionSignal(requestId);
         if (shouldRaise)
         {
+            LogSessionSummary(FinalizeRuntimeSession(requestId, null, null));
             SessionEnded?.Invoke(this, new VoiceInputSessionEndedResult(requestId));
         }
     }
@@ -503,7 +626,20 @@ public sealed class NativeVoiceInputService : IVoiceInputService
         var shouldRaise = TryCompleteSessionSignal(error.RequestId);
         if (shouldRaise)
         {
+            LogSessionSummary(FinalizeRuntimeSession(error.RequestId, error.ErrorCode, error.Message));
             RaiseError(error);
+        }
+    }
+
+    public async Task<VoiceInputRuntimeDiagnostics> GetRuntimeDiagnosticsAsync(CancellationToken cancellationToken = default)
+    {
+        var (defaultInputDeviceName, defaultInputDeviceId) = await GetDefaultInputDeviceAsync(cancellationToken).ConfigureAwait(false);
+        lock (_runtimeDiagnosticsSync)
+        {
+            return new VoiceInputRuntimeDiagnostics(
+                defaultInputDeviceName,
+                defaultInputDeviceId,
+                _runtimeRequestId is not null ? BuildRuntimeSessionSnapshotUnsafe() : _latestRuntimeSession);
         }
     }
 
@@ -588,6 +724,226 @@ public sealed class NativeVoiceInputService : IVoiceInputService
     {
         _authorizationTarget = target;
         return true;
+    }
+
+    private void ResetSessionCounters()
+    {
+        Interlocked.Exchange(ref _partialResultCount, 0);
+        Interlocked.Exchange(ref _finalResultCount, 0);
+        Interlocked.Exchange(ref _emptyPartialResultCount, 0);
+        Interlocked.Exchange(ref _emptyFinalResultCount, 0);
+    }
+
+    private void BeginRuntimeSession(string requestId, string normalizedLanguageTag)
+    {
+        lock (_runtimeDiagnosticsSync)
+        {
+            _runtimeRequestId = requestId;
+            _runtimeStartRequestedAt = DateTimeOffset.Now;
+            _runtimeRecognizerReadyAt = null;
+            _runtimeFirstPartialAt = null;
+            _runtimeFinalResultAt = null;
+            _runtimeStopRequestedAt = null;
+            _runtimeEndedAt = null;
+            _runtimeErrorAt = null;
+            _runtimeErrorCode = null;
+            _runtimeErrorMessage = null;
+            _runtimeLanguageTag = normalizedLanguageTag;
+            _runtimeCompletionStatus = null;
+        }
+    }
+
+    private void MarkRuntimeRecognizerReady()
+    {
+        lock (_runtimeDiagnosticsSync)
+        {
+            _runtimeRecognizerReadyAt ??= DateTimeOffset.Now;
+        }
+    }
+
+    private void MarkRuntimePartialObserved()
+    {
+        lock (_runtimeDiagnosticsSync)
+        {
+            _runtimeFirstPartialAt ??= DateTimeOffset.Now;
+        }
+    }
+
+    private void MarkRuntimeFinalObserved()
+    {
+        lock (_runtimeDiagnosticsSync)
+        {
+            _runtimeFinalResultAt ??= DateTimeOffset.Now;
+        }
+    }
+
+    private void MarkRuntimeEmptyPartialObserved()
+    {
+        lock (_runtimeDiagnosticsSync)
+        {
+            _runtimeRecognizerReadyAt ??= DateTimeOffset.Now;
+        }
+    }
+
+    private void MarkRuntimeEmptyFinalObserved()
+    {
+        lock (_runtimeDiagnosticsSync)
+        {
+            _runtimeRecognizerReadyAt ??= DateTimeOffset.Now;
+        }
+    }
+
+    private void MarkRuntimeStopRequested()
+    {
+        lock (_runtimeDiagnosticsSync)
+        {
+            _runtimeStopRequestedAt ??= DateTimeOffset.Now;
+            _runtimeCompletionStatus ??= "StoppedByApp";
+        }
+    }
+
+    private void SetRuntimeCompletionStatus(string completionStatus)
+    {
+        lock (_runtimeDiagnosticsSync)
+        {
+            _runtimeCompletionStatus = completionStatus;
+        }
+    }
+
+    private void SetRuntimeFailure(string errorMessage, string? completionStatus, string? errorCode = null)
+    {
+        lock (_runtimeDiagnosticsSync)
+        {
+            _runtimeErrorAt ??= DateTimeOffset.Now;
+            _runtimeErrorCode ??= errorCode;
+            _runtimeErrorMessage ??= errorMessage;
+            if (!string.IsNullOrWhiteSpace(completionStatus))
+            {
+                _runtimeCompletionStatus = completionStatus;
+            }
+        }
+    }
+
+    private VoiceInputDiagnosticSession FinalizeRuntimeSession(string requestId, string? errorCode, string? errorMessage)
+    {
+        lock (_runtimeDiagnosticsSync)
+        {
+            if (!string.Equals(_runtimeRequestId, requestId, StringComparison.Ordinal))
+            {
+                return _latestRuntimeSession
+                    ?? new VoiceInputDiagnosticSession(
+                        requestId,
+                        VoiceInputDiagnosticSessionOutcome.Unknown,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        errorCode,
+                        errorMessage,
+                        null,
+                        0,
+                        0,
+                        0,
+                        0,
+                        null);
+            }
+
+            _runtimeEndedAt ??= DateTimeOffset.Now;
+            _runtimeErrorCode ??= errorCode;
+            _runtimeErrorMessage ??= errorMessage;
+            _runtimeErrorAt ??= string.IsNullOrWhiteSpace(_runtimeErrorMessage) ? null : DateTimeOffset.Now;
+            _latestRuntimeSession = BuildRuntimeSessionSnapshotUnsafe();
+            _runtimeRequestId = null;
+            return _latestRuntimeSession;
+        }
+    }
+
+    private VoiceInputDiagnosticSession BuildRuntimeSessionSnapshotUnsafe()
+    {
+        var outcome = DetermineRuntimeOutcomeUnsafe();
+        return new VoiceInputDiagnosticSession(
+            RequestId: _runtimeRequestId ?? _latestRuntimeSession?.RequestId ?? string.Empty,
+            Outcome: outcome,
+            StartRequestedAt: _runtimeStartRequestedAt,
+            RecognizerReadyAt: _runtimeRecognizerReadyAt,
+            FirstPartialAt: _runtimeFirstPartialAt,
+            FinalResultAt: _runtimeFinalResultAt,
+            StopRequestedAt: _runtimeStopRequestedAt,
+            EndedAt: _runtimeEndedAt,
+            ErrorAt: _runtimeErrorAt,
+            ErrorCode: _runtimeErrorCode,
+            ErrorMessage: _runtimeErrorMessage,
+            LanguageTag: _runtimeLanguageTag,
+            PartialResultCount: Volatile.Read(ref _partialResultCount),
+            FinalResultCount: Volatile.Read(ref _finalResultCount),
+            EmptyPartialResultCount: Volatile.Read(ref _emptyPartialResultCount),
+            EmptyFinalResultCount: Volatile.Read(ref _emptyFinalResultCount),
+            CompletionStatus: _runtimeCompletionStatus);
+    }
+
+    private VoiceInputDiagnosticSessionOutcome DetermineRuntimeOutcomeUnsafe()
+    {
+        if (_runtimeErrorAt is not null || !string.IsNullOrWhiteSpace(_runtimeErrorMessage))
+        {
+            return VoiceInputDiagnosticSessionOutcome.Failed;
+        }
+
+        if (_runtimeFinalResultAt is not null || Volatile.Read(ref _finalResultCount) > 0)
+        {
+            return VoiceInputDiagnosticSessionOutcome.FinalResultReceived;
+        }
+
+        if (_runtimeFirstPartialAt is not null || Volatile.Read(ref _partialResultCount) > 0)
+        {
+            return VoiceInputDiagnosticSessionOutcome.PartialResultReceived;
+        }
+
+        if (_runtimeRecognizerReadyAt is not null)
+        {
+            return VoiceInputDiagnosticSessionOutcome.ReadyWithoutRecognition;
+        }
+
+        if (_runtimeStartRequestedAt is not null)
+        {
+            return VoiceInputDiagnosticSessionOutcome.StartRequested;
+        }
+
+        return VoiceInputDiagnosticSessionOutcome.Unknown;
+    }
+
+    private void LogSessionSummary(VoiceInputDiagnosticSession session)
+    {
+        _logger.LogInformation(
+            "Voice input session summary. RequestId={RequestId} Outcome={Outcome} CompletionStatus={CompletionStatus} PartialCount={PartialCount} FinalCount={FinalCount} EmptyPartialCount={EmptyPartialCount} EmptyFinalCount={EmptyFinalCount}",
+            session.RequestId,
+            session.Outcome,
+            session.CompletionStatus,
+            session.PartialResultCount,
+            session.FinalResultCount,
+            session.EmptyPartialResultCount,
+            session.EmptyFinalResultCount);
+    }
+
+    private static async Task<(string? DeviceName, string? DeviceId)> GetDefaultInputDeviceAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var deviceId = MediaDevice.GetDefaultAudioCaptureId(AudioDeviceRole.Default);
+            if (string.IsNullOrWhiteSpace(deviceId))
+            {
+                return (null, null);
+            }
+
+            var info = await DeviceInformation.CreateFromIdAsync(deviceId).AsTask(cancellationToken).ConfigureAwait(false);
+            return (info?.Name, deviceId);
+        }
+        catch
+        {
+            return (null, null);
+        }
     }
 
     private Uri? GetAuthorizationSettingsUri()
