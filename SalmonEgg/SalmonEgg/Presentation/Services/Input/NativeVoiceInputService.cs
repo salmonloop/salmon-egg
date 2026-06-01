@@ -21,6 +21,7 @@ public sealed class NativeVoiceInputService : IVoiceInputService
     private SpeechRecognizer? _recognizer;
     private CancellationTokenSource? _sessionCts;
     private Task? _sessionTask;
+    private TaskCompletionSource<object?>? _sessionStarted;
     private TaskCompletionSource<object?>? _sessionCompletion;
     private string? _activeRequestId;
     private string? _activeLanguageTag;
@@ -101,6 +102,7 @@ public sealed class NativeVoiceInputService : IVoiceInputService
             throw new ArgumentException("Voice input request id cannot be empty.", nameof(options));
         }
 
+        Task sessionStartedTask;
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -111,16 +113,20 @@ public sealed class NativeVoiceInputService : IVoiceInputService
             }
 
             _sessionCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            _sessionStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
             _sessionCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
             _activeRequestId = options.RequestId;
             _stoppingRequestId = null;
             _isListening = true;
             _sessionTask = RunRecognitionAsync(options, _sessionCts.Token);
+            sessionStartedTask = GetSessionStartedTask();
         }
         finally
         {
             _gate.Release();
         }
+
+        await sessionStartedTask.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task StopAsync(CancellationToken cancellationToken = default)
@@ -175,24 +181,30 @@ public sealed class NativeVoiceInputService : IVoiceInputService
             var compileResult = await recognizer.CompileConstraintsAsync().AsTask(cancellationToken).ConfigureAwait(false);
             if (compileResult.Status != SpeechRecognitionResultStatus.Success)
             {
-                TrySignalError(new VoiceInputErrorResult(
+                TrySignalSessionStartFailure(
                     requestId,
-                    $"Unable to prepare voice recognition: {compileResult.Status}.",
-                    compileResult.Status.ToString()));
+                    CreateStartFailureException(compileResult.Status));
                 return;
             }
 
             var sessionCompletion = GetSessionCompletionTask();
             await recognizer.ContinuousRecognitionSession.StartAsync().AsTask(cancellationToken).ConfigureAwait(false);
+            TrySignalSessionStarted(requestId);
             await sessionCompletion.ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
-            TrySignalSessionEnded(requestId);
+            if (!TrySignalSessionStartCanceled(requestId))
+            {
+                TrySignalSessionEnded(requestId);
+            }
         }
         catch (Exception ex)
         {
-            TrySignalError(CreateErrorResult(requestId, ex));
+            if (!TrySignalSessionStartFailure(requestId, CreateStartFailureException(requestId, ex)))
+            {
+                TrySignalError(CreateErrorResult(requestId, ex));
+            }
         }
         finally
         {
@@ -204,6 +216,7 @@ public sealed class NativeVoiceInputService : IVoiceInputService
                     _isListening = false;
                     _activeRequestId = null;
                     _sessionTask = null;
+                    _sessionStarted = null;
                     _sessionCompletion = null;
                     _stoppingRequestId = null;
                     try
@@ -397,11 +410,82 @@ public sealed class NativeVoiceInputService : IVoiceInputService
         };
     }
 
+    private VoiceInputStartFailureException CreateStartFailureException(SpeechRecognitionResultStatus status)
+    {
+        var permissionResult = CreatePermissionDeniedResultFromStatus(status);
+        var message = permissionResult.Message ?? $"Unable to prepare voice recognition: {status}.";
+        return new VoiceInputStartFailureException(
+            message,
+            permissionResult.RequiresAuthorization);
+    }
+
+    private VoiceInputStartFailureException CreateStartFailureException(string requestId, Exception exception)
+    {
+        var error = CreateErrorResult(requestId, exception);
+        return new VoiceInputStartFailureException(
+            error.Message,
+            error.RequiresAuthorization,
+            exception);
+    }
+
     private Task GetSessionCompletionTask()
     {
         lock (_sessionSignalSync)
         {
             return _sessionCompletion?.Task ?? Task.CompletedTask;
+        }
+    }
+
+    private Task GetSessionStartedTask()
+    {
+        lock (_sessionSignalSync)
+        {
+            return _sessionStarted?.Task ?? Task.CompletedTask;
+        }
+    }
+
+    private bool TrySignalSessionStarted(string requestId)
+    {
+        lock (_sessionSignalSync)
+        {
+            if (string.IsNullOrWhiteSpace(requestId)
+                || !string.Equals(_activeRequestId, requestId, StringComparison.Ordinal)
+                || _sessionStarted is null)
+            {
+                return false;
+            }
+
+            return _sessionStarted.TrySetResult(null);
+        }
+    }
+
+    private bool TrySignalSessionStartFailure(string requestId, Exception exception)
+    {
+        lock (_sessionSignalSync)
+        {
+            if (string.IsNullOrWhiteSpace(requestId)
+                || !string.Equals(_activeRequestId, requestId, StringComparison.Ordinal)
+                || _sessionStarted is null)
+            {
+                return false;
+            }
+
+            return _sessionStarted.TrySetException(exception);
+        }
+    }
+
+    private bool TrySignalSessionStartCanceled(string requestId)
+    {
+        lock (_sessionSignalSync)
+        {
+            if (string.IsNullOrWhiteSpace(requestId)
+                || !string.Equals(_activeRequestId, requestId, StringComparison.Ordinal)
+                || _sessionStarted is null)
+            {
+                return false;
+            }
+
+            return _sessionStarted.TrySetCanceled();
         }
     }
 

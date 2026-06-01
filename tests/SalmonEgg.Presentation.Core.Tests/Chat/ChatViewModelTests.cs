@@ -785,6 +785,40 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
     }
 
     [Fact]
+    public async Task StartVoiceInputCommand_WhenRecognizerStartIsPending_KeepsTransitioningStateUntilReady()
+    {
+        var voiceInput = new FakeVoiceInputService
+        {
+            IsSupported = true,
+            PermissionResult = VoiceInputPermissionResult.Granted(),
+            DelayStartUntilReleased = true
+        };
+
+        await using var fixture = CreateViewModel(voiceInputService: voiceInput);
+        fixture.ViewModel.IsSessionActive = true;
+
+        var startTask = fixture.ViewModel.StartVoiceInputCommand.ExecuteAsync(null);
+
+        await WaitForConditionAsync(() => Task.FromResult(fixture.ViewModel.IsVoiceInputTransportBusy));
+
+        Assert.False(fixture.ViewModel.IsVoiceInputListening);
+        Assert.False(fixture.ViewModel.CanStartVoiceInput);
+        Assert.False(fixture.ViewModel.CanStopVoiceInput);
+        Assert.False(fixture.ViewModel.ShowVoiceInputStartButton);
+        Assert.False(fixture.ViewModel.ShowVoiceInputStopButton);
+        Assert.True(fixture.ViewModel.VoiceInputUiState.ShowProgressRing);
+
+        voiceInput.ReleaseStart();
+        await startTask;
+
+        Assert.True(fixture.ViewModel.IsVoiceInputListening);
+        Assert.False(fixture.ViewModel.IsVoiceInputTransportBusy);
+        Assert.True(fixture.ViewModel.CanStopVoiceInput);
+        Assert.True(fixture.ViewModel.ShowVoiceInputStopButton);
+        Assert.False(fixture.ViewModel.VoiceInputUiState.ShowProgressRing);
+    }
+
+    [Fact]
     public async Task StopVoiceInputCommand_StopsActiveVoiceSession()
     {
         var voiceInput = new FakeVoiceInputService
@@ -812,7 +846,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         {
             IsSupported = true,
             PermissionResult = VoiceInputPermissionResult.Granted(),
-            BlockStartUntilCancellation = true
+            DelayStartUntilReleased = true
         };
 
         await using var fixture = CreateViewModel(voiceInputService: voiceInput);
@@ -820,10 +854,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
         var startTask = fixture.ViewModel.StartVoiceInputCommand.ExecuteAsync(null);
 
-        await WaitForConditionAsync(() => Task.FromResult(
-            fixture.ViewModel.IsVoiceInputListening
-            && fixture.ViewModel.IsVoiceInputTransportBusy
-            && fixture.ViewModel.CanStopVoiceInput));
+        await WaitForConditionAsync(() => Task.FromResult(fixture.ViewModel.IsVoiceInputTransportBusy));
 
         await fixture.ViewModel.StopVoiceInputCommand.ExecuteAsync(null);
         await startTask;
@@ -934,7 +965,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         {
             IsSupported = true,
             PermissionResult = VoiceInputPermissionResult.Granted(),
-            BlockStartUntilCancellation = true,
+            DelayStartUntilReleased = true,
             DelayStopUntilReleased = true
         };
 
@@ -946,9 +977,9 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         var startTask = fixture.ViewModel.StartVoiceInputCommand.ExecuteAsync(null);
 
         await WaitForConditionAsync(() => Task.FromResult(
-            fixture.ViewModel.IsVoiceInputListening
-            && fixture.ViewModel.IsVoiceInputTransportBusy
-            && fixture.ViewModel.CanStopVoiceInput));
+            fixture.ViewModel.IsVoiceInputTransportBusy
+            && !fixture.ViewModel.IsVoiceInputListening
+            && !fixture.ViewModel.CanStartVoiceInput));
 
         var stopTask = fixture.ViewModel.StopVoiceInputCommand.ExecuteAsync(null);
         await startTask;
@@ -1029,6 +1060,30 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
         Assert.Equal("Voice input permission check failed.", fixture.ViewModel.VoiceInputErrorMessage);
         Assert.Equal("Voice input permission check failed.", fixture.ViewModel.TransientNotificationMessage);
+    }
+
+    [Fact]
+    public async Task StartVoiceInputCommand_WhenRecognizerStartFailsWithAuthorizationRequirement_RequestsAuthorizationHelpAndShowsFriendlyMessage()
+    {
+        var voiceInput = new FakeVoiceInputService
+        {
+            IsSupported = true,
+            PermissionResult = VoiceInputPermissionResult.Granted(),
+            StartException = new VoiceInputStartFailureException(
+                "Microphone access is blocked for SalmonEgg. Enable it in Settings > Privacy & security > Microphone, then try again.",
+                requiresAuthorization: true)
+        };
+
+        await using var fixture = CreateViewModel(voiceInputService: voiceInput);
+        fixture.ViewModel.IsSessionActive = true;
+
+        await fixture.ViewModel.StartVoiceInputCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, voiceInput.AuthorizationHelpRequestCount);
+        Assert.Equal(
+            "Microphone access is blocked for SalmonEgg. Enable it in Settings > Privacy & security > Microphone, then try again.",
+            fixture.ViewModel.VoiceInputErrorMessage);
+        Assert.False(fixture.ViewModel.IsVoiceInputListening);
     }
 
     [Fact]
@@ -6682,7 +6737,11 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
         public bool BlockPermissionUntilReleased { get; set; }
 
+        public bool DelayStartUntilReleased { get; set; }
+
         public bool DelayStopUntilReleased { get; set; }
+
+        public Exception? StartException { get; set; }
 
         public Exception? StopException { get; set; }
 
@@ -6722,11 +6781,28 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         public Task StartAsync(VoiceInputSessionOptions options, CancellationToken cancellationToken = default)
         {
             StartCount++;
-            IsListening = true;
             StartedSessionIds.Add(options.RequestId);
+            if (DelayStartUntilReleased)
+            {
+                StartCompletion ??= new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+                return WaitForStartAsync(cancellationToken);
+            }
+
+            if (StartException is not null)
+            {
+                return Task.FromException(StartException);
+            }
+
+            IsListening = true;
             return BlockStartUntilCancellation
                 ? Task.Delay(Timeout.Infinite, cancellationToken)
                 : Task.CompletedTask;
+        }
+
+        private async Task WaitForStartAsync(CancellationToken cancellationToken)
+        {
+            await StartCompletion!.Task.WaitAsync(cancellationToken);
+            IsListening = true;
         }
 
         public Task StopAsync(CancellationToken cancellationToken = default)
@@ -6778,6 +6854,9 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
             PermissionCompletion?.TrySetResult(null);
         }
 
+        public void ReleaseStart()
+            => StartCompletion?.TrySetResult(null);
+
         public void ReleaseStop()
             => StopCompletion?.TrySetResult(null);
 
@@ -6787,6 +6866,8 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         }
 
         private TaskCompletionSource<object?>? StopCompletion { get; set; }
+
+        private TaskCompletionSource<object?>? StartCompletion { get; set; }
     }
 
     [Fact]

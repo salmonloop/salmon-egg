@@ -598,7 +598,13 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
                 return true;
             }
 
-            if (!_transcriptViewportHost.TryFocusItem(targetIndex, FocusState.Keyboard))
+            var transcriptViewportHost = _transcriptViewportHost;
+            if (transcriptViewportHost is null)
+            {
+                return false;
+            }
+
+            if (!transcriptViewportHost.TryFocusItem(targetIndex, FocusState.Keyboard))
             {
                 if (MessagesList.Items[targetIndex] is not object item)
                 {
@@ -606,7 +612,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
                 }
 
                 _pendingTranscriptMessageFocusIndex = targetIndex;
-                _transcriptViewportHost.ScrollItemIntoView(targetIndex, TranscriptItemScrollAlignment.Leading);
+                transcriptViewportHost.ScrollItemIntoView(targetIndex, TranscriptItemScrollAlignment.Leading);
                 _activeTranscriptMessageAnchorItem = item;
                 _isTranscriptViewportLayerActive = false;
                 _isTranscriptChildControlLayerActive = false;
@@ -628,7 +634,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
                 return;
             }
 
-            if (_transcriptViewportHost.TryFocusItem(pendingIndex, FocusState.Keyboard))
+            if (_transcriptViewportHost?.TryFocusItem(pendingIndex, FocusState.Keyboard) == true)
             {
                 _pendingTranscriptMessageFocusIndex = null;
             }
@@ -677,7 +683,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
                 return false;
             }
 
-            return _transcriptViewportHost.TryFocusItem(anchorIndex, FocusState.Keyboard);
+            return _transcriptViewportHost?.TryFocusItem(anchorIndex, FocusState.Keyboard) == true;
         }
 
         private void ClearTranscriptMessageLayerState()

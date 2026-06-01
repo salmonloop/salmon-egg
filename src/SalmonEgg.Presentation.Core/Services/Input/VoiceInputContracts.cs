@@ -40,3 +40,14 @@ public readonly record struct VoiceInputErrorResult(
     string Message,
     string? ErrorCode = null,
     bool RequiresAuthorization = false);
+
+public sealed class VoiceInputStartFailureException : Exception
+{
+    public VoiceInputStartFailureException(string message, bool requiresAuthorization = false, Exception? innerException = null)
+        : base(message, innerException)
+    {
+        RequiresAuthorization = requiresAuthorization;
+    }
+
+    public bool RequiresAuthorization { get; }
+}

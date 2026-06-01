@@ -22,6 +22,10 @@ public interface IVoiceInputService : IDisposable
 
     Task<bool> TryRequestAuthorizationHelpAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Starts a voice-input session and returns only after the native recognizer
+    /// is ready to receive audio for the supplied request.
+    /// </summary>
     Task StartAsync(VoiceInputSessionOptions options, CancellationToken cancellationToken = default);
 
     /// <summary>

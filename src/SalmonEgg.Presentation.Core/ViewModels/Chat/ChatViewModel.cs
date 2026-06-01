@@ -216,6 +216,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private string? _activeVoiceInputRequestId;
     private string? _transportVoiceInputRequestId;
     private VoiceInputTransportState _voiceInputTransportState;
+    private string? _voiceInputFirstPartialLoggedRequestId;
     private bool _suppressNewSessionDraftModeSelectionDispatch;
     private CancellationTokenSource? _newSessionDraftModeSelectionCts;
     private string _voiceInputBasePrompt = string.Empty;
