@@ -196,6 +196,9 @@ internal sealed class HidMaestroBridge : IDisposable
             case "b":
                 SubmitTap(buttonName: "B");
                 break;
+            case "y":
+                SubmitTap(buttonName: "Y");
+                break;
             default:
                 throw new InvalidOperationException($"Unsupported gamepad input '{input}'.");
         }

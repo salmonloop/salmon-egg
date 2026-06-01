@@ -27,7 +27,8 @@ public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsServic
         foreach (var gamepad in gamepads)
         {
             reading = GetInputReading(gamepad.GetCurrentReading());
-            if (GamepadIntentProcessor.GetActiveIntents(reading).Count > 0)
+            if (GamepadIntentProcessor.GetActiveIntents(reading).Count > 0
+                || GamepadShortcutIntentProjector.HasActiveShortcuts(reading))
             {
                 source = GamepadDiagnosticsInputSource.Gamepad;
                 break;
@@ -39,7 +40,8 @@ public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsServic
             foreach (var controller in rawControllers)
             {
                 reading = _rawMapper.GetInputReading(controller);
-                if (GamepadIntentProcessor.GetActiveIntents(reading).Count > 0)
+                if (GamepadIntentProcessor.GetActiveIntents(reading).Count > 0
+                    || GamepadShortcutIntentProjector.HasActiveShortcuts(reading))
                 {
                     source = GamepadDiagnosticsInputSource.RawGameController;
                     break;
@@ -121,6 +123,7 @@ public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsServic
             MoveRight: reading.Buttons.HasFlag(GamepadButtons.DPadRight),
             Activate: reading.Buttons.HasFlag(GamepadButtons.A),
             Back: reading.Buttons.HasFlag(GamepadButtons.B),
+            ShortcutVoiceToggle: reading.Buttons.HasFlag(GamepadButtons.Y),
             ThumbstickX: reading.LeftThumbstickX,
             ThumbstickY: reading.LeftThumbstickY);
     }

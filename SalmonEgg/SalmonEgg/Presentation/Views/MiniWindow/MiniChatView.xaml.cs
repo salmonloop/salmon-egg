@@ -1,19 +1,21 @@
 using System;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Windows.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 #if WINDOWS
 using Microsoft.UI;
 #endif
+using SalmonEgg.Presentation.Core.Services.Input;
 using SalmonEgg.Presentation.Transcript;
 using SalmonEgg.Presentation.Utilities;
 using SalmonEgg.Presentation.ViewModels.Chat;
 
 namespace SalmonEgg.Presentation.Views.MiniWindow;
 
-public sealed partial class MiniChatView : Page
+public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer
 {
     public ChatShellViewModel ShellViewModel { get; }
     public ChatViewModel ViewModel => ShellViewModel.Chat;
@@ -279,6 +281,30 @@ public sealed partial class MiniChatView : Page
         {
             HandleOverlayVisibilityChanged();
         }
+    }
+
+    public bool TryConsumeShortcutIntent(GamepadShortcutIntent intent)
+    {
+        if (XamlRoot is null)
+        {
+            return false;
+        }
+
+        var focusedElement = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(XamlRoot) as DependencyObject;
+        var action = ChatVoiceShortcutPolicy.Decide(
+            intent,
+            ResolveVoiceShortcutFocusContext(focusedElement),
+            ViewModel.CanStartVoiceInput,
+            ViewModel.CanStopVoiceInput,
+            ViewModel.IsVoiceInputListening,
+            isImeComposing: false);
+
+        return action switch
+        {
+            ChatVoiceShortcutAction.StartVoiceInput => TryExecuteVoiceCommand(ViewModel.StartVoiceInputCommand),
+            ChatVoiceShortcutAction.StopVoiceInput => TryExecuteVoiceCommand(ViewModel.StopVoiceInputCommand),
+            _ => false
+        };
     }
 
     private void DisposeTranscriptViewportHost()
@@ -805,6 +831,24 @@ public sealed partial class MiniChatView : Page
         {
             RegisterUserViewportIntent();
         }
+    }
+
+    private ChatVoiceShortcutFocusContext ResolveVoiceShortcutFocusContext(DependencyObject? focusedElement)
+    {
+        return ReferenceEquals(DependencyObjectAncestry.FindAncestorOrSelf<TextBox>(focusedElement), MiniChatInputBox)
+            ? ChatVoiceShortcutFocusContext.InputBox
+            : ChatVoiceShortcutFocusContext.Other;
+    }
+
+    private static bool TryExecuteVoiceCommand(ICommand? command)
+    {
+        if (command is null || !command.CanExecute(null))
+        {
+            return false;
+        }
+
+        command.Execute(null);
+        return true;
     }
 
 #if WINDOWS

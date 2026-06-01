@@ -13,4 +13,6 @@ internal interface IGamepadTestInput : IDisposable
     void PressActivate();
 
     void PressBack();
+
+    void PressShortcutVoiceToggle();
 }

@@ -175,6 +175,7 @@ public static class DependencyInjection
 #endif
         services.AddSingleton<IShellBackNavigationService, ShellBackNavigationService>();
         services.AddSingleton<IGamepadNavigationDispatcher, MainShellGamepadNavigationDispatcher>();
+        services.AddSingleton<IGamepadShortcutDispatcher, MainShellGamepadShortcutDispatcher>();
 
         // Secure Storage
 #if WINDOWS

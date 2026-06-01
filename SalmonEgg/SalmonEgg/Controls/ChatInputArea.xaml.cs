@@ -18,7 +18,7 @@ using WindowActivatedEventArgs = Microsoft.UI.Xaml.WindowActivatedEventArgs;
 
 namespace SalmonEgg.Controls;
 
-public sealed partial class ChatInputArea : UserControl, INavigationIntentConsumer
+public sealed partial class ChatInputArea : UserControl, INavigationIntentConsumer, IGamepadShortcutConsumer
 {
     public static readonly DependencyProperty ViewModelProperty =
         DependencyProperty.Register(
@@ -584,6 +584,30 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
         };
     }
 
+    public bool TryConsumeShortcutIntent(GamepadShortcutIntent intent)
+    {
+        if (ViewModel == null || XamlRoot == null)
+        {
+            return false;
+        }
+
+        var focusedElement = XamlFocusManager.GetFocusedElement(XamlRoot) as DependencyObject;
+        var action = ChatVoiceShortcutPolicy.Decide(
+            intent,
+            ResolveVoiceShortcutFocusContext(focusedElement),
+            ViewModel.CanStartVoiceInput,
+            ViewModel.CanStopVoiceInput,
+            ViewModel.IsVoiceInputListening,
+            _isImeComposing);
+
+        return action switch
+        {
+            ChatVoiceShortcutAction.StartVoiceInput => TryExecuteVoiceCommand(ViewModel.StartVoiceInputCommand),
+            ChatVoiceShortcutAction.StopVoiceInput => TryExecuteVoiceCommand(ViewModel.StopVoiceInputCommand),
+            _ => false
+        };
+    }
+
     private bool TryAcceptSelectedSlashCommandAndMoveCaretToEnd()
     {
         if (ViewModel == null || !IsPromptEditingAvailable())
@@ -958,6 +982,24 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
     private bool IsInControlSubtree(DependencyObject? element)
     {
         return ReferenceEquals(FindAncestorOrSelf<ChatInputArea>(element), this);
+    }
+
+    private ChatVoiceShortcutFocusContext ResolveVoiceShortcutFocusContext(DependencyObject? focusedElement)
+    {
+        return ReferenceEquals(FindAncestorOrSelf<TextBox>(focusedElement), InputBox)
+            ? ChatVoiceShortcutFocusContext.InputBox
+            : ChatVoiceShortcutFocusContext.Other;
+    }
+
+    private static bool TryExecuteVoiceCommand(ICommand? command)
+    {
+        if (command is null || !command.CanExecute(null))
+        {
+            return false;
+        }
+
+        command.Execute(null);
+        return true;
     }
 
     private static T? FindAncestorOrSelf<T>(DependencyObject? element)

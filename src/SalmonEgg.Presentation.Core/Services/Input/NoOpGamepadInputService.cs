@@ -10,6 +10,12 @@ public sealed class NoOpGamepadInputService : IGamepadInputService
         remove { }
     }
 
+    public event EventHandler<GamepadShortcutIntent>? ShortcutRaised
+    {
+        add { }
+        remove { }
+    }
+
     public void Start()
     {
     }

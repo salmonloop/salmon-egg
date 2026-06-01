@@ -42,7 +42,8 @@ public static class GamepadActiveReadingSelector
     {
         foreach (var reading in readings)
         {
-            if (GamepadIntentProcessor.GetActiveIntents(reading).Count == 0)
+            if (GamepadIntentProcessor.GetActiveIntents(reading).Count == 0
+                && !GamepadShortcutIntentProjector.HasActiveShortcuts(reading))
             {
                 continue;
             }

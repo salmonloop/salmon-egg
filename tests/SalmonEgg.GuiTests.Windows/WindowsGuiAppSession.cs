@@ -25,7 +25,9 @@ internal sealed class WindowsGuiAppSession : IDisposable
     // Windows.System.VirtualKey mapping:
     // GamepadA = 195, GamepadDPadUp = 203, GamepadDPadDown = 204.
     // GamepadDPadLeft = 205, GamepadDPadRight = 206.
+    // GamepadY = 198.
     private const VirtualKeyShort VirtualGamepadA = (VirtualKeyShort)195;
+    private const VirtualKeyShort VirtualGamepadY = (VirtualKeyShort)198;
     private const VirtualKeyShort VirtualGamepadDPadDown = (VirtualKeyShort)204;
     private const VirtualKeyShort VirtualGamepadDPadUp = (VirtualKeyShort)203;
     private const VirtualKeyShort VirtualGamepadDPadLeft = (VirtualKeyShort)205;
@@ -658,6 +660,16 @@ internal sealed class WindowsGuiAppSession : IDisposable
     public void PressVirtualGamepadB()
     {
         CreateSyntheticGamepadInput().PressBack();
+    }
+
+    internal void PressSyntheticGamepadShortcutVoiceToggle()
+    {
+        PressKey(VirtualGamepadY);
+    }
+
+    public void PressVirtualGamepadY()
+    {
+        CreateSyntheticGamepadInput().PressShortcutVoiceToggle();
     }
 
     public void PressTab()

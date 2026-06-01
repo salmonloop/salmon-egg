@@ -15,8 +15,11 @@ public sealed partial class MainPage
     private TrayIconManager? _trayIcon;
     private InputKeyboardSource? _debugKeyboardSource;
     private IGamepadNavigationDispatcher? _virtualGamepadNavigationDispatcher;
+    private IGamepadShortcutDispatcher? _virtualGamepadShortcutDispatcher;
     private GamepadNavigationIntent? _lastNativeGamepadIntent;
     private long _lastNativeGamepadIntentTimestamp;
+    private GamepadShortcutIntent? _lastNativeGamepadShortcut;
+    private long _lastNativeGamepadShortcutTimestamp;
     private bool _allowClose;
 
     partial void InitializeTray()
@@ -164,6 +167,7 @@ public sealed partial class MainPage
 
         _debugKeyboardSource ??= InputKeyboardSource.GetForIsland(XamlRoot.ContentIsland);
         _virtualGamepadNavigationDispatcher ??= App.ServiceProvider.GetRequiredService<IGamepadNavigationDispatcher>();
+        _virtualGamepadShortcutDispatcher ??= App.ServiceProvider.GetRequiredService<IGamepadShortcutDispatcher>();
         _debugKeyboardSource.KeyDown -= OnPlatformGamepadDirectionalBridgeKeyDown;
         _debugKeyboardSource.KeyDown += OnPlatformGamepadDirectionalBridgeKeyDown;
     }
@@ -189,9 +193,7 @@ public sealed partial class MainPage
             _ => (GamepadNavigationIntent?)null
         };
 
-        if (handledIntent == GamepadNavigationIntent.MoveRight
-            && IsFocusWithinMainNavigation()
-            && TryMoveFocusFromMainNavigationIntoCurrentContent())
+        if (handledIntent == GamepadNavigationIntent.MoveRight && IsFocusWithinMainNavigation() && TryMoveFocusFromMainNavigationIntoCurrentContent())
         {
             args.Handled = true;
             return;
@@ -235,6 +237,13 @@ public sealed partial class MainPage
                     args.Handled = true;
                 }
                 break;
+            case Windows.System.VirtualKey.GamepadY:
+                RecordNativeGamepadShortcut(GamepadShortcutIntent.ToggleVoiceInput);
+                if ((_virtualGamepadShortcutDispatcher?.TryDispatch(GamepadShortcutIntent.ToggleVoiceInput)).GetValueOrDefault())
+                {
+                    args.Handled = true;
+                }
+                break;
         }
     }
 
@@ -246,6 +255,17 @@ public sealed partial class MainPage
         }
 
         var elapsed = Stopwatch.GetElapsedTime(_lastNativeGamepadIntentTimestamp);
+        return elapsed <= PolledGamepadSuppressionWindow;
+    }
+
+    private bool ShouldSuppressPolledGamepadShortcutForWindows(GamepadShortcutIntent intent)
+    {
+        if (_lastNativeGamepadShortcut != intent || _lastNativeGamepadShortcutTimestamp == 0)
+        {
+            return false;
+        }
+
+        var elapsed = Stopwatch.GetElapsedTime(_lastNativeGamepadShortcutTimestamp);
         return elapsed <= PolledGamepadSuppressionWindow;
     }
 
@@ -269,6 +289,12 @@ public sealed partial class MainPage
 
         _lastNativeGamepadIntent = intent.Value;
         _lastNativeGamepadIntentTimestamp = Stopwatch.GetTimestamp();
+    }
+
+    private void RecordNativeGamepadShortcut(GamepadShortcutIntent shortcut)
+    {
+        _lastNativeGamepadShortcut = shortcut;
+        _lastNativeGamepadShortcutTimestamp = Stopwatch.GetTimestamp();
     }
 
     private bool TryConsumeCurrentContentNavigationIntent(GamepadNavigationIntent intent)

@@ -17,4 +17,17 @@ public sealed class NoOpGamepadInputServiceTests
 
         Assert.False(raised);
     }
+
+    [Fact]
+    public void NoOpGamepadInputService_StartAndStop_DoNotRaiseShortcut()
+    {
+        var service = new NoOpGamepadInputService();
+        var raised = false;
+        service.ShortcutRaised += (_, _) => raised = true;
+
+        service.Start();
+        service.Stop();
+
+        Assert.False(raised);
+    }
 }

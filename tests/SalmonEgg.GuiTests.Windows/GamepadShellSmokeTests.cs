@@ -620,6 +620,78 @@ public sealed class ShellFocusedActivationSmokeTests
     }
 
     [SkippableFact]
+    public void ChatInputArea_InputBox_VirtualGamepadY_KeepsFocusDuringVoiceToggle()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData(withContent: true);
+        using var session = WindowsGuiAppSession.LaunchFresh();
+        using var gamepad = session.CreateConfiguredGamepadInput();
+
+        var inputBox = OpenChatSessionAndFocusInputBox(session, appData);
+
+        gamepad.PressShortcutVoiceToggle();
+
+        AssertFocusRemainsOnInputBox(
+            session,
+            automationId: "InputBox",
+            timeout: TimeSpan.FromSeconds(3),
+            failurePrefix: "Virtual gamepad Y moved focus away from the main chat input after starting voice input.",
+            bootLog: appData.ReadBootLogTail());
+
+        if (session.WaitUntilOnscreen("VoiceInputStopButton", TimeSpan.FromSeconds(2)))
+        {
+            gamepad.PressShortcutVoiceToggle();
+
+            AssertFocusRemainsOnInputBox(
+                session,
+                automationId: "InputBox",
+                timeout: TimeSpan.FromSeconds(3),
+                failurePrefix: "Virtual gamepad Y moved focus away from the main chat input after stopping voice input.",
+                bootLog: appData.ReadBootLogTail());
+        }
+    }
+
+    [SkippableFact]
+    public void MiniChatInputBox_VirtualGamepadY_KeepsFocusDuringVoiceToggle()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData(withContent: true);
+        using var session = WindowsGuiAppSession.LaunchFresh();
+        using var gamepad = session.CreateConfiguredGamepadInput();
+
+        OpenChatSessionAndFocusInputBox(session, appData);
+        OpenMiniWindow(session);
+
+        var miniInputBox = session.FindByAutomationIdAnywhere("MiniChatInputBox", TimeSpan.FromSeconds(10));
+        FocusAndAssertAnywhere(session, miniInputBox, "MiniChatInputBox", "mini chat input box");
+
+        gamepad.PressShortcutVoiceToggle();
+
+        AssertFocusRemainsOnInputBox(
+            session,
+            automationId: "MiniChatInputBox",
+            timeout: TimeSpan.FromSeconds(3),
+            failurePrefix: "Virtual gamepad Y moved focus away from the mini chat input after starting voice input.",
+            bootLog: appData.ReadBootLogTail());
+
+        if (WaitUntil(
+                () => session.TryFindByAutomationIdAnywhere("MiniChatVoiceInputStopButton", TimeSpan.FromMilliseconds(150)) is not null,
+                TimeSpan.FromSeconds(2)))
+        {
+            gamepad.PressShortcutVoiceToggle();
+
+            AssertFocusRemainsOnInputBox(
+                session,
+                automationId: "MiniChatInputBox",
+                timeout: TimeSpan.FromSeconds(3),
+                failurePrefix: "Virtual gamepad Y moved focus away from the mini chat input after stopping voice input.",
+                bootLog: appData.ReadBootLogTail());
+        }
+    }
+
+    [SkippableFact]
     public void ChatTranscriptViewport_KeyboardUpThenVirtualGamepadActivation_CanEnterFirstMessageListItem()
     {
         GuiTestGate.RequireEnabled();
@@ -2274,6 +2346,25 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}");
     }
 
+    private static AutomationElement OpenChatSessionAndFocusInputBox(
+        WindowsGuiAppSession session,
+        GuiAppDataScope appData)
+    {
+        Assert.True(
+            session.WaitUntilOnscreen("MainNav.Session.gui-session-01", TimeSpan.FromSeconds(15)),
+            $"Session nav item did not become onscreen before chat input focus validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-session-01", TimeSpan.FromSeconds(10));
+        session.ActivateElement(sessionItem);
+        Assert.True(
+            session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10)),
+            $"Chat view did not become visible before chat input focus validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var inputBox = session.FindByAutomationId("InputBox", TimeSpan.FromSeconds(10));
+        FocusAndAssert(session, inputBox, "InputBox", "chat input box");
+        return inputBox;
+    }
+
     private static void OpenDiscoverSessions(WindowsGuiAppSession session)
     {
         var discoverItem = session.FindByAutomationId("MainNav.DiscoverSessions", TimeSpan.FromSeconds(10));
@@ -2291,6 +2382,39 @@ public sealed class ShellFocusedActivationSmokeTests
         Assert.Fail(
             $"Unable to activate Discover sessions through the native nav item."
             + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}");
+    }
+
+    private static void OpenMiniWindow(WindowsGuiAppSession session)
+    {
+        var button = FindElementAnywhereWithFallback(
+            session,
+            primaryAutomationId: "TitleBar.OpenMiniWindow",
+            fallbackAutomationId: "TitleBarMiniWindowButton",
+            timeout: TimeSpan.FromSeconds(8));
+
+        if (button.Patterns.Invoke.IsSupported)
+        {
+            button.Patterns.Invoke.Pattern.Invoke();
+            return;
+        }
+
+        session.ActivateElement(button);
+    }
+
+    private static AutomationElement FindElementAnywhereWithFallback(
+        WindowsGuiAppSession session,
+        string primaryAutomationId,
+        string fallbackAutomationId,
+        TimeSpan timeout)
+    {
+        try
+        {
+            return session.FindByAutomationIdAnywhere(primaryAutomationId, TimeSpan.FromMilliseconds(Math.Min(3000, (int)timeout.TotalMilliseconds)));
+        }
+        catch (TimeoutException)
+        {
+            return session.FindByAutomationIdAnywhere(fallbackAutomationId, timeout);
+        }
     }
 
     private static AutomationElement FindAndScrollIntoView(
@@ -2336,6 +2460,43 @@ public sealed class ShellFocusedActivationSmokeTests
         }
 
         session.ResizeMainWindow(width: 1800, height: 1000);
+    }
+
+    private static void FocusAndAssertAnywhere(
+        WindowsGuiAppSession session,
+        AutomationElement element,
+        string automationId,
+        string description)
+    {
+        session.BringMainWindowToFront();
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            session.FocusElement(element);
+            if (WaitUntil(
+                    () => session.IsFocusWithinAutomationId(automationId),
+                    TimeSpan.FromMilliseconds(250)))
+            {
+                return;
+            }
+        }
+
+        Assert.Fail(
+            $"Unable to establish {description} focus before shortcut validation."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElementDetailed()}");
+    }
+
+    private static void AssertFocusRemainsOnInputBox(
+        WindowsGuiAppSession session,
+        string automationId,
+        TimeSpan timeout,
+        string failurePrefix,
+        string bootLog)
+    {
+        Assert.True(
+            WaitUntil(() => session.IsFocusWithinAutomationId(automationId), timeout),
+            $"{failurePrefix}"
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElementDetailed()}"
+            + $"{Environment.NewLine}{bootLog}");
     }
 
     private static bool IsFocusWithinApplicationBody(WindowsGuiAppSession session)

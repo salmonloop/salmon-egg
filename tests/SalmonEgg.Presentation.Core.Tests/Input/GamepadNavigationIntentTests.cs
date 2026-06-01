@@ -15,4 +15,15 @@ public sealed class GamepadNavigationIntentTests
             new[] { "MoveUp", "MoveDown", "MoveLeft", "MoveRight", "Activate", "Back" },
             values);
     }
+
+    [Fact]
+    public void GamepadNavigationIntent_RemainsNavigationOnly()
+    {
+        var values = Enum.GetNames(typeof(GamepadNavigationIntent));
+
+        Assert.DoesNotContain("ToggleVoiceInput", values);
+        Assert.Equal(
+            new[] { "MoveUp", "MoveDown", "MoveLeft", "MoveRight", "Activate", "Back" },
+            values);
+    }
 }

@@ -2243,6 +2243,28 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void ChatInputArea_CodeBehind_UsesGamepadShortcutConsumer_WithoutExpandingNavigationEnum()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml.cs");
+        var navigationEnum = LoadText(@"src\SalmonEgg.Presentation.Core\Services\Input\GamepadNavigationIntent.cs");
+
+        Assert.Contains("IGamepadShortcutConsumer", code, StringComparison.Ordinal);
+        Assert.Contains("TryConsumeShortcutIntent", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("ToggleVoiceInput", navigationEnum, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MiniChatView_UsesFocusedShortcutConsumerForVoiceInput()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs");
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml");
+
+        Assert.Contains("IGamepadShortcutConsumer", code, StringComparison.Ordinal);
+        Assert.Contains("TryConsumeShortcutIntent", code, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"MiniChatInputBox\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ChatInputArea_ComposerDirectionalNavigation_UsesNativeBoundaryAnchorsForActions()
     {
         var code = LoadText(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml.cs");

@@ -169,7 +169,9 @@
                     <Grid Grid.Row="1"
                           ColumnDefinitions="*,Auto">
                         <TextBox Grid.Column="0"
+                                 x:Name="MiniChatInputBox"
                                  x:Uid="MiniChatInputBox"
+                                 AutomationProperties.AutomationId="MiniChatInputBox"
                                  Text="{x:Bind ViewModel.CurrentPrompt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  MinHeight="36"
                                  BorderThickness="0"
@@ -194,6 +196,7 @@
                                     VerticalAlignment="Bottom"
                                     Margin="8,0,0,0">
                             <Button x:Uid="MiniChatVoiceInputStartButton"
+                                    AutomationProperties.AutomationId="MiniChatVoiceInputStartButton"
                                     Width="44" Height="44"
                                     CornerRadius="22"
                                     Padding="0"
@@ -204,6 +207,7 @@
                             </Button>
 
                             <Button x:Uid="MiniChatVoiceInputStopButton"
+                                    AutomationProperties.AutomationId="MiniChatVoiceInputStopButton"
                                     Width="44" Height="44"
                                     CornerRadius="22"
                                     Padding="0"

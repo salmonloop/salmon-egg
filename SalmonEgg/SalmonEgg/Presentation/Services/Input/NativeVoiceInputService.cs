@@ -68,7 +68,7 @@ public sealed class NativeVoiceInputService : IVoiceInputService
 
             return CreatePermissionDeniedResult(
                 AuthorizationTarget.Speech,
-                string.IsNullOrWhiteSpace(ex.Message) ? "Voice input permission check failed." : ex.Message.Trim(),
+                VoiceInputErrorMessageSanitizer.Normalize(ex.Message, "Voice input permission check failed."),
                 requiresAuthorization: false);
         }
     }
@@ -392,7 +392,7 @@ public sealed class NativeVoiceInputService : IVoiceInputService
                 errorCode),
             _ => new VoiceInputErrorResult(
                 requestId,
-                string.IsNullOrWhiteSpace(exception.Message) ? "Voice input failed." : exception.Message.Trim(),
+                VoiceInputErrorMessageSanitizer.Normalize(exception.Message, "Voice input failed."),
                 errorCode)
         };
     }

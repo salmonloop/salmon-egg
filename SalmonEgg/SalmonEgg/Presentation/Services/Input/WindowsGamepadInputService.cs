@@ -15,6 +15,7 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
     private readonly ILogger<WindowsGamepadInputService> _logger;
     private readonly WindowsRawGameControllerMapper _rawMapper;
     private readonly GamepadIntentProcessor _intentProcessor = new();
+    private readonly GamepadShortcutProcessor _shortcutProcessor = new();
     private readonly object _sync = new();
     private readonly List<Gamepad> _connectedGamepads = new();
     private readonly List<RawGameController> _connectedRawControllers = new();
@@ -33,6 +34,8 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
     }
 
     public event EventHandler<GamepadNavigationIntent>? IntentRaised;
+
+    public event EventHandler<GamepadShortcutIntent>? ShortcutRaised;
 
     public void Start()
     {
@@ -110,6 +113,7 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
             }
 
             _intentProcessor.Reset();
+            _shortcutProcessor.Reset();
             _connectedGamepads.Clear();
             _connectedRawControllers.Clear();
             _isStarted = false;
@@ -154,20 +158,24 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
             lock (_sync)
             {
                 _intentProcessor.Reset();
+                _shortcutProcessor.Reset();
                 UpdateInputPath(hasActiveReading: false, GamepadInputPath.None);
             }
 
             return;
         }
 
-        var now = DateTimeOffset.UtcNow;
-
         lock (_sync)
         {
-            var raisedIntents = _intentProcessor.Process(reading, now);
+            var raisedIntents = _intentProcessor.Process(reading, DateTimeOffset.UtcNow);
             foreach (var intent in raisedIntents)
             {
                 EmitIntent(intent);
+            }
+
+            foreach (var shortcut in _shortcutProcessor.Process(reading))
+            {
+                EmitShortcut(shortcut);
             }
         }
     }
@@ -219,6 +227,7 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
             MoveRight: reading.Buttons.HasFlag(GamepadButtons.DPadRight),
             Activate: reading.Buttons.HasFlag(GamepadButtons.A),
             Back: reading.Buttons.HasFlag(GamepadButtons.B),
+            ShortcutVoiceToggle: reading.Buttons.HasFlag(GamepadButtons.Y),
             ThumbstickX: reading.LeftThumbstickX,
             ThumbstickY: reading.LeftThumbstickY);
     }
@@ -226,6 +235,11 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
     private void EmitIntent(GamepadNavigationIntent intent)
     {
         IntentRaised?.Invoke(this, intent);
+    }
+
+    private void EmitShortcut(GamepadShortcutIntent shortcut)
+    {
+        ShortcutRaised?.Invoke(this, shortcut);
     }
 
     private void UpdateInputPath(bool hasActiveReading, GamepadInputPath path)

@@ -466,9 +466,9 @@ public partial class ChatViewModel
             var permission = await _voiceInputService.EnsurePermissionAsync(_voiceInputCts.Token);
             if (!permission.IsGranted)
             {
-                var message = string.IsNullOrWhiteSpace(permission.Message)
-                    ? "Microphone permission was denied."
-                    : permission.Message.Trim();
+                var message = VoiceInputErrorMessageSanitizer.Normalize(
+                    permission.Message,
+                    "Voice input permission check failed.");
                 if (permission.RequiresAuthorization)
                 {
                     try
@@ -518,8 +518,12 @@ public partial class ChatViewModel
         }
         catch (Exception ex)
         {
-            VoiceInputErrorMessage = ex.Message;
-            ShowTransientNotificationToast($"Voice input failed: {ex.Message}");
+            var message = VoiceInputErrorMessageSanitizer.Normalize(ex.Message, "Voice input failed.");
+            VoiceInputErrorMessage = message;
+            ShowTransientNotificationToast(
+                string.Equals(message, "Voice input failed.", StringComparison.Ordinal)
+                    ? message
+                    : $"Voice input failed: {message}");
             if (requestId is not null && IsCurrentVoiceInputRequest(requestId))
             {
                 IsVoiceInputListening = false;
@@ -593,8 +597,12 @@ public partial class ChatViewModel
         catch (Exception ex)
         {
             RestoreVoiceInputFrontSession(requestId);
-            VoiceInputErrorMessage = ex.Message;
-            ShowTransientNotificationToast($"Failed to stop voice input: {ex.Message}");
+            var message = VoiceInputErrorMessageSanitizer.Normalize(ex.Message, "Failed to stop voice input.");
+            VoiceInputErrorMessage = message;
+            ShowTransientNotificationToast(
+                string.Equals(message, "Failed to stop voice input.", StringComparison.Ordinal)
+                    ? message
+                    : $"Failed to stop voice input: {message}");
         }
     }
 
@@ -700,9 +708,7 @@ public partial class ChatViewModel
                 return;
             }
 
-            var message = string.IsNullOrWhiteSpace(result.Message)
-                ? "Voice input failed."
-                : result.Message.Trim();
+            var message = VoiceInputErrorMessageSanitizer.Normalize(result.Message, "Voice input failed.");
             if (result.RequiresAuthorization)
             {
                 try

@@ -1005,6 +1005,27 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
     }
 
     [Fact]
+    public async Task StartVoiceInputCommand_WhenPermissionDeniedUsesSystemPlaceholder_ShowsReadableFallback()
+    {
+        var voiceInput = new FakeVoiceInputService
+        {
+            IsSupported = true,
+            PermissionResult = new VoiceInputPermissionResult(
+                VoiceInputPermissionStatus.Denied,
+                "没有与此错误关联的文本",
+                RequiresAuthorization: false)
+        };
+
+        await using var fixture = CreateViewModel(voiceInputService: voiceInput);
+        fixture.ViewModel.IsSessionActive = true;
+
+        await fixture.ViewModel.StartVoiceInputCommand.ExecuteAsync(null);
+
+        Assert.Equal("Voice input permission check failed.", fixture.ViewModel.VoiceInputErrorMessage);
+        Assert.Equal("Voice input permission check failed.", fixture.ViewModel.TransientNotificationMessage);
+    }
+
+    [Fact]
     public async Task ComposerState_WhenPromptSubmitInFlight_DisablesComposerSurfaceAndShowsCancel()
     {
         await using var fixture = CreateViewModel();
@@ -1095,6 +1116,34 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
             Task.FromResult(string.Equals(fixture.ViewModel.VoiceInputErrorMessage, "Enable speech access", StringComparison.Ordinal)));
 
         Assert.Equal(1, voiceInput.AuthorizationHelpRequestCount);
+    }
+
+    [Fact]
+    public async Task VoiceInputError_WhenSystemPlaceholderMessageIsRaised_ShowsReadableFallback()
+    {
+        var voiceInput = new FakeVoiceInputService
+        {
+            IsSupported = true,
+            PermissionResult = VoiceInputPermissionResult.Granted()
+        };
+
+        await using var fixture = CreateViewModel(voiceInputService: voiceInput);
+        fixture.ViewModel.IsSessionActive = true;
+
+        await fixture.ViewModel.StartVoiceInputCommand.ExecuteAsync(null);
+
+        var requestId = Assert.Single(voiceInput.StartedSessionIds);
+        voiceInput.EmitError(new VoiceInputErrorResult(
+            requestId,
+            "No text is associated with this error code.",
+            ErrorCode: "0x80004005",
+            RequiresAuthorization: false));
+
+        await WaitForConditionAsync(() =>
+            Task.FromResult(string.Equals(fixture.ViewModel.VoiceInputErrorMessage, "Voice input failed.", StringComparison.Ordinal)));
+
+        Assert.Equal("Voice input failed.", fixture.ViewModel.VoiceInputErrorMessage);
+        Assert.Equal("Voice input failed.", fixture.ViewModel.TransientNotificationMessage);
     }
 
     [Fact]
