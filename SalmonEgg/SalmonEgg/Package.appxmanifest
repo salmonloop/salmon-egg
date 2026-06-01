@@ -8,7 +8,7 @@
 
   <Identity Name="SalmonEgg.SalmonEgg"
             Publisher="CN=0B694F0E-510C-433A-A6F7-1484D6A39E19"
-            Version="1.0.1.0" />
+            Version="__SALMONEGG_PACKAGE_VERSION__" />
   <Properties>
     <DisplayName>Salmon Egg</DisplayName>
     <PublisherDisplayName>Salmon Egg</PublisherDisplayName>

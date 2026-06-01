@@ -145,12 +145,15 @@
     <ApplicationTitle>SalmonEgg</ApplicationTitle>
     <!-- App Identifier -->
     <ApplicationId>com.companyname.salmonegg</ApplicationId>
+    <!-- Keep package, assembly, and display versions derived from one source of truth. -->
+    <SalmonEggDisplayVersion>1.0.1</SalmonEggDisplayVersion>
+    <SalmonEggPackageVersion>$(SalmonEggDisplayVersion).0</SalmonEggPackageVersion>
     <!-- Versions -->
-    <Version>1.0.1.0</Version>
-    <AssemblyVersion>1.0.1.0</AssemblyVersion>
-    <FileVersion>1.0.1.0</FileVersion>
-    <InformationalVersion>1.0.1.0</InformationalVersion>
-    <ApplicationDisplayVersion>1.0.1</ApplicationDisplayVersion>
+    <Version>$(SalmonEggPackageVersion)</Version>
+    <AssemblyVersion>$(SalmonEggPackageVersion)</AssemblyVersion>
+    <FileVersion>$(SalmonEggPackageVersion)</FileVersion>
+    <InformationalVersion>$(SalmonEggPackageVersion)</InformationalVersion>
+    <ApplicationDisplayVersion>$(SalmonEggDisplayVersion)</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
     <!-- Package Publisher -->
     <ApplicationPublisher>SalmonEgg</ApplicationPublisher>
@@ -183,6 +186,11 @@
   </ItemGroup>
 
   <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.26100.0'">
+    <SalmonEggGeneratedManifestDirectory>$(BaseIntermediateOutputPath)generated\windows\</SalmonEggGeneratedManifestDirectory>
+    <SalmonEggGeneratedPackageManifest>$(SalmonEggGeneratedManifestDirectory)Package.appxmanifest</SalmonEggGeneratedPackageManifest>
+    <SalmonEggGeneratedApplicationManifest>$(SalmonEggGeneratedManifestDirectory)app.manifest</SalmonEggGeneratedApplicationManifest>
+    <WindowsAppxManifestPath>$(SalmonEggGeneratedPackageManifest)</WindowsAppxManifestPath>
+    <ApplicationManifest>$(SalmonEggGeneratedApplicationManifest)</ApplicationManifest>
     <UseWinUI>true</UseWinUI>
     <TargetPlatformVersion>10.0.26100.0</TargetPlatformVersion>
     <!-- Keep runtime compatibility wide while targeting an installed Windows SDK toolset -->
@@ -211,6 +219,34 @@
     <!-- WinUI target should not pull Uno.UI packages; Windows uses WinUI 3 directly. -->
     <DisableImplicitUnoPackages>true</DisableImplicitUnoPackages>
   </PropertyGroup>
+
+  <Target Name="GenerateVersionedWindowsManifests"
+          BeforeTargets="_EnsureAppxManifestExists;ResolveReferences;ResolveProjectReferences;BeforeBuild"
+          Condition="'$(TargetFramework)' == 'net10.0-windows10.0.26100.0'">
+    <PropertyGroup>
+      <_SalmonEggPackageManifestTemplate>$(MSBuildProjectDirectory)\Package.appxmanifest</_SalmonEggPackageManifestTemplate>
+      <_SalmonEggApplicationManifestTemplate>$(MSBuildProjectDirectory)\app.manifest</_SalmonEggApplicationManifestTemplate>
+      <_SalmonEggGeneratedPackageManifestContent>$([System.IO.File]::ReadAllText('$(_SalmonEggPackageManifestTemplate)').Replace('__SALMONEGG_PACKAGE_VERSION__', '$(SalmonEggPackageVersion)'))</_SalmonEggGeneratedPackageManifestContent>
+      <_SalmonEggGeneratedApplicationManifestContent>$([System.IO.File]::ReadAllText('$(_SalmonEggApplicationManifestTemplate)').Replace('__SALMONEGG_PACKAGE_VERSION__', '$(SalmonEggPackageVersion)'))</_SalmonEggGeneratedApplicationManifestContent>
+    </PropertyGroup>
+
+    <MakeDir Directories="$(SalmonEggGeneratedManifestDirectory)" />
+
+    <WriteLinesToFile File="$(SalmonEggGeneratedPackageManifest)"
+                      Lines="$(_SalmonEggGeneratedPackageManifestContent)"
+                      Overwrite="true" />
+    <WriteLinesToFile File="$(SalmonEggGeneratedApplicationManifest)"
+                      Lines="$(_SalmonEggGeneratedApplicationManifestContent)"
+                      Overwrite="true" />
+
+    <ItemGroup>
+      <AppxManifest Remove="@(AppxManifest)" />
+      <CustomAppxManifest Remove="@(CustomAppxManifest)" />
+      <Manifest Remove="@(Manifest)" />
+      <AppxManifest Include="$(SalmonEggGeneratedPackageManifest)" />
+      <Manifest Include="$(SalmonEggGeneratedApplicationManifest)" />
+    </ItemGroup>
+  </Target>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.26100.0' AND '$(MSBuildRuntimeType)' == 'Core'">
     <PackageReference Include="System.Security.Permissions" />
