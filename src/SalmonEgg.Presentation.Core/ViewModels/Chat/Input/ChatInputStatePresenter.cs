@@ -6,6 +6,7 @@ public sealed class ChatInputStatePresenter
     {
         if (input.IsVoiceInputListening)
         {
+            var canStopVoiceInput = input.VoiceInputTransportState != VoiceInputTransportState.Stopping;
             return new ChatComposerPresentationState(
                 Mode: ChatComposerMode.VoiceListening,
                 IsTextInputEnabled: true,
@@ -15,9 +16,9 @@ public sealed class ChatInputStatePresenter
                 CanCancelPrompt: false,
                 CanStartVoiceInput: false,
                 ShowVoiceStartButton: false,
-                ShowVoiceStopButton: true,
-                CanStopVoiceInput: true,
-                ShowVoiceListeningStatus: true);
+                ShowVoiceStopButton: canStopVoiceInput,
+                CanStopVoiceInput: canStopVoiceInput,
+                ShowVoiceListeningStatus: canStopVoiceInput);
         }
 
         if (input.IsPromptSubmitInFlight)

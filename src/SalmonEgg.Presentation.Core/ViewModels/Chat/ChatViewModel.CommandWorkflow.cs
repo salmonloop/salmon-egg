@@ -341,7 +341,7 @@ public partial class ChatViewModel
             IsPromptInFlight: IsPromptInFlight,
             IsPromptSubmitInFlight: IsPromptSubmitInFlight,
             IsVoiceInputListening: IsVoiceInputListening,
-            IsVoiceInputTransportBusy: IsVoiceInputTransportBusy,
+            VoiceInputTransportState: _voiceInputTransportState,
             HasPendingAskUserRequest: PendingAskUserRequest is not null,
             ShouldShowLoadingOverlayPresenter: ShouldShowLoadingOverlayPresenter,
             IsSessionActive: IsSessionActive,
@@ -350,6 +350,17 @@ public partial class ChatViewModel
             HasCurrentSessionId: !string.IsNullOrWhiteSpace(CurrentSessionId),
             HasPromptText: !string.IsNullOrWhiteSpace(CurrentPrompt),
             IsVoiceInputSupported: IsVoiceInputSupported));
+
+    private VoiceInputUiState ResolveVoiceInputUiState()
+    {
+        var composerState = ResolveInputState();
+        return _voiceInputUiStatePresenter.Present(new VoiceInputUiStateInput(
+            IsVoiceInputSupported: IsVoiceInputSupported,
+            IsVoiceInputListening: IsVoiceInputListening,
+            TransportState: _voiceInputTransportState,
+            CanStartVoiceInput: composerState.CanStartVoiceInput,
+            CanStopVoiceInput: composerState.CanStopVoiceInput));
+    }
 
     private SelectorProjectionResult ResolveChatModeSelectorProjection()
     {
@@ -463,6 +474,7 @@ public partial class ChatViewModel
 
         try
         {
+            SetVoiceInputTransportState(VoiceInputTransportState.Authorizing);
             var permission = await _voiceInputService.EnsurePermissionAsync(_voiceInputCts.Token);
             if (!permission.IsGranted)
             {
@@ -482,6 +494,8 @@ public partial class ChatViewModel
 
                 VoiceInputErrorMessage = message;
                 ShowTransientNotificationToast(message);
+                SetVoiceInputTransportState(VoiceInputTransportState.Idle);
+                TryDisposeVoiceInputCts();
                 return;
             }
 
@@ -515,6 +529,12 @@ public partial class ChatViewModel
             {
                 ClearVoiceInputTransport(requestId, disposeCts: true);
             }
+            else if (requestId is null
+                && _voiceInputTransportState == VoiceInputTransportState.Authorizing)
+            {
+                SetVoiceInputTransportState(VoiceInputTransportState.Idle);
+                TryDisposeVoiceInputCts();
+            }
         }
         catch (Exception ex)
         {
@@ -537,15 +557,16 @@ public partial class ChatViewModel
             {
                 ClearVoiceInputTransport(requestId, disposeCts: true);
             }
+            else if (requestId is null
+                && _voiceInputTransportState == VoiceInputTransportState.Authorizing)
+            {
+                SetVoiceInputTransportState(VoiceInputTransportState.Idle);
+                TryDisposeVoiceInputCts();
+            }
         }
         finally
         {
-            if (requestId is null
-                && _voiceInputTransportState == VoiceInputTransportState.Starting)
-            {
-                SetVoiceInputTransportState(VoiceInputTransportState.Idle);
-            }
-            else if (requestId is not null
+            if (requestId is not null
                 && IsCurrentVoiceTransportRequest(requestId)
                 && _voiceInputTransportState == VoiceInputTransportState.Starting)
             {

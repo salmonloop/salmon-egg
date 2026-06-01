@@ -5,7 +5,7 @@ public sealed record ChatInputStateInput(
     bool IsPromptInFlight,
     bool IsPromptSubmitInFlight,
     bool IsVoiceInputListening,
-    bool IsVoiceInputTransportBusy,
+    VoiceInputTransportState VoiceInputTransportState,
     bool HasPendingAskUserRequest,
     bool ShouldShowLoadingOverlayPresenter,
     bool IsSessionActive,
@@ -13,4 +13,7 @@ public sealed record ChatInputStateInput(
     bool IsInitialized,
     bool HasCurrentSessionId,
     bool HasPromptText,
-    bool IsVoiceInputSupported);
+    bool IsVoiceInputSupported)
+{
+    public bool IsVoiceInputTransportBusy => VoiceInputTransportState != VoiceInputTransportState.Idle;
+}

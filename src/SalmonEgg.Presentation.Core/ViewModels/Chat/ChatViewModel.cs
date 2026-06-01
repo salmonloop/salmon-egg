@@ -104,6 +104,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly ChatProjectAffinityCorrectionCoordinator _projectAffinityCorrectionCoordinator;
     private readonly ChatConversationSurfaceProjectionCoordinator _conversationSurfaceProjectionCoordinator;
     private readonly ChatInputStatePresenter _inputStatePresenter;
+    private readonly VoiceInputUiStatePresenter _voiceInputUiStatePresenter = new();
     private readonly SelectorProjectionPresenter _selectorProjectionPresenter = new();
     private readonly ModeSelectorPolicy _modeSelectorPolicy = new();
     private readonly ChatAskUserStatePresenter _askUserStatePresenter;
@@ -460,6 +461,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ComposerState))]
+    [NotifyPropertyChangedFor(nameof(VoiceInputUiState))]
     [NotifyPropertyChangedFor(nameof(IsInputEnabled))]
     [NotifyPropertyChangedFor(nameof(IsTextInputEnabled))]
     [NotifyPropertyChangedFor(nameof(AreComposerToolsEnabled))]
@@ -488,6 +490,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ComposerState))]
+    [NotifyPropertyChangedFor(nameof(VoiceInputUiState))]
     [NotifyPropertyChangedFor(nameof(CanStartVoiceInput))]
     [NotifyPropertyChangedFor(nameof(CanStopVoiceInput))]
     private bool _isVoiceInputSupported;
@@ -802,6 +805,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     public ChatComposerPresentationState ComposerState => ResolveInputState();
 
+    public VoiceInputUiState VoiceInputUiState => ResolveVoiceInputUiState();
+
     public SelectorProjectionResult ChatModeSelectorProjection => ResolveChatModeSelectorProjection();
 
     public ComposerSelectorSlotsPresentation ComposerSelectorSlots
@@ -854,9 +859,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     public bool CanStopVoiceInput => ResolveInputState().CanStopVoiceInput;
 
-    public bool ShowVoiceInputStartButton => ResolveInputState().ShowVoiceStartButton;
+    public bool ShowVoiceInputStartButton => VoiceInputUiState.ShowStartButton;
 
-    public bool ShowVoiceInputStopButton => ResolveInputState().ShowVoiceStopButton;
+    public bool ShowVoiceInputStopButton => VoiceInputUiState.ShowStopButton;
 
     public bool ShowCancelPromptButton => ResolveInputState().ShowCancelButton;
 
@@ -1508,6 +1513,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private void NotifyComposerProjectionChanged()
     {
         OnPropertyChanged(nameof(ComposerState));
+        OnPropertyChanged(nameof(VoiceInputUiState));
         OnPropertyChanged(nameof(ChatModeSelectorProjection));
         OnPropertyChanged(nameof(ComposerSelectorSlots));
         OnPropertyChanged(nameof(ChatModeSelectorItems));

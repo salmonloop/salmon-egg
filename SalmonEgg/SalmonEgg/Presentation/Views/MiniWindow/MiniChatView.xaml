@@ -164,7 +164,7 @@
                                x:Uid="MiniChatComposerVoiceListeningStatus"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                FontSize="12"
-                               Visibility="{x:Bind ViewModel.ComposerState.ShowVoiceListeningStatus, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                               Visibility="{x:Bind ViewModel.VoiceInputUiState.ShowListeningStatus, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
 
                     <Grid Grid.Row="1"
                           ColumnDefinitions="*,Auto">
@@ -202,7 +202,7 @@
                                     Padding="0"
                                     Command="{x:Bind ViewModel.StartVoiceInputCommand}"
                                     IsEnabled="{x:Bind ViewModel.CanStartVoiceInput, Mode=OneWay}"
-                                    Visibility="{x:Bind ViewModel.ShowVoiceInputStartButton, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    Visibility="{x:Bind ViewModel.VoiceInputUiState.ShowStartButton, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                                 <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE720;" FontSize="14" />
                             </Button>
 
@@ -213,9 +213,19 @@
                                     Padding="0"
                                     Command="{x:Bind ViewModel.StopVoiceInputCommand}"
                                     IsEnabled="{x:Bind ViewModel.CanStopVoiceInput, Mode=OneWay}"
-                                    Visibility="{x:Bind ViewModel.ShowVoiceInputStopButton, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    Visibility="{x:Bind ViewModel.VoiceInputUiState.ShowStopButton, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                                 <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE71A;" FontSize="14" />
                             </Button>
+
+                            <Grid Width="44"
+                                  Height="44"
+                                  Visibility="{x:Bind ViewModel.VoiceInputUiState.ShowProgressRing, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <ProgressRing Width="20"
+                                              Height="20"
+                                              IsActive="{x:Bind ViewModel.VoiceInputUiState.ShowProgressRing, Mode=OneWay}"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                            </Grid>
 
                             <Button x:Uid="MiniChatSendButton"
                                     Width="44" Height="44"

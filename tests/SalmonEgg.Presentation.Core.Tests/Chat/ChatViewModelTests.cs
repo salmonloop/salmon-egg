@@ -667,7 +667,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
     }
 
     [Fact]
-    public async Task StartVoiceInputCommand_WhilePermissionCheckIsPending_DoesNotEnterTransportStartingState()
+    public async Task StartVoiceInputCommand_WhilePermissionCheckIsPending_ProjectsVoiceTransitionState()
     {
         var voiceInput = new FakeVoiceInputService
         {
@@ -683,9 +683,9 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
         await WaitForConditionAsync(() => Task.FromResult(voiceInput.PermissionRequestCount == 1));
 
-        Assert.False(fixture.ViewModel.IsVoiceInputTransportBusy);
-        Assert.True(fixture.ViewModel.CanStartVoiceInput);
-        Assert.True(fixture.ViewModel.ShowVoiceInputStartButton);
+        Assert.True(fixture.ViewModel.IsVoiceInputTransportBusy);
+        Assert.False(fixture.ViewModel.CanStartVoiceInput);
+        Assert.False(fixture.ViewModel.ShowVoiceInputStartButton);
         Assert.False(fixture.ViewModel.ShowVoiceInputStopButton);
 
         voiceInput.ReleasePermissionRequest();
@@ -856,10 +856,13 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         var stopTask = fixture.ViewModel.StopVoiceInputCommand.ExecuteAsync(null);
 
         Assert.True(fixture.ViewModel.IsVoiceInputListening);
-        Assert.True(fixture.ViewModel.ComposerState.ShowVoiceListeningStatus);
+        Assert.True(fixture.ViewModel.IsVoiceInputTransportBusy);
+        Assert.False(fixture.ViewModel.ComposerState.ShowVoiceListeningStatus);
         Assert.True(fixture.ViewModel.IsTextInputEnabled);
         Assert.False(fixture.ViewModel.CanStartVoiceInput);
-        Assert.True(fixture.ViewModel.CanStopVoiceInput);
+        Assert.False(fixture.ViewModel.CanStopVoiceInput);
+        Assert.False(fixture.ViewModel.ShowVoiceInputStartButton);
+        Assert.False(fixture.ViewModel.ShowVoiceInputStopButton);
 
         voiceInput.ReleaseStop();
         await stopTask;
@@ -893,7 +896,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
     }
 
     [Fact]
-    public async Task StopVoiceInputCommand_WhileServiceStopping_KeepsTextInteractive_ButBlocksRestart()
+    public async Task StopVoiceInputCommand_WhileServiceStopping_UsesVoiceTransitionState()
     {
         var voiceInput = new FakeVoiceInputService
         {
@@ -912,10 +915,13 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
         var stopTask = fixture.ViewModel.StopVoiceInputCommand.ExecuteAsync(null);
 
+        Assert.True(fixture.ViewModel.IsVoiceInputTransportBusy);
         Assert.True(fixture.ViewModel.IsTextInputEnabled);
         Assert.False(fixture.ViewModel.CanStartVoiceInput);
         Assert.True(fixture.ViewModel.IsVoiceInputListening);
-        Assert.True(fixture.ViewModel.CanStopVoiceInput);
+        Assert.False(fixture.ViewModel.CanStopVoiceInput);
+        Assert.False(fixture.ViewModel.ShowVoiceInputStartButton);
+        Assert.False(fixture.ViewModel.ShowVoiceInputStopButton);
 
         voiceInput.ReleaseStop();
         await stopTask;

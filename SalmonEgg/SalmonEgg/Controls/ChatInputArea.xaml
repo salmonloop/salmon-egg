@@ -269,7 +269,7 @@
                                         CornerRadius="22"
                                         IsEnabled="{x:Bind ViewModel.CanStartVoiceInput, Mode=OneWay}"
                                         Command="{x:Bind ViewModel.StartVoiceInputCommand}"
-                                        Visibility="{x:Bind ViewModel.ShowVoiceInputStartButton, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                        Visibility="{x:Bind ViewModel.VoiceInputUiState.ShowStartButton, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
 
                                 <Button x:Name="VoiceInputStopButton"
                                         x:Uid="VoiceInputStopButton"
@@ -283,7 +283,17 @@
                                         CornerRadius="22"
                                         IsEnabled="{x:Bind ViewModel.CanStopVoiceInput, Mode=OneWay}"
                                         Command="{x:Bind ViewModel.StopVoiceInputCommand}"
-                                        Visibility="{x:Bind ViewModel.ShowVoiceInputStopButton, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                        Visibility="{x:Bind ViewModel.VoiceInputUiState.ShowStopButton, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                                <Grid Width="44"
+                                      Height="44"
+                                      Visibility="{x:Bind ViewModel.VoiceInputUiState.ShowProgressRing, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <ProgressRing Width="20"
+                                                  Height="20"
+                                                  IsActive="{x:Bind ViewModel.VoiceInputUiState.ShowProgressRing, Mode=OneWay}"
+                                                  HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"/>
+                                </Grid>
 
                                 <Button x:Name="SendButton"
                                         x:Uid="SendButton"

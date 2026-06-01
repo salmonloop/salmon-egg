@@ -709,8 +709,9 @@ public sealed class XamlComplianceTests
         Assert.Contains("IsEnabled=\"{x:Bind ViewModel.IsTextInputEnabled, Mode=OneWay}\"", xaml);
         Assert.Contains("IsEnabled=\"{x:Bind ViewModel.AreComposerToolsEnabled, Mode=OneWay}\"", xaml);
         Assert.Contains("IsEnabled=\"{x:Bind IsSubmitButtonEnabled, Mode=OneWay}\"", xaml);
-        Assert.Contains("IsEnabled=\"{x:Bind ViewModel.CanStartVoiceInput, Mode=OneWay}\"", xaml);
-        Assert.Contains("IsEnabled=\"{x:Bind ViewModel.CanStopVoiceInput, Mode=OneWay}\"", xaml);
+        Assert.Contains("Visibility=\"{x:Bind ViewModel.VoiceInputUiState.ShowStartButton, Mode=OneWay", xaml);
+        Assert.Contains("Visibility=\"{x:Bind ViewModel.VoiceInputUiState.ShowStopButton, Mode=OneWay", xaml);
+        Assert.Contains("Visibility=\"{x:Bind ViewModel.VoiceInputUiState.ShowProgressRing, Mode=OneWay", xaml);
         Assert.Contains("IsEnabled=\"{x:Bind ViewModel.CanCancelPromptUi, Mode=OneWay}\"", xaml);
         Assert.Contains("Visibility=\"{x:Bind ViewModel.ShowCancelPromptButton, Mode=OneWay", xaml);
         Assert.DoesNotContain("ViewModel.IsVoiceInputListening", xaml, StringComparison.Ordinal);
@@ -1159,10 +1160,11 @@ public sealed class XamlComplianceTests
 
         Assert.Contains("Visibility=\"{x:Bind ViewModel.ShowCancelPromptButton, Mode=OneWay", xaml);
         Assert.Contains("IsEnabled=\"{x:Bind ViewModel.CanCancelPromptUi, Mode=OneWay}\"", xaml);
-        Assert.Contains("Visibility=\"{x:Bind ViewModel.ComposerState.ShowVoiceListeningStatus, Mode=OneWay", xaml);
+        Assert.Contains("Visibility=\"{x:Bind ViewModel.VoiceInputUiState.ShowListeningStatus, Mode=OneWay", xaml);
+        Assert.Contains("Visibility=\"{x:Bind ViewModel.VoiceInputUiState.ShowProgressRing, Mode=OneWay", xaml);
         Assert.Contains("IsEnabled=\"{x:Bind ViewModel.IsTextInputEnabled, Mode=OneWay}\"", xaml);
-        Assert.Contains("IsEnabled=\"{x:Bind ViewModel.CanStartVoiceInput, Mode=OneWay}\"", xaml);
-        Assert.Contains("IsEnabled=\"{x:Bind ViewModel.CanStopVoiceInput, Mode=OneWay}\"", xaml);
+        Assert.Contains("Visibility=\"{x:Bind ViewModel.VoiceInputUiState.ShowStartButton, Mode=OneWay", xaml);
+        Assert.Contains("Visibility=\"{x:Bind ViewModel.VoiceInputUiState.ShowStopButton, Mode=OneWay", xaml);
     }
 
     [Fact]

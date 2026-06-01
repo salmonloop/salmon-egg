@@ -16,7 +16,7 @@ public sealed class ChatInputStatePresenterTests
             IsPromptInFlight: false,
             IsPromptSubmitInFlight: false,
             IsVoiceInputListening: false,
-            IsVoiceInputTransportBusy: false,
+            VoiceInputTransportState: VoiceInputTransportState.Idle,
             HasPendingAskUserRequest: false,
             ShouldShowLoadingOverlayPresenter: false,
             IsSessionActive: true,
@@ -43,7 +43,7 @@ public sealed class ChatInputStatePresenterTests
             IsPromptInFlight: true,
             IsPromptSubmitInFlight: true,
             IsVoiceInputListening: false,
-            IsVoiceInputTransportBusy: false,
+            VoiceInputTransportState: VoiceInputTransportState.Idle,
             HasPendingAskUserRequest: false,
             ShouldShowLoadingOverlayPresenter: false,
             IsSessionActive: true,
@@ -73,7 +73,7 @@ public sealed class ChatInputStatePresenterTests
             IsPromptInFlight: true,
             IsPromptSubmitInFlight: false,
             IsVoiceInputListening: false,
-            IsVoiceInputTransportBusy: false,
+            VoiceInputTransportState: VoiceInputTransportState.Idle,
             HasPendingAskUserRequest: false,
             ShouldShowLoadingOverlayPresenter: false,
             IsSessionActive: true,
@@ -98,7 +98,7 @@ public sealed class ChatInputStatePresenterTests
             IsPromptInFlight: false,
             IsPromptSubmitInFlight: false,
             IsVoiceInputListening: true,
-            IsVoiceInputTransportBusy: false,
+            VoiceInputTransportState: VoiceInputTransportState.Idle,
             HasPendingAskUserRequest: false,
             ShouldShowLoadingOverlayPresenter: false,
             IsSessionActive: true,
@@ -127,7 +127,7 @@ public sealed class ChatInputStatePresenterTests
             IsPromptInFlight: false,
             IsPromptSubmitInFlight: false,
             IsVoiceInputListening: false,
-            IsVoiceInputTransportBusy: false,
+            VoiceInputTransportState: VoiceInputTransportState.Idle,
             HasPendingAskUserRequest: false,
             ShouldShowLoadingOverlayPresenter: false,
             IsSessionActive: true,
@@ -151,7 +151,7 @@ public sealed class ChatInputStatePresenterTests
             IsPromptInFlight: false,
             IsPromptSubmitInFlight: false,
             IsVoiceInputListening: false,
-            IsVoiceInputTransportBusy: false,
+            VoiceInputTransportState: VoiceInputTransportState.Idle,
             HasPendingAskUserRequest: true,
             ShouldShowLoadingOverlayPresenter: false,
             IsSessionActive: true,
@@ -176,7 +176,7 @@ public sealed class ChatInputStatePresenterTests
             IsPromptInFlight: false,
             IsPromptSubmitInFlight: false,
             IsVoiceInputListening: true,
-            IsVoiceInputTransportBusy: false,
+            VoiceInputTransportState: VoiceInputTransportState.Idle,
             HasPendingAskUserRequest: false,
             ShouldShowLoadingOverlayPresenter: false,
             IsSessionActive: true,
@@ -192,14 +192,14 @@ public sealed class ChatInputStatePresenterTests
     }
 
     [Fact]
-    public void Present_WhenVoiceListeningAndBusy_StopEscapeActionRemainsAvailable()
+    public void Present_WhenVoiceListeningAndBusy_HidesDirectStopAffordanceDuringTransition()
     {
         var state = _sut.Present(new ChatInputStateInput(
             IsBusy: false,
             IsPromptInFlight: false,
             IsPromptSubmitInFlight: false,
             IsVoiceInputListening: true,
-            IsVoiceInputTransportBusy: true,
+            VoiceInputTransportState: VoiceInputTransportState.Stopping,
             HasPendingAskUserRequest: false,
             ShouldShowLoadingOverlayPresenter: false,
             IsSessionActive: true,
@@ -210,8 +210,9 @@ public sealed class ChatInputStatePresenterTests
             IsVoiceInputSupported: true));
 
         Assert.Equal(ChatComposerMode.VoiceListening, state.Mode);
-        Assert.True(state.ShowVoiceStopButton);
-        Assert.True(state.CanStopVoiceInput);
+        Assert.False(state.ShowVoiceStopButton);
+        Assert.False(state.CanStopVoiceInput);
+        Assert.False(state.ShowVoiceListeningStatus);
     }
 
     [Fact]
@@ -222,7 +223,7 @@ public sealed class ChatInputStatePresenterTests
             IsPromptInFlight: false,
             IsPromptSubmitInFlight: false,
             IsVoiceInputListening: false,
-            IsVoiceInputTransportBusy: false,
+            VoiceInputTransportState: VoiceInputTransportState.Idle,
             HasPendingAskUserRequest: false,
             ShouldShowLoadingOverlayPresenter: false,
             IsSessionActive: true,
@@ -247,7 +248,7 @@ public sealed class ChatInputStatePresenterTests
             IsPromptInFlight: false,
             IsPromptSubmitInFlight: false,
             IsVoiceInputListening: false,
-            IsVoiceInputTransportBusy: false,
+            VoiceInputTransportState: VoiceInputTransportState.Idle,
             HasPendingAskUserRequest: false,
             ShouldShowLoadingOverlayPresenter: true,
             IsSessionActive: true,
@@ -272,7 +273,7 @@ public sealed class ChatInputStatePresenterTests
             IsPromptInFlight: false,
             IsPromptSubmitInFlight: false,
             IsVoiceInputListening: false,
-            IsVoiceInputTransportBusy: true,
+            VoiceInputTransportState: VoiceInputTransportState.Authorizing,
             HasPendingAskUserRequest: false,
             ShouldShowLoadingOverlayPresenter: false,
             IsSessionActive: true,
