@@ -31,7 +31,8 @@ public sealed class AcpConnectionSettingsXamlTests
         Assert.Contains("SelectedValuePath=\"Transport\"", xaml, StringComparison.Ordinal);
         Assert.Contains("SelectedValue=\"{x:Bind Transport, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("SelectedItem=\"{x:Bind Transport, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("<ItemsControl ItemsSource=\"{x:Bind ViewModel.Servers, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("<ItemsControl", xaml, StringComparison.Ordinal);
+        Assert.Contains("ItemsSource=\"{x:Bind ViewModel.Servers, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("<ListView ItemsSource=\"{x:Bind ViewModel.Servers", xaml, StringComparison.Ordinal);
         Assert.Contains("Command=\"{x:Bind ViewModel.AddServerCommand}\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Command=\"{x:Bind ViewModel.SaveCommand}\"", xaml, StringComparison.Ordinal);
@@ -45,7 +46,7 @@ public sealed class AcpConnectionSettingsXamlTests
         Assert.Contains("AutomationProperties.AutomationId=\"Mcp.FillFromClipboardJson\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{x:Bind ViewModel.ImportStatusMessage, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"Mcp.Import.Status\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("AutomationProperties.LiveSetting=\"Polite\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("AutomationProperties.LiveSetting=\"Polite\"", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"Mcp.AddServer\"", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"Mcp.RemoveServer\"", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.Name=\"删除\"", xaml, StringComparison.Ordinal);

@@ -112,7 +112,6 @@
                                                        Style="{StaticResource SettingsRowDescriptionTextStyle}"
                                                        TextWrapping="Wrap"
                                                        VerticalAlignment="Center"
-                                                       AutomationProperties.LiveSetting="Polite"
                                                        AutomationProperties.AutomationId="Mcp.Import.Status"/>
                                             <Button Grid.Column="1"
                                                     x:Uid="Mcp_FillFromClipboardJson"
