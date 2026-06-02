@@ -16,6 +16,12 @@ public sealed class NoOpGamepadInputService : IGamepadInputService
         remove { }
     }
 
+    public event EventHandler<GamepadContextIntent>? ContextIntentRaised
+    {
+        add { }
+        remove { }
+    }
+
     public void Start()
     {
     }

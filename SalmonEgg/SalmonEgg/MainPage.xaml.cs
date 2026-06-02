@@ -82,6 +82,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
     private readonly IGamepadInputService _gamepadInputService;
     private readonly IGamepadNavigationDispatcher _gamepadNavigationDispatcher;
     private readonly IGamepadShortcutDispatcher _gamepadShortcutDispatcher;
+    private readonly IGamepadContextIntentDispatcher _gamepadContextIntentDispatcher;
     private readonly IShellStartupNavigationService _startupNavigation;
     private readonly ContentFrameNavigationAdapter _contentNavigation;
     private bool _isGamepadInputAttached;
@@ -107,6 +108,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
         _gamepadInputService = App.ServiceProvider.GetRequiredService<IGamepadInputService>();
         _gamepadNavigationDispatcher = App.ServiceProvider.GetRequiredService<IGamepadNavigationDispatcher>();
         _gamepadShortcutDispatcher = App.ServiceProvider.GetRequiredService<IGamepadShortcutDispatcher>();
+        _gamepadContextIntentDispatcher = App.ServiceProvider.GetRequiredService<IGamepadContextIntentDispatcher>();
         _startupNavigation = App.ServiceProvider.GetRequiredService<IShellStartupNavigationService>();
         IsGuiAutomationMode = string.Equals(
             Environment.GetEnvironmentVariable("SALMONEGG_GUI"),
@@ -198,6 +200,15 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
     {
 #if WINDOWS
         return ShouldSuppressPolledGamepadShortcutForWindows(intent);
+#else
+        return false;
+#endif
+    }
+
+    private bool ShouldSuppressPolledGamepadContextIntent(GamepadContextIntent intent)
+    {
+#if WINDOWS
+        return ShouldSuppressPolledGamepadContextIntentForWindows(intent);
 #else
         return false;
 #endif
@@ -787,6 +798,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
 
         _gamepadInputService.IntentRaised += OnGamepadIntentRaised;
         _gamepadInputService.ShortcutRaised += OnGamepadShortcutRaised;
+        _gamepadInputService.ContextIntentRaised += OnGamepadContextIntentRaised;
         _gamepadInputService.Start();
         _isGamepadInputAttached = true;
     }
@@ -800,6 +812,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
 
         _gamepadInputService.IntentRaised -= OnGamepadIntentRaised;
         _gamepadInputService.ShortcutRaised -= OnGamepadShortcutRaised;
+        _gamepadInputService.ContextIntentRaised -= OnGamepadContextIntentRaised;
         _gamepadInputService.Stop();
         _isGamepadInputAttached = false;
     }
@@ -834,6 +847,22 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
         }
 
         _ = _gamepadShortcutDispatcher.TryDispatch(intent);
+    }
+
+    private void OnGamepadContextIntentRaised(object? sender, GamepadContextIntent intent)
+    {
+        if (!DispatcherQueue.HasThreadAccess)
+        {
+            _ = DispatcherQueue.TryEnqueue(() => OnGamepadContextIntentRaised(sender, intent));
+            return;
+        }
+
+        if (ShouldSuppressPolledGamepadContextIntent(intent))
+        {
+            return;
+        }
+
+        _ = _gamepadContextIntentDispatcher.TryDispatch(intent);
     }
 
     public bool TryConsumeNavigationIntent(GamepadNavigationIntent intent)

@@ -118,4 +118,42 @@ public sealed class ChatTranscriptNavigationPolicyTests
         Assert.Equal(0, scrollCount);
         Assert.Equal(0, registerCount);
     }
+
+    [Theory]
+    [InlineData(GamepadContextIntent.PageUp, -1)]
+    [InlineData(GamepadContextIntent.PageDown, 1)]
+    public void ResolveContext_ReturnsPageScrollForTranscriptContextIntents(
+        GamepadContextIntent intent,
+        int expectedPageDelta)
+    {
+        var decision = ChatTranscriptContextIntentPolicy.Resolve(
+            intent,
+            hasTranscriptFocus: true,
+            messageCount: 3);
+
+        Assert.Equal(ChatTranscriptContextIntentAction.ScrollByPages, decision.Action);
+        Assert.Equal(expectedPageDelta, decision.PageDelta);
+    }
+
+    [Fact]
+    public void TryConsumeContext_ScrollsTranscriptByPagesAndRegistersViewportIntent()
+    {
+        var scrolledDelta = 0;
+        var registerCount = 0;
+
+        var consumed = ChatTranscriptContextIntentHandler.TryConsume(
+            GamepadContextIntent.PageDown,
+            hasTranscriptFocus: true,
+            messageCount: 3,
+            tryScrollByPages: delta =>
+            {
+                scrolledDelta = delta;
+                return true;
+            },
+            registerUserViewportIntent: () => registerCount++);
+
+        Assert.True(consumed);
+        Assert.Equal(1, scrolledDelta);
+        Assert.Equal(1, registerCount);
+    }
 }

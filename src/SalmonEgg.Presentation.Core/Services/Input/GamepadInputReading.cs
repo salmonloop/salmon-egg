@@ -8,5 +8,7 @@ public readonly record struct GamepadInputReading(
     bool Activate,
     bool Back,
     bool ShortcutVoiceToggle = false,
+    double LeftTrigger = 0,
+    double RightTrigger = 0,
     double ThumbstickX = 0,
     double ThumbstickY = 0);

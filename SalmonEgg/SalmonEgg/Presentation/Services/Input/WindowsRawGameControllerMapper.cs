@@ -63,6 +63,8 @@ public sealed class WindowsRawGameControllerMapper
             GameControllerButtonLabel.XboxRight or GameControllerButtonLabel.Right => reading with { MoveRight = true },
             GameControllerButtonLabel.XboxA or GameControllerButtonLabel.Cross or GameControllerButtonLabel.LetterA => reading with { Activate = true },
             GameControllerButtonLabel.XboxB or GameControllerButtonLabel.Circle or GameControllerButtonLabel.LetterB or GameControllerButtonLabel.Back => reading with { Back = true },
+            GameControllerButtonLabel.XboxLeftTrigger => reading with { LeftTrigger = 1 },
+            GameControllerButtonLabel.XboxRightTrigger => reading with { RightTrigger = 1 },
             _ => reading
         };
     }

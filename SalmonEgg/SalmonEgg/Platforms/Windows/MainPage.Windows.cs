@@ -20,6 +20,8 @@ public sealed partial class MainPage
     private long _lastNativeGamepadIntentTimestamp;
     private GamepadShortcutIntent? _lastNativeGamepadShortcut;
     private long _lastNativeGamepadShortcutTimestamp;
+    private GamepadContextIntent? _lastNativeGamepadContextIntent;
+    private long _lastNativeGamepadContextIntentTimestamp;
     private bool _allowClose;
 
     partial void InitializeTray()
@@ -244,6 +246,12 @@ public sealed partial class MainPage
                     args.Handled = true;
                 }
                 break;
+            case Windows.System.VirtualKey.GamepadLeftTrigger:
+                RecordNativeGamepadContextIntent(GamepadContextIntent.PageUp);
+                break;
+            case Windows.System.VirtualKey.GamepadRightTrigger:
+                RecordNativeGamepadContextIntent(GamepadContextIntent.PageDown);
+                break;
         }
     }
 
@@ -266,6 +274,17 @@ public sealed partial class MainPage
         }
 
         var elapsed = Stopwatch.GetElapsedTime(_lastNativeGamepadShortcutTimestamp);
+        return elapsed <= PolledGamepadSuppressionWindow;
+    }
+
+    private bool ShouldSuppressPolledGamepadContextIntentForWindows(GamepadContextIntent intent)
+    {
+        if (_lastNativeGamepadContextIntent != intent || _lastNativeGamepadContextIntentTimestamp == 0)
+        {
+            return false;
+        }
+
+        var elapsed = Stopwatch.GetElapsedTime(_lastNativeGamepadContextIntentTimestamp);
         return elapsed <= PolledGamepadSuppressionWindow;
     }
 
@@ -295,6 +314,12 @@ public sealed partial class MainPage
     {
         _lastNativeGamepadShortcut = shortcut;
         _lastNativeGamepadShortcutTimestamp = Stopwatch.GetTimestamp();
+    }
+
+    private void RecordNativeGamepadContextIntent(GamepadContextIntent intent)
+    {
+        _lastNativeGamepadContextIntent = intent;
+        _lastNativeGamepadContextIntentTimestamp = Stopwatch.GetTimestamp();
     }
 
     private bool TryConsumeCurrentContentNavigationIntent(GamepadNavigationIntent intent)

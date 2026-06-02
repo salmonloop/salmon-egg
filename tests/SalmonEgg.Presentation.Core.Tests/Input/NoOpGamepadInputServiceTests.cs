@@ -30,4 +30,17 @@ public sealed class NoOpGamepadInputServiceTests
 
         Assert.False(raised);
     }
+
+    [Fact]
+    public void NoOpGamepadInputService_StartAndStop_DoNotRaiseContextIntent()
+    {
+        var service = new NoOpGamepadInputService();
+        var raised = false;
+        service.ContextIntentRaised += (_, _) => raised = true;
+
+        service.Start();
+        service.Stop();
+
+        Assert.False(raised);
+    }
 }

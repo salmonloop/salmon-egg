@@ -243,10 +243,13 @@ public sealed class ChatViewXamlTests
         var chatViewXaml = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml");
 
         Assert.Contains("using SalmonEgg.Presentation.Core.Services.Input;", chatViewCode, StringComparison.Ordinal);
-        Assert.Contains("public sealed partial class ChatView : Page, INavigationIntentConsumer", chatViewCode, StringComparison.Ordinal);
+        Assert.Contains("public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepadContextIntentConsumer", chatViewCode, StringComparison.Ordinal);
         Assert.Contains("public bool TryConsumeNavigationIntent(GamepadNavigationIntent intent)", chatViewCode, StringComparison.Ordinal);
         Assert.Contains("ChatTranscriptNavigationIntentHandler.TryConsume(", chatViewCode, StringComparison.Ordinal);
         Assert.Contains("_transcriptViewportHost.TryScrollByItems", chatViewCode, StringComparison.Ordinal);
+        Assert.Contains("public bool TryConsumeContextIntent(GamepadContextIntent intent)", chatViewCode, StringComparison.Ordinal);
+        Assert.Contains("ChatTranscriptContextIntentHandler.TryConsume(", chatViewCode, StringComparison.Ordinal);
+        Assert.Contains("_transcriptViewportHost.TryScrollByPages", chatViewCode, StringComparison.Ordinal);
         Assert.Contains("RegisterUserViewportIntent);", chatViewCode, StringComparison.Ordinal);
         Assert.Contains("IsFocusEngagementEnabled=\"True\"", chatViewXaml, StringComparison.Ordinal);
         Assert.Contains("XYFocusKeyboardNavigation=\"Enabled\"", chatViewXaml, StringComparison.Ordinal);
@@ -262,8 +265,11 @@ public sealed class ChatViewXamlTests
         var hostCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Transcript\ListViewTranscriptViewportHost.cs");
 
         Assert.Contains("bool TryScrollByItems(int itemDelta);", hostInterface, StringComparison.Ordinal);
+        Assert.Contains("bool TryScrollByPages(int pageDelta);", hostInterface, StringComparison.Ordinal);
         Assert.Contains("public bool TryScrollByItems(int itemDelta)", hostCode, StringComparison.Ordinal);
+        Assert.Contains("public bool TryScrollByPages(int pageDelta)", hostCode, StringComparison.Ordinal);
         Assert.Contains("TryGetFirstVisibleIndex(_listView.Items.Count, out var firstVisibleIndex)", hostCode, StringComparison.Ordinal);
+        Assert.Contains("TryGetVisibleIndexBounds(_listView.Items.Count, out var firstVisibleIndex, out var lastVisibleIndex)", hostCode, StringComparison.Ordinal);
         Assert.Contains("ScrollItemIntoView(targetIndex, TranscriptItemScrollAlignment.Leading);", hostCode, StringComparison.Ordinal);
         Assert.DoesNotContain("ChangeView", hostCode, StringComparison.Ordinal);
     }

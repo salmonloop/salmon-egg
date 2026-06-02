@@ -34,6 +34,10 @@ public sealed class GamepadDiagnosticsViewModelTests
                 GamepadNavigationIntent.MoveDown,
                 GamepadNavigationIntent.Activate
             },
+            ActiveContextIntents: new[]
+            {
+                GamepadContextIntent.PageDown
+            },
             RawControllers:
             [
                 new RawGameControllerDiagnostics(
@@ -55,7 +59,7 @@ public sealed class GamepadDiagnosticsViewModelTests
         Assert.Equal("1", viewModel.ConnectedGamepadsText);
         Assert.Equal("2", viewModel.ConnectedRawControllersText);
         Assert.Equal("RawGameController", viewModel.InputSourceText);
-        Assert.Equal("MoveDown, Activate", viewModel.ActiveInputsText);
+        Assert.Equal("MoveDown, Activate, PageDown", viewModel.ActiveInputsText);
         Assert.Equal("X 0.25, Y -0.50", viewModel.ThumbstickText);
         Assert.Contains("Wireless Controller", viewModel.RawControllersText);
         Assert.Contains("VID 054C PID 0CE6", viewModel.RawControllersText);
@@ -87,6 +91,7 @@ public sealed class GamepadDiagnosticsViewModelTests
             InputSource: GamepadDiagnosticsInputSource.Gamepad,
             Reading: default,
             ActiveIntents: [],
+            ActiveContextIntents: [],
             RawControllers: []));
         var viewModel = CreateViewModel(service, supportsGamepadInput: true);
 

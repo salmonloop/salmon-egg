@@ -17,7 +17,7 @@ using XamlFocusManager = Microsoft.UI.Xaml.Input.FocusManager;
 
 namespace SalmonEgg.Presentation.Views.Chat;
 
-public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimaryContentFocusTarget
+public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepadContextIntentConsumer, IPrimaryContentFocusTarget
 {
         public ChatShellViewModel ShellViewModel { get; }
         public ChatViewModel ViewModel => ShellViewModel.Chat;
@@ -408,6 +408,31 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimary
                 _isTranscriptViewportLayerActive || IsTranscriptViewportSurfaceFocusWithin(),
                 ViewModel.MessageHistory.Count,
                 _transcriptViewportHost.TryScrollByItems,
+                RegisterUserViewportIntent);
+            if (consumed)
+            {
+                _isTranscriptViewportLayerActive = true;
+                if (!IsTranscriptViewportSurfaceFocusWithin())
+                {
+                    _ = TryFocusTranscriptViewportSurface(FocusState.Keyboard);
+                }
+            }
+
+            return consumed;
+        }
+
+        public bool TryConsumeContextIntent(GamepadContextIntent intent)
+        {
+            if (_transcriptViewportHost is null)
+            {
+                return false;
+            }
+
+            var consumed = ChatTranscriptContextIntentHandler.TryConsume(
+                intent,
+                _isTranscriptViewportLayerActive || IsTranscriptViewportSurfaceFocusWithin(),
+                ViewModel.MessageHistory.Count,
+                _transcriptViewportHost.TryScrollByPages,
                 RegisterUserViewportIntent);
             if (consumed)
             {

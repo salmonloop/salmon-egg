@@ -8,6 +8,8 @@ public interface IGamepadInputService : IDisposable
 
     event EventHandler<GamepadShortcutIntent>? ShortcutRaised;
 
+    event EventHandler<GamepadContextIntent>? ContextIntentRaised;
+
     void Start();
 
     void Stop();

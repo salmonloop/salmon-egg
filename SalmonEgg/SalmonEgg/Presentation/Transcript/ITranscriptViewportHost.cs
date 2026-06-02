@@ -22,6 +22,8 @@ public interface ITranscriptViewportHost : IDisposable
 
     bool TryScrollByItems(int itemDelta);
 
+    bool TryScrollByPages(int pageDelta);
+
     bool TryFocusViewport(FocusState focusState);
 
     bool IsAtBottom(int itemCount, double bottomThreshold, double bottomGeometryTolerance);

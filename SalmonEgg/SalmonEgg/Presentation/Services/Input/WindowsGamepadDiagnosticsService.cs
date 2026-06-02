@@ -28,6 +28,7 @@ public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsServic
         {
             reading = GetInputReading(gamepad.GetCurrentReading());
             if (GamepadIntentProcessor.GetActiveIntents(reading).Count > 0
+                || GamepadContextIntentProjector.HasActiveIntents(reading)
                 || GamepadShortcutIntentProjector.HasActiveShortcuts(reading))
             {
                 source = GamepadDiagnosticsInputSource.Gamepad;
@@ -41,6 +42,7 @@ public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsServic
             {
                 reading = _rawMapper.GetInputReading(controller);
                 if (GamepadIntentProcessor.GetActiveIntents(reading).Count > 0
+                    || GamepadContextIntentProjector.HasActiveIntents(reading)
                     || GamepadShortcutIntentProjector.HasActiveShortcuts(reading))
                 {
                     source = GamepadDiagnosticsInputSource.RawGameController;
@@ -50,6 +52,7 @@ public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsServic
         }
 
         var activeIntents = GamepadIntentProcessor.GetActiveIntents(reading);
+        var activeContextIntents = GamepadContextIntentProjector.GetActiveIntents(reading);
         return new GamepadDiagnosticsSnapshot(
             IsSupported: true,
             ConnectedGamepadCount: gamepads.Length,
@@ -57,6 +60,7 @@ public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsServic
             InputSource: source,
             Reading: reading,
             ActiveIntents: activeIntents,
+            ActiveContextIntents: activeContextIntents,
             RawControllers: rawControllers.Select(CreateRawControllerDiagnostics).ToArray());
     }
 
@@ -124,6 +128,8 @@ public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsServic
             Activate: reading.Buttons.HasFlag(GamepadButtons.A),
             Back: reading.Buttons.HasFlag(GamepadButtons.B),
             ShortcutVoiceToggle: reading.Buttons.HasFlag(GamepadButtons.Y),
+            LeftTrigger: reading.LeftTrigger,
+            RightTrigger: reading.RightTrigger,
             ThumbstickX: reading.LeftThumbstickX,
             ThumbstickY: reading.LeftThumbstickY);
     }

@@ -2525,7 +2525,7 @@ public sealed class XamlComplianceTests
         Assert.Contains("interface IPrimaryContentFocusTarget", contract, StringComparison.Ordinal);
         Assert.Contains("ContentFrame.Content is IPrimaryContentFocusTarget focusTarget", sharedPage, StringComparison.Ordinal);
         Assert.DoesNotContain("ContentFrame.Content is SalmonEgg.Presentation.Views.Chat.ChatView chatView", sharedPage, StringComparison.Ordinal);
-        Assert.Contains("public sealed partial class ChatView : Page, INavigationIntentConsumer, IPrimaryContentFocusTarget", chatView, StringComparison.Ordinal);
+        Assert.Contains("public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepadContextIntentConsumer, IPrimaryContentFocusTarget", chatView, StringComparison.Ordinal);
         Assert.Contains("IsDescendantOf(current, ContentFrame)", sharedPage, StringComparison.Ordinal);
         Assert.Contains("ReferenceEquals(current, MainNavView)", sharedPage, StringComparison.Ordinal);
         Assert.DoesNotContain("SyncShellSelectionFromCurrentContent", sharedPage, StringComparison.Ordinal);

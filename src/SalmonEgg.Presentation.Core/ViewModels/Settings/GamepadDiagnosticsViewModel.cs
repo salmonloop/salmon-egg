@@ -225,7 +225,7 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject
         ConnectedGamepadsText = FormatCount(snapshot.ConnectedGamepadCount);
         ConnectedRawControllersText = FormatCount(snapshot.ConnectedRawControllerCount);
         InputSourceText = FormatInputSource(snapshot.InputSource);
-        ActiveInputsText = FormatActiveInputs(snapshot.ActiveIntents);
+        ActiveInputsText = FormatActiveInputs(snapshot.ActiveIntents, snapshot.ActiveContextIntents);
         ThumbstickText = FormatThumbstick(snapshot.Reading);
         RawControllersText = FormatRawControllers(snapshot.RawControllers);
 
@@ -254,10 +254,18 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject
             _ => _localizer["GamepadDiagnostics_InputSourceNone"]
         };
 
-    private string FormatActiveInputs(IReadOnlyCollection<GamepadNavigationIntent> activeIntents)
-        => activeIntents.Count == 0
-            ? _localizer["GamepadDiagnostics_ActiveInputsNone"]
-            : string.Join(", ", activeIntents);
+    private string FormatActiveInputs(
+        IReadOnlyCollection<GamepadNavigationIntent> activeIntents,
+        IReadOnlyCollection<GamepadContextIntent> activeContextIntents)
+    {
+        if (activeIntents.Count == 0 && activeContextIntents.Count == 0)
+        {
+            return _localizer["GamepadDiagnostics_ActiveInputsNone"];
+        }
+
+        return string.Join(", ", activeIntents.Select(static intent => intent.ToString())
+            .Concat(activeContextIntents.Select(static intent => intent.ToString())));
+    }
 
     private static string FormatCount(int count)
         => count.ToString(CultureInfo.InvariantCulture);

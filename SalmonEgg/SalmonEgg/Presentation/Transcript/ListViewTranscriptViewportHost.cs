@@ -73,6 +73,44 @@ public sealed class ListViewTranscriptViewportHost : ITranscriptViewportHost
         return false;
     }
 
+    private bool TryGetVisibleIndexBounds(int itemCount, out int firstVisibleIndex, out int lastVisibleIndex)
+    {
+        firstVisibleIndex = -1;
+        lastVisibleIndex = -1;
+        if (itemCount <= 0)
+        {
+            return false;
+        }
+
+        var range = _visibleRangeProvider?.Invoke() is { Length: > 0 } visibleRange
+            ? ClampRange(visibleRange, itemCount)
+            : new TranscriptVirtualizationRange(0, itemCount);
+        var viewportTop = _listView.Padding.Top;
+        var viewportBottom = _listView.ActualHeight - _listView.Padding.Bottom;
+        for (var candidate = range.FirstIndex; candidate <= range.LastIndex; candidate++)
+        {
+            if (!TryGetContainerAnchor(candidate, out var anchor))
+            {
+                continue;
+            }
+
+            var relativeOrigin = anchor.TransformToVisual(_listView).TransformPoint(default);
+            var itemTop = relativeOrigin.Y;
+            var itemBottom = itemTop + anchor.ActualHeight;
+            if (itemBottom <= viewportTop || itemTop >= viewportBottom)
+            {
+                continue;
+            }
+
+            firstVisibleIndex = firstVisibleIndex < 0
+                ? candidate
+                : firstVisibleIndex;
+            lastVisibleIndex = candidate;
+        }
+
+        return firstVisibleIndex >= 0 && lastVisibleIndex >= firstVisibleIndex;
+    }
+
     public void ScrollItemIntoView(
         int index,
         TranscriptItemScrollAlignment alignment = TranscriptItemScrollAlignment.Default)
@@ -120,6 +158,31 @@ public sealed class ListViewTranscriptViewportHost : ITranscriptViewportHost
         }
 
         var targetIndex = Math.Clamp(firstVisibleIndex + itemDelta, 0, _listView.Items.Count - 1);
+        if (targetIndex == firstVisibleIndex)
+        {
+            return false;
+        }
+
+        ScrollItemIntoView(targetIndex, TranscriptItemScrollAlignment.Leading);
+        return true;
+    }
+
+    public bool TryScrollByPages(int pageDelta)
+    {
+        if (pageDelta == 0 || _listView.Items.Count <= 0)
+        {
+            return false;
+        }
+
+        if (!TryGetVisibleIndexBounds(_listView.Items.Count, out var firstVisibleIndex, out var lastVisibleIndex))
+        {
+            return false;
+        }
+
+        var visibleCount = Math.Max(1, (lastVisibleIndex - firstVisibleIndex) + 1);
+        var targetIndex = pageDelta > 0
+            ? Math.Clamp(firstVisibleIndex + visibleCount, 0, _listView.Items.Count - 1)
+            : Math.Clamp(firstVisibleIndex - visibleCount, 0, _listView.Items.Count - 1);
         if (targetIndex == firstVisibleIndex)
         {
             return false;
