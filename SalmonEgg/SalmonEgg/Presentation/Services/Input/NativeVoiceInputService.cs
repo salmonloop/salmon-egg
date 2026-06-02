@@ -18,6 +18,8 @@ public sealed class NativeVoiceInputService : IVoiceInputService, IVoiceInputRun
     private const int HResultPrivacyStatementDeclined = unchecked((int)0x80045509);
     private const int HResultNoCaptureDevices = -1072845856;
     private const int HResultAccessDenied = unchecked((int)0x80070005);
+    private static readonly TimeSpan VoiceInputStopTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan VoiceInputCancelTimeout = TimeSpan.FromSeconds(2);
 
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _sessionSignalSync = new();
@@ -184,21 +186,17 @@ public sealed class NativeVoiceInputService : IVoiceInputService, IVoiceInputRun
 
         if (recognizer is not null)
         {
-            try
+            var stopCompleted = await TryStopRecognitionSessionAsync(
+                recognizer,
+                requestId,
+                cancellationToken).ConfigureAwait(false);
+
+            if (!stopCompleted && !string.IsNullOrWhiteSpace(requestId))
             {
-                // Prefer a graceful stop so the recognizer can still flush final results.
-                await recognizer.ContinuousRecognitionSession.StopAsync().AsTask(cancellationToken).ConfigureAwait(false);
-            }
-            catch
-            {
-                try
-                {
-                    await recognizer.ContinuousRecognitionSession.CancelAsync().AsTask(cancellationToken).ConfigureAwait(false);
-                }
-                catch
-                {
-                    // No-op: cancel can still race with natural completion or teardown.
-                }
+                SetRuntimeCompletionStatus("StoppedByAppForcedEnd");
+                _logger.LogWarning(
+                    "Voice input stop did not complete in time. Forcing local session end. RequestId={RequestId}",
+                    requestId);
             }
         }
 
@@ -206,6 +204,72 @@ public sealed class NativeVoiceInputService : IVoiceInputService, IVoiceInputRun
         {
             TrySignalSessionEnded(requestId);
         }
+    }
+
+    private async Task<bool> TryStopRecognitionSessionAsync(
+        SpeechRecognizer recognizer,
+        string? requestId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await recognizer.ContinuousRecognitionSession
+                .StopAsync()
+                .AsTask(cancellationToken)
+                .WaitAsync(VoiceInputStopTimeout, cancellationToken)
+                .ConfigureAwait(false);
+            return true;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (TimeoutException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Voice input graceful stop timed out. RequestId={RequestId} TimeoutMs={TimeoutMs}",
+                requestId,
+                VoiceInputStopTimeout.TotalMilliseconds);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Voice input graceful stop failed. RequestId={RequestId}",
+                requestId);
+        }
+
+        try
+        {
+            await recognizer.ContinuousRecognitionSession
+                .CancelAsync()
+                .AsTask(cancellationToken)
+                .WaitAsync(VoiceInputCancelTimeout, cancellationToken)
+                .ConfigureAwait(false);
+            return true;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (TimeoutException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Voice input cancel fallback timed out. RequestId={RequestId} TimeoutMs={TimeoutMs}",
+                requestId,
+                VoiceInputCancelTimeout.TotalMilliseconds);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Voice input cancel fallback failed. RequestId={RequestId}",
+                requestId);
+        }
+
+        return false;
     }
 
     private async Task RunRecognitionAsync(VoiceInputSessionOptions options, CancellationToken cancellationToken)
