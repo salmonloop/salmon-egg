@@ -14,6 +14,14 @@ namespace SalmonEgg.Presentation.ViewModels.Settings;
 
 public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObject
 {
+    private enum AuthorizationProbeRetryState
+    {
+        None = 0,
+        WaitingForActivation,
+        WaitingForProbeReady,
+        Starting
+    }
+
     private static readonly TimeSpan SignalPollInterval = TimeSpan.FromMilliseconds(100);
 
     private readonly IVoiceInputService _voiceInputService;
@@ -35,7 +43,7 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
     private DateTimeOffset? _endedAt;
     private DateTimeOffset? _errorAt;
     private string? _errorMessage;
-    private bool _resumeProbeAfterAuthorization;
+    private AuthorizationProbeRetryState _authorizationProbeRetryState;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanStartProbe))]
@@ -99,6 +107,11 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
     {
         if (IsRunning)
         {
+            if (isAuthorizationResumeAttempt)
+            {
+                _authorizationProbeRetryState = AuthorizationProbeRetryState.WaitingForProbeReady;
+            }
+
             return;
         }
 
@@ -269,19 +282,43 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
     }
 
     private void ArmPendingAuthorizationProbeRetry()
-        => _resumeProbeAfterAuthorization = true;
+        => _authorizationProbeRetryState = AuthorizationProbeRetryState.WaitingForActivation;
 
     private void ClearPendingAuthorizationProbeRetry()
-        => _resumeProbeAfterAuthorization = false;
+        => _authorizationProbeRetryState = AuthorizationProbeRetryState.None;
 
     private void OnApplicationActivated(object? sender, EventArgs e)
     {
-        if (!_resumeProbeAfterAuthorization)
+        if (_authorizationProbeRetryState != AuthorizationProbeRetryState.WaitingForActivation)
         {
             return;
         }
 
-        ClearPendingAuthorizationProbeRetry();
+        _authorizationProbeRetryState = AuthorizationProbeRetryState.WaitingForProbeReady;
+        TryResumeAuthorizationProbeIfReady();
+    }
+
+    partial void OnIsRunningChanged(bool value)
+    {
+        if (!value)
+        {
+            TryResumeAuthorizationProbeIfReady();
+        }
+    }
+
+    private void TryResumeAuthorizationProbeIfReady()
+    {
+        if (_authorizationProbeRetryState != AuthorizationProbeRetryState.WaitingForProbeReady)
+        {
+            return;
+        }
+
+        if (IsRunning)
+        {
+            return;
+        }
+
+        _authorizationProbeRetryState = AuthorizationProbeRetryState.Starting;
         _ = _uiDispatcher.EnqueueAsync(() => StartProbeCoreAsync(
             requestAuthorizationHelpOnDenied: false,
             isAuthorizationResumeAttempt: true));

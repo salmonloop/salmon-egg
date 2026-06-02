@@ -69,6 +69,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private const int TaskOverviewPlanPreviewLimit = 4;
     private const int TaskOverviewChangePreviewLimit = 5;
 
+    private enum VoiceInputAuthorizationRetryState
+    {
+        None = 0,
+        WaitingForActivation,
+        WaitingForComposerReady,
+        Starting
+    }
+
     public enum LoadingOverlayStage
     {
         None = 0,
@@ -217,7 +225,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private string? _activeVoiceInputRequestId;
     private string? _transportVoiceInputRequestId;
     private VoiceInputTransportState _voiceInputTransportState;
-    private bool _resumeVoiceInputAfterAuthorization;
+    private VoiceInputAuthorizationRetryState _voiceInputAuthorizationRetryState;
+    private string? _voiceInputAuthorizationRetryConversationId;
+    private string? _voiceInputAuthorizationRetryProfileId;
+    private string? _voiceInputAuthorizationRetryConnectionInstanceId;
     private bool _suppressNewSessionDraftModeSelectionDispatch;
     private CancellationTokenSource? _newSessionDraftModeSelectionCts;
     private string _voiceInputBasePrompt = string.Empty;
@@ -1534,6 +1545,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         OnPropertyChanged(nameof(ShowCancelPromptButton));
         OnPropertyChanged(nameof(CanCancelPromptUi));
         OnPropertyChanged(nameof(ShouldShowSlashCommandsUi));
+        TryResumeVoiceInputAfterAuthorizationIfReady();
     }
 
     private void OnAcpProfilesPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -2130,6 +2142,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         OnPropertyChanged(nameof(OverlayStatusText));
         OnPropertyChanged(nameof(ShouldShowBlockingLoadingMask));
         OnPropertyChanged(nameof(ShouldShowLoadingOverlayPresenter));
+        NotifyComposerProjectionChanged();
     }
 
     private static ConversationMessageSnapshot ToSnapshot(ChatMessageViewModel vm)

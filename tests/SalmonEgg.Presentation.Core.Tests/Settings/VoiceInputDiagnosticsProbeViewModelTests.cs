@@ -254,6 +254,40 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
     }
 
     [Fact]
+    public async Task StartProbeAsync_WhenActivationArrivesBeforeDeniedFlowSettles_RetriesAfterProbeBecomesIdle()
+    {
+        var activationSource = new FakeApplicationActivationSignalSource();
+        var dispatcher = new BufferedActionUiDispatcher();
+        var service = new FakeVoiceInputService
+        {
+            PermissionResult = new VoiceInputPermissionResult(
+                VoiceInputPermissionStatus.Denied,
+                "Enable speech access",
+                RequiresAuthorization: true)
+        };
+        service.OnAuthorizationHelpRequested = () =>
+        {
+            dispatcher.BufferNextAction();
+        };
+        var viewModel = CreateViewModel(service, dispatcher: dispatcher, activationSource: activationSource);
+
+        await viewModel.StartProbeCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, service.AuthorizationHelpRequestCount);
+        Assert.True(viewModel.IsRunning);
+
+        service.PermissionResult = VoiceInputPermissionResult.Granted();
+        activationSource.RaiseActivated();
+        dispatcher.FlushBufferedActions();
+
+        await WaitForConditionAsync(() => Task.FromResult(
+            service.StartCount == 1
+            && viewModel.IsRunning));
+
+        Assert.Equal(2, service.PermissionRequestCount);
+    }
+
+    [Fact]
     public async Task HandlePageUnloadedAsync_ClearsPendingAuthorizationRetry()
     {
         var service = new FakeVoiceInputService
@@ -279,7 +313,7 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
 
     private static VoiceInputDiagnosticsProbeViewModel CreateViewModel(
         FakeVoiceInputService service,
-        TrackingUiDispatcher? dispatcher = null,
+        IUiDispatcher? dispatcher = null,
         FakeAudioInputSignalDiagnosticsService? signalService = null,
         IApplicationActivationSignalSource? activationSource = null,
         Mock<ILogger<VoiceInputDiagnosticsProbeViewModel>>? logger = null)
@@ -368,6 +402,45 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
         }
     }
 
+    private sealed class BufferedActionUiDispatcher : IUiDispatcher
+    {
+        private Action? _bufferedAction;
+        private bool _bufferNextAction;
+
+        public bool HasThreadAccess => false;
+
+        public void BufferNextAction()
+            => _bufferNextAction = true;
+
+        public void FlushBufferedActions()
+        {
+            var action = _bufferedAction;
+            _bufferedAction = null;
+            action?.Invoke();
+        }
+
+        public void Enqueue(Action action)
+        {
+            EnqueueAsync(action).GetAwaiter().GetResult();
+        }
+
+        public Task EnqueueAsync(Action action)
+        {
+            if (_bufferNextAction)
+            {
+                _bufferNextAction = false;
+                _bufferedAction = action;
+                return Task.CompletedTask;
+            }
+
+            action();
+            return Task.CompletedTask;
+        }
+
+        public Task EnqueueAsync(Func<Task> action)
+            => action();
+    }
+
     private sealed class FakeVoiceInputService : IVoiceInputService
     {
         public VoiceInputPermissionResult PermissionResult { get; set; } = VoiceInputPermissionResult.Granted();
@@ -385,6 +458,8 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
         public int StartCount { get; private set; }
 
         public bool WasStartCancellationRequestedWhenStopCalled { get; private set; }
+
+        public Action? OnAuthorizationHelpRequested { get; set; }
 
         public VoiceInputSessionOptions? LastOptions { get; private set; }
 
@@ -417,6 +492,7 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
         public Task<bool> TryRequestAuthorizationHelpAsync(CancellationToken cancellationToken = default)
         {
             AuthorizationHelpRequestCount++;
+            OnAuthorizationHelpRequested?.Invoke();
             return Task.FromResult(true);
         }
 

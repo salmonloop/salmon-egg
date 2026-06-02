@@ -1097,6 +1097,149 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
     }
 
     [Fact]
+    public async Task StartVoiceInputCommand_WhenAuthorizationGrantedButActivationOccursWhileBusy_RetriesAfterComposerUnblocks()
+    {
+        var voiceInput = new FakeVoiceInputService
+        {
+            IsSupported = true,
+            PermissionResult = new VoiceInputPermissionResult(
+                VoiceInputPermissionStatus.Denied,
+                "Enable speech access",
+                RequiresAuthorization: true)
+        };
+        var activationSource = new FakeApplicationActivationSignalSource();
+
+        await using var fixture = CreateViewModel(
+            voiceInputService: voiceInput,
+            applicationActivationSignalSource: activationSource);
+        fixture.ViewModel.IsSessionActive = true;
+
+        await fixture.ViewModel.StartVoiceInputCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, voiceInput.AuthorizationHelpRequestCount);
+        Assert.Equal(0, voiceInput.StartCount);
+        Assert.False(fixture.ViewModel.IsVoiceInputListening);
+
+        fixture.ViewModel.IsBusy = true;
+        voiceInput.PermissionResult = VoiceInputPermissionResult.Granted();
+        activationSource.RaiseActivated();
+
+        await Task.Delay(50);
+
+        Assert.Equal(0, voiceInput.StartCount);
+        Assert.False(fixture.ViewModel.IsVoiceInputListening);
+
+        fixture.ViewModel.IsBusy = false;
+
+        await WaitForConditionAsync(() => Task.FromResult(
+            voiceInput.StartCount == 1
+            && fixture.ViewModel.IsVoiceInputListening));
+
+        Assert.Equal(2, voiceInput.PermissionRequestCount);
+        Assert.Equal(1, voiceInput.AuthorizationHelpRequestCount);
+    }
+
+    [Fact]
+    public async Task StartVoiceInputCommand_WhenAuthorizationGrantedButActivationOccursWhileAskUserIsPending_RetriesAfterAskUserResolves()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var voiceInput = new FakeVoiceInputService
+        {
+            IsSupported = true,
+            PermissionResult = new VoiceInputPermissionResult(
+                VoiceInputPermissionStatus.Denied,
+                "Enable speech access",
+                RequiresAuthorization: true)
+        };
+        var activationSource = new FakeApplicationActivationSignalSource();
+
+        await using var fixture = CreateViewModel(
+            syncContext,
+            voiceInputService: voiceInput,
+            applicationActivationSignalSource: activationSource);
+        var viewModel = fixture.ViewModel;
+        var chatService = CreateConnectedChatService();
+        IReadOnlyDictionary<string, string>? capturedAnswers = null;
+
+        chatService.Setup(service => service.RespondToAskUserRequestAsync(It.IsAny<object>(), It.IsAny<IReadOnlyDictionary<string, string>>()))
+            .ThrowsAsync(new InvalidOperationException("Ask-user responses should use the event responder."));
+
+        viewModel.ReplaceChatService(chatService.Object);
+
+        var initialState = (await fixture.GetStateAsync()) with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+        };
+        await fixture.UpdateStateAsync(_ => initialState);
+
+        await WaitForConditionAsync(() =>
+            Task.FromResult(
+                string.Equals(viewModel.CurrentSessionId, "conv-1", StringComparison.Ordinal)
+                && string.Equals(viewModel.CurrentRemoteSessionId, "remote-1", StringComparison.Ordinal)));
+
+        await viewModel.StartVoiceInputCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, voiceInput.AuthorizationHelpRequestCount);
+        Assert.Equal(0, voiceInput.StartCount);
+
+        chatService.Raise(
+            service => service.AskUserRequestReceived += null,
+            new AskUserRequestEventArgs(
+                "msg-1",
+                new AskUserRequest
+                {
+                    SessionId = "remote-1",
+                    Questions =
+                    {
+                        new AskUserQuestion
+                        {
+                            Header = "Execution",
+                            Question = "Choose a mode",
+                            MultiSelect = false,
+                            Options =
+                            {
+                                new AskUserOption { Label = "Plan", Description = "Planning mode" },
+                                new AskUserOption { Label = "Agent", Description = "Interactive mode" }
+                            }
+                        }
+                    }
+                },
+                answers =>
+                {
+                    capturedAnswers = new Dictionary<string, string>(answers, StringComparer.Ordinal);
+                    return Task.FromResult(true);
+                }));
+
+        await WaitForConditionAsync(() => Task.FromResult(viewModel.PendingAskUserRequest is not null));
+
+        voiceInput.PermissionResult = VoiceInputPermissionResult.Granted();
+        activationSource.RaiseActivated();
+
+        await Task.Delay(50);
+
+        Assert.Equal(0, voiceInput.StartCount);
+        Assert.False(viewModel.IsVoiceInputListening);
+
+        var askUserRequest = viewModel.PendingAskUserRequest;
+        Assert.NotNull(askUserRequest);
+        var question = Assert.Single(askUserRequest!.Questions);
+        question.Options[0].ToggleSelectedCommand.Execute(null);
+        await askUserRequest.SubmitCommand.ExecuteAsync(null);
+
+        await WaitForConditionAsync(() => Task.FromResult(
+            viewModel.PendingAskUserRequest is null
+            && voiceInput.StartCount == 1
+            && viewModel.IsVoiceInputListening));
+
+        Assert.NotNull(capturedAnswers);
+        Assert.Equal("Plan", capturedAnswers!["Choose a mode"]);
+        Assert.Equal(2, voiceInput.PermissionRequestCount);
+        Assert.Equal(1, voiceInput.AuthorizationHelpRequestCount);
+    }
+
+    [Fact]
     public async Task StartVoiceInputCommand_WhenAuthorizationStillDeniedAfterReturn_DoesNotReopenSettingsLoop()
     {
         var voiceInput = new FakeVoiceInputService
@@ -1260,6 +1403,46 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
             Task.FromResult(string.Equals(fixture.ViewModel.VoiceInputErrorMessage, "Enable speech access", StringComparison.Ordinal)));
 
         Assert.Equal(1, voiceInput.AuthorizationHelpRequestCount);
+    }
+
+    [Fact]
+    public async Task VoiceInputError_WhenAuthorizationGrantedAfterReturn_RetriesAutomaticallyOnNextActivation()
+    {
+        var voiceInput = new FakeVoiceInputService
+        {
+            IsSupported = true,
+            PermissionResult = VoiceInputPermissionResult.Granted()
+        };
+        var activationSource = new FakeApplicationActivationSignalSource();
+
+        await using var fixture = CreateViewModel(
+            voiceInputService: voiceInput,
+            applicationActivationSignalSource: activationSource);
+        fixture.ViewModel.IsSessionActive = true;
+
+        await fixture.ViewModel.StartVoiceInputCommand.ExecuteAsync(null);
+
+        var requestId = Assert.Single(voiceInput.StartedSessionIds);
+        voiceInput.EmitError(new VoiceInputErrorResult(
+            requestId,
+            "Enable speech access",
+            ErrorCode: "0x80045509",
+            RequiresAuthorization: true));
+
+        await WaitForConditionAsync(() =>
+            Task.FromResult(string.Equals(fixture.ViewModel.VoiceInputErrorMessage, "Enable speech access", StringComparison.Ordinal)));
+
+        Assert.Equal(1, voiceInput.AuthorizationHelpRequestCount);
+        Assert.False(fixture.ViewModel.IsVoiceInputListening);
+
+        voiceInput.PermissionResult = VoiceInputPermissionResult.Granted();
+        activationSource.RaiseActivated();
+
+        await WaitForConditionAsync(() => Task.FromResult(
+            voiceInput.StartCount == 2
+            && fixture.ViewModel.IsVoiceInputListening));
+
+        Assert.Equal(2, voiceInput.PermissionRequestCount);
     }
 
     [Fact]

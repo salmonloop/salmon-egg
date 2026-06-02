@@ -217,9 +217,15 @@ public partial class ChatViewModel
         }
 
         ApplySettingsSelectedProfileFromStore(projection.SettingsSelectedProfileId);
-        _selectedProfileIdFromStore = !string.IsNullOrWhiteSpace(projection.ChatOwnerProfileId)
+        var selectedProfileId = !string.IsNullOrWhiteSpace(projection.ChatOwnerProfileId)
             ? projection.ChatOwnerProfileId
             : projection.SettingsSelectedProfileId;
+        if (!string.Equals(_selectedProfileIdFromStore, selectedProfileId, StringComparison.Ordinal))
+        {
+            _selectedProfileIdFromStore = selectedProfileId;
+            NotifyComposerProjectionChanged();
+        }
+
         _currentRemoteSessionId = projection.RemoteSessionId;
     }
 
@@ -343,7 +349,6 @@ public partial class ChatViewModel
 
     private void ApplyConnectionAndAgentProjection(ChatUiProjection projection)
     {
-        RaiseOverlayStateChanged();
         Interlocked.Exchange(ref _connectionGeneration, projection.ConnectionGeneration);
         if (!string.Equals(_connectionInstanceId, projection.ConnectionInstanceId, StringComparison.Ordinal))
         {
@@ -357,6 +362,7 @@ public partial class ChatViewModel
         AuthenticationHintMessage = projection.AuthenticationHintMessage;
         AgentName = projection.AgentName;
         AgentVersion = projection.AgentVersion;
+        RaiseOverlayStateChanged();
     }
 
     private void ApplySessionToolingProjection(ChatUiProjection projection)

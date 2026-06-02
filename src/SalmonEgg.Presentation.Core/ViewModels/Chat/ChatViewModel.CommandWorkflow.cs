@@ -472,7 +472,7 @@ public partial class ChatViewModel
         {
             if (isAuthorizationResumeAttempt)
             {
-                ClearPendingVoiceInputAuthorizationRetry();
+                _voiceInputAuthorizationRetryState = VoiceInputAuthorizationRetryState.WaitingForComposerReady;
             }
 
             return;
@@ -627,6 +627,17 @@ public partial class ChatViewModel
     }
 
     private async Task RequestVoiceInputAuthorizationHelpAndArmRetryAsync(CancellationToken cancellationToken)
+        => await RequestVoiceInputAuthorizationHelpAndArmRetryAsync(
+            cancellationToken,
+            CurrentSessionId,
+            SelectedProfileId,
+            ConnectionInstanceId).ConfigureAwait(false);
+
+    private async Task RequestVoiceInputAuthorizationHelpAndArmRetryAsync(
+        CancellationToken cancellationToken,
+        string? conversationId,
+        string? profileId,
+        string? connectionInstanceId)
     {
         var opened = false;
         try
@@ -640,7 +651,7 @@ public partial class ChatViewModel
 
         if (opened)
         {
-            ArmPendingVoiceInputAuthorizationRetry();
+            ArmPendingVoiceInputAuthorizationRetry(conversationId, profileId, connectionInstanceId);
         }
         else
         {
@@ -649,23 +660,83 @@ public partial class ChatViewModel
     }
 
     private void ArmPendingVoiceInputAuthorizationRetry()
-        => _resumeVoiceInputAfterAuthorization = true;
+        => ArmPendingVoiceInputAuthorizationRetry(CurrentSessionId, SelectedProfileId, ConnectionInstanceId);
+
+    private void ArmPendingVoiceInputAuthorizationRetry(
+        string? conversationId,
+        string? profileId,
+        string? connectionInstanceId)
+    {
+        _voiceInputAuthorizationRetryState = VoiceInputAuthorizationRetryState.WaitingForActivation;
+        _voiceInputAuthorizationRetryConversationId = conversationId;
+        _voiceInputAuthorizationRetryProfileId = profileId;
+        _voiceInputAuthorizationRetryConnectionInstanceId = connectionInstanceId;
+        Logger.LogInformation("Voice input authorization retry armed.");
+    }
 
     private void ClearPendingVoiceInputAuthorizationRetry()
-        => _resumeVoiceInputAfterAuthorization = false;
+    {
+        _voiceInputAuthorizationRetryState = VoiceInputAuthorizationRetryState.None;
+        _voiceInputAuthorizationRetryConversationId = null;
+        _voiceInputAuthorizationRetryProfileId = null;
+        _voiceInputAuthorizationRetryConnectionInstanceId = null;
+    }
 
     private void OnApplicationActivated(object? sender, EventArgs e)
     {
-        if (!_resumeVoiceInputAfterAuthorization || _disposed)
+        if (_voiceInputAuthorizationRetryState != VoiceInputAuthorizationRetryState.WaitingForActivation || _disposed)
         {
             return;
         }
 
-        ClearPendingVoiceInputAuthorizationRetry();
+        _voiceInputAuthorizationRetryState = VoiceInputAuthorizationRetryState.WaitingForComposerReady;
+        Logger.LogInformation(
+            "Voice input authorization retry observed app activation. CanStartVoiceInput={CanStartVoiceInput} IsBusy={IsBusy} HasPendingAskUserRequest={HasPendingAskUserRequest} ShouldShowLoadingOverlayPresenter={ShouldShowLoadingOverlayPresenter} IsVoiceInputTransportBusy={IsVoiceInputTransportBusy}",
+            CanStartVoiceInput,
+            IsBusy,
+            HasPendingAskUserRequest,
+            ShouldShowLoadingOverlayPresenter,
+            IsVoiceInputTransportBusy);
+        TryResumeVoiceInputAfterAuthorizationIfReady();
+    }
+
+    private void TryResumeVoiceInputAfterAuthorizationIfReady()
+    {
+        if (_voiceInputAuthorizationRetryState != VoiceInputAuthorizationRetryState.WaitingForComposerReady || _disposed)
+        {
+            return;
+        }
+
+        if (!DoesPendingVoiceInputAuthorizationRetryMatchCurrentIdentity())
+        {
+            Logger.LogInformation(
+                "Voice input authorization retry was discarded because the conversation identity changed. RetryConversationId={RetryConversationId} CurrentConversationId={CurrentConversationId} RetryProfileId={RetryProfileId} CurrentProfileId={CurrentProfileId} RetryConnectionInstanceId={RetryConnectionInstanceId} CurrentConnectionInstanceId={CurrentConnectionInstanceId}",
+                _voiceInputAuthorizationRetryConversationId,
+                CurrentSessionId,
+                _voiceInputAuthorizationRetryProfileId,
+                SelectedProfileId,
+                _voiceInputAuthorizationRetryConnectionInstanceId,
+                ConnectionInstanceId);
+            ClearPendingVoiceInputAuthorizationRetry();
+            return;
+        }
+
+        if (!CanStartVoiceInput)
+        {
+            return;
+        }
+
+        _voiceInputAuthorizationRetryState = VoiceInputAuthorizationRetryState.Starting;
+        Logger.LogInformation("Voice input authorization retry is starting automatically.");
         _ = PostToUiAsync(() => StartVoiceInputCoreAsync(
             requestAuthorizationHelpOnDenied: false,
             isAuthorizationResumeAttempt: true));
     }
+
+    private bool DoesPendingVoiceInputAuthorizationRetryMatchCurrentIdentity()
+        => string.Equals(_voiceInputAuthorizationRetryConversationId, CurrentSessionId, StringComparison.Ordinal)
+            && string.Equals(_voiceInputAuthorizationRetryProfileId, SelectedProfileId, StringComparison.Ordinal)
+            && string.Equals(_voiceInputAuthorizationRetryConnectionInstanceId, ConnectionInstanceId, StringComparison.Ordinal);
 
     [RelayCommand]
     private async Task StopVoiceInputAsync()
@@ -843,6 +914,10 @@ public partial class ChatViewModel
             return;
         }
 
+        var retryConversationId = CurrentSessionId;
+        var retryProfileId = SelectedProfileId;
+        var retryConnectionInstanceId = ConnectionInstanceId;
+
         await PostToUiAsync(() =>
         {
             if (!IsCurrentVoiceInputRequest(result.RequestId))
@@ -851,16 +926,6 @@ public partial class ChatViewModel
             }
 
             var message = VoiceInputErrorMessageSanitizer.Normalize(result.Message, "Voice input failed.");
-            if (result.RequiresAuthorization)
-            {
-                try
-                {
-                    _ = _voiceInputService.TryRequestAuthorizationHelpAsync();
-                }
-                catch
-                {
-                }
-            }
             VoiceInputErrorMessage = message;
             IsVoiceInputListening = false;
             _activeVoiceInputRequestId = null;
@@ -868,6 +933,19 @@ public partial class ChatViewModel
             ResetVoiceInputDiagnosticsState(result.RequestId);
             ShowTransientNotificationToast(message);
         }).ConfigureAwait(false);
+
+        if (result.RequiresAuthorization)
+        {
+            await RequestVoiceInputAuthorizationHelpAndArmRetryAsync(
+                CancellationToken.None,
+                retryConversationId,
+                retryProfileId,
+                retryConnectionInstanceId).ConfigureAwait(false);
+        }
+        else
+        {
+            ClearPendingVoiceInputAuthorizationRetry();
+        }
     }
 
     private bool IsCurrentVoiceInputRequest(string requestId)
@@ -1309,6 +1387,7 @@ public partial class ChatViewModel
         OnPropertyChanged(nameof(AskUserHasError));
         OnPropertyChanged(nameof(AskUserErrorMessage));
         OnPropertyChanged(nameof(AskUserSubmitCommand));
+        NotifyComposerProjectionChanged();
     }
 
     private void OnPendingAskUserRequestPropertyChanged(object? sender, PropertyChangedEventArgs e)
