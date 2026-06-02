@@ -156,29 +156,6 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
 
         try
         {
-            var permission = await _voiceInputService.EnsurePermissionAsync(_probeCts.Token).ConfigureAwait(false);
-            if (!permission.IsGranted)
-            {
-                if (permission.RequiresAuthorization && requestAuthorizationHelpOnDenied)
-                {
-                    await RequestProbeAuthorizationHelpAndArmRetryAsync(_probeCts.Token).ConfigureAwait(false);
-                }
-                else
-                {
-                    ClearPendingAuthorizationProbeRetry();
-                }
-
-                await _uiDispatcher.EnqueueAsync(() =>
-                {
-                    IsRunning = false;
-                    ProbeStatusText = string.IsNullOrWhiteSpace(permission.Message)
-                        ? _localizer["VoiceDiagnostics_PermissionDenied"]
-                        : permission.Message!;
-                }).ConfigureAwait(false);
-                TryDisposeProbeCts();
-                return;
-            }
-
             var requestId = Guid.NewGuid().ToString("N");
             var languageTag = CultureInfo.CurrentUICulture.Name;
             await RunOnUiAsync(() =>
@@ -261,6 +238,8 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
 
     private async Task RequestProbeAuthorizationHelpAndArmRetryAsync(CancellationToken cancellationToken)
     {
+        ArmPendingAuthorizationProbeRetry();
+
         var opened = false;
         try
         {
@@ -271,11 +250,7 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
             opened = false;
         }
 
-        if (opened)
-        {
-            ArmPendingAuthorizationProbeRetry();
-        }
-        else
+        if (!opened)
         {
             ClearPendingAuthorizationProbeRetry();
         }
@@ -319,9 +294,15 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
         }
 
         _authorizationProbeRetryState = AuthorizationProbeRetryState.Starting;
-        _ = _uiDispatcher.EnqueueAsync(() => StartProbeCoreAsync(
+        _ = ScheduleProbeAuthorizationRetryStartAsync();
+    }
+
+    private async Task ScheduleProbeAuthorizationRetryStartAsync()
+    {
+        await Task.Yield();
+        await _uiDispatcher.EnqueueAsync(() => StartProbeCoreAsync(
             requestAuthorizationHelpOnDenied: false,
-            isAuthorizationResumeAttempt: true));
+            isAuthorizationResumeAttempt: true)).ConfigureAwait(false);
     }
 
     [RelayCommand]

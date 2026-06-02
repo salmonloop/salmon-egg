@@ -4,9 +4,11 @@ using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Input;
 using Windows.Devices.Enumeration;
 using Windows.Globalization;
+using Windows.Media.Capture;
 using Windows.Media.Devices;
 using Windows.Media.SpeechRecognition;
 using Windows.System;
@@ -25,6 +27,7 @@ public sealed class NativeVoiceInputService : IVoiceInputService, IVoiceInputRun
     private readonly object _sessionSignalSync = new();
     private readonly object _runtimeDiagnosticsSync = new();
     private readonly ILogger<NativeVoiceInputService> _logger;
+    private readonly IUiDispatcher _uiDispatcher;
     private SpeechRecognizer? _recognizer;
     private CancellationTokenSource? _sessionCts;
     private Task? _sessionTask;
@@ -53,9 +56,12 @@ public sealed class NativeVoiceInputService : IVoiceInputService, IVoiceInputRun
     private string? _runtimeCompletionStatus;
     private VoiceInputDiagnosticSession? _latestRuntimeSession;
 
-    public NativeVoiceInputService(ILogger<NativeVoiceInputService> logger)
+    public NativeVoiceInputService(
+        ILogger<NativeVoiceInputService> logger,
+        IUiDispatcher uiDispatcher)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
     }
 
     public bool IsSupported => true;
@@ -76,6 +82,7 @@ public sealed class NativeVoiceInputService : IVoiceInputService, IVoiceInputRun
 
         try
         {
+            await EnsureMicrophoneCaptureAccessAsync(requestId: null, cancellationToken).ConfigureAwait(false);
             using var recognizer = CreateRecognizer(CultureInfo.CurrentUICulture.Name);
             var compileResult = await recognizer.CompileConstraintsAsync().AsTask(cancellationToken).ConfigureAwait(false);
             return compileResult.Status switch
@@ -93,6 +100,14 @@ public sealed class NativeVoiceInputService : IVoiceInputService, IVoiceInputRun
             if (TryCreateAuthorizationError(ex, out var permissionResult))
             {
                 return permissionResult;
+            }
+
+            if (ex.HResult == HResultNoCaptureDevices)
+            {
+                return CreatePermissionDeniedResult(
+                    AuthorizationTarget.None,
+                    "No microphone was detected on this device.",
+                    requiresAuthorization: false);
             }
 
             return CreatePermissionDeniedResult(
@@ -130,6 +145,19 @@ public sealed class NativeVoiceInputService : IVoiceInputService, IVoiceInputRun
             throw new ArgumentException("Voice input request id cannot be empty.", nameof(options));
         }
 
+        try
+        {
+            await EnsureMicrophoneCaptureAccessAsync(options.RequestId, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw CreateStartFailureException(options.RequestId, ex);
+        }
+
         Task sessionStartedTask;
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -157,6 +185,43 @@ public sealed class NativeVoiceInputService : IVoiceInputService, IVoiceInputRun
         }
 
         await sessionStartedTask.WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task EnsureMicrophoneCaptureAccessAsync(string? requestId, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation(
+            "Voice input microphone preflight started. RequestId={RequestId}",
+            requestId);
+
+        try
+        {
+            await _uiDispatcher.EnqueueAsync(async () =>
+            {
+                using var capture = new MediaCapture();
+                var settings = new MediaCaptureInitializationSettings
+                {
+                    StreamingCaptureMode = StreamingCaptureMode.Audio,
+                    MediaCategory = MediaCategory.Speech
+                };
+                await capture.InitializeAsync(settings).AsTask(cancellationToken).ConfigureAwait(false);
+            }).ConfigureAwait(false);
+
+            _logger.LogInformation(
+                "Voice input microphone preflight completed. RequestId={RequestId}",
+                requestId);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Voice input microphone preflight failed. RequestId={RequestId}",
+                requestId);
+            throw;
+        }
     }
 
     public async Task StopAsync(CancellationToken cancellationToken = default)

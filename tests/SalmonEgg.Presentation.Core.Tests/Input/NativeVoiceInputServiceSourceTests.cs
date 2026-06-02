@@ -43,4 +43,16 @@ public sealed class NativeVoiceInputServiceSourceTests
         Assert.Contains(".WaitAsync(VoiceInputCancelTimeout, cancellationToken)", code);
         Assert.Contains("StoppedByAppForcedEnd", code);
     }
+
+    [Fact]
+    public void NativeVoiceInputService_PerformsMicrophonePreflightOnUiThreadBeforeStartingRecognition()
+    {
+        var code = File.ReadAllText(@"..\..\..\..\..\SalmonEgg\SalmonEgg\Presentation\Services\Input\NativeVoiceInputService.cs");
+
+        Assert.Contains("MediaCaptureInitializationSettings", code);
+        Assert.Contains("StreamingCaptureMode = StreamingCaptureMode.Audio", code);
+        Assert.Contains("MediaCategory = MediaCategory.Speech", code);
+        Assert.Contains("_uiDispatcher.EnqueueAsync", code);
+        Assert.Contains("EnsureMicrophoneCaptureAccessAsync(options.RequestId, cancellationToken)", code);
+    }
 }

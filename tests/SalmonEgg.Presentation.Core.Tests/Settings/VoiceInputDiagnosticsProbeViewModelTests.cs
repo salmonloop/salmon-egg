@@ -240,16 +240,43 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
 
         Assert.Equal(1, service.AuthorizationHelpRequestCount);
         Assert.False(viewModel.IsRunning);
-        Assert.Null(service.LastOptions);
+        Assert.NotNull(service.LastOptions);
 
         service.PermissionResult = VoiceInputPermissionResult.Granted();
         activationSource.RaiseActivated();
 
         await WaitForConditionAsync(() => Task.FromResult(
-            service.StartCount == 1
+            service.StartCount == 2
             && viewModel.IsRunning));
 
-        Assert.Equal(2, service.PermissionRequestCount);
+        Assert.Equal(1, service.AuthorizationHelpRequestCount);
+    }
+
+    [Fact]
+    public async Task StartProbeAsync_WhenActivationOccursBeforeAuthorizationHelpRequestReturns_RetriesAutomatically()
+    {
+        var activationSource = new FakeApplicationActivationSignalSource();
+        var service = new FakeVoiceInputService
+        {
+            PermissionResult = new VoiceInputPermissionResult(
+                VoiceInputPermissionStatus.Denied,
+                "Enable speech access",
+                RequiresAuthorization: true)
+        };
+        service.OnAuthorizationHelpRequested = () =>
+        {
+            service.PermissionResult = VoiceInputPermissionResult.Granted();
+            activationSource.RaiseActivated();
+        };
+        var viewModel = CreateViewModel(service, activationSource: activationSource);
+
+        var startTask = viewModel.StartProbeCommand.ExecuteAsync(null);
+        await startTask;
+
+        await WaitForConditionAsync(() => Task.FromResult(
+            service.StartCount == 2
+            && viewModel.IsRunning));
+
         Assert.Equal(1, service.AuthorizationHelpRequestCount);
     }
 
@@ -281,10 +308,8 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
         dispatcher.FlushBufferedActions();
 
         await WaitForConditionAsync(() => Task.FromResult(
-            service.StartCount == 1
+            service.StartCount == 2
             && viewModel.IsRunning));
-
-        Assert.Equal(2, service.PermissionRequestCount);
     }
 
     [Fact]
@@ -465,9 +490,11 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
 
         private CancellationToken LastStartCancellationToken { get; set; }
 
+        private bool _isListening;
+
         public bool IsSupported => true;
 
-        public bool IsListening => IsListeningOverride || LastOptions is not null;
+        public bool IsListening => IsListeningOverride || _isListening;
 
         public event EventHandler<VoiceInputPartialResult>? PartialResultReceived;
 
@@ -501,17 +528,29 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
             StartCount++;
             LastOptions = options;
             LastStartCancellationToken = cancellationToken;
+            if (!PermissionResult.IsGranted)
+            {
+                return Task.FromException(new VoiceInputStartFailureException(
+                    PermissionResult.Message ?? "Voice input failed.",
+                    PermissionResult.RequiresAuthorization));
+            }
+
             return DelayStartAsync
                 ? Task.Run(async () =>
                 {
                     await Task.Yield();
+                    _isListening = true;
                 }, cancellationToken)
-                : Task.CompletedTask;
+                : Task.Run(() =>
+                {
+                    _isListening = true;
+                }, cancellationToken);
         }
 
         public Task StopAsync(CancellationToken cancellationToken = default)
         {
             WasStartCancellationRequestedWhenStopCalled = LastStartCancellationToken.IsCancellationRequested;
+            _isListening = false;
             RaiseSessionEnded();
             return Task.CompletedTask;
         }
@@ -523,6 +562,7 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
                 return;
             }
 
+            _isListening = false;
             FinalResultReceived?.Invoke(this, new VoiceInputFinalResult(LastOptions.Value.RequestId, text));
         }
 
@@ -544,6 +584,7 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
             }
 
             var requestId = LastOptions.Value.RequestId;
+            _isListening = false;
             LastOptions = null;
             ErrorOccurred?.Invoke(this, new VoiceInputErrorResult(requestId, message));
         }
@@ -556,6 +597,7 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
             }
 
             var requestId = LastOptions.Value.RequestId;
+            _isListening = false;
             LastOptions = null;
             SessionEnded?.Invoke(this, new VoiceInputSessionEndedResult(requestId));
         }

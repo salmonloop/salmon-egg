@@ -492,33 +492,6 @@ public partial class ChatViewModel
         try
         {
             SetVoiceInputTransportState(VoiceInputTransportState.Authorizing);
-            var permission = await _voiceInputService.EnsurePermissionAsync(_voiceInputCts.Token);
-            if (!permission.IsGranted)
-            {
-                Logger.LogWarning(
-                    "Voice input permission denied. Status={Status} RequiresAuthorization={RequiresAuthorization}",
-                    permission.Status,
-                    permission.RequiresAuthorization);
-                var message = VoiceInputErrorMessageSanitizer.Normalize(
-                    permission.Message,
-                    "Voice input permission check failed.");
-                if (permission.RequiresAuthorization && requestAuthorizationHelpOnDenied)
-                {
-                    await RequestVoiceInputAuthorizationHelpAndArmRetryAsync(_voiceInputCts.Token).ConfigureAwait(false);
-                }
-                else
-                {
-                    ClearPendingVoiceInputAuthorizationRetry();
-                }
-
-                VoiceInputErrorMessage = message;
-                ShowTransientNotificationToast(message);
-                SetVoiceInputTransportState(VoiceInputTransportState.Idle);
-                TryDisposeVoiceInputCts();
-                return;
-            }
-
-            SetVoiceInputTransportState(VoiceInputTransportState.Starting);
             requestId = Guid.NewGuid().ToString("N");
             var languageTag = ResolveVoiceInputLanguageTag();
             _transportVoiceInputRequestId = requestId;
@@ -555,7 +528,7 @@ public partial class ChatViewModel
 
             if (requestId is not null
                 && IsCurrentVoiceTransportRequest(requestId)
-                && _voiceInputTransportState == VoiceInputTransportState.Starting)
+                && _voiceInputTransportState == VoiceInputTransportState.Authorizing)
             {
                 ClearVoiceInputTransport(requestId, disposeCts: true);
             }
@@ -604,7 +577,7 @@ public partial class ChatViewModel
 
             if (requestId is not null
                 && IsCurrentVoiceTransportRequest(requestId)
-                && _voiceInputTransportState == VoiceInputTransportState.Starting)
+                && _voiceInputTransportState == VoiceInputTransportState.Authorizing)
             {
                 ClearVoiceInputTransport(requestId, disposeCts: true);
             }
@@ -619,7 +592,7 @@ public partial class ChatViewModel
         {
             if (requestId is not null
                 && IsCurrentVoiceTransportRequest(requestId)
-                && _voiceInputTransportState == VoiceInputTransportState.Starting)
+                && _voiceInputTransportState == VoiceInputTransportState.Authorizing)
             {
                 SetVoiceInputTransportState(VoiceInputTransportState.Idle);
             }
@@ -639,6 +612,8 @@ public partial class ChatViewModel
         string? profileId,
         string? connectionInstanceId)
     {
+        ArmPendingVoiceInputAuthorizationRetry(conversationId, profileId, connectionInstanceId);
+
         var opened = false;
         try
         {
@@ -649,11 +624,7 @@ public partial class ChatViewModel
             opened = false;
         }
 
-        if (opened)
-        {
-            ArmPendingVoiceInputAuthorizationRetry(conversationId, profileId, connectionInstanceId);
-        }
-        else
+        if (!opened)
         {
             ClearPendingVoiceInputAuthorizationRetry();
         }
