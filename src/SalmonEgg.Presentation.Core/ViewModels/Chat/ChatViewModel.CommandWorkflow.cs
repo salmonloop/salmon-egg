@@ -691,6 +691,9 @@ public partial class ChatViewModel
         try
         {
             await _voiceInputService.StopAsync();
+            Logger.LogInformation(
+                "Voice input service stop completed in view model. RequestId={RequestId}",
+                requestId);
             if (IsCurrentVoiceInputRequest(requestId))
             {
                 IsVoiceInputListening = false;

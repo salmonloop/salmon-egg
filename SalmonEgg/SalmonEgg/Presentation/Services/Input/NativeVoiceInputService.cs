@@ -184,6 +184,12 @@ public sealed class NativeVoiceInputService : IVoiceInputService, IVoiceInputRun
             _gate.Release();
         }
 
+        _logger.LogInformation(
+            "Voice input service stop initiated. RequestId={RequestId} RecognizerPresent={RecognizerPresent} SessionCompletionTaskCompleted={SessionCompletionTaskCompleted}",
+            requestId,
+            recognizer is not null,
+            GetSessionCompletionTask().IsCompleted);
+
         if (recognizer is not null)
         {
             var stopCompleted = await TryStopRecognitionSessionAsync(
@@ -204,6 +210,10 @@ public sealed class NativeVoiceInputService : IVoiceInputService, IVoiceInputRun
         {
             TrySignalSessionEnded(requestId);
         }
+
+        _logger.LogInformation(
+            "Voice input service stop returned. RequestId={RequestId}",
+            requestId);
     }
 
     private async Task<bool> TryStopRecognitionSessionAsync(
@@ -211,6 +221,9 @@ public sealed class NativeVoiceInputService : IVoiceInputService, IVoiceInputRun
         string? requestId,
         CancellationToken cancellationToken)
     {
+        _logger.LogInformation(
+            "Voice input graceful stop request started. RequestId={RequestId}",
+            requestId);
         try
         {
             await recognizer.ContinuousRecognitionSession
@@ -218,6 +231,9 @@ public sealed class NativeVoiceInputService : IVoiceInputService, IVoiceInputRun
                 .AsTask(cancellationToken)
                 .WaitAsync(VoiceInputStopTimeout, cancellationToken)
                 .ConfigureAwait(false);
+            _logger.LogInformation(
+                "Voice input graceful stop request completed. RequestId={RequestId}",
+                requestId);
             return true;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -240,6 +256,9 @@ public sealed class NativeVoiceInputService : IVoiceInputService, IVoiceInputRun
                 requestId);
         }
 
+        _logger.LogInformation(
+            "Voice input cancel fallback started. RequestId={RequestId}",
+            requestId);
         try
         {
             await recognizer.ContinuousRecognitionSession
@@ -247,6 +266,9 @@ public sealed class NativeVoiceInputService : IVoiceInputService, IVoiceInputRun
                 .AsTask(cancellationToken)
                 .WaitAsync(VoiceInputCancelTimeout, cancellationToken)
                 .ConfigureAwait(false);
+            _logger.LogInformation(
+                "Voice input cancel fallback completed. RequestId={RequestId}",
+                requestId);
             return true;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -686,6 +708,10 @@ public sealed class NativeVoiceInputService : IVoiceInputService, IVoiceInputRun
         var shouldRaise = TryCompleteSessionSignal(requestId);
         if (shouldRaise)
         {
+            _logger.LogInformation(
+                "Voice input session completion signal raised. RequestId={RequestId} Kind={Kind}",
+                requestId,
+                "Ended");
             LogSessionSummary(FinalizeRuntimeSession(requestId, null, null));
             SessionEnded?.Invoke(this, new VoiceInputSessionEndedResult(requestId));
         }
@@ -696,6 +722,10 @@ public sealed class NativeVoiceInputService : IVoiceInputService, IVoiceInputRun
         var shouldRaise = TryCompleteSessionSignal(error.RequestId);
         if (shouldRaise)
         {
+            _logger.LogInformation(
+                "Voice input session completion signal raised. RequestId={RequestId} Kind={Kind}",
+                error.RequestId,
+                "Error");
             LogSessionSummary(FinalizeRuntimeSession(error.RequestId, error.ErrorCode, error.Message));
             RaiseError(error);
         }
