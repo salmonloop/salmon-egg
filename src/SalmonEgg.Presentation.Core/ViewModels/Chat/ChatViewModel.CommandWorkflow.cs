@@ -459,11 +459,28 @@ public partial class ChatViewModel
     }
 
     [RelayCommand]
-    private async Task StartVoiceInputAsync()
+    private Task StartVoiceInputAsync()
+        => StartVoiceInputCoreAsync(
+            requestAuthorizationHelpOnDenied: true,
+            isAuthorizationResumeAttempt: false);
+
+    private async Task StartVoiceInputCoreAsync(
+        bool requestAuthorizationHelpOnDenied,
+        bool isAuthorizationResumeAttempt)
     {
         if (!CanStartVoiceInput)
         {
+            if (isAuthorizationResumeAttempt)
+            {
+                ClearPendingVoiceInputAuthorizationRetry();
+            }
+
             return;
+        }
+
+        if (!isAuthorizationResumeAttempt)
+        {
+            ClearPendingVoiceInputAuthorizationRetry();
         }
 
         VoiceInputErrorMessage = null;
@@ -485,15 +502,13 @@ public partial class ChatViewModel
                 var message = VoiceInputErrorMessageSanitizer.Normalize(
                     permission.Message,
                     "Voice input permission check failed.");
-                if (permission.RequiresAuthorization)
+                if (permission.RequiresAuthorization && requestAuthorizationHelpOnDenied)
                 {
-                    try
-                    {
-                        await _voiceInputService.TryRequestAuthorizationHelpAsync(_voiceInputCts.Token);
-                    }
-                    catch
-                    {
-                    }
+                    await RequestVoiceInputAuthorizationHelpAndArmRetryAsync(_voiceInputCts.Token).ConfigureAwait(false);
+                }
+                else
+                {
+                    ClearPendingVoiceInputAuthorizationRetry();
                 }
 
                 VoiceInputErrorMessage = message;
@@ -509,7 +524,6 @@ public partial class ChatViewModel
             _transportVoiceInputRequestId = requestId;
             _activeVoiceInputRequestId = requestId;
             _voiceInputBasePrompt = CurrentPrompt ?? string.Empty;
-            _voiceInputFirstPartialLoggedRequestId = null;
             Logger.LogInformation(
                 "Voice input start requested. RequestId={RequestId} LanguageTag={LanguageTag}",
                 requestId,
@@ -522,6 +536,7 @@ public partial class ChatViewModel
                 PreferOffline: false);
 
             await _voiceInputService.StartAsync(options, _voiceInputCts.Token);
+            ClearPendingVoiceInputAuthorizationRetry();
             IsVoiceInputListening = true;
             Logger.LogInformation(
                 "Voice input recognizer ready. RequestId={RequestId} LanguageTag={LanguageTag}",
@@ -555,13 +570,18 @@ public partial class ChatViewModel
         {
             if (ex is VoiceInputStartFailureException startFailure && startFailure.RequiresAuthorization)
             {
-                try
+                if (requestAuthorizationHelpOnDenied)
                 {
-                    await _voiceInputService.TryRequestAuthorizationHelpAsync(_voiceInputCts.Token);
+                    await RequestVoiceInputAuthorizationHelpAndArmRetryAsync(_voiceInputCts.Token).ConfigureAwait(false);
                 }
-                catch
+                else
                 {
+                    ClearPendingVoiceInputAuthorizationRetry();
                 }
+            }
+            else
+            {
+                ClearPendingVoiceInputAuthorizationRetry();
             }
 
             var message = VoiceInputErrorMessageSanitizer.Normalize(ex.Message, "Voice input failed.");
@@ -606,6 +626,47 @@ public partial class ChatViewModel
         }
     }
 
+    private async Task RequestVoiceInputAuthorizationHelpAndArmRetryAsync(CancellationToken cancellationToken)
+    {
+        var opened = false;
+        try
+        {
+            opened = await _voiceInputService.TryRequestAuthorizationHelpAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            opened = false;
+        }
+
+        if (opened)
+        {
+            ArmPendingVoiceInputAuthorizationRetry();
+        }
+        else
+        {
+            ClearPendingVoiceInputAuthorizationRetry();
+        }
+    }
+
+    private void ArmPendingVoiceInputAuthorizationRetry()
+        => _resumeVoiceInputAfterAuthorization = true;
+
+    private void ClearPendingVoiceInputAuthorizationRetry()
+        => _resumeVoiceInputAfterAuthorization = false;
+
+    private void OnApplicationActivated(object? sender, EventArgs e)
+    {
+        if (!_resumeVoiceInputAfterAuthorization || _disposed)
+        {
+            return;
+        }
+
+        ClearPendingVoiceInputAuthorizationRetry();
+        _ = PostToUiAsync(() => StartVoiceInputCoreAsync(
+            requestAuthorizationHelpOnDenied: false,
+            isAuthorizationResumeAttempt: true));
+    }
+
     [RelayCommand]
     private async Task StopVoiceInputAsync()
     {
@@ -629,14 +690,6 @@ public partial class ChatViewModel
 
         try
         {
-            try
-            {
-                _voiceInputCts?.Cancel();
-            }
-            catch
-            {
-            }
-
             await _voiceInputService.StopAsync();
             if (IsCurrentVoiceInputRequest(requestId))
             {
@@ -689,15 +742,6 @@ public partial class ChatViewModel
         }
 
         var text = result.Text;
-
-        if (!string.Equals(_voiceInputFirstPartialLoggedRequestId, result.RequestId, StringComparison.Ordinal))
-        {
-            _voiceInputFirstPartialLoggedRequestId = result.RequestId;
-            Logger.LogInformation(
-                "Voice input first partial received. RequestId={RequestId} TextLength={TextLength}",
-                result.RequestId,
-                text.Length);
-        }
 
         await PostToUiAsync(() =>
         {
@@ -861,15 +905,6 @@ public partial class ChatViewModel
 
     private void ResetVoiceInputDiagnosticsState(string requestId)
     {
-        if (string.IsNullOrWhiteSpace(requestId))
-        {
-            return;
-        }
-
-        if (string.Equals(_voiceInputFirstPartialLoggedRequestId, requestId, StringComparison.Ordinal))
-        {
-            _voiceInputFirstPartialLoggedRequestId = null;
-        }
     }
 
     private void SetVoiceInputTransportState(VoiceInputTransportState state)

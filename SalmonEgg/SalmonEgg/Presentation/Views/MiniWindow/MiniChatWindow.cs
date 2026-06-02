@@ -11,6 +11,7 @@ public sealed class MiniChatWindow : Window
 {
     private readonly MiniChatView _view;
     private readonly Presentation.Services.WindowBackdropService? _windowBackdropService;
+    private readonly Presentation.Services.AppActivationSignalSource? _appActivationSignalSource;
 
 #if WINDOWS
     private AppWindowTitleBar? _appWindowTitleBar;
@@ -21,7 +22,9 @@ public sealed class MiniChatWindow : Window
         _view = new MiniChatView();
         Content = _view;
         _windowBackdropService = App.ServiceProvider.GetService(typeof(Presentation.Services.WindowBackdropService)) as Presentation.Services.WindowBackdropService;
+        _appActivationSignalSource = App.ServiceProvider.GetService(typeof(Presentation.Services.AppActivationSignalSource)) as Presentation.Services.AppActivationSignalSource;
         _windowBackdropService?.Attach(this);
+        _appActivationSignalSource?.Attach(this);
 
         Closed += OnWindowClosed;
         _view.Loaded += OnViewLoaded;
@@ -31,6 +34,7 @@ public sealed class MiniChatWindow : Window
     private void OnWindowClosed(object sender, WindowEventArgs e)
     {
         _windowBackdropService?.Detach(this);
+        _appActivationSignalSource?.Detach(this);
         _view.Loaded -= OnViewLoaded;
         _view.Unloaded -= OnViewUnloaded;
         Closed -= OnWindowClosed;

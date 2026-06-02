@@ -14,11 +14,18 @@ namespace SalmonEgg.Presentation.ViewModels.Settings;
 
 public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObject
 {
+    private static readonly TimeSpan SignalPollInterval = TimeSpan.FromMilliseconds(100);
+
     private readonly IVoiceInputService _voiceInputService;
+    private readonly IAudioInputSignalDiagnosticsService _signalDiagnosticsService;
+    private readonly IApplicationActivationSignalSource _applicationActivationSignalSource;
     private readonly IUiDispatcher _uiDispatcher;
     private readonly IStringLocalizer<CoreStrings> _localizer;
     private readonly ILogger<VoiceInputDiagnosticsProbeViewModel> _logger;
     private CancellationTokenSource? _probeCts;
+    private CancellationTokenSource? _signalMonitoringCancellationTokenSource;
+    private Task? _signalMonitoringTask;
+    private int _signalMonitoringActive;
     private string? _activeRequestId;
     private DateTimeOffset? _startRequestedAt;
     private DateTimeOffset? _recognizerReadyAt;
@@ -28,6 +35,7 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
     private DateTimeOffset? _endedAt;
     private DateTimeOffset? _errorAt;
     private string? _errorMessage;
+    private bool _resumeProbeAfterAuthorization;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanStartProbe))]
@@ -43,23 +51,36 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
     [ObservableProperty]
     private string _probeCapturedText;
 
+    [ObservableProperty]
+    private string _probeSignalObservationText;
+
+    [ObservableProperty]
+    private string _probeSignalTimelineText;
+
     public VoiceInputDiagnosticsProbeViewModel(
         IVoiceInputService voiceInputService,
+        IAudioInputSignalDiagnosticsService signalDiagnosticsService,
         IUiDispatcher uiDispatcher,
         IStringLocalizer<CoreStrings> localizer,
-        ILogger<VoiceInputDiagnosticsProbeViewModel> logger)
+        ILogger<VoiceInputDiagnosticsProbeViewModel> logger,
+        IApplicationActivationSignalSource? applicationActivationSignalSource = null)
     {
         _voiceInputService = voiceInputService ?? throw new ArgumentNullException(nameof(voiceInputService));
+        _signalDiagnosticsService = signalDiagnosticsService ?? throw new ArgumentNullException(nameof(signalDiagnosticsService));
+        _applicationActivationSignalSource = applicationActivationSignalSource ?? NoOpApplicationActivationSignalSource.Instance;
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _probeStatusText = _localizer["VoiceDiagnostics_ProbeIdle"];
         _probeTimelineText = _localizer["VoiceDiagnostics_ProbeTimelinePending"];
         _probeCapturedText = _localizer["VoiceDiagnostics_ProbeNoCapturedText"];
+        _probeSignalObservationText = _localizer["VoiceDiagnostics_ProbeSignalPending"];
+        _probeSignalTimelineText = _localizer["VoiceDiagnostics_ProbeSignalTimelinePending"];
         _voiceInputService.PartialResultReceived += OnPartialResultReceived;
         _voiceInputService.FinalResultReceived += OnFinalResultReceived;
         _voiceInputService.SessionEnded += OnSessionEnded;
         _voiceInputService.ErrorOccurred += OnErrorOccurred;
+        _applicationActivationSignalSource.Activated += OnApplicationActivated;
     }
 
     public bool CanStartProbe => !IsRunning;
@@ -67,7 +88,14 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
     public bool CanStopProbe => IsRunning;
 
     [RelayCommand]
-    private async Task StartProbeAsync()
+    private Task StartProbeAsync()
+        => StartProbeCoreAsync(
+            requestAuthorizationHelpOnDenied: true,
+            isAuthorizationResumeAttempt: false);
+
+    private async Task StartProbeCoreAsync(
+        bool requestAuthorizationHelpOnDenied,
+        bool isAuthorizationResumeAttempt)
     {
         if (IsRunning)
         {
@@ -94,6 +122,11 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
             return;
         }
 
+        if (!isAuthorizationResumeAttempt)
+        {
+            ClearPendingAuthorizationProbeRetry();
+        }
+
         await RunOnUiAsync(() =>
         {
             ResetProbeState();
@@ -101,6 +134,8 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
             ProbeStatusText = _localizer["VoiceDiagnostics_ProbeAuthorizing"];
             ProbeTimelineText = _localizer["VoiceDiagnostics_ProbeTimelinePending"];
             ProbeCapturedText = _localizer["VoiceDiagnostics_ProbeNoCapturedText"];
+            ProbeSignalObservationText = _localizer["VoiceDiagnostics_ProbeSignalPending"];
+            ProbeSignalTimelineText = _localizer["VoiceDiagnostics_ProbeSignalTimelinePending"];
         }).ConfigureAwait(false);
 
         TryDisposeProbeCts();
@@ -111,6 +146,15 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
             var permission = await _voiceInputService.EnsurePermissionAsync(_probeCts.Token).ConfigureAwait(false);
             if (!permission.IsGranted)
             {
+                if (permission.RequiresAuthorization && requestAuthorizationHelpOnDenied)
+                {
+                    await RequestProbeAuthorizationHelpAndArmRetryAsync(_probeCts.Token).ConfigureAwait(false);
+                }
+                else
+                {
+                    ClearPendingAuthorizationProbeRetry();
+                }
+
                 await _uiDispatcher.EnqueueAsync(() =>
                 {
                     IsRunning = false;
@@ -130,6 +174,7 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
                 _startRequestedAt = DateTimeOffset.Now;
                 ProbeStatusText = _localizer["VoiceDiagnostics_ProbeStarting"];
             }).ConfigureAwait(false);
+            await StartSignalMonitoringAsync(_probeCts.Token).ConfigureAwait(false);
             _logger.LogInformation(
                 "Voice diagnostics probe start requested. RequestId={RequestId} LanguageTag={LanguageTag}",
                 requestId,
@@ -142,6 +187,7 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
                     EnablePartialResults: true,
                     PreferOffline: false),
                 _probeCts.Token).ConfigureAwait(false);
+            ClearPendingAuthorizationProbeRetry();
 
             await _uiDispatcher.EnqueueAsync(() =>
             {
@@ -166,6 +212,22 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
         }
         catch (Exception ex)
         {
+            if (ex is VoiceInputStartFailureException startFailure && startFailure.RequiresAuthorization)
+            {
+                if (requestAuthorizationHelpOnDenied)
+                {
+                    await RequestProbeAuthorizationHelpAndArmRetryAsync(_probeCts.Token).ConfigureAwait(false);
+                }
+                else
+                {
+                    ClearPendingAuthorizationProbeRetry();
+                }
+            }
+            else
+            {
+                ClearPendingAuthorizationProbeRetry();
+            }
+
             _logger.LogWarning(ex, "Voice diagnostics probe failed before completion. RequestId={RequestId}", _activeRequestId);
             await RunOnUiAsync(() =>
             {
@@ -180,7 +242,49 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
                 _activeRequestId = null;
                 TryDisposeProbeCts();
             }).ConfigureAwait(false);
+            await StopSignalMonitoringAsync().ConfigureAwait(false);
         }
+    }
+
+    private async Task RequestProbeAuthorizationHelpAndArmRetryAsync(CancellationToken cancellationToken)
+    {
+        var opened = false;
+        try
+        {
+            opened = await _voiceInputService.TryRequestAuthorizationHelpAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            opened = false;
+        }
+
+        if (opened)
+        {
+            ArmPendingAuthorizationProbeRetry();
+        }
+        else
+        {
+            ClearPendingAuthorizationProbeRetry();
+        }
+    }
+
+    private void ArmPendingAuthorizationProbeRetry()
+        => _resumeProbeAfterAuthorization = true;
+
+    private void ClearPendingAuthorizationProbeRetry()
+        => _resumeProbeAfterAuthorization = false;
+
+    private void OnApplicationActivated(object? sender, EventArgs e)
+    {
+        if (!_resumeProbeAfterAuthorization)
+        {
+            return;
+        }
+
+        ClearPendingAuthorizationProbeRetry();
+        _ = _uiDispatcher.EnqueueAsync(() => StartProbeCoreAsync(
+            requestAuthorizationHelpOnDenied: false,
+            isAuthorizationResumeAttempt: true));
     }
 
     [RelayCommand]
@@ -208,14 +312,6 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
 
         try
         {
-            try
-            {
-                _probeCts?.Cancel();
-            }
-            catch
-            {
-            }
-
             await _voiceInputService.StopAsync().ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -234,14 +330,20 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
                 _activeRequestId = null;
                 TryDisposeProbeCts();
             }).ConfigureAwait(false);
+            await StopSignalMonitoringAsync(logSummary: true, requestId: requestId).ConfigureAwait(false);
         }
     }
 
     public async Task HandlePageUnloadedAsync()
     {
+        ClearPendingAuthorizationProbeRetry();
         if (IsRunning)
         {
             await StopProbeAsync().ConfigureAwait(false);
+        }
+        else
+        {
+            await StopSignalMonitoringAsync().ConfigureAwait(false);
         }
     }
 
@@ -287,6 +389,7 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
             IsRunning = false;
             _activeRequestId = null;
             TryDisposeProbeCts();
+            _ = StopSignalMonitoringAsync(logSummary: true, requestId: result.RequestId);
         });
 
     private void OnErrorOccurred(object? sender, VoiceInputErrorResult result)
@@ -307,6 +410,7 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
             IsRunning = false;
             _activeRequestId = null;
             TryDisposeProbeCts();
+            _ = StopSignalMonitoringAsync(logSummary: true, requestId: result.RequestId);
         });
 
     private string ResolveCompletedStatus()
@@ -412,6 +516,193 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
         }
 
         _probeCts = null;
+    }
+
+    private async Task StartSignalMonitoringAsync(CancellationToken cancellationToken)
+    {
+        await StopSignalMonitoringAsync().ConfigureAwait(false);
+
+        try
+        {
+            await _signalDiagnosticsService.StartMonitoringAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Voice diagnostics signal monitoring failed to start.");
+            await RunOnUiAsync(() =>
+            {
+                ProbeSignalObservationText = string.Format(
+                    CultureInfo.InvariantCulture,
+                    _localizer["VoiceDiagnostics_ProbeSignalFailureFormat"],
+                    VoiceInputErrorMessageSanitizer.Normalize(ex.Message, "Signal monitoring failed."));
+                ProbeSignalTimelineText = _localizer["VoiceDiagnostics_ProbeSignalTimelinePending"];
+            }).ConfigureAwait(false);
+            return;
+        }
+
+        var snapshot = _signalDiagnosticsService.GetCurrentSnapshot();
+        await RunOnUiAsync(() => ApplySignalSnapshot(snapshot)).ConfigureAwait(false);
+
+        if (!snapshot.IsSupported)
+        {
+            return;
+        }
+
+        Interlocked.Exchange(ref _signalMonitoringActive, 1);
+        var pollingCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _signalMonitoringCancellationTokenSource = pollingCancellationTokenSource;
+        _signalMonitoringTask = Task.Run(() => ObserveSignalMonitoringAsync(pollingCancellationTokenSource));
+    }
+
+    private async Task StopSignalMonitoringAsync(bool logSummary = false, string? requestId = null)
+    {
+        var cancellationTokenSource = _signalMonitoringCancellationTokenSource;
+        var monitoringTask = _signalMonitoringTask;
+        _signalMonitoringCancellationTokenSource = null;
+        _signalMonitoringTask = null;
+        var shouldStopService = cancellationTokenSource is not null
+            || monitoringTask is not null
+            || Interlocked.Exchange(ref _signalMonitoringActive, 0) == 1;
+
+        try
+        {
+            cancellationTokenSource?.Cancel();
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            if (monitoringTask is not null)
+            {
+                await monitoringTask.ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            cancellationTokenSource?.Dispose();
+        }
+
+        if (!shouldStopService)
+        {
+            return;
+        }
+
+        try
+        {
+            await _signalDiagnosticsService.StopMonitoringAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Voice diagnostics signal monitoring failed to stop.");
+        }
+
+        if (logSummary)
+        {
+            LogSignalMonitoringSummary(requestId, _signalDiagnosticsService.GetCurrentSnapshot());
+        }
+    }
+
+    private async Task ObserveSignalMonitoringAsync(CancellationTokenSource cancellationTokenSource)
+    {
+        try
+        {
+            while (!cancellationTokenSource.IsCancellationRequested)
+            {
+                var snapshot = _signalDiagnosticsService.GetCurrentSnapshot();
+                await _uiDispatcher.EnqueueAsync(() => ApplySignalSnapshot(snapshot)).ConfigureAwait(false);
+                await Task.Delay(SignalPollInterval, cancellationTokenSource.Token).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationTokenSource.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Voice diagnostics signal monitoring polling failed.");
+            await _uiDispatcher.EnqueueAsync(() =>
+            {
+                ProbeSignalObservationText = string.Format(
+                    CultureInfo.InvariantCulture,
+                    _localizer["VoiceDiagnostics_ProbeSignalFailureFormat"],
+                    VoiceInputErrorMessageSanitizer.Normalize(ex.Message, "Signal monitoring failed."));
+            }).ConfigureAwait(false);
+        }
+    }
+
+    private void ApplySignalSnapshot(AudioInputSignalDiagnosticsSnapshot snapshot)
+    {
+        if (!snapshot.IsSupported)
+        {
+            ProbeSignalObservationText = _localizer["VoiceDiagnostics_ProbeSignalUnsupported"];
+            ProbeSignalTimelineText = _localizer["VoiceDiagnostics_ProbeSignalTimelinePending"];
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(snapshot.FailureMessage))
+        {
+            ProbeSignalObservationText = string.Format(
+                CultureInfo.InvariantCulture,
+                _localizer["VoiceDiagnostics_ProbeSignalFailureFormat"],
+                snapshot.FailureMessage);
+            ProbeSignalTimelineText = _localizer["VoiceDiagnostics_ProbeSignalTimelinePending"];
+            return;
+        }
+
+        if (snapshot.ObservedSampleCount <= 0)
+        {
+            ProbeSignalObservationText = _localizer["VoiceDiagnostics_ProbeSignalNoSamples"];
+            ProbeSignalTimelineText = _localizer["VoiceDiagnostics_ProbeSignalTimelinePending"];
+            return;
+        }
+
+        if (snapshot.ObservedNonSilentSampleCount <= 0)
+        {
+            ProbeSignalObservationText = string.Format(
+                CultureInfo.InvariantCulture,
+                _localizer["VoiceDiagnostics_ProbeSignalSilentFormat"],
+                snapshot.ObservedSampleCount,
+                snapshot.MaxPeakLevel);
+            ProbeSignalTimelineText = _localizer["VoiceDiagnostics_ProbeSignalTimelinePending"];
+            return;
+        }
+
+        ProbeSignalObservationText = string.Format(
+            CultureInfo.InvariantCulture,
+            _localizer["VoiceDiagnostics_ProbeSignalDetectedFormat"],
+            snapshot.ObservedSampleCount,
+            snapshot.ObservedNonSilentSampleCount,
+            snapshot.MaxPeakLevel);
+
+        if (_startRequestedAt is not null
+            && snapshot.FirstNonSilentSampleObservedAt is not null
+            && snapshot.LastNonSilentSampleObservedAt is not null)
+        {
+            ProbeSignalTimelineText = string.Format(
+                CultureInfo.InvariantCulture,
+                _localizer["VoiceDiagnostics_ProbeSignalTimelineFormat"],
+                (snapshot.FirstNonSilentSampleObservedAt.Value - _startRequestedAt.Value).TotalSeconds,
+                (snapshot.LastNonSilentSampleObservedAt.Value - _startRequestedAt.Value).TotalSeconds);
+            return;
+        }
+
+        ProbeSignalTimelineText = _localizer["VoiceDiagnostics_ProbeSignalTimelinePending"];
+    }
+
+    private void LogSignalMonitoringSummary(string? requestId, AudioInputSignalDiagnosticsSnapshot snapshot)
+    {
+        _logger.LogInformation(
+            "Voice diagnostics signal summary. RequestId={RequestId} IsSupported={IsSupported} ObservedSampleCount={ObservedSampleCount} ObservedNonSilentSampleCount={ObservedNonSilentSampleCount} MaxPeakLevel={MaxPeakLevel} FailureMessage={FailureMessage}",
+            requestId,
+            snapshot.IsSupported,
+            snapshot.ObservedSampleCount,
+            snapshot.ObservedNonSilentSampleCount,
+            snapshot.MaxPeakLevel,
+            snapshot.FailureMessage);
     }
 
     private Task RunOnUiAsync(Action action)

@@ -152,6 +152,7 @@ public sealed class DiagnosticsSettingsViewModelTests
             Mock.Of<IVoiceInputDiagnosticsService>(),
             new VoiceInputDiagnosticsProbeViewModel(
                 NoOpVoiceInputService.Instance,
+                new NoOpAudioInputSignalDiagnosticsService(),
                 new ImmediateUiDispatcher(),
                 new TestCoreStringLocalizer(),
                 Mock.Of<ILogger<VoiceInputDiagnosticsProbeViewModel>>()),

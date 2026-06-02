@@ -148,8 +148,10 @@ public static class DependencyInjection
         services.AddSingleton<IGamepadNativeInputBridge, WindowsGamepadNativeInputBridge>();
         services.AddSingleton<WindowsGamepadInputService>();
         services.AddSingleton<WindowsGamepadDiagnosticsService>();
+        services.AddSingleton<WindowsAudioInputSignalDiagnosticsService>();
         services.AddSingleton<NoOpGamepadInputService>();
         services.AddSingleton<NoOpGamepadDiagnosticsService>();
+        services.AddSingleton<NoOpAudioInputSignalDiagnosticsService>();
         services.AddSingleton<IGamepadInputService>(sp =>
             sp.GetRequiredService<IPlatformCapabilityService>().SupportsGamepadInput
                 ? sp.GetRequiredService<WindowsGamepadInputService>()
@@ -158,13 +160,17 @@ public static class DependencyInjection
             sp.GetRequiredService<IPlatformCapabilityService>().SupportsGamepadInput
                 ? sp.GetRequiredService<WindowsGamepadDiagnosticsService>()
                 : sp.GetRequiredService<NoOpGamepadDiagnosticsService>());
+        services.AddSingleton<IAudioInputSignalDiagnosticsService>(sp =>
+            sp.GetRequiredService<WindowsAudioInputSignalDiagnosticsService>());
 #elif __ANDROID__
         services.AddSingleton<IGamepadInputService, NoOpGamepadInputService>();
         services.AddSingleton<IGamepadDiagnosticsService, NoOpGamepadDiagnosticsService>();
+        services.AddSingleton<IAudioInputSignalDiagnosticsService, NoOpAudioInputSignalDiagnosticsService>();
         services.AddSingleton<IGamepadNativeInputBridge, NoOpGamepadNativeInputBridge>();
 #else
         services.AddSingleton<IGamepadInputService, NoOpGamepadInputService>();
         services.AddSingleton<IGamepadDiagnosticsService, NoOpGamepadDiagnosticsService>();
+        services.AddSingleton<IAudioInputSignalDiagnosticsService, NoOpAudioInputSignalDiagnosticsService>();
         services.AddSingleton<IGamepadNativeInputBridge, NoOpGamepadNativeInputBridge>();
 #endif
 
@@ -651,6 +657,8 @@ public static class DependencyInjection
 
         // Shell Layout SSOT
         services.AddSingleton<ShellLayoutViewModel>();
+        services.AddSingleton<AppActivationSignalSource>();
+        services.AddSingleton<IApplicationActivationSignalSource>(sp => sp.GetRequiredService<AppActivationSignalSource>());
         services.AddSingleton<WindowMetricsProvider>();
     }
 

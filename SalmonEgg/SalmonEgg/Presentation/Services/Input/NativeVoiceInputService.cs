@@ -29,7 +29,6 @@ public sealed class NativeVoiceInputService : IVoiceInputService, IVoiceInputRun
     private TaskCompletionSource<object?>? _sessionStarted;
     private TaskCompletionSource<object?>? _sessionCompletion;
     private string? _activeRequestId;
-    private string? _activeLanguageTag;
     private string? _stoppingRequestId;
     private bool _isListening;
     private bool _disposed;
@@ -187,11 +186,19 @@ public sealed class NativeVoiceInputService : IVoiceInputService, IVoiceInputRun
         {
             try
             {
-                await recognizer.ContinuousRecognitionSession.CancelAsync().AsTask(cancellationToken).ConfigureAwait(false);
+                // Prefer a graceful stop so the recognizer can still flush final results.
+                await recognizer.ContinuousRecognitionSession.StopAsync().AsTask(cancellationToken).ConfigureAwait(false);
             }
             catch
             {
-                // No-op: cancel can race with natural completion.
+                try
+                {
+                    await recognizer.ContinuousRecognitionSession.CancelAsync().AsTask(cancellationToken).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // No-op: cancel can still race with natural completion or teardown.
+                }
             }
         }
 
@@ -207,7 +214,7 @@ public sealed class NativeVoiceInputService : IVoiceInputService, IVoiceInputRun
 
         try
         {
-            var recognizer = await EnsureRecognizerAsync(options.LanguageTag, cancellationToken).ConfigureAwait(false);
+            var recognizer = await CreateSessionRecognizerAsync(options.LanguageTag, cancellationToken).ConfigureAwait(false);
             var compileResult = await recognizer.CompileConstraintsAsync().AsTask(cancellationToken).ConfigureAwait(false);
             if (compileResult.Status != SpeechRecognitionResultStatus.Success)
             {
@@ -291,6 +298,8 @@ public sealed class NativeVoiceInputService : IVoiceInputService, IVoiceInputRun
                     }
                     _sessionCts = null;
                 }
+
+                DisposeRecognizer();
             }
             finally
             {
@@ -299,30 +308,18 @@ public sealed class NativeVoiceInputService : IVoiceInputService, IVoiceInputRun
         }
     }
 
-    private async Task<SpeechRecognizer> EnsureRecognizerAsync(string languageTag, CancellationToken cancellationToken)
+    private async Task<SpeechRecognizer> CreateSessionRecognizerAsync(string languageTag, CancellationToken cancellationToken)
     {
         var normalizedLanguage = NormalizeLanguageTag(languageTag);
-        if (_recognizer is not null
-            && string.Equals(_activeLanguageTag, normalizedLanguage, StringComparison.OrdinalIgnoreCase))
-        {
-            return _recognizer;
-        }
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (_recognizer is not null
-                && string.Equals(_activeLanguageTag, normalizedLanguage, StringComparison.OrdinalIgnoreCase))
-            {
-                return _recognizer;
-            }
-
             DisposeRecognizer();
             _recognizer = CreateRecognizer(normalizedLanguage);
             _recognizer.HypothesisGenerated += OnHypothesisGenerated;
             _recognizer.ContinuousRecognitionSession.ResultGenerated += OnResultGenerated;
             _recognizer.ContinuousRecognitionSession.Completed += OnRecognitionCompleted;
-            _activeLanguageTag = normalizedLanguage;
             return _recognizer;
         }
         finally
@@ -411,19 +408,29 @@ public sealed class NativeVoiceInputService : IVoiceInputService, IVoiceInputRun
             return;
         }
 
-        SetRuntimeCompletionStatus(args.Status.ToString());
+        var completionStatus = args.Status.ToString();
+        var stopRequested = string.Equals(_stoppingRequestId, requestId, StringComparison.Ordinal);
+        var partialCount = Volatile.Read(ref _partialResultCount);
+        var finalCount = Volatile.Read(ref _finalResultCount);
+        var emptyPartialCount = Volatile.Read(ref _emptyPartialResultCount);
+        var emptyFinalCount = Volatile.Read(ref _emptyFinalResultCount);
+
+        SetRuntimeCompletionStatus(completionStatus);
         _logger.LogInformation(
             "Voice input recognition completed. RequestId={RequestId} Status={Status} StopRequested={StopRequested} PartialCount={PartialCount} FinalCount={FinalCount} EmptyPartialCount={EmptyPartialCount} EmptyFinalCount={EmptyFinalCount}",
             requestId,
             args.Status,
-            string.Equals(_stoppingRequestId, requestId, StringComparison.Ordinal),
-            Volatile.Read(ref _partialResultCount),
-            Volatile.Read(ref _finalResultCount),
-            Volatile.Read(ref _emptyPartialResultCount),
-            Volatile.Read(ref _emptyFinalResultCount));
+            stopRequested,
+            partialCount,
+            finalCount,
+            emptyPartialCount,
+            emptyFinalCount);
 
-        if (string.Equals(_stoppingRequestId, requestId, StringComparison.Ordinal)
-            || args.Status == SpeechRecognitionResultStatus.Success)
+        if (VoiceInputRecognitionCompletionPolicy.ShouldTreatAsGracefulEnd(
+                completionStatus,
+                stopRequested,
+                partialCount,
+                finalCount))
         {
             TrySignalSessionEnded(requestId);
             return;
@@ -431,8 +438,8 @@ public sealed class NativeVoiceInputService : IVoiceInputService, IVoiceInputRun
 
         TrySignalError(new VoiceInputErrorResult(
             requestId,
-            $"Voice recognition ended: {args.Status}.",
-            args.Status.ToString()));
+            VoiceInputRecognitionCompletionPolicy.BuildFailureMessage(completionStatus),
+            completionStatus));
     }
 
     private static SpeechRecognizer CreateRecognizer(string languageTag)
@@ -488,7 +495,6 @@ public sealed class NativeVoiceInputService : IVoiceInputService, IVoiceInputRun
         }
 
         _recognizer = null;
-        _activeLanguageTag = null;
     }
 
     private void RaiseError(VoiceInputErrorResult error)

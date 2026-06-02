@@ -475,6 +475,30 @@
   <data name="VoiceDiagnostics_ProbeNoCapturedText" xml:space="preserve">
     <value>暂无识别文本。</value>
   </data>
+  <data name="VoiceDiagnostics_ProbeSignalPending" xml:space="preserve">
+    <value>开始独立诊断后，这里会显示是否收到麦克风输入峰值采样。</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeSignalUnsupported" xml:space="preserve">
+    <value>当前平台不支持采集层语音监测。</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeSignalNoSamples" xml:space="preserve">
+    <value>尚未观察到任何输入峰值采样。</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeSignalSilentFormat" xml:space="preserve">
+    <value>已完成 {0} 次峰值采样，但没有检测到非静音输入。峰值 {1:0.00}。</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeSignalDetectedFormat" xml:space="preserve">
+    <value>已完成 {0} 次峰值采样，检测到 {1} 次非静音输入。峰值 {2:0.00}。</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeSignalFailureFormat" xml:space="preserve">
+    <value>采集层监测失败：{0}</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeSignalTimelinePending" xml:space="preserve">
+    <value>开始独立诊断后，这里会显示首个和最近一次非静音输入时间点。</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeSignalTimelineFormat" xml:space="preserve">
+    <value>启动后 {0:0.00}s 观察到首个非静音输入；启动后 {1:0.00}s 观察到最近一次非静音输入。</value>
+  </data>
 
   <!-- Settings: Shortcuts -->
   <data name="Shortcuts_InvalidGestureMessage" xml:space="preserve">

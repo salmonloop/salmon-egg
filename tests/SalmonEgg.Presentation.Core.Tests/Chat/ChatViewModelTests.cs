@@ -66,6 +66,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         Func<IChatConnectionStore, IAcpConnectionCoordinator>? acpConnectionCoordinatorFactory = null,
         IConversationBindingCommands? bindingCommands = null,
         IVoiceInputService? voiceInputService = null,
+        IApplicationActivationSignalSource? applicationActivationSignalSource = null,
         IConversationPreviewStore? previewStore = null,
         IShellNavigationRuntimeState? shellNavigationRuntimeState = null,
         LocalTerminalPanelCoordinator? localTerminalPanelCoordinator = null,
@@ -221,6 +222,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
                 acpConnectionCoordinator: acpConnectionCoordinatorFactory?.Invoke(connectionStore),
                 shellNavigationRuntimeState: shellNavigationRuntimeState,
                 voiceInputService: voiceInputService,
+                applicationActivationSignalSource: applicationActivationSignalSource,
                 localTerminalPanelCoordinator: localTerminalPanelCoordinator,
                 conversationCatalogFacade: conversationCatalogFacade,
                 connectionSessionRegistry: connectionSessionRegistry,
@@ -840,6 +842,24 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
     }
 
     [Fact]
+    public async Task StopVoiceInputCommand_DoesNotCancelServiceStartTokenBeforeRequestingGracefulStop()
+    {
+        var voiceInput = new FakeVoiceInputService
+        {
+            IsSupported = true,
+            PermissionResult = VoiceInputPermissionResult.Granted()
+        };
+
+        await using var fixture = CreateViewModel(voiceInputService: voiceInput);
+        fixture.ViewModel.IsSessionActive = true;
+
+        await fixture.ViewModel.StartVoiceInputCommand.ExecuteAsync(null);
+        await fixture.ViewModel.StopVoiceInputCommand.ExecuteAsync(null);
+
+        Assert.False(voiceInput.WasStartCancellationRequestedWhenStopCalled);
+    }
+
+    [Fact]
     public async Task StopVoiceInputCommand_WhenStartIsStuck_CancelsActiveVoiceSessionAndClearsBusyState()
     {
         var voiceInput = new FakeVoiceInputService
@@ -1039,6 +1059,69 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         await fixture.ViewModel.StartVoiceInputCommand.ExecuteAsync(null);
 
         Assert.Equal(1, voiceInput.AuthorizationHelpRequestCount);
+    }
+
+    [Fact]
+    public async Task StartVoiceInputCommand_WhenAuthorizationGrantedAfterReturn_RetriesAutomaticallyOnNextActivation()
+    {
+        var voiceInput = new FakeVoiceInputService
+        {
+            IsSupported = true,
+            PermissionResult = new VoiceInputPermissionResult(
+                VoiceInputPermissionStatus.Denied,
+                "Enable speech access",
+                RequiresAuthorization: true)
+        };
+        var activationSource = new FakeApplicationActivationSignalSource();
+
+        await using var fixture = CreateViewModel(
+            voiceInputService: voiceInput,
+            applicationActivationSignalSource: activationSource);
+        fixture.ViewModel.IsSessionActive = true;
+
+        await fixture.ViewModel.StartVoiceInputCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, voiceInput.AuthorizationHelpRequestCount);
+        Assert.Equal(0, voiceInput.StartCount);
+        Assert.False(fixture.ViewModel.IsVoiceInputListening);
+
+        voiceInput.PermissionResult = VoiceInputPermissionResult.Granted();
+        activationSource.RaiseActivated();
+
+        await WaitForConditionAsync(() => Task.FromResult(
+            voiceInput.StartCount == 1
+            && fixture.ViewModel.IsVoiceInputListening));
+
+        Assert.Equal(2, voiceInput.PermissionRequestCount);
+        Assert.Equal(1, voiceInput.AuthorizationHelpRequestCount);
+    }
+
+    [Fact]
+    public async Task StartVoiceInputCommand_WhenAuthorizationStillDeniedAfterReturn_DoesNotReopenSettingsLoop()
+    {
+        var voiceInput = new FakeVoiceInputService
+        {
+            IsSupported = true,
+            PermissionResult = new VoiceInputPermissionResult(
+                VoiceInputPermissionStatus.Denied,
+                "Enable speech access",
+                RequiresAuthorization: true)
+        };
+        var activationSource = new FakeApplicationActivationSignalSource();
+
+        await using var fixture = CreateViewModel(
+            voiceInputService: voiceInput,
+            applicationActivationSignalSource: activationSource);
+        fixture.ViewModel.IsSessionActive = true;
+
+        await fixture.ViewModel.StartVoiceInputCommand.ExecuteAsync(null);
+        activationSource.RaiseActivated();
+
+        await WaitForConditionAsync(() => Task.FromResult(voiceInput.PermissionRequestCount == 2));
+
+        Assert.Equal(1, voiceInput.AuthorizationHelpRequestCount);
+        Assert.Equal(0, voiceInput.StartCount);
+        Assert.False(fixture.ViewModel.IsVoiceInputListening);
     }
 
     [Fact]
@@ -6733,6 +6816,8 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
         public int AuthorizationHelpRequestCount { get; private set; }
 
+        public bool WasStartCancellationRequestedWhenStopCalled { get; private set; }
+
         public bool BlockStartUntilCancellation { get; set; }
 
         public bool BlockPermissionUntilReleased { get; set; }
@@ -6751,6 +6836,8 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
             new(VoiceInputPermissionStatus.Unsupported, "Not configured");
 
         private TaskCompletionSource<object?>? PermissionCompletion { get; set; }
+
+        private CancellationToken LastStartCancellationToken { get; set; }
 
         public event EventHandler<VoiceInputPartialResult>? PartialResultReceived;
 
@@ -6782,6 +6869,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         {
             StartCount++;
             StartedSessionIds.Add(options.RequestId);
+            LastStartCancellationToken = cancellationToken;
             if (DelayStartUntilReleased)
             {
                 StartCompletion ??= new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -6808,6 +6896,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         public Task StopAsync(CancellationToken cancellationToken = default)
         {
             StopCount++;
+            WasStartCancellationRequestedWhenStopCalled = LastStartCancellationToken.IsCancellationRequested;
             IsListening = false;
             if (StopException is not null)
             {
@@ -6868,6 +6957,13 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         private TaskCompletionSource<object?>? StopCompletion { get; set; }
 
         private TaskCompletionSource<object?>? StartCompletion { get; set; }
+    }
+
+    private sealed class FakeApplicationActivationSignalSource : IApplicationActivationSignalSource
+    {
+        public event EventHandler? Activated;
+
+        public void RaiseActivated() => Activated?.Invoke(this, EventArgs.Empty);
     }
 
     [Fact]

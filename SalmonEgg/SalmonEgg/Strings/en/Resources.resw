@@ -345,6 +345,12 @@
   <data name="Diagnostics_VoiceProbeCapturedTextLabel.Text" xml:space="preserve">
     <value>Probe recognized text:</value>
   </data>
+  <data name="Diagnostics_VoiceProbeSignalLabel.Text" xml:space="preserve">
+    <value>Capture-layer observation:</value>
+  </data>
+  <data name="Diagnostics_VoiceProbeSignalTimelineLabel.Text" xml:space="preserve">
+    <value>Capture-layer timeline:</value>
+  </data>
   <data name="Diagnostics_VoiceRefresh.Content" xml:space="preserve">
     <value>Refresh voice diagnostics</value>
   </data>

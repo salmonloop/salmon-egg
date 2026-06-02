@@ -475,6 +475,30 @@
   <data name="VoiceDiagnostics_ProbeNoCapturedText" xml:space="preserve">
     <value>No recognized text yet.</value>
   </data>
+  <data name="VoiceDiagnostics_ProbeSignalPending" xml:space="preserve">
+    <value>Start the standalone probe to see whether microphone peak samples are being observed.</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeSignalUnsupported" xml:space="preserve">
+    <value>Capture-layer voice monitoring is not supported on this platform.</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeSignalNoSamples" xml:space="preserve">
+    <value>No input peak samples have been observed yet.</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeSignalSilentFormat" xml:space="preserve">
+    <value>Completed {0} peak samples, but no non-silent input was detected. Peak {1:0.00}.</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeSignalDetectedFormat" xml:space="preserve">
+    <value>Completed {0} peak samples and detected {1} non-silent inputs. Peak {2:0.00}.</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeSignalFailureFormat" xml:space="preserve">
+    <value>Capture-layer monitoring failed: {0}</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeSignalTimelinePending" xml:space="preserve">
+    <value>Start the standalone probe to see the first and latest non-silent input timestamps.</value>
+  </data>
+  <data name="VoiceDiagnostics_ProbeSignalTimelineFormat" xml:space="preserve">
+    <value>First non-silent input observed {0:0.00}s after start; latest non-silent input observed {1:0.00}s after start.</value>
+  </data>
 
   <!-- Settings: Shortcuts -->
   <data name="Shortcuts_InvalidGestureMessage" xml:space="preserve">

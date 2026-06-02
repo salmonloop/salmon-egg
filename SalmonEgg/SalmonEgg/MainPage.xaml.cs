@@ -73,6 +73,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
     public ShellSessionActivationOverlayViewModel ShellOverlayVM { get; }
     public ShellLayoutViewModel LayoutVM { get; }
     private readonly WindowMetricsProvider _metricsProvider;
+    private readonly AppActivationSignalSource _appActivationSignalSource;
     private readonly IShellLayoutMetricsSink _metricsSink;
     private readonly ILogger<MainPage> _logger;
     private readonly MainNavigationViewAdapter _mainNavigationViewAdapter;
@@ -98,6 +99,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
 
         LayoutVM = App.ServiceProvider.GetRequiredService<ShellLayoutViewModel>();
         _metricsProvider = App.ServiceProvider.GetRequiredService<WindowMetricsProvider>();
+        _appActivationSignalSource = App.ServiceProvider.GetRequiredService<AppActivationSignalSource>();
         _metricsSink = App.ServiceProvider.GetRequiredService<IShellLayoutMetricsSink>();
         var navigationCoordinator = App.ServiceProvider.GetRequiredService<INavigationCoordinator>();
         _logger = App.ServiceProvider.GetRequiredService<ILogger<MainPage>>();
@@ -759,6 +761,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
         AttachPlatformGamepadDirectionalBridge();
         AttachDebugKeyLogging();
         _titleBarAdapter.Configure(App.MainWindowInstance);
+        _appActivationSignalSource.Attach(App.MainWindowInstance!);
         _metricsProvider.Attach(App.MainWindowInstance!, _titleBarAdapter);
         UpdateNavPaneToggleUi();
         NavVM.RebuildTree();

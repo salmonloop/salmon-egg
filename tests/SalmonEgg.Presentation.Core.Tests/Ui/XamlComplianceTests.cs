@@ -1416,6 +1416,8 @@ public sealed class XamlComplianceTests
         Assert.Contains("ViewModel.VoiceInputDiagnostics.Probe.ProbeStatusText", xaml, StringComparison.Ordinal);
         Assert.Contains("ViewModel.VoiceInputDiagnostics.Probe.ProbeTimelineText", xaml, StringComparison.Ordinal);
         Assert.Contains("ViewModel.VoiceInputDiagnostics.Probe.ProbeCapturedText", xaml, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.VoiceInputDiagnostics.Probe.ProbeSignalObservationText", xaml, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.VoiceInputDiagnostics.Probe.ProbeSignalTimelineText", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Windows.Media.SpeechRecognition", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Windows.Media.SpeechRecognition", viewModel, StringComparison.Ordinal);
         Assert.DoesNotContain("Windows.Media.SpeechRecognition", LoadText(@"src\SalmonEgg.Presentation.Core\ViewModels\Settings\VoiceInputDiagnosticsProbeViewModel.cs"), StringComparison.Ordinal);
@@ -1540,6 +1542,8 @@ public sealed class XamlComplianceTests
             "Diagnostics_VoiceProbeStatusLabel.Text",
             "Diagnostics_VoiceProbeTimelineLabel.Text",
             "Diagnostics_VoiceProbeCapturedTextLabel.Text",
+            "Diagnostics_VoiceProbeSignalLabel.Text",
+            "Diagnostics_VoiceProbeSignalTimelineLabel.Text",
             "Diagnostics_VoiceRefresh.Content",
             "Diagnostics_VoiceOpenAuthorization.Content",
             "Diagnostics_VoiceProbeStart.Content",

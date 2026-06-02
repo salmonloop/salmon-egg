@@ -155,6 +155,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly ConversationHydrationCoordinator _hydrationCoordinator;
     private readonly ConversationHydrationContext _hydrationContext;
     private readonly IVoiceInputService _voiceInputService;
+    private readonly IApplicationActivationSignalSource _applicationActivationSignalSource;
     private readonly IShellNavigationRuntimeState? _shellNavigationRuntimeState;
     private readonly ConversationActivationOutcomePublisher _conversationActivationOutcomePublisher;
     private bool _disposed;
@@ -216,7 +217,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private string? _activeVoiceInputRequestId;
     private string? _transportVoiceInputRequestId;
     private VoiceInputTransportState _voiceInputTransportState;
-    private string? _voiceInputFirstPartialLoggedRequestId;
+    private bool _resumeVoiceInputAfterAuthorization;
     private bool _suppressNewSessionDraftModeSelectionDispatch;
     private CancellationTokenSource? _newSessionDraftModeSelectionCts;
     private string _voiceInputBasePrompt = string.Empty;
@@ -1200,6 +1201,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         IProjectAffinityResolver? projectAffinityResolver = null,
         IShellNavigationRuntimeState? shellNavigationRuntimeState = null,
         IVoiceInputService? voiceInputService = null,
+        IApplicationActivationSignalSource? applicationActivationSignalSource = null,
         LocalTerminalPanelCoordinator? localTerminalPanelCoordinator = null,
         IAuthoritativeRemoteSessionRouter? authoritativeRemoteSessionRouter = null,
         ConversationCatalogFacade? conversationCatalogFacade = null,
@@ -1301,6 +1303,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             WaitForPendingSessionUpdatesAsync = WaitForPendingSessionUpdatesAsync
         };
         _voiceInputService = voiceInputService ?? NoOpVoiceInputService.Instance;
+        _applicationActivationSignalSource = applicationActivationSignalSource ?? NoOpApplicationActivationSignalSource.Instance;
         _shellNavigationRuntimeState = shellNavigationRuntimeState;
         _conversationActivationOutcomePublisher = new ConversationActivationOutcomePublisher(
             _shellNavigationRuntimeState,
@@ -1317,6 +1320,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _voiceInputService.FinalResultReceived += OnVoiceInputFinalResultReceived;
         _voiceInputService.SessionEnded += OnVoiceInputSessionEnded;
         _voiceInputService.ErrorOccurred += OnVoiceInputErrorOccurred;
+        _applicationActivationSignalSource.Activated += OnApplicationActivated;
         IsVoiceInputSupported = _voiceInputService.IsSupported;
         StartStoreProjection();
 
@@ -3111,6 +3115,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
            _voiceInputService.FinalResultReceived -= OnVoiceInputFinalResultReceived;
            _voiceInputService.SessionEnded -= OnVoiceInputSessionEnded;
            _voiceInputService.ErrorOccurred -= OnVoiceInputErrorOccurred;
+           _applicationActivationSignalSource.Activated -= OnApplicationActivated;
            if (_shellNavigationRuntimeState is not null)
            {
                _shellNavigationRuntimeState.PropertyChanged -= OnShellNavigationRuntimeStatePropertyChanged;

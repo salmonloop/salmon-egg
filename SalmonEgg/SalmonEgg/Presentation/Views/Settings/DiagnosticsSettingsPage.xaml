@@ -373,6 +373,44 @@
                                                        TextWrapping="WrapWholeWords"/>
                                         </controls:ResponsiveFormRow.Value>
                                     </controls:ResponsiveFormRow>
+
+                                    <Border Height="1"
+                                            Margin="16,0"
+                                            Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+
+                                    <controls:ResponsiveFormRow>
+                                        <controls:ResponsiveFormRow.Label>
+                                            <TextBlock x:Uid="Diagnostics_VoiceProbeSignalLabel"
+                                                       Text="采集层观测："
+                                                       Style="{StaticResource SettingsRowTitleTextStyle}"
+                                                       VerticalAlignment="Center"/>
+                                        </controls:ResponsiveFormRow.Label>
+                                        <controls:ResponsiveFormRow.Value>
+                                            <TextBlock Text="{x:Bind ViewModel.VoiceInputDiagnostics.Probe.ProbeSignalObservationText, Mode=OneWay}"
+                                                       AutomationProperties.AutomationId="Diagnostics.VoiceProbeSignal"
+                                                       Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                       TextWrapping="WrapWholeWords"/>
+                                        </controls:ResponsiveFormRow.Value>
+                                    </controls:ResponsiveFormRow>
+
+                                    <Border Height="1"
+                                            Margin="16,0"
+                                            Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+
+                                    <controls:ResponsiveFormRow>
+                                        <controls:ResponsiveFormRow.Label>
+                                            <TextBlock x:Uid="Diagnostics_VoiceProbeSignalTimelineLabel"
+                                                       Text="采集层时间线："
+                                                       Style="{StaticResource SettingsRowTitleTextStyle}"
+                                                       VerticalAlignment="Center"/>
+                                        </controls:ResponsiveFormRow.Label>
+                                        <controls:ResponsiveFormRow.Value>
+                                            <TextBlock Text="{x:Bind ViewModel.VoiceInputDiagnostics.Probe.ProbeSignalTimelineText, Mode=OneWay}"
+                                                       AutomationProperties.AutomationId="Diagnostics.VoiceProbeSignalTimeline"
+                                                       Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                       TextWrapping="WrapWholeWords"/>
+                                        </controls:ResponsiveFormRow.Value>
+                                    </controls:ResponsiveFormRow>
                                 </StackPanel>
                             </StackPanel>
                         </Border>

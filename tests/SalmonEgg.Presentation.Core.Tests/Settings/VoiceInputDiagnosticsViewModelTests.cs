@@ -184,6 +184,7 @@ public sealed class VoiceInputDiagnosticsViewModelTests
     private static VoiceInputDiagnosticsProbeViewModel CreateProbeViewModel()
         => new(
             NoOpVoiceInputService.Instance,
+            new NoOpAudioInputSignalDiagnosticsService(),
             new ImmediateUiDispatcher(),
             new TestCoreStringLocalizer(),
             Mock.Of<ILogger<VoiceInputDiagnosticsProbeViewModel>>());

@@ -390,6 +390,12 @@
   <data name="Diagnostics_VoiceProbeCapturedTextLabel.Text" xml:space="preserve">
     <value>独立诊断识别文本：</value>
   </data>
+  <data name="Diagnostics_VoiceProbeSignalLabel.Text" xml:space="preserve">
+    <value>采集层观测：</value>
+  </data>
+  <data name="Diagnostics_VoiceProbeSignalTimelineLabel.Text" xml:space="preserve">
+    <value>采集层时间线：</value>
+  </data>
   <data name="Diagnostics_VoiceRefresh.Content" xml:space="preserve">
     <value>刷新语音诊断</value>
   </data>

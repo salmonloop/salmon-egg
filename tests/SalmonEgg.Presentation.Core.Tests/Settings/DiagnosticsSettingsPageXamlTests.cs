@@ -57,6 +57,8 @@ public sealed class DiagnosticsSettingsPageXamlTests
         Assert.Contains("ViewModel.VoiceInputDiagnostics.Probe.ProbeStatusText", xaml, StringComparison.Ordinal);
         Assert.Contains("ViewModel.VoiceInputDiagnostics.Probe.ProbeTimelineText", xaml, StringComparison.Ordinal);
         Assert.Contains("ViewModel.VoiceInputDiagnostics.Probe.ProbeCapturedText", xaml, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.VoiceInputDiagnostics.Probe.ProbeSignalObservationText", xaml, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.VoiceInputDiagnostics.Probe.ProbeSignalTimelineText", xaml, StringComparison.Ordinal);
     }
 
     [Fact]
