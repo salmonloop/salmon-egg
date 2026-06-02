@@ -7073,6 +7073,9 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
             return Task.FromResult(PermissionResult);
         }
 
+        public Task<VoiceInputPermissionResult> GetPermissionStatusAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(PermissionResult);
+
         private async Task<VoiceInputPermissionResult> WaitForPermissionAsync(CancellationToken cancellationToken)
         {
             await PermissionCompletion!.Task.WaitAsync(cancellationToken);

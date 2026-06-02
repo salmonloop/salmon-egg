@@ -55,6 +55,25 @@ public sealed class VoiceInputDiagnosticsServiceTests
     }
 
     [Fact]
+    public async Task GetSnapshotAsync_UsesNonInteractivePermissionQueryInsteadOfInteractiveEnsure()
+    {
+        var permission = VoiceInputPermissionResult.Granted();
+        var voiceInputService = new FakeVoiceInputService(permission);
+        var runtimeSource = new FakeVoiceInputRuntimeDiagnosticsSource(new VoiceInputRuntimeDiagnostics(null, null, null));
+        var sut = new VoiceInputDiagnosticsService(
+            voiceInputService,
+            runtimeSource,
+            new FakeAppDataService("C:/app/logs"),
+            new FakeLogFileCatalog(string.Empty));
+
+        var snapshot = await sut.GetSnapshotAsync();
+
+        Assert.Equal(permission, snapshot.Permission);
+        Assert.Equal(0, voiceInputService.EnsurePermissionCallCount);
+        Assert.Equal(1, voiceInputService.GetPermissionStatusCallCount);
+    }
+
+    [Fact]
     public async Task GetSnapshotAsync_WhenLatestSessionHasFinalResult_PrefersMostRecentRequest()
     {
         var logText = """
@@ -183,6 +202,10 @@ public sealed class VoiceInputDiagnosticsServiceTests
 
         public bool IsListening => false;
 
+        public int EnsurePermissionCallCount { get; private set; }
+
+        public int GetPermissionStatusCallCount { get; private set; }
+
         public event EventHandler<VoiceInputPartialResult>? PartialResultReceived
         {
             add { }
@@ -208,7 +231,16 @@ public sealed class VoiceInputDiagnosticsServiceTests
         }
 
         public Task<VoiceInputPermissionResult> EnsurePermissionAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult(_permission);
+        {
+            EnsurePermissionCallCount++;
+            return Task.FromResult(_permission);
+        }
+
+        public Task<VoiceInputPermissionResult> GetPermissionStatusAsync(CancellationToken cancellationToken = default)
+        {
+            GetPermissionStatusCallCount++;
+            return Task.FromResult(_permission);
+        }
 
         public Task<bool> TryRequestAuthorizationHelpAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(true);

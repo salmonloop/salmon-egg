@@ -1535,6 +1535,9 @@ public sealed class StartViewModelTests
         public Task<VoiceInputPermissionResult> EnsurePermissionAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(PermissionResult);
 
+        public Task<VoiceInputPermissionResult> GetPermissionStatusAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(PermissionResult);
+
         public Task<bool> TryRequestAuthorizationHelpAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(true);
 

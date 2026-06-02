@@ -18,6 +18,8 @@ public interface IVoiceInputService : IDisposable
 
     event EventHandler<VoiceInputErrorResult>? ErrorOccurred;
 
+    Task<VoiceInputPermissionResult> GetPermissionStatusAsync(CancellationToken cancellationToken = default);
+
     Task<VoiceInputPermissionResult> EnsurePermissionAsync(CancellationToken cancellationToken = default);
 
     Task<bool> TryRequestAuthorizationHelpAsync(CancellationToken cancellationToken = default);

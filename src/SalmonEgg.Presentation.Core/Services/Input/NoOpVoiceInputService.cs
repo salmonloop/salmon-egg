@@ -43,6 +43,9 @@ public sealed class NoOpVoiceInputService : IVoiceInputService, IVoiceInputRunti
     public Task<VoiceInputPermissionResult> EnsurePermissionAsync(CancellationToken cancellationToken = default)
         => Task.FromResult(new VoiceInputPermissionResult(VoiceInputPermissionStatus.Unsupported, "Voice input is not supported on this platform."));
 
+    public Task<VoiceInputPermissionResult> GetPermissionStatusAsync(CancellationToken cancellationToken = default)
+        => Task.FromResult(new VoiceInputPermissionResult(VoiceInputPermissionStatus.Unsupported, "Voice input is not supported on this platform."));
+
     public Task<bool> TryRequestAuthorizationHelpAsync(CancellationToken cancellationToken = default)
         => Task.FromResult(false);
 

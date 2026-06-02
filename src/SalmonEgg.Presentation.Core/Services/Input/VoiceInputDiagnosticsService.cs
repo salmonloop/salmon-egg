@@ -32,7 +32,7 @@ public sealed class VoiceInputDiagnosticsService : IVoiceInputDiagnosticsService
     public async Task<VoiceInputDiagnosticsSnapshot> GetSnapshotAsync(CancellationToken cancellationToken = default)
     {
         var permission = _voiceInputService.IsSupported
-            ? await _voiceInputService.EnsurePermissionAsync(cancellationToken).ConfigureAwait(false)
+            ? await _voiceInputService.GetPermissionStatusAsync(cancellationToken).ConfigureAwait(false)
             : new VoiceInputPermissionResult(
                 VoiceInputPermissionStatus.Unsupported,
                 "Voice input is not supported on this platform.");

@@ -83,6 +83,40 @@ public sealed class NativeVoiceInputService : IVoiceInputService, IVoiceInputRun
         try
         {
             await EnsureMicrophoneCaptureAccessAsync(requestId: null, cancellationToken).ConfigureAwait(false);
+            return await GetPermissionStatusAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            if (TryCreateAuthorizationError(ex, out var permissionResult))
+            {
+                return permissionResult;
+            }
+
+            if (ex.HResult == HResultNoCaptureDevices)
+            {
+                return CreatePermissionDeniedResult(
+                    AuthorizationTarget.None,
+                    "No microphone was detected on this device.",
+                    requiresAuthorization: false);
+            }
+
+            return CreatePermissionDeniedResult(
+                AuthorizationTarget.Speech,
+                VoiceInputErrorMessageSanitizer.Normalize(ex.Message, "Voice input permission check failed."),
+                requiresAuthorization: false);
+        }
+    }
+
+    public async Task<VoiceInputPermissionResult> GetPermissionStatusAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+
+        try
+        {
             using var recognizer = CreateRecognizer(CultureInfo.CurrentUICulture.Name);
             var compileResult = await recognizer.CompileConstraintsAsync().AsTask(cancellationToken).ConfigureAwait(false);
             return compileResult.Status switch

@@ -516,6 +516,9 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
                 : Task.FromResult(PermissionResult);
         }
 
+        public Task<VoiceInputPermissionResult> GetPermissionStatusAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(PermissionResult);
+
         public Task<bool> TryRequestAuthorizationHelpAsync(CancellationToken cancellationToken = default)
         {
             AuthorizationHelpRequestCount++;
