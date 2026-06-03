@@ -1,4 +1,6 @@
 using System;
+using System.Net;
+using System.Net.WebSockets;
 using System.Reactive.Subjects;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,6 +16,7 @@ namespace SalmonEgg.Infrastructure.Network
     public class WebSocketTransport : ITransport, IDisposable
     {
         private readonly ILogger _logger;
+        private readonly Uri? _proxyUri;
         private IWebsocketClient? _client;
         private readonly Subject<string> _messagesSubject;
         private readonly BehaviorSubject<TransportState> _stateSubject;
@@ -23,9 +26,10 @@ namespace SalmonEgg.Infrastructure.Network
         /// Initializes a new instance of the WebSocketTransport class.
         /// </summary>
         /// <param name="logger">Logger instance for logging transport events.</param>
-        public WebSocketTransport(ILogger logger)
+        public WebSocketTransport(ILogger logger, Uri? proxyUri = null)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _proxyUri = proxyUri;
             _messagesSubject = new Subject<string>();
             _stateSubject = new BehaviorSubject<TransportState>(TransportState.Disconnected);
         }
@@ -57,7 +61,7 @@ namespace SalmonEgg.Infrastructure.Network
 
                 // Create WebSocket client
                 var uri = new Uri(url);
-                _client = new WebsocketClient(uri);
+                _client = new WebsocketClient(uri, () => CreateNativeClient(_proxyUri));
 
                 // Configure reconnection strategy (disabled for manual control)
                 _client.ReconnectTimeout = null;
@@ -248,6 +252,13 @@ namespace SalmonEgg.Infrastructure.Network
             }
 
             _disposed = true;
+        }
+
+        internal static ClientWebSocket CreateNativeClient(Uri? proxyUri = null)
+        {
+            var client = new ClientWebSocket();
+            client.Options.Proxy = proxyUri == null ? null : new WebProxy(proxyUri);
+            return client;
         }
     }
 }

@@ -1,4 +1,4 @@
-using System;using System.Collections.Generic;using System.Net.Http;using System.Reactive.Subjects;using System.Threading;using System.Threading.Tasks;using Moq;using Serilog;using SalmonEgg.Infrastructure.Network;using Xunit;
+using System;using System.Collections.Generic;using System.Net;using System.Net.Http;using System.Net.WebSockets;using System.Reactive.Subjects;using System.Threading;using System.Threading.Tasks;using Moq;using Serilog;using SalmonEgg.Infrastructure.Network;using Xunit;
 
 namespace SalmonEgg.Infrastructure.Tests.Network
 {
@@ -142,6 +142,25 @@ namespace SalmonEgg.Infrastructure.Tests.Network
             // Act & Assert
             await Assert.ThrowsAsync<TaskCanceledException>(() =>
                 transport.ConnectAsync("http://localhost:8080", cts.Token));
+        }
+
+        [Fact]
+        public void WebSocketTransport_CreateNativeClient_ShouldDisableSystemProxy_ByDefault()
+        {
+            var client = WebSocketTransport.CreateNativeClient();
+
+            Assert.Null(client.Options.Proxy);
+        }
+
+        [Fact]
+        public void WebSocketTransport_CreateNativeClient_ShouldUseExplicitProxy_WhenConfigured()
+        {
+            var proxyUri = new Uri("http://proxy.example.com:8080");
+
+            var client = WebSocketTransport.CreateNativeClient(proxyUri);
+
+            var proxy = Assert.IsType<WebProxy>(client.Options.Proxy);
+            Assert.Equal(proxyUri, proxy.Address);
         }
 
         /// <summary>
