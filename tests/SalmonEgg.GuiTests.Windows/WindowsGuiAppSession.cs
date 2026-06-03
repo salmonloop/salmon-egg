@@ -25,6 +25,7 @@ internal sealed class WindowsGuiAppSession : IDisposable
     // Windows.System.VirtualKey mapping:
     // GamepadA = 195, GamepadDPadUp = 203, GamepadDPadDown = 204.
     // GamepadDPadLeft = 205, GamepadDPadRight = 206.
+    // GamepadLeftTrigger = 201, GamepadRightTrigger = 202.
     // GamepadY = 198.
     private const VirtualKeyShort VirtualGamepadA = (VirtualKeyShort)195;
     private const VirtualKeyShort VirtualGamepadY = (VirtualKeyShort)198;
@@ -32,6 +33,8 @@ internal sealed class WindowsGuiAppSession : IDisposable
     private const VirtualKeyShort VirtualGamepadDPadUp = (VirtualKeyShort)203;
     private const VirtualKeyShort VirtualGamepadDPadLeft = (VirtualKeyShort)205;
     private const VirtualKeyShort VirtualGamepadDPadRight = (VirtualKeyShort)206;
+    private const VirtualKeyShort VirtualGamepadLeftTrigger = (VirtualKeyShort)201;
+    private const VirtualKeyShort VirtualGamepadRightTrigger = (VirtualKeyShort)202;
     private const VirtualKeyShort VirtualGamepadB = (VirtualKeyShort)196;
     private static readonly string[] MainShellWindowAnchorAutomationIds =
     [
@@ -670,6 +673,26 @@ internal sealed class WindowsGuiAppSession : IDisposable
     public void PressVirtualGamepadY()
     {
         CreateSyntheticGamepadInput().PressShortcutVoiceToggle();
+    }
+
+    internal void PressSyntheticGamepadLeftTrigger()
+    {
+        PressKey(VirtualGamepadLeftTrigger);
+    }
+
+    public void PressVirtualGamepadLeftTrigger()
+    {
+        PressSyntheticGamepadLeftTrigger();
+    }
+
+    internal void PressSyntheticGamepadRightTrigger()
+    {
+        PressKey(VirtualGamepadRightTrigger);
+    }
+
+    public void PressVirtualGamepadRightTrigger()
+    {
+        PressSyntheticGamepadRightTrigger();
     }
 
     public void PressTab()

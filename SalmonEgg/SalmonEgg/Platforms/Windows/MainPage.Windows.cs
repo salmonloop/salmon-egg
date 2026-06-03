@@ -16,6 +16,7 @@ public sealed partial class MainPage
     private InputKeyboardSource? _debugKeyboardSource;
     private IGamepadNavigationDispatcher? _virtualGamepadNavigationDispatcher;
     private IGamepadShortcutDispatcher? _virtualGamepadShortcutDispatcher;
+    private IGamepadContextIntentDispatcher? _virtualGamepadContextIntentDispatcher;
     private GamepadNavigationIntent? _lastNativeGamepadIntent;
     private long _lastNativeGamepadIntentTimestamp;
     private GamepadShortcutIntent? _lastNativeGamepadShortcut;
@@ -170,8 +171,10 @@ public sealed partial class MainPage
         _debugKeyboardSource ??= InputKeyboardSource.GetForIsland(XamlRoot.ContentIsland);
         _virtualGamepadNavigationDispatcher ??= App.ServiceProvider.GetRequiredService<IGamepadNavigationDispatcher>();
         _virtualGamepadShortcutDispatcher ??= App.ServiceProvider.GetRequiredService<IGamepadShortcutDispatcher>();
+        _virtualGamepadContextIntentDispatcher ??= App.ServiceProvider.GetRequiredService<IGamepadContextIntentDispatcher>();
         _debugKeyboardSource.KeyDown -= OnPlatformGamepadDirectionalBridgeKeyDown;
         _debugKeyboardSource.KeyDown += OnPlatformGamepadDirectionalBridgeKeyDown;
+        _logger.LogDebug("Platform gamepad directional bridge attached.");
     }
 
     partial void DetachPlatformGamepadDirectionalBridge()
@@ -182,6 +185,7 @@ public sealed partial class MainPage
         }
 
         _debugKeyboardSource.KeyDown -= OnPlatformGamepadDirectionalBridgeKeyDown;
+        _logger.LogDebug("Platform gamepad directional bridge detached.");
     }
 
     private void OnPlatformGamepadDirectionalBridgeKeyDown(InputKeyboardSource sender, WinUIKeyEventArgs args)
@@ -198,6 +202,9 @@ public sealed partial class MainPage
         if (handledIntent == GamepadNavigationIntent.MoveRight && IsFocusWithinMainNavigation() && TryMoveFocusFromMainNavigationIntoCurrentContent())
         {
             args.Handled = true;
+            _logger.LogDebug(
+                "Native gamepad DPadRight handled as focus handoff. CurrentFocusIsNav={IsFocusWithinMainNavigation}.",
+                IsFocusWithinMainNavigation());
             return;
         }
 
@@ -205,15 +212,24 @@ public sealed partial class MainPage
             && handledIntent is not null
             && TryConsumeCurrentContentNavigationIntent(handledIntent.Value))
         {
+            _logger.LogDebug(
+                "Native gamepad navigation intent consumed by content path. Intent={Intent}.",
+                handledIntent.Value);
             return;
         }
 
-        if (args.Handled)
+        if (args.Handled
+            && args.VirtualKey is not Windows.System.VirtualKey.GamepadLeftTrigger
+            and not Windows.System.VirtualKey.GamepadRightTrigger)
         {
+            _logger.LogDebug(
+                "Native gamepad keydown was already handled by control pipeline. VirtualKey={VirtualKey}.",
+                args.VirtualKey);
             return;
         }
 
         RecordNativeGamepadIntent(args.VirtualKey);
+        _logger.LogDebug("Native gamepad keydown mapped. VirtualKey={VirtualKey} Intent={Intent}.", args.VirtualKey, handledIntent);
 
         switch (args.VirtualKey)
         {
@@ -225,6 +241,9 @@ public sealed partial class MainPage
                 {
                     args.Handled = true;
                 }
+                _logger.LogDebug(
+                    "Native gamepad DPadUp dispatch result. Handled={Handled}.",
+                    upConsumed);
                 break;
             case Windows.System.VirtualKey.GamepadDPadDown:
                 var downConsumed = (_virtualGamepadNavigationDispatcher?.TryDispatchWithoutNativeFallback(GamepadNavigationIntent.MoveDown)).GetValueOrDefault();
@@ -232,11 +251,15 @@ public sealed partial class MainPage
                 {
                     args.Handled = true;
                 }
+                _logger.LogDebug(
+                    "Native gamepad DPadDown dispatch result. Handled={Handled}.",
+                    downConsumed);
                 break;
             case Windows.System.VirtualKey.GamepadB:
                 if ((_virtualGamepadNavigationDispatcher?.TryDispatchWithoutNativeFallback(GamepadNavigationIntent.Back)).GetValueOrDefault())
                 {
                     args.Handled = true;
+                    _logger.LogDebug("Native gamepad B handled by shell navigation dispatcher.");
                 }
                 break;
             case Windows.System.VirtualKey.GamepadY:
@@ -244,15 +267,53 @@ public sealed partial class MainPage
                 if ((_virtualGamepadShortcutDispatcher?.TryDispatch(GamepadShortcutIntent.ToggleVoiceInput)).GetValueOrDefault())
                 {
                     args.Handled = true;
+                    _logger.LogDebug("Native gamepad Y dispatch result. Handled={Handled}.", true);
+                }
+                else
+                {
+                    _logger.LogDebug("Native gamepad Y dispatch result. Handled={Handled}.", false);
                 }
                 break;
             case Windows.System.VirtualKey.GamepadLeftTrigger:
-                RecordNativeGamepadContextIntent(GamepadContextIntent.PageUp);
+                _logger.LogDebug("Native gamepad left trigger keydown received.");
+                if (TryDispatchNativeGamepadContextIntent(GamepadContextIntent.PageUp))
+                {
+                    RecordNativeGamepadContextIntent(GamepadContextIntent.PageUp);
+                    args.Handled = true;
+                }
+
                 break;
             case Windows.System.VirtualKey.GamepadRightTrigger:
-                RecordNativeGamepadContextIntent(GamepadContextIntent.PageDown);
+                _logger.LogDebug("Native gamepad right trigger keydown received.");
+                if (TryDispatchNativeGamepadContextIntent(GamepadContextIntent.PageDown))
+                {
+                    RecordNativeGamepadContextIntent(GamepadContextIntent.PageDown);
+                    args.Handled = true;
+                }
+
+                break;
+            default:
+                _logger.LogDebug("Native gamepad keydown ignored by bridge. VirtualKey={VirtualKey}.", args.VirtualKey);
                 break;
         }
+    }
+
+    private bool TryDispatchNativeGamepadContextIntent(GamepadContextIntent intent)
+    {
+        if (_virtualGamepadContextIntentDispatcher is null)
+        {
+            return false;
+        }
+
+        var dispatched = _virtualGamepadContextIntentDispatcher.TryDispatch(intent);
+        if (!dispatched)
+        {
+            _logger.LogDebug(
+                "Native gamepad context intent {Intent} not consumed immediately on keydown.",
+                intent);
+        }
+
+        return dispatched;
     }
 
     private bool ShouldSuppressPolledGamepadIntentForWindows(GamepadNavigationIntent intent)

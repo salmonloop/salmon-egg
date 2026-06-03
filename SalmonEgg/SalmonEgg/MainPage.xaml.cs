@@ -40,7 +40,7 @@ using Windows.ApplicationModel.Resources;
 
 namespace SalmonEgg;
 
-public sealed partial class MainPage : Page, INavigationIntentConsumer
+public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepadContextIntentConsumer
 {
     private static readonly ResourceLoader ResourceLoader = ResourceLoader.GetForViewIndependentUse();
     private const double NavPaneMinWidth = 240;
@@ -800,6 +800,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
         _gamepadInputService.ShortcutRaised += OnGamepadShortcutRaised;
         _gamepadInputService.ContextIntentRaised += OnGamepadContextIntentRaised;
         _gamepadInputService.Start();
+        _logger.LogDebug("Gamepad input service attached to shell handlers.");
         _isGamepadInputAttached = true;
     }
 
@@ -814,6 +815,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
         _gamepadInputService.ShortcutRaised -= OnGamepadShortcutRaised;
         _gamepadInputService.ContextIntentRaised -= OnGamepadContextIntentRaised;
         _gamepadInputService.Stop();
+        _logger.LogDebug("Gamepad input service detached from shell handlers.");
         _isGamepadInputAttached = false;
     }
 
@@ -821,48 +823,78 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
     {
         if (!DispatcherQueue.HasThreadAccess)
         {
+            _logger.LogDebug(
+                "Gamepad navigation intent received on non-UI thread, dispatching to UI. Intent={Intent}.",
+                intent);
             _ = DispatcherQueue.TryEnqueue(() => OnGamepadIntentRaised(sender, intent));
             return;
         }
 
         if (ShouldSuppressPolledGamepadIntent(intent))
         {
+            _logger.LogDebug(
+                "Gamepad navigation intent suppressed due duplicate native keydown. Intent={Intent}.",
+                intent);
             return;
         }
 
-        _ = _gamepadNavigationDispatcher.TryDispatch(intent);
+        var consumed = _gamepadNavigationDispatcher.TryDispatch(intent);
+        _logger.LogDebug(
+            "Gamepad navigation intent dispatched from poller. Intent={Intent} Consumed={Consumed}.",
+            intent,
+            consumed);
     }
 
     private void OnGamepadShortcutRaised(object? sender, GamepadShortcutIntent intent)
     {
         if (!DispatcherQueue.HasThreadAccess)
         {
+            _logger.LogDebug(
+                "Gamepad shortcut intent received on non-UI thread, dispatching to UI. Intent={Intent}.",
+                intent);
             _ = DispatcherQueue.TryEnqueue(() => OnGamepadShortcutRaised(sender, intent));
             return;
         }
 
         if (ShouldSuppressPolledGamepadShortcut(intent))
         {
+            _logger.LogDebug(
+                "Gamepad shortcut intent suppressed due duplicate native keydown. Intent={Intent}.",
+                intent);
             return;
         }
 
-        _ = _gamepadShortcutDispatcher.TryDispatch(intent);
+        var consumed = _gamepadShortcutDispatcher.TryDispatch(intent);
+        _logger.LogDebug(
+            "Gamepad shortcut intent dispatched from poller. Intent={Intent} Consumed={Consumed}.",
+            intent,
+            consumed);
     }
 
     private void OnGamepadContextIntentRaised(object? sender, GamepadContextIntent intent)
     {
         if (!DispatcherQueue.HasThreadAccess)
         {
+            _logger.LogDebug(
+                "Gamepad context intent received on non-UI thread, dispatching to UI. Intent={Intent}.",
+                intent);
             _ = DispatcherQueue.TryEnqueue(() => OnGamepadContextIntentRaised(sender, intent));
             return;
         }
 
         if (ShouldSuppressPolledGamepadContextIntent(intent))
         {
+            _logger.LogDebug(
+                "Gamepad context intent suppressed due duplicate native keydown. Intent={Intent}.",
+                intent);
             return;
         }
 
-        _ = _gamepadContextIntentDispatcher.TryDispatch(intent);
+        var consumed = _gamepadContextIntentDispatcher.TryDispatch(intent);
+        _logger.LogDebug(
+            "Gamepad context intent dispatched from poller. Intent={Intent} Consumed={Consumed}.",
+            intent,
+            consumed);
     }
 
     public bool TryConsumeNavigationIntent(GamepadNavigationIntent intent)
@@ -878,6 +910,17 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer
         }
 
         return TryMoveFocusFromMainNavigationIntoCurrentContent();
+    }
+
+    public bool TryConsumeContextIntent(GamepadContextIntent intent)
+    {
+        if (ContentFrame.Content is IGamepadContextIntentConsumer contentConsumer
+            && contentConsumer.TryConsumeContextIntent(intent))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     public bool TryGoBack()

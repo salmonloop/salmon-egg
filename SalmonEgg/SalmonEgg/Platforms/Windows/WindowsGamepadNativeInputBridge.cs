@@ -26,11 +26,15 @@ public sealed class WindowsGamepadNativeInputBridge : IGamepadNativeInputBridge
     {
         if (!TryMapVirtualKey(intent, out var virtualKey))
         {
+            _logger.LogDebug(
+                "Gamepad native input bridge failed to map intent. Intent={Intent}.",
+                intent);
             return false;
         }
 
         if (!IsAppWindowForeground())
         {
+            _logger.LogDebug("Gamepad native input bridge skipped because application window is not foreground.");
             return false;
         }
 
@@ -43,6 +47,10 @@ public sealed class WindowsGamepadNativeInputBridge : IGamepadNativeInputBridge
         var sent = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
         if (sent == inputs.Length)
         {
+            _logger.LogDebug(
+                "Gamepad native input bridge dispatched keyboard fallback. Intent={Intent} VirtualKey={VirtualKey}.",
+                intent,
+                virtualKey);
             return true;
         }
 

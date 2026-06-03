@@ -17,7 +17,7 @@ namespace SalmonEgg.Presentation.Views;
 /// - Secondary navigation as a Top NavigationView below the breadcrumb.
 /// - Section content hosted in an inner Frame.
 /// </summary>
-public sealed partial class SettingsShellPage : Page, IPrimaryContentFocusTarget
+public sealed partial class SettingsShellPage : Page, IPrimaryContentFocusTarget, IGamepadContextIntentConsumer
 {
     private SettingsSectionNavigationAdapter? _sectionNavigation;
     private SettingsPageBase? _pendingFocusTargetRefreshPage;
@@ -150,6 +150,16 @@ public sealed partial class SettingsShellPage : Page, IPrimaryContentFocusTarget
 
     public bool TryFocusPrimaryContentTarget()
         => TryFocusCurrentSectionNavigationItem();
+
+    public bool TryConsumeContextIntent(GamepadContextIntent intent)
+    {
+        if (SettingsFrame.Content is not SettingsPageBase settingsPage)
+        {
+            return false;
+        }
+
+        return settingsPage.TryConsumeContextIntent(intent, requireFocusedDescendant: false);
+    }
 
     private void QueueRefreshCurrentSectionFocusTargets()
     {

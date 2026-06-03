@@ -15,7 +15,7 @@ using SalmonEgg.Presentation.ViewModels.Chat;
 
 namespace SalmonEgg.Presentation.Views.MiniWindow;
 
-public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer
+public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGamepadContextIntentConsumer
 {
     public ChatShellViewModel ShellViewModel { get; }
     public ChatViewModel ViewModel => ShellViewModel.Chat;
@@ -23,6 +23,7 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer
     private bool _isLoaded;
     private bool _isMessagesListLoaded;
     private bool _isTrackingViewModel;
+    private bool _isTranscriptViewportLayerActive;
     private INotifyCollectionChanged? _trackedMessageHistory;
     private readonly TranscriptViewportController _viewportController = new();
     private const double BottomThreshold = 10;
@@ -307,6 +308,38 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer
         };
     }
 
+    public bool TryConsumeContextIntent(GamepadContextIntent intent)
+    {
+        if (_transcriptViewportHost is null)
+        {
+            return false;
+        }
+
+        if (IsTranscriptInputSurfaceFocusWithin())
+        {
+            _isTranscriptViewportLayerActive = false;
+            return false;
+        }
+
+        var consumed = ChatTranscriptContextIntentHandler.TryConsume(
+            intent,
+            _isTranscriptViewportLayerActive || IsTranscriptViewportSurfaceFocusWithin(),
+            ViewModel.MessageHistory.Count,
+            _transcriptViewportHost.TryScrollByPages,
+            RegisterUserViewportIntent);
+
+        if (consumed)
+        {
+            _isTranscriptViewportLayerActive = true;
+            if (!IsTranscriptViewportSurfaceFocusWithin())
+            {
+                _ = TryFocusTranscriptScroller(FocusState.Keyboard);
+            }
+        }
+
+        return consumed;
+    }
+
     private void DisposeTranscriptViewportHost()
     {
         if (_transcriptViewportHost is null)
@@ -362,6 +395,46 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer
         ApplyViewportActions(_viewportController.OnUserViewportDetachIntent(
             CreateViewportViewState(),
             TryCaptureProjectionRestoreToken()));
+    }
+
+    private bool IsTranscriptViewportSurfaceFocusWithin()
+    {
+        if (MessagesList is null || MessagesList.XamlRoot is null)
+        {
+            return false;
+        }
+
+        var current = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(MessagesList.XamlRoot) as DependencyObject;
+        if (DependencyObjectAncestry.FindAncestorOrSelf<ListViewItem>(current) is ListViewItem
+            {
+                } itemContainer
+            && DependencyObjectAncestry.IsDescendantOf(itemContainer, MessagesList))
+        {
+            return false;
+        }
+
+        return DependencyObjectAncestry.IsDescendantOf(current, MessagesList);
+    }
+
+    private bool IsTranscriptInputSurfaceFocusWithin()
+    {
+        if (MiniChatInputBox is null || MiniChatInputBox.XamlRoot is null)
+        {
+            return false;
+        }
+
+        var current = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(MiniChatInputBox.XamlRoot) as DependencyObject;
+        return DependencyObjectAncestry.IsDescendantOf(current, MiniChatInputBox);
+    }
+
+    private bool TryFocusTranscriptScroller(FocusState focusState)
+    {
+        if (MessagesList is null)
+        {
+            return false;
+        }
+
+        return MessagesList.Focus(focusState);
     }
 
     private TranscriptProjectionRestoreToken? TryCaptureProjectionRestoreToken()

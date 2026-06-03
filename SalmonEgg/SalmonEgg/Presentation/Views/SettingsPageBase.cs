@@ -6,16 +6,19 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using SalmonEgg.Presentation.Core.Resources;
+using SalmonEgg.Presentation.Core.Services.Input;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Models.Settings;
+using SalmonEgg.Presentation.Utilities;
 using Windows.ApplicationModel.Resources;
+using XamlFocusManager = Microsoft.UI.Xaml.Input.FocusManager;
 
 namespace SalmonEgg.Presentation.Views;
 
 /// <summary>
 /// Base class for Settings sub-pages providing a standard BreadcrumbBar model.
 /// </summary>
-public class SettingsPageBase : Page
+public class SettingsPageBase : Page, IGamepadContextIntentConsumer
 {
     private static readonly ResourceLoader ResourceLoader = ResourceLoader.GetForViewIndependentUse();
 
@@ -62,6 +65,41 @@ public class SettingsPageBase : Page
     }
 
     protected virtual Control? GetSectionEntryFocusTarget() => null;
+
+    public bool TryConsumeContextIntent(GamepadContextIntent intent)
+    {
+        return TryConsumeContextIntent(intent, requireFocusedDescendant: true);
+    }
+
+    internal bool TryConsumeContextIntent(GamepadContextIntent intent, bool requireFocusedDescendant)
+    {
+        if (XamlRoot is null)
+        {
+            return false;
+        }
+
+        if (requireFocusedDescendant)
+        {
+            var focusedElement = XamlFocusManager.GetFocusedElement(XamlRoot) as DependencyObject;
+            if (!DependencyObjectAncestry.IsDescendantOf(focusedElement, this))
+            {
+                return false;
+            }
+        }
+
+        var scrollViewer = FindDescendant<ScrollViewer>(this, HasScrollableHeight);
+        if (scrollViewer is null)
+        {
+            return false;
+        }
+
+        return intent switch
+        {
+            GamepadContextIntent.PageUp => TryScrollByPage(scrollViewer, -1),
+            GamepadContextIntent.PageDown => TryScrollByPage(scrollViewer, 1),
+            _ => false
+        };
+    }
 
     internal Control? TryGetSectionEntryFocusTarget()
         => GetSectionEntryFocusTarget();
@@ -126,7 +164,7 @@ public class SettingsPageBase : Page
         return true;
     }
 
-    private static T? FindDescendant<T>(DependencyObject root, Func<T, bool>? predicate)
+    private static T? FindDescendant<T>(DependencyObject root, Func<T, bool>? predicate = null)
         where T : DependencyObject
     {
         var count = VisualTreeHelper.GetChildrenCount(root);
@@ -146,5 +184,26 @@ public class SettingsPageBase : Page
         }
 
         return default;
+    }
+
+    private static bool HasScrollableHeight(ScrollViewer scrollViewer)
+        => scrollViewer.ScrollableHeight > 0 && scrollViewer.ActualHeight > 0;
+
+    private static bool TryScrollByPage(ScrollViewer scrollViewer, int pageDelta)
+    {
+        if (pageDelta is 0 || scrollViewer.ViewportHeight <= 0 || scrollViewer.ScrollableHeight <= 0)
+        {
+            return false;
+        }
+
+        var target = scrollViewer.VerticalOffset + (scrollViewer.ViewportHeight * pageDelta);
+        var clampedTarget = Math.Clamp(target, 0, scrollViewer.ScrollableHeight);
+        if (Math.Abs(clampedTarget - scrollViewer.VerticalOffset) <= double.Epsilon)
+        {
+            return false;
+        }
+
+        scrollViewer.ChangeView(null, clampedTarget, null);
+        return true;
     }
 }

@@ -688,7 +688,98 @@ public sealed class ShellFocusedActivationSmokeTests
                 timeout: TimeSpan.FromSeconds(3),
                 failurePrefix: "Virtual gamepad Y moved focus away from the mini chat input after stopping voice input.",
                 bootLog: appData.ReadBootLogTail());
-        }
+    }
+    }
+
+    [SkippableFact]
+    public void ChatTranscriptViewport_VirtualGamepadLeftTrigger_CanPageUpTranscript()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData(withContent: true, messageCountPerSession: 80);
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        Assert.True(
+            session.WaitUntilOnscreen("MainNav.Session.gui-session-01", TimeSpan.FromSeconds(15)),
+            $"Session item did not appear before chat transcript trigger validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-session-01", TimeSpan.FromSeconds(10));
+        session.ActivateElement(sessionItem);
+        Assert.True(
+            session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10)),
+            $"Chat view did not become visible before transcript trigger validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var messagesList = session.FindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(10));
+        Assert.True(messagesList.Patterns.Scroll.IsSupported, "Chat transcript list should expose ScrollPattern.");
+        var scroll = messagesList.Patterns.Scroll.Pattern;
+        Assert.True(scroll.VerticallyScrollable.Value, "Chat transcript list should be vertically scrollable in seeded data.");
+
+        session.FocusElement(messagesList);
+        Assert.True(
+            WaitUntil(
+                () => session.IsFocusWithinAutomationId("ChatView.MessagesList"),
+                TimeSpan.FromSeconds(2)),
+            $"Unable to focus chat transcript list before trigger validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        session.PressPageUp();
+        Thread.Sleep(150);
+
+        var beforePercent = scroll.VerticalScrollPercent.Value;
+        var afterTrigger = WaitUntil(
+            () =>
+            {
+                session.PressVirtualGamepadLeftTrigger();
+                return Math.Abs(scroll.VerticalScrollPercent.Value - beforePercent) > 0.5;
+            },
+            TimeSpan.FromSeconds(3));
+
+        Assert.True(
+            afterTrigger,
+            $"Left trigger PageUp did not scroll chat transcript by pages."
+            + $"{Environment.NewLine}beforePercent={beforePercent:0.##}"
+            + $"{Environment.NewLine}afterPercent={scroll.VerticalScrollPercent.Value:0.##}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
+    [SkippableFact]
+    public void SettingsDataStorageContent_VirtualGamepadRightTrigger_CanPageDownSettingsContent()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+        session.ResizeMainWindow(width: 980, height: 520);
+
+        OpenSettingsSectionAndFocusFirstControl(
+            session,
+            appData,
+            sectionAutomationId: "SettingsNav.DataStorage",
+            expectedFirstControlAutomationId: "DataStorage.SaveLocalHistory",
+            firstControlAutomationId: "DataStorage.SaveLocalHistory",
+            sectionDescription: "Data Storage");
+
+        var firstControl = session.FindByAutomationId("DataStorage.SaveLocalHistory", TimeSpan.FromSeconds(10));
+        var scrollViewer = FindScrollableAncestor(firstControl);
+        Assert.NotNull(scrollViewer);
+        Assert.True(scrollViewer.Patterns.Scroll.IsSupported, "Settings content should expose ScrollPattern on a page-level scroll host.");
+        var scroll = scrollViewer.Patterns.Scroll.Pattern;
+        Assert.True(scroll.VerticallyScrollable.Value, "Settings content should be vertically scrollable in this fixture.");
+
+        var beforePercent = scroll.VerticalScrollPercent.Value;
+        var changed = WaitUntil(
+            () =>
+            {
+                session.PressVirtualGamepadRightTrigger();
+                return Math.Abs(scroll.VerticalScrollPercent.Value - beforePercent) > 0.5;
+            },
+            TimeSpan.FromSeconds(3));
+
+        Assert.True(
+            changed,
+            $"Right trigger PageDown did not scroll Data Storage settings content."
+            + $"{Environment.NewLine}beforePercent={beforePercent:0.##}"
+            + $"{Environment.NewLine}afterPercent={scroll.VerticalScrollPercent.Value:0.##}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
     [SkippableFact]
@@ -2546,5 +2637,22 @@ public sealed class ShellFocusedActivationSmokeTests
         }
 
         return condition();
+    }
+
+    private static AutomationElement? FindScrollableAncestor(AutomationElement element)
+    {
+        var current = element.Parent;
+        while (current is not null)
+        {
+            if (current.Patterns.Scroll.IsSupported
+                && current.Patterns.Scroll.Pattern.VerticallyScrollable.Value)
+            {
+                return current;
+            }
+
+            current = current.Parent;
+        }
+
+        return null;
     }
 }
