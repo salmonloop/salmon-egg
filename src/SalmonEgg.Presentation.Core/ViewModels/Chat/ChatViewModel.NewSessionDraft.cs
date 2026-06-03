@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Models.Protocol;
@@ -41,7 +42,6 @@ public partial class ChatViewModel
             var foregroundProfileId = connectionState.ForegroundTransportProfileId;
             var profileId = normalizedRequiredProfileId ?? foregroundProfileId ?? SelectedProfileId;
             var connectionInstanceId = connectionState.ConnectionInstanceId ?? ConnectionInstanceId;
-            var normalizedCwd = NormalizeNewSessionDraftCwd(cwd);
 
             if (!string.IsNullOrWhiteSpace(normalizedRequiredProfileId)
                 && !string.Equals(foregroundProfileId, normalizedRequiredProfileId, StringComparison.Ordinal))
@@ -56,6 +56,40 @@ public partial class ChatViewModel
                 await ClearNewSessionDraftStateAsync().ConfigureAwait(false);
                 return;
             }
+
+            var profile = ResolveNewSessionDraftProfile(profileId);
+            var cwdResolution = AcpSessionNewCwdResolver.Resolve(
+                cwd,
+                profile,
+                _preferences.ProjectPathMappings);
+
+            if (!cwdResolution.IsSuccess || string.IsNullOrWhiteSpace(cwdResolution.Cwd))
+            {
+                var failed = connectionState.NewSessionDraft is null
+                    ? CreateNewSessionDraftState(
+                        profileId ?? string.Empty,
+                        string.Empty,
+                        remoteSessionId: null,
+                        connectionInstanceId ?? string.Empty,
+                        NewSessionDraftPhase.Faulted,
+                        version: 0,
+                        AcpSessionUpdateDelta.Empty,
+                        isConfigAuthoritative: false) with
+                    {
+                        Error = cwdResolution.ErrorMessage ?? AcpSessionNewCwdResolver.MissingRemoteCwdMessage
+                    }
+                    : connectionState.NewSessionDraft with
+                    {
+                        Phase = NewSessionDraftPhase.Faulted,
+                        Error = cwdResolution.ErrorMessage ?? AcpSessionNewCwdResolver.MissingRemoteCwdMessage
+                    };
+                await _chatConnectionStore.Dispatch(new SetNewSessionDraftAction(failed)).ConfigureAwait(false);
+                await ApplyNewSessionDraftProjectionAsync(
+                    await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false)).ConfigureAwait(false);
+                return;
+            }
+
+            var normalizedCwd = cwdResolution.Cwd;
 
             if (chatService is not { IsConnected: true, IsInitialized: true }
                 || connectionState.Phase != ConnectionPhase.Connected
@@ -585,5 +619,19 @@ public partial class ChatViewModel
             : profileId.Trim();
 
     private static string NormalizeNewSessionDraftError(string? error)
-        => "Unable to load session configuration. Check the connection and try again.";
+        => string.Equals(error, AcpSessionNewCwdResolver.MissingRemoteCwdMessage, StringComparison.Ordinal)
+            ? error ?? AcpSessionNewCwdResolver.MissingRemoteCwdMessage
+            : "Unable to load session configuration. Check the connection and try again.";
+
+    private ServerConfiguration? ResolveNewSessionDraftProfile(string? profileId)
+    {
+        if (string.IsNullOrWhiteSpace(profileId))
+        {
+            return SelectedAcpProfile;
+        }
+
+        return AcpProfileList.FirstOrDefault(profile =>
+                   string.Equals(profile.Id, profileId, StringComparison.Ordinal))
+               ?? SelectedAcpProfile;
+    }
 }

@@ -12,6 +12,7 @@ using SalmonEgg.Domain.Interfaces.Storage;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Domain.Models.Mcp;
+using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
@@ -636,6 +637,146 @@ public sealed class StartViewModelTests
             Assert.DoesNotContain("session/new failed", startViewModel.StartSessionDraftErrorMessage, StringComparison.Ordinal);
             Assert.False(startViewModel.IsStartModeSelectorEnabled);
             Assert.False(startViewModel.StartSessionAndSendCommand.CanExecute(null));
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task StartSessionDraft_WhenRemoteProfileHasMappedProject_UsesRemoteMappedCwdForNewSession()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            preferences.Projects.Add(new ProjectDefinition
+            {
+                ProjectId = "project-a",
+                Name = "Alpha",
+                RootPath = @"C:\Repo\Alpha"
+            });
+            preferences.ProjectPathMappings.Add(new ProjectPathMapping
+            {
+                ProfileId = "profile-1",
+                LocalRootPath = @"C:\Repo\Alpha",
+                RemoteRootPath = "/home/ubuntu/Projects/Alpha"
+            });
+
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
+            {
+                Id = "profile-1",
+                Name = "Agent One",
+                Transport = TransportType.WebSocket,
+                ServerUrl = "ws://127.0.0.1:3010/"
+            });
+            chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[0];
+
+            SessionNewParams? captured = null;
+            var chatService = CreateConnectedChatService();
+            chatService
+                .Setup(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+                .Callback<SessionNewParams>(request => captured = request)
+                .ReturnsAsync(new SessionNewResponse(
+                    "remote-draft",
+                    new SessionModesState
+                    {
+                        CurrentModeId = "default",
+                        AvailableModes = [new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "default", Name = "Default" }]
+                    },
+                    [new ConfigOption
+                    {
+                        Id = "mode",
+                        Name = "Mode",
+                        Category = "mode",
+                        Type = "select",
+                        CurrentValue = "default",
+                        Options =
+                        [
+                            new ConfigOptionValue
+                            {
+                                Value = "default",
+                                Name = "Default"
+                            }
+                        ]
+                    }]));
+            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(
+                chat.ViewModel,
+                preferences,
+                nav,
+                workflow.Object);
+
+            await chat.DispatchConnectionAsync(new SetSettingsSelectedProfileAction("profile-1"));
+            await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
+            await chat.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+            await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+
+            startViewModel.SelectedStartProjectId = "project-a";
+            startViewModel.OnComposerLoaded();
+
+            await WaitForConditionAsync(() => startViewModel.StartModeOptions.Count == 1);
+
+            Assert.NotNull(captured);
+            Assert.Equal("/home/ubuntu/Projects/Alpha", captured!.Cwd);
+            Assert.False(startViewModel.HasStartSessionDraftError);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task StartSessionDraft_WhenRemoteProfileHasNoResolvableCwd_ShowsExplicitRemoteCwdError()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
+            {
+                Id = "profile-1",
+                Name = "Agent One",
+                Transport = TransportType.WebSocket,
+                ServerUrl = "ws://127.0.0.1:3010/"
+            });
+            chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[0];
+
+            var chatService = CreateConnectedChatService();
+            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(
+                chat.ViewModel,
+                preferences,
+                nav,
+                workflow.Object);
+
+            await chat.DispatchConnectionAsync(new SetSettingsSelectedProfileAction("profile-1"));
+            await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
+            await chat.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+            await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+
+            startViewModel.OnComposerLoaded();
+
+            await WaitForConditionAsync(() => startViewModel.HasStartSessionDraftError);
+
+            Assert.Equal(
+                "Select a project or configure a remote path mapping before creating a remote session.",
+                startViewModel.StartSessionDraftErrorMessage);
+            chatService.Verify(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()), Times.Never);
         }
         finally
         {
