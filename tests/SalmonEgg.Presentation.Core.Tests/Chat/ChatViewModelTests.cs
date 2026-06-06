@@ -10155,10 +10155,10 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         runtimeState.IsSessionActivationInProgress = true;
 
         Assert.False(fixture.ViewModel.ShouldShowActiveConversationRoot);
-        Assert.False(fixture.ViewModel.ShouldLoadActiveConversationRoot);
+        Assert.True(fixture.ViewModel.ShouldLoadActiveConversationRoot);
         Assert.False(fixture.ViewModel.ShouldShowSessionHeader);
         Assert.False(fixture.ViewModel.ShouldShowTranscriptSurface);
-        Assert.False(fixture.ViewModel.ShouldLoadTranscriptSurface);
+        Assert.True(fixture.ViewModel.ShouldLoadTranscriptSurface);
         Assert.False(fixture.ViewModel.ShouldShowConversationInputSurface);
         Assert.Equal(SessionNamePolicy.CreateDefault("conv-1"), fixture.ViewModel.CurrentSessionDisplayName);
         Assert.Equal(string.Empty, fixture.ViewModel.PresentedSessionHeaderDisplayName);
@@ -10202,10 +10202,8 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
         Assert.Contains(nameof(ChatViewModel.ShouldShowSessionHeader), raised);
         Assert.Contains(nameof(ChatViewModel.ShouldShowTranscriptSurface), raised);
-        Assert.Contains(nameof(ChatViewModel.ShouldLoadTranscriptSurface), raised);
         Assert.Contains(nameof(ChatViewModel.ShouldShowConversationInputSurface), raised);
         Assert.Contains(nameof(ChatViewModel.ShouldShowActiveConversationRoot), raised);
-        Assert.Contains(nameof(ChatViewModel.ShouldLoadActiveConversationRoot), raised);
     }
 
     [Fact]
@@ -11215,10 +11213,10 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         syncContext.RunAll();
 
         Assert.False(fixture.ViewModel.ShouldShowActiveConversationRoot);
-        Assert.False(fixture.ViewModel.ShouldLoadActiveConversationRoot);
+        Assert.True(fixture.ViewModel.ShouldLoadActiveConversationRoot);
         Assert.False(fixture.ViewModel.ShouldShowSessionHeader);
         Assert.False(fixture.ViewModel.ShouldShowTranscriptSurface);
-        Assert.False(fixture.ViewModel.ShouldLoadTranscriptSurface);
+        Assert.True(fixture.ViewModel.ShouldLoadTranscriptSurface);
         Assert.False(fixture.ViewModel.ShouldShowConversationInputSurface);
 
         var switchTask = fixture.ViewModel.SwitchConversationAsync("conv-2");
@@ -11235,10 +11233,10 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         syncContext.RunAll();
 
         Assert.False(fixture.ViewModel.ShouldShowActiveConversationRoot);
-        Assert.False(fixture.ViewModel.ShouldLoadActiveConversationRoot);
+        Assert.True(fixture.ViewModel.ShouldLoadActiveConversationRoot);
         Assert.False(fixture.ViewModel.ShouldShowSessionHeader);
         Assert.False(fixture.ViewModel.ShouldShowTranscriptSurface);
-        Assert.False(fixture.ViewModel.ShouldLoadTranscriptSurface);
+        Assert.True(fixture.ViewModel.ShouldLoadTranscriptSurface);
         Assert.False(fixture.ViewModel.ShouldShowConversationInputSurface);
         Assert.Equal("conv-2", runtimeState.DesiredSessionId);
         Assert.True(runtimeState.IsSessionActivationInProgress);
