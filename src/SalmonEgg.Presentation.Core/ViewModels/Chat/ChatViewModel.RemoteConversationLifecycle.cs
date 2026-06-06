@@ -629,10 +629,9 @@ public partial class ChatViewModel
             {
                 Logger.LogWarning(
                     ex,
-                    "Remote session binding became stale during hydration. Clearing binding. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
+                    "Remote session binding became stale during hydration. Preserving binding for explicit recovery. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
                     conversationId,
                     binding.RemoteSessionId);
-                await ClearRemoteBindingAsync(conversationId, binding.ProfileId).ConfigureAwait(false);
                 await SetConversationRuntimeStateAsync(
                         conversationId,
                         ConversationRuntimePhase.Stale,
@@ -640,23 +639,6 @@ public partial class ChatViewModel
                         reason: "RemoteSessionNotFound",
                         cancellationToken: CancellationToken.None)
                     .ConfigureAwait(false);
-                var restoredFromWorkspace = await TryRestoreConversationProjectionFromWorkspaceSnapshotAsync(conversationId).ConfigureAwait(false);
-                if (!restoredFromWorkspace)
-                {
-                    await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                            conversationId,
-                            activationVersion,
-                            SessionActivationPhase.Faulted,
-                            reason: ex.Message)
-                        .ConfigureAwait(false);
-                    await _conversationActivationOutcomePublisher.TrySetActivationErrorAsync(
-                            conversationId,
-                            activationVersion,
-                            $"Failed to load session: {ex.Message}")
-                        .ConfigureAwait(false);
-                    return false;
-                }
-
                 await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
                         conversationId,
                         activationVersion,
@@ -774,7 +756,7 @@ public partial class ChatViewModel
                     workspaceBinding.BoundProfileId));
         if (string.IsNullOrWhiteSpace(binding?.RemoteSessionId))
         {
-            return true;
+            return string.IsNullOrWhiteSpace(binding?.ProfileId);
         }
 
         if (AcpSessionRecoveryPolicy.Resolve(_chatService?.AgentCapabilities) == AcpSessionRecoveryMode.None)
@@ -919,28 +901,6 @@ public partial class ChatViewModel
                 PendingPermissionRequest = null;
             }
         }
-    }
-
-    private async Task ClearRemoteBindingAsync(string conversationId, string? boundProfileId)
-    {
-        if (string.IsNullOrWhiteSpace(conversationId))
-        {
-            return;
-        }
-
-        var result = await _bindingCommands
-            .UpdateBindingAsync(conversationId, remoteSessionId: null, boundProfileId)
-            .ConfigureAwait(false);
-        if (result.Status is BindingUpdateStatus.Success)
-        {
-            return;
-        }
-
-        Logger.LogWarning(
-            "Failed to clear stale remote binding after hydration error. ConversationId={ConversationId} Status={Status} Error={Error}",
-            conversationId,
-            result.Status,
-            result.ErrorMessage);
     }
 
     private void ApplySelectedProfile(ServerConfiguration profile)

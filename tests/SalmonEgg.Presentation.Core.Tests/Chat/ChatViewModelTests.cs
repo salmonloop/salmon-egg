@@ -14290,7 +14290,45 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
     }
 
     [Fact]
-    public async Task SwitchConversationAsync_RemoteBoundConversation_WhenRemoteSessionMissing_ClearsStaleBindingWithoutReplayingWorkspaceTranscript()
+    public async Task SwitchConversationAsync_ProfileBoundConversationWithoutRemoteSessionId_FailsInsteadOfOpeningLocalBlankHistory()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var sessionManager = CreateSessionManagerWithStore();
+        await sessionManager.Object.CreateSessionAsync("conv-local", @"C:\repo\local");
+        await sessionManager.Object.CreateSessionAsync("conv-broken", @"C:\repo\broken");
+
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
+        await fixture.ViewModel.RestoreAsync();
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-broken",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+        fixture.Workspace.UpdateRemoteBinding("conv-broken", remoteSessionId: null, boundProfileId: "profile-1");
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-local",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-broken", new ConversationBindingSlice("conv-broken", null, "profile-1"))
+        });
+
+        var switched = await fixture.ViewModel.SwitchConversationAsync("conv-broken");
+
+        Assert.False(switched);
+        Assert.Contains("no remote session binding", fixture.ViewModel.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        var state = await fixture.GetStateAsync();
+        var runtime = state.ResolveRuntimeState("conv-broken");
+        Assert.NotNull(runtime);
+        Assert.Equal(ConversationRuntimePhase.Faulted, runtime!.Value.Phase);
+        Assert.Equal("MissingRemoteSessionId", runtime.Value.Reason);
+        Assert.Empty(fixture.ViewModel.MessageHistory);
+    }
+
+    [Fact]
+    public async Task SwitchConversationAsync_RemoteBoundConversation_WhenRemoteSessionMissing_PreservesRemoteBindingWithoutCreatingReplacementSession()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
@@ -14330,6 +14368,8 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         chatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
         chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new AcpException(JsonRpcErrorCode.ResourceNotFound, "Resource not found: remote-2"));
+        chatService.Setup(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+            .Throws(new Xunit.Sdk.XunitException("session/new must not be used to recover a missing historical ACP session."));
 
         var commands = new Mock<IAcpConnectionCommands>(MockBehavior.Strict);
         commands.Setup(x => x.ConnectToProfileAsync(
@@ -14368,6 +14408,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
             ShowPlanPanel: false,
             CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+        fixture.Workspace.UpdateRemoteBinding("conv-2", "remote-2", "profile-1");
 
         await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
         await fixture.UpdateStateAsync(state => state with
@@ -14388,8 +14429,8 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
             var state = await fixture.GetStateAsync();
             return (fixture.ViewModel.ErrorMessage?.Contains("Resource not found", StringComparison.Ordinal) ?? false)
                 && fixture.ViewModel.MessageHistory.Count == 0
-                && workspaceBinding is { RemoteSessionId: null, BoundProfileId: "profile-1" }
-                && state.ResolveBinding("conv-2") == new ConversationBindingSlice("conv-2", null, "profile-1");
+                && workspaceBinding is { RemoteSessionId: "remote-2", BoundProfileId: "profile-1" }
+                && state.ResolveBinding("conv-2") == new ConversationBindingSlice("conv-2", "remote-2", "profile-1");
         });
         Assert.Contains("Resource not found", fixture.ViewModel.ErrorMessage ?? string.Empty, StringComparison.Ordinal);
         chatService.Verify(
@@ -14398,23 +14439,23 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
                 It.IsAny<CancellationToken>()),
             Times.Once);
         Assert.Empty(fixture.ViewModel.MessageHistory);
+        chatService.Verify(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()), Times.Never);
 
         var workspaceBinding = fixture.Workspace.GetRemoteBinding("conv-2");
         Assert.NotNull(workspaceBinding);
-        Assert.Null(workspaceBinding!.RemoteSessionId);
+        Assert.Equal("remote-2", workspaceBinding!.RemoteSessionId);
         Assert.Equal("profile-1", workspaceBinding.BoundProfileId);
         var workspaceSnapshot = fixture.Workspace.GetConversationSnapshot("conv-2");
         Assert.NotNull(workspaceSnapshot);
-        Assert.Empty(workspaceSnapshot!.Transcript);
-        Assert.Empty(workspaceSnapshot.Plan);
+        Assert.Single(workspaceSnapshot!.Transcript);
 
         var state = await fixture.GetStateAsync();
-        Assert.Equal(new ConversationBindingSlice("conv-2", null, "profile-1"), state.ResolveBinding("conv-2"));
+        Assert.Equal(new ConversationBindingSlice("conv-2", "remote-2", "profile-1"), state.ResolveBinding("conv-2"));
         Assert.Empty(state.ResolveContentSlice("conv-2")?.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty);
     }
 
     [Fact]
-    public async Task SwitchConversationAsync_RemoteBoundConversation_WhenBindingClearFails_DoesNotApplyLocalFallback()
+    public async Task SwitchConversationAsync_RemoteBoundConversation_WhenRemoteSessionMissing_DoesNotClearBindingOrApplyLocalFallback()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
@@ -14454,6 +14495,8 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         chatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
         chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new AcpException(JsonRpcErrorCode.ResourceNotFound, "Resource not found: remote-2"));
+        chatService.Setup(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+            .Throws(new Xunit.Sdk.XunitException("session/new must not be used to recover a missing historical ACP session."));
 
         var commands = new Mock<IAcpConnectionCommands>(MockBehavior.Strict);
         commands.Setup(x => x.ConnectToProfileAsync(
@@ -14491,6 +14534,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
             ShowPlanPanel: false,
             CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+        fixture.Workspace.UpdateRemoteBinding("conv-2", "remote-2", "profile-1");
 
         await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
         await fixture.UpdateStateAsync(state => state with
@@ -14505,12 +14549,13 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         var switched = await fixture.ViewModel.SwitchConversationAsync("conv-2");
 
         Assert.False(switched);
-        bindingCommands.Verify(x => x.UpdateBindingAsync("conv-2", null, "profile-1"), Times.Once);
+        bindingCommands.Verify(x => x.UpdateBindingAsync("conv-2", null, "profile-1"), Times.Never);
+        chatService.Verify(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()), Times.Never);
 
         var workspaceBinding = fixture.Workspace.GetRemoteBinding("conv-2");
         Assert.NotNull(workspaceBinding);
-        Assert.Null(workspaceBinding!.RemoteSessionId);
-        Assert.Null(workspaceBinding.BoundProfileId);
+        Assert.Equal("remote-2", workspaceBinding!.RemoteSessionId);
+        Assert.Equal("profile-1", workspaceBinding.BoundProfileId);
         var workspaceSnapshot = fixture.Workspace.GetConversationSnapshot("conv-2");
         Assert.NotNull(workspaceSnapshot);
         Assert.Empty(workspaceSnapshot!.Transcript);

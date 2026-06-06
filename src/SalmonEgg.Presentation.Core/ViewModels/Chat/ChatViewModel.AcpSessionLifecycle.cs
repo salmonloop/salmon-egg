@@ -701,6 +701,29 @@ public partial class ChatViewModel
         var hasReusableProjection = HasReusableWarmProjection(state, sessionId);
         if (string.IsNullOrWhiteSpace(binding?.RemoteSessionId))
         {
+            if (!string.IsNullOrWhiteSpace(binding?.ProfileId))
+            {
+                await SetConversationRuntimeStateAsync(
+                        sessionId,
+                        ConversationRuntimePhase.Faulted,
+                        binding,
+                        reason: "MissingRemoteSessionId",
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
+                        sessionId,
+                        activationVersion,
+                        SessionActivationPhase.Faulted,
+                        reason: "MissingRemoteSessionId")
+                    .ConfigureAwait(false);
+                await _conversationActivationOutcomePublisher.TrySetActivationErrorAsync(
+                        sessionId,
+                        activationVersion,
+                        "Failed to load session: no remote session binding is available for the profile-bound conversation.")
+                    .ConfigureAwait(false);
+                return false;
+            }
+
             await SetConversationRuntimeStateAsync(
                     sessionId,
                     ConversationRuntimePhase.Warm,
