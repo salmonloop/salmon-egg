@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Collections.Generic;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Application.Services.Chat;
 
@@ -52,21 +53,16 @@ public sealed class AcpConnectionSessionCleaner : IAcpConnectionSessionCleaner
             || !session.Service.IsInitialized);
 
         var disposeFailureCount = 0;
-        foreach (var session in removed)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (ReferenceEquals(activeService, session.Service))
-            {
-                continue;
-            }
 
+        async Task DisposeSessionAsync(AcpConnectionSession session)
+        {
             try
             {
                 await DisconnectAndDisposeAsync(session.Service).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                disposeFailureCount++;
+                Interlocked.Increment(ref disposeFailureCount);
                 _logger.LogDebug(
                     ex,
                     "Failed to dispose stale cached ACP session. profileId={ProfileId}",
@@ -80,6 +76,7 @@ public sealed class AcpConnectionSessionCleaner : IAcpConnectionSessionCleaner
                     }
                     catch (Exception disposeEx)
                     {
+                        // Ignore errors during disposal
                         _logger.LogDebug(
                             disposeEx,
                             "Failed to release stale cached ACP session after disconnect failure. profileId={ProfileId}",
@@ -87,6 +84,21 @@ public sealed class AcpConnectionSessionCleaner : IAcpConnectionSessionCleaner
                     }
                 }
             }
+        }
+
+        var staleTasks = new List<Task>(removed.Count);
+        foreach (var session in removed)
+        {
+            if (ReferenceEquals(activeService, session.Service))
+            {
+                continue;
+            }
+            staleTasks.Add(DisposeSessionAsync(session));
+        }
+
+        if (staleTasks.Count > 0)
+        {
+            await Task.WhenAll(staleTasks).ConfigureAwait(false);
         }
 
         var warmCandidates = _sessionRegistry.GetSnapshot()
@@ -135,6 +147,23 @@ public sealed class AcpConnectionSessionCleaner : IAcpConnectionSessionCleaner
             .ToArray();
         var removedWarmCount = 0;
 
+        async Task DisposeEvictedSessionAsync(AcpConnectionSession session)
+        {
+            try
+            {
+                await DisconnectAndDisposeAsync(session.Service).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Interlocked.Increment(ref disposeFailureCount);
+                _logger.LogDebug(
+                    ex,
+                    "Failed to dispose evicted cached ACP session. profileId={ProfileId}",
+                    session.ProfileId);
+            }
+        }
+
+        var evictedTasks = new List<Task>(sessionsToEvict.Length);
         foreach (var session in sessionsToEvict)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -149,18 +178,12 @@ public sealed class AcpConnectionSessionCleaner : IAcpConnectionSessionCleaner
                 continue;
             }
 
-            try
-            {
-                await DisconnectAndDisposeAsync(session.Service).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                disposeFailureCount++;
-                _logger.LogDebug(
-                    ex,
-                    "Failed to dispose evicted cached ACP session. profileId={ProfileId}",
-                    session.ProfileId);
-            }
+            evictedTasks.Add(DisposeEvictedSessionAsync(session));
+        }
+
+        if (evictedTasks.Count > 0)
+        {
+            await Task.WhenAll(evictedTasks).ConfigureAwait(false);
         }
 
         return new AcpConnectionSessionCleanupResult(removed.Count + removedWarmCount, disposeFailureCount);
