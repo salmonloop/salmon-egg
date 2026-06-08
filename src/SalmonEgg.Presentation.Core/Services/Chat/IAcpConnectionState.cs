@@ -159,12 +159,12 @@ public interface IAcpChatCoordinatorSink : IAcpConnectionState
             : ResetHydratedConversationForResyncAsync(cancellationToken);
     }
 
-    string GetActiveSessionCwdOrDefault() => Environment.CurrentDirectory;
+    string? GetActiveSessionCwdOrDefault() => null;
 
-    string GetSessionCwdOrDefault(string conversationId)
+    string? GetSessionCwdOrDefault(string conversationId)
         => string.IsNullOrWhiteSpace(conversationId)
             || !string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal)
-            ? Environment.CurrentDirectory
+            ? null
             : GetActiveSessionCwdOrDefault();
 
     Task SetIsHydratingAsync(bool isHydrating, CancellationToken cancellationToken = default)

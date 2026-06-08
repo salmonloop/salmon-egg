@@ -59,12 +59,14 @@ public interface IAcpSessionCommandOrchestrator
 public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrator
 {
     private readonly IAcpMcpServerResolver _mcpServerResolver;
+    private readonly ILogger<AcpSessionCommandOrchestrator> _logger;
 
     public AcpSessionCommandOrchestrator(
         ILogger<AcpSessionCommandOrchestrator> logger,
         IAcpMcpServerResolver mcpServerResolver)
     {
         ArgumentNullException.ThrowIfNull(logger);
+        _logger = logger;
         _mcpServerResolver = mcpServerResolver ?? throw new ArgumentNullException(nameof(mcpServerResolver));
     }
 
@@ -94,8 +96,9 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
                 UsedExistingBinding: true);
         }
 
+        var activeSessionCwd = ResolveActiveSessionCwdOrProtocolError(sink);
         var sessionParams = new SessionNewParams(
-            sink.GetActiveSessionCwdOrDefault(),
+            activeSessionCwd,
             McpServerJsonConverter.CloneServers(
                 await _mcpServerResolver.ResolveCurrentMcpServersAsync(sink, cancellationToken)
                     .ConfigureAwait(false)));
@@ -116,7 +119,7 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
             }
 
             sessionParams = new SessionNewParams(
-                sink.GetActiveSessionCwdOrDefault(),
+                activeSessionCwd,
                 McpServerJsonConverter.CloneServers(
                     await _mcpServerResolver.ResolveCurrentMcpServersAsync(sink, cancellationToken)
                         .ConfigureAwait(false)));
@@ -126,6 +129,19 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
         await UpdateBindingForCurrentConversationAsync(sink, response.SessionId, selectedProfileId).ConfigureAwait(false);
         markHydrated();
         return new AcpRemoteSessionResult(response.SessionId, response, UsedExistingBinding: false);
+    }
+
+    private string ResolveActiveSessionCwdOrProtocolError(IAcpChatCoordinatorSink sink)
+    {
+        var cwd = sink.GetActiveSessionCwdOrDefault()?.Trim();
+        if (string.IsNullOrWhiteSpace(cwd))
+        {
+            _logger.LogWarning("Skipping remote session creation because session cwd is missing or empty.");
+            throw new InvalidOperationException(
+                AcpSessionNewCwdResolver.MissingRemoteCwdMessage);
+        }
+
+        return cwd;
     }
 
     public async Task<AcpPromptDispatchResult> SendPromptAsync(
