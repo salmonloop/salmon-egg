@@ -1095,6 +1095,14 @@ public partial class ChatViewModel
             return new DiscoverRemoteSessionOpenResult(false, null, "RemoteSessionIdMissing");
         }
 
+        if (string.IsNullOrWhiteSpace(request.RemoteSessionCwd))
+        {
+            return new DiscoverRemoteSessionOpenResult(
+                false,
+                null,
+                AcpSessionNewCwdResolver.MissingRemoteCwdMessage);
+        }
+
         var localConversationId = Guid.NewGuid().ToString("N");
         try
         {

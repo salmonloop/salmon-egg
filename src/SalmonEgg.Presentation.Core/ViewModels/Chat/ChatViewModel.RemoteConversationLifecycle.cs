@@ -404,13 +404,25 @@ public partial class ChatViewModel
             AcpSessionRecoveryProjection recoveryProjection;
             if (recoveryMode == AcpSessionRecoveryMode.Load)
             {
+                var recoveryCwd = await ResolveRecoverySessionCwdOrSessionListAsync(
+                        chatService,
+                        binding,
+                        conversationId,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                if (string.IsNullOrWhiteSpace(recoveryCwd))
+                {
+                    throw new InvalidOperationException(
+                        "Cannot recover remote session because working directory is missing.");
+                }
+
                 var recoveryStart = GetOrStartRemoteSessionRecoveryProjection(
                         chatService,
                         recoveryMode,
                         conversationId,
                         binding,
                         resolvedConnection.ConnectionInstanceId,
-                        GetSessionCwdOrDefault(conversationId),
+                        recoveryCwd,
                         adapter);
                 hydrationAttemptId = recoveryStart.BufferScope.HydrationAttemptId;
                 ownsRecoveryLease = recoveryStart.BufferScope.OwnsRecoveryLease;
@@ -485,13 +497,25 @@ public partial class ChatViewModel
             }
             else
             {
+                var recoveryCwd = await ResolveRecoverySessionCwdOrSessionListAsync(
+                        chatService,
+                        binding,
+                        conversationId,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                if (string.IsNullOrWhiteSpace(recoveryCwd))
+                {
+                    throw new InvalidOperationException(
+                        "Cannot recover remote session because working directory is missing.");
+                }
+
                 var recoveryStart = GetOrStartRemoteSessionRecoveryProjection(
                         chatService,
                         recoveryMode,
                         conversationId,
                         binding,
                         resolvedConnection.ConnectionInstanceId,
-                        GetSessionCwdOrDefault(conversationId),
+                        recoveryCwd,
                         adapter: null);
                 ownsRecoveryLease = recoveryStart.BufferScope.OwnsRecoveryLease;
                 recoveryCancellationToken = recoveryStart.BufferScope.RecoveryCancellationToken;
@@ -1659,9 +1683,21 @@ public partial class ChatViewModel
         string conversationId,
         ConversationBindingSlice binding,
         string? connectionInstanceId,
-        string cwd,
+        string? cwd,
         IAcpSessionUpdateBufferController? adapter)
     {
+        if (string.IsNullOrWhiteSpace(cwd))
+        {
+            return new AcpSessionRecoveryStartResult(
+                Task.FromException<AcpSessionRecoveryProjection>(
+                    new InvalidOperationException("Cannot recover remote session without a working directory.")),
+                new( null, OwnsRecoveryLease: false, CancellationToken.None),
+                null,
+                null,
+                null,
+                null);
+        }
+
         if (string.IsNullOrWhiteSpace(binding.RemoteSessionId))
         {
             return new AcpSessionRecoveryStartResult(
@@ -1813,10 +1849,22 @@ public partial class ChatViewModel
         string conversationId,
         ConversationBindingSlice binding,
         string? connectionInstanceId,
-        string cwd,
+        string? cwd,
         IAcpSessionUpdateBufferController? adapter,
         bool canStartRecoveryTransport = true)
     {
+        if (string.IsNullOrWhiteSpace(cwd))
+        {
+            return new AcpSessionRecoveryStartResult(
+                Task.FromException<AcpSessionRecoveryProjection>(
+                    new InvalidOperationException("Cannot recover remote session without a working directory.")),
+                new( null, OwnsRecoveryLease: false, CancellationToken.None),
+                null,
+                null,
+                null,
+                null);
+        }
+
         return new AcpSessionRecoveryStartResult(
             request.Task,
             bufferScope,
@@ -2529,7 +2577,7 @@ public partial class ChatViewModel
             sessionInfo.Title,
             HasTitle: true,
             sessionInfo.Description,
-            null,
+            string.IsNullOrWhiteSpace(sessionInfo.Cwd) ? null : sessionInfo.Cwd,
             sessionInfo.UpdatedAt,
             HasUpdatedAt: true,
             sessionInfo.Meta));
@@ -2602,6 +2650,37 @@ public partial class ChatViewModel
                 sessionInfo,
                 cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    private async Task<string?> ResolveRecoverySessionCwdOrSessionListAsync(
+        IChatService chatService,
+        ConversationBindingSlice binding,
+        string conversationId,
+        CancellationToken cancellationToken)
+    {
+        var establishedCwd = GetSessionCwdOrDefault(conversationId);
+        if (!string.IsNullOrWhiteSpace(establishedCwd))
+        {
+            return establishedCwd;
+        }
+
+        var remoteSessionInfo = await LoadRemoteSessionInfoSnapshotFromSsotAsync(
+            conversationId,
+            binding,
+            chatService,
+            cancellationToken)
+            .ConfigureAwait(false);
+
+        if (string.IsNullOrWhiteSpace(remoteSessionInfo?.Cwd))
+        {
+            return null;
+        }
+
+        var normalizedCwd = remoteSessionInfo.Cwd.Trim();
+        await ApplySessionInfoSnapshotProjectionAsync(conversationId, remoteSessionInfo, cancellationToken)
+            .ConfigureAwait(false);
+
+        return normalizedCwd;
     }
 
     private async Task ApplySessionInfoSnapshotProjectionAsync(

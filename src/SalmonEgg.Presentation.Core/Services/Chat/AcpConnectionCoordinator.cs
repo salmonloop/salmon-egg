@@ -140,6 +140,16 @@ public sealed class AcpConnectionCoordinator : IAcpConnectionCoordinator
         try
         {
             await sink.SetConversationHydratingAsync(conversationId!, true, cancellationToken).ConfigureAwait(false);
+            var sessionCwd = sink.GetSessionCwdOrDefault(conversationId!);
+            if (string.IsNullOrWhiteSpace(sessionCwd))
+            {
+                _logger.LogWarning(
+                    "Skipping ACP resync because session working directory is missing. conversationId={ConversationId} remoteSessionId={RemoteSessionId}",
+                    conversationId,
+                    sessionId);
+                await sink.SetConversationHydratingAsync(conversationId!, false, CancellationToken.None).ConfigureAwait(false);
+                return;
+            }
 
             AcpSessionRecoveryProjection recoveryProjection;
             if (recoveryMode == AcpSessionRecoveryMode.Load)
@@ -149,7 +159,7 @@ public sealed class AcpConnectionCoordinator : IAcpConnectionCoordinator
                 var loadTask = sink.CurrentChatService.LoadSessionAsync(
                     new SessionLoadParams(
                         sessionId,
-                        sink.GetSessionCwdOrDefault(conversationId!),
+                        sessionCwd!,
                         McpServerJsonConverter.CloneServers(mcpServers)),
                     cancellationToken);
                 recoveryProjection = AcpSessionRecoveryProjection.FromLoad(
@@ -171,7 +181,7 @@ public sealed class AcpConnectionCoordinator : IAcpConnectionCoordinator
                 var resumeTask = sink.CurrentChatService.ResumeSessionAsync(
                     new SessionResumeParams(
                         sessionId,
-                        sink.GetSessionCwdOrDefault(conversationId!),
+                        sessionCwd!,
                         McpServerJsonConverter.CloneServers(mcpServers)),
                     cancellationToken);
                 recoveryProjection = AcpSessionRecoveryProjection.FromResume(

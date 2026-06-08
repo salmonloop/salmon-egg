@@ -28,20 +28,7 @@ public static class AcpSessionNewCwdResolver
                 return new AcpSessionNewCwdResolution(true, trimmedCwd, null);
             }
 
-            try
-            {
-                var currentDirectory = Environment.CurrentDirectory?.Trim();
-                return new AcpSessionNewCwdResolution(
-                    !string.IsNullOrWhiteSpace(currentDirectory),
-                    currentDirectory,
-                    string.IsNullOrWhiteSpace(currentDirectory)
-                        ? MissingRemoteCwdMessage
-                        : null);
-            }
-            catch
-            {
-                return new AcpSessionNewCwdResolution(false, null, MissingRemoteCwdMessage);
-            }
+            return new AcpSessionNewCwdResolution(false, null, MissingRemoteCwdMessage);
         }
 
         if (string.IsNullOrWhiteSpace(trimmedCwd))

@@ -596,23 +596,6 @@ public partial class ChatViewModel
             string.Equals(option.Category, "mode", StringComparison.OrdinalIgnoreCase)
             || string.Equals(option.Id, "mode", StringComparison.OrdinalIgnoreCase))?.Id;
 
-    private static string NormalizeNewSessionDraftCwd(string? cwd)
-    {
-        if (!string.IsNullOrWhiteSpace(cwd))
-        {
-            return cwd.Trim();
-        }
-
-        try
-        {
-            return Environment.CurrentDirectory;
-        }
-        catch
-        {
-            return string.Empty;
-        }
-    }
-
     private static string? NormalizeNewSessionDraftProfileId(string? profileId)
         => string.IsNullOrWhiteSpace(profileId)
             ? null

@@ -104,6 +104,84 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
+    public async Task RestoreAsync_ExistingSessionWithMissingCwd_PicksUpRestoredConversationCwd()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore
+        {
+            LoadResult = new ConversationDocument
+            {
+                Conversations =
+                {
+                    new ConversationRecord
+                    {
+                        ConversationId = "session-existing",
+                        DisplayName = "Session Existing",
+                        CreatedAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                        LastUpdatedAt = new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
+                        Cwd = @"C:\repo\restored"
+                    }
+                }
+            }
+        };
+
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-existing", null);
+        var existing = sessionManager.GetSession("session-existing");
+        Assert.NotNull(existing);
+        Assert.Null(existing!.Cwd);
+
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+
+        await workspace.RestoreAsync();
+
+        var session = sessionManager.GetSession("session-existing");
+        Assert.NotNull(session);
+        Assert.Equal(@"C:\repo\restored", session!.Cwd);
+        var catalogItem = Assert.Single(workspace.GetCatalog(), item => item.ConversationId == "session-existing");
+        Assert.Equal(@"C:\repo\restored", catalogItem.Cwd);
+    }
+
+    [Fact]
+    public async Task RestoreAsync_ExistingSessionWithMissingCwd_PicksUpSessionInfoCwd()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore
+        {
+            LoadResult = new ConversationDocument
+            {
+                Conversations =
+                {
+                    new ConversationRecord
+                    {
+                        ConversationId = "session-existing-info",
+                        DisplayName = "Session Existing",
+                        CreatedAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                        LastUpdatedAt = new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
+                        SessionInfo = new ConversationSessionInfoSnapshot
+                        {
+                            Cwd = @"C:\repo\info"
+                        }
+                    }
+                }
+            }
+        };
+
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-existing-info", null);
+
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+
+        await workspace.RestoreAsync();
+
+        var session = sessionManager.GetSession("session-existing-info");
+        Assert.NotNull(session);
+        Assert.Equal(@"C:\repo\info", session!.Cwd);
+    }
+
+    [Fact]
     public async Task RestoreAsync_LocalConversationPreservesPersistedDisplayName()
     {
         var syncContext = new ImmediateSynchronizationContext();

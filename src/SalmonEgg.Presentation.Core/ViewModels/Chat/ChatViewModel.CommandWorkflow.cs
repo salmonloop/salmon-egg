@@ -154,10 +154,18 @@ public partial class ChatViewModel
     }
 
     private async Task<SessionNewParams> CreateSessionNewParamsAsync(CancellationToken cancellationToken)
-        => new(
-            GetActiveSessionCwdOrDefault(),
+    {
+        var cwd = GetActiveSessionCwdOrDefault();
+        if (string.IsNullOrWhiteSpace(cwd))
+        {
+            throw new InvalidOperationException(AcpSessionNewCwdResolver.MissingRemoteCwdMessage);
+        }
+
+        return new(
+            cwd,
             McpServerJsonConverter.CloneServers(
                 await ResolveCurrentMcpServersAsync(cancellationToken).ConfigureAwait(false)));
+    }
 
     private async Task<SessionNewResponse> CreateRemoteSessionAsync(
         SessionNewParams sessionParams,
@@ -1118,34 +1126,44 @@ public partial class ChatViewModel
         });
     }
 
-    public string GetActiveSessionCwdOrDefault()
+    public string? GetActiveSessionCwdOrDefault()
         => GetSessionCwdOrDefault(CurrentSessionId);
 
-    private string GetSessionCwdOrDefault(string? conversationId)
+    private string? GetSessionCwdOrDefault(string? conversationId)
     {
         try
         {
             if (!string.IsNullOrWhiteSpace(conversationId))
             {
-                var session = _sessionManager.GetSession(conversationId);
-                if (!string.IsNullOrWhiteSpace(session?.Cwd))
+                var localSession = _sessionManager.GetSession(conversationId);
+                if (!string.IsNullOrWhiteSpace(localSession?.Cwd))
                 {
-                    return session!.Cwd!.Trim();
+                    return localSession!.Cwd!.Trim();
+                }
+
+                var remoteSessionId = _conversationWorkspace.GetRemoteBinding(conversationId)?.RemoteSessionId;
+                if (!string.IsNullOrWhiteSpace(remoteSessionId))
+                {
+                    var remoteSession = _sessionManager.GetSession(remoteSessionId);
+                    if (!string.IsNullOrWhiteSpace(remoteSession?.Cwd))
+                    {
+                        return remoteSession!.Cwd!.Trim();
+                    }
+                }
+
+                var snapshotCwd = TryGetConversationSnapshot(conversationId)?.SessionInfo?.Cwd;
+                if (!string.IsNullOrWhiteSpace(snapshotCwd))
+                {
+                    return snapshotCwd!.Trim();
                 }
             }
         }
         catch
         {
+            return null;
         }
 
-        try
-        {
-            return Environment.CurrentDirectory;
-        }
-        catch
-        {
-            return string.Empty;
-        }
+        return null;
     }
 
     [RelayCommand]
