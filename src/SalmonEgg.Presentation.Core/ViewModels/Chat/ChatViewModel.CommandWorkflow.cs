@@ -155,14 +155,19 @@ public partial class ChatViewModel
 
     private async Task<SessionNewParams> CreateSessionNewParamsAsync(CancellationToken cancellationToken)
     {
-        var cwd = GetActiveSessionCwdOrDefault();
-        if (string.IsNullOrWhiteSpace(cwd))
+        var profile = ResolveNewSessionDraftProfile(SelectedProfileId);
+        var cwdResolution = AcpSessionNewCwdResolver.Resolve(
+            GetActiveSessionCwdOrDefault(),
+            profile,
+            _preferences.ProjectPathMappings);
+
+        if (!cwdResolution.IsSuccess || string.IsNullOrWhiteSpace(cwdResolution.Cwd))
         {
             throw new InvalidOperationException(AcpSessionNewCwdResolver.MissingRemoteCwdMessage);
         }
 
         return new(
-            cwd,
+            cwdResolution.Cwd,
             McpServerJsonConverter.CloneServers(
                 await ResolveCurrentMcpServersAsync(cancellationToken).ConfigureAwait(false)));
     }

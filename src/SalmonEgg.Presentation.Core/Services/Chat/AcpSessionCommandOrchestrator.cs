@@ -133,12 +133,16 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
 
     private string ResolveActiveSessionCwdOrProtocolError(IAcpChatCoordinatorSink sink)
     {
-        var cwd = sink.GetActiveSessionCwdOrDefault()?.Trim();
+        var cwdResolution = AcpSessionNewCwdResolver.Resolve(
+            sink.GetActiveSessionCwdOrDefault()?.Trim(),
+            sink.ResolveProfile(sink.SelectedProfileId),
+            sink.GetProjectPathMappings());
+        var cwd = cwdResolution.Cwd?.Trim();
         if (string.IsNullOrWhiteSpace(cwd))
         {
             _logger.LogWarning("Skipping remote session creation because session cwd is missing or empty.");
             throw new InvalidOperationException(
-                AcpSessionNewCwdResolver.MissingRemoteCwdMessage);
+                cwdResolution.ErrorMessage ?? AcpSessionNewCwdResolver.MissingRemoteCwdMessage);
         }
 
         return cwd;

@@ -14,6 +14,7 @@ using SalmonEgg.Domain.Models.JsonRpc;
 using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Models.Plan;
 using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services;
@@ -1207,6 +1208,43 @@ public sealed class AcpChatCoordinatorTests
         Assert.Single(sink.BindingCommands.Updates);
         Assert.Equal("local-session-1", sink.BindingCommands.Updates[0].ConversationId);
         Assert.Equal("profile-1", sink.BindingCommands.Updates[0].ProfileId);
+    }
+
+    [Fact]
+    public async Task EnsureRemoteSessionAsync_WithStdioProfileUsesDefaultUserProfileAsCwdWhenMissing()
+    {
+        var service = CreateChatService();
+        var expectedCwd = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        SessionNewParams? capturedParams = null;
+        var sink = new FakeSink
+        {
+            CurrentChatService = service.Object,
+            IsConnected = true,
+            IsInitialized = true,
+            IsSessionActive = true,
+            CurrentSessionId = "local-session-1",
+            ActiveSessionCwd = "   ",
+            SelectedProfileId = "profile-stdio"
+        };
+        sink.ResolvedProfile = new ServerConfiguration
+        {
+            Id = "profile-stdio",
+            Transport = TransportType.Stdio
+        };
+        var factory = new Mock<IAcpChatServiceFactory>();
+        var logger = new Mock<ILogger<AcpChatCoordinator>>();
+
+        service
+            .Setup(x => x.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+            .Callback<SessionNewParams>(parameters => capturedParams = parameters)
+            .ReturnsAsync(new SessionNewResponse("remote-session-1"));
+
+        var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
+
+        await sut.EnsureRemoteSessionAsync(sink, _ => Task.FromResult(true));
+
+        Assert.NotNull(capturedParams);
+        Assert.Equal(expectedCwd, capturedParams!.Cwd);
     }
 
     [Fact]
@@ -2463,6 +2501,7 @@ public sealed class AcpChatCoordinatorTests
         public string ActiveSessionCwd { get; set; } = string.Empty;
         public ConversationRemoteBindingState? ResolvedBinding { get; set; }
         public int ClearedRemoteSessionBindings { get; private set; }
+        public ServerConfiguration? ResolvedProfile { get; set; }
         public List<(string RemoteSessionId, string? ProfileId, bool PreserveConversation)> BoundRemoteSessions { get; } = new();
         public List<IChatService?> ReplaceChatServiceCalls { get; } = new();
         public List<ServiceReplaceIntent> ReplaceChatServiceIntents { get; } = new();
@@ -2478,7 +2517,17 @@ public sealed class AcpChatCoordinatorTests
         public void SelectProfile(ServerConfiguration profile)
         {
             SelectedProfileId = profile.Id;
+            ResolvedProfile = profile;
         }
+
+        public ServerConfiguration? ResolveProfile(string? profileId)
+            => ResolvedProfile is not null && (string.IsNullOrWhiteSpace(profileId) || string.Equals(ResolvedProfile.Id, profileId, StringComparison.Ordinal))
+                ? ResolvedProfile
+                : string.IsNullOrWhiteSpace(profileId)
+                    ? ResolvedProfile
+                    : new ServerConfiguration { Id = profileId, Transport = TransportType.WebSocket };
+
+        public IReadOnlyList<ProjectPathMapping> GetProjectPathMappings() => Array.Empty<ProjectPathMapping>();
 
         public void SetCurrentMcpServers(IReadOnlyList<McpServer> mcpServers)
         {

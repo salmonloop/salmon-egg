@@ -21,14 +21,17 @@ public static class AcpSessionNewCwdResolver
         IReadOnlyList<ProjectPathMapping>? pathMappings)
     {
         var trimmedCwd = TrimOrNull(requestedCwd);
-        if (profile is null || profile.Transport == TransportType.Stdio)
+        if (profile?.Transport == TransportType.Stdio)
         {
             if (!string.IsNullOrWhiteSpace(trimmedCwd))
             {
                 return new AcpSessionNewCwdResolution(true, trimmedCwd, null);
             }
 
-            return new AcpSessionNewCwdResolution(false, null, MissingRemoteCwdMessage);
+            return new AcpSessionNewCwdResolution(
+                true,
+                GetDefaultStdioUserProfileDirectory(),
+                null);
         }
 
         if (string.IsNullOrWhiteSpace(trimmedCwd))
@@ -36,7 +39,7 @@ public static class AcpSessionNewCwdResolver
             return new AcpSessionNewCwdResolution(false, null, MissingRemoteCwdMessage);
         }
 
-        if (TryMapLocalPathToRemote(trimmedCwd, profile.Id, pathMappings, out var remoteCwd))
+        if (TryMapLocalPathToRemote(trimmedCwd, profile?.Id, pathMappings, out var remoteCwd))
         {
             return new AcpSessionNewCwdResolution(true, remoteCwd, null);
         }
@@ -127,4 +130,7 @@ public static class AcpSessionNewCwdResolver
         => string.IsNullOrWhiteSpace(path)
             ? string.Empty
             : path.Trim().Replace('\\', '/').TrimEnd('/');
+
+    private static string GetDefaultStdioUserProfileDirectory()
+        => Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 }

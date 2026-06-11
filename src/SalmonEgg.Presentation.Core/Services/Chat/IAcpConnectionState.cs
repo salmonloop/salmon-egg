@@ -6,6 +6,7 @@ using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Domain.Models.ProjectAffinity;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 
@@ -58,6 +59,8 @@ public interface IAcpChatCoordinatorSink : IAcpConnectionState
 
     string? SelectedProfileId => null;
 
+    ServerConfiguration? ResolveProfile(string? profileId) => null;
+
     IReadOnlyList<McpServer> CurrentMcpServers { get; }
 
     void SetCurrentMcpServers(IReadOnlyList<McpServer> mcpServers);
@@ -67,6 +70,8 @@ public interface IAcpChatCoordinatorSink : IAcpConnectionState
     IUiDispatcher Dispatcher { get; }
 
     IConversationBindingCommands ConversationBindingCommands { get; }
+
+    IReadOnlyList<ProjectPathMapping> GetProjectPathMappings() => [];
 
     ValueTask<ConversationRemoteBindingState?> GetCurrentRemoteBindingAsync(CancellationToken cancellationToken = default)
     {

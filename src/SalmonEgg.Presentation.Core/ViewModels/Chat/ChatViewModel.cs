@@ -2896,11 +2896,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         public bool IsInitialized => _owner.IsInitialized;
         public string? CurrentRemoteSessionId => _owner.CurrentRemoteSessionId;
         public string? SelectedProfileId => _owner.SelectedProfileId;
+        public ServerConfiguration? ResolveProfile(string? profileId) => _owner.ResolveNewSessionDraftProfile(profileId);
         public IReadOnlyList<McpServer> CurrentMcpServers => _owner.CurrentMcpServers;
         public string? ConnectionInstanceId => _owner.ConnectionInstanceId;
         public long ConnectionGeneration => _owner.ConnectionGeneration;
         public IUiDispatcher Dispatcher => _owner.Dispatcher;
         public IConversationBindingCommands ConversationBindingCommands => _bindingCommands;
+        public IReadOnlyList<ProjectPathMapping> GetProjectPathMappings()
+            => _owner._preferences.ProjectPathMappings;
 
         public void SetCurrentMcpServers(IReadOnlyList<McpServer> mcpServers)
         {
