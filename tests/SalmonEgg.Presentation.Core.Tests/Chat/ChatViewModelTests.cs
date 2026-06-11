@@ -4197,6 +4197,81 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
     }
 
     [Fact]
+    public async Task EnsureNewSessionDraftAsync_WhenRequiredProfileMatchesAfterProfileSwitch_CreatesDraft()
+    {
+        await using var fixture = CreateViewModel();
+        var chatService = CreateConnectedChatService();
+        chatService.SetupGet(service => service.AgentCapabilities)
+            .Returns(new AgentCapabilities(sessionCapabilities: new SessionCapabilities
+            {
+                Close = new SessionCloseCapabilities()
+            }));
+        chatService.Setup(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+            .ReturnsAsync(new SessionNewResponse("remote-draft"));
+
+        await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+        await fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+
+        var ensureTask = fixture.ViewModel.EnsureNewSessionDraftForProfileAsync(
+            @"C:\Repo\App",
+            requiredProfileId: "profile-2");
+        await Task.Delay(25);
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connecting));
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-2"));
+        await fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-2"));
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+        await ensureTask;
+
+        await WaitForConditionAsync(async () =>
+        {
+            var state = await fixture.GetConnectionStateAsync();
+            return state.NewSessionDraft is not null
+                && string.Equals(state.NewSessionDraft.ProfileId, "profile-2", StringComparison.Ordinal)
+                && string.Equals(state.NewSessionDraft.ConnectionInstanceId, "conn-2", StringComparison.Ordinal);
+        });
+        var connectionState = await fixture.GetConnectionStateAsync();
+        Assert.NotNull(connectionState.NewSessionDraft);
+        Assert.Equal("remote-draft", connectionState.NewSessionDraft!.RemoteSessionId);
+        Assert.Equal("profile-2", connectionState.NewSessionDraft.ProfileId);
+        Assert.Equal("conn-2", connectionState.NewSessionDraft.ConnectionInstanceId);
+        chatService.Verify(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task EnsureNewSessionDraftAsync_WhenRequiredProfileSwitchWaitsForConnectedProfileInstanceBeforeDrafting()
+    {
+        await using var fixture = CreateViewModel();
+        var chatService = CreateConnectedChatService();
+        chatService.Setup(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+            .ReturnsAsync(new SessionNewResponse("remote-draft"));
+
+        await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+        await fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+
+        var ensureTask = fixture.ViewModel.EnsureNewSessionDraftForProfileAsync(
+            @"C:\Repo\App",
+            requiredProfileId: "profile-2");
+        await Task.Delay(25);
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connecting));
+        await fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-2"));
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+        Assert.False(ensureTask.IsCompleted);
+
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-2"));
+        await ensureTask;
+
+        var connectionState = await fixture.GetConnectionStateAsync();
+        Assert.NotNull(connectionState.NewSessionDraft);
+        Assert.Equal("profile-2", connectionState.NewSessionDraft!.ProfileId);
+        Assert.Equal("conn-2", connectionState.NewSessionDraft.ConnectionInstanceId);
+        chatService.Verify(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()), Times.Once);
+    }
+
+    [Fact]
     public async Task EnsureNewSessionDraftAsync_WhenCancelledAfterSessionNew_ClosesCreatedRemoteSession()
     {
         await using var fixture = CreateViewModel();

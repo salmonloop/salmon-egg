@@ -18,6 +18,9 @@ namespace SalmonEgg.Presentation.ViewModels.Chat;
 
 public partial class ChatViewModel
 {
+    private static readonly TimeSpan NewSessionDraftProfileWaitTimeout = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan NewSessionDraftProfileWaitDelay = TimeSpan.FromMilliseconds(50);
+
     public async Task EnsureNewSessionDraftAsync(string? cwd, CancellationToken cancellationToken = default)
         => await EnsureNewSessionDraftForProfileAsync(cwd, requiredProfileId: null, cancellationToken).ConfigureAwait(false);
 
@@ -54,7 +57,24 @@ public partial class ChatViewModel
                 }
 
                 await ClearNewSessionDraftStateAsync().ConfigureAwait(false);
-                return;
+                if (!await WaitForRequiredForegroundProfileAsync(
+                    normalizedRequiredProfileId,
+                    cancellationToken).ConfigureAwait(false))
+                {
+                    return;
+                }
+
+                connectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
+                chatService = _chatService;
+                profileId = normalizedRequiredProfileId;
+                connectionInstanceId = connectionState.ConnectionInstanceId ?? ConnectionInstanceId;
+                if (chatService is null
+                    || string.IsNullOrWhiteSpace(profileId)
+                    || string.IsNullOrWhiteSpace(connectionInstanceId))
+                {
+                    await ClearNewSessionDraftStateAsync().ConfigureAwait(false);
+                    return;
+                }
             }
 
             var profile = ResolveNewSessionDraftProfile(profileId);
@@ -194,6 +214,43 @@ public partial class ChatViewModel
         {
             _newSessionDraftGate.Release();
         }
+    }
+
+    private async Task<bool> WaitForRequiredForegroundProfileAsync(
+        string requiredProfileId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var timeoutAt = DateTime.UtcNow.Add(NewSessionDraftProfileWaitTimeout);
+        while (DateTime.UtcNow < timeoutAt)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var state = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(requiredProfileId)
+                && state.Phase == ConnectionPhase.Connected
+                && string.Equals(state.ForegroundTransportProfileId, requiredProfileId, StringComparison.Ordinal)
+                && !string.IsNullOrWhiteSpace(state.ConnectionInstanceId))
+            {
+                return true;
+            }
+
+            if (state.Phase is ConnectionPhase.Disconnected or ConnectionPhase.Error)
+            {
+                Logger.LogInformation(
+                    "New session draft preparation aborted while waiting for required profile. requiredProfileId={RequiredProfileId} currentProfileId={CurrentProfileId} currentPhase={Phase}",
+                    requiredProfileId,
+                    state.ForegroundTransportProfileId,
+                    state.Phase);
+                return false;
+            }
+
+            await Task.Delay(NewSessionDraftProfileWaitDelay, cancellationToken).ConfigureAwait(false);
+        }
+
+        Logger.LogWarning(
+            "Timed out waiting for required foreground profile before creating ACP new-session draft. requiredProfileId={RequiredProfileId}",
+            requiredProfileId);
+        return false;
     }
 
     public async Task DiscardNewSessionDraftAsync(CancellationToken cancellationToken = default)

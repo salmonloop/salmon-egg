@@ -645,6 +645,121 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
+    public async Task StartModeSelector_WhenSelectedAgentSwitches_WaitsForForegroundProfileAndStillBecomesReady()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            preferences.Projects.Add(new ProjectDefinition
+            {
+                ProjectId = "project-a",
+                Name = "Alpha",
+                RootPath = @"C:\Repo\Alpha"
+            });
+
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
+            {
+                Id = "profile-1",
+                Name = "Agent 1",
+                Transport = TransportType.Stdio,
+                StdioCommand = "acp-one"
+            });
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
+            {
+                Id = "profile-2",
+                Name = "Agent 2",
+                Transport = TransportType.Stdio,
+                StdioCommand = "acp-two"
+            });
+            chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[0];
+
+            var chatService = CreateConnectedChatService();
+            chatService.SetupGet(service => service.AgentCapabilities)
+                .Returns(new AgentCapabilities(sessionCapabilities: new SessionCapabilities
+                {
+                    Close = new SessionCloseCapabilities()
+                }));
+            var callCount = 0;
+            chatService.Setup(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+                .ReturnsAsync(() =>
+                {
+                    ++callCount;
+                    return new SessionNewResponse(
+                        $"remote-{callCount}",
+                        new SessionModesState
+                        {
+                            CurrentModeId = "code",
+                            AvailableModes = new List<SalmonEgg.Domain.Models.Protocol.SessionMode>
+                            {
+                                new() { Id = "code", Name = "Code" },
+                                new() { Id = "plan", Name = "Plan" }
+                            }
+                        });
+                });
+            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(
+                chat.ViewModel,
+                preferences,
+                nav,
+                workflow.Object);
+
+            startViewModel.SelectedStartProjectId = "project-a";
+            startViewModel.OnComposerLoaded();
+
+            await chat.DispatchConnectionAsync(new SetSettingsSelectedProfileAction("profile-1"));
+            await chat.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+            await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
+            await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+
+            await WaitForConditionAsync(
+                () => startViewModel.IsStartModeSelectorEnabled
+                    && startViewModel.StartModeStage == StartSessionModeStage.Ready
+                    && startViewModel.StartModeOptions.Count == 2,
+                timeoutMilliseconds: 3000);
+
+            chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[1];
+            await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connecting));
+            await chat.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-2"));
+            await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-2"));
+            await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+
+            var timeoutAt = DateTime.UtcNow.AddSeconds(3);
+            while (true)
+            {
+                var connectionState = await chat.GetConnectionStateAsync();
+                if (connectionState.NewSessionDraft is not null
+                    && string.Equals(connectionState.NewSessionDraft.ProfileId, "profile-2", StringComparison.Ordinal)
+                    && string.Equals(connectionState.NewSessionDraft.ConnectionInstanceId, "conn-2", StringComparison.Ordinal)
+                    && string.Equals(connectionState.NewSessionDraft.RemoteSessionId, "remote-2", StringComparison.Ordinal)
+                    && startViewModel.IsStartModeSelectorEnabled
+                    && startViewModel.StartModeStage == StartSessionModeStage.Ready)
+                {
+                    break;
+                }
+
+                Assert.True(DateTime.UtcNow < timeoutAt, "Timed out waiting for profile-2 new-session draft to become ready.");
+                await Task.Delay(20);
+            }
+
+            var finalState = await chat.GetConnectionStateAsync();
+            Assert.Equal("profile-2", finalState.NewSessionDraft?.ProfileId);
+            Assert.Equal("remote-2", finalState.NewSessionDraft?.RemoteSessionId);
+            Assert.Equal(2, callCount);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public async Task StartSessionDraft_WhenRemoteProfileHasMappedProject_UsesRemoteMappedCwdForNewSession()
     {
         var originalContext = SynchronizationContext.Current;
