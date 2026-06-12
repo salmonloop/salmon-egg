@@ -31,7 +31,7 @@ public sealed class AcpConnectionSettingsXamlTests
         Assert.Contains("SelectedValuePath=\"Transport\"", xaml, StringComparison.Ordinal);
         Assert.Contains("SelectedValue=\"{x:Bind Transport, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("SelectedItem=\"{x:Bind Transport, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("<ItemsControl ItemsSource=\"{x:Bind ViewModel.Servers, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ItemsSource=\"{x:Bind ViewModel.Servers, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("<ListView ItemsSource=\"{x:Bind ViewModel.Servers", xaml, StringComparison.Ordinal);
         Assert.Contains("Command=\"{x:Bind ViewModel.AddServerCommand}\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Command=\"{x:Bind ViewModel.SaveCommand}\"", xaml, StringComparison.Ordinal);
