@@ -116,17 +116,6 @@ public partial class ChatViewModel
             suppressProfileSyncFromStore: true);
     }
 
-    private void ApplySettingsSelectedProfileFromStore(string? profileId)
-    {
-        _settingsSelectedProfileId = profileId;
-
-        var match = _profileSelectionResolver.ResolveById(_acpProfiles.Profiles, profileId);
-        ApplyResolvedProfileSelection(
-            match,
-            suppressStoreProjection: false,
-            suppressProfileSyncFromStore: true);
-    }
-
     private ServerConfiguration? ResolveLoadedProfileSelection(ServerConfiguration? profile)
         => _profileSelectionResolver.ResolveLoadedProfileSelection(_acpProfiles.Profiles, profile);
 
@@ -216,10 +205,10 @@ public partial class ChatViewModel
             CurrentPrompt = draft;
         }
 
-        ApplySettingsSelectedProfileFromStore(projection.SettingsSelectedProfileId);
+        ApplySelectedProfileFromStore(projection.SelectedProfileIntentId);
         var selectedProfileId = !string.IsNullOrWhiteSpace(projection.ChatOwnerProfileId)
             ? projection.ChatOwnerProfileId
-            : projection.SettingsSelectedProfileId;
+            : projection.SelectedProfileIntentId;
         if (!string.Equals(_selectedProfileIdFromStore, selectedProfileId, StringComparison.Ordinal))
         {
             _selectedProfileIdFromStore = selectedProfileId;
@@ -388,7 +377,7 @@ public partial class ChatViewModel
     {
         if (!_suppressStoreProfileProjection)
         {
-            _ = _chatConnectionStore.Dispatch(new SetSettingsSelectedProfileAction(value?.Id));
+            _ = _chatConnectionStore.Dispatch(new SetSelectedProfileIntentAction(value?.Id));
         }
 
         if (_suppressAcpProfileConnect || value == null)

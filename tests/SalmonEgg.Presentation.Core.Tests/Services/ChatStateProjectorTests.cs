@@ -15,12 +15,12 @@ public sealed class ChatStateProjectorTests
     {
         var binding = new ConversationRemoteBindingState("conv-1", "remote-1", "profile-binding");
         var projector = new ChatStateProjector();
-        var connectionState = ChatConnectionState.Empty with { SettingsSelectedProfileId = "profile-store" };
+        var connectionState = ChatConnectionState.Empty with { SelectedProfileIntentId = "profile-store" };
 
         var projection = projector.Apply(ChatState.Empty, connectionState, "conv-1", binding);
 
         Assert.Equal("profile-binding", projection.ChatOwnerProfileId);
-        Assert.Equal("profile-store", projection.SettingsSelectedProfileId);
+        Assert.Equal("profile-store", projection.SelectedProfileIntentId);
         Assert.Equal("remote-1", projection.RemoteSessionId);
     }
 
@@ -38,12 +38,12 @@ public sealed class ChatStateProjectorTests
     public void Apply_ReturnsNullRemoteSessionWhenBindingMissing()
     {
         var projector = new ChatStateProjector();
-        var connectionState = ChatConnectionState.Empty with { SettingsSelectedProfileId = "profile-store" };
+        var connectionState = ChatConnectionState.Empty with { SelectedProfileIntentId = "profile-store" };
 
         var projection = projector.Apply(ChatState.Empty, connectionState, "conv-3", binding: null);
 
         Assert.Null(projection.RemoteSessionId);
-        Assert.Equal("profile-store", projection.SettingsSelectedProfileId);
+        Assert.Equal("profile-store", projection.SelectedProfileIntentId);
     }
 
     [Fact]
@@ -163,7 +163,7 @@ public sealed class ChatStateProjectorTests
         };
         var connectionState = ChatConnectionState.Empty with
         {
-            SettingsSelectedProfileId = "profile-next",
+            SelectedProfileIntentId = "profile-next",
             ForegroundTransportProfileId = "profile-committed"
         };
 
@@ -185,7 +185,7 @@ public sealed class ChatStateProjectorTests
         };
         var connectionState = ChatConnectionState.Empty with
         {
-            SettingsSelectedProfileId = "profile-other",
+            SelectedProfileIntentId = "profile-other",
             ForegroundTransportProfileId = "profile-transport"
         };
         var binding = new ConversationRemoteBindingState("conv-1", "remote-1", "profile-binding");

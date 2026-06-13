@@ -27,6 +27,41 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
 public sealed class AcpConnectionCoordinatorTests
 {
     [Fact]
+    public async Task SetConnectingAsync_PublishesConnectingBeforeForegroundProfileChanges()
+    {
+        await using var connectionState = State.Value(
+            new object(),
+            () => ChatConnectionState.Empty with
+            {
+                Phase = ConnectionPhase.Connected,
+                ForegroundTransportProfileId = "profile-local",
+                ConnectionInstanceId = "conn-local"
+            });
+        var store = new RecordingConnectionStore(connectionState);
+        var coordinator = new AcpConnectionCoordinator(
+            store,
+            Mock.Of<ILogger<AcpConnectionCoordinator>>(),
+            new StaticMcpResolver([]));
+
+        await coordinator.SetConnectingAsync("profile-remote");
+
+        Assert.Collection(
+            store.Snapshots,
+            first =>
+            {
+                Assert.Equal(ConnectionPhase.Connecting, first.Phase);
+                Assert.Equal("profile-local", first.ForegroundTransportProfileId);
+                Assert.Equal("conn-local", first.ConnectionInstanceId);
+            },
+            second =>
+            {
+                Assert.Equal(ConnectionPhase.Connecting, second.Phase);
+                Assert.Equal("profile-remote", second.ForegroundTransportProfileId);
+                Assert.Equal("conn-local", second.ConnectionInstanceId);
+            });
+    }
+
+    [Fact]
     public async Task ResyncAsync_ReplaysBufferedUpdatesOnlyAfterSinkReset()
     {
         var uiDispatcher = new ImmediateUiDispatcher();
@@ -552,7 +587,7 @@ public sealed class AcpConnectionCoordinatorTests
             () => ChatConnectionState.Empty with
             {
                 Phase = ConnectionPhase.Connected,
-                SettingsSelectedProfileId = "profile-1",
+                SelectedProfileIntentId = "profile-1",
                 ConnectionInstanceId = "conn-old",
                 Generation = 9
             });
@@ -567,7 +602,7 @@ public sealed class AcpConnectionCoordinatorTests
 
         var updated = await store.GetCurrentStateAsync();
         Assert.Equal(ConnectionPhase.Connected, updated.Phase);
-        Assert.Equal("profile-1", updated.SettingsSelectedProfileId);
+        Assert.Equal("profile-1", updated.SelectedProfileIntentId);
         Assert.Equal("conn-new", updated.ConnectionInstanceId);
         Assert.Equal(10, updated.Generation);
     }
@@ -580,7 +615,7 @@ public sealed class AcpConnectionCoordinatorTests
             () => ChatConnectionState.Empty with
             {
                 Phase = ConnectionPhase.Connected,
-                SettingsSelectedProfileId = "profile-1",
+                SelectedProfileIntentId = "profile-1",
                 ConnectionInstanceId = "conn-1",
                 Generation = 3
             });
@@ -608,7 +643,7 @@ public sealed class AcpConnectionCoordinatorTests
             () => ChatConnectionState.Empty with
             {
                 Phase = ConnectionPhase.Connected,
-                SettingsSelectedProfileId = "profile-1",
+                SelectedProfileIntentId = "profile-1",
                 ConnectionInstanceId = "conn-1",
                 Generation = 5
             });
@@ -663,6 +698,10 @@ public sealed class AcpConnectionCoordinatorTests
         public string? CurrentRemoteSessionId { get; set; }
 
         public string? SelectedProfileId { get; set; }
+
+        public string? SessionCwd { get; set; } = "C:/work/session";
+
+        public string? GetActiveSessionCwdOrDefault() => SessionCwd;
 
         public IReadOnlyList<McpServer> CurrentMcpServers { get; set; } = Array.Empty<McpServer>();
 
@@ -719,6 +758,29 @@ public sealed class AcpConnectionCoordinatorTests
 
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class RecordingConnectionStore : IChatConnectionStore
+    {
+        private readonly ChatConnectionStore _inner;
+
+        public RecordingConnectionStore(IState<ChatConnectionState> state)
+        {
+            _inner = new ChatConnectionStore(state);
+        }
+
+        public IState<ChatConnectionState> State => _inner.State;
+
+        public List<ChatConnectionState> Snapshots { get; } = new();
+
+        public async ValueTask Dispatch(ChatConnectionAction action)
+        {
+            await _inner.Dispatch(action).ConfigureAwait(false);
+            Snapshots.Add(await _inner.GetCurrentStateAsync().ConfigureAwait(false));
+        }
+
+        public ValueTask<ChatConnectionState> GetCurrentStateAsync()
+            => _inner.GetCurrentStateAsync();
     }
 
     private sealed class NoopBindingCommands : IConversationBindingCommands

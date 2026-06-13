@@ -187,7 +187,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private bool _suppressProfileSyncFromStore;
     private bool _suppressModeSelectionDispatch;
     private string? _selectedProfileIdFromStore;
-    private string? _settingsSelectedProfileId;
     private int _storeProjectionSequence;
     private readonly object _restoreSync = new();
     private Task? _restoreTask;
@@ -1608,6 +1607,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             _pendingSelectedProfileConnect = profile;
             if (_selectedProfileConnectTask is { IsCompleted: false })
             {
+                CancelAmbientConnectionRequest();
                 return;
             }
 
@@ -1706,7 +1706,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         ArgumentNullException.ThrowIfNull(profile);
 
         await _chatConnectionStore
-            .Dispatch(new SetSettingsSelectedProfileAction(profile.Id))
+            .Dispatch(new SetSelectedProfileIntentAction(profile.Id))
             .ConfigureAwait(false);
         await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
     }
@@ -2067,7 +2067,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         }
 
         var connectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
-        if (!string.IsNullOrWhiteSpace(connectionState.SettingsSelectedProfileId))
+        if (!string.IsNullOrWhiteSpace(connectionState.SelectedProfileIntentId))
         {
             return;
         }
@@ -2078,7 +2078,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             return;
         }
 
-        await _chatConnectionStore.Dispatch(new SetSettingsSelectedProfileAction(binding.BoundProfileId)).ConfigureAwait(false);
+        await _chatConnectionStore.Dispatch(new SetSelectedProfileIntentAction(binding.BoundProfileId)).ConfigureAwait(false);
     }
 
     private void QueueConversationListProjection()
@@ -2569,13 +2569,13 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         }
 
         var connectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
-        var profileId = connectionState.SettingsSelectedProfileId;
+        var profileId = connectionState.SelectedProfileIntentId;
         if (string.IsNullOrWhiteSpace(profileId))
         {
             profileId = _preferences.LastSelectedServerId;
             if (!string.IsNullOrWhiteSpace(profileId))
             {
-                await _chatConnectionStore.Dispatch(new SetSettingsSelectedProfileAction(profileId)).ConfigureAwait(false);
+                await _chatConnectionStore.Dispatch(new SetSelectedProfileIntentAction(profileId)).ConfigureAwait(false);
             }
         }
 

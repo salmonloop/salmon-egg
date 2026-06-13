@@ -86,7 +86,7 @@ public class ChatReducerTests
         var initialState = ChatConnectionState.Empty with
         {
             Phase = ConnectionPhase.Connecting,
-            SettingsSelectedProfileId = "profile-1",
+            SelectedProfileIntentId = "profile-1",
             ConnectionInstanceId = "conn-1",
             Generation = 7
         };
@@ -94,7 +94,7 @@ public class ChatReducerTests
         var next = ChatConnectionReducer.Reduce(initialState, new SetConnectionPhaseAction(ConnectionPhase.Connected));
 
         Assert.Equal(ConnectionPhase.Connected, next.Phase);
-        Assert.Equal("profile-1", next.SettingsSelectedProfileId);
+        Assert.Equal("profile-1", next.SelectedProfileIntentId);
         Assert.Equal("conn-1", next.ConnectionInstanceId);
         Assert.Equal(8, next.Generation);
     }
@@ -105,14 +105,14 @@ public class ChatReducerTests
         var initialState = ChatConnectionState.Empty with
         {
             Phase = ConnectionPhase.Connected,
-            SettingsSelectedProfileId = "profile-1",
+            SelectedProfileIntentId = "profile-1",
             ConnectionInstanceId = "conn-1",
             Generation = 4
         };
 
-        var next = ChatConnectionReducer.Reduce(initialState, new SetSettingsSelectedProfileAction("profile-2"));
+        var next = ChatConnectionReducer.Reduce(initialState, new SetSelectedProfileIntentAction("profile-2"));
 
-        Assert.Equal("profile-2", next.SettingsSelectedProfileId);
+        Assert.Equal("profile-2", next.SelectedProfileIntentId);
         Assert.Equal("conn-1", next.ConnectionInstanceId);
         Assert.Equal(ConnectionPhase.Connected, next.Phase);
         Assert.Equal(5, next.Generation);
@@ -124,7 +124,7 @@ public class ChatReducerTests
         var initialState = ChatConnectionState.Empty with
         {
             Phase = ConnectionPhase.Connected,
-            SettingsSelectedProfileId = "profile-1",
+            SelectedProfileIntentId = "profile-1",
             Error = "previous-error",
             IsAuthenticationRequired = true,
             AuthenticationHintMessage = "hint",
@@ -137,7 +137,7 @@ public class ChatReducerTests
 
         Assert.Equal("conn-new", next.ConnectionInstanceId);
         Assert.Equal(ConnectionPhase.Connected, next.Phase);
-        Assert.Equal("profile-1", next.SettingsSelectedProfileId);
+        Assert.Equal("profile-1", next.SelectedProfileIntentId);
         Assert.Equal("previous-error", next.Error);
         Assert.True(next.IsAuthenticationRequired);
         Assert.Equal("hint", next.AuthenticationHintMessage);
@@ -196,16 +196,16 @@ public class ChatReducerTests
         var initialState = ChatConnectionState.Empty with
         {
             Phase = ConnectionPhase.Connected,
-            SettingsSelectedProfileId = "profile-1",
+            SelectedProfileIntentId = "profile-1",
             ConnectionInstanceId = "conn-1",
             ForegroundTransportProfileId = "profile-1",
             NewSessionDraft = draft,
             Generation = 4
         };
 
-        var next = ChatConnectionReducer.Reduce(initialState, new SetSettingsSelectedProfileAction("profile-2"));
+        var next = ChatConnectionReducer.Reduce(initialState, new SetSelectedProfileIntentAction("profile-2"));
 
-        Assert.Equal("profile-2", next.SettingsSelectedProfileId);
+        Assert.Equal("profile-2", next.SelectedProfileIntentId);
         Assert.Same(draft, next.NewSessionDraft);
         Assert.Equal(5, next.Generation);
     }
@@ -229,16 +229,16 @@ public class ChatReducerTests
         var initialState = ChatConnectionState.Empty with
         {
             Phase = ConnectionPhase.Connected,
-            SettingsSelectedProfileId = "profile-1",
+            SelectedProfileIntentId = "profile-1",
             ConnectionInstanceId = "conn-1",
             ForegroundTransportProfileId = "profile-1",
             NewSessionDraft = draft,
             Generation = 4
         };
 
-        var next = ChatConnectionReducer.Reduce(initialState, new SetSettingsSelectedProfileAction("profile-1"));
+        var next = ChatConnectionReducer.Reduce(initialState, new SetSelectedProfileIntentAction("profile-1"));
 
-        Assert.Equal("profile-1", next.SettingsSelectedProfileId);
+        Assert.Equal("profile-1", next.SelectedProfileIntentId);
         Assert.Same(draft, next.NewSessionDraft);
         Assert.Equal(5, next.Generation);
     }
@@ -279,7 +279,7 @@ public class ChatReducerTests
         var connectedState = ChatConnectionState.Empty with
         {
             Phase = ConnectionPhase.Connected,
-            SettingsSelectedProfileId = "profile-1",
+            SelectedProfileIntentId = "profile-1",
             ConnectionInstanceId = "conn-1",
             Generation = 20
         };
@@ -301,7 +301,7 @@ public class ChatReducerTests
         var connectedState = ChatConnectionState.Empty with
         {
             Phase = ConnectionPhase.Connected,
-            SettingsSelectedProfileId = "profile-1",
+            SelectedProfileIntentId = "profile-1",
             ConnectionInstanceId = "conn-1",
             Generation = 20
         };
@@ -310,7 +310,7 @@ public class ChatReducerTests
 
         Assert.Equal("conn-1", reset.ConnectionInstanceId);
         Assert.Equal(ConnectionPhase.Disconnected, reset.Phase);
-        Assert.Equal("profile-1", reset.SettingsSelectedProfileId);
+        Assert.Equal("profile-1", reset.SelectedProfileIntentId);
         Assert.Null(reset.ForegroundTransportProfileId);
         Assert.Equal(21, reset.Generation);
     }

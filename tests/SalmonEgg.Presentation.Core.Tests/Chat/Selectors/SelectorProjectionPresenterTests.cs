@@ -92,4 +92,31 @@ public sealed class SelectorProjectionPresenterTests
         Assert.True(result.IsEnabled);
         Assert.Equal(new[] { "plan", "code" }, result.DisplayItems.Select(item => item.SemanticValue).ToArray());
     }
+
+    [Fact]
+    public void ComposerSelectorItemViewModel_UsesSemanticValueForStableAutomationId()
+    {
+        var item = ComposerSelectorItemViewModel.Real(
+            ComposerSelectorKind.Agent,
+            "5813c231-cba2-40de-8299-c1ce799ad7ef",
+            "Claude Code",
+            "agent|profile|connection");
+
+        Assert.Equal(
+            "ComposerSelectorItem.Agent.5813c231_cba2_40de_8299_c1ce799ad7ef",
+            item.AutomationId);
+    }
+
+    [Fact]
+    public void ComposerSelectorItemViewModel_UsesPlaceholderKindWhenSemanticValueMissing()
+    {
+        var item = ComposerSelectorItemViewModel.Placeholder(
+            ComposerSelectorKind.Mode,
+            SelectorPlaceholderKind.Loading,
+            "Loading modes...",
+            identity: "profile-1|conn-1|cwd-1|0",
+            blocksSubmit: true);
+
+        Assert.Equal("ComposerSelectorItem.Mode.Loading", item.AutomationId);
+    }
 }

@@ -27,9 +27,9 @@ public static class ChatConnectionReducer
                 },
                 Generation = nextGeneration
             },
-            SetSettingsSelectedProfileAction setSettings => current with
+            SetSelectedProfileIntentAction setSettings => current with
             {
-                SettingsSelectedProfileId = setSettings.ProfileId,
+                SelectedProfileIntentId = setSettings.ProfileId,
                 Generation = nextGeneration
             },
             SetForegroundTransportProfileAction setForeground => current with
@@ -66,7 +66,7 @@ public static class ChatConnectionReducer
             },
             ResetConnectionStateAction => ChatConnectionState.Empty with
             {
-                SettingsSelectedProfileId = current.SettingsSelectedProfileId,
+                SelectedProfileIntentId = current.SelectedProfileIntentId,
                 ConnectionInstanceId = current.ConnectionInstanceId,
                 Generation = nextGeneration
             },

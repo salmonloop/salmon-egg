@@ -45,4 +45,35 @@ public sealed record ComposerSelectorItemViewModel(
 
     public ComposerSelectorItemViewModel AsDisabled()
         => this with { IsSelectable = false };
+
+    public string AutomationId
+        => $"ComposerSelectorItem.{Kind}.{ResolveAutomationSegment()}";
+
+    private string ResolveAutomationSegment()
+    {
+        if (!string.IsNullOrWhiteSpace(SemanticValue))
+        {
+            return SanitizeAutomationSegment(SemanticValue);
+        }
+
+        if (IsPlaceholder)
+        {
+            return PlaceholderKind.ToString();
+        }
+
+        return "Empty";
+    }
+
+    private static string SanitizeAutomationSegment(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "Empty";
+        }
+
+        var chars = value
+            .Select(ch => char.IsLetterOrDigit(ch) ? ch : '_')
+            .ToArray();
+        return new string(chars);
+    }
 }

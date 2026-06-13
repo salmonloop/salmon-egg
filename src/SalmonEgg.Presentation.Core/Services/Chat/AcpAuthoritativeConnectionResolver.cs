@@ -26,11 +26,6 @@ internal sealed class AcpAuthoritativeConnectionResolver
     {
         snapshot = default;
 
-        if (foregroundChatService is not { IsConnected: true, IsInitialized: true })
-        {
-            return false;
-        }
-
         if (connectionState.Phase is ConnectionPhase.Connecting or ConnectionPhase.Initializing)
         {
             return false;
@@ -43,6 +38,11 @@ internal sealed class AcpAuthoritativeConnectionResolver
 
         if (string.IsNullOrWhiteSpace(requiredProfileId))
         {
+            if (foregroundChatService is not { IsConnected: true, IsInitialized: true })
+            {
+                return false;
+            }
+
             snapshot = new(
                 foregroundChatService,
                 connectionState.ForegroundTransportProfileId,
@@ -57,6 +57,11 @@ internal sealed class AcpAuthoritativeConnectionResolver
 
         if (_connectionSessionRegistry is null)
         {
+            if (foregroundChatService is not { IsConnected: true, IsInitialized: true })
+            {
+                return false;
+            }
+
             snapshot = new(
                 foregroundChatService,
                 requiredProfileId,
@@ -70,11 +75,6 @@ internal sealed class AcpAuthoritativeConnectionResolver
         }
 
         if (!session.Service.IsConnected || !session.Service.IsInitialized)
-        {
-            return false;
-        }
-
-        if (!ReferenceEquals(session.Service, foregroundChatService))
         {
             return false;
         }

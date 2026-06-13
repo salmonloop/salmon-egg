@@ -1446,6 +1446,110 @@ public sealed partial class RealUserConfigSmokeTests
     }
 
     [SkippableFact]
+    public void StartComposer_WhenStartupRemoteProfileCannotPrepareDraft_SwitchingToLocalStdioProfileRecoversModeSelector()
+    {
+        GuiTestGate.RequireEnabled();
+
+        var scenario = RealUserConfigProbe.LoadStartComposerProfileSwitchScenario();
+        Skip.If(
+            scenario is null,
+            "Current real config does not expose a startup remote profile plus a different local stdio profile for targeted start-composer recovery validation.");
+
+        using var session = WindowsGuiAppSession.LaunchFresh();
+        session.ResizeMainWindow(width: 1400, height: 900);
+        var startItem = session.FindByAutomationId("MainNav.Start", TimeSpan.FromSeconds(10));
+        session.ActivateElement(startItem);
+        Thread.Sleep(500);
+
+        Assert.True(
+            session.WaitUntilOnscreen("StartView.AgentSelector", TimeSpan.FromSeconds(10)),
+            "StartView.AgentSelector did not appear for the real-config start composer.");
+        Assert.True(
+            session.WaitUntilOnscreen("StartView.ModeSelector", TimeSpan.FromSeconds(10)),
+            "StartView.ModeSelector did not appear for the real-config start composer.");
+
+        // Allow the startup remote profile to enter its real unavailable/unready path before we switch away.
+        _ = WaitUntil(
+            () => IsStartComposerModeUnavailable(session)
+                || TryOpenStartModeSelectorAndDetectKnownMode(session),
+            TimeSpan.FromSeconds(12),
+            TimeSpan.FromMilliseconds(250));
+
+        SelectComboBoxItemByVisibleText(session, "StartView.AgentSelector", scenario.LocalProfileName);
+
+        var recovered = WaitUntil(
+            () => TryOpenStartModeSelectorAndDetectKnownMode(session),
+            TimeSpan.FromSeconds(20),
+            TimeSpan.FromMilliseconds(300));
+
+        Assert.True(
+            recovered,
+            $"Start composer mode selector did not recover after switching from startup remote profile '{scenario.StartupProfileName}' ({scenario.StartupProfileTransport}) to local stdio profile '{scenario.LocalProfileName}'. AgentSelector='{session.TryGetElementName("StartView.AgentSelector", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}' ModeSelector='{session.TryGetElementName("StartView.ModeSelector", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}'.");
+    }
+
+    [SkippableFact]
+    public void StartComposer_WhenSwitchingLocalRemoteLocal_RoundTripsBackToReadyModes()
+    {
+        GuiTestGate.RequireEnabled();
+
+        var scenario = RealUserConfigProbe.LoadStartComposerRoundTripScenario();
+        Skip.If(
+            scenario is null,
+            "Current real config does not expose both a local stdio profile and a different remote profile for targeted start-composer local-remote-local validation.");
+
+        using var session = WindowsGuiAppSession.LaunchFresh();
+        session.ResizeMainWindow(width: 1400, height: 900);
+        var startItem = session.FindByAutomationId("MainNav.Start", TimeSpan.FromSeconds(10));
+        session.ActivateElement(startItem);
+        Thread.Sleep(500);
+
+        Assert.True(
+            session.WaitUntilOnscreen("StartView.AgentSelector", TimeSpan.FromSeconds(10)),
+            "StartView.AgentSelector did not appear for the real-config start composer.");
+        Assert.True(
+            session.WaitUntilOnscreen("StartView.ModeSelector", TimeSpan.FromSeconds(10)),
+            "StartView.ModeSelector did not appear for the real-config start composer.");
+
+        SelectComboBoxItemByAutomationId(
+            session,
+            "StartView.AgentSelector",
+            scenario.LocalProfileAutomationId,
+            scenario.LocalProfileName);
+        var localReady = WaitUntil(
+            () => TryOpenStartModeSelectorAndDetectKnownMode(session),
+            TimeSpan.FromSeconds(20),
+            TimeSpan.FromMilliseconds(300));
+        Assert.True(
+            localReady,
+            $"Start composer mode selector did not become ready after selecting local stdio profile '{scenario.LocalProfileName}'.");
+
+        SelectComboBoxItemByAutomationId(
+            session,
+            "StartView.AgentSelector",
+            scenario.RemoteProfileAutomationId,
+            scenario.RemoteProfileName);
+        _ = WaitUntil(
+            () => IsStartComposerModeUnavailable(session)
+                || TryOpenStartModeSelectorAndDetectKnownMode(session),
+            TimeSpan.FromSeconds(12),
+            TimeSpan.FromMilliseconds(250));
+
+        SelectComboBoxItemByAutomationId(
+            session,
+            "StartView.AgentSelector",
+            scenario.LocalProfileAutomationId,
+            scenario.LocalProfileName);
+        var recovered = WaitUntil(
+            () => TryOpenStartModeSelectorAndDetectKnownMode(session),
+            TimeSpan.FromSeconds(20),
+            TimeSpan.FromMilliseconds(300));
+
+        Assert.True(
+            recovered,
+            $"Start composer mode selector did not recover after round-tripping from local stdio profile '{scenario.LocalProfileName}' to remote profile '{scenario.RemoteProfileName}' ({scenario.RemoteProfileTransport}) and back. AgentSelector='{session.TryGetElementName("StartView.AgentSelector", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}' ModeSelector='{session.TryGetElementName("StartView.ModeSelector", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}'.");
+    }
+
+    [SkippableFact]
     public void RandomSwitchBetweenLocalRemote_WithOneSecondCadence_RemainsInteractive()
     {
         GuiTestGate.RequireEnabled();
@@ -2170,6 +2274,84 @@ public sealed partial class RealUserConfigSmokeTests
         return element is not null && !TryGetIsOffscreen(element);
     }
 
+    private static void SelectComboBoxItemByVisibleText(
+        WindowsGuiAppSession session,
+        string selectorAutomationId,
+        string expectedVisibleName)
+    {
+        var selector = session.FindByAutomationId(selectorAutomationId, TimeSpan.FromSeconds(10));
+        session.ClickElement(selector);
+
+        var target = session.FindVisibleTextAnywhere(expectedVisibleName, TimeSpan.FromSeconds(5))
+            ?? throw new TimeoutException(
+                $"Could not find combo-box item '{expectedVisibleName}' after opening selector '{selectorAutomationId}'.");
+        session.ActivateElement(FindSelectableAncestor(target));
+    }
+
+    private static void SelectComboBoxItemByAutomationId(
+        WindowsGuiAppSession session,
+        string selectorAutomationId,
+        string itemAutomationId,
+        string expectedVisibleName)
+    {
+        var selector = session.FindByAutomationId(selectorAutomationId, TimeSpan.FromSeconds(10));
+        session.ClickElement(selector);
+
+        var target = session.FindByAutomationIdAnywhere(itemAutomationId, TimeSpan.FromSeconds(5));
+        session.ActivateElement(FindSelectableAncestor(target));
+
+        var selected = WaitUntil(
+            () =>
+            {
+                var current = session.TryGetElementName(selectorAutomationId, TimeSpan.FromMilliseconds(120));
+                return string.Equals(current?.Trim(), expectedVisibleName, StringComparison.Ordinal);
+            },
+            TimeSpan.FromSeconds(5),
+            TimeSpan.FromMilliseconds(120));
+        if (!selected)
+        {
+            throw new Xunit.Sdk.XunitException(
+                $"Selector '{selectorAutomationId}' did not settle to '{expectedVisibleName}' after selecting automation id '{itemAutomationId}'. Current='{session.TryGetElementName(selectorAutomationId, TimeSpan.FromMilliseconds(200)) ?? "<missing>"}'.");
+        }
+    }
+
+    private static bool TryOpenStartModeSelectorAndDetectKnownMode(WindowsGuiAppSession session)
+    {
+        var selector = session.TryFindByAutomationId("StartView.ModeSelector", TimeSpan.FromMilliseconds(200));
+        if (selector is null || TryGetIsOffscreen(selector))
+        {
+            return false;
+        }
+
+        try
+        {
+            session.ClickElement(selector);
+            Thread.Sleep(150);
+            foreach (var label in KnownReadyModeLabels)
+            {
+                if (session.TryFindVisibleTextAnywhere(label, TimeSpan.FromMilliseconds(120)) is not null)
+                {
+                    session.PressEscape();
+                    return true;
+                }
+            }
+        }
+        catch
+        {
+        }
+        finally
+        {
+            session.PressEscape();
+        }
+
+        return false;
+    }
+
+    private static bool IsStartComposerModeUnavailable(WindowsGuiAppSession session)
+        => session.TryFindVisibleTextAnywhere("模式不可用", TimeSpan.FromMilliseconds(120)) is not null
+            || session.TryFindVisibleTextAnywhere("模式尚未就绪", TimeSpan.FromMilliseconds(120)) is not null
+            || session.TryFindVisibleTextAnywhere("正在加载模式...", TimeSpan.FromMilliseconds(120)) is not null;
+
     private static bool WaitUntilNavigationActivationStarted(
         WindowsGuiAppSession session,
         string sessionId,
@@ -2544,6 +2726,24 @@ public sealed partial class RealUserConfigSmokeTests
         int MessageCount,
         int MarkdownLikeMessageCount);
 
+    private sealed record StartComposerProfileSwitchScenario(
+        string StartupProfileId,
+        string StartupProfileName,
+        string StartupProfileTransport,
+        string LocalProfileId,
+        string LocalProfileName);
+
+    private static readonly string[] KnownReadyModeLabels =
+    [
+        "Default",
+        "Plan Mode",
+        "Accept Edits",
+        "Read Only",
+        "Full Access",
+        "Don't Ask",
+        "Bypass Permissions"
+    ];
+
     private static IReadOnlyList<RealTranscriptAuditCandidate> LoadRealTranscriptAuditCandidates()
     {
         var conversationsPath = Path.Combine(
@@ -2761,6 +2961,113 @@ public sealed partial class RealUserConfigSmokeTests
                 .ToArray();
         }
 
+        public static StartComposerProfileSwitchScenario? LoadStartComposerProfileSwitchScenario()
+        {
+            var appDataRoot = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "SalmonEgg");
+            var appYamlPath = Path.Combine(appDataRoot, "config", "app.yaml");
+            var serversRoot = Path.Combine(appDataRoot, "config", "servers");
+            if (!File.Exists(appYamlPath) || !Directory.Exists(serversRoot))
+            {
+                return null;
+            }
+
+            var startupProfileId = ReadYamlScalar(appYamlPath, "last_selected_server_id");
+            if (string.IsNullOrWhiteSpace(startupProfileId))
+            {
+                return null;
+            }
+
+            var profiles = Directory.EnumerateFiles(serversRoot, "*.yaml")
+                .Select(ReadServerProfile)
+                .Where(static profile => profile is not null)
+                .Cast<RealServerProfile>()
+                .ToArray();
+            var startupProfile = profiles.FirstOrDefault(profile =>
+                string.Equals(profile.Id, startupProfileId, StringComparison.Ordinal));
+            if (startupProfile is null
+                || string.Equals(startupProfile.Transport, "stdio", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            var localProfile = profiles
+                .Where(profile =>
+                    !string.Equals(profile.Id, startupProfile.Id, StringComparison.Ordinal)
+                    && string.Equals(profile.Transport, "stdio", StringComparison.OrdinalIgnoreCase)
+                    && LooksLikeUsableVisibleLabel(profile.Name))
+                .OrderByDescending(static profile => profile.IsPreferredLocalInteractiveProfile)
+                .ThenBy(static profile => profile.Name, StringComparer.Ordinal)
+                .FirstOrDefault();
+            if (localProfile is null)
+            {
+                return null;
+            }
+
+            return new StartComposerProfileSwitchScenario(
+                startupProfile.Id,
+                startupProfile.Name,
+                startupProfile.Transport,
+                localProfile.Id,
+                localProfile.Name);
+        }
+
+        public static StartComposerRoundTripScenario? LoadStartComposerRoundTripScenario()
+        {
+            var appDataRoot = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "SalmonEgg");
+            var serversRoot = Path.Combine(appDataRoot, "config", "servers");
+            if (!Directory.Exists(serversRoot))
+            {
+                return null;
+            }
+
+            var profiles = Directory.EnumerateFiles(serversRoot, "*.yaml")
+                .Select(ReadServerProfile)
+                .Where(static profile => profile is not null)
+                .Cast<RealServerProfile>()
+                .ToArray();
+            if (profiles.Length == 0)
+            {
+                return null;
+            }
+
+            var localProfile = profiles
+                .Where(profile =>
+                    string.Equals(profile.Transport, "stdio", StringComparison.OrdinalIgnoreCase)
+                    && LooksLikeUsableVisibleLabel(profile.Name))
+                .OrderByDescending(static profile => profile.IsPreferredLocalInteractiveProfile)
+                .ThenBy(static profile => profile.Name, StringComparer.Ordinal)
+                .FirstOrDefault();
+            if (localProfile is null)
+            {
+                return null;
+            }
+
+            var remoteProfile = profiles
+                .Where(profile =>
+                    !string.Equals(profile.Id, localProfile.Id, StringComparison.Ordinal)
+                    && !string.Equals(profile.Transport, "stdio", StringComparison.OrdinalIgnoreCase)
+                    && LooksLikeUsableVisibleLabel(profile.Name))
+                .OrderBy(static profile => profile.Name, StringComparer.Ordinal)
+                .FirstOrDefault();
+            if (remoteProfile is null)
+            {
+                return null;
+            }
+
+            return new StartComposerRoundTripScenario(
+                localProfile.Id,
+                localProfile.Name,
+                BuildComposerSelectorItemAutomationId("Agent", localProfile.Id),
+                remoteProfile.Id,
+                remoteProfile.Name,
+                BuildComposerSelectorItemAutomationId("Agent", remoteProfile.Id),
+                remoteProfile.Transport);
+        }
+
         private static HashSet<string> ReadReplayBackedRemoteSessionIds(string logsRoot)
         {
             var loadedSessionIds = new HashSet<string>(StringComparer.Ordinal);
@@ -2829,6 +3136,19 @@ public sealed partial class RealUserConfigSmokeTests
             return null;
         }
 
+        private static RealServerProfile? ReadServerProfile(string yamlPath)
+        {
+            var id = ReadYamlScalar(yamlPath, "id");
+            var name = ReadYamlScalar(yamlPath, "name");
+            var transport = ReadYamlScalar(yamlPath, "transport");
+            var stdioCommand = ReadYamlScalar(yamlPath, "stdio_command");
+            return string.IsNullOrWhiteSpace(id)
+                   || string.IsNullOrWhiteSpace(name)
+                   || string.IsNullOrWhiteSpace(transport)
+                ? null
+                : new RealServerProfile(id, name, transport, stdioCommand);
+        }
+
         private static string? ReadString(JsonElement element, string propertyName)
         {
             return element.TryGetProperty(propertyName, out var property)
@@ -2849,7 +3169,37 @@ public sealed partial class RealUserConfigSmokeTests
             sessionId = string.Empty;
             return false;
         }
+
+        private static string BuildComposerSelectorItemAutomationId(string kind, string semanticValue)
+        {
+            var sanitized = string.IsNullOrWhiteSpace(semanticValue)
+                ? "Empty"
+                : new string(semanticValue.Select(ch => char.IsLetterOrDigit(ch) ? ch : '_').ToArray());
+            return $"ComposerSelectorItem.{kind}.{sanitized}";
+        }
+
+        private sealed record RealServerProfile(
+            string Id,
+            string Name,
+            string Transport,
+            string? StdioCommand)
+        {
+            public bool IsPreferredLocalInteractiveProfile
+                => string.Equals(StdioCommand, "claude-agent-acp", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(StdioCommand, "codex-acp", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(StdioCommand, "opencode", StringComparison.OrdinalIgnoreCase);
+        }
     }
+
+    private sealed record StartComposerRoundTripScenario(
+        string LocalProfileId,
+        string LocalProfileName,
+        string LocalProfileAutomationId,
+        string RemoteProfileId,
+        string RemoteProfileName,
+        string RemoteProfileAutomationId,
+        string RemoteProfileTransport);
+
 
     [GeneratedRegex("\\\"sessionId\\\":\\\"([^\\\"]+)\\\"", RegexOptions.Compiled)]
     private static partial Regex SessionIdRegex();

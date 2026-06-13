@@ -137,6 +137,64 @@ public sealed class AcpChatCoordinatorTests
     }
 
     [Fact]
+    public async Task ConnectToProfileAsync_WhenSinkSelectedProfileProjectionLags_UsesExplicitProfileIdForConnectionLifecycleAndRegistry()
+    {
+        var transport = new FakeTransportConfiguration();
+        var sink = new LaggingSelectedProfileSink();
+        var service = CreateChatService();
+        var factory = new Mock<IAcpChatServiceFactory>();
+        var logger = new Mock<ILogger<AcpChatCoordinator>>();
+        var connectionCoordinator = new Mock<IAcpConnectionCoordinator>();
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        var cleaner = new AcpConnectionSessionCleaner(
+            registry,
+            new ConservativeAcpConnectionEvictionPolicy(new AcpConnectionEvictionOptions()),
+            new AcpConnectionEvictionOptions(),
+            Mock.Of<ILogger<AcpConnectionSessionCleaner>>());
+        var poolManager = new AcpConnectionPoolManager(
+            registry,
+            cleaner,
+            Mock.Of<ILogger<AcpConnectionPoolManager>>());
+
+        factory
+            .Setup(x => x.CreateChatService(TransportType.Stdio, "agent.exe", "--serve", null))
+            .Returns(service.Object);
+
+        var sut = CreateCoordinator(
+            factory.Object,
+            logger.Object,
+            connectionCoordinator: connectionCoordinator.Object,
+            sessionRegistry: registry,
+            sessionCleaner: cleaner,
+            connectionPoolManager: poolManager,
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
+        var profile = new ServerConfiguration
+        {
+            Id = "profile-1",
+            Name = "Local Agent",
+            Transport = TransportType.Stdio,
+            StdioCommand = "agent.exe",
+            StdioArgs = "--serve"
+        };
+
+        await sut.ConnectToProfileAsync(profile, transport, sink);
+
+        Assert.Null(sink.SelectedProfileId);
+        Assert.True(registry.TryGetByProfile("profile-1", out var cachedSession));
+        Assert.NotNull(cachedSession);
+        connectionCoordinator.Verify(
+            x => x.SetConnectingAsync("profile-1", It.IsAny<CancellationToken>()),
+            Times.Once);
+        connectionCoordinator.Verify(
+            x => x.SetInitializingAsync("profile-1", It.IsAny<CancellationToken>()),
+            Times.Once);
+        connectionCoordinator.Verify(
+            x => x.SetConnectedAsync("profile-1", It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
     public async Task ConnectToProfileAsync_WhenGlobalAcpDisabled_DoesNotCreateService()
     {
         var transport = new FakeTransportConfiguration();
@@ -368,6 +426,50 @@ public sealed class AcpChatCoordinatorTests
         Assert.Equal(connectionInstanceIds[0], connectionInstanceIds[1]);
         Assert.True(registry.TryGetByProfile("profile-1", out var cachedSession));
         Assert.Equal(connectionInstanceIds[1], cachedSession!.ConnectionInstanceId);
+    }
+
+    [Fact]
+    public async Task ConnectToProfileAsync_WhenCanceledDuringInitialize_ReturnsAndDisposesCandidate()
+    {
+        var transport = new FakeTransportConfiguration();
+        var sink = new FakeSink();
+        var initializeStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var service = CreateChatService();
+        service
+            .Setup(x => x.InitializeAsync(It.IsAny<InitializeParams>()))
+            .Returns(() =>
+            {
+                initializeStarted.TrySetResult(null);
+                return Task.Delay(Timeout.InfiniteTimeSpan)
+                    .ContinueWith(_ => new InitializeResponse(), TaskScheduler.Default);
+            });
+
+        var factory = new Mock<IAcpChatServiceFactory>();
+        var logger = new Mock<ILogger<AcpChatCoordinator>>();
+        factory
+            .Setup(x => x.CreateChatService(TransportType.Stdio, "agent.exe", "--serve", null))
+            .Returns(service.Object);
+
+        var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
+        var profile = new ServerConfiguration
+        {
+            Id = "profile-1",
+            Name = "Agent",
+            Transport = TransportType.Stdio,
+            StdioCommand = "agent.exe",
+            StdioArgs = "--serve"
+        };
+
+        using var cts = new CancellationTokenSource();
+        var connectTask = sut.ConnectToProfileAsync(profile, transport, sink, cts.Token);
+        await initializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            async () => await connectTask.WaitAsync(TimeSpan.FromSeconds(2)));
+        service.Verify(x => x.DisconnectAsync(), Times.Once);
+        Assert.Null(sink.CurrentChatService);
     }
 
     [Fact]
@@ -798,7 +900,7 @@ public sealed class AcpChatCoordinatorTests
         cancellation.Cancel();
         allowInitializeCompletion.TrySetResult(null);
 
-        await Assert.ThrowsAsync<OperationCanceledException>(() => applyTask);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => applyTask);
 
         Assert.Same(previousService.Object, sink.CurrentChatService);
         Assert.Empty(sink.ReplaceChatServiceCalls);
@@ -869,7 +971,7 @@ public sealed class AcpChatCoordinatorTests
         cancellation.Cancel();
         allowInitializeCompletion.TrySetResult(null);
 
-        await Assert.ThrowsAsync<OperationCanceledException>(() => applyTask);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => applyTask);
 
         Assert.Null(sink.CurrentChatService);
         Assert.Empty(sink.ReplaceChatServiceCalls);
@@ -1089,7 +1191,7 @@ public sealed class AcpChatCoordinatorTests
             CancellationToken.None);
 
         allowFirstFault.TrySetResult(null);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => firstApplyTask);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => firstApplyTask);
 
         Assert.NotNull(sink.CurrentChatService);
         Assert.Equal("second", sink.AgentName);
@@ -2600,6 +2702,93 @@ public sealed class AcpChatCoordinatorTests
         }
 
         public string GetActiveSessionCwdOrDefault() => ActiveSessionCwd;
+    }
+
+    private sealed class LaggingSelectedProfileSink : IAcpChatCoordinatorSink
+    {
+        public event PropertyChangedEventHandler? PropertyChanged
+        {
+            add { }
+            remove { }
+        }
+
+        public IChatService? CurrentChatService { get; private set; }
+        public IConversationBindingCommands ConversationBindingCommands { get; } = Mock.Of<IConversationBindingCommands>();
+        public bool IsConnected { get; private set; }
+        public bool IsInitialized { get; private set; }
+        public bool IsConnecting { get; private set; }
+        public bool IsInitializing { get; private set; }
+        public bool IsSessionActive => false;
+        public bool IsHydrating => false;
+        public bool IsAuthenticationRequired { get; private set; }
+        public string? ConnectionErrorMessage { get; private set; }
+        public string? AuthenticationHintMessage { get; private set; }
+        public string? AgentName { get; private set; }
+        public string? AgentVersion { get; private set; }
+        public string? CurrentSessionId => null;
+        public string? CurrentRemoteSessionId => null;
+        public string? SelectedProfileId => null;
+        public IReadOnlyList<McpServer> CurrentMcpServers { get; private set; } = Array.Empty<McpServer>();
+        public string? ConnectionInstanceId => null;
+        public IUiDispatcher Dispatcher { get; } = new ImmediateUiDispatcher();
+        public long ConnectionGeneration => 0;
+
+        public ServerConfiguration? ResolveProfile(string? profileId)
+            => string.IsNullOrWhiteSpace(profileId)
+                ? null
+                : new ServerConfiguration { Id = profileId, Transport = TransportType.Stdio };
+
+        public void SetCurrentMcpServers(IReadOnlyList<McpServer> mcpServers)
+        {
+            CurrentMcpServers = mcpServers;
+        }
+
+        public void SelectProfile(ServerConfiguration profile)
+        {
+        }
+
+        public Task SelectProfileAsync(ServerConfiguration profile, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+
+        public void ReplaceChatService(IChatService? chatService)
+        {
+            CurrentChatService = chatService;
+        }
+
+        public Task ReplaceChatServiceAsync(IChatService? chatService, ServiceReplaceIntent intent, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ReplaceChatService(chatService);
+            return Task.CompletedTask;
+        }
+
+        public void UpdateConnectionState(bool isConnecting, bool isConnected, bool isInitialized, string? errorMessage)
+        {
+            IsConnecting = isConnecting;
+            IsConnected = isConnected;
+            IsInitialized = isInitialized;
+            ConnectionErrorMessage = errorMessage;
+        }
+
+        public void UpdateInitializationState(bool isInitializing)
+        {
+            IsInitializing = isInitializing;
+        }
+
+        public void UpdateAuthenticationState(bool isRequired, string? hintMessage)
+        {
+            IsAuthenticationRequired = isRequired;
+            AuthenticationHintMessage = hintMessage;
+        }
+
+        public void UpdateAgentIdentity(string? agentName, string? agentVersion)
+        {
+            AgentName = agentName;
+            AgentVersion = agentVersion;
+        }
     }
 
     private sealed class FakeBindingCommands : IConversationBindingCommands

@@ -721,7 +721,7 @@ public sealed class ConversationActivationCoordinatorTests
 
         var currentConnectionState = await connectionStore.State;
         Assert.NotNull(currentConnectionState);
-        Assert.Equal("profile-a", currentConnectionState.SettingsSelectedProfileId);
+        Assert.Equal("profile-a", currentConnectionState.SelectedProfileIntentId);
     }
 
     [Fact]
@@ -1059,7 +1059,7 @@ public sealed class ConversationActivationCoordinatorTests
         var state = State.Value(new object(), () => ChatConnectionState.Empty with
         {
             ForegroundTransportProfileId = selectedProfileId,
-            SettingsSelectedProfileId = selectedProfileId
+            SelectedProfileIntentId = selectedProfileId
         });
         return new ChatConnectionStore(state);
     }

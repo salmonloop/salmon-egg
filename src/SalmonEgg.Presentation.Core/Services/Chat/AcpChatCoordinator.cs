@@ -118,10 +118,11 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         await sink.SelectProfileAsync(profile, cancellationToken).ConfigureAwait(false);
         ApplyProfileToTransportConfiguration(profile, transportConfiguration);
 
-        return await ApplyTransportConfigurationAsync(
+        return await ApplyTransportConfigurationCoreAsync(
             transportConfiguration,
             sink,
             connectionContext,
+            profile.Id,
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -141,6 +142,19 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         IAcpChatCoordinatorSink sink,
         AcpConnectionContext connectionContext,
         CancellationToken cancellationToken = default)
+        => await ApplyTransportConfigurationCoreAsync(
+            transportConfiguration,
+            sink,
+            connectionContext,
+            selectedProfileIdOverride: null,
+            cancellationToken).ConfigureAwait(false);
+
+    private async Task<AcpTransportApplyResult> ApplyTransportConfigurationCoreAsync(
+        IAcpTransportConfiguration transportConfiguration,
+        IAcpChatCoordinatorSink sink,
+        AcpConnectionContext connectionContext,
+        string? selectedProfileIdOverride,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(transportConfiguration);
         ArgumentNullException.ThrowIfNull(sink);
@@ -158,7 +172,9 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             throw new InvalidOperationException(errorMessage ?? "Invalid ACP transport configuration.");
         }
 
-        var selectedProfileId = sink.SelectedProfileId;
+        var selectedProfileId = string.IsNullOrWhiteSpace(selectedProfileIdOverride)
+            ? sink.SelectedProfileId
+            : selectedProfileIdOverride;
         var dependencySnapshot = await _connectionDependencySnapshotProvider
             .GetSnapshotAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -249,6 +265,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
 
             var initializeResponse = await wrappedService
                 .InitializeAsync(CreateDefaultInitializeParams())
+                .WaitAsync(applyToken)
                 .ConfigureAwait(false);
             _logger.LogInformation(
                 "ACP candidate initialized. transport={TransportType} conversationId={ConversationId}",

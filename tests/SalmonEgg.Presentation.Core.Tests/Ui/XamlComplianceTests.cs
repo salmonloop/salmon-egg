@@ -1201,6 +1201,26 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void ChatInputArea_SelectorItems_ExposeStableAutomationIds()
+    {
+        var chatInputXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml");
+        var selectorItemVm = LoadText(@"src\SalmonEgg.Presentation.Core\ViewModels\Chat\Selectors\ComposerSelectorItemViewModel.cs");
+
+        Assert.Contains(
+            "AutomationProperties.AutomationId=\"{x:Bind AutomationId, Mode=OneWay}\"",
+            chatInputXaml,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "public string AutomationId",
+            selectorItemVm,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"ComposerSelectorItem.{Kind}.{ResolveAutomationSegment()}\"",
+            selectorItemVm,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ChatView_UsesDeferredTranscriptLoadingWithoutWholePageLifecycleHack()
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml");

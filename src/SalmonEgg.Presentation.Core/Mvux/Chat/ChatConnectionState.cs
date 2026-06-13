@@ -39,7 +39,7 @@ public sealed record NewSessionDraftState(
 
 public sealed record ChatConnectionState(
     ConnectionPhase Phase,
-    string? SettingsSelectedProfileId,
+    string? SelectedProfileIntentId,
     string? Error,
     bool IsAuthenticationRequired,
     string? AuthenticationHintMessage,
@@ -50,7 +50,7 @@ public sealed record ChatConnectionState(
 {
     public static ChatConnectionState Empty { get; } = new(
         ConnectionPhase.Disconnected,
-        SettingsSelectedProfileId: null,
+        SelectedProfileIntentId: null,
         Error: null,
         IsAuthenticationRequired: false,
         AuthenticationHintMessage: null,

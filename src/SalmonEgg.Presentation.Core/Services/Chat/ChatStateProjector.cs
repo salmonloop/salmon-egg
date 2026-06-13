@@ -50,7 +50,7 @@ public sealed class ChatStateProjector : IChatStateProjector
         ConversationRemoteBindingState? binding)
     {
         ArgumentNullException.ThrowIfNull(storeState);
-        var settingsSelectedProfileId = connectionState.SettingsSelectedProfileId;
+        var selectedProfileIntentId = connectionState.SelectedProfileIntentId;
         var foregroundTransportProfileId = connectionState.ForegroundTransportProfileId;
         var chatOwnerProfileId = binding?.BoundProfileId;
         var effectiveDisplayProfileId = !string.IsNullOrWhiteSpace(chatOwnerProfileId)
@@ -98,9 +98,7 @@ public sealed class ChatStateProjector : IChatStateProjector
         return new ChatUiProjection(
             HydratedConversationId: hydratedConversationId,
             ChatOwnerProfileId: chatOwnerProfileId,
-            SettingsSelectedProfileId: !string.IsNullOrWhiteSpace(settingsSelectedProfileId)
-                ? settingsSelectedProfileId
-                : effectiveDisplayProfileId,
+            SelectedProfileIntentId: selectedProfileIntentId,
             ForegroundTransportProfileId: foregroundTransportProfileId,
             RemoteSessionId: binding?.RemoteSessionId,
             IsSessionActive: !string.IsNullOrWhiteSpace(hydratedConversationId),
@@ -202,7 +200,7 @@ public sealed class ChatStateProjector : IChatStateProjector
 public sealed record ChatUiProjection(
     string? HydratedConversationId,
     string? ChatOwnerProfileId,
-    string? SettingsSelectedProfileId,
+    string? SelectedProfileIntentId,
     string? ForegroundTransportProfileId,
     string? RemoteSessionId,
     bool IsSessionActive,

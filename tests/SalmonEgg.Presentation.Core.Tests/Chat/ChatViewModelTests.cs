@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Collections.Immutable;
@@ -1563,7 +1563,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         await WaitForConditionAsync(async () =>
         {
             var connectionState = await fixture.GetConnectionStateAsync();
-            return string.Equals(connectionState.SettingsSelectedProfileId, "profile-1", StringComparison.Ordinal);
+            return string.Equals(connectionState.SelectedProfileIntentId, "profile-1", StringComparison.Ordinal);
         });
     }
 
@@ -2771,6 +2771,77 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
     }
 
     [Fact]
+    public async Task SelectedAcpProfile_Change_CancelsHungProfileConnectAndStartsLatestSelection()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        await RunWithSynchronizationContextAsync(syncContext, async () =>
+        {
+            var firstStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var firstCanceled = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var secondStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var commands = new Mock<IAcpConnectionCommands>();
+            commands
+                .Setup(x => x.ConnectToProfileAsync(
+                    It.IsAny<ServerConfiguration>(),
+                    It.IsAny<IAcpTransportConfiguration>(),
+                    It.IsAny<IAcpChatCoordinatorSink>(),
+                    It.IsAny<CancellationToken>()))
+                .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, CancellationToken>(
+                    (profile, _, _, cancellationToken) => ConnectForProfileAsync(profile, cancellationToken));
+            commands
+                .Setup(x => x.ConnectToProfileAsync(
+                    It.IsAny<ServerConfiguration>(),
+                    It.IsAny<IAcpTransportConfiguration>(),
+                    It.IsAny<IAcpChatCoordinatorSink>(),
+                    It.IsAny<AcpConnectionContext>(),
+                    It.IsAny<CancellationToken>()))
+                .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, AcpConnectionContext, CancellationToken>(
+                    (profile, _, _, _, cancellationToken) => ConnectForProfileAsync(profile, cancellationToken));
+
+            async Task<AcpTransportApplyResult> ConnectForProfileAsync(
+                ServerConfiguration profile,
+                CancellationToken cancellationToken)
+            {
+                if (string.Equals(profile.Id, "profile-a", StringComparison.Ordinal))
+                {
+                    firstStarted.TrySetResult(null);
+                    try
+                    {
+                        await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        firstCanceled.TrySetResult(null);
+                        throw;
+                    }
+                }
+
+                secondStarted.TrySetResult(null);
+                return new AcpTransportApplyResult(Mock.Of<IChatService>(), new InitializeResponse());
+            }
+
+            await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
+            var profileA = new ServerConfiguration { Id = "profile-a", Name = "Profile A", Transport = TransportType.WebSocket, ServerUrl = "ws://127.0.0.1:3010/" };
+            var profileB = new ServerConfiguration { Id = "profile-b", Name = "Profile B", Transport = TransportType.Stdio, StdioCommand = "agent" };
+            fixture.Profiles.Profiles.Add(profileA);
+            fixture.Profiles.Profiles.Add(profileB);
+
+            fixture.ViewModel.SelectedAcpProfile = profileA;
+            await firstStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+            fixture.ViewModel.SelectedAcpProfile = profileB;
+
+            await firstCanceled.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            await secondStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            commands.Verify(x => x.ConnectToProfileAsync(
+                It.Is<ServerConfiguration>(profile => profile.Id == "profile-b"),
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<CancellationToken>()), Times.Once);
+        });
+    }
+
+    [Fact]
     public async Task SelectedAcpProfile_Change_UpdatesConnectionStoreSelection()
     {
         await using var fixture = CreateViewModel();
@@ -2781,7 +2852,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         await Task.Delay(50);
 
         var connectionState = await fixture.GetConnectionStateAsync();
-        Assert.Equal("profile-a", connectionState.SettingsSelectedProfileId);
+        Assert.Equal("profile-a", connectionState.SelectedProfileIntentId);
     }
 
     [Fact]
@@ -2825,7 +2896,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         await Task.Delay(50);
 
         var connectionState = await fixture.GetConnectionStateAsync();
-        Assert.Equal("profile-a", connectionState.SettingsSelectedProfileId);
+        Assert.Equal("profile-a", connectionState.SelectedProfileIntentId);
         Assert.Null(fixture.ViewModel.SelectedAcpProfile);
         Assert.Null(fixture.Profiles.SelectedProfile);
     }
@@ -4240,7 +4311,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
     }
 
     [Fact]
-    public async Task EnsureNewSessionDraftAsync_WhenRequiredProfileSwitchWaitsForConnectedProfileInstanceBeforeDrafting()
+    public async Task EnsureNewSessionDraftAsync_WhenSettingsIntentAdvancesBeforeForegroundWaitsForForegroundProfileBeforeDrafting()
     {
         await using var fixture = CreateViewModel();
         var chatService = CreateConnectedChatService();
@@ -4248,6 +4319,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
             .ReturnsAsync(new SessionNewResponse("remote-draft"));
 
         await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+        await fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-1"));
         await fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
         await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
@@ -4256,12 +4328,17 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
             @"C:\Repo\App",
             requiredProfileId: "profile-2");
         await Task.Delay(25);
+        await fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-2"));
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connecting));
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-2"));
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+
+        await Task.Delay(100);
+        Assert.False(ensureTask.IsCompleted);
+        chatService.Verify(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()), Times.Never);
+
         await fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-2"));
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
-        Assert.False(ensureTask.IsCompleted);
-
-        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-2"));
         await ensureTask;
 
         var connectionState = await fixture.GetConnectionStateAsync();
@@ -4269,6 +4346,90 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         Assert.Equal("profile-2", connectionState.NewSessionDraft!.ProfileId);
         Assert.Equal("conn-2", connectionState.NewSessionDraft.ConnectionInstanceId);
         chatService.Verify(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task EnsureNewSessionDraftAsync_WhenSelectedIntentAlreadyPointsToRemoteButForegroundIsStillLocal_WaitsInsteadOfFaulting()
+    {
+        await using var fixture = CreateViewModel();
+        var chatService = CreateConnectedChatService();
+        chatService.Setup(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+            .ReturnsAsync(new SessionNewResponse("remote-draft"));
+
+        fixture.Profiles.Profiles.Add(new ServerConfiguration
+        {
+            Id = "profile-1",
+            Name = "Local Agent",
+            Transport = TransportType.Stdio,
+            StdioCommand = "agent"
+        });
+        fixture.Profiles.Profiles.Add(new ServerConfiguration
+        {
+            Id = "profile-2",
+            Name = "Remote Agent",
+            Transport = TransportType.WebSocket,
+            ServerUrl = "ws://127.0.0.1:3010/"
+        });
+
+        await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+        await fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-2"));
+        await fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+
+        using var cts = new CancellationTokenSource();
+        var ensureTask = fixture.ViewModel.EnsureNewSessionDraftForProfileAsync(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            requiredProfileId: "profile-2",
+            cts.Token);
+
+        await ensureTask;
+
+        var connectionState = await fixture.GetConnectionStateAsync();
+        Assert.Null(connectionState.NewSessionDraft);
+        chatService.Verify(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task EnsureNewSessionDraftAsync_WhenRequiredProfileMatchesStaleForegroundWithoutAuthoritativeSession_DoesNotFaultDraft()
+    {
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        await using var fixture = CreateViewModel(connectionSessionRegistry: registry);
+        var chatService = CreateConnectedChatService();
+        chatService.Setup(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+            .ReturnsAsync(new SessionNewResponse("remote-draft"));
+
+        fixture.Profiles.Profiles.Add(new ServerConfiguration
+        {
+            Id = "profile-1",
+            Name = "Local Agent",
+            Transport = TransportType.Stdio,
+            StdioCommand = "agent"
+        });
+        fixture.Profiles.Profiles.Add(new ServerConfiguration
+        {
+            Id = "profile-2",
+            Name = "Remote Agent",
+            Transport = TransportType.WebSocket,
+            ServerUrl = "ws://127.0.0.1:3010/"
+        });
+
+        await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+        await fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-2"));
+        await fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-2"));
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-local"));
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+
+        var ensureTask = fixture.ViewModel.EnsureNewSessionDraftForProfileAsync(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            requiredProfileId: "profile-2",
+            CancellationToken.None);
+
+        await ensureTask;
+
+        var connectionState = await fixture.GetConnectionStateAsync();
+        Assert.Null(connectionState.NewSessionDraft);
+        chatService.Verify(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()), Times.Never);
     }
 
     [Fact]
@@ -4462,7 +4623,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
             AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
             SessionInfo: null);
 
-        await fixture.DispatchConnectionAsync(new SetSettingsSelectedProfileAction("profile-2"));
+        await fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-2"));
         await fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
         await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
@@ -11225,7 +11386,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
                 .Add("conv-2", new ConversationBindingSlice("conv-2", "remote-2", "profile-1"))
         });
         fixture.ViewModel.CurrentPrompt = "start composer draft";
-        await fixture.DispatchConnectionAsync(new SetSettingsSelectedProfileAction("profile-2"));
+        await fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-2"));
         await DispatchConnectedAsync(fixture, "profile-1");
         syncContext.RunAll();
 
@@ -11261,7 +11422,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         previewStore.Verify(store => store.LoadAsync("conv-2", It.IsAny<CancellationToken>()), Times.Never);
         var finalState = await fixture.GetStateAsync();
         Assert.Equal("conv-2", finalState.HydratedConversationId);
-        Assert.Equal("profile-1", (await fixture.GetConnectionStateAsync()).SettingsSelectedProfileId);
+        Assert.Equal("profile-1", (await fixture.GetConnectionStateAsync()).SelectedProfileIntentId);
     }
 
     [Fact]
@@ -11381,7 +11542,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1")).AsTask());
         await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1")).AsTask());
         await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected)).AsTask());
-        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetSettingsSelectedProfileAction("profile-2")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-2")).AsTask());
         await WaitForConditionAsync(() =>
         {
             syncContext.RunAll();
@@ -11402,7 +11563,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         syncContext.RunAll();
 
         Assert.True(await switched);
-        Assert.Equal("profile-1", (await fixture.GetConnectionStateAsync()).SettingsSelectedProfileId);
+        Assert.Equal("profile-1", (await fixture.GetConnectionStateAsync()).SelectedProfileIntentId);
         Assert.Equal(0, Volatile.Read(ref createSessionCallCount));
 
         startViewModel.OnComposerUnloaded();
@@ -11523,7 +11684,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
                     UpdatedAtUtc: new DateTime(2026, 5, 13, 0, 0, 2, DateTimeKind.Utc)))
         });
 
-        await fixture.DispatchConnectionAsync(new SetSettingsSelectedProfileAction("profile-1"));
+        await fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-1"));
         await fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
         await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
@@ -11709,7 +11870,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
                 .Add("conv-2", new ConversationBindingSlice("conv-2", "remote-2", "profile-1"))
         });
         fixture.ViewModel.CurrentPrompt = "start composer draft";
-        await fixture.DispatchConnectionAsync(new SetSettingsSelectedProfileAction("profile-1"));
+        await fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-1"));
         await fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
         await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
@@ -15329,9 +15490,47 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
             AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
             SessionInfo: null);
 
-        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetSettingsSelectedProfileAction("profile-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-1")).AsTask());
         await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1")).AsTask());
         await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected)).AsTask());
+
+        await AwaitWithSynchronizationContextAsync(
+            syncContext,
+            fixture.DispatchConnectionAsync(new SetNewSessionDraftAction(draft)).AsTask());
+        await fixture.ApplyNewSessionDraftProjectionAsync();
+
+        var mode = Assert.Single(fixture.ViewModel.NewSessionDraftModeOptions);
+        Assert.Equal("code", mode.ModeId);
+        Assert.Equal("code", fixture.ViewModel.SelectedNewSessionDraftMode?.ModeId);
+    }
+
+    [Fact]
+    public async Task ConnectionStoreProjection_WhenSettingsSelectionAdvancesBeforeForeground_StillProjectsDraft()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        var draft = new NewSessionDraftState(
+            ProfileId: "profile-2",
+            Cwd: @"C:\Repo\App",
+            RemoteSessionId: "remote-draft",
+            ConnectionInstanceId: "conn-2",
+            Phase: NewSessionDraftPhase.Ready,
+            Version: 1,
+            AvailableModes: ImmutableList.Create(new ConversationModeOptionSnapshot
+            {
+                ModeId = "code",
+                ModeName = "Code"
+            }),
+            SelectedModeId: "code",
+            ConfigOptions: ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+            ShowConfigOptionsPanel: false,
+            AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+            SessionInfo: null);
+
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-2")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-2")).AsTask());
         await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected)).AsTask());
 
         await AwaitWithSynchronizationContextAsync(
@@ -15364,7 +15563,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
             SessionInfo: null,
             Error: "session/new failed");
 
-        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetSettingsSelectedProfileAction("profile-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-1")).AsTask());
         await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1")).AsTask());
         await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1")).AsTask());
         await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected)).AsTask());

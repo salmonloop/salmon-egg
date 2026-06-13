@@ -20,6 +20,9 @@ public partial class ChatViewModel
 {
     private static readonly TimeSpan NewSessionDraftProfileWaitTimeout = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan NewSessionDraftProfileWaitDelay = TimeSpan.FromMilliseconds(50);
+    private readonly object _newSessionDraftRequestSync = new();
+    private readonly Dictionary<NewSessionDraftRequestKey, Task> _inFlightNewSessionDraftRequests = new();
+    private NewSessionDraftRequestKey? _desiredNewSessionDraftRequestKey;
 
     public async Task EnsureNewSessionDraftAsync(string? cwd, CancellationToken cancellationToken = default)
         => await EnsureNewSessionDraftForProfileAsync(cwd, requiredProfileId: null, cancellationToken).ConfigureAwait(false);
@@ -35,6 +38,7 @@ public partial class ChatViewModel
             return;
         }
 
+        Task? inFlightRequestTask = null;
         await _newSessionDraftGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -42,8 +46,9 @@ public partial class ChatViewModel
             var connectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
             var chatService = _chatService;
             var normalizedRequiredProfileId = NormalizeNewSessionDraftProfileId(requiredProfileId);
+            var projectedProfileId = ResolveProjectedProfileId(connectionState);
             var foregroundProfileId = connectionState.ForegroundTransportProfileId;
-            var profileId = normalizedRequiredProfileId ?? foregroundProfileId ?? SelectedProfileId;
+            var profileId = normalizedRequiredProfileId ?? projectedProfileId ?? SelectedProfileId;
             var connectionInstanceId = connectionState.ConnectionInstanceId ?? ConnectionInstanceId;
 
             if (!string.IsNullOrWhiteSpace(normalizedRequiredProfileId)
@@ -57,7 +62,7 @@ public partial class ChatViewModel
                 }
 
                 await ClearNewSessionDraftStateAsync().ConfigureAwait(false);
-                if (!await WaitForRequiredForegroundProfileAsync(
+                if (!await WaitForRequiredProfileIdentityAsync(
                     normalizedRequiredProfileId,
                     cancellationToken).ConfigureAwait(false))
                 {
@@ -77,6 +82,22 @@ public partial class ChatViewModel
                 }
             }
 
+            var authoritativeConnection = await ResolveAuthoritativeNewSessionDraftConnectionAsync(
+                normalizedRequiredProfileId,
+                cancellationToken).ConfigureAwait(false);
+            if (authoritativeConnection is null
+                || authoritativeConnection.Value.ChatService is not { IsConnected: true, IsInitialized: true }
+                || string.IsNullOrWhiteSpace(authoritativeConnection.Value.ProfileId)
+                || string.IsNullOrWhiteSpace(authoritativeConnection.Value.ConnectionInstanceId))
+            {
+                await ClearNewSessionDraftStateAsync().ConfigureAwait(false);
+                return;
+            }
+
+            chatService = authoritativeConnection.Value.ChatService;
+            profileId = authoritativeConnection.Value.ProfileId;
+            connectionInstanceId = authoritativeConnection.Value.ConnectionInstanceId;
+
             var profile = ResolveNewSessionDraftProfile(profileId);
             var cwdResolution = AcpSessionNewCwdResolver.Resolve(
                 cwd,
@@ -85,6 +106,11 @@ public partial class ChatViewModel
 
             if (!cwdResolution.IsSuccess || string.IsNullOrWhiteSpace(cwdResolution.Cwd))
             {
+                Logger.LogInformation(
+                    "ACP new-session draft cwd resolution failed. profileId={ProfileId} connectionInstanceId={ConnectionInstanceId} error={Error}",
+                    profileId,
+                    connectionInstanceId,
+                    cwdResolution.ErrorMessage ?? AcpSessionNewCwdResolver.MissingRemoteCwdMessage);
                 var failed = connectionState.NewSessionDraft is null
                     ? CreateNewSessionDraftState(
                         profileId ?? string.Empty,
@@ -110,15 +136,12 @@ public partial class ChatViewModel
             }
 
             var normalizedCwd = cwdResolution.Cwd;
+            var requestKey = new NewSessionDraftRequestKey(
+                profileId ?? string.Empty,
+                connectionInstanceId ?? string.Empty,
+                normalizedCwd);
 
-            if (chatService is not { IsConnected: true, IsInitialized: true }
-                || connectionState.Phase != ConnectionPhase.Connected
-                || string.IsNullOrWhiteSpace(profileId)
-                || string.IsNullOrWhiteSpace(connectionInstanceId))
-            {
-                await ClearNewSessionDraftStateAsync().ConfigureAwait(false);
-                return;
-            }
+            SetDesiredNewSessionDraftRequestKey(requestKey);
 
             var existingDraft = connectionState.NewSessionDraft;
             if (IsReusableNewSessionDraft(existingDraft, profileId!, connectionInstanceId!, normalizedCwd))
@@ -127,69 +150,45 @@ public partial class ChatViewModel
                 return;
             }
 
-            if (existingDraft is not null)
+            if (TryGetInFlightNewSessionDraftRequestTask(requestKey, out inFlightRequestTask))
             {
-                await CloseNewSessionDraftQuietlyAsync(chatService, existingDraft, cancellationToken).ConfigureAwait(false);
-                await ClearNewSessionDraftStateAsync().ConfigureAwait(false);
+                Logger.LogInformation(
+                    "Joining in-flight ACP new-session draft request. profileId={ProfileId} connectionInstanceId={ConnectionInstanceId} cwd={Cwd}",
+                    profileId,
+                    connectionInstanceId,
+                    normalizedCwd);
             }
-
-            var requestVersion = checked((existingDraft?.Version ?? 0) + 1);
-            var creatingDraft = CreateNewSessionDraftState(
-                profileId!,
-                normalizedCwd,
-                remoteSessionId: null,
-                connectionInstanceId!,
-                NewSessionDraftPhase.Creating,
-                requestVersion,
-                AcpSessionUpdateDelta.Empty,
-                isConfigAuthoritative: false);
-            await _chatConnectionStore.Dispatch(new SetNewSessionDraftAction(creatingDraft)).ConfigureAwait(false);
-            await ApplyNewSessionDraftProjectionAsync(
-                await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false)).ConfigureAwait(false);
-
-            SessionNewResponse response;
-            try
+            else
             {
-                var mcpServers = await ResolveCurrentMcpServersAsync(cancellationToken).ConfigureAwait(false);
-                response = await chatService.CreateSessionAsync(
-                    new SessionNewParams(
-                        normalizedCwd,
-                        McpServerJsonConverter.CloneServers(mcpServers))).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (ChatAuthenticationCoordinator.IsAuthenticationRequiredError(ex))
-            {
-                var authenticated = await TryAuthenticateAsync(cancellationToken).ConfigureAwait(false);
-                if (!authenticated)
+                if (existingDraft is not null)
                 {
-                    throw new OperationCanceledException("Authentication was not completed.", cancellationToken);
+                    await CloseNewSessionDraftQuietlyAsync(chatService, existingDraft, cancellationToken).ConfigureAwait(false);
+                    await ClearNewSessionDraftStateAsync(clearDesiredRequest: false).ConfigureAwait(false);
                 }
 
-                var mcpServers = await ResolveCurrentMcpServersAsync(cancellationToken).ConfigureAwait(false);
-                response = await chatService.CreateSessionAsync(
-                    new SessionNewParams(
-                        normalizedCwd,
-                        McpServerJsonConverter.CloneServers(mcpServers))).ConfigureAwait(false);
-            }
+                var requestVersion = checked((existingDraft?.Version ?? 0) + 1);
+                var creatingDraft = CreateNewSessionDraftState(
+                    profileId!,
+                    normalizedCwd,
+                    remoteSessionId: null,
+                    connectionInstanceId!,
+                    NewSessionDraftPhase.Creating,
+                    requestVersion,
+                    AcpSessionUpdateDelta.Empty,
+                    isConfigAuthoritative: false);
+                await _chatConnectionStore.Dispatch(new SetNewSessionDraftAction(creatingDraft)).ConfigureAwait(false);
+                await ApplyNewSessionDraftProjectionAsync(
+                    await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false)).ConfigureAwait(false);
 
-            if (cancellationToken.IsCancellationRequested)
-            {
-                await CloseNewSessionIdQuietlyAsync(chatService, response.SessionId, CancellationToken.None).ConfigureAwait(false);
-                await ClearNewSessionDraftStateAsync().ConfigureAwait(false);
-                cancellationToken.ThrowIfCancellationRequested();
+                var request = new PendingNewSessionDraftRequest(
+                    requestKey,
+                    profileId!,
+                    connectionInstanceId!,
+                    normalizedCwd,
+                    requestVersion,
+                    chatService);
+                inFlightRequestTask = StartInFlightNewSessionDraftRequest(request);
             }
-
-            var readyDraft = CreateNewSessionDraftState(
-                profileId!,
-                normalizedCwd,
-                response.SessionId,
-                connectionInstanceId!,
-                NewSessionDraftPhase.Ready,
-                requestVersion,
-                _acpSessionUpdateProjector.ProjectSessionNew(response),
-                response.ConfigOptions is not null);
-            await _chatConnectionStore.Dispatch(new SetNewSessionDraftAction(readyDraft)).ConfigureAwait(false);
-            await ApplyNewSessionDraftProjectionAsync(
-                await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false)).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -214,9 +213,14 @@ public partial class ChatViewModel
         {
             _newSessionDraftGate.Release();
         }
+
+        if (inFlightRequestTask is not null)
+        {
+            await inFlightRequestTask.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
     }
 
-    private async Task<bool> WaitForRequiredForegroundProfileAsync(
+    private async Task<bool> WaitForRequiredProfileIdentityAsync(
         string requiredProfileId,
         CancellationToken cancellationToken)
     {
@@ -227,9 +231,13 @@ public partial class ChatViewModel
             cancellationToken.ThrowIfCancellationRequested();
             var state = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
             if (!string.IsNullOrWhiteSpace(requiredProfileId)
-                && state.Phase == ConnectionPhase.Connected
-                && string.Equals(state.ForegroundTransportProfileId, requiredProfileId, StringComparison.Ordinal)
-                && !string.IsNullOrWhiteSpace(state.ConnectionInstanceId))
+                && _authoritativeConnectionResolver.TryResolveReadyForegroundConnection(
+                    _chatService,
+                    state,
+                    requiredProfileId,
+                    out var snapshot)
+                && !string.IsNullOrWhiteSpace(snapshot.ProfileId)
+                && !string.IsNullOrWhiteSpace(snapshot.ConnectionInstanceId))
             {
                 return true;
             }
@@ -237,8 +245,9 @@ public partial class ChatViewModel
             if (state.Phase is ConnectionPhase.Disconnected or ConnectionPhase.Error)
             {
                 Logger.LogInformation(
-                    "New session draft preparation aborted while waiting for required profile. requiredProfileId={RequiredProfileId} currentProfileId={CurrentProfileId} currentPhase={Phase}",
+                    "New session draft preparation aborted while waiting for required profile identity. requiredProfileId={RequiredProfileId} currentSelectedProfileId={CurrentSelectedProfileId} currentForegroundProfileId={CurrentForegroundProfileId} currentPhase={Phase}",
                     requiredProfileId,
+                    state.SelectedProfileIntentId,
                     state.ForegroundTransportProfileId,
                     state.Phase);
                 return false;
@@ -248,9 +257,29 @@ public partial class ChatViewModel
         }
 
         Logger.LogWarning(
-            "Timed out waiting for required foreground profile before creating ACP new-session draft. requiredProfileId={RequiredProfileId}",
+            "Timed out waiting for required profile identity before creating ACP new-session draft. requiredProfileId={RequiredProfileId}",
             requiredProfileId);
         return false;
+    }
+
+    private async Task<AcpAuthoritativeConnectionSnapshot?> ResolveAuthoritativeNewSessionDraftConnectionAsync(
+        string? requiredProfileId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var state = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
+        if (_authoritativeConnectionResolver.TryResolveReadyForegroundConnection(
+                _chatService,
+                state,
+                requiredProfileId,
+                out var snapshot)
+            && !string.IsNullOrWhiteSpace(snapshot.ProfileId)
+            && !string.IsNullOrWhiteSpace(snapshot.ConnectionInstanceId))
+        {
+            return snapshot;
+        }
+
+        return null;
     }
 
     public async Task DiscardNewSessionDraftAsync(CancellationToken cancellationToken = default)
@@ -471,8 +500,13 @@ public partial class ChatViewModel
         }).ConfigureAwait(false);
     }
 
-    private async Task ClearNewSessionDraftStateAsync()
+    private async Task ClearNewSessionDraftStateAsync(bool clearDesiredRequest = true)
     {
+        if (clearDesiredRequest)
+        {
+            ClearDesiredNewSessionDraftRequestKey();
+        }
+
         var current = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
         if (current.NewSessionDraft is null)
         {
@@ -536,10 +570,12 @@ public partial class ChatViewModel
     }
 
     private bool IsCurrentNewSessionDraft(ChatConnectionState connectionState, NewSessionDraftState draft)
-        => string.Equals(connectionState.ForegroundTransportProfileId, draft.ProfileId, StringComparison.Ordinal)
-            && (string.IsNullOrWhiteSpace(connectionState.SettingsSelectedProfileId)
-                || string.Equals(connectionState.SettingsSelectedProfileId, draft.ProfileId, StringComparison.Ordinal))
+    {
+        var projectedProfileId = ResolveProjectedProfileId(connectionState);
+        return (string.IsNullOrWhiteSpace(projectedProfileId)
+                || string.Equals(projectedProfileId, draft.ProfileId, StringComparison.Ordinal))
             && string.Equals(connectionState.ConnectionInstanceId, draft.ConnectionInstanceId, StringComparison.Ordinal);
+    }
 
     private static NewSessionDraftState? ResolveEffectiveNewSessionDraft(ChatConnectionState connectionState)
     {
@@ -549,14 +585,9 @@ public partial class ChatViewModel
             return null;
         }
 
-        if (!string.IsNullOrWhiteSpace(connectionState.SettingsSelectedProfileId)
-            && !string.Equals(connectionState.SettingsSelectedProfileId, draft.ProfileId, StringComparison.Ordinal))
-        {
-            return null;
-        }
-
-        if (!string.IsNullOrWhiteSpace(connectionState.ForegroundTransportProfileId)
-            && !string.Equals(connectionState.ForegroundTransportProfileId, draft.ProfileId, StringComparison.Ordinal))
+        var projectedProfileId = ResolveProjectedProfileId(connectionState);
+        if (!string.IsNullOrWhiteSpace(projectedProfileId)
+            && !string.Equals(projectedProfileId, draft.ProfileId, StringComparison.Ordinal))
         {
             return null;
         }
@@ -569,6 +600,11 @@ public partial class ChatViewModel
 
         return draft;
     }
+
+    private static string? ResolveProjectedProfileId(ChatConnectionState connectionState)
+        => !string.IsNullOrWhiteSpace(connectionState.SelectedProfileIntentId)
+            ? connectionState.SelectedProfileIntentId
+            : connectionState.ForegroundTransportProfileId;
 
     private static bool IsReusableNewSessionDraft(
         NewSessionDraftState? draft,
@@ -674,4 +710,248 @@ public partial class ChatViewModel
                    string.Equals(profile.Id, profileId, StringComparison.Ordinal))
                ?? SelectedAcpProfile;
     }
+
+    private Task StartInFlightNewSessionDraftRequest(PendingNewSessionDraftRequest request)
+    {
+        var task = ExecuteInFlightNewSessionDraftRequestAsync(request);
+        RegisterInFlightNewSessionDraftRequest(request.RequestKey, task);
+        Logger.LogInformation(
+            "Started ACP new-session draft request. profileId={ProfileId} connectionInstanceId={ConnectionInstanceId} cwd={Cwd}",
+            request.ProfileId,
+            request.ConnectionInstanceId,
+            request.Cwd);
+        return task;
+    }
+
+    private async Task ExecuteInFlightNewSessionDraftRequestAsync(PendingNewSessionDraftRequest request)
+    {
+        try
+        {
+            var response = await CreateNewSessionDraftResponseAsync(request).ConfigureAwait(false);
+            await CompleteSuccessfulNewSessionDraftRequestAsync(request, response).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (_disposed)
+        {
+        }
+        catch (Exception ex)
+        {
+            await CompleteFailedNewSessionDraftRequestAsync(request, ex).ConfigureAwait(false);
+        }
+        finally
+        {
+            RemoveInFlightNewSessionDraftRequest(request.RequestKey);
+        }
+    }
+
+    private async Task<SessionNewResponse> CreateNewSessionDraftResponseAsync(
+        PendingNewSessionDraftRequest request)
+    {
+        var operationCancellationToken = _disposed ? CancellationToken.None : _disposeCts.Token;
+
+        try
+        {
+            var mcpServers = await ResolveCurrentMcpServersAsync(operationCancellationToken).ConfigureAwait(false);
+            return await request.ChatService.CreateSessionAsync(
+                new SessionNewParams(
+                    request.Cwd,
+                    McpServerJsonConverter.CloneServers(mcpServers))).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ChatAuthenticationCoordinator.IsAuthenticationRequiredError(ex))
+        {
+            var authenticated = await TryAuthenticateAsync(operationCancellationToken).ConfigureAwait(false);
+            if (!authenticated)
+            {
+                throw new OperationCanceledException("Authentication was not completed.", operationCancellationToken);
+            }
+
+            var mcpServers = await ResolveCurrentMcpServersAsync(operationCancellationToken).ConfigureAwait(false);
+            return await request.ChatService.CreateSessionAsync(
+                new SessionNewParams(
+                    request.Cwd,
+                    McpServerJsonConverter.CloneServers(mcpServers))).ConfigureAwait(false);
+        }
+    }
+
+    private async Task CompleteSuccessfulNewSessionDraftRequestAsync(
+        PendingNewSessionDraftRequest request,
+        SessionNewResponse response)
+    {
+        var shouldDiscardResponse = false;
+
+        await _newSessionDraftGate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
+        try
+        {
+            var connectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
+            if (!ShouldAdoptNewSessionDraftRequestResponse(connectionState, request.RequestKey))
+            {
+                shouldDiscardResponse = true;
+            }
+            else
+            {
+                var readyDraft = CreateNewSessionDraftState(
+                    request.ProfileId,
+                    request.Cwd,
+                    response.SessionId,
+                    request.ConnectionInstanceId,
+                    NewSessionDraftPhase.Ready,
+                    request.RequestVersion,
+                    _acpSessionUpdateProjector.ProjectSessionNew(response),
+                    response.ConfigOptions is not null);
+                await _chatConnectionStore.Dispatch(new SetNewSessionDraftAction(readyDraft)).ConfigureAwait(false);
+                await ApplyNewSessionDraftProjectionAsync(
+                    await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false)).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _newSessionDraftGate.Release();
+        }
+
+        if (!shouldDiscardResponse)
+        {
+            return;
+        }
+
+        Logger.LogInformation(
+            "Discarding superseded ACP new-session draft response. profileId={ProfileId} connectionInstanceId={ConnectionInstanceId} remoteSessionId={RemoteSessionId}",
+            request.ProfileId,
+            request.ConnectionInstanceId,
+            response.SessionId);
+        await CloseNewSessionIdQuietlyAsync(request.ChatService, response.SessionId, CancellationToken.None).ConfigureAwait(false);
+    }
+
+    private async Task CompleteFailedNewSessionDraftRequestAsync(
+        PendingNewSessionDraftRequest request,
+        Exception exception)
+    {
+        var appliedFailure = false;
+
+        await _newSessionDraftGate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
+        try
+        {
+            var connectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
+            if (ShouldAdoptNewSessionDraftRequestResponse(connectionState, request.RequestKey))
+            {
+                var failed = connectionState.NewSessionDraft is null
+                    ? CreateNewSessionDraftState(
+                        request.ProfileId,
+                        request.Cwd,
+                        remoteSessionId: null,
+                        request.ConnectionInstanceId,
+                        NewSessionDraftPhase.Faulted,
+                        request.RequestVersion,
+                        AcpSessionUpdateDelta.Empty,
+                        isConfigAuthoritative: false) with
+                    {
+                        Error = exception.Message
+                    }
+                    : connectionState.NewSessionDraft with
+                    {
+                        Phase = NewSessionDraftPhase.Faulted,
+                        Error = exception.Message
+                    };
+                await _chatConnectionStore.Dispatch(new SetNewSessionDraftAction(failed)).ConfigureAwait(false);
+                await ApplyNewSessionDraftProjectionAsync(
+                    await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false)).ConfigureAwait(false);
+                appliedFailure = true;
+            }
+        }
+        finally
+        {
+            _newSessionDraftGate.Release();
+        }
+
+        if (appliedFailure)
+        {
+            Logger.LogDebug(exception, "Failed to prepare ACP new-session draft.");
+            return;
+        }
+
+        Logger.LogInformation(
+            "Ignoring superseded ACP new-session draft failure. profileId={ProfileId} connectionInstanceId={ConnectionInstanceId} error={Error}",
+            request.ProfileId,
+            request.ConnectionInstanceId,
+            exception.Message);
+    }
+
+    private bool ShouldAdoptNewSessionDraftRequestResponse(
+        ChatConnectionState connectionState,
+        NewSessionDraftRequestKey requestKey)
+    {
+        if (!IsDesiredNewSessionDraftRequest(requestKey)
+            || connectionState.Phase != ConnectionPhase.Connected)
+        {
+            return false;
+        }
+
+        return _authoritativeConnectionResolver.TryResolveReadyForegroundConnection(
+                   _chatService,
+                   connectionState,
+                   requestKey.ProfileId,
+                   out var snapshot)
+               && string.Equals(snapshot.ProfileId, requestKey.ProfileId, StringComparison.Ordinal)
+               && string.Equals(snapshot.ConnectionInstanceId, requestKey.ConnectionInstanceId, StringComparison.Ordinal);
+    }
+
+    private void RegisterInFlightNewSessionDraftRequest(NewSessionDraftRequestKey requestKey, Task task)
+    {
+        lock (_newSessionDraftRequestSync)
+        {
+            _inFlightNewSessionDraftRequests[requestKey] = task;
+        }
+    }
+
+    private bool TryGetInFlightNewSessionDraftRequestTask(NewSessionDraftRequestKey requestKey, out Task? task)
+    {
+        lock (_newSessionDraftRequestSync)
+        {
+            return _inFlightNewSessionDraftRequests.TryGetValue(requestKey, out task);
+        }
+    }
+
+    private void RemoveInFlightNewSessionDraftRequest(NewSessionDraftRequestKey requestKey)
+    {
+        lock (_newSessionDraftRequestSync)
+        {
+            _inFlightNewSessionDraftRequests.Remove(requestKey);
+        }
+    }
+
+    private void SetDesiredNewSessionDraftRequestKey(NewSessionDraftRequestKey requestKey)
+    {
+        lock (_newSessionDraftRequestSync)
+        {
+            _desiredNewSessionDraftRequestKey = requestKey;
+        }
+    }
+
+    private void ClearDesiredNewSessionDraftRequestKey()
+    {
+        lock (_newSessionDraftRequestSync)
+        {
+            _desiredNewSessionDraftRequestKey = null;
+        }
+    }
+
+    private bool IsDesiredNewSessionDraftRequest(NewSessionDraftRequestKey requestKey)
+    {
+        lock (_newSessionDraftRequestSync)
+        {
+            return _desiredNewSessionDraftRequestKey is { } desired
+                && desired.Equals(requestKey);
+        }
+    }
+
+    private readonly record struct NewSessionDraftRequestKey(
+        string ProfileId,
+        string ConnectionInstanceId,
+        string Cwd);
+
+    private sealed record PendingNewSessionDraftRequest(
+        NewSessionDraftRequestKey RequestKey,
+        string ProfileId,
+        string ConnectionInstanceId,
+        string Cwd,
+        long RequestVersion,
+        SalmonEgg.Application.Services.Chat.IChatService ChatService);
 }

@@ -1,4 +1,7 @@
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 
@@ -14,6 +17,8 @@ internal sealed class GuiAppDataScope : IDisposable
     private const string LateUserMessageTextEnvVar = "SALMONEGG_GUI_LATE_USER_MESSAGE_TEXT";
     private const string LateUserMessageDelayMsEnvVar = "SALMONEGG_GUI_LATE_USER_MESSAGE_DELAY_MS";
     private const string GuiControlFileEnvVar = "SALMONEGG_GUI_CONTROL_FILE";
+    private const string MockAcpHarnessScenarioFileName = "mock-acp-harness.scenario.json";
+    private const string MockAcpHarnessReadySignalFileName = "mock-acp-harness.ready";
     private readonly string _appDataRoot;
     private readonly string _configDirectory;
     private readonly string _conversationsDirectory;
@@ -37,7 +42,69 @@ internal sealed class GuiAppDataScope : IDisposable
     private readonly string? _previousFakeReplayMessageCount;
     private readonly string? _previousGuiControlFile;
     private readonly IReadOnlyDictionary<string, string?> _environmentRestoreMap;
+    private readonly Process? _mockAcpHarnessProcess;
     private bool _disposed;
+
+    internal enum MockAcpTransportKind
+    {
+        Stdio,
+        WebSocket
+    }
+
+    internal enum MockAcpInitializeBehavior
+    {
+        Success,
+        NoResponse
+    }
+
+    internal enum MockAcpSessionNewBehavior
+    {
+        Success,
+        Error,
+        DelayedResponse,
+        NoResponse
+    }
+
+    internal enum MockAcpCwdAcceptancePolicy
+    {
+        AcceptAny,
+        RejectMissing,
+        RejectNonexistent,
+        RejectUnmappedRemote
+    }
+
+    internal enum MockAcpModesVariant
+    {
+        Normal,
+        Empty
+    }
+
+    internal sealed record MockAcpHarnessScenario
+    {
+        public MockAcpTransportKind TransportKind { get; init; } = MockAcpTransportKind.Stdio;
+
+        public MockAcpInitializeBehavior InitializeBehavior { get; init; } = MockAcpInitializeBehavior.Success;
+
+        public MockAcpSessionNewBehavior SessionNewBehavior { get; init; } = MockAcpSessionNewBehavior.Success;
+
+        public MockAcpCwdAcceptancePolicy CwdAcceptancePolicy { get; init; } = MockAcpCwdAcceptancePolicy.AcceptAny;
+
+        public MockAcpModesVariant ModesVariant { get; init; } = MockAcpModesVariant.Normal;
+
+        public string SessionId { get; init; } = "gui-remote-session-01";
+
+        public string? AcceptedCwd { get; init; }
+
+        public string? MappedRemoteCwd { get; init; }
+
+        public int InitializeDelayMs { get; init; }
+
+        public int SessionNewDelayMs { get; init; }
+
+        public int SessionNewErrorCode { get; init; } = -32602;
+
+        public string SessionNewErrorMessage { get; init; } = "session/new rejected by GUI mock ACP harness.";
+    }
 
     private GuiAppDataScope(
         string appDataRoot,
@@ -58,7 +125,8 @@ internal sealed class GuiAppDataScope : IDisposable
         string? previousFakeReplaySessionId = null,
         string? previousFakeReplayMessageCount = null,
         string? previousGuiControlFile = null,
-        IReadOnlyDictionary<string, string?>? environmentRestoreMap = null)
+        IReadOnlyDictionary<string, string?>? environmentRestoreMap = null,
+        Process? mockAcpHarnessProcess = null)
     {
         _appDataRoot = appDataRoot;
         _configDirectory = Path.GetDirectoryName(appYamlPath)!;
@@ -83,6 +151,7 @@ internal sealed class GuiAppDataScope : IDisposable
         _previousFakeReplayMessageCount = previousFakeReplayMessageCount;
         _previousGuiControlFile = previousGuiControlFile;
         _environmentRestoreMap = environmentRestoreMap ?? new Dictionary<string, string?>();
+        _mockAcpHarnessProcess = mockAcpHarnessProcess;
     }
 
     public static GuiAppDataScope CreateDeterministicLeftNavData(
@@ -374,6 +443,21 @@ internal sealed class GuiAppDataScope : IDisposable
         bool includeLocalConversation = false,
         int localMessageCount = 3,
         int remoteConversationCount = 1)
+        => CreateDeterministicMockAcpHarnessData(
+            new MockAcpHarnessScenario(),
+            cachedMessageCount,
+            replayMessageCount,
+            includeLocalConversation,
+            localMessageCount,
+            remoteConversationCount);
+
+    public static GuiAppDataScope CreateDeterministicMockAcpHarnessData(
+        MockAcpHarnessScenario? scenario = null,
+        int cachedMessageCount = 1,
+        int replayMessageCount = 60,
+        bool includeLocalConversation = false,
+        int localMessageCount = 3,
+        int remoteConversationCount = 1)
     {
         if (cachedMessageCount < 0)
         {
@@ -395,10 +479,11 @@ internal sealed class GuiAppDataScope : IDisposable
             throw new ArgumentOutOfRangeException(nameof(remoteConversationCount));
         }
 
+        scenario ??= new MockAcpHarnessScenario();
         GuiTestGate.RequireEnabled();
         WindowsGuiAppSession.StopAllRunningInstances();
 
-        const string profileId = "gui-slow-remote-profile";
+        const string profileId = "gui-mock-acp-profile";
         const string fakeReplaySessionIdEnvVar = "SALMONEGG_GUI_FAKE_REMOTE_REPLAY_SESSION_ID";
         const string fakeReplayMessageCountEnvVar = "SALMONEGG_GUI_FAKE_REMOTE_REPLAY_MESSAGE_COUNT";
         var appDataRoot = ResolveAppDataRoot();
@@ -410,7 +495,43 @@ internal sealed class GuiAppDataScope : IDisposable
         var appYamlPath = Path.Combine(appDataRoot, "config", "app.yaml");
         var conversationsPath = Path.Combine(appDataRoot, "conversations", "conversations.v1.json");
         var serverYamlPath = Path.Combine(appDataRoot, "config", "servers", profileId + ".yaml");
-        var projectRootPath = Path.Combine(Path.GetTempPath(), "SalmonEgg.GuiTests", "remote-project-1");
+        var projectRootPath = Path.Combine(Path.GetTempPath(), "SalmonEgg.GuiTests", "mock-acp-project-1");
+        var scenarioPath = Path.Combine(appDataRoot, "control", MockAcpHarnessScenarioFileName);
+        var readySignalPath = Path.Combine(appDataRoot, "control", MockAcpHarnessReadySignalFileName);
+        Directory.CreateDirectory(Path.GetDirectoryName(scenarioPath)!);
+
+        var scenarioToWrite = NormalizeMockAcpHarnessScenario(scenario, projectRootPath);
+        TestFileIo.WriteAllTextWithRetry(
+            scenarioPath,
+            BuildMockAcpHarnessScenarioJson(scenarioToWrite),
+            Encoding.UTF8);
+
+        Process? mockAcpHarnessProcess = null;
+        string serverYaml;
+        if (scenarioToWrite.TransportKind == MockAcpTransportKind.WebSocket)
+        {
+            var websocketPort = AllocateLoopbackPort();
+            var websocketUrl = $"ws://127.0.0.1:{websocketPort}/";
+            serverYaml = BuildServerYaml(
+                profileId,
+                transport: "websocket",
+                serverUrl: websocketUrl);
+            mockAcpHarnessProcess = StartMockAcpHarnessProcess(
+                scenarioPath,
+                websocketUrl,
+                readySignalPath);
+            WaitForMockAcpHarnessReady(readySignalPath);
+        }
+        else
+        {
+            var agentScriptPath = ResolveSlowReplayAgentScriptPath();
+            serverYaml = BuildServerYaml(
+                profileId,
+                transport: "stdio",
+                stdioCommand: "powershell.exe",
+                stdioArgs:
+                    $"-NoLogo -NoProfile -ExecutionPolicy Bypass -File {QuoteCommandLineArgument(agentScriptPath)} -ScenarioJsonPath {QuoteCommandLineArgument(scenarioPath)}");
+        }
 
         var scope = new GuiAppDataScope(
             appDataRoot,
@@ -429,15 +550,20 @@ internal sealed class GuiAppDataScope : IDisposable
             projectRootPath,
             previousGuiAppDataRootOverride,
             previousFakeReplaySessionId,
-            previousFakeReplayMessageCount);
+            previousFakeReplayMessageCount,
+            previousGuiControlFile: Environment.GetEnvironmentVariable(GuiControlFileEnvVar),
+            environmentRestoreMap: null,
+            mockAcpHarnessProcess);
 
-        scope.SeedSlowRemoteReplay(
+        scope.SeedMockAcpHarness(
             profileId,
             cachedMessageCount,
             replayMessageCount,
             includeLocalConversation,
             localMessageCount,
-            remoteConversationCount);
+            remoteConversationCount,
+            scenarioToWrite,
+            serverYaml);
         return scope;
     }
 
@@ -631,6 +757,7 @@ internal sealed class GuiAppDataScope : IDisposable
         }
 
         _disposed = true;
+        TryStopMockAcpHarnessProcess();
         WindowsGuiAppSession.StopAllRunningInstances();
         RestoreFile(_appYamlPath, _originalAppYaml, _appYamlExisted);
         RestoreFile(_conversationsPath, _originalConversations, _conversationsExisted);
@@ -907,10 +1034,34 @@ internal sealed class GuiAppDataScope : IDisposable
         bool includeLocalConversation,
         int localMessageCount,
         int remoteConversationCount)
+        => SeedMockAcpHarness(
+            profileId,
+            cachedMessageCount,
+            replayMessageCount,
+            includeLocalConversation,
+            localMessageCount,
+            remoteConversationCount,
+            new MockAcpHarnessScenario(),
+            BuildServerYaml(
+                profileId,
+                transport: "stdio",
+                stdioCommand: "powershell.exe",
+                stdioArgs:
+                    $"-NoLogo -NoProfile -ExecutionPolicy Bypass -File {QuoteCommandLineArgument(ResolveSlowReplayAgentScriptPath())} -ScenarioJsonPath {QuoteCommandLineArgument(Path.Combine(_appDataRoot, "control", MockAcpHarnessScenarioFileName))}"));
+
+    private void SeedMockAcpHarness(
+        string profileId,
+        int cachedMessageCount,
+        int replayMessageCount,
+        bool includeLocalConversation,
+        int localMessageCount,
+        int remoteConversationCount,
+        MockAcpHarnessScenario scenario,
+        string serverYaml)
     {
         if (string.IsNullOrWhiteSpace(_serverYamlPath))
         {
-            throw new InvalidOperationException("Remote replay seed requires a server YAML path.");
+            throw new InvalidOperationException("Mock ACP harness seed requires a server YAML path.");
         }
 
         Directory.CreateDirectory(_configDirectory);
@@ -918,7 +1069,12 @@ internal sealed class GuiAppDataScope : IDisposable
         Directory.CreateDirectory(_serversDirectory);
         Directory.CreateDirectory(_projectRootPath);
 
-        var agentScriptPath = ResolveSlowReplayAgentScriptPath();
+        var scenarioPath = Path.Combine(_appDataRoot, "control", MockAcpHarnessScenarioFileName);
+        Directory.CreateDirectory(Path.GetDirectoryName(scenarioPath)!);
+        TestFileIo.WriteAllTextWithRetry(
+            scenarioPath,
+            BuildMockAcpHarnessScenarioJson(NormalizeMockAcpHarnessScenario(scenario, _projectRootPath)),
+            Encoding.UTF8);
 
         TestFileIo.WriteAllTextWithRetry(
             _appYamlPath,
@@ -929,6 +1085,7 @@ internal sealed class GuiAppDataScope : IDisposable
             BuildSlowRemoteReplayConversationsJson(
                 _projectRootPath,
                 profileId,
+                scenario.SessionId,
                 cachedMessageCount,
                 includeLocalConversation,
                 localMessageCount,
@@ -936,13 +1093,10 @@ internal sealed class GuiAppDataScope : IDisposable
             Encoding.UTF8);
         TestFileIo.WriteAllTextWithRetry(
             _serverYamlPath,
-            BuildServerYaml(
-                profileId,
-                "powershell.exe",
-                $"-NoLogo -NoProfile -ExecutionPolicy Bypass -File {QuoteCommandLineArgument(agentScriptPath)} -SessionId gui-remote-session-01 -MessageCount {replayMessageCount}"),
+            serverYaml,
             Encoding.UTF8);
 
-        Environment.SetEnvironmentVariable("SALMONEGG_GUI_FAKE_REMOTE_REPLAY_SESSION_ID", "gui-remote-session-01");
+        Environment.SetEnvironmentVariable("SALMONEGG_GUI_FAKE_REMOTE_REPLAY_SESSION_ID", scenario.SessionId);
         Environment.SetEnvironmentVariable("SALMONEGG_GUI_FAKE_REMOTE_REPLAY_MESSAGE_COUNT", replayMessageCount.ToString());
     }
 
@@ -981,11 +1135,19 @@ internal sealed class GuiAppDataScope : IDisposable
             Encoding.UTF8);
         TestFileIo.WriteAllTextWithRetry(
             _serverYamlPath,
-            BuildServerYaml(profileA, "powershell.exe", $"{agentArgsPrefix} -SessionId gui-remote-session-01 -MessageCount {replayMessageCount} -ListDelayMs 700"),
+            BuildServerYaml(
+                profileA,
+                transport: "stdio",
+                stdioCommand: "powershell.exe",
+                stdioArgs: $"{agentArgsPrefix} -SessionId gui-remote-session-01 -MessageCount {replayMessageCount} -ListDelayMs 700"),
             Encoding.UTF8);
         TestFileIo.WriteAllTextWithRetry(
             _secondaryServerYamlPath,
-            BuildServerYaml(profileB, "powershell.exe", $"{agentArgsPrefix} -SessionId gui-remote-session-02 -MessageCount {replayMessageCount} -ListDelayMs 0"),
+            BuildServerYaml(
+                profileB,
+                transport: "stdio",
+                stdioCommand: "powershell.exe",
+                stdioArgs: $"{agentArgsPrefix} -SessionId gui-remote-session-02 -MessageCount {replayMessageCount} -ListDelayMs 0"),
             Encoding.UTF8);
 
         Environment.SetEnvironmentVariable("SALMONEGG_GUI_FAKE_REMOTE_REPLAY_SESSION_ID", "gui-remote-session-01");
@@ -1459,6 +1621,7 @@ internal sealed class GuiAppDataScope : IDisposable
     private static string BuildSlowRemoteReplayConversationsJson(
         string projectRootPath,
         string profileId,
+        string remoteSessionId,
         int cachedMessageCount,
         bool includeLocalConversation,
         int localMessageCount,
@@ -1509,7 +1672,7 @@ internal sealed class GuiAppDataScope : IDisposable
         {
             var suffix = remoteIndex.ToString("00");
             var conversationId = $"gui-remote-conversation-{suffix}";
-            var sessionId = $"gui-remote-session-{suffix}";
+            var sessionId = remoteIndex == 1 ? remoteSessionId : $"gui-remote-session-{suffix}";
             conversations.Add(new
             {
                 conversationId,
@@ -1624,26 +1787,187 @@ internal sealed class GuiAppDataScope : IDisposable
         return JsonSerializer.Serialize(document);
     }
 
-    private static string BuildServerYaml(string profileId, string command, string args)
+    private static string BuildServerYaml(
+        string profileId,
+        string transport,
+        string? stdioCommand = null,
+        string? stdioArgs = null,
+        string? serverUrl = null)
     {
-        var normalizedCommand = command.Replace("'", "''", StringComparison.Ordinal);
-        var normalizedArgs = args.Replace("'", "''", StringComparison.Ordinal);
-
-        return string.Join(
-            Environment.NewLine,
+        var normalizedTransport = transport.Replace("'", "''", StringComparison.Ordinal);
+        var lines = new List<string>
+        {
             "schema_version: 1",
             $"id: '{profileId}'",
-            "name: 'GUI Slow Replay Agent'",
-            "transport: 'stdio'",
-            $"stdio_command: '{normalizedCommand}'",
-            $"stdio_args: '{normalizedArgs}'",
+            "name: 'GUI Mock ACP Harness'",
+            $"transport: '{normalizedTransport}'",
             "connection_timeout_seconds: 10",
             "authentication:",
             "  mode: 'none'",
             "proxy:",
             "  enabled: false",
-            "  proxy_url: ''",
-            string.Empty);
+            "  proxy_url: ''"
+        };
+
+        if (string.Equals(transport, "stdio", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(stdioCommand))
+            {
+                throw new ArgumentException("stdioCommand is required for stdio transport.", nameof(stdioCommand));
+            }
+
+            var normalizedCommand = stdioCommand.Replace("'", "''", StringComparison.Ordinal);
+            var normalizedArgs = (stdioArgs ?? string.Empty).Replace("'", "''", StringComparison.Ordinal);
+            lines.Insert(4, $"stdio_command: '{normalizedCommand}'");
+            lines.Insert(5, $"stdio_args: '{normalizedArgs}'");
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(serverUrl))
+            {
+                throw new ArgumentException("serverUrl is required for remote transport.", nameof(serverUrl));
+            }
+
+            lines.Insert(4, $"server_url: '{serverUrl.Replace("'", "''", StringComparison.Ordinal)}'");
+        }
+
+        lines.Add(string.Empty);
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private static MockAcpHarnessScenario NormalizeMockAcpHarnessScenario(
+        MockAcpHarnessScenario scenario,
+        string projectRootPath)
+    {
+        var acceptedCwd = string.IsNullOrWhiteSpace(scenario.AcceptedCwd)
+            ? projectRootPath
+            : scenario.AcceptedCwd.Trim();
+
+        var mappedRemoteCwd = string.IsNullOrWhiteSpace(scenario.MappedRemoteCwd)
+            ? acceptedCwd
+            : scenario.MappedRemoteCwd.Trim();
+
+        return scenario with
+        {
+            AcceptedCwd = acceptedCwd,
+            MappedRemoteCwd = mappedRemoteCwd
+        };
+    }
+
+    private static string BuildMockAcpHarnessScenarioJson(MockAcpHarnessScenario scenario)
+    {
+        var document = new
+        {
+            transportKind = scenario.TransportKind.ToString(),
+            initializeBehavior = scenario.InitializeBehavior.ToString(),
+            sessionNewBehavior = scenario.SessionNewBehavior.ToString(),
+            cwdAcceptancePolicy = scenario.CwdAcceptancePolicy.ToString(),
+            modesVariant = scenario.ModesVariant.ToString(),
+            sessionId = scenario.SessionId,
+            acceptedCwd = scenario.AcceptedCwd,
+            mappedRemoteCwd = scenario.MappedRemoteCwd,
+            initializeDelayMs = scenario.InitializeDelayMs,
+            sessionNewDelayMs = scenario.SessionNewDelayMs,
+            sessionNewErrorCode = scenario.SessionNewErrorCode,
+            sessionNewErrorMessage = scenario.SessionNewErrorMessage
+        };
+
+        return JsonSerializer.Serialize(document);
+    }
+
+    private static Process StartMockAcpHarnessProcess(
+        string scenarioPath,
+        string websocketUrl,
+        string readySignalPath)
+    {
+        var scriptPath = ResolveMockAcpHarnessScriptPath();
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "powershell.exe",
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        startInfo.ArgumentList.Add("-NoLogo");
+        startInfo.ArgumentList.Add("-NoProfile");
+        startInfo.ArgumentList.Add("-ExecutionPolicy");
+        startInfo.ArgumentList.Add("Bypass");
+        startInfo.ArgumentList.Add("-File");
+        startInfo.ArgumentList.Add(scriptPath);
+        startInfo.ArgumentList.Add("-ScenarioJsonPath");
+        startInfo.ArgumentList.Add(scenarioPath);
+        startInfo.ArgumentList.Add("-ListenUrl");
+        startInfo.ArgumentList.Add(websocketUrl);
+        startInfo.ArgumentList.Add("-ReadySignalPath");
+        startInfo.ArgumentList.Add(readySignalPath);
+
+        var process = Process.Start(startInfo);
+        if (process is null)
+        {
+            throw new InvalidOperationException("Failed to start the mock ACP websocket harness process.");
+        }
+
+        return process;
+    }
+
+    private static void WaitForMockAcpHarnessReady(string readySignalPath, int timeoutMs = 15000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (File.Exists(readySignalPath))
+            {
+                var signal = File.ReadAllText(readySignalPath);
+                if (!string.IsNullOrWhiteSpace(signal))
+                {
+                    return;
+                }
+            }
+
+            Thread.Sleep(50);
+        }
+
+        throw new TimeoutException($"Timed out waiting for the mock ACP websocket harness to become ready: {readySignalPath}");
+    }
+
+    private static int AllocateLoopbackPort()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        try
+        {
+            return ((IPEndPoint)listener.LocalEndpoint).Port;
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    private void TryStopMockAcpHarnessProcess()
+    {
+        if (_mockAcpHarnessProcess is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (!_mockAcpHarnessProcess.HasExited)
+            {
+                _mockAcpHarnessProcess.Kill(entireProcessTree: true);
+                _mockAcpHarnessProcess.WaitForExit(5000);
+            }
+        }
+        catch
+        {
+        }
+        finally
+        {
+            _mockAcpHarnessProcess.Dispose();
+        }
     }
 
     private static string QuoteCommandLineArgument(string value)
@@ -1665,6 +1989,18 @@ internal sealed class GuiAppDataScope : IDisposable
         if (!File.Exists(scriptPath))
         {
             throw new FileNotFoundException("Slow replay ACP agent script was not found.", scriptPath);
+        }
+
+        return scriptPath;
+    }
+
+    private static string ResolveMockAcpHarnessScriptPath()
+    {
+        var repoRoot = ResolveRepoRoot();
+        var scriptPath = Path.Combine(repoRoot, "tests", "SalmonEgg.GuiTests.Windows", "Fixtures", "MockAcpHarness.ps1");
+        if (!File.Exists(scriptPath))
+        {
+            throw new FileNotFoundException("Mock ACP harness script was not found.", scriptPath);
         }
 
         return scriptPath;

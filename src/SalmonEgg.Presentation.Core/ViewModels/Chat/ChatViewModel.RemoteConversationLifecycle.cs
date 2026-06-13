@@ -961,7 +961,7 @@ public partial class ChatViewModel
         if (_uiDispatcher.HasThreadAccess)
         {
             ApplySelectedProfile(profile);
-            _ = _chatConnectionStore.Dispatch(new SetSettingsSelectedProfileAction(profile.Id));
+            _ = _chatConnectionStore.Dispatch(new SetSelectedProfileIntentAction(profile.Id));
             return;
         }
 
@@ -980,7 +980,7 @@ public partial class ChatViewModel
         cancellationToken.ThrowIfCancellationRequested();
         await PostToUiAsync(() => ApplySelectedProfile(profile)).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
-        await _chatConnectionStore.Dispatch(new SetSettingsSelectedProfileAction(profile.Id)).ConfigureAwait(false);
+        await _chatConnectionStore.Dispatch(new SetSelectedProfileIntentAction(profile.Id)).ConfigureAwait(false);
     }
 
     private void ApplyChatServiceReplacement(

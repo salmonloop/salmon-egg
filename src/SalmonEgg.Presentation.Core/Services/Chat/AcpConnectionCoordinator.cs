@@ -46,9 +46,9 @@ public sealed class AcpConnectionCoordinator : IAcpConnectionCoordinator
     public async Task SetConnectingAsync(string? profileId, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        await UpdateForegroundProfileAsync(profileId).ConfigureAwait(false);
         await _store.Dispatch(new SetConnectionPhaseAction(ConnectionPhase.Connecting, Error: null))
             .ConfigureAwait(false);
+        await UpdateForegroundProfileAsync(profileId).ConfigureAwait(false);
     }
 
     public async Task SetInitializingAsync(string? profileId, CancellationToken cancellationToken = default)

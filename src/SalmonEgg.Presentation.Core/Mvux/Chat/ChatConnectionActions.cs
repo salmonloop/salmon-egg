@@ -6,7 +6,7 @@ public sealed record SetConnectionPhaseAction(
     ConnectionPhase Phase,
     string? Error = null) : ChatConnectionAction;
 
-public sealed record SetSettingsSelectedProfileAction(string? ProfileId) : ChatConnectionAction;
+public sealed record SetSelectedProfileIntentAction(string? ProfileId) : ChatConnectionAction;
 
 public sealed record SetForegroundTransportProfileAction(string? ProfileId) : ChatConnectionAction;
 

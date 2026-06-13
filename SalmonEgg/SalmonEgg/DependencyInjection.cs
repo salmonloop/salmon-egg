@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using System.Threading;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
@@ -75,6 +76,7 @@ public static class DependencyInjection
         var appDataPath = GetAppDataPath();
         var logger = LoggingConfiguration.ConfigureLogging(appDataPath, hostCapabilities: GetLoggingHostCapabilities());
         Log.Logger = logger;
+        LogStartupMarker(logger);
         services.AddLogging(builder =>
         {
             builder.ClearProviders();
@@ -90,6 +92,23 @@ public static class DependencyInjection
 #else
         return LoggingHostCapabilities.Desktop;
 #endif
+    }
+
+    private static void LogStartupMarker(Serilog.ILogger logger)
+    {
+        var assembly = typeof(App).Assembly;
+        var informationalVersion = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+            ?? "unknown";
+        var fileVersion = assembly.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version
+            ?? "unknown";
+        var assemblyVersion = assembly.GetName().Version?.ToString() ?? "unknown";
+
+        logger.Information(
+            "SalmonEgg startup marker: AssemblyVersion={AssemblyVersion} FileVersion={FileVersion} InformationalVersion={InformationalVersion} ProcessId={ProcessId}",
+            assemblyVersion,
+            fileVersion,
+            informationalVersion,
+            Environment.ProcessId);
     }
 
     private static void RegisterDomainServices(IServiceCollection services)

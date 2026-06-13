@@ -184,13 +184,13 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
         }
 
         var connectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
-        if (string.Equals(connectionState.SettingsSelectedProfileId, boundProfileId, StringComparison.Ordinal))
+        if (string.Equals(connectionState.SelectedProfileIntentId, boundProfileId, StringComparison.Ordinal))
         {
             return;
         }
 
         await _chatConnectionStore
-            .Dispatch(new SetSettingsSelectedProfileAction(boundProfileId))
+            .Dispatch(new SetSelectedProfileIntentAction(boundProfileId))
             .ConfigureAwait(false);
     }
     private async Task<ConversationMutationResult> RemoveConversationAsync(

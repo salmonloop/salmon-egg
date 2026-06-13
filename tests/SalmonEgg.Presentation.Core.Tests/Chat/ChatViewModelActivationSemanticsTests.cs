@@ -343,7 +343,7 @@ public partial class ChatViewModelTests
             });
 
             fixture.ViewModel.CurrentPrompt = "start composer draft";
-            await fixture.DispatchConnectionAsync(new SetSettingsSelectedProfileAction("profile-2"));
+            await fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-2"));
             await DispatchConnectedAsync(fixture, "profile-1");
             await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
             await fixture.ApplyCurrentStoreProjectionAsync();
