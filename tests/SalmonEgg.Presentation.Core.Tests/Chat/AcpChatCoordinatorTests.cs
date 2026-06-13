@@ -992,6 +992,81 @@ public sealed class AcpChatCoordinatorTests
     }
 
     [Fact]
+    public async Task ApplyTransportConfigurationAsync_CancelledBeforeCandidateCommit_DoesNotRestoreIntermediateConnectingPhase()
+    {
+        // Regression: a previously-Connecting/Initializing snapshot must NOT be replayed when an apply is
+        // discarded. Connecting/Initializing are non-authoritative intermediate states owned by a live apply;
+        // restoring them publishes a phantom "connecting" state with no work behind it, which manifests as
+        // a stuck "正在连接 Agent" placeholder in the selector UI.
+        var transport = new FakeTransportConfiguration
+        {
+            SelectedTransportType = TransportType.WebSocket,
+            RemoteUrl = "wss://agent.test"
+        };
+        var candidateService = CreateChatService();
+        var initializeStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowInitializeCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sink = new FakeSink
+        {
+            // Sink mirrors what an in-flight previous apply would have published: Connecting, no committed service.
+            CurrentSessionId = "local-session-1",
+            SelectedProfileId = "profile-1",
+            ConnectionInstanceId = "conn-prev"
+        };
+        sink.UpdateConnectionState(isConnecting: true, isConnected: false, isInitialized: false, errorMessage: null);
+        var factory = new Mock<IAcpChatServiceFactory>();
+        var logger = new Mock<ILogger<AcpChatCoordinator>>();
+        var connectionCoordinator = new Mock<IAcpConnectionCoordinator>();
+
+        candidateService
+            .Setup(x => x.InitializeAsync(It.IsAny<InitializeParams>()))
+            .Returns(async () =>
+            {
+                initializeStarted.TrySetResult(null);
+                await allowInitializeCompletion.Task;
+                return new InitializeResponse(1, new AgentInfo("agent", "1.0.0"), new AgentCapabilities());
+            });
+
+        factory
+            .Setup(x => x.CreateChatService(TransportType.WebSocket, null, null, "wss://agent.test"))
+            .Returns(candidateService.Object);
+
+        var sut = CreateCoordinator(
+            factory.Object,
+            logger.Object,
+            connectionCoordinator: connectionCoordinator.Object,
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
+        using var cancellation = new CancellationTokenSource();
+
+        var applyTask = sut.ApplyTransportConfigurationAsync(
+            transport,
+            sink,
+            new AcpConnectionContext("local-session-1", PreserveConversation: false),
+            cancellation.Token);
+        await initializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        cancellation.Cancel();
+        allowInitializeCompletion.TrySetResult(null);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => applyTask);
+
+        connectionCoordinator.Verify(
+            x => x.SetDisconnectedAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+        connectionCoordinator.Verify(
+            x => x.SetConnectionInstanceIdAsync("conn-prev", It.IsAny<CancellationToken>()),
+            Times.Once);
+        // The discard path MUST NOT republish the previous in-flight Connecting/Initializing phase.
+        connectionCoordinator.Verify(
+            x => x.SetConnectingAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()),
+            Times.Once); // only the SetConnectingAsync from this apply's own start
+        connectionCoordinator.Verify(
+            x => x.SetInitializingAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()),
+            Times.AtMostOnce); // at most the in-progress one from this apply itself
+    }
+
+    [Fact]
     public async Task ApplyTransportConfigurationAsync_WhenSecondApplyStarts_FirstApplyMustNotOverrideCommittedService()
     {
         var transport = new FakeTransportConfiguration

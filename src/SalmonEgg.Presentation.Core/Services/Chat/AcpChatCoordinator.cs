@@ -708,6 +708,11 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
 
     private async Task RestoreConnectionStateAfterDiscardAsync(AcpConnectionStateSnapshot snapshot)
     {
+        // Connecting/Initializing are non-authoritative intermediate states owned exclusively by the
+        // apply path that drives them forward. Once that apply is discarded, no live actor remains to
+        // progress them, so reflecting them back into the store would publish a phantom "still connecting"
+        // state with no work behind it. Only Connected reflects a committed pre-existing service worth
+        // preserving; everything else collapses to Disconnected.
         try
         {
             await _connectionCoordinator.SetConnectionInstanceIdAsync(snapshot.ConnectionInstanceId, CancellationToken.None)
@@ -715,20 +720,6 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             if (snapshot.IsConnected)
             {
                 await _connectionCoordinator.SetConnectedAsync(snapshot.SelectedProfileId, CancellationToken.None)
-                    .ConfigureAwait(false);
-                return;
-            }
-
-            if (snapshot.IsInitializing)
-            {
-                await _connectionCoordinator.SetInitializingAsync(snapshot.SelectedProfileId, CancellationToken.None)
-                    .ConfigureAwait(false);
-                return;
-            }
-
-            if (snapshot.IsConnecting)
-            {
-                await _connectionCoordinator.SetConnectingAsync(snapshot.SelectedProfileId, CancellationToken.None)
                     .ConfigureAwait(false);
                 return;
             }
@@ -750,8 +741,6 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         => new(
             sink.SelectedProfileId,
             sink.ConnectionInstanceId,
-            sink.IsConnecting,
-            sink.IsInitializing,
             sink.IsConnected,
             sink.ConnectionErrorMessage);
 
@@ -892,16 +881,10 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
     private readonly record struct AcpConnectionStateSnapshot(
         string? SelectedProfileId,
         string? ConnectionInstanceId,
-        bool IsConnecting,
-        bool IsInitializing,
         bool IsConnected,
         string? ErrorMessage)
     {
-        public string PhaseName =>
-            IsConnected ? "Connected" :
-            IsInitializing ? "Initializing" :
-            IsConnecting ? "Connecting" :
-            "Disconnected";
+        public string PhaseName => IsConnected ? "Connected" : "Disconnected";
     }
 
     private sealed class NoopAcpConnectionCoordinator : IAcpConnectionCoordinator
