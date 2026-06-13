@@ -94,6 +94,81 @@ public sealed class SelectorProjectionPresenterTests
     }
 
     [Fact]
+    public void Present_WhenPlaceholderIsNotSelection_DoesNotInjectPhantomRowAboveRealItems()
+    {
+        // Regression: when a placeholder is used purely as a status signal (e.g. agent connecting while
+        // the user already has a real selection), it must NOT appear as an extra row above the real
+        // items in the dropdown. Native dropdowns never show an unselectable badge sitting above the
+        // selected option; doing so manifests as a phantom "正在连接 Agent..." row in the agent selector.
+        var presenter = new SelectorProjectionPresenter();
+        var realItem = ComposerSelectorItemViewModel.Real(
+            ComposerSelectorKind.Agent,
+            "profile-1",
+            "Agent A",
+            "agent|profile-1|conn-1");
+        var statusPlaceholder = ComposerSelectorItemViewModel.Placeholder(
+            ComposerSelectorKind.Agent,
+            SelectorPlaceholderKind.Loading,
+            "正在连接 Agent...",
+            identity: "agent|profile-1|conn-1",
+            blocksSubmit: true);
+
+        var result = presenter.Present(new SelectorProjectionInput(
+            ComposerSelectorKind.Agent,
+            new[] { realItem },
+            SelectedSemanticValue: "profile-1",
+            Placeholder: statusPlaceholder,
+            ReplaceSelectionWithPlaceholder: false,
+            DisableRealItems: false,
+            SelectorEnabled: true));
+
+        // Closed display still shows the actually selected real agent.
+        Assert.Same(realItem, result.SelectedDisplayItem);
+        // Submit-block signal still flows through the result.
+        Assert.True(result.IsSubmitBlocked);
+        Assert.Equal("正在连接 Agent...", result.SubmitBlockReason);
+        Assert.Equal(SelectorPlaceholderKind.Loading, result.PlaceholderKind);
+        // The dropdown list contains only real items; no phantom placeholder row.
+        Assert.Equal(new[] { "profile-1" }, result.DisplayItems.Select(item => item.SemanticValue).ToArray());
+        Assert.DoesNotContain(result.DisplayItems, item => ReferenceEquals(item, statusPlaceholder));
+    }
+
+    [Fact]
+    public void Present_WhenPlaceholderIsSelectionFallback_ShowsPlaceholderAtTopOfList()
+    {
+        // Counterpart to the regression above: when no real selection exists (e.g. unresolved/empty),
+        // the placeholder IS the closed-display selection, so it must appear at the top of the dropdown
+        // — that's the legitimate "pick something" affordance.
+        var presenter = new SelectorProjectionPresenter();
+        var realItem = ComposerSelectorItemViewModel.Real(
+            ComposerSelectorKind.Agent,
+            "profile-1",
+            "Agent A",
+            "agent|profile-1|conn-1");
+        var unresolvedPlaceholder = ComposerSelectorItemViewModel.Placeholder(
+            ComposerSelectorKind.Agent,
+            SelectorPlaceholderKind.Unresolved,
+            "选择 Agent",
+            identity: "agent||",
+            blocksSubmit: true);
+
+        var result = presenter.Present(new SelectorProjectionInput(
+            ComposerSelectorKind.Agent,
+            new[] { realItem },
+            SelectedSemanticValue: null,
+            Placeholder: unresolvedPlaceholder,
+            ReplaceSelectionWithPlaceholder: false,
+            DisableRealItems: false,
+            SelectorEnabled: true));
+
+        Assert.Same(unresolvedPlaceholder, result.SelectedDisplayItem);
+        Assert.Collection(
+            result.DisplayItems,
+            item => Assert.Same(unresolvedPlaceholder, item),
+            item => Assert.Equal("profile-1", item.SemanticValue));
+    }
+
+    [Fact]
     public void ComposerSelectorItemViewModel_UsesSemanticValueForStableAutomationId()
     {
         var item = ComposerSelectorItemViewModel.Real(

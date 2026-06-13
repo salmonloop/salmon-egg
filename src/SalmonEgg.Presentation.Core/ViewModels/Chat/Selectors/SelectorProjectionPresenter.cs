@@ -13,11 +13,19 @@ public sealed class SelectorProjectionPresenter
             ? realItems.Select(static item => item.AsDisabled()).ToArray()
             : realItems.ToArray();
 
-        var displayItems = input.Placeholder is null
-            ? projectedRealItems
-            : new[] { input.Placeholder }.Concat(projectedRealItems).ToArray();
-
         var selected = ResolveSelectedDisplayItem(input, projectedRealItems);
+
+        // The placeholder appears as a dropdown row only when it is also the resolved closed-display
+        // selection. A placeholder that does not occupy the selection slot is purely a status signal
+        // (loading/error/unresolved while real items remain selectable); injecting it as a phantom row
+        // above real items violates native dropdown semantics. Submit-block and placeholder-kind
+        // signals continue to flow through the projection result fields below.
+        var placeholderIsSelection = input.Placeholder is not null
+            && ReferenceEquals(selected, input.Placeholder);
+        var displayItems = placeholderIsSelection
+            ? new[] { input.Placeholder! }.Concat(projectedRealItems).ToArray()
+            : projectedRealItems;
+
         var isSubmitBlocked = input.Placeholder?.BlocksSubmit == true;
         var submitBlockReason = isSubmitBlocked
             ? input.Placeholder!.DisplayName
