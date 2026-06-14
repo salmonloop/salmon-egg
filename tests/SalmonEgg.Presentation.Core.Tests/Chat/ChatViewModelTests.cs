@@ -3239,6 +3239,92 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
     }
 
     [Fact]
+    public async Task TryAutoConnectAsync_WhenInnerConnectFaults_AllowsLaterRetry()
+    {
+        // Regression: a faulted auto-connect attempt must release the in-flight claim. Otherwise the
+        // _autoConnectAttempted flag stays set forever and every subsequent retry trigger (preferences
+        // hydration, IsConnected change, draft refresh) bails at the early-return guard, stranding the
+        // selector on "模式尚未就绪" with no way to recover.
+        var connectCalls = 0;
+        var commands = new Mock<IAcpConnectionCommands>();
+        commands
+            .Setup(x => x.ConnectToProfileAsync(
+                It.IsAny<ServerConfiguration>(),
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<CancellationToken>()))
+            .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, CancellationToken>((_, _, _, _) =>
+            {
+                var callNumber = Interlocked.Increment(ref connectCalls);
+                if (callNumber == 1)
+                {
+                    throw new InvalidOperationException("transport spawn failed");
+                }
+
+                return Task.FromResult(new AcpTransportApplyResult(Mock.Of<IChatService>(), new InitializeResponse()));
+            });
+
+        await using var fixture = CreateViewModel(acpConnectionCommands: commands.Object);
+        var profile = new ServerConfiguration { Id = "profile-1", Name = "Profile 1", Transport = TransportType.Stdio };
+        fixture.Profiles.Profiles.Add(profile);
+        fixture.Preferences.LastSelectedServerId = profile.Id;
+
+        await fixture.ViewModel.TryAutoConnectAsync(CancellationToken.None);
+        Assert.Equal(1, connectCalls);
+
+        // Second invocation must not be silently swallowed by a stuck "already attempted" flag.
+        await fixture.ViewModel.TryAutoConnectAsync(CancellationToken.None);
+
+        Assert.Equal(2, connectCalls);
+    }
+
+    [Fact]
+    public async Task TryAutoConnectAsync_WhenProfileResolutionReturnsNull_AllowsLaterRetry()
+    {
+        // Regression: if the configured profile cannot be resolved (stale LastSelectedServerId, deleted
+        // profile, transient load failure), the attempt must NOT consume the in-flight claim — once the
+        // profile becomes available a retry should still proceed.
+        var connectCalls = 0;
+        var commands = new Mock<IAcpConnectionCommands>();
+        commands
+            .Setup(x => x.ConnectToProfileAsync(
+                It.IsAny<ServerConfiguration>(),
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<CancellationToken>()))
+            .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, CancellationToken>((_, _, _, _) =>
+            {
+                Interlocked.Increment(ref connectCalls);
+                return Task.FromResult(new AcpTransportApplyResult(Mock.Of<IChatService>(), new InitializeResponse()));
+            });
+
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService.Setup(x => x.ListConfigurationsAsync()).ReturnsAsync(Array.Empty<ServerConfiguration>());
+        configurationService.Setup(x => x.LoadConfigurationAsync("profile-1")).ReturnsAsync((ServerConfiguration?)null);
+
+        await using var fixture = CreateViewModel(
+            acpConnectionCommands: commands.Object,
+            configurationService: configurationService);
+        fixture.Preferences.LastSelectedServerId = "profile-1";
+
+        await fixture.ViewModel.TryAutoConnectAsync(CancellationToken.None);
+        Assert.Equal(0, connectCalls);
+
+        // Profile becomes available later; the retry must still proceed instead of bailing on a stuck flag.
+        configurationService.Setup(x => x.LoadConfigurationAsync("profile-1")).ReturnsAsync(
+            new ServerConfiguration
+            {
+                Id = "profile-1",
+                Name = "Recovered Profile",
+                Transport = TransportType.Stdio
+            });
+
+        await fixture.ViewModel.TryAutoConnectAsync(CancellationToken.None);
+
+        Assert.Equal(1, connectCalls);
+    }
+
+    [Fact]
     public async Task StoreTranscript_ProjectsToMessageHistory()
     {
         var syncContext = new QueueingSynchronizationContext();

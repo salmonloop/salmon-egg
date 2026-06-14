@@ -2590,7 +2590,13 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         }
 
         // Only mark as attempted once we actually have enough information to try.
+        // The flag is "an in-flight attempt has been claimed", not "an attempt has been made
+        // and we're done". On any outcome that does not produce a committed connection we must
+        // release the claim so subsequent triggers (preferences hydration, connection state
+        // changes, draft refresh) can retry. Otherwise the flag silently strands the auto-connect
+        // and the UI lands on the unresolved placeholder ("模式尚未就绪") with no visible signal.
         _autoConnectAttempted = true;
+        var attemptCommitted = false;
 
         try
         {
@@ -2604,6 +2610,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
             if (config == null)
             {
+                Logger.LogWarning(
+                    "Auto-connect skipped: profile {ProfileId} could not be resolved from loaded profiles or persisted configuration.",
+                    profileId);
                 return;
             }
 
@@ -2626,14 +2635,45 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
             cancellationToken.ThrowIfCancellationRequested();
             await ConnectToAcpProfileCoreAsync(config, cancellationToken);
+            attemptCommitted = true;
         }
         catch (OperationCanceledException)
         {
-            _autoConnectAttempted = false;
+            // User-driven cancellation: caller wants to abort, not necessarily retry.
+            // The inner connect path handles its own state restore on supersede.
             return;
         }
-        catch
+        catch (Exception ex)
         {
+            // Inner ConnectToAcpProfileCoreAsync already publishes Disconnected+Error and logs.
+            // For failures that happen BEFORE the inner connect (profile load, UI dispatch, etc.),
+            // publish an explicit Disconnected+Error so the agent selector renders the
+            // authoritative error placeholder ("Agent 不可用") instead of stranding on
+            // "模式尚未就绪".
+            Logger.LogWarning(ex, "Auto-connect attempt failed for profile {ProfileId}.", profileId);
+            await PublishAutoConnectFailureAsync(ex.Message).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (!attemptCommitted)
+            {
+                _autoConnectAttempted = false;
+            }
+        }
+    }
+
+    private async Task PublishAutoConnectFailureAsync(string? errorMessage)
+    {
+        try
+        {
+            await _chatConnectionStore
+                .Dispatch(new SetConnectionPhaseAction(ConnectionPhase.Disconnected, errorMessage))
+                .ConfigureAwait(false);
+            await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Failed to publish auto-connect failure state.");
         }
     }
 
