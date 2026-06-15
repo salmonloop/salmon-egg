@@ -43,7 +43,7 @@ namespace SalmonEgg.Infrastructure.Storage
                     var filePath = GetFilePath(key);
                     Directory.CreateDirectory(_storageDirectory);
                     File.WriteAllText(filePath, encoded);
-                    
+
                     // 同时缓存到内存
                     _memoryCache[key] = value;
                 }
@@ -73,10 +73,10 @@ namespace SalmonEgg.Infrastructure.Storage
 
                     var encoded = File.ReadAllText(filePath);
                     var decoded = Encoding.UTF8.GetString(Convert.FromBase64String(encoded));
-                    
+
                     // 缓存到内存
                     _memoryCache[key] = decoded;
-                    
+
                     return decoded;
                 }
                 catch (Exception ex)
@@ -98,7 +98,7 @@ namespace SalmonEgg.Infrastructure.Storage
                     var filePath = GetFilePath(key);
                     if (File.Exists(filePath))
                         File.Delete(filePath);
-                    
+
                     // 从内存缓存中移除
                     _memoryCache.Remove(key);
                 }

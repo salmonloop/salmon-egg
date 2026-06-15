@@ -1,9 +1,9 @@
 using System;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml.Controls;
+using SalmonEgg.Infrastructure.Storage;
 using SalmonEgg.Presentation.Models;
 using SalmonEgg.Presentation.Services;
-using SalmonEgg.Infrastructure.Storage;
 
 namespace SalmonEgg;
 

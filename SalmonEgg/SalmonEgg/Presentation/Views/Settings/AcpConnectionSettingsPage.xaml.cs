@@ -49,7 +49,7 @@ public sealed partial class AcpConnectionSettingsPage : SettingsPageBase
             UiMotionController.Current.CreateNavigationTransitionInfo());
     }
 
-    
+
     private async void OnDeleteProfileMenuClick(object sender, RoutedEventArgs e)
     {
         if (sender is not MenuFlyoutItem item || item.Tag is not string profileId)

@@ -79,7 +79,7 @@ namespace SalmonEgg.Application.UseCases
 
                 // 4. 发送消息 (Requirement 4.3)
                 var sendResult = await _connectionManager.SendMessageAsync(message, CancellationToken.None);
-                
+
                 if (!sendResult.IsSuccess)
                 {
                     _logger.Error("发送消息失败: {Error}", sendResult.Error);

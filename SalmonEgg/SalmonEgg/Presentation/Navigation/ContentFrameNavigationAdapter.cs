@@ -3,8 +3,8 @@ using System.Threading.Tasks;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Navigation;
-using SalmonEgg.Presentation.Models;
 using SalmonEgg.Presentation.Core.Services.Navigation;
+using SalmonEgg.Presentation.Models;
 using SalmonEgg.Presentation.Services;
 
 namespace SalmonEgg.Presentation.Navigation;

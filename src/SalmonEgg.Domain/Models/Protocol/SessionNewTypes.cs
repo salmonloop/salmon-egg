@@ -62,7 +62,7 @@ namespace SalmonEgg.Domain.Models.Protocol
         [JsonConverter(typeof(SessionModesStateJsonConverter))]
         public SessionModesState? Modes { get; set; }
 
-        
+
         /// <summary>
         /// 可用的配置选项列表（可选）。
         /// </summary>

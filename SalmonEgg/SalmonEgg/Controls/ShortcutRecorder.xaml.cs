@@ -1,12 +1,12 @@
 using System;
-using System.Globalization;
 using System.ComponentModel;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
-using Windows.System;
 using SalmonEgg.Presentation.Core.Services.Shortcuts;
+using Windows.System;
 
 namespace SalmonEgg.Controls;
 

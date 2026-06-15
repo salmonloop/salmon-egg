@@ -35,7 +35,7 @@ namespace SalmonEgg.Infrastructure.Tests.Serialization
             // Act
             var json = _parser.SerializeMessage(originalMessage);
             var parsedMessage = _parser.ParseMessage(json);
-            
+
             // Assert
             AssertEquivalentMessages(originalMessage, parsedMessage);
         }
@@ -57,7 +57,7 @@ namespace SalmonEgg.Infrastructure.Tests.Serialization
             // Act
             var json = _parser.SerializeMessage(originalMessage);
             var parsedMessage = _parser.ParseMessage(json);
-            
+
             // Assert
             AssertEquivalentMessages(originalMessage, parsedMessage);
         }
@@ -113,10 +113,10 @@ namespace SalmonEgg.Infrastructure.Tests.Serialization
         {
             // Arrange
             var json = "{\"id\":\"1\",\"type\":\"request\",\"method\":\"test\",\"params\":{\"key\":\"value\"}}";
-            
+
             // Act
             var message = _parser.ParseMessage(json);
-            
+
             // Assert
             Assert.Equal("1", message.Id);
             Assert.Equal("request", message.Type);
@@ -128,10 +128,10 @@ namespace SalmonEgg.Infrastructure.Tests.Serialization
         {
             // Arrange
             var json = "{\"id\":\"1\",\"type\":\"response\",\"result\":\"success\"}";
-            
+
             // Act
             var message = _parser.ParseMessage(json);
-            
+
             // Assert
             Assert.Equal("1", message.Id);
             Assert.Equal("response", message.Type);
@@ -142,10 +142,10 @@ namespace SalmonEgg.Infrastructure.Tests.Serialization
         {
             // Arrange
             var json = "{\"id\":\"1\",\"type\":\"notification\",\"method\":\"test\",\"params\":{\"key\":\"value\"}}";
-            
+
             // Act
             var message = _parser.ParseMessage(json);
-            
+
             // Assert
             Assert.Equal("1", message.Id);
             Assert.Equal("notification", message.Type);
@@ -157,10 +157,10 @@ namespace SalmonEgg.Infrastructure.Tests.Serialization
         {
             // Arrange
             var json = "{\"id\":\"1\",\"type\":\"initialize\",\"params\":{\"version\":\"1.0\"}}";
-            
+
             // Act
             var message = _parser.ParseMessage(json);
-            
+
             // Assert
             Assert.Equal("1", message.Id);
             Assert.Equal("initialize", message.Type);
@@ -229,7 +229,7 @@ namespace SalmonEgg.Infrastructure.Tests.Serialization
             Assert.Equal(expected.Id, actual.Id);
             Assert.Equal(expected.Type, actual.Type);
             Assert.Equal(expected.Method, actual.Method);
-            
+
             // Compare Params
             if (expected.Params.HasValue && actual.Params.HasValue)
             {
@@ -241,7 +241,7 @@ namespace SalmonEgg.Infrastructure.Tests.Serialization
             {
                 Assert.Equal(expected.Params.HasValue, actual.Params.HasValue);
             }
-            
+
             // Compare Result
             if (expected.Result.HasValue && actual.Result.HasValue)
             {
@@ -253,7 +253,7 @@ namespace SalmonEgg.Infrastructure.Tests.Serialization
             {
                 Assert.Equal(expected.Result.HasValue, actual.Result.HasValue);
             }
-            
+
             // Compare Error
             if (expected.Error != null && actual.Error != null)
             {
@@ -264,7 +264,7 @@ namespace SalmonEgg.Infrastructure.Tests.Serialization
             {
                 Assert.Equal(expected.Error == null, actual.Error == null);
             }
-            
+
             Assert.Equal(expected.ProtocolVersion, actual.ProtocolVersion);
         }
     }

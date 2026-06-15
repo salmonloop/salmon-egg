@@ -55,24 +55,24 @@ public static class ChatReducer
             }),
             AdvanceTurnPhaseAction advance when MatchesActiveTurn(current.ActiveTurn, advance.ConversationId, advance.TurnId)
                 && !IsTerminalPhase(current.ActiveTurn!.Phase) => Mutate(current, current with
-            {
-                ActiveTurn = current.ActiveTurn with { Phase = advance.NewPhase, ToolCallId = advance.ToolCallId, ToolTitle = advance.ToolTitle, LastUpdatedAtUtc = DateTime.UtcNow }
-            }),
+                {
+                    ActiveTurn = current.ActiveTurn with { Phase = advance.NewPhase, ToolCallId = advance.ToolCallId, ToolTitle = advance.ToolTitle, LastUpdatedAtUtc = DateTime.UtcNow }
+                }),
             CompleteTurnAction complete when MatchesActiveTurn(current.ActiveTurn, complete.ConversationId, complete.TurnId)
                 && !IsTerminalPhase(current.ActiveTurn!.Phase) => Mutate(current, current with
-            {
-                ActiveTurn = current.ActiveTurn with { Phase = ChatTurnPhase.Completed, LastUpdatedAtUtc = DateTime.UtcNow }
-            }),
+                {
+                    ActiveTurn = current.ActiveTurn with { Phase = ChatTurnPhase.Completed, LastUpdatedAtUtc = DateTime.UtcNow }
+                }),
             FailTurnAction fail when MatchesActiveTurn(current.ActiveTurn, fail.ConversationId, fail.TurnId)
                 && !IsTerminalPhase(current.ActiveTurn!.Phase) => Mutate(current, current with
-            {
-                ActiveTurn = current.ActiveTurn with { Phase = ChatTurnPhase.Failed, FailureMessage = fail.ErrorMessage, LastUpdatedAtUtc = DateTime.UtcNow }
-            }),
+                {
+                    ActiveTurn = current.ActiveTurn with { Phase = ChatTurnPhase.Failed, FailureMessage = fail.ErrorMessage, LastUpdatedAtUtc = DateTime.UtcNow }
+                }),
             CancelTurnAction cancel when MatchesActiveTurn(current.ActiveTurn, cancel.ConversationId, cancel.TurnId)
                 && !IsTerminalPhase(current.ActiveTurn!.Phase) => Mutate(current, current with
-            {
-                ActiveTurn = current.ActiveTurn with { Phase = ChatTurnPhase.Cancelled, LastUpdatedAtUtc = DateTime.UtcNow }
-            }),
+                {
+                    ActiveTurn = current.ActiveTurn with { Phase = ChatTurnPhase.Cancelled, LastUpdatedAtUtc = DateTime.UtcNow }
+                }),
             ClearTurnAction clear when current.ActiveTurn?.ConversationId == clear.ConversationId => Mutate(current, current with
             {
                 ActiveTurn = null
@@ -628,7 +628,7 @@ public static class ChatReducer
                     Priority = source.PlanEntry.Priority
                 },
             ModeId = source.ModeId
-            };
+        };
     }
 
 }
