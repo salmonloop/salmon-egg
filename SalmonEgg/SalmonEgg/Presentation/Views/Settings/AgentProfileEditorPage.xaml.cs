@@ -4,9 +4,9 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Models;
-using SalmonEgg.Presentation.ViewModels;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Models.Settings;
+using SalmonEgg.Presentation.ViewModels;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.Views;
 

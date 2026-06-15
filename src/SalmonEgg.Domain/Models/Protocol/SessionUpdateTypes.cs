@@ -334,7 +334,7 @@ namespace SalmonEgg.Domain.Models.Protocol
     /// <summary>
     /// 配置更新。
     /// 用于通知客户端会话配置选项的变化。
-        /// </summary>
+    /// </summary>
     public class ConfigUpdateUpdate : SessionUpdate
     {
         /// <summary>

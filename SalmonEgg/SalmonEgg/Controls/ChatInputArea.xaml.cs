@@ -10,11 +10,11 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using SalmonEgg.Presentation.Core.Services.Input;
-using SalmonEgg.Presentation.Core.ViewModels.Composer;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.Selectors;
+using SalmonEgg.Presentation.Core.ViewModels.Composer;
 using SalmonEgg.Presentation.ViewModels.Chat;
-using XamlFocusManager = Microsoft.UI.Xaml.Input.FocusManager;
 using WindowActivatedEventArgs = Microsoft.UI.Xaml.WindowActivatedEventArgs;
+using XamlFocusManager = Microsoft.UI.Xaml.Input.FocusManager;
 
 namespace SalmonEgg.Controls;
 

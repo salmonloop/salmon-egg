@@ -77,7 +77,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var parser = new MessageParser();
             var client = await CreateInitializedClientAsync(
                 new AgentCapabilities(loadSession: true));
-            
+
             SetupJsonRpcResponse(
                 "session/new",
                 JsonSerializer.SerializeToElement(new SessionNewResponse("session-123"), parser.Options),

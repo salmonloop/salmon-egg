@@ -35,9 +35,9 @@ namespace SalmonEgg.Domain.Models
         /// <returns>True if the type is valid, false otherwise.</returns>
         public static bool IsValid(string type)
         {
-            return type == Request 
-                || type == Response 
-                || type == Notification 
+            return type == Request
+                || type == Response
+                || type == Notification
                 || type == Initialize;
         }
     }

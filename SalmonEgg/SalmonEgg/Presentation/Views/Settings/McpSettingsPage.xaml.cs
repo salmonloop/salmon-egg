@@ -1,9 +1,9 @@
+using System.Collections.Generic;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
-using System.Collections.Specialized;
-using System.ComponentModel;
-using System.Collections.Generic;
 using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.Views;

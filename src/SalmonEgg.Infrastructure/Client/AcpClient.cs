@@ -40,7 +40,7 @@ namespace SalmonEgg.Infrastructure.Client
         private readonly ITerminalSessionManager _terminalSessionManager;
         private readonly IErrorLogger _errorLogger;
 
-        
+
         private readonly ConcurrentDictionary<string, TaskCompletionSource<JsonRpcResponse>> _pendingRequests = new();
         // Inbound tool requests (agent -> client) are correlated by request id so we can format responses correctly.
         private readonly ConcurrentDictionary<string, PendingInboundRequest> _pendingInboundRequests = new();
@@ -149,29 +149,29 @@ namespace SalmonEgg.Infrastructure.Client
         /// <summary>
         /// 初始化与 Agent 的连接。
         /// </summary>
-       public async Task<InitializeResponse> InitializeAsync(InitializeParams @params, CancellationToken cancellationToken = default)
-           {
-               if (_isInitialized)
-               {
-                   throw new InvalidOperationException("客户端已初始化");
-               }
+        public async Task<InitializeResponse> InitializeAsync(InitializeParams @params, CancellationToken cancellationToken = default)
+        {
+            if (_isInitialized)
+            {
+                throw new InvalidOperationException("客户端已初始化");
+            }
 
-               // 确保传输层已连接
-              if (!_transport.IsConnected)
-              {
-                  var connected = await _transport.ConnectAsync(cancellationToken).ConfigureAwait(false);
-                  if (!connected)
-                  {
-                      throw new InvalidOperationException("无法连接到传输层");
-                  }
-              }
+            // 确保传输层已连接
+            if (!_transport.IsConnected)
+            {
+                var connected = await _transport.ConnectAsync(cancellationToken).ConfigureAwait(false);
+                if (!connected)
+                {
+                    throw new InvalidOperationException("无法连接到传输层");
+                }
+            }
 
-               // 发送 initialize 请求
-               var request = new JsonRpcRequest(
-                   Interlocked.Increment(ref _nextMessageId),
-                   "initialize",
-                   ToElement(@params, AcpJsonContext.Default.InitializeParams));
-               var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
+            // 发送 initialize 请求
+            var request = new JsonRpcRequest(
+                Interlocked.Increment(ref _nextMessageId),
+                "initialize",
+                ToElement(@params, AcpJsonContext.Default.InitializeParams));
+            var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
 
             // 验证响应
             var validationResult = _validator.ValidateResponse(response);
@@ -736,7 +736,7 @@ namespace SalmonEgg.Infrastructure.Client
         /// <summary>
         /// 发送请求并等待响应。
         /// </summary>
-        
+
         private async Task<JsonRpcResponse> SendRequestAsync(JsonRpcRequest request, CancellationToken cancellationToken)
         {
             var requestIdStr = request.Id?.ToString() ?? string.Empty;
@@ -791,7 +791,7 @@ namespace SalmonEgg.Infrastructure.Client
             {
                 var message = _parser.ParseMessage(e.Message);
 
-                
+
                 if (message is JsonRpcResponse response)
                 {
                     var responseIdStr = response.Id?.ToString() ?? string.Empty;
