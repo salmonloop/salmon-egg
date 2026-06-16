@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Collections.Specialized;
@@ -8,7 +9,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SalmonEgg.Domain.Models;
-using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Tests.Localization;
@@ -257,99 +257,57 @@ public sealed class AcpConnectionSettingsViewModelTests
     }
 
     [Fact]
-    public async Task PathMappingRows_SelectedProfile_ExposesOnlyProfileMappings()
+    public async Task RemoteDirectoryRows_SelectedProfile_ExposesOnlyProfileDirectories()
     {
-        // Arrange
-        var preferences = await CreatePreferencesAsync();
-        preferences.ProjectPathMappings.Add(new ProjectPathMapping
-        {
-            ProfileId = "profile-a",
-            RemoteRootPath = "/remote/a-1",
-            LocalRootPath = "C:\\work\\a-1"
-        });
-        preferences.ProjectPathMappings.Add(new ProjectPathMapping
-        {
-            ProfileId = "profile-a",
-            RemoteRootPath = "/remote/a-2",
-            LocalRootPath = "C:\\work\\a-2"
-        });
-        preferences.ProjectPathMappings.Add(new ProjectPathMapping
-        {
-            ProfileId = "profile-b",
-            RemoteRootPath = "/remote/b-1",
-            LocalRootPath = "C:\\work\\b-1"
-        });
+        var preferences = CreatePreferences();
+        preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory { ProfileId = "profile-a", DirectoryId = "dir-a-1", DisplayName = "Alpha One", RemotePath = "/remote/a-1" });
+        preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory { ProfileId = "profile-b", DirectoryId = "dir-b-1", DisplayName = "Beta One", RemotePath = "/remote/b-1" });
+        var viewModel = await CreateViewModelAsync(preferences);
 
-        var profiles = CreateProfiles(preferences);
-        profiles.Profiles.Add(new ServerConfiguration { Id = "profile-a", Name = "Profile A" });
-        profiles.Profiles.Add(new ServerConfiguration { Id = "profile-b", Name = "Profile B" });
-        profiles.SelectedProfile = profiles.Profiles[0];
+        SelectProfile(viewModel, "profile-a");
 
-        var chat = new TestSettingsChatConnection();
-        var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
-
-        // Act
-        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, CreateTransportSupportPolicy(preferences), logger.Object, new TestCoreStringLocalizer());
-        var profileARows = viewModel.PathMappingRows.ToArray();
-        profiles.SelectedProfile = profiles.Profiles[1];
-        var profileBRows = viewModel.PathMappingRows.ToArray();
-
-        // Assert
-        Assert.Equal(2, profileARows.Length);
-        Assert.All(profileARows, row => Assert.Equal("profile-a", row.ProfileId));
-        Assert.Single(profileBRows);
-        Assert.Equal("profile-b", profileBRows[0].ProfileId);
+        var row = Assert.Single(viewModel.RemoteDirectoryRows);
+        Assert.Equal("Alpha One", row.DisplayName);
+        Assert.Equal("/remote/a-1", row.RemotePath);
     }
 
     [Fact]
-    public async Task PathMappingRows_AddUpdateRemove_UpdatesAppPreferencesMappings()
+    public async Task RemoteDirectoryRows_AddUpdateRemove_UpdatesAppPreferencesDirectories()
     {
-        // Arrange
-        var preferences = await CreatePreferencesAsync();
-        var profiles = CreateProfiles(preferences);
-        profiles.Profiles.Add(new ServerConfiguration { Id = "profile-a", Name = "Profile A" });
-        profiles.SelectedProfile = profiles.Profiles[0];
+        var preferences = CreatePreferences();
+        var viewModel = await CreateViewModelAsync(preferences);
+        SelectProfile(viewModel, "profile-a");
 
-        var chat = new TestSettingsChatConnection();
-        var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
+        viewModel.AddRemoteDirectoryCommand.Execute(null);
+        var row = Assert.Single(viewModel.RemoteDirectoryRows);
+        row.DisplayName = " Workspace ";
+        row.RemotePath = " /remote/workspace ";
 
-        // Act
-        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, CreateTransportSupportPolicy(preferences), logger.Object, new TestCoreStringLocalizer());
-        viewModel.AddPathMappingCommand.Execute(null);
-        var row = Assert.Single(viewModel.PathMappingRows);
-        row.RemoteRootPath = " /remote/workspace ";
-        row.LocalRootPath = " C:\\work\\workspace ";
+        var directory = Assert.Single(preferences.AgentRemoteDirectories.Where(d => d.ProfileId == "profile-a"));
+        Assert.False(string.IsNullOrWhiteSpace(directory.DirectoryId));
+        Assert.Equal("Workspace", directory.DisplayName);
+        Assert.Equal("/remote/workspace", directory.RemotePath);
 
-        // Assert
-        var mapping = Assert.Single(preferences.ProjectPathMappings.Where(m => m.ProfileId == "profile-a"));
-        Assert.Equal("/remote/workspace", mapping.RemoteRootPath);
-        Assert.Equal("C:\\work\\workspace", mapping.LocalRootPath);
-
-        // Act
         row.RemoveCommand.Execute(null);
 
-        // Assert
-        Assert.Empty(preferences.ProjectPathMappings.Where(m => m.ProfileId == "profile-a"));
+        Assert.Empty(preferences.AgentRemoteDirectories.Where(d => d.ProfileId == "profile-a"));
     }
 
     [Fact]
-    public async Task AddPathMappingCommand_NoSelectedProfile_DisablesAndSkipsMutation()
+    public async Task AddRemoteDirectoryCommand_NoSelectedProfile_DisablesAndSkipsMutation()
     {
-        // Arrange
         var preferences = await CreatePreferencesAsync();
         var profiles = CreateProfiles(preferences);
         var chat = new TestSettingsChatConnection();
         var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
 
-        // Act
         using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, CreateTransportSupportPolicy(preferences), logger.Object, new TestCoreStringLocalizer());
-        var canExecute = viewModel.AddPathMappingCommand.CanExecute(null);
-        viewModel.AddPathMappingCommand.Execute(null);
+        var canExecute = viewModel.AddRemoteDirectoryCommand.CanExecute(null);
+        viewModel.AddRemoteDirectoryCommand.Execute(null);
 
-        // Assert
         Assert.False(canExecute);
-        Assert.Empty(viewModel.PathMappingRows);
-        Assert.Empty(preferences.ProjectPathMappings);
+        Assert.Empty(viewModel.RemoteDirectoryRows);
+        Assert.Empty(preferences.AgentRemoteDirectories);
     }
 
     [Fact]
@@ -430,6 +388,67 @@ public sealed class AcpConnectionSettingsViewModelTests
 
         await Task.Delay(10);
         return preferences;
+    }
+
+    /// <summary>
+    /// Synchronous variant used by remote-directory row tests where the initial settings are
+    /// already known and the preferences object is mutated before the ViewModel is created.
+    /// </summary>
+    private static AppPreferencesViewModel CreatePreferences()
+    {
+        var appSettingsService = new Mock<IAppSettingsService>();
+        appSettingsService.Setup(s => s.LoadAsync()).ReturnsAsync(new AppSettings());
+
+        var startupService = new Mock<IAppStartupService>();
+        startupService.SetupGet(s => s.IsSupported).Returns(false);
+
+        var languageService = new Mock<IAppLanguageService>();
+        var capabilities = new Mock<IPlatformCapabilityService>();
+        capabilities.SetupGet(c => c.SupportsStdioTransport).Returns(true);
+        capabilities.SetupGet(c => c.SupportsLocalTerminal).Returns(true);
+        capabilities.SetupGet(c => c.SupportsInteractiveTerminalSurface).Returns(true);
+        var uiRuntime = new Mock<IUiRuntimeService>();
+        var logger = new Mock<ILogger<AppPreferencesViewModel>>();
+
+        return new AppPreferencesViewModel(
+            appSettingsService.Object,
+            startupService.Object,
+            languageService.Object,
+            capabilities.Object,
+            uiRuntime.Object,
+            logger.Object,
+            new ImmediateUiDispatcher());
+    }
+
+    private static async Task<AcpConnectionSettingsViewModel> CreateViewModelAsync(AppPreferencesViewModel preferences)
+    {
+        var profiles = CreateProfiles(preferences);
+        profiles.Profiles.Add(new ServerConfiguration { Id = "profile-a", Name = "Profile A" });
+        profiles.Profiles.Add(new ServerConfiguration { Id = "profile-b", Name = "Profile B" });
+
+        var chat = new TestSettingsChatConnection();
+        var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
+
+        var viewModel = new AcpConnectionSettingsViewModel(
+            chat,
+            profiles,
+            preferences,
+            CreateTransportSupportPolicy(preferences),
+            logger.Object,
+            new TestCoreStringLocalizer());
+
+        await Task.Delay(10);
+        return viewModel;
+    }
+
+    private static void SelectProfile(AcpConnectionSettingsViewModel viewModel, string profileId)
+    {
+        var profile = viewModel.Profiles.Profiles.FirstOrDefault(
+            p => string.Equals(p.Id, profileId, StringComparison.Ordinal));
+        if (profile is not null)
+        {
+            viewModel.Profiles.SelectedProfile = profile;
+        }
     }
 
     private static AcpProfilesViewModel CreateProfiles(AppPreferencesViewModel preferences)

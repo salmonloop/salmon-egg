@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models;
-using SalmonEgg.Domain.Models.ProjectAffinity;
+using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Services;
@@ -62,7 +62,7 @@ public partial class AppPreferencesViewModel : ObservableObject
     // Keep a single writer (AppPreferencesViewModel) to avoid settings overwrite races.
     public ObservableCollection<ProjectDefinition> Projects { get; } = new();
 
-    public ObservableCollection<ProjectPathMapping> ProjectPathMappings { get; } = new();
+    public ObservableCollection<AgentRemoteDirectory> AgentRemoteDirectories { get; } = new();
 
     [ObservableProperty]
     private string? _lastSelectedProjectId;
@@ -122,7 +122,7 @@ public partial class AppPreferencesViewModel : ObservableObject
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
         KeyBindings.CollectionChanged += OnKeyBindingsChanged;
         Projects.CollectionChanged += OnProjectsChanged;
-        ProjectPathMappings.CollectionChanged += OnProjectPathMappingsChanged;
+        AgentRemoteDirectories.CollectionChanged += OnAgentRemoteDirectoriesChanged;
         _ = LoadAsync();
     }
 
@@ -191,10 +191,10 @@ public partial class AppPreferencesViewModel : ObservableObject
                     });
                 }
 
-                ProjectPathMappings.Clear();
-                foreach (var mapping in NormalizeProjectPathMappings(settings.ProjectPathMappings))
+                AgentRemoteDirectories.Clear();
+                foreach (var directory in NormalizeAgentRemoteDirectories(settings.AgentRemoteDirectories))
                 {
-                    ProjectPathMappings.Add(mapping);
+                    AgentRemoteDirectories.Add(directory);
                 }
 
                 KeyBindings.Clear();
@@ -273,7 +273,7 @@ public partial class AppPreferencesViewModel : ObservableObject
         ScheduleSave();
     }
 
-    private void OnProjectPathMappingsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    private void OnAgentRemoteDirectoriesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         ScheduleSave();
     }
@@ -412,7 +412,7 @@ public partial class AppPreferencesViewModel : ObservableObject
                     AcpHydrationCompletionMode = string.IsNullOrWhiteSpace(AcpHydrationCompletionMode)
                         ? "StrictReplay"
                         : AcpHydrationCompletionMode.Trim(),
-                    ProjectPathMappings = NormalizeProjectPathMappings(ProjectPathMappings),
+                    AgentRemoteDirectories = NormalizeAgentRemoteDirectories(AgentRemoteDirectories),
                     LastSelectedProjectId = LastSelectedProjectId,
                     Projects = Projects
                         .Where(p => !string.IsNullOrWhiteSpace(p.ProjectId)
@@ -462,37 +462,39 @@ public partial class AppPreferencesViewModel : ObservableObject
         }
     }
 
-    private static List<ProjectPathMapping> NormalizeProjectPathMappings(IEnumerable<ProjectPathMapping>? mappings)
+    private static List<AgentRemoteDirectory> NormalizeAgentRemoteDirectories(IEnumerable<AgentRemoteDirectory>? directories)
     {
-        var normalized = new List<ProjectPathMapping>();
-        if (mappings is null)
+        var normalized = new List<AgentRemoteDirectory>();
+        if (directories is null)
         {
             return normalized;
         }
 
-        foreach (var mapping in mappings)
+        foreach (var directory in directories)
         {
-            if (mapping is null)
+            if (directory is null)
             {
                 continue;
             }
 
-            var profileId = mapping.ProfileId?.Trim();
-            var remoteRoot = mapping.RemoteRootPath?.Trim();
-            var localRoot = mapping.LocalRootPath?.Trim();
-
-            if (string.IsNullOrWhiteSpace(profileId) ||
-                string.IsNullOrWhiteSpace(remoteRoot) ||
-                string.IsNullOrWhiteSpace(localRoot))
+            var profileId = directory.ProfileId?.Trim();
+            var directoryId = directory.DirectoryId?.Trim();
+            var remotePath = directory.RemotePath?.Trim();
+            if (string.IsNullOrWhiteSpace(profileId)
+                || string.IsNullOrWhiteSpace(directoryId)
+                || string.IsNullOrWhiteSpace(remotePath)
+                || !ProtocolPathRules.IsAbsolutePath(remotePath))
             {
+                // Non-absolute paths would only fail later at session/new; drop them here.
                 continue;
             }
 
-            normalized.Add(new ProjectPathMapping
+            normalized.Add(new AgentRemoteDirectory
             {
                 ProfileId = profileId,
-                RemoteRootPath = remoteRoot,
-                LocalRootPath = localRoot
+                DirectoryId = directoryId,
+                DisplayName = string.IsNullOrWhiteSpace(directory.DisplayName) ? remotePath : directory.DisplayName.Trim(),
+                RemotePath = remotePath
             });
         }
 

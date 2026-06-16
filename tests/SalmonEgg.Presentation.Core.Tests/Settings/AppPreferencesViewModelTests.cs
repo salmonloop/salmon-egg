@@ -1,9 +1,9 @@
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Moq;
 using SalmonEgg.Domain.Models;
-using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.Core.Services;
@@ -175,133 +175,47 @@ public class AppPreferencesViewModelTests
     }
 
     [Fact]
-    public async Task LoadAsync_RestoresProjectPathMappings()
+    public async Task LoadAsync_RestoresAgentRemoteDirectories()
     {
-        var appSettings = new AppSettings
+        var settingsService = new FakeAppSettingsService(new AppSettings
         {
-            Theme = "System",
-            IsAnimationEnabled = true,
-            Backdrop = "System",
-            LaunchOnStartup = false,
-            MinimizeToTray = true,
-            Language = "System",
-            SaveLocalHistory = true,
-            CacheRetentionDays = 7,
-            ProjectPathMappings = new List<ProjectPathMapping>
+            AgentRemoteDirectories = new List<AgentRemoteDirectory>
             {
-                new()
-                {
-                    ProfileId = "profile-one",
-                    RemoteRootPath = "/remote/one",
-                    LocalRootPath = "C:\\Project\\One"
-                },
-                new()
-                {
-                    ProfileId = " profile-two ",
-                    RemoteRootPath = " /remote/two ",
-                    LocalRootPath = " C:\\Project\\Two "
-                }
+                new() { ProfileId = "profile-a", DirectoryId = "dir-a", DisplayName = "Alpha", RemotePath = "/remote/alpha" }
             }
-        };
+        });
+        var vm = CreateViewModel(settingsService);
 
-        var appSettingsService = new Mock<IAppSettingsService>();
-        appSettingsService.Setup(s => s.LoadAsync()).ReturnsAsync(appSettings);
+        await settingsService.LoadCompletion;
 
-        var startupService = new Mock<IAppStartupService>();
-        startupService.SetupGet(s => s.IsSupported).Returns(false);
-
-        var languageService = new Mock<IAppLanguageService>();
-        var capabilities = new Mock<IPlatformCapabilityService>();
-        capabilities.SetupGet(c => c.SupportsLaunchOnStartup).Returns(false);
-        capabilities.SetupGet(c => c.SupportsTray).Returns(false);
-        capabilities.SetupGet(c => c.SupportsLanguageOverride).Returns(false);
-
-        var uiRuntime = new Mock<IUiRuntimeService>();
-        var logger = new Mock<ILogger<AppPreferencesViewModel>>();
-
-        var vm = new AppPreferencesViewModel(
-            appSettingsService.Object,
-            startupService.Object,
-            languageService.Object,
-            capabilities.Object,
-            uiRuntime.Object,
-            logger.Object,
-            new ImmediateUiDispatcher());
-
-        await Task.Delay(100);
-
-        Assert.Collection(
-            vm.ProjectPathMappings,
-            first =>
-            {
-                Assert.Equal("profile-one", first.ProfileId);
-                Assert.Equal("/remote/one", first.RemoteRootPath);
-                Assert.Equal("C:\\Project\\One", first.LocalRootPath);
-            },
-            second =>
-            {
-                Assert.Equal("profile-two", second.ProfileId);
-                Assert.Equal("/remote/two", second.RemoteRootPath);
-                Assert.Equal("C:\\Project\\Two", second.LocalRootPath);
-            });
+        var directory = Assert.Single(vm.AgentRemoteDirectories);
+        Assert.Equal("profile-a", directory.ProfileId);
+        Assert.Equal("dir-a", directory.DirectoryId);
+        Assert.Equal("Alpha", directory.DisplayName);
+        Assert.Equal("/remote/alpha", directory.RemotePath);
     }
 
     [Fact]
-    public async Task ScheduleSave_PersistsNormalizedProjectPathMappings()
+    public async Task ScheduleSave_PersistsNormalizedAgentRemoteDirectories()
     {
-        var appSettingsService = new Mock<IAppSettingsService>();
-        appSettingsService.Setup(s => s.LoadAsync()).ReturnsAsync(new AppSettings
-        {
-            Theme = "System",
-            IsAnimationEnabled = true,
-            Backdrop = "System",
-            LaunchOnStartup = false,
-            MinimizeToTray = true,
-            Language = "System",
-            SaveLocalHistory = true,
-            CacheRetentionDays = 7
-        });
-        appSettingsService.Setup(s => s.SaveAsync(It.IsAny<AppSettings>())).Returns(Task.CompletedTask);
+        var settingsService = new FakeAppSettingsService(new AppSettings());
+        var vm = CreateViewModel(settingsService);
+        await settingsService.LoadCompletion;
 
-        var startupService = new Mock<IAppStartupService>();
-        startupService.SetupGet(s => s.IsSupported).Returns(false);
-
-        var languageService = new Mock<IAppLanguageService>();
-        var capabilities = new Mock<IPlatformCapabilityService>();
-        capabilities.SetupGet(c => c.SupportsLaunchOnStartup).Returns(false);
-        capabilities.SetupGet(c => c.SupportsTray).Returns(false);
-        capabilities.SetupGet(c => c.SupportsLanguageOverride).Returns(false);
-
-        var uiRuntime = new Mock<IUiRuntimeService>();
-        var logger = new Mock<ILogger<AppPreferencesViewModel>>();
-
-        var vm = new AppPreferencesViewModel(
-            appSettingsService.Object,
-            startupService.Object,
-            languageService.Object,
-            capabilities.Object,
-            uiRuntime.Object,
-            logger.Object,
-            new ImmediateUiDispatcher());
-
-        await Task.Delay(100);
-
-        vm.ProjectPathMappings.Add(new ProjectPathMapping
+        vm.AgentRemoteDirectories.Add(new AgentRemoteDirectory
         {
             ProfileId = " profile ",
-            RemoteRootPath = " /remote ",
-            LocalRootPath = " local "
+            DirectoryId = " dir ",
+            DisplayName = " Workspace ",
+            RemotePath = " /remote/workspace "
         });
 
-        await Task.Delay(1200);
-
-        appSettingsService.Verify(
-            s => s.SaveAsync(It.Is<AppSettings>(saved =>
-                saved.ProjectPathMappings.Count == 1
-                && saved.ProjectPathMappings[0].ProfileId == "profile"
-                && saved.ProjectPathMappings[0].RemoteRootPath == "/remote"
-                && saved.ProjectPathMappings[0].LocalRootPath == "local")),
-            Times.AtLeastOnce);
+        await WaitForConditionAsync(() =>
+            settingsService.LastSaved?.AgentRemoteDirectories.Count == 1
+            && settingsService.LastSaved.AgentRemoteDirectories[0].ProfileId == "profile"
+            && settingsService.LastSaved.AgentRemoteDirectories[0].DirectoryId == "dir"
+            && settingsService.LastSaved.AgentRemoteDirectories[0].DisplayName == "Workspace"
+            && settingsService.LastSaved.AgentRemoteDirectories[0].RemotePath == "/remote/workspace");
     }
 
     [Fact]
@@ -332,6 +246,68 @@ public class AppPreferencesViewModelTests
         appSettingsService.Verify(
             service => service.SaveAsync(It.Is<AppSettings>(settings => settings.AcpEnabled == false)),
             Times.AtLeastOnce);
+    }
+
+    private static AppPreferencesViewModel CreateViewModel(FakeAppSettingsService settingsService)
+    {
+        var startupService = new Mock<IAppStartupService>();
+        startupService.SetupGet(s => s.IsSupported).Returns(false);
+        var languageService = new Mock<IAppLanguageService>();
+        var capabilities = new Mock<IPlatformCapabilityService>();
+        var uiRuntime = new Mock<IUiRuntimeService>();
+        var logger = new Mock<ILogger<AppPreferencesViewModel>>();
+        return new AppPreferencesViewModel(
+            settingsService,
+            startupService.Object,
+            languageService.Object,
+            capabilities.Object,
+            uiRuntime.Object,
+            logger.Object,
+            new ImmediateUiDispatcher());
+    }
+
+    private static async Task WaitForConditionAsync(Func<bool> predicate, int timeoutMilliseconds = 5000, int pollDelayMilliseconds = 20)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMilliseconds);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (predicate())
+            {
+                return;
+            }
+
+            await Task.Delay(pollDelayMilliseconds).ConfigureAwait(false);
+        }
+
+        Assert.True(predicate(), "Condition was not satisfied within the allotted time.");
+    }
+
+    private sealed class FakeAppSettingsService : IAppSettingsService
+    {
+        private readonly AppSettings _settings;
+        private readonly TaskCompletionSource _loadTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public FakeAppSettingsService(AppSettings settings)
+        {
+            _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        }
+
+        public Task LoadCompletion => _loadTcs.Task;
+
+        public AppSettings? LastSaved { get; private set; }
+
+        public Task<AppSettings> LoadAsync()
+        {
+            var result = _settings;
+            _loadTcs.TrySetResult();
+            return Task.FromResult(result);
+        }
+
+        public Task SaveAsync(AppSettings settings)
+        {
+            LastSaved = settings;
+            return Task.CompletedTask;
+        }
     }
 
     [Fact]

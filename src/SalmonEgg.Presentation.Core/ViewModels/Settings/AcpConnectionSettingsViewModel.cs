@@ -10,7 +10,6 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models;
-using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Core.Services;
@@ -28,7 +27,7 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
     private readonly ITransportSupportPolicy _transportSupportPolicy;
     private readonly IStringLocalizer<CoreStrings> _localizer;
     private readonly IUiDispatcher _uiDispatcher;
-    private bool _suppressPathMappingProjection;
+    private bool _suppressRemoteDirectoryProjection;
     private bool _disposed;
 
     public ISettingsChatConnection Chat { get; }
@@ -36,10 +35,10 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
 
     public ObservableCollection<TransportOptionViewModel> TransportOptions { get; }
 
-    public ObservableCollection<AcpPathMappingRowViewModel> PathMappingRows { get; } = new();
+    public ObservableCollection<AcpRemoteDirectoryRowViewModel> RemoteDirectoryRows { get; } = new();
     public ObservableCollection<HydrationCompletionModeOptionViewModel> HydrationCompletionModeOptions { get; }
 
-    public bool CanEditPathMappings => !string.IsNullOrWhiteSpace(ResolveSelectedProfileId());
+    public bool CanEditRemoteDirectories => !string.IsNullOrWhiteSpace(ResolveSelectedProfileId());
 
     [ObservableProperty]
     private TransportOptionViewModel? _selectedTransport;
@@ -160,17 +159,17 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         Profiles.PropertyChanged += OnProfilesPropertyChanged;
         Profiles.Profiles.CollectionChanged += OnProfilesCollectionChanged;
         _preferences.PropertyChanged += OnPreferencesPropertyChanged;
-        _preferences.ProjectPathMappings.CollectionChanged += OnProjectPathMappingsCollectionChanged;
+        _preferences.AgentRemoteDirectories.CollectionChanged += OnAgentRemoteDirectoriesCollectionChanged;
 
         SelectedHydrationCompletionMode = ResolveHydrationCompletionModeOption(_preferences.AcpHydrationCompletionMode);
-        RefreshPathMappingRows();
+        RefreshRemoteDirectoryRows();
     }
 
     private void OnProfilesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         PostToUi(() =>
         {
-            RefreshPathMappingRows();
+            RefreshRemoteDirectoryRows();
         });
     }
 
@@ -205,20 +204,20 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
 
         PostToUi(() =>
         {
-            OnPropertyChanged(nameof(CanEditPathMappings));
-            AddPathMappingCommand.NotifyCanExecuteChanged();
-            RefreshPathMappingRows();
+            OnPropertyChanged(nameof(CanEditRemoteDirectories));
+            AddRemoteDirectoryCommand.NotifyCanExecuteChanged();
+            RefreshRemoteDirectoryRows();
         });
     }
 
-    private void OnProjectPathMappingsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    private void OnAgentRemoteDirectoriesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        if (_suppressPathMappingProjection)
+        if (_suppressRemoteDirectoryProjection)
         {
             return;
         }
 
-        PostToUi(RefreshPathMappingRows);
+        PostToUi(RefreshRemoteDirectoryRows);
     }
 
     private void OnTransportConfigPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -305,8 +304,8 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         }
     }
 
-    [RelayCommand(CanExecute = nameof(CanEditPathMappings))]
-    private void AddPathMapping()
+    [RelayCommand(CanExecute = nameof(CanEditRemoteDirectories))]
+    private void AddRemoteDirectory()
     {
         var profileId = ResolveSelectedProfileId();
         if (string.IsNullOrWhiteSpace(profileId))
@@ -314,11 +313,12 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
             return;
         }
 
-        _preferences.ProjectPathMappings.Add(new ProjectPathMapping
+        _preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory
         {
             ProfileId = profileId,
-            RemoteRootPath = string.Empty,
-            LocalRootPath = string.Empty
+            DirectoryId = Guid.NewGuid().ToString("N"),
+            DisplayName = string.Empty,
+            RemotePath = string.Empty
         });
     }
 
@@ -384,99 +384,100 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         return HydrationCompletionModeOptions[0];
     }
 
-    private void RefreshPathMappingRows()
+    private void RefreshRemoteDirectoryRows()
     {
         var profileId = ResolveSelectedProfileId();
         if (string.IsNullOrWhiteSpace(profileId))
         {
-            PathMappingRows.Clear();
+            RemoteDirectoryRows.Clear();
             return;
         }
 
-        var mappings = _preferences.ProjectPathMappings
-            .Where(m => string.Equals(m.ProfileId, profileId, StringComparison.Ordinal))
+        var directories = _preferences.AgentRemoteDirectories
+            .Where(d => string.Equals(d.ProfileId, profileId, StringComparison.Ordinal))
             .ToList();
-        var existingRows = PathMappingRows.ToDictionary(row => row.Mapping);
-        var nextRows = new List<AcpPathMappingRowViewModel>(mappings.Count);
+        var existingRows = RemoteDirectoryRows.ToDictionary(row => row.Directory);
+        var nextRows = new List<AcpRemoteDirectoryRowViewModel>(directories.Count);
 
-        foreach (var mapping in mappings)
+        foreach (var directory in directories)
         {
-            if (existingRows.TryGetValue(mapping, out var existing))
+            if (existingRows.TryGetValue(directory, out var existing))
             {
-                existing.SyncFromMapping();
+                existing.ReplaceDirectory(directory);
                 nextRows.Add(existing);
                 continue;
             }
 
-            nextRows.Add(new AcpPathMappingRowViewModel(mapping, this));
+            nextRows.Add(new AcpRemoteDirectoryRowViewModel(directory, this));
         }
 
-        for (var i = PathMappingRows.Count - 1; i >= 0; i--)
+        for (var i = RemoteDirectoryRows.Count - 1; i >= 0; i--)
         {
-            if (!nextRows.Contains(PathMappingRows[i]))
+            if (!nextRows.Contains(RemoteDirectoryRows[i]))
             {
-                PathMappingRows.RemoveAt(i);
+                RemoteDirectoryRows.RemoveAt(i);
             }
         }
 
         for (var i = 0; i < nextRows.Count; i++)
         {
-            if (i >= PathMappingRows.Count)
+            if (i >= RemoteDirectoryRows.Count)
             {
-                PathMappingRows.Add(nextRows[i]);
+                RemoteDirectoryRows.Add(nextRows[i]);
                 continue;
             }
 
-            if (!ReferenceEquals(PathMappingRows[i], nextRows[i]))
+            if (!ReferenceEquals(RemoteDirectoryRows[i], nextRows[i]))
             {
-                PathMappingRows.Insert(i, nextRows[i]);
-                PathMappingRows.RemoveAt(i + 1);
+                RemoteDirectoryRows.Insert(i, nextRows[i]);
+                RemoteDirectoryRows.RemoveAt(i + 1);
             }
         }
     }
 
-    internal void UpdatePathMapping(AcpPathMappingRowViewModel row)
+    internal void UpdateRemoteDirectory(AcpRemoteDirectoryRowViewModel row)
     {
-        var index = _preferences.ProjectPathMappings.IndexOf(row.Mapping);
+        var index = _preferences.AgentRemoteDirectories.IndexOf(row.Directory);
         if (index < 0)
         {
             return;
         }
 
-        var updated = new ProjectPathMapping
+        var updated = new AgentRemoteDirectory
         {
-            ProfileId = row.Mapping.ProfileId,
-            RemoteRootPath = (row.RemoteRootPath ?? string.Empty).Trim(),
-            LocalRootPath = (row.LocalRootPath ?? string.Empty).Trim()
+            ProfileId = row.Directory.ProfileId,
+            DirectoryId = row.Directory.DirectoryId,
+            DisplayName = (row.DisplayName ?? string.Empty).Trim(),
+            RemotePath = (row.RemotePath ?? string.Empty).Trim()
         };
 
-        if (string.Equals(row.Mapping.RemoteRootPath, updated.RemoteRootPath, StringComparison.Ordinal) &&
-            string.Equals(row.Mapping.LocalRootPath, updated.LocalRootPath, StringComparison.Ordinal))
+        if (string.Equals(row.Directory.DisplayName, updated.DisplayName, StringComparison.Ordinal)
+            && string.Equals(row.Directory.RemotePath, updated.RemotePath, StringComparison.Ordinal))
         {
             return;
         }
 
-        _suppressPathMappingProjection = true;
+        _suppressRemoteDirectoryProjection = true;
         try
         {
-            _preferences.ProjectPathMappings[index] = updated;
+            _preferences.AgentRemoteDirectories[index] = updated;
         }
         finally
         {
-            _suppressPathMappingProjection = false;
+            _suppressRemoteDirectoryProjection = false;
         }
 
-        row.ReplaceMapping(updated);
+        row.ReplaceDirectory(updated);
     }
 
-    internal void RemovePathMapping(AcpPathMappingRowViewModel row)
+    internal void RemoveRemoteDirectory(AcpRemoteDirectoryRowViewModel row)
     {
         if (row == null)
         {
             return;
         }
 
-        _preferences.ProjectPathMappings.Remove(row.Mapping);
+        _preferences.AgentRemoteDirectories.Remove(row.Directory);
     }
 
     public void Dispose()
@@ -491,7 +492,7 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         Profiles.PropertyChanged -= OnProfilesPropertyChanged;
         Profiles.Profiles.CollectionChanged -= OnProfilesCollectionChanged;
         _preferences.PropertyChanged -= OnPreferencesPropertyChanged;
-        _preferences.ProjectPathMappings.CollectionChanged -= OnProjectPathMappingsCollectionChanged;
+        _preferences.AgentRemoteDirectories.CollectionChanged -= OnAgentRemoteDirectoriesCollectionChanged;
     }
 
     private void PostToUi(Action action)
@@ -555,56 +556,42 @@ public sealed class HydrationCompletionModeOptionViewModel
     public string Description { get; }
 }
 
-public sealed partial class AcpPathMappingRowViewModel : ObservableObject
+public sealed partial class AcpRemoteDirectoryRowViewModel : ObservableObject
 {
     private readonly AcpConnectionSettingsViewModel _owner;
     private bool _isApplyingModel;
 
-    internal AcpPathMappingRowViewModel(ProjectPathMapping mapping, AcpConnectionSettingsViewModel owner)
+    internal AcpRemoteDirectoryRowViewModel(AgentRemoteDirectory directory, AcpConnectionSettingsViewModel owner)
     {
-        Mapping = mapping ?? throw new ArgumentNullException(nameof(mapping));
+        Directory = directory ?? throw new ArgumentNullException(nameof(directory));
         _owner = owner ?? throw new ArgumentNullException(nameof(owner));
-        _remoteRootPath = mapping.RemoteRootPath;
-        _localRootPath = mapping.LocalRootPath;
+        _displayName = directory.DisplayName;
+        _remotePath = directory.RemotePath;
         RemoveCommand = new RelayCommand(Remove);
     }
 
-    internal ProjectPathMapping Mapping { get; private set; }
-
-    public string ProfileId => Mapping.ProfileId;
+    internal AgentRemoteDirectory Directory { get; private set; }
 
     [ObservableProperty]
-    private string _remoteRootPath;
+    private string _displayName;
 
     [ObservableProperty]
-    private string _localRootPath;
+    private string _remotePath;
 
     public IRelayCommand RemoveCommand { get; }
 
-    partial void OnRemoteRootPathChanged(string value)
-    {
-        Commit();
-    }
+    partial void OnDisplayNameChanged(string value) => UpdateOwner();
 
-    partial void OnLocalRootPathChanged(string value)
-    {
-        Commit();
-    }
+    partial void OnRemotePathChanged(string value) => UpdateOwner();
 
-    internal void ReplaceMapping(ProjectPathMapping mapping)
+    internal void ReplaceDirectory(AgentRemoteDirectory directory)
     {
-        Mapping = mapping ?? throw new ArgumentNullException(nameof(mapping));
-        SyncFromMapping();
-        OnPropertyChanged(nameof(ProfileId));
-    }
-
-    internal void SyncFromMapping()
-    {
+        Directory = directory ?? throw new ArgumentNullException(nameof(directory));
         _isApplyingModel = true;
         try
         {
-            RemoteRootPath = Mapping.RemoteRootPath;
-            LocalRootPath = Mapping.LocalRootPath;
+            DisplayName = Directory.DisplayName;
+            RemotePath = Directory.RemotePath;
         }
         finally
         {
@@ -612,18 +599,15 @@ public sealed partial class AcpPathMappingRowViewModel : ObservableObject
         }
     }
 
-    private void Commit()
+    private void UpdateOwner()
     {
         if (_isApplyingModel)
         {
             return;
         }
 
-        _owner.UpdatePathMapping(this);
+        _owner.UpdateRemoteDirectory(this);
     }
 
-    private void Remove()
-    {
-        _owner.RemovePathMapping(this);
-    }
+    private void Remove() => _owner.RemoveRemoteDirectory(this);
 }
