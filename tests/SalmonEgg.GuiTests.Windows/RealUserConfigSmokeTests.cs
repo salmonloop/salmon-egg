@@ -321,8 +321,8 @@ public sealed partial class RealUserConfigSmokeTests
 
         session.ActivateElement(acpSettingsItem!);
 
-        var acpVisible = session.WaitUntilVisible("Acp.PathMappings.Section", TimeSpan.FromSeconds(10))
-            || session.WaitUntilVisible("Acp.PathMappings.List", TimeSpan.FromSeconds(10));
+        var acpVisible = session.WaitUntilVisible("Acp.RemoteDirectories.Section", TimeSpan.FromSeconds(10))
+            || session.WaitUntilVisible("Acp.RemoteDirectories.List", TimeSpan.FromSeconds(10));
         Assert.True(acpVisible, "ACP settings page did not become visible after selecting Agent (ACP).");
 
         Thread.Sleep(TimeSpan.FromSeconds(30));

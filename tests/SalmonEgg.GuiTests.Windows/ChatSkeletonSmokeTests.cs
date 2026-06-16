@@ -3101,8 +3101,8 @@ public sealed class ChatSkeletonSmokeTests
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
         while (DateTime.UtcNow < deadline)
         {
-            if (session.TryFindByAutomationId("Acp.PathMappings.Section", TimeSpan.FromMilliseconds(150)) is not null
-                || session.TryFindByAutomationId("Acp.PathMappings.List", TimeSpan.FromMilliseconds(150)) is not null)
+            if (session.TryFindByAutomationId("Acp.RemoteDirectories.Section", TimeSpan.FromMilliseconds(150)) is not null
+                || session.TryFindByAutomationId("Acp.RemoteDirectories.List", TimeSpan.FromMilliseconds(150)) is not null)
             {
                 acpVisible = true;
                 break;

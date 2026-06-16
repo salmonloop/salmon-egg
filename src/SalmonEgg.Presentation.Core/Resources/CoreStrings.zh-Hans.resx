@@ -214,14 +214,14 @@
   <data name="Discover_AffinityStatusOverride" xml:space="preserve">
     <value>已应用本地项目覆盖。</value>
   </data>
-  <data name="Discover_AffinityStatusPathMapping" xml:space="preserve">
-    <value>已根据远程路径映射。</value>
+  <data name="Discover_AffinityStatusRemoteDirectory" xml:space="preserve">
+    <value>已匹配已配置的远端目录。</value>
   </data>
   <data name="Discover_AffinityStatusDirectMatch" xml:space="preserve">
     <value>已匹配本地项目路径。</value>
   </data>
   <data name="Discover_AffinityStatusNeedsMapping" xml:space="preserve">
-    <value>远程工作目录需要路径映射。</value>
+    <value>远程工作目录需要指定项目。</value>
   </data>
   <data name="Discover_AffinityStatusMissingCwd" xml:space="preserve">
     <value>远程元数据没有可用工作目录。</value>

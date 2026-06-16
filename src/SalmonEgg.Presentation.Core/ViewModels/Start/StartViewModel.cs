@@ -632,7 +632,7 @@ public sealed partial class StartViewModel : ObservableObject
     }
 
     private string GetSelectedStartProjectId()
-        => HasSelectableProject(_selectedStartProjectIdOverride)
+        => HasSelectableProject(_selectedStartProjectIdOverride) || HasSelectableOption(_selectedStartProjectIdOverride)
             ? _selectedStartProjectIdOverride!
             : string.Equals(_selectedStartProjectIdOverride, NavigationProjectIds.Unclassified, StringComparison.Ordinal)
                 ? NavigationProjectIds.Unclassified
@@ -658,6 +658,12 @@ public sealed partial class StartViewModel : ObservableObject
         => _projectPreferences.Projects.Any(project =>
             string.Equals(project.ProjectId, projectId, StringComparison.Ordinal)
             && IsSelectableProject(project));
+
+    private bool HasSelectableOption(string? projectId)
+        => !string.IsNullOrWhiteSpace(projectId)
+            && _startProjectOptions.Any(option =>
+                string.Equals(option.ProjectId, projectId, StringComparison.Ordinal)
+                && option.IsSelectable);
 
     private static bool IsSelectableProject(ProjectDefinition? project)
         => project is not null

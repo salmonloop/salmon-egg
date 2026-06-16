@@ -22,7 +22,7 @@ public sealed class StartPageAcpSmokeTests
 
     private static readonly string[] RemoteBlockedErrorLabels =
     [
-        "Select a project or configure a remote path mapping before creating a remote session.",
+        "Select a configured remote directory before creating a remote session.",
         "Unable to load session configuration. Check the connection and try again."
     ];
 

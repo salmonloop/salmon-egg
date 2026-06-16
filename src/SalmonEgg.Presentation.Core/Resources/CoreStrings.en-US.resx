@@ -216,14 +216,14 @@
   <data name="Discover_AffinityStatusOverride" xml:space="preserve">
     <value>Using local project override.</value>
   </data>
-  <data name="Discover_AffinityStatusPathMapping" xml:space="preserve">
-    <value>Mapped from remote path.</value>
+  <data name="Discover_AffinityStatusRemoteDirectory" xml:space="preserve">
+    <value>Matched a configured remote directory.</value>
   </data>
   <data name="Discover_AffinityStatusDirectMatch" xml:space="preserve">
     <value>Matched by local project path.</value>
   </data>
   <data name="Discover_AffinityStatusNeedsMapping" xml:space="preserve">
-    <value>Remote working directory needs path mapping.</value>
+    <value>Remote working directory needs a project assignment.</value>
   </data>
   <data name="Discover_AffinityStatusMissingCwd" xml:space="preserve">
     <value>Remote metadata has no usable working directory.</value>

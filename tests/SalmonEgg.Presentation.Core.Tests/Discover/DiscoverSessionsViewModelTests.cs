@@ -86,7 +86,7 @@ public sealed class DiscoverSessionsViewModelTests
             Assert.Equal(ProjectAffinitySource.NeedsMapping, needsMappingRow.AffinitySource);
             Assert.Equal("Needs mapping", needsMappingRow.ProjectAffinityBadgeText);
             Assert.True(needsMappingRow.NeedsUserAttention);
-            Assert.Contains("mapping", needsMappingRow.AffinityStatusText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("project assignment", needsMappingRow.AffinityStatusText, StringComparison.OrdinalIgnoreCase);
 
             var unclassifiedRow = Assert.Single(viewModel.AgentSessions.Where(row => row.Id == "remote-unclassified"));
             Assert.Equal(ProjectAffinitySource.Unclassified, unclassifiedRow.AffinitySource);

@@ -782,6 +782,13 @@ public sealed class StartViewModelTests
                 Name = "Alpha",
                 RootPath = @"C:\Repo\Alpha"
             });
+            preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory
+            {
+                ProfileId = "profile-1",
+                DirectoryId = "dir-remote",
+                DisplayName = "Remote",
+                RemotePath = "/remote/alpha"
+            });
 
             using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
@@ -839,7 +846,7 @@ public sealed class StartViewModelTests
                 nav,
                 workflow.Object);
 
-            startViewModel.SelectedStartProjectId = "project-a";
+            startViewModel.SelectedStartProjectId = "remote-directory:dir-remote";
             await chat.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-1"));
             await chat.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
             await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
@@ -1038,7 +1045,7 @@ public sealed class StartViewModelTests
             await WaitForConditionAsync(() => startViewModel.HasStartSessionDraftError);
 
             Assert.Equal(
-                "Select a project or configure a remote path mapping before creating a remote session.",
+                "Select a configured remote directory before creating a remote session.",
                 startViewModel.StartSessionDraftErrorMessage);
             chatService.Verify(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()), Times.Never);
         }
@@ -1116,7 +1123,7 @@ public sealed class StartViewModelTests
 
             await WaitForConditionAsync(() => startViewModel.HasStartSessionDraftError);
             Assert.Equal(
-                "Select a project or configure a remote path mapping before creating a remote session.",
+                "Select a configured remote directory before creating a remote session.",
                 startViewModel.StartSessionDraftErrorMessage);
             Assert.Empty(createCalls);
 
