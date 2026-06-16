@@ -45,8 +45,34 @@ public sealed class ProjectSelectorPolicyTests
         Assert.True(projection.ReplaceSelectionWithPlaceholder);
     }
 
+    [Fact]
+    public void Project_WhenSelectedProjectIsDisabled_BlocksSubmitAndKeepsDisabledItemVisible()
+    {
+        var policy = new ProjectSelectorPolicy();
+
+        var projection = policy.Project(new ProjectSelectorPolicyInput(
+            Identity: "project|remote",
+            Projects: new[]
+            {
+                new StartProjectOptionViewModel(NavigationProjectIds.Unclassified, "Unclassified", isSelectable: false),
+                new StartProjectOptionViewModel("local-a", "Local A", isSelectable: false),
+                new StartProjectOptionViewModel("remote-directory:dir-a", "Remote A", isSelectable: true, remoteCwd: "/remote/a")
+            },
+            SelectedProjectId: NavigationProjectIds.Unclassified,
+            PendingProjectIntentResolved: true,
+            HasLegalFallback: false,
+            Labels: Labels()));
+
+        Assert.True(projection.Placeholder!.BlocksSubmit);
+        Assert.Equal(3, projection.RealItems.Count);
+        Assert.False(projection.RealItems[0].IsSelectable);
+        Assert.False(projection.RealItems[1].IsSelectable);
+        Assert.True(projection.RealItems[2].IsSelectable);
+    }
+
     private static ProjectSelectorPlaceholderLabels Labels()
         => new(
             Unresolved: "project-unresolved",
-            Fallback: "project-fallback");
+            Fallback: "project-fallback",
+            RemoteSelectionRequired: "remote-selection-required");
 }

@@ -20,11 +20,15 @@ public sealed class ProjectSelectorPolicy
     {
         var realItems = (input.Projects ?? Array.Empty<StartProjectOptionViewModel>())
             .Where(static project => !string.IsNullOrWhiteSpace(project.ProjectId))
-            .Select(project => ComposerSelectorItemViewModel.Real(
-                ComposerSelectorKind.Project,
-                project.ProjectId,
-                string.IsNullOrWhiteSpace(project.DisplayName) ? project.ProjectId : project.DisplayName,
-                input.Identity))
+            .Select(project =>
+            {
+                var item = ComposerSelectorItemViewModel.Real(
+                    ComposerSelectorKind.Project,
+                    project.ProjectId,
+                    string.IsNullOrWhiteSpace(project.DisplayName) ? project.ProjectId : project.DisplayName,
+                    input.Identity);
+                return project.IsSelectable ? item : item.AsDisabled();
+            })
             .ToArray();
 
         if (!input.PendingProjectIntentResolved && !input.HasLegalFallback)
@@ -63,6 +67,29 @@ public sealed class ProjectSelectorPolicy
                 ReplaceSelectionWithPlaceholder: true,
                 DisableRealItems: false,
                 SelectorEnabled: true);
+        }
+
+        var selectedProjectId = string.IsNullOrWhiteSpace(input.SelectedProjectId)
+            ? NavigationProjectIds.Unclassified
+            : input.SelectedProjectId;
+        var selectedItem = realItems.FirstOrDefault(item =>
+            string.Equals(item.SemanticValue, selectedProjectId, StringComparison.Ordinal));
+        if (selectedItem is not null && !selectedItem.IsSelectable)
+        {
+            var blocked = ComposerSelectorItemViewModel.Placeholder(
+                ComposerSelectorKind.Project,
+                SelectorPlaceholderKind.Unresolved,
+                input.Labels.RemoteSelectionRequired,
+                input.Identity,
+                blocksSubmit: true);
+
+            return new SelectorPolicyProjection(
+                realItems,
+                selectedProjectId,
+                blocked,
+                ReplaceSelectionWithPlaceholder: true,
+                DisableRealItems: false,
+                SelectorEnabled: realItems.Length > 0);
         }
 
         return new SelectorPolicyProjection(

@@ -14,4 +14,5 @@ public sealed record AgentSelectorPlaceholderLabels(
 
 public sealed record ProjectSelectorPlaceholderLabels(
     string Unresolved,
-    string Fallback);
+    string Fallback,
+    string RemoteSelectionRequired);

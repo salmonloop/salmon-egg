@@ -256,6 +256,7 @@ public sealed partial class StartViewModel : ObservableObject
         _preferences.PropertyChanged += OnPreferencesPropertyChanged;
         _nav.PropertyChanged += OnNavigationPropertyChanged;
         ((INotifyCollectionChanged)_projectPreferences.Projects).CollectionChanged += OnProjectPreferencesChanged;
+        ((INotifyCollectionChanged)_preferences.AgentRemoteDirectories).CollectionChanged += OnAgentRemoteDirectoriesChanged;
         _conversationCatalog.PropertyChanged += OnConversationCatalogPropertyChanged;
         Chat.PropertyChanged += OnChatPropertyChanged;
         ((INotifyCollectionChanged)Chat.NewSessionDraftModeOptions).CollectionChanged += OnStartModeOptionsChanged;
@@ -548,8 +549,21 @@ public sealed partial class StartViewModel : ObservableObject
         QueueEnsureNewSessionDraft();
     }
 
+    private void OnAgentRemoteDirectoriesChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        RefreshStartProjectOptions();
+        QueueEnsureNewSessionDraft();
+    }
+
     private string? ResolveDefaultCwd()
     {
+        var selectedOption = ResolveSelectedProjectOption();
+        if (!string.IsNullOrWhiteSpace(selectedOption?.RemoteCwd))
+        {
+            _ = _nav.ConsumePendingProjectRootPath();
+            return selectedOption.RemoteCwd;
+        }
+
         var selectedRoot = _projectPreferences.TryGetProjectRootPath(SelectedStartProjectId);
         _ = _nav.ConsumePendingProjectRootPath();
         return SessionCwdResolver.Resolve(selectedRoot, null);
@@ -569,11 +583,22 @@ public sealed partial class StartViewModel : ObservableObject
         RefreshAllSelectorProjections();
     }
 
+    private bool IsSelectedProfileRemote()
+        => Chat.SelectedAcpProfile?.Transport is TransportType.WebSocket or TransportType.HttpSse;
+
+    private static string BuildRemoteDirectoryProjectId(string directoryId)
+        => $"remote-directory:{directoryId}";
+
+    private StartProjectOptionViewModel? ResolveSelectedProjectOption()
+        => StartProjectOptions.FirstOrDefault(option =>
+            string.Equals(option.ProjectId, SelectedStartProjectId, StringComparison.Ordinal));
+
     private IReadOnlyList<StartProjectOptionViewModel> BuildStartProjectOptions()
     {
+        var isRemoteProfile = IsSelectedProfileRemote();
         var options = new List<StartProjectOptionViewModel>
         {
-            new(NavigationProjectIds.Unclassified, Localize("Nav_Unclassified", "未归类")),
+            new(NavigationProjectIds.Unclassified, Localize("Nav_Unclassified", "未归类"), isSelectable: !isRemoteProfile),
         };
 
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -586,7 +611,22 @@ public sealed partial class StartViewModel : ObservableObject
                 continue;
             }
 
-            options.Add(new StartProjectOptionViewModel(project.ProjectId, project.Name));
+            options.Add(new StartProjectOptionViewModel(project.ProjectId, project.Name, isSelectable: !isRemoteProfile));
+        }
+
+        if (isRemoteProfile && !string.IsNullOrWhiteSpace(Chat.SelectedAcpProfile?.Id))
+        {
+            foreach (var directory in _preferences.AgentRemoteDirectories
+                         .Where(d => string.Equals(d.ProfileId, Chat.SelectedAcpProfile!.Id, StringComparison.Ordinal))
+                         .Where(d => !string.IsNullOrWhiteSpace(d.DirectoryId) && !string.IsNullOrWhiteSpace(d.RemotePath))
+                         .OrderBy(d => string.IsNullOrWhiteSpace(d.DisplayName) ? d.RemotePath : d.DisplayName, StringComparer.Ordinal))
+            {
+                options.Add(new StartProjectOptionViewModel(
+                    BuildRemoteDirectoryProjectId(directory.DirectoryId),
+                    string.IsNullOrWhiteSpace(directory.DisplayName) ? directory.RemotePath : directory.DisplayName,
+                    isSelectable: true,
+                    remoteCwd: directory.RemotePath));
+            }
         }
 
         return options;
@@ -648,7 +688,8 @@ public sealed partial class StartViewModel : ObservableObject
     private ProjectSelectorPlaceholderLabels ResolveProjectSelectorPlaceholderLabels()
         => new(
             Unresolved: Localize("Selector_Project_Unresolved", "项目不可用"),
-            Fallback: Localize("Nav_Unclassified", "未归类"));
+            Fallback: Localize("Nav_Unclassified", "未归类"),
+            RemoteSelectionRequired: Localize("Selector_Project_RemoteSelectionRequired", "请选择远端目录"));
 
     private string Localize(string key, string fallback)
     {
@@ -687,6 +728,7 @@ public sealed partial class StartViewModel : ObservableObject
     {
         if (string.Equals(e.PropertyName, nameof(ChatViewModel.SelectedAcpProfile), StringComparison.Ordinal))
         {
+            RefreshStartProjectOptions();
             RefreshAllSelectorProjections();
             StartSessionAndSendCommand.NotifyCanExecuteChanged();
             OnPropertyChanged(nameof(CanStartSessionAndSendUi));
@@ -916,7 +958,15 @@ public sealed partial class StartViewModel : ObservableObject
     }
 
     private string? ResolvePreviewCwd()
-        => _projectPreferences.TryGetProjectRootPath(SelectedStartProjectId);
+    {
+        var selectedOption = ResolveSelectedProjectOption();
+        if (!string.IsNullOrWhiteSpace(selectedOption?.RemoteCwd))
+        {
+            return selectedOption.RemoteCwd;
+        }
+
+        return _projectPreferences.TryGetProjectRootPath(SelectedStartProjectId);
+    }
 
     private sealed class NoOpConversationCatalogReadModel : IConversationCatalogReadModel
     {
