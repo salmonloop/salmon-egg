@@ -35,7 +35,7 @@
                                    Text="ACP Agent"
                                    Style="{StaticResource SettingsPageTitleTextStyle}"/>
                         <TextBlock x:Uid="Acp_PageSummary"
-                                   Text="管理 ACP 连接配置、路径映射，以及会话加载策略。"
+                                   Text="管理 ACP 连接配置、远端目录，以及会话加载策略。"
                                    Style="{StaticResource SettingsPageSummaryTextStyle}"/>
                     </StackPanel>
 

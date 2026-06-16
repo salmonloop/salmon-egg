@@ -622,7 +622,7 @@
     <value>ACP Agent</value>
   </data>
   <data name="Acp_PageSummary.Text" xml:space="preserve">
-    <value>管理 ACP 连接配置、路径映射，以及会话加载策略。</value>
+    <value>管理 ACP 连接配置、远端目录，以及会话加载策略。</value>
   </data>
   <data name="Acp_GlobalTitle.Text" xml:space="preserve">
     <value>全局 ACP 配置</value>

@@ -709,7 +709,7 @@
     <value>ACP Agent</value>
   </data>
   <data name="Acp_PageSummary.Text" xml:space="preserve">
-    <value>Manage ACP connection profiles, path mappings, and session loading policy.</value>
+    <value>Manage ACP connection profiles, remote directories, and session loading policy.</value>
   </data>
   <data name="Acp_GlobalTitle.Text" xml:space="preserve">
     <value>Global ACP configuration</value>
