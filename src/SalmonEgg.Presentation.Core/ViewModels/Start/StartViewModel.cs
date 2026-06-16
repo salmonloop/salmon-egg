@@ -560,7 +560,6 @@ public sealed partial class StartViewModel : ObservableObject
         var selectedOption = ResolveSelectedProjectOption();
         if (!string.IsNullOrWhiteSpace(selectedOption?.RemoteCwd))
         {
-            _ = _nav.ConsumePendingProjectRootPath();
             return selectedOption.RemoteCwd;
         }
 
@@ -729,7 +728,6 @@ public sealed partial class StartViewModel : ObservableObject
         if (string.Equals(e.PropertyName, nameof(ChatViewModel.SelectedAcpProfile), StringComparison.Ordinal))
         {
             RefreshStartProjectOptions();
-            RefreshAllSelectorProjections();
             StartSessionAndSendCommand.NotifyCanExecuteChanged();
             OnPropertyChanged(nameof(CanStartSessionAndSendUi));
             if (_isComposerLoaded)

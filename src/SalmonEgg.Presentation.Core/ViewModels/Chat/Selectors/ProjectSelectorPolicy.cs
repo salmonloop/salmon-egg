@@ -76,6 +76,7 @@ public sealed class ProjectSelectorPolicy
             string.Equals(item.SemanticValue, selectedProjectId, StringComparison.Ordinal));
         if (selectedItem is not null && !selectedItem.IsSelectable)
         {
+            // The Unresolved kind is reused intentionally; the remote-selection-required semantics are conveyed via the label, not a dedicated kind.
             var blocked = ComposerSelectorItemViewModel.Placeholder(
                 ComposerSelectorKind.Project,
                 SelectorPlaceholderKind.Unresolved,

@@ -64,6 +64,8 @@ public sealed class ProjectSelectorPolicyTests
             Labels: Labels()));
 
         Assert.True(projection.Placeholder!.BlocksSubmit);
+        Assert.True(projection.ReplaceSelectionWithPlaceholder);
+        Assert.Equal(NavigationProjectIds.Unclassified, projection.SelectedSemanticValue);
         Assert.Equal(3, projection.RealItems.Count);
         Assert.False(projection.RealItems[0].IsSelectable);
         Assert.False(projection.RealItems[1].IsSelectable);
