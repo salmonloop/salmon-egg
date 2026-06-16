@@ -1339,7 +1339,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _preferences.PropertyChanged += OnPreferencesPropertyChanged;
         _hydrationCompletionMode = ResolveHydrationCompletionMode(_preferences.AcpHydrationCompletionMode);
         _preferences.Projects.CollectionChanged += OnProjectAffinityPreferencesCollectionChanged;
-        _preferences.ProjectPathMappings.CollectionChanged += OnProjectAffinityPreferencesCollectionChanged;
+        _preferences.AgentRemoteDirectories.CollectionChanged += OnProjectAffinityPreferencesCollectionChanged;
         _conversationWorkspace.PropertyChanged += OnConversationWorkspacePropertyChanged;
         if (_shellNavigationRuntimeState is not null)
         {
@@ -3165,7 +3165,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
            _acpProfiles.Profiles.CollectionChanged -= OnAcpProfilesCollectionChanged;
            _preferences.PropertyChanged -= OnPreferencesPropertyChanged;
            _preferences.Projects.CollectionChanged -= OnProjectAffinityPreferencesCollectionChanged;
-           _preferences.ProjectPathMappings.CollectionChanged -= OnProjectAffinityPreferencesCollectionChanged;
+           _preferences.AgentRemoteDirectories.CollectionChanged -= OnProjectAffinityPreferencesCollectionChanged;
            _conversationWorkspace.PropertyChanged -= OnConversationWorkspacePropertyChanged;
            _voiceInputService.PartialResultReceived -= OnVoiceInputPartialResultReceived;
            _voiceInputService.FinalResultReceived -= OnVoiceInputFinalResultReceived;
