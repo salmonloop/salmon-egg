@@ -204,57 +204,51 @@
                         </Border>
                     </StackPanel>
 
-                    <!-- Path mappings -->
+                    <!-- Remote directories -->
                     <StackPanel Spacing="12"
-                                AutomationProperties.AutomationId="Acp.PathMappings.Section">
+                                AutomationProperties.AutomationId="Acp.RemoteDirectories.Section">
                         <Grid ColumnDefinitions="*,Auto">
-                            <TextBlock x:Uid="Acp_PathMappingsTitle"
-                                       Text="本地路径映射"
+                            <TextBlock x:Uid="Acp_RemoteDirectoriesTitle"
+                                       Text="远端目录"
                                        Style="{StaticResource SettingsSectionTitleTextStyle}"
                                        VerticalAlignment="Center"/>
                             <Button Grid.Column="1"
-                                    x:Name="AcpPathMappingsAddButton"
-                                    x:Uid="Acp_PathMappingsAdd"
-                                    Content="新增映射"
-                                    Command="{x:Bind ViewModel.AddPathMappingCommand}"
-                                    AutomationProperties.AutomationId="Acp.PathMappings.Add"/>
+                                    x:Name="AcpRemoteDirectoriesAddButton"
+                                    x:Uid="Acp_RemoteDirectoriesAdd"
+                                    Content="新增目录"
+                                    Command="{x:Bind ViewModel.AddRemoteDirectoryCommand}"
+                                    AutomationProperties.AutomationId="Acp.RemoteDirectories.Add"/>
                         </Grid>
 
-                        <TextBlock x:Uid="Acp_PathMappingsHint"
-                                   Text="SalmonEgg 使用这些映射把 Agent 返回的远程工作区路径转换为本地文件系统路径。"
+                        <TextBlock x:Uid="Acp_RemoteDirectoriesHint"
+                                   Text="为当前 Agent 配置可用于新建远程 ACP 会话的远端工作目录。Salmon Egg 不会把本机路径发送给远端 Agent。"
                                    Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
 
                         <Border Style="{StaticResource SettingsSectionContainerStyle}">
-                            <ListView ItemsSource="{x:Bind ViewModel.PathMappingRows, Mode=OneWay}"
+                            <ListView ItemsSource="{x:Bind ViewModel.RemoteDirectoryRows, Mode=OneWay}"
                                       SelectionMode="None"
                                       MinHeight="120"
                                       Background="Transparent"
                                       ItemContainerStyle="{StaticResource AgentListItemStyle}"
-                                      AutomationProperties.AutomationId="Acp.PathMappings.List">
+                                      AutomationProperties.AutomationId="Acp.RemoteDirectories.List">
                                 <ListView.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:AcpPathMappingRowViewModel">
+                                    <DataTemplate x:DataType="vm:AcpRemoteDirectoryRowViewModel">
                                         <Grid Style="{StaticResource SettingsRowGridStyle}"
                                               ColumnDefinitions="*,Auto"
                                               RowDefinitions="Auto,Auto"
                                               RowSpacing="8">
-                                            <TextBox Grid.Row="0"
-                                                     Grid.Column="0"
-                                                     x:Uid="Acp_PathMappingsRemotePath"
-                                                     Header="远程根路径"
-                                                     PlaceholderText="/workspace/project"
-                                                     Text="{x:Bind RemoteRootPath, Mode=TwoWay}"/>
-
-                                            <TextBox Grid.Row="1"
-                                                     Grid.Column="0"
-                                                     x:Uid="Acp_PathMappingsLocalPath"
-                                                     Header="本地根路径"
-                                                     PlaceholderText="C:\project 或 /Users/name/project"
-                                                     Text="{x:Bind LocalRootPath, Mode=TwoWay}"/>
-
-                                            <Button Grid.Row="0"
-                                                    Grid.RowSpan="2"
-                                                    Grid.Column="1"
-                                                    x:Uid="Acp_PathMappingsRemove"
+                                            <TextBox Grid.Row="0" Grid.Column="0"
+                                                     x:Uid="Acp_RemoteDirectoriesDisplayName"
+                                                     Header="显示名称"
+                                                     PlaceholderText="Workspace"
+                                                     Text="{x:Bind DisplayName, Mode=TwoWay}"/>
+                                            <TextBox Grid.Row="1" Grid.Column="0"
+                                                     x:Uid="Acp_RemoteDirectoriesRemotePath"
+                                                     Header="远端目录"
+                                                     PlaceholderText="/home/user/project"
+                                                     Text="{x:Bind RemotePath, Mode=TwoWay}"/>
+                                            <Button Grid.Row="0" Grid.RowSpan="2" Grid.Column="1"
+                                                    x:Uid="Acp_RemoteDirectoriesRemove"
                                                     Command="{x:Bind RemoveCommand}"
                                                     VerticalAlignment="Center">
                                                 <Button.Content>

@@ -237,29 +237,25 @@ public sealed class AcpConnectionSettingsXamlTests
     }
 
     [Fact]
-    public void AcpConnectionSettingsPage_PathMappingsEditor_UsesViewModelDrivenBindings()
+    public void AcpConnectionSettingsPage_RemoteDirectoriesEditor_UsesViewModelDrivenBindings()
     {
-        // Arrange
         var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AcpConnectionSettingsPage.xaml");
-
-        // Assert
-        Assert.Contains("ItemsSource=\"{x:Bind ViewModel.PathMappingRows, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Command=\"{x:Bind ViewModel.AddPathMappingCommand}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Command=\"{x:Bind RemoveCommand}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Text=\"{x:Bind RemoteRootPath, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Text=\"{x:Bind LocalRootPath, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ItemsSource=\"{x:Bind ViewModel.RemoteDirectoryRows, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind ViewModel.AddRemoteDirectoryCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind DisplayName, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind RemotePath, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("PathMappingRows", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("LocalRootPath", xaml, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void AcpConnectionSettingsPage_PathMappingsEditor_ExposesStableAutomationIds()
+    public void AcpConnectionSettingsPage_RemoteDirectoriesEditor_ExposesStableAutomationIds()
     {
-        // Arrange
         var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AcpConnectionSettingsPage.xaml");
-
-        // Assert
-        Assert.Contains("AutomationProperties.AutomationId=\"Acp.PathMappings.Section\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("AutomationProperties.AutomationId=\"Acp.PathMappings.List\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("AutomationProperties.AutomationId=\"Acp.PathMappings.Add\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"Acp.RemoteDirectories.Section\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"Acp.RemoteDirectories.List\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"Acp.RemoteDirectories.Add\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Acp.PathMappings", xaml, StringComparison.Ordinal);
     }
 
     private static string LoadFile(string relativePath)

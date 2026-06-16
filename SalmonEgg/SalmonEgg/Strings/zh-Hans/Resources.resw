@@ -669,23 +669,23 @@
   <data name="Acp_ProfileDelete.Text" xml:space="preserve">
     <value>删除</value>
   </data>
-  <data name="Acp_PathMappingsTitle.Text" xml:space="preserve">
-    <value>本地路径映射</value>
+  <data name="Acp_RemoteDirectoriesTitle.Text" xml:space="preserve">
+    <value>远端目录</value>
   </data>
-  <data name="Acp_PathMappingsAdd.Content" xml:space="preserve">
-    <value>新增映射</value>
+  <data name="Acp_RemoteDirectoriesAdd.Content" xml:space="preserve">
+    <value>新增目录</value>
   </data>
-  <data name="Acp_PathMappingsHint.Text" xml:space="preserve">
-    <value>SalmonEgg 使用这些映射把 Agent 返回的远程工作区路径转换为本地文件系统路径。</value>
+  <data name="Acp_RemoteDirectoriesHint.Text" xml:space="preserve">
+    <value>为当前 Agent 配置可用于新建远程 ACP 会话的远端工作目录。Salmon Egg 不会把本机路径发送给远端 Agent。</value>
   </data>
-  <data name="Acp_PathMappingsRemotePath.Header" xml:space="preserve">
-    <value>远程根路径</value>
+  <data name="Acp_RemoteDirectoriesDisplayName.Header" xml:space="preserve">
+    <value>显示名称</value>
   </data>
-  <data name="Acp_PathMappingsLocalPath.Header" xml:space="preserve">
-    <value>本地根路径</value>
+  <data name="Acp_RemoteDirectoriesRemotePath.Header" xml:space="preserve">
+    <value>远端目录</value>
   </data>
-  <data name="Acp_PathMappingsRemove.ToolTipService.ToolTip" xml:space="preserve">
-    <value>移除映射</value>
+  <data name="Acp_RemoteDirectoriesRemove.ToolTipService.ToolTip" xml:space="preserve">
+    <value>移除目录</value>
   </data>
   <data name="Start_Title.Text" xml:space="preserve">
     <value>Salmon Egg</value>

@@ -1290,23 +1290,23 @@
   <data name="Acp_OverviewTitle.Text" xml:space="preserve">
     <value>Current connection</value>
   </data>
-  <data name="Acp_PathMappingsAdd.Content" xml:space="preserve">
-    <value>Add mapping</value>
+  <data name="Acp_RemoteDirectoriesAdd.Content" xml:space="preserve">
+    <value>Add directory</value>
   </data>
-  <data name="Acp_PathMappingsHint.Text" xml:space="preserve">
-    <value>SalmonEgg uses these mappings to translate remote workspace paths reported by the agent into local file system paths.</value>
+  <data name="Acp_RemoteDirectoriesHint.Text" xml:space="preserve">
+    <value>Configure remote working directories available for new remote ACP sessions. Salmon Egg does not send local paths to the remote agent.</value>
   </data>
-  <data name="Acp_PathMappingsLocalPath.Header" xml:space="preserve">
-    <value>Local root path</value>
+  <data name="Acp_RemoteDirectoriesDisplayName.Header" xml:space="preserve">
+    <value>Display name</value>
   </data>
-  <data name="Acp_PathMappingsRemotePath.Header" xml:space="preserve">
-    <value>Remote root path</value>
+  <data name="Acp_RemoteDirectoriesRemotePath.Header" xml:space="preserve">
+    <value>Remote directory</value>
   </data>
-  <data name="Acp_PathMappingsRemove.ToolTipService.ToolTip" xml:space="preserve">
-    <value>Remove mapping</value>
+  <data name="Acp_RemoteDirectoriesRemove.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Remove directory</value>
   </data>
-  <data name="Acp_PathMappingsTitle.Text" xml:space="preserve">
-    <value>Local path mappings</value>
+  <data name="Acp_RemoteDirectoriesTitle.Text" xml:space="preserve">
+    <value>Remote directories</value>
   </data>
   <data name="Acp_ProfileConnect.Text" xml:space="preserve">
     <value>Connect</value>
