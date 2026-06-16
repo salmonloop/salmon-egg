@@ -159,10 +159,16 @@ public partial class ChatViewModel
         var cwdResolution = AcpSessionNewCwdResolver.Resolve(
             GetActiveSessionCwdOrDefault(),
             profile,
-            _preferences.ProjectPathMappings);
+            _preferences.AgentRemoteDirectories);
 
         if (!cwdResolution.IsSuccess || string.IsNullOrWhiteSpace(cwdResolution.Cwd))
         {
+            Logger.LogInformation(
+                "ACP remote session cwd resolution rejected. profileId={ProfileId} transport={Transport} requestedCwd={RequestedCwd} reason={Reason}",
+                SelectedProfileId,
+                ResolveNewSessionDraftProfile(SelectedProfileId)?.Transport,
+                GetActiveSessionCwdOrDefault(),
+                cwdResolution.ErrorMessage ?? AcpSessionNewCwdResolver.MissingRemoteCwdMessage);
             throw new InvalidOperationException(AcpSessionNewCwdResolver.MissingRemoteCwdMessage);
         }
 

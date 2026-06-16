@@ -2942,8 +2942,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         public long ConnectionGeneration => _owner.ConnectionGeneration;
         public IUiDispatcher Dispatcher => _owner.Dispatcher;
         public IConversationBindingCommands ConversationBindingCommands => _bindingCommands;
-        public IReadOnlyList<ProjectPathMapping> GetProjectPathMappings()
-            => _owner._preferences.ProjectPathMappings;
+        public IReadOnlyList<AgentRemoteDirectory> GetAgentRemoteDirectories()
+            => _owner._preferences.AgentRemoteDirectories;
 
         public void SetCurrentMcpServers(IReadOnlyList<McpServer> mcpServers)
         {

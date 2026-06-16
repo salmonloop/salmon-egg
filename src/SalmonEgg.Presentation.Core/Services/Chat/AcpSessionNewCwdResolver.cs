@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using SalmonEgg.Domain.Models;
-using SalmonEgg.Domain.Models.ProjectAffinity;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 
@@ -13,12 +12,12 @@ public readonly record struct AcpSessionNewCwdResolution(
 public static class AcpSessionNewCwdResolver
 {
     public const string MissingRemoteCwdMessage =
-        "Select a project or configure a remote path mapping before creating a remote session.";
+        "Select a configured remote directory before creating a remote session.";
 
     public static AcpSessionNewCwdResolution Resolve(
         string? requestedCwd,
         ServerConfiguration? profile,
-        IReadOnlyList<ProjectPathMapping>? pathMappings)
+        IReadOnlyList<AgentRemoteDirectory>? remoteDirectories)
     {
         var trimmedCwd = TrimOrNull(requestedCwd);
         if (profile?.Transport == TransportType.Stdio)
@@ -28,108 +27,48 @@ public static class AcpSessionNewCwdResolver
                 return new AcpSessionNewCwdResolution(true, trimmedCwd, null);
             }
 
-            return new AcpSessionNewCwdResolution(
-                true,
-                GetDefaultStdioUserProfileDirectory(),
-                null);
+            return new AcpSessionNewCwdResolution(true, GetDefaultStdioUserProfileDirectory(), null);
         }
 
-        if (string.IsNullOrWhiteSpace(trimmedCwd))
+        if (string.IsNullOrWhiteSpace(trimmedCwd)
+            || string.IsNullOrWhiteSpace(profile?.Id)
+            || !IsConfiguredRemoteDirectory(trimmedCwd, profile.Id, remoteDirectories))
         {
             return new AcpSessionNewCwdResolution(false, null, MissingRemoteCwdMessage);
-        }
-
-        if (TryMapLocalPathToRemote(trimmedCwd, profile?.Id, pathMappings, out var remoteCwd))
-        {
-            return new AcpSessionNewCwdResolution(true, remoteCwd, null);
         }
 
         return new AcpSessionNewCwdResolution(true, trimmedCwd, null);
     }
 
-    private static bool TryMapLocalPathToRemote(
-        string localCwd,
-        string? profileId,
-        IReadOnlyList<ProjectPathMapping>? pathMappings,
-        out string? remoteCwd)
+    private static bool IsConfiguredRemoteDirectory(
+        string requestedCwd,
+        string profileId,
+        IReadOnlyList<AgentRemoteDirectory>? remoteDirectories)
     {
-        remoteCwd = null;
-        if (string.IsNullOrWhiteSpace(localCwd)
-            || string.IsNullOrWhiteSpace(profileId)
-            || pathMappings is not { Count: > 0 })
+        if (remoteDirectories is not { Count: > 0 })
         {
             return false;
         }
 
-        var normalizedLocalCwd = NormalizePath(localCwd);
-        if (string.IsNullOrWhiteSpace(normalizedLocalCwd))
+        foreach (var directory in remoteDirectories)
         {
-            return false;
-        }
-
-        ProjectPathMapping? bestMapping = null;
-        var bestLength = -1;
-        foreach (var mapping in pathMappings)
-        {
-            if (mapping is null || string.IsNullOrWhiteSpace(mapping.ProfileId))
+            if (directory is null)
             {
                 continue;
             }
 
-            if (!string.Equals(mapping.ProfileId.Trim(), profileId.Trim(), StringComparison.Ordinal))
+            if (string.Equals(directory.ProfileId?.Trim(), profileId.Trim(), StringComparison.Ordinal)
+                && string.Equals(directory.RemotePath?.Trim(), requestedCwd, StringComparison.Ordinal))
             {
-                continue;
-            }
-
-            var normalizedLocalRoot = NormalizePath(mapping.LocalRootPath);
-            var normalizedRemoteRoot = NormalizePath(mapping.RemoteRootPath);
-            if (string.IsNullOrWhiteSpace(normalizedLocalRoot)
-                || string.IsNullOrWhiteSpace(normalizedRemoteRoot)
-                || !IsPathPrefix(normalizedLocalRoot, normalizedLocalCwd))
-            {
-                continue;
-            }
-
-            if (normalizedLocalRoot.Length > bestLength)
-            {
-                bestMapping = mapping;
-                bestLength = normalizedLocalRoot.Length;
+                return true;
             }
         }
 
-        if (bestMapping is null)
-        {
-            return false;
-        }
-
-        var localRoot = NormalizePath(bestMapping.LocalRootPath);
-        var remoteRoot = NormalizePath(bestMapping.RemoteRootPath);
-        var suffix = normalizedLocalCwd.Length > localRoot.Length
-            ? normalizedLocalCwd.Substring(localRoot.Length).TrimStart('/')
-            : string.Empty;
-        remoteCwd = string.IsNullOrEmpty(suffix)
-            ? remoteRoot
-            : $"{remoteRoot}/{suffix}";
-        return true;
-    }
-
-    private static bool IsPathPrefix(string root, string path)
-    {
-        if (!path.StartsWith(root, StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        return path.Length == root.Length || path[root.Length] == '/';
+        return false;
     }
 
     private static string? TrimOrNull(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-
-    private static string NormalizePath(string? path)
-        => string.IsNullOrWhiteSpace(path)
-            ? string.Empty
-            : path.Trim().Replace('\\', '/').TrimEnd('/');
 
     private static string GetDefaultStdioUserProfileDirectory()
         => Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);

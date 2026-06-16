@@ -136,11 +136,16 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
         var cwdResolution = AcpSessionNewCwdResolver.Resolve(
             sink.GetActiveSessionCwdOrDefault()?.Trim(),
             sink.ResolveProfile(sink.SelectedProfileId),
-            sink.GetProjectPathMappings());
+            sink.GetAgentRemoteDirectories());
         var cwd = cwdResolution.Cwd?.Trim();
         if (string.IsNullOrWhiteSpace(cwd))
         {
-            _logger.LogWarning("Skipping remote session creation because session cwd is missing or empty.");
+            _logger.LogInformation(
+                "ACP remote session cwd resolution rejected. profileId={ProfileId} transport={Transport} requestedCwd={RequestedCwd} reason={Reason}",
+                sink.SelectedProfileId,
+                sink.ResolveProfile(sink.SelectedProfileId)?.Transport,
+                sink.GetActiveSessionCwdOrDefault(),
+                cwdResolution.ErrorMessage ?? AcpSessionNewCwdResolver.MissingRemoteCwdMessage);
             throw new InvalidOperationException(
                 cwdResolution.ErrorMessage ?? AcpSessionNewCwdResolver.MissingRemoteCwdMessage);
         }

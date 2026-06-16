@@ -102,7 +102,7 @@ public partial class ChatViewModel
             var cwdResolution = AcpSessionNewCwdResolver.Resolve(
                 cwd,
                 profile,
-                _preferences.ProjectPathMappings);
+                _preferences.AgentRemoteDirectories);
 
             if (!cwdResolution.IsSuccess || string.IsNullOrWhiteSpace(cwdResolution.Cwd))
             {

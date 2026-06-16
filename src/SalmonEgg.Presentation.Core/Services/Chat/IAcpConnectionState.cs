@@ -6,7 +6,6 @@ using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Models.Protocol;
-using SalmonEgg.Domain.Models.ProjectAffinity;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 
@@ -71,7 +70,7 @@ public interface IAcpChatCoordinatorSink : IAcpConnectionState
 
     IConversationBindingCommands ConversationBindingCommands { get; }
 
-    IReadOnlyList<ProjectPathMapping> GetProjectPathMappings() => [];
+    IReadOnlyList<AgentRemoteDirectory> GetAgentRemoteDirectories() => [];
 
     ValueTask<ConversationRemoteBindingState?> GetCurrentRemoteBindingAsync(CancellationToken cancellationToken = default)
     {
