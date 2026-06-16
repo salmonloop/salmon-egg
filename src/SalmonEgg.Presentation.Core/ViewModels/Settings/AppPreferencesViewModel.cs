@@ -489,11 +489,14 @@ public partial class AppPreferencesViewModel : ObservableObject
                 continue;
             }
 
+            // Persist DisplayName trim-only: a blank DisplayName is intentionally preserved so storage
+            // stays consistent with the live-edit path and Task 1's clone. Consumers (Start project
+            // selector, project affinity) fall back to RemotePath at display time.
             normalized.Add(new AgentRemoteDirectory
             {
                 ProfileId = profileId,
                 DirectoryId = directoryId,
-                DisplayName = string.IsNullOrWhiteSpace(directory.DisplayName) ? remotePath : directory.DisplayName.Trim(),
+                DisplayName = directory.DisplayName?.Trim() ?? string.Empty,
                 RemotePath = remotePath
             });
         }
