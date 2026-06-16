@@ -411,7 +411,7 @@ public partial class ChatViewModel
             SelectedAcpProfile?.Id,
             SelectedProjectAffinityOverrideProjectId,
             _preferences.Projects.ToArray(),
-            _preferences.ProjectPathMappings.ToArray());
+            _preferences.AgentRemoteDirectories.ToArray());
 
         ProjectAffinityOverrideOptions = new ObservableCollection<ProjectAffinityOverrideOptionViewModel>(presentedState.Options);
         IsProjectAffinityCorrectionVisible = presentedState.IsVisible;

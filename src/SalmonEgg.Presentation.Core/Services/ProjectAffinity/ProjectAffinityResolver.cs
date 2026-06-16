@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using SalmonEgg.Domain.Models;
-using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Presentation.Core.Services;
 
 namespace SalmonEgg.Presentation.Core.Services.ProjectAffinity;
@@ -9,7 +8,7 @@ namespace SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 public sealed class ProjectAffinityResolver : IProjectAffinityResolver
 {
     private const string ReasonOverride = "Override";
-    private const string ReasonPathMapping = "PathMapping";
+    private const string ReasonRemoteDirectory = "RemoteDirectory";
     private const string ReasonDirectMatch = "DirectMatch";
     private const string ReasonNeedsMapping = "NeedsMapping";
     private const string ReasonUnclassified = "Unclassified";
@@ -21,7 +20,7 @@ public sealed class ProjectAffinityResolver : IProjectAffinityResolver
 
         var unclassifiedProjectId = GetUnclassifiedProjectId(request);
         var projects = request.Projects ?? Array.Empty<ProjectDefinition>();
-        var mappings = request.PathMappings ?? Array.Empty<ProjectPathMapping>();
+        var remoteDirectories = request.RemoteDirectories ?? Array.Empty<AgentRemoteDirectory>();
         var overrideProjectId = NormalizeToken(request.OverrideProjectId);
 
         var overrideResolution = ResolveOverride(request.RemoteCwd, overrideProjectId, unclassifiedProjectId, projects);
@@ -46,19 +45,6 @@ public sealed class ProjectAffinityResolver : IProjectAffinityResolver
 
         var normalizedProfileId = NormalizeToken(request.BoundProfileId);
 
-        var mappingResolution = ResolveMapping(
-            normalizedRemoteCwd,
-            normalizedProfileId,
-            overrideProjectId,
-            request.RemoteCwd,
-            projects,
-            mappings,
-            out var mappedPath);
-        if (mappingResolution != null)
-        {
-            return mappingResolution;
-        }
-
         var directResolution = ResolveDirect(
             normalizedRemoteCwd,
             overrideProjectId,
@@ -69,13 +55,25 @@ public sealed class ProjectAffinityResolver : IProjectAffinityResolver
             return directResolution;
         }
 
+        var remoteDirectoryResolution = ResolveRemoteDirectory(
+            normalizedRemoteCwd,
+            normalizedProfileId,
+            request.RemoteSessionId,
+            overrideProjectId,
+            request.RemoteCwd,
+            unclassifiedProjectId,
+            remoteDirectories);
+        if (remoteDirectoryResolution != null)
+        {
+            return remoteDirectoryResolution;
+        }
+
         return ResolveFallback(
             unclassifiedProjectId,
             normalizedProfileId,
             request.RemoteSessionId,
             overrideProjectId,
-            request.RemoteCwd,
-            mappedPath);
+            request.RemoteCwd);
     }
 
     private static string GetUnclassifiedProjectId(ProjectAffinityRequest request)
@@ -118,36 +116,70 @@ public sealed class ProjectAffinityResolver : IProjectAffinityResolver
             Reason: ReasonOverride);
     }
 
-    private static ProjectAffinityResolution? ResolveMapping(
+    private static ProjectAffinityResolution? ResolveRemoteDirectory(
         string normalizedRemoteCwd,
         string? normalizedProfileId,
+        string? remoteSessionId,
         string? overrideProjectId,
         string? remoteCwd,
-        IReadOnlyList<ProjectDefinition> projects,
-        IReadOnlyList<ProjectPathMapping> mappings,
-        out string? mappedPath)
+        string unclassifiedProjectId,
+        IReadOnlyList<AgentRemoteDirectory> remoteDirectories)
     {
-        mappedPath = null;
-        if (!TryResolveMappedPath(normalizedRemoteCwd, normalizedProfileId, mappings, out mappedPath))
+        if (!IsRemoteBound(normalizedProfileId, remoteSessionId)
+            || string.IsNullOrWhiteSpace(normalizedProfileId))
         {
             return null;
         }
 
-        var mappedProjectId = TryMatchProjectId(mappedPath, projects);
-        if (string.IsNullOrWhiteSpace(mappedProjectId))
+        AgentRemoteDirectory? matchedDirectory = null;
+        foreach (var directory in remoteDirectories)
+        {
+            if (directory == null
+                || string.IsNullOrWhiteSpace(directory.ProfileId)
+                || string.IsNullOrWhiteSpace(directory.RemotePath))
+            {
+                continue;
+            }
+
+            if (!string.Equals(directory.ProfileId.Trim(), normalizedProfileId, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var normalizedDirectoryPath = NormalizePath(directory.RemotePath);
+            if (string.IsNullOrWhiteSpace(normalizedDirectoryPath))
+            {
+                continue;
+            }
+
+            if (!string.Equals(normalizedDirectoryPath, normalizedRemoteCwd, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            matchedDirectory = directory;
+            break;
+        }
+
+        if (matchedDirectory == null)
         {
             return null;
         }
+
+        var displayName = string.IsNullOrWhiteSpace(matchedDirectory.DisplayName)
+            ? matchedDirectory.RemotePath
+            : matchedDirectory.DisplayName;
 
         return CreateResolution(
-            EffectiveProjectId: mappedProjectId!,
-            Source: ProjectAffinitySource.PathMapping,
-            MatchedProjectId: mappedProjectId,
+            EffectiveProjectId: unclassifiedProjectId,
+            Source: ProjectAffinitySource.RemoteDirectory,
+            MatchedProjectId: null,
             OverrideProjectId: overrideProjectId,
             RemoteCwd: remoteCwd,
-            LocalResolvedPath: mappedPath,
+            LocalResolvedPath: null,
             NeedsUserAttention: false,
-            Reason: ReasonPathMapping);
+            Reason: ReasonRemoteDirectory,
+            RemoteDirectoryDisplayName: displayName);
     }
 
     private static ProjectAffinityResolution? ResolveDirect(
@@ -178,8 +210,7 @@ public sealed class ProjectAffinityResolver : IProjectAffinityResolver
         string? normalizedProfileId,
         string? remoteSessionId,
         string? overrideProjectId,
-        string? remoteCwd,
-        string? mappedPath)
+        string? remoteCwd)
         => IsRemoteBound(normalizedProfileId, remoteSessionId)
             ? CreateResolution(
                 EffectiveProjectId: unclassifiedProjectId,
@@ -187,7 +218,7 @@ public sealed class ProjectAffinityResolver : IProjectAffinityResolver
                 MatchedProjectId: null,
                 OverrideProjectId: overrideProjectId,
                 RemoteCwd: remoteCwd,
-                LocalResolvedPath: mappedPath,
+                LocalResolvedPath: null,
                 NeedsUserAttention: true,
                 Reason: ReasonNeedsMapping)
             : CreateResolution(
@@ -196,7 +227,7 @@ public sealed class ProjectAffinityResolver : IProjectAffinityResolver
                 MatchedProjectId: null,
                 OverrideProjectId: overrideProjectId,
                 RemoteCwd: remoteCwd,
-                LocalResolvedPath: mappedPath,
+                LocalResolvedPath: null,
                 NeedsUserAttention: false,
                 Reason: ReasonUnclassified);
 
@@ -208,7 +239,8 @@ public sealed class ProjectAffinityResolver : IProjectAffinityResolver
         string? RemoteCwd,
         string? LocalResolvedPath,
         bool NeedsUserAttention,
-        string Reason)
+        string Reason,
+        string? RemoteDirectoryDisplayName = null)
         => new(
             EffectiveProjectId,
             Source,
@@ -217,7 +249,8 @@ public sealed class ProjectAffinityResolver : IProjectAffinityResolver
             RemoteCwd,
             LocalResolvedPath,
             NeedsUserAttention,
-            Reason);
+            Reason,
+            RemoteDirectoryDisplayName);
 
     private static bool TryResolveOverride(
         string? overrideProjectId,
@@ -245,74 +278,6 @@ public sealed class ProjectAffinityResolver : IProjectAffinityResolver
         }
 
         return false;
-    }
-
-    private static bool TryResolveMappedPath(
-        string normalizedRemoteCwd,
-        string? profileId,
-        IReadOnlyList<ProjectPathMapping> mappings,
-        out string? mappedPath)
-    {
-        mappedPath = null;
-        if (string.IsNullOrWhiteSpace(profileId) || string.IsNullOrWhiteSpace(normalizedRemoteCwd))
-        {
-            return false;
-        }
-
-        ProjectPathMapping? bestMapping = null;
-        var bestLength = -1;
-        foreach (var mapping in mappings)
-        {
-            if (mapping == null || string.IsNullOrWhiteSpace(mapping.ProfileId))
-            {
-                continue;
-            }
-
-            if (!string.Equals(mapping.ProfileId.Trim(), profileId, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            var normalizedRemoteRoot = NormalizePath(mapping.RemoteRootPath);
-            if (string.IsNullOrWhiteSpace(normalizedRemoteRoot))
-            {
-                continue;
-            }
-
-            if (!IsPathPrefix(normalizedRemoteRoot, normalizedRemoteCwd))
-            {
-                continue;
-            }
-
-            if (normalizedRemoteRoot.Length > bestLength)
-            {
-                bestMapping = mapping;
-                bestLength = normalizedRemoteRoot.Length;
-            }
-        }
-
-        if (bestMapping == null)
-        {
-            return false;
-        }
-
-        var remoteRoot = NormalizePath(bestMapping.RemoteRootPath);
-        var localRoot = NormalizePath(bestMapping.LocalRootPath);
-        if (string.IsNullOrWhiteSpace(localRoot))
-        {
-            return false;
-        }
-
-        var suffix = string.Empty;
-        if (normalizedRemoteCwd.Length > remoteRoot.Length)
-        {
-            suffix = normalizedRemoteCwd.Substring(remoteRoot.Length).TrimStart('/');
-        }
-
-        mappedPath = string.IsNullOrEmpty(suffix)
-            ? localRoot
-            : $"{localRoot}/{suffix}";
-        return true;
     }
 
     private static string? TryMatchProjectId(string? normalizedPath, IReadOnlyList<ProjectDefinition> projects)

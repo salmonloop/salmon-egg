@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using SalmonEgg.Domain.Models;
-using SalmonEgg.Domain.Models.ProjectAffinity;
 
 namespace SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 
@@ -15,5 +14,5 @@ public sealed record ProjectAffinityRequest(
     string? RemoteSessionId,
     string? OverrideProjectId,
     IReadOnlyList<ProjectDefinition> Projects,
-    IReadOnlyList<ProjectPathMapping> PathMappings,
+    IReadOnlyList<AgentRemoteDirectory> RemoteDirectories,
     string UnclassifiedProjectId);

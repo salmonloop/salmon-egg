@@ -36,7 +36,7 @@ public sealed class ChatProjectAffinityCorrectionCoordinatorTests
             selectedProfileId: "profile-1",
             selectedOverrideProjectId: null,
             projects: [],
-            pathMappings: []);
+            remoteDirectories: []);
 
         Assert.True(state.IsVisible);
     }

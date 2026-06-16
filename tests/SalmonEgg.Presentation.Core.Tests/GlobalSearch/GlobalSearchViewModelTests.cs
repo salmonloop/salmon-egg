@@ -5,7 +5,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Localization;
 using Moq;
 using SalmonEgg.Domain.Models;
-using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
@@ -30,11 +29,12 @@ public sealed class GlobalSearchViewModelTests
     public async Task SelectResultAsync_SessionUsesResolverDerivedProjectId()
     {
         var preferences = CreatePreferencesWithProject();
-        preferences.ProjectPathMappings.Add(new ProjectPathMapping
+        preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory
         {
             ProfileId = "profile-1",
-            RemoteRootPath = "/remote/worktrees",
-            LocalRootPath = @"C:\repo"
+            DirectoryId = "dir-1",
+            DisplayName = "Worktrees",
+            RemotePath = "/remote/worktrees"
         });
 
         var presenter = new ConversationCatalogPresenter();
@@ -44,7 +44,7 @@ public sealed class GlobalSearchViewModelTests
             new ConversationCatalogItem(
                 "session-1",
                 "Remote Session",
-                "/remote/worktrees/demo/feature",
+                "/remote/worktrees",
                 new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                 new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
                 new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
@@ -73,7 +73,7 @@ public sealed class GlobalSearchViewModelTests
         });
 
         navigationCoordinator.Verify(
-            coordinator => coordinator.ActivateSessionAsync("session-1", "project-1"),
+            coordinator => coordinator.ActivateSessionAsync("session-1", NavigationProjectIds.Unclassified),
             Times.Once);
     }
 

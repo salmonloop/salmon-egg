@@ -8,7 +8,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Localization;
 using Moq;
 using SalmonEgg.Domain.Models;
-using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Models.Navigation;
@@ -849,16 +848,17 @@ public sealed class MainNavigationViewModelSelectionTests
         try
         {
             var navState = new FakeNavigationPaneState();
-            var sessionManager = CreateSessionManager(new Session("session-remote", "/remote/worktrees/demo/feature")
+            var sessionManager = CreateSessionManager(new Session("session-remote", "/remote/worktrees")
             {
                 DisplayName = "Remote Session"
             });
             var preferences = CreatePreferencesWithProject();
-            preferences.ProjectPathMappings.Add(new ProjectPathMapping
+            preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory
             {
                 ProfileId = "profile-1",
-                RemoteRootPath = "/remote/worktrees",
-                LocalRootPath = @"C:\repo"
+                DirectoryId = "dir-1",
+                DisplayName = "Worktrees",
+                RemotePath = "/remote/worktrees"
             });
 
             var chatCatalog = CreateChatSessionCatalog("session-remote");
@@ -869,7 +869,7 @@ public sealed class MainNavigationViewModelSelectionTests
                 new ConversationCatalogItem(
                     "session-remote",
                     "Remote Session",
-                    "/remote/worktrees/demo/feature",
+                    "/remote/worktrees",
                     new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                     new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
                     new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
@@ -896,8 +896,8 @@ public sealed class MainNavigationViewModelSelectionTests
 
             navVm.RebuildTree();
 
-            var project = Assert.Single(navVm.Items.OfType<ProjectNavItemViewModel>(), p => p.ProjectId == "project-1");
-            var session = Assert.Single(project.Children.OfType<SessionNavItemViewModel>());
+            var unclassifiedProject = Assert.Single(navVm.Items.OfType<ProjectNavItemViewModel>(), p => p.ProjectId == NavigationProjectIds.Unclassified);
+            var session = Assert.Single(unclassifiedProject.Children.OfType<SessionNavItemViewModel>());
             Assert.Equal("session-remote", session.SessionId);
             Assert.Equal("remote-1", session.RemoteSessionId);
         }

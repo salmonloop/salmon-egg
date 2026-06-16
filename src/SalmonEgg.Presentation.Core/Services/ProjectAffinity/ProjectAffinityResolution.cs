@@ -3,7 +3,7 @@ namespace SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 public enum ProjectAffinitySource
 {
     Override,
-    PathMapping,
+    RemoteDirectory,
     DirectMatch,
     NeedsMapping,
     Unclassified
@@ -17,4 +17,5 @@ public sealed record ProjectAffinityResolution(
     string? RemoteCwd,
     string? LocalResolvedPath,
     bool NeedsUserAttention,
-    string Reason);
+    string Reason,
+    string? RemoteDirectoryDisplayName = null);

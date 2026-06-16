@@ -292,7 +292,7 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
             RemoteSessionId: conversation.RemoteSessionId,
             OverrideProjectId: conversation.ProjectAffinityOverrideProjectId,
             Projects: _preferences.Projects,
-            PathMappings: _preferences.ProjectPathMappings,
+            RemoteDirectories: _preferences.AgentRemoteDirectories,
             UnclassifiedProjectId: MainNavigationViewModel.UnclassifiedProjectId)).EffectiveProjectId;
     }
 

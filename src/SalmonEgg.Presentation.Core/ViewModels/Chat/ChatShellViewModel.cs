@@ -172,7 +172,7 @@ public sealed partial class ChatShellViewModel : ObservableObject
             RemoteSessionId: conversation.RemoteSessionId,
             OverrideProjectId: conversation.ProjectAffinityOverrideProjectId,
             Projects: _preferences.Projects,
-            PathMappings: _preferences.ProjectPathMappings,
+            RemoteDirectories: _preferences.AgentRemoteDirectories,
             UnclassifiedProjectId: NavigationProjectIds.Unclassified)).EffectiveProjectId;
     }
 

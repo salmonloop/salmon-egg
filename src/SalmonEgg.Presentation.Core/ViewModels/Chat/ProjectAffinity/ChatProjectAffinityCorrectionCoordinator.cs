@@ -1,7 +1,6 @@
 using System;
 using System.Linq;
 using SalmonEgg.Domain.Models;
-using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
@@ -26,12 +25,12 @@ public sealed class ChatProjectAffinityCorrectionCoordinator
         string? selectedProfileId,
         string? selectedOverrideProjectId,
         IReadOnlyList<ProjectDefinition> projects,
-        IReadOnlyList<ProjectPathMapping> pathMappings)
+        IReadOnlyList<AgentRemoteDirectory> remoteDirectories)
     {
         ArgumentNullException.ThrowIfNull(conversationWorkspace);
         ArgumentNullException.ThrowIfNull(sessionManager);
         ArgumentNullException.ThrowIfNull(projects);
-        ArgumentNullException.ThrowIfNull(pathMappings);
+        ArgumentNullException.ThrowIfNull(remoteDirectories);
 
         var activeConversationId = string.IsNullOrWhiteSpace(requestedConversationId)
             ? currentConversationId
@@ -63,6 +62,6 @@ public sealed class ChatProjectAffinityCorrectionCoordinator
             OverrideProjectId: overrideProjectId,
             SelectedOverrideProjectId: selectedOverrideProjectId,
             Projects: projects.ToArray(),
-            PathMappings: pathMappings.ToArray()));
+            RemoteDirectories: remoteDirectories.ToArray()));
     }
 }

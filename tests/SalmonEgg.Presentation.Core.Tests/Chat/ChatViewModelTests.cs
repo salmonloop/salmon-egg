@@ -8480,12 +8480,6 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
             Name = "Project One",
             RootPath = @"C:\repo\stale"
         });
-        fixture.Preferences.ProjectPathMappings.Add(new ProjectPathMapping
-        {
-            ProfileId = "profile-1",
-            RemoteRootPath = @"C:\repo\stale",
-            LocalRootPath = @"C:\repo\stale"
-        });
 
         await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync());
         SetCurrentSessionId(fixture.ViewModel, "conv-1");

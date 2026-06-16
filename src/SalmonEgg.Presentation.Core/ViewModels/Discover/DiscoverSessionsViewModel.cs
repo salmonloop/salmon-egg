@@ -334,8 +334,8 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
                                   && !string.IsNullOrWhiteSpace(project.ProjectId)
                                   && !string.IsNullOrWhiteSpace(project.Name))
                 .ToList();
-            var projectPathMappings = _projectPreferences.ProjectPathMappings
-                .Where(mapping => mapping != null)
+            var remoteDirectories = _projectPreferences.AgentRemoteDirectories
+                .Where(directory => directory != null)
                 .ToList();
             if (listResponse?.Sessions != null)
             {
@@ -347,7 +347,7 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
                         RemoteSessionId: session.SessionId,
                         OverrideProjectId: null,
                         Projects: projects,
-                        PathMappings: projectPathMappings,
+                        RemoteDirectories: remoteDirectories,
                         UnclassifiedProjectId: NavigationProjectIds.Unclassified));
                     items.Add(new DiscoverSessionItemViewModel(
                         session.SessionId,
@@ -561,6 +561,12 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
             return Localize("Discover_AffinityUnclassified", "Unclassified");
         }
 
+        if (resolution.Source == ProjectAffinitySource.RemoteDirectory
+            && !string.IsNullOrWhiteSpace(resolution.RemoteDirectoryDisplayName))
+        {
+            return resolution.RemoteDirectoryDisplayName;
+        }
+
         var effectiveProjectId = resolution.EffectiveProjectId;
         if (string.IsNullOrWhiteSpace(effectiveProjectId))
         {
@@ -582,9 +588,9 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
         return resolution.Source switch
         {
             ProjectAffinitySource.Override => Localize("Discover_AffinityStatusOverride", "Using local project override."),
-            ProjectAffinitySource.PathMapping => Localize("Discover_AffinityStatusPathMapping", "Mapped from remote path."),
+            ProjectAffinitySource.RemoteDirectory => Localize("Discover_AffinityStatusRemoteDirectory", "Matched a configured remote directory."),
             ProjectAffinitySource.DirectMatch => Localize("Discover_AffinityStatusDirectMatch", "Matched by local project path."),
-            ProjectAffinitySource.NeedsMapping => Localize("Discover_AffinityStatusNeedsMapping", "Remote working directory needs path mapping."),
+            ProjectAffinitySource.NeedsMapping => Localize("Discover_AffinityStatusNeedsMapping", "Remote working directory needs a project assignment."),
             ProjectAffinitySource.Unclassified when string.Equals(resolution.Reason, "MissingCwd", StringComparison.Ordinal) => Localize("Discover_AffinityStatusMissingCwd", "Remote metadata has no usable working directory."),
             ProjectAffinitySource.Unclassified => Localize("Discover_AffinityStatusUnclassified", "No matching local project."),
             _ => Localize("Discover_AffinityStatusUnknown", "No project affinity information.")

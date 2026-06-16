@@ -14,7 +14,6 @@ using SalmonEgg.Domain.Models.JsonRpc;
 using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Models.Plan;
 using SalmonEgg.Domain.Models.Protocol;
-using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services;
@@ -2704,7 +2703,7 @@ public sealed class AcpChatCoordinatorTests
                     ? ResolvedProfile
                     : new ServerConfiguration { Id = profileId, Transport = TransportType.WebSocket };
 
-        public IReadOnlyList<ProjectPathMapping> GetProjectPathMappings() => Array.Empty<ProjectPathMapping>();
+        public IReadOnlyList<AgentRemoteDirectory> GetAgentRemoteDirectories() => Array.Empty<AgentRemoteDirectory>();
 
         public void SetCurrentMcpServers(IReadOnlyList<McpServer> mcpServers)
         {

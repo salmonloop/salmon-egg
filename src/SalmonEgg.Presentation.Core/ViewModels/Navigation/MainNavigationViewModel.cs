@@ -203,7 +203,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         _shellRuntimeState.PropertyChanged += OnShellRuntimeStatePropertyChanged;
         _projectsChangedHandler = (_, _) => RebuildTree();
         ((INotifyCollectionChanged)_projectPreferences.Projects).CollectionChanged += _projectsChangedHandler;
-        ((INotifyCollectionChanged)_projectPreferences.ProjectPathMappings).CollectionChanged += _projectsChangedHandler;
+        ((INotifyCollectionChanged)_projectPreferences.AgentRemoteDirectories).CollectionChanged += _projectsChangedHandler;
 
         _relativeTimeTimer = new Timer(
             _ => _uiDispatcher.Enqueue(RefreshRelativeTimes),
@@ -221,7 +221,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         _shellSelection.PropertyChanged -= OnShellSelectionPropertyChanged;
         _shellRuntimeState.PropertyChanged -= OnShellRuntimeStatePropertyChanged;
         ((INotifyCollectionChanged)_projectPreferences.Projects).CollectionChanged -= _projectsChangedHandler;
-        ((INotifyCollectionChanged)_projectPreferences.ProjectPathMappings).CollectionChanged -= _projectsChangedHandler;
+        ((INotifyCollectionChanged)_projectPreferences.AgentRemoteDirectories).CollectionChanged -= _projectsChangedHandler;
         _relativeTimeTimer.Dispose();
 
         var itemsToDispose = Items.Concat(FooterItems).ToArray();
@@ -1051,7 +1051,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             RemoteSessionId: item.RemoteSessionId,
             OverrideProjectId: item.ProjectAffinityOverrideProjectId,
             Projects: _projectPreferences.Projects,
-            PathMappings: _projectPreferences.ProjectPathMappings,
+            RemoteDirectories: _projectPreferences.AgentRemoteDirectories,
             UnclassifiedProjectId: UnclassifiedProjectId));
 #if DEBUG
         _logger.LogDebug(

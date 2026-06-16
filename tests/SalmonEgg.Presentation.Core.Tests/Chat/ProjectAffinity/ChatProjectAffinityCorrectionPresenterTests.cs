@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using SalmonEgg.Domain.Models;
-using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.ProjectAffinity;
@@ -24,7 +23,7 @@ public sealed class ChatProjectAffinityCorrectionPresenterTests
             OverrideProjectId: null,
             SelectedOverrideProjectId: "project-1",
             Projects: new List<ProjectDefinition>(),
-            PathMappings: new List<ProjectPathMapping>()));
+            RemoteDirectories: new List<AgentRemoteDirectory>()));
 
         Assert.False(state.IsVisible);
         Assert.False(state.HasOverride);
@@ -50,7 +49,7 @@ public sealed class ChatProjectAffinityCorrectionPresenterTests
                 new ProjectDefinition { ProjectId = "project-b", Name = "Zulu" },
                 new ProjectDefinition { ProjectId = "project-a", Name = "Alpha" }
             ],
-            PathMappings: new List<ProjectPathMapping>()));
+            RemoteDirectories: new List<AgentRemoteDirectory>()));
 
         Assert.True(state.IsVisible);
         Assert.False(state.HasOverride);
@@ -77,7 +76,7 @@ public sealed class ChatProjectAffinityCorrectionPresenterTests
             [
                 new ProjectDefinition { ProjectId = "project-1", Name = "Project 1" }
             ],
-            PathMappings: new List<ProjectPathMapping>()));
+            RemoteDirectories: new List<AgentRemoteDirectory>()));
 
         Assert.True(state.IsVisible);
         Assert.True(state.HasOverride);
@@ -101,7 +100,7 @@ public sealed class ChatProjectAffinityCorrectionPresenterTests
             [
                 new ProjectDefinition { ProjectId = "project-1", Name = "Project 1" }
             ],
-            PathMappings: new List<ProjectPathMapping>()));
+            RemoteDirectories: new List<AgentRemoteDirectory>()));
 
         Assert.Null(state.SelectedOverrideProjectId);
     }

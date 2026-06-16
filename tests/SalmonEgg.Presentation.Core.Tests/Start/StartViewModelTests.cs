@@ -12,7 +12,6 @@ using SalmonEgg.Domain.Interfaces.Storage;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Domain.Models.Mcp;
-using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
@@ -783,12 +782,6 @@ public sealed class StartViewModelTests
                 Name = "Alpha",
                 RootPath = @"C:\Repo\Alpha"
             });
-            preferences.ProjectPathMappings.Add(new ProjectPathMapping
-            {
-                ProfileId = "profile-1",
-                LocalRootPath = @"C:\Repo\Alpha",
-                RemoteRootPath = "/remote/alpha"
-            });
 
             using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
@@ -915,7 +908,7 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
-    public async Task StartSessionDraft_WhenRemoteProfileHasMappedProject_UsesRemoteMappedCwdForNewSession()
+    public async Task StartSessionDraft_WhenRemoteProfileHasConfiguredDirectory_UsesRemoteCwdForNewSession()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -929,11 +922,12 @@ public sealed class StartViewModelTests
                 Name = "Alpha",
                 RootPath = @"C:\Repo\Alpha"
             });
-            preferences.ProjectPathMappings.Add(new ProjectPathMapping
+            preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory
             {
                 ProfileId = "profile-1",
-                LocalRootPath = @"C:\Repo\Alpha",
-                RemoteRootPath = "/home/ubuntu/Projects/Alpha"
+                DirectoryId = "dir-alpha",
+                DisplayName = "Alpha",
+                RemotePath = "/home/ubuntu/Projects/Alpha"
             });
 
             using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
@@ -989,7 +983,7 @@ public sealed class StartViewModelTests
             await chat.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
             await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
 
-            startViewModel.SelectedStartProjectId = "project-a";
+            startViewModel.SelectedStartProjectId = "remote-directory:dir-alpha";
             startViewModel.OnComposerLoaded();
 
             await WaitForConditionAsync(() => startViewModel.StartModeOptions.Count == 1);

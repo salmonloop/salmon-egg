@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using SalmonEgg.Domain.Models;
-using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.ViewModels.Chat;
@@ -40,7 +39,7 @@ public sealed class ChatProjectAffinityCorrectionPresenter
             RemoteSessionId: input.RemoteSessionId,
             OverrideProjectId: input.OverrideProjectId,
             Projects: input.Projects,
-            PathMappings: input.PathMappings,
+            RemoteDirectories: input.RemoteDirectories,
             UnclassifiedProjectId: NavigationProjectIds.Unclassified));
 
         var hasOverride = !string.IsNullOrWhiteSpace(input.OverrideProjectId);

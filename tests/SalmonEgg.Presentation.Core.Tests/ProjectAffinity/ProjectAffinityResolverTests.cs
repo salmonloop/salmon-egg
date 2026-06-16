@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using SalmonEgg.Domain.Models;
-using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using Xunit;
@@ -76,38 +75,44 @@ public sealed class ProjectAffinityResolverTests
     }
 
     [Fact]
-    public void Resolve_PathMappingMatch_ReturnsMappedProject()
+    public void Resolve_RemoteBoundCwdMatchesConfiguredRemoteDirectory_ClassifiesAsRemoteDirectory()
     {
         var resolver = new ProjectAffinityResolver();
-        var projects = new[]
-        {
-            new ProjectDefinition
-            {
-                ProjectId = "mapped",
-                RootPath = @"C:\Local\Repo"
-            }
-        };
-        var mappings = new[]
-        {
-            new ProjectPathMapping
-            {
-                ProfileId = "profile-1",
-                RemoteRootPath = "/remote/repo",
-                LocalRootPath = @"C:\Local\Repo"
-            }
-        };
-        var request = CreateRequest(
-            remoteCwd: "/remote/repo/sub",
-            boundProfileId: "profile-1",
-            projects: projects,
-            pathMappings: mappings);
 
-        var result = resolver.Resolve(request);
+        var result = resolver.Resolve(new ProjectAffinityRequest(
+            RemoteCwd: "/remote/repo",
+            BoundProfileId: "profile-1",
+            RemoteSessionId: "remote-1",
+            OverrideProjectId: null,
+            Projects: Array.Empty<ProjectDefinition>(),
+            RemoteDirectories: new[]
+            {
+                new AgentRemoteDirectory { ProfileId = "profile-1", DirectoryId = "dir-1", DisplayName = "Repo", RemotePath = "/remote/repo" }
+            },
+            UnclassifiedProjectId: NavigationProjectIds.Unclassified));
 
-        Assert.Equal("mapped", result.EffectiveProjectId);
-        Assert.Equal(ProjectAffinitySource.PathMapping, result.Source);
-        Assert.Equal("mapped", result.MatchedProjectId);
+        Assert.Equal(ProjectAffinitySource.RemoteDirectory, result.Source);
+        Assert.Equal(NavigationProjectIds.Unclassified, result.EffectiveProjectId);
         Assert.False(result.NeedsUserAttention);
+        Assert.Equal("Repo", result.RemoteDirectoryDisplayName);
+    }
+
+    [Fact]
+    public void Resolve_RemoteBoundCwdWithNoConfiguredDirectory_ReturnsNeedsMapping()
+    {
+        var resolver = new ProjectAffinityResolver();
+
+        var result = resolver.Resolve(new ProjectAffinityRequest(
+            RemoteCwd: "/remote/repo",
+            BoundProfileId: "profile-1",
+            RemoteSessionId: "remote-1",
+            OverrideProjectId: null,
+            Projects: Array.Empty<ProjectDefinition>(),
+            RemoteDirectories: Array.Empty<AgentRemoteDirectory>(),
+            UnclassifiedProjectId: NavigationProjectIds.Unclassified));
+
+        Assert.Equal(ProjectAffinitySource.NeedsMapping, result.Source);
+        Assert.True(result.NeedsUserAttention);
     }
 
     [Fact]
@@ -159,7 +164,7 @@ public sealed class ProjectAffinityResolverTests
     }
 
     [Fact]
-    public void Resolve_OverrideWinsOverMappingAndDirectMatch()
+    public void Resolve_OverrideWinsOverRemoteDirectoryAndDirectMatch()
     {
         var resolver = new ProjectAffinityResolver();
         var projects = new[]
@@ -175,21 +180,22 @@ public sealed class ProjectAffinityResolverTests
                 RootPath = @"C:\Local\Repo"
             }
         };
-        var mappings = new[]
+        var remoteDirectories = new[]
         {
-            new ProjectPathMapping
+            new AgentRemoteDirectory
             {
                 ProfileId = "profile-1",
-                RemoteRootPath = "/remote/repo",
-                LocalRootPath = @"C:\Local\Repo"
+                DirectoryId = "dir-1",
+                DisplayName = "Repo",
+                RemotePath = "/remote/repo"
             }
         };
         var request = CreateRequest(
-            remoteCwd: "/remote/repo/sub",
+            remoteCwd: "/remote/repo",
             boundProfileId: "profile-1",
             overrideProjectId: "override",
             projects: projects,
-            pathMappings: mappings);
+            remoteDirectories: remoteDirectories);
 
         var result = resolver.Resolve(request);
 
@@ -316,13 +322,13 @@ public sealed class ProjectAffinityResolverTests
         string? remoteSessionId = null,
         string? overrideProjectId = null,
         IReadOnlyList<ProjectDefinition>? projects = null,
-        IReadOnlyList<ProjectPathMapping>? pathMappings = null)
+        IReadOnlyList<AgentRemoteDirectory>? remoteDirectories = null)
         => new(
             RemoteCwd: remoteCwd,
             BoundProfileId: boundProfileId,
             RemoteSessionId: remoteSessionId,
             OverrideProjectId: overrideProjectId,
             Projects: projects ?? Array.Empty<ProjectDefinition>(),
-            PathMappings: pathMappings ?? Array.Empty<ProjectPathMapping>(),
+            RemoteDirectories: remoteDirectories ?? Array.Empty<AgentRemoteDirectory>(),
             UnclassifiedProjectId: NavigationProjectIds.Unclassified);
 }
