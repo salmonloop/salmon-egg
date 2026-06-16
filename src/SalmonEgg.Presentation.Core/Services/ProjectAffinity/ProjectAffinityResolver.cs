@@ -58,7 +58,6 @@ public sealed class ProjectAffinityResolver : IProjectAffinityResolver
         var remoteDirectoryResolution = ResolveRemoteDirectory(
             normalizedRemoteCwd,
             normalizedProfileId,
-            request.RemoteSessionId,
             overrideProjectId,
             request.RemoteCwd,
             unclassifiedProjectId,
@@ -119,14 +118,15 @@ public sealed class ProjectAffinityResolver : IProjectAffinityResolver
     private static ProjectAffinityResolution? ResolveRemoteDirectory(
         string normalizedRemoteCwd,
         string? normalizedProfileId,
-        string? remoteSessionId,
         string? overrideProjectId,
         string? remoteCwd,
         string unclassifiedProjectId,
         IReadOnlyList<AgentRemoteDirectory> remoteDirectories)
     {
-        if (!IsRemoteBound(normalizedProfileId, remoteSessionId)
-            || string.IsNullOrWhiteSpace(normalizedProfileId))
+        // A configured remote directory can only be matched when we have both a bound profile id and a remote cwd;
+        // profile-less or cwd-less requests fall through to the NeedsMapping/Unclassified fallback.
+        if (string.IsNullOrWhiteSpace(normalizedProfileId)
+            || string.IsNullOrWhiteSpace(normalizedRemoteCwd))
         {
             return null;
         }
