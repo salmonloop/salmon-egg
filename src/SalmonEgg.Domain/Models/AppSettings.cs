@@ -1,7 +1,6 @@
 namespace SalmonEgg.Domain.Models;
 
 using System.Collections.Generic;
-using SalmonEgg.Domain.Models.ProjectAffinity;
 
 public sealed class AppSettings
 {
@@ -40,7 +39,7 @@ public sealed class AppSettings
     // Projects (Navigation)
     public List<ProjectDefinition> Projects { get; set; } = new();
 
-    public List<ProjectPathMapping> ProjectPathMappings { get; set; } = new();
+    public List<AgentRemoteDirectory> AgentRemoteDirectories { get; set; } = new();
 
     public string? LastSelectedProjectId { get; set; }
 

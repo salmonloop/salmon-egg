@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using SalmonEgg.Domain.Models;
-using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Infrastructure.Storage.YamlModels;
 using YamlDotNet.Core;
@@ -55,7 +54,7 @@ public sealed class AppSettingsService : IAppSettingsService
                 CacheRetentionDays = model.CacheRetentionDays > 0 ? model.CacheRetentionDays : 7,
                 KeyBindings = model.KeyBindings ?? new(),
                 Projects = model.Projects ?? new(),
-                ProjectPathMappings = CloneProjectPathMappings(model.ProjectPathMappings),
+                AgentRemoteDirectories = CloneAgentRemoteDirectories(model.AgentRemoteDirectories),
                 LastSelectedProjectId = string.IsNullOrWhiteSpace(model.LastSelectedProjectId) ? null : model.LastSelectedProjectId,
                 AcpEnableConnectionEviction = model.AcpEnableConnectionEviction,
                 AcpConnectionIdleTtlMinutes = model.AcpConnectionIdleTtlMinutes,
@@ -98,7 +97,7 @@ public sealed class AppSettingsService : IAppSettingsService
             CacheRetentionDays = settings.CacheRetentionDays > 0 ? settings.CacheRetentionDays : 7,
             KeyBindings = settings.KeyBindings ?? new(),
             Projects = settings.Projects ?? new(),
-            ProjectPathMappings = CloneProjectPathMappings(settings.ProjectPathMappings),
+            AgentRemoteDirectories = CloneAgentRemoteDirectories(settings.AgentRemoteDirectories),
             LastSelectedProjectId = settings.LastSelectedProjectId ?? string.Empty,
             AcpEnableConnectionEviction = settings.AcpEnableConnectionEviction,
             AcpConnectionIdleTtlMinutes = settings.AcpConnectionIdleTtlMinutes,
@@ -140,26 +139,27 @@ public sealed class AppSettingsService : IAppSettingsService
         }
     }
 
-    private static List<ProjectPathMapping> CloneProjectPathMappings(IEnumerable<ProjectPathMapping>? mappings)
+    private static List<AgentRemoteDirectory> CloneAgentRemoteDirectories(IEnumerable<AgentRemoteDirectory>? directories)
     {
-        var clone = new List<ProjectPathMapping>();
-        if (mappings is null)
+        var clone = new List<AgentRemoteDirectory>();
+        if (directories is null)
         {
             return clone;
         }
 
-        foreach (var mapping in mappings)
+        foreach (var directory in directories)
         {
-            if (mapping is null)
+            if (directory is null)
             {
                 continue;
             }
 
-            clone.Add(new ProjectPathMapping
+            clone.Add(new AgentRemoteDirectory
             {
-                ProfileId = mapping.ProfileId?.Trim() ?? string.Empty,
-                RemoteRootPath = mapping.RemoteRootPath?.Trim() ?? string.Empty,
-                LocalRootPath = mapping.LocalRootPath?.Trim() ?? string.Empty
+                ProfileId = directory.ProfileId?.Trim() ?? string.Empty,
+                DirectoryId = directory.DirectoryId?.Trim() ?? string.Empty,
+                DisplayName = directory.DisplayName?.Trim() ?? string.Empty,
+                RemotePath = directory.RemotePath?.Trim() ?? string.Empty
             });
         }
 

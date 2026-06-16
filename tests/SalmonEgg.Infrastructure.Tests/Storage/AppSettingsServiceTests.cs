@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using SalmonEgg.Domain.Models;
-using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Infrastructure.Storage;
 using Xunit;
 
@@ -56,45 +55,48 @@ public sealed class AppSettingsServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SaveThenLoad_RoundTripsProjectPathMappings()
+    public async Task SaveThenLoad_RoundTripsAgentRemoteDirectories()
     {
         var service = CreateService();
-        var settings = new AppSettings
+
+        await service.SaveAsync(new AppSettings
         {
-            ProjectPathMappings = new List<ProjectPathMapping>
+            AgentRemoteDirectories = new List<AgentRemoteDirectory>
             {
                 new()
                 {
-                    ProfileId = "profile-one",
-                    RemoteRootPath = "/remote/one",
-                    LocalRootPath = "C:\\Project\\One"
+                    ProfileId = " profile-a ",
+                    DirectoryId = " dir-a ",
+                    DisplayName = " Alpha ",
+                    RemotePath = " /remote/alpha "
                 },
                 new()
                 {
-                    ProfileId = " profile-two ",
-                    RemoteRootPath = " /remote/two ",
-                    LocalRootPath = " C:\\Project\\Two "
+                    ProfileId = "profile-b",
+                    DirectoryId = "dir-b",
+                    DisplayName = "Beta",
+                    RemotePath = "/remote/beta"
                 }
             }
-        };
-
-        await service.SaveAsync(settings);
+        });
 
         var loaded = await service.LoadAsync();
-        Assert.Equal(2, loaded.ProjectPathMappings.Count);
+
         Assert.Collection(
-            loaded.ProjectPathMappings,
+            loaded.AgentRemoteDirectories,
             first =>
             {
-                Assert.Equal("profile-one", first.ProfileId);
-                Assert.Equal("/remote/one", first.RemoteRootPath);
-                Assert.Equal("C:\\Project\\One", first.LocalRootPath);
+                Assert.Equal("profile-a", first.ProfileId);
+                Assert.Equal("dir-a", first.DirectoryId);
+                Assert.Equal("Alpha", first.DisplayName);
+                Assert.Equal("/remote/alpha", first.RemotePath);
             },
             second =>
             {
-                Assert.Equal("profile-two", second.ProfileId);
-                Assert.Equal("/remote/two", second.RemoteRootPath);
-                Assert.Equal("C:\\Project\\Two", second.LocalRootPath);
+                Assert.Equal("profile-b", second.ProfileId);
+                Assert.Equal("dir-b", second.DirectoryId);
+                Assert.Equal("Beta", second.DisplayName);
+                Assert.Equal("/remote/beta", second.RemotePath);
             });
     }
 
