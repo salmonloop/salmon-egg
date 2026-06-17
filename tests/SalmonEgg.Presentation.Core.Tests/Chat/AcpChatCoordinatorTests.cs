@@ -1436,6 +1436,7 @@ public sealed class AcpChatCoordinatorTests
             CurrentSessionId = "local-session-1",
             ActiveSessionCwd = @"C:\repo\demo",
             SelectedProfileId = "profile-1",
+            ResolvedProfile = new ServerConfiguration { Id = "profile-1", Transport = TransportType.Stdio },
             CurrentMcpServers =
             [
                 new HttpMcpServer("stale", "https://stale.example.com/mcp")
@@ -1480,6 +1481,7 @@ public sealed class AcpChatCoordinatorTests
             CurrentSessionId = "local-session-1",
             ActiveSessionCwd = @"C:\repo\demo",
             SelectedProfileId = "profile-1",
+            ResolvedProfile = new ServerConfiguration { Id = "profile-1", Transport = TransportType.Stdio },
             CurrentMcpServers =
             [
                 new HttpMcpServer("stale", "https://stale.example.com/mcp")
@@ -1524,6 +1526,7 @@ public sealed class AcpChatCoordinatorTests
             CurrentSessionId = "local-session-1",
             ActiveSessionCwd = @"/repo/demo",
             SelectedProfileId = "profile-1",
+            ResolvedProfile = new ServerConfiguration { Id = "profile-1", Transport = TransportType.Stdio },
             CurrentMcpServers =
             [
                 new HttpMcpServer("stale", "https://stale.example.com/mcp")
