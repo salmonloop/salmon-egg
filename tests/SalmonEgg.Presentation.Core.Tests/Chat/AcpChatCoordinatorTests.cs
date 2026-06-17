@@ -1366,7 +1366,8 @@ public sealed class AcpChatCoordinatorTests
             IsSessionActive = true,
             CurrentSessionId = "local-session-1",
             ActiveSessionCwd = @"C:\repo\demo",
-            SelectedProfileId = "profile-1"
+            SelectedProfileId = "profile-1",
+            ResolvedProfile = new ServerConfiguration { Id = "profile-1", Transport = TransportType.Stdio }
         };
         var factory = new Mock<IAcpChatServiceFactory>();
         var logger = new Mock<ILogger<AcpChatCoordinator>>();
@@ -1751,7 +1752,8 @@ public sealed class AcpChatCoordinatorTests
             IsSessionActive = true,
             CurrentSessionId = "local-session-1",
             ActiveSessionCwd = @"C:\repo\demo",
-            SelectedProfileId = "profile-1"
+            SelectedProfileId = "profile-1",
+            ResolvedProfile = new ServerConfiguration { Id = "profile-1", Transport = TransportType.Stdio }
         };
         var factory = new Mock<IAcpChatServiceFactory>();
         var logger = new Mock<ILogger<AcpChatCoordinator>>();
@@ -1977,7 +1979,8 @@ public sealed class AcpChatCoordinatorTests
             CurrentSessionId = "local-1",
             CurrentRemoteSessionId = "remote-stale",
             ActiveSessionCwd = @"C:\repo\demo",
-            SelectedProfileId = "profile-1"
+            SelectedProfileId = "profile-1",
+            ResolvedProfile = new ServerConfiguration { Id = "profile-1", Transport = TransportType.Stdio }
         };
         var factory = new Mock<IAcpChatServiceFactory>();
         var logger = new Mock<ILogger<AcpChatCoordinator>>();
@@ -2023,7 +2026,8 @@ public sealed class AcpChatCoordinatorTests
             IsSessionActive = true,
             CurrentSessionId = "local-1",
             ActiveSessionCwd = @"C:\repo\demo",
-            SelectedProfileId = "profile-1"
+            SelectedProfileId = "profile-1",
+            ResolvedProfile = new ServerConfiguration { Id = "profile-1", Transport = TransportType.Stdio }
         };
         var factory = new Mock<IAcpChatServiceFactory>();
         var logger = new Mock<ILogger<AcpChatCoordinator>>();
