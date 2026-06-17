@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Presentation.Core.Services;
 
 namespace SalmonEgg.Presentation.Core.Services.ProjectAffinity;
@@ -152,7 +153,7 @@ public sealed class ProjectAffinityResolver : IProjectAffinityResolver
                 continue;
             }
 
-            if (!string.Equals(normalizedDirectoryPath, normalizedRemoteCwd, StringComparison.Ordinal))
+            if (!PathsEqual(normalizedDirectoryPath, normalizedRemoteCwd))
             {
                 continue;
             }
@@ -353,6 +354,29 @@ public sealed class ProjectAffinityResolver : IProjectAffinityResolver
         var normalized = trimmed.Replace('\\', '/');
         normalized = normalized.TrimEnd('/');
         return normalized;
+    }
+
+    private static bool PathsEqual(string left, string right)
+    {
+        var comparison = UsesCaseInsensitivePathSemantics(left) || UsesCaseInsensitivePathSemantics(right)
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        return string.Equals(left, right, comparison);
+    }
+
+    private static bool UsesCaseInsensitivePathSemantics(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        return ProtocolPathRules.IsAbsolutePath(path)
+            && (path.StartsWith(@"\\", StringComparison.Ordinal)
+                || (path.Length >= 3
+                    && char.IsLetter(path[0])
+                    && path[1] == ':'
+                    && path[2] == '/'));
     }
 
     private static string? NormalizeToken(string? value)

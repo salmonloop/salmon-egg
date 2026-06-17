@@ -98,6 +98,49 @@ public sealed class ProjectAffinityResolverTests
     }
 
     [Fact]
+    public void Resolve_RemoteBoundWindowsCwdMatchesConfiguredRemoteDirectory_IgnoresCase()
+    {
+        var resolver = new ProjectAffinityResolver();
+
+        var result = resolver.Resolve(new ProjectAffinityRequest(
+            RemoteCwd: @"C:\REMOTE\REPO",
+            BoundProfileId: "profile-1",
+            RemoteSessionId: "remote-1",
+            OverrideProjectId: null,
+            Projects: Array.Empty<ProjectDefinition>(),
+            RemoteDirectories: new[]
+            {
+                new AgentRemoteDirectory { ProfileId = "profile-1", DirectoryId = "dir-1", DisplayName = "Repo", RemotePath = @"c:\remote\repo" }
+            },
+            UnclassifiedProjectId: NavigationProjectIds.Unclassified));
+
+        Assert.Equal(ProjectAffinitySource.RemoteDirectory, result.Source);
+        Assert.False(result.NeedsUserAttention);
+        Assert.Equal("Repo", result.RemoteDirectoryDisplayName);
+    }
+
+    [Fact]
+    public void Resolve_RemoteBoundPosixCwdMatchesConfiguredRemoteDirectory_RemainsCaseSensitive()
+    {
+        var resolver = new ProjectAffinityResolver();
+
+        var result = resolver.Resolve(new ProjectAffinityRequest(
+            RemoteCwd: "/REMOTE/REPO",
+            BoundProfileId: "profile-1",
+            RemoteSessionId: "remote-1",
+            OverrideProjectId: null,
+            Projects: Array.Empty<ProjectDefinition>(),
+            RemoteDirectories: new[]
+            {
+                new AgentRemoteDirectory { ProfileId = "profile-1", DirectoryId = "dir-1", DisplayName = "Repo", RemotePath = "/remote/repo" }
+            },
+            UnclassifiedProjectId: NavigationProjectIds.Unclassified));
+
+        Assert.Equal(ProjectAffinitySource.NeedsMapping, result.Source);
+        Assert.True(result.NeedsUserAttention);
+    }
+
+    [Fact]
     public void Resolve_RemoteBoundCwdWithNoConfiguredDirectory_ReturnsNeedsMapping()
     {
         var resolver = new ProjectAffinityResolver();
