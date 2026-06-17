@@ -1406,3 +1406,39 @@ Expected: no whitespace errors. Review changed files and ensure no unrelated for
 - Local stdio behavior remains unchanged: missing cwd falls back to `Environment.SpecialFolder.UserProfile`.
 - Tests prove stale/disabled project selections cannot submit a remote session.
 - Legacy-name scan returns no product/test hits.
+
+---
+
+## Implementation Status (2026-06-17)
+
+**Completed.** All 9 tasks executed and smoke-verified.
+
+### Commits (develop branch)
+| SHA | Description |
+|---|---|
+| `384d6a0b` | docs: add corrected plan (reviewer corrections embedded) |
+| `7576f648` | Task 1: domain model — AgentRemoteDirectory, delete ProjectPathMapping |
+| `c13c3878` | Task 2: AppPreferencesViewModel + AcpConnectionSettingsViewModel (incl. ProtocolPathRules absolute-path guard) |
+| `a51c02da` | Task 2 fix: DisplayName trim-only, no fallback to RemotePath in normalize |
+| `395cf295` | Task 3: settings XAML + resw (Acp.RemoteDirectories.*) |
+| `6bb42f16` | Task 3 fix: Acp_PageSummary stale copy removed from XAML + 3 resw locales |
+| `ec84a5df` | Task 4: Start project selector remote-profile awareness |
+| `a7ed8c64` | Task 4 fix: double-refresh removed, cwd consume guarded, test assertions strengthened |
+| `713e4fd9` | Task 5: AcpSessionNewCwdResolver strict for remote; sink renamed GetAgentRemoteDirectories |
+| `92c83f97` | Task 5 fix: ChatViewModel.cs CollectionChanged subscriptions renamed |
+| `39c0bf34` | Task 6: affinity subsystem — PathMapping removed, RemoteDirectory parity added |
+| `5da71bcd` | Task 6 fix: ResolveRemoteDirectory guard simplified (remove redundant IsRemoteBound) |
+| `3e99857f` | Tasks 7–9: GUI smoke IDs, CoreStrings resx, HasSelectableOption fix for remote-directory selection |
+| `108a9a1f` | Smoke fix: AcpChatCoordinatorTests MCP-server fixtures set Stdio transport |
+
+### Smoke verification results
+- `SalmonEgg.Presentation.Core` build: **0 errors** (2 pre-existing nullable warnings)
+- `SalmonEgg.Infrastructure.Tests`: **275/275 pass**
+- `SalmonEgg.Presentation.Core.Tests` (excl. 1 known pre-existing hang): **all pass** (confirmed after fixing 3 test fixtures not updated when Task 5 made the cwd resolver strict)
+- Legacy token scan (`ProjectPathMapping`, `PathMappingRows`, `RemoteRootPath`, `LocalRootPath`, `Acp.PathMappings`, `路径映射`) across `src/` `tests/` `SalmonEgg/`: **0 hits** (only DoesNotContain assertions in test code)
+
+### Post-implementation notes
+- `HasSelectableOption` helper added to `StartViewModel` (commit `3e99857f`) to fix `GetSelectedStartProjectId()` recognising `remote-directory:*` option IDs, which would have caused silent fallback to `ResolveDefaultStartProjectId()` when a remote directory was selected.
+- `AcpChatCoordinatorTests`: 3 MCP-server-resolution tests needed `ResolvedProfile = Stdio` in their `FakeSink`; the original fixtures relied on a fallback that returned `WebSocket` transport, which triggered the new strict cwd check introduced in Task 5. These are test-only changes, semantically correct.
+- Pre-existing failures unrelated to this change: `VoiceInputDiagnosticsProbeViewModelTests.HandlePageUnloadedAsync_ClearsPendingAuthorizationRetry` (fails on develop HEAD before this branch), `HydrateActiveConversationAsync_WhenSessionLoadReturnsBeforeReplayStarts` (hangs test runner, excluded from suite runs).
+- Remote origin may contain additional commits pushed by the third-party executor — a `git pull --rebase` will be needed before the final merge.
