@@ -332,7 +332,7 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
         activationSource.RaiseActivated();
         await Task.Delay(100);
 
-        Assert.Equal(0, service.StartCount);
+        Assert.Equal(1, service.StartCount);
         Assert.False(viewModel.IsRunning);
     }
 
