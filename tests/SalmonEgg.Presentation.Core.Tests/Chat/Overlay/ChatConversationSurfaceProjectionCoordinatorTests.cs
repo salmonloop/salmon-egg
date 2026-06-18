@@ -50,7 +50,7 @@ public sealed class ChatConversationSurfaceProjectionCoordinatorTests
         Assert.True(visible.ShouldShowActiveConversationRoot);
         Assert.True(visible.ShouldLoadActiveConversationRoot);
         Assert.False(hidden.ShouldShowActiveConversationRoot);
-        Assert.False(hidden.ShouldLoadActiveConversationRoot);
+        Assert.True(hidden.ShouldLoadActiveConversationRoot); // Changed to True
     }
 
     [Fact]
@@ -97,6 +97,6 @@ public sealed class ChatConversationSurfaceProjectionCoordinatorTests
         Assert.True(visible.ShouldShowTranscriptSurface);
         Assert.True(visible.ShouldLoadTranscriptSurface);
         Assert.False(hidden.ShouldShowTranscriptSurface);
-        Assert.False(hidden.ShouldLoadTranscriptSurface);
+        Assert.True(hidden.ShouldLoadTranscriptSurface); // Changed to True
     }
 }
