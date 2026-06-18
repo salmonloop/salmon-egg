@@ -676,16 +676,34 @@
     <value>新增目录</value>
   </data>
   <data name="Acp_RemoteDirectoriesHint.Text" xml:space="preserve">
-    <value>为当前 Agent 配置可用于新建远程 ACP 会话的远端工作目录。Salmon Egg 不会把本机路径发送给远端 Agent。</value>
+    <value>配置可用于新建远程 ACP 会话的通用远端工作目录。Salmon Egg 不会把本机路径发送给远端 Agent。</value>
   </data>
   <data name="Acp_RemoteDirectoriesDisplayName.Header" xml:space="preserve">
     <value>显示名称</value>
   </data>
+  <data name="Acp_RemoteDirectoriesDisplayName.PlaceholderText" xml:space="preserve">
+    <value>工作区</value>
+  </data>
   <data name="Acp_RemoteDirectoriesRemotePath.Header" xml:space="preserve">
     <value>远端目录</value>
   </data>
+  <data name="Acp_RemoteDirectoriesRemotePath.PlaceholderText" xml:space="preserve">
+    <value>/home/user/project</value>
+  </data>
   <data name="Acp_RemoteDirectoriesRemove.ToolTipService.ToolTip" xml:space="preserve">
     <value>移除目录</value>
+  </data>
+  <data name="Acp_RemoteDirectoryEdit.Content" xml:space="preserve">
+    <value>编辑</value>
+  </data>
+  <data name="Acp_RemoteDirectorySave.Content" xml:space="preserve">
+    <value>保存</value>
+  </data>
+  <data name="Acp_RemoteDirectoryCancel.Content" xml:space="preserve">
+    <value>取消</value>
+  </data>
+  <data name="Acp_RemoteDirectoryDelete.Content" xml:space="preserve">
+    <value>删除</value>
   </data>
   <data name="Start_Title.Text" xml:space="preserve">
     <value>Salmon Egg</value>

@@ -36,6 +36,15 @@
           Background="Transparent"
           Padding="24,20,24,24">
 
+        <TextBlock HorizontalAlignment="Left"
+                   VerticalAlignment="Top"
+                   Width="1"
+                   Height="1"
+                   Opacity="0.01"
+                   Visibility="{x:Bind IsGuiAutomationMode, Mode=OneTime, Converter={StaticResource BoolToVisibilityConverter}}"
+                   Text="{x:Bind ViewModel.StartDraftAutomationState, Mode=OneWay}"
+                   AutomationProperties.AutomationId="StartView.Automation.DraftState" />
+
         <Grid x:Name="HeroLayer"
               Grid.Row="0"
               Margin="0,28,0,24"

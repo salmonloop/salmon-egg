@@ -4298,6 +4298,47 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
     }
 
     [Fact]
+    public async Task EnsureNewSessionDraftAsync_WhenReplacingDraftWithoutSessionCloseSupport_RemovesLocalDraftSession()
+    {
+        var sessionManager = new Mock<ISessionManager>();
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .Returns<string, string?>((sessionId, cwd) => Task.FromResult(new Session(sessionId, cwd)));
+        sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>())).Returns(true);
+        await using var fixture = CreateViewModel(sessionManager: sessionManager);
+        var chatService = CreateConnectedChatService();
+        chatService.SetupGet(service => service.AgentCapabilities)
+            .Returns(new AgentCapabilities(sessionCapabilities: new SessionCapabilities()));
+        chatService.Setup(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+            .ReturnsAsync(new SessionNewResponse("remote-new"));
+        var oldDraft = new NewSessionDraftState(
+            ProfileId: "profile-1",
+            Cwd: @"C:\Repo\Old",
+            RemoteSessionId: "remote-old",
+            ConnectionInstanceId: "conn-1",
+            Phase: NewSessionDraftPhase.Ready,
+            Version: 1,
+            AvailableModes: ImmutableList<ConversationModeOptionSnapshot>.Empty,
+            SelectedModeId: null,
+            ConfigOptions: ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+            ShowConfigOptionsPanel: false,
+            AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+            SessionInfo: null);
+
+        await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+        await fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+        await fixture.DispatchConnectionAsync(new SetNewSessionDraftAction(oldDraft));
+
+        await fixture.ViewModel.EnsureNewSessionDraftAsync(@"C:\Repo\New");
+
+        sessionManager.Verify(manager => manager.RemoveSession("remote-old"), Times.Once);
+        chatService.Verify(service => service.CloseSessionAsync(
+            It.IsAny<SessionCloseParams>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task EnsureNewSessionDraftAsync_WhenRequiredProfileDiffersFromForeground_ClosesStaleDraftWithoutReuse()
     {
         await using var fixture = CreateViewModel();
@@ -4477,6 +4518,52 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
     }
 
     [Fact]
+    public async Task EnsureNewSessionDraftAsync_WhenSelectedIntentMovesAwayFromRequiredProfile_StopsWaitingForStaleDraft()
+    {
+        await using var fixture = CreateViewModel();
+        var chatService = CreateConnectedChatService();
+        chatService.Setup(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+            .ReturnsAsync(new SessionNewResponse("remote-draft"));
+
+        fixture.Profiles.Profiles.Add(new ServerConfiguration
+        {
+            Id = "profile-local",
+            Name = "Local Agent",
+            Transport = TransportType.Stdio,
+            StdioCommand = "agent"
+        });
+        fixture.Profiles.Profiles.Add(new ServerConfiguration
+        {
+            Id = "profile-remote",
+            Name = "Remote Agent",
+            Transport = TransportType.WebSocket,
+            ServerUrl = "ws://127.0.0.1:3010/"
+        });
+
+        await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+        fixture.ViewModel.IsConnected = true;
+        await fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-remote"));
+        await fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-local"));
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-local"));
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Initializing));
+
+        var ensureTask = fixture.ViewModel.EnsureNewSessionDraftForProfileAsync(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            requiredProfileId: "profile-remote",
+            CancellationToken.None);
+
+        await Task.Delay(100);
+        await fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-local"));
+
+        var completed = await Task.WhenAny(ensureTask, Task.Delay(TimeSpan.FromMilliseconds(750)));
+
+        Assert.Same(ensureTask, completed);
+        await ensureTask;
+        Assert.Null((await fixture.GetConnectionStateAsync()).NewSessionDraft);
+        chatService.Verify(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()), Times.Never);
+    }
+
+    [Fact]
     public async Task EnsureNewSessionDraftAsync_WhenRequiredProfileMatchesStaleForegroundWithoutAuthoritativeSession_DoesNotFaultDraft()
     {
         var registry = new InMemoryAcpConnectionSessionRegistry();
@@ -4545,7 +4632,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
 
-        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             fixture.ViewModel.EnsureNewSessionDraftAsync(@"C:\Repo\App", cts.Token));
 
         Assert.Null((await fixture.GetConnectionStateAsync()).NewSessionDraft);

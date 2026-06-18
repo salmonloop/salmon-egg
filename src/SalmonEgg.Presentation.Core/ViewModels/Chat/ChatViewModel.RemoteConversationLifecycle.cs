@@ -82,7 +82,31 @@ public partial class ChatViewModel
 
     public string? CurrentRemoteSessionId => _currentRemoteSessionId;
 
+    public string? SelectedProfileIntentId => _selectedProfileIntentIdFromStore;
+
     public string? SelectedProfileId => _selectedProfileIdFromStore;
+
+    public async Task<string?> ResolvePreferredNewSessionDraftProfileIdAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var connectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(connectionState.SelectedProfileIntentId))
+        {
+            return connectionState.SelectedProfileIntentId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_selectedProfileIntentIdFromStore))
+        {
+            return _selectedProfileIntentIdFromStore;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_preferences.LastSelectedServerId))
+        {
+            return _preferences.LastSelectedServerId;
+        }
+
+        return SelectedAcpProfile?.Id;
+    }
 
     public IReadOnlyList<McpServer> CurrentMcpServers => _currentMcpServers;
 
@@ -932,6 +956,7 @@ public partial class ChatViewModel
         ArgumentNullException.ThrowIfNull(profile);
 
         var selectedProfile = ResolveLoadedProfileSelection(profile);
+        _selectedProfileIntentIdFromStore = profile.Id;
         _selectedProfileIdFromStore = profile.Id;
         ApplyResolvedProfileSelection(
             selectedProfile,

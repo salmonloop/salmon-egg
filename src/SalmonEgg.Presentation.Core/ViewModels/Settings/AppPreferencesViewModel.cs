@@ -477,11 +477,9 @@ public partial class AppPreferencesViewModel : ObservableObject
                 continue;
             }
 
-            var profileId = directory.ProfileId?.Trim();
             var directoryId = directory.DirectoryId?.Trim();
             var remotePath = directory.RemotePath?.Trim();
-            if (string.IsNullOrWhiteSpace(profileId)
-                || string.IsNullOrWhiteSpace(directoryId)
+            if (string.IsNullOrWhiteSpace(directoryId)
                 || string.IsNullOrWhiteSpace(remotePath)
                 || !ProtocolPathRules.IsAbsolutePath(remotePath))
             {
@@ -490,18 +488,76 @@ public partial class AppPreferencesViewModel : ObservableObject
             }
 
             // Persist DisplayName trim-only: a blank DisplayName is intentionally preserved so storage
-            // stays consistent with the live-edit path and Task 1's clone. Consumers (Start project
-            // selector, project affinity) fall back to RemotePath at display time.
-            normalized.Add(new AgentRemoteDirectory
+            // stays consistent with the live-edit path. Consumers (Start project selector,
+            // project affinity) fall back to RemotePath at display time.
+            var normalizedDirectory = new AgentRemoteDirectory
             {
-                ProfileId = profileId,
                 DirectoryId = directoryId,
                 DisplayName = directory.DisplayName?.Trim() ?? string.Empty,
                 RemotePath = remotePath
-            });
+            };
+
+            var duplicateIndex = FindEquivalentRemoteDirectoryIndex(normalized, normalizedDirectory.RemotePath);
+            if (duplicateIndex >= 0)
+            {
+                normalized[duplicateIndex] = normalizedDirectory;
+                continue;
+            }
+
+            normalized.Add(normalizedDirectory);
         }
 
         return normalized;
+    }
+
+    private static int FindEquivalentRemoteDirectoryIndex(
+        IReadOnlyList<AgentRemoteDirectory> directories,
+        string remotePath)
+    {
+        for (var i = 0; i < directories.Count; i++)
+        {
+            if (PathsEqual(directories[i].RemotePath, remotePath))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static bool PathsEqual(string? left, string? right)
+    {
+        var normalizedLeft = NormalizePath(left);
+        var normalizedRight = NormalizePath(right);
+        var comparison = UsesCaseInsensitivePathSemantics(normalizedLeft) || UsesCaseInsensitivePathSemantics(normalizedRight)
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        return string.Equals(normalizedLeft, normalizedRight, comparison);
+    }
+
+    private static string NormalizePath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return string.Empty;
+        }
+
+        return path.Trim().Replace('\\', '/').TrimEnd('/');
+    }
+
+    private static bool UsesCaseInsensitivePathSemantics(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        return ProtocolPathRules.IsAbsolutePath(path)
+            && (path.StartsWith(@"\\", StringComparison.Ordinal)
+                || (path.Length >= 3
+                    && char.IsLetter(path[0])
+                    && path[1] == ':'
+                    && path[2] == '/'));
     }
 
     private static ObservableCollection<AppLanguageOptionViewModel> CreateLanguageOptions()

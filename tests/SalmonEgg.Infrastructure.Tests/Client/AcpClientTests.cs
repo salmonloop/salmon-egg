@@ -810,6 +810,50 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             Assert.Equal("session-123", @params.GetProperty("sessionId").GetString());
         }
 
+        [Fact]
+        public async Task CloseSessionAsync_WhenSupported_RemovesTrackedLocalSession()
+        {
+            var parser = new MessageParser();
+            var sessionManager = new SessionManager();
+            var client = new AcpClient(
+                _transportMock.Object,
+                parser,
+                null,
+                _errorLoggerMock.Object,
+                sessionManager);
+
+            SetupJsonRpcResponse(
+                "initialize",
+                JsonSerializer.SerializeToElement(
+                    new InitializeResponse(
+                        1,
+                        new AgentInfo("TestAgent", "1.0.0"),
+                        new AgentCapabilities(sessionCapabilities: new SessionCapabilities
+                        {
+                            Close = new SessionCloseCapabilities()
+                        })),
+                    parser.Options),
+                parser);
+            await client.InitializeAsync(new InitializeParams(
+                new ClientInfo("Test", "1.0.0"),
+                new ClientCapabilities()));
+
+            SetupJsonRpcResponse(
+                "session/new",
+                JsonSerializer.SerializeToElement(new SessionNewResponse("session-123"), parser.Options),
+                parser);
+            await client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null));
+            Assert.NotNull(sessionManager.GetSession("session-123"));
+
+            SetupJsonRpcResponse(
+                "session/close",
+                ElementFromJson("{}"),
+                parser);
+            await client.CloseSessionAsync(new SessionCloseParams("session-123"));
+
+            Assert.Null(sessionManager.GetSession("session-123"));
+        }
+
         [Theory]
         [InlineData(StopReason.MaxTurnRequests)]
         [InlineData(StopReason.Refusal)]

@@ -257,22 +257,53 @@ public sealed class AcpConnectionSettingsViewModelTests
     }
 
     [Fact]
-    public async Task RemoteDirectoryRows_SelectedProfile_ExposesOnlyProfileDirectories()
+    public async Task RemoteDirectoryRows_ExposeSharedDirectoriesRegardlessOfSelectedProfile()
     {
         var preferences = CreatePreferences();
-        preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory { ProfileId = "profile-a", DirectoryId = "dir-a-1", DisplayName = "Alpha One", RemotePath = "/remote/a-1" });
-        preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory { ProfileId = "profile-b", DirectoryId = "dir-b-1", DisplayName = "Beta One", RemotePath = "/remote/b-1" });
+        preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory { DirectoryId = "dir-a-1", DisplayName = "Alpha One", RemotePath = "/remote/a-1" });
+        preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory { DirectoryId = "dir-b-1", DisplayName = "Beta One", RemotePath = "/remote/b-1" });
         var viewModel = await CreateViewModelAsync(preferences);
 
         SelectProfile(viewModel, "profile-a");
 
-        var row = Assert.Single(viewModel.RemoteDirectoryRows);
-        Assert.Equal("Alpha One", row.DisplayName);
-        Assert.Equal("/remote/a-1", row.RemotePath);
+        Assert.Collection(
+            viewModel.RemoteDirectoryRows,
+            first =>
+            {
+                Assert.Equal("Alpha One", first.DisplayName);
+                Assert.Equal("/remote/a-1", first.RemotePath);
+                Assert.False(first.IsEditing);
+                Assert.False(first.IsNew);
+            },
+            second =>
+            {
+                Assert.Equal("Beta One", second.DisplayName);
+                Assert.Equal("/remote/b-1", second.RemotePath);
+                Assert.False(second.IsEditing);
+                Assert.False(second.IsNew);
+            });
     }
 
     [Fact]
-    public async Task RemoteDirectoryRows_AddUpdateRemove_UpdatesAppPreferencesDirectories()
+    public async Task RemoteDirectoryRows_AddCreatesExpandedDraftRow()
+    {
+        var preferences = CreatePreferences();
+        var viewModel = await CreateViewModelAsync(preferences);
+        SelectProfile(viewModel, "profile-a");
+
+        viewModel.AddRemoteDirectoryCommand.Execute(null);
+
+        var row = Assert.Single(viewModel.RemoteDirectoryRows);
+        Assert.True(row.IsEditing);
+        Assert.True(row.IsNew);
+        Assert.Equal(string.Empty, row.DisplayName);
+        Assert.Equal(string.Empty, row.RemotePath);
+        Assert.Equal(string.Empty, row.DisplayNameDraft);
+        Assert.Equal(string.Empty, row.RemotePathDraft);
+    }
+
+    [Fact]
+    public async Task RemoteDirectoryRows_SaveCommitsDraftAndCollapsesRow()
     {
         var preferences = CreatePreferences();
         var viewModel = await CreateViewModelAsync(preferences);
@@ -280,21 +311,255 @@ public sealed class AcpConnectionSettingsViewModelTests
 
         viewModel.AddRemoteDirectoryCommand.Execute(null);
         var row = Assert.Single(viewModel.RemoteDirectoryRows);
-        row.DisplayName = " Workspace ";
-        row.RemotePath = " /remote/workspace ";
+        row.DisplayNameDraft = " Workspace ";
+        row.RemotePathDraft = " /remote/workspace ";
 
-        var directory = Assert.Single(preferences.AgentRemoteDirectories.Where(d => d.ProfileId == "profile-a"));
+        await row.SaveCommand.ExecuteAsync(null);
+
+        var directory = Assert.Single(preferences.AgentRemoteDirectories);
         Assert.False(string.IsNullOrWhiteSpace(directory.DirectoryId));
         Assert.Equal("Workspace", directory.DisplayName);
         Assert.Equal("/remote/workspace", directory.RemotePath);
-
-        row.RemoveCommand.Execute(null);
-
-        Assert.Empty(preferences.AgentRemoteDirectories.Where(d => d.ProfileId == "profile-a"));
+        Assert.False(row.IsEditing);
+        Assert.False(row.IsNew);
+        Assert.Equal("Workspace", row.DisplayName);
+        Assert.Equal("/remote/workspace", row.RemotePath);
+        Assert.Equal("Workspace", row.DisplayNameDraft);
+        Assert.Equal("/remote/workspace", row.RemotePathDraft);
     }
 
     [Fact]
-    public async Task AddRemoteDirectoryCommand_NoSelectedProfile_DisablesAndSkipsMutation()
+    public async Task RemoteDirectoryRows_SaveWithEmptyRemotePath_ShowsValidationAndKeepsEditing()
+    {
+        var preferences = CreatePreferences();
+        var viewModel = await CreateViewModelAsync(preferences);
+        SelectProfile(viewModel, "profile-a");
+
+        viewModel.AddRemoteDirectoryCommand.Execute(null);
+        var row = Assert.Single(viewModel.RemoteDirectoryRows);
+        row.DisplayNameDraft = " Workspace ";
+        row.RemotePathDraft = " ";
+
+        await row.SaveCommand.ExecuteAsync(null);
+
+        Assert.True(row.IsEditing);
+        Assert.True(row.IsNew);
+        Assert.False(string.IsNullOrWhiteSpace(row.ValidationMessage));
+        Assert.Empty(preferences.AgentRemoteDirectories);
+    }
+
+    [Fact]
+    public async Task RemoteDirectoryRows_CancelOnExistingRow_RestoresPersistedValues()
+    {
+        var preferences = CreatePreferences();
+        preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory
+        {
+            DirectoryId = "dir-a-1",
+            DisplayName = "Alpha One",
+            RemotePath = "/remote/a-1"
+        });
+        var viewModel = await CreateViewModelAsync(preferences);
+        SelectProfile(viewModel, "profile-a");
+
+        var row = Assert.Single(viewModel.RemoteDirectoryRows);
+        row.BeginEditCommand.Execute(null);
+        row.DisplayNameDraft = "Changed";
+        row.RemotePathDraft = "/remote/changed";
+
+        row.CancelCommand.Execute(null);
+
+        var directory = Assert.Single(preferences.AgentRemoteDirectories);
+        Assert.Equal("Alpha One", directory.DisplayName);
+        Assert.Equal("/remote/a-1", directory.RemotePath);
+        Assert.False(row.IsEditing);
+        Assert.Equal("Alpha One", row.DisplayName);
+        Assert.Equal("/remote/a-1", row.RemotePath);
+        Assert.Equal("Alpha One", row.DisplayNameDraft);
+        Assert.Equal("/remote/a-1", row.RemotePathDraft);
+    }
+
+    [Fact]
+    public async Task RemoteDirectoryRows_BeginEdit_AllowsOnlyOneExpandedRow()
+    {
+        var preferences = CreatePreferences();
+        preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory
+        {
+            DirectoryId = "dir-a-1",
+            DisplayName = "Alpha One",
+            RemotePath = "/remote/a-1"
+        });
+        preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory
+        {
+            DirectoryId = "dir-a-2",
+            DisplayName = "Alpha Two",
+            RemotePath = "/remote/a-2"
+        });
+        var viewModel = await CreateViewModelAsync(preferences);
+        SelectProfile(viewModel, "profile-a");
+
+        var first = viewModel.RemoteDirectoryRows[0];
+        var second = viewModel.RemoteDirectoryRows[1];
+
+        first.BeginEditCommand.Execute(null);
+        second.BeginEditCommand.Execute(null);
+
+        Assert.True(first.IsEditing);
+        Assert.False(second.IsEditing);
+    }
+
+    [Fact]
+    public async Task RemoteDirectoryRows_ProfileSelectionChangeWhileEditing_PreservesDraftWithoutBlockingProfileSelection()
+    {
+        var preferences = CreatePreferences();
+        preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory
+        {
+            DirectoryId = "dir-a-1",
+            DisplayName = "Alpha One",
+            RemotePath = "/remote/a-1"
+        });
+        using var profiles = await CreateProfilesWithItemsAsync(preferences);
+        var chat = new TestSettingsChatConnection();
+        var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
+
+        using var viewModel = new AcpConnectionSettingsViewModel(
+            chat,
+            profiles,
+            preferences,
+            CreateTransportSupportPolicy(preferences),
+            logger.Object,
+            new TestCoreStringLocalizer());
+
+        SelectProfileItem(viewModel, "profile-a");
+
+        var row = Assert.Single(viewModel.RemoteDirectoryRows);
+        row.BeginEditCommand.Execute(null);
+        row.DisplayNameDraft = "Workspace";
+        row.RemotePathDraft = "/remote/workspace";
+
+        SelectProfileItem(viewModel, "profile-b");
+
+        Assert.Equal("profile-b", viewModel.Profiles.SelectedProfile?.Id);
+        Assert.Equal("profile-b", viewModel.Profiles.SelectedProfileItem?.ProfileId);
+        Assert.Single(viewModel.RemoteDirectoryRows);
+        Assert.True(row.IsEditing);
+        Assert.Equal("Workspace", row.DisplayNameDraft);
+        Assert.Equal("/remote/workspace", row.RemotePathDraft);
+    }
+
+    [Fact]
+    public async Task RemoteDirectoryRows_CancelOnNewRow_RemovesRowAndDoesNotPersist()
+    {
+        var preferences = CreatePreferences();
+        var viewModel = await CreateViewModelAsync(preferences);
+        SelectProfile(viewModel, "profile-a");
+
+        viewModel.AddRemoteDirectoryCommand.Execute(null);
+        var row = Assert.Single(viewModel.RemoteDirectoryRows);
+        row.DisplayNameDraft = " Workspace ";
+        row.RemotePathDraft = " /remote/workspace ";
+
+        row.CancelCommand.Execute(null);
+
+        Assert.Empty(viewModel.RemoteDirectoryRows);
+        Assert.Empty(preferences.AgentRemoteDirectories);
+    }
+
+    [Fact]
+    public async Task RemoteDirectoryRows_RemoveRemovesPersistedDirectory()
+    {
+        var preferences = CreatePreferences();
+        var viewModel = await CreateViewModelAsync(preferences);
+        SelectProfile(viewModel, "profile-a");
+
+        viewModel.AddRemoteDirectoryCommand.Execute(null);
+        var row = Assert.Single(viewModel.RemoteDirectoryRows);
+        row.DisplayNameDraft = " Workspace ";
+        row.RemotePathDraft = " /remote/workspace ";
+        await row.SaveCommand.ExecuteAsync(null);
+
+        row.RemoveCommand.Execute(null);
+
+        Assert.Empty(preferences.AgentRemoteDirectories);
+    }
+
+    [Fact]
+    public async Task RemoteDirectoryRows_SaveWithNonAbsoluteRemotePath_ShowsValidationAndKeepsEditing()
+    {
+        var preferences = CreatePreferences();
+        var viewModel = await CreateViewModelAsync(preferences);
+        SelectProfile(viewModel, "profile-a");
+
+        viewModel.AddRemoteDirectoryCommand.Execute(null);
+        var row = Assert.Single(viewModel.RemoteDirectoryRows);
+        row.DisplayNameDraft = "Workspace";
+        row.RemotePathDraft = "relative/path";
+
+        await row.SaveCommand.ExecuteAsync(null);
+
+        Assert.True(row.IsEditing);
+        Assert.True(row.IsNew);
+        Assert.False(string.IsNullOrWhiteSpace(row.ValidationMessage));
+        Assert.Empty(preferences.AgentRemoteDirectories);
+    }
+
+    [Fact]
+    public async Task RemoteDirectoryRows_SaveUpdatesExistingSharedDirectory()
+    {
+        var preferences = CreatePreferences();
+        preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory
+        {
+            DirectoryId = "dir-a-1",
+            DisplayName = string.Empty,
+            RemotePath = "/remote/a-1"
+        });
+        var viewModel = await CreateViewModelAsync(preferences);
+        SelectProfile(viewModel, "profile-b");
+
+        var row = new AcpRemoteDirectoryRowViewModel(
+            new AgentRemoteDirectory
+            {
+                DirectoryId = "dir-a-1",
+                DisplayName = "Alpha One",
+                RemotePath = "/remote/a-1"
+            },
+            viewModel);
+        row.BeginEditCommand.Execute(null);
+        row.DisplayNameDraft = "Workspace";
+        row.RemotePathDraft = "/remote/workspace";
+
+        await viewModel.SaveRemoteDirectoryAsync(row);
+
+        var directory = Assert.Single(preferences.AgentRemoteDirectories);
+        Assert.Equal("Workspace", directory.DisplayName);
+        Assert.Equal("/remote/workspace", directory.RemotePath);
+    }
+
+    [Fact]
+    public async Task RemoteDirectoryRows_SaveWithDuplicateRemotePath_KeepsNewestSharedDirectory()
+    {
+        var preferences = CreatePreferences();
+        preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory
+        {
+            DirectoryId = "dir-a",
+            DisplayName = "Alpha",
+            RemotePath = "/remote/shared"
+        });
+        var viewModel = await CreateViewModelAsync(preferences);
+
+        viewModel.AddRemoteDirectoryCommand.Execute(null);
+        var draftRow = Assert.Single(viewModel.RemoteDirectoryRows.Where(row => row.IsNew));
+        draftRow.DisplayNameDraft = "Shared Workspace";
+        draftRow.RemotePathDraft = "/remote/shared";
+
+        await draftRow.SaveCommand.ExecuteAsync(null);
+
+        var directory = Assert.Single(preferences.AgentRemoteDirectories);
+        Assert.Equal("Shared Workspace", directory.DisplayName);
+        Assert.Equal("/remote/shared", directory.RemotePath);
+    }
+
+    [Fact]
+    public async Task AddRemoteDirectoryCommand_NoSelectedProfile_CreatesSharedDraftRow()
     {
         var preferences = await CreatePreferencesAsync();
         var profiles = CreateProfiles(preferences);
@@ -305,8 +570,10 @@ public sealed class AcpConnectionSettingsViewModelTests
         var canExecute = viewModel.AddRemoteDirectoryCommand.CanExecute(null);
         viewModel.AddRemoteDirectoryCommand.Execute(null);
 
-        Assert.False(canExecute);
-        Assert.Empty(viewModel.RemoteDirectoryRows);
+        Assert.True(canExecute);
+        var row = Assert.Single(viewModel.RemoteDirectoryRows);
+        Assert.True(row.IsEditing);
+        Assert.True(row.IsNew);
         Assert.Empty(preferences.AgentRemoteDirectories);
     }
 
@@ -441,6 +708,36 @@ public sealed class AcpConnectionSettingsViewModelTests
         return viewModel;
     }
 
+    private static async Task<AcpProfilesViewModel> CreateProfilesWithItemsAsync(AppPreferencesViewModel preferences)
+    {
+        var configurations = new[]
+        {
+            new ServerConfiguration { Id = "profile-a", Name = "Profile A" },
+            new ServerConfiguration { Id = "profile-b", Name = "Profile B" }
+        };
+
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .Setup(service => service.ListConfigurationsAsync())
+            .ReturnsAsync(configurations);
+
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        var logger = new Mock<ILogger<AcpProfilesViewModel>>();
+        var profiles = new AcpProfilesViewModel(
+            configurationService.Object,
+            preferences,
+            logger.Object,
+            registry,
+            registry,
+            new TestConnectionCommands(),
+            NullLoggerFactory.Instance,
+            new ImmediateUiDispatcher(),
+            new TestCoreStringLocalizer());
+
+        await profiles.RefreshAsync();
+        return profiles;
+    }
+
     private static void SelectProfile(AcpConnectionSettingsViewModel viewModel, string profileId)
     {
         var profile = viewModel.Profiles.Profiles.FirstOrDefault(
@@ -448,6 +745,16 @@ public sealed class AcpConnectionSettingsViewModelTests
         if (profile is not null)
         {
             viewModel.Profiles.SelectedProfile = profile;
+        }
+    }
+
+    private static void SelectProfileItem(AcpConnectionSettingsViewModel viewModel, string profileId)
+    {
+        var item = viewModel.Profiles.ProfileItems.FirstOrDefault(
+            vm => string.Equals(vm.ProfileId, profileId, StringComparison.Ordinal));
+        if (item is not null)
+        {
+            viewModel.Profiles.SelectedProfileItem = item;
         }
     }
 

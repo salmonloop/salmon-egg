@@ -55,7 +55,7 @@ public sealed class AppSettingsServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SaveThenLoad_RoundTripsAgentRemoteDirectories()
+    public async Task SaveThenLoad_TrimsAgentRemoteDirectories_WithoutPersistingProfileBinding()
     {
         var service = CreateService();
 
@@ -65,14 +65,12 @@ public sealed class AppSettingsServiceTests : IDisposable
             {
                 new()
                 {
-                    ProfileId = " profile-a ",
                     DirectoryId = " dir-a ",
                     DisplayName = " Alpha ",
                     RemotePath = " /remote/alpha "
                 },
                 new()
                 {
-                    ProfileId = "profile-b",
                     DirectoryId = "dir-b",
                     DisplayName = "Beta",
                     RemotePath = "/remote/beta"
@@ -80,24 +78,60 @@ public sealed class AppSettingsServiceTests : IDisposable
             }
         });
 
+        var appYamlPath = Path.Combine(_testDirectory, "SalmonEgg", "config", "app.yaml");
+        var yaml = await File.ReadAllTextAsync(appYamlPath);
+
+        Assert.DoesNotContain("profile_id", yaml, StringComparison.Ordinal);
+
         var loaded = await service.LoadAsync();
 
         Assert.Collection(
             loaded.AgentRemoteDirectories,
             first =>
             {
-                Assert.Equal("profile-a", first.ProfileId);
                 Assert.Equal("dir-a", first.DirectoryId);
                 Assert.Equal("Alpha", first.DisplayName);
                 Assert.Equal("/remote/alpha", first.RemotePath);
             },
             second =>
             {
-                Assert.Equal("profile-b", second.ProfileId);
                 Assert.Equal("dir-b", second.DirectoryId);
                 Assert.Equal("Beta", second.DisplayName);
                 Assert.Equal("/remote/beta", second.RemotePath);
             });
+    }
+
+    [Fact]
+    public async Task LoadAsync_IgnoresLegacyRemoteDirectoryProfileBindingField()
+    {
+        var appYamlPath = Path.Combine(_testDirectory, "SalmonEgg", "config", "app.yaml");
+        Directory.CreateDirectory(Path.GetDirectoryName(appYamlPath)!);
+
+        await File.WriteAllTextAsync(
+            appYamlPath,
+            """
+            schema_version: 1
+            agent_remote_directories:
+              - profile_id: legacy-profile
+                directory_id: dir-a
+                display_name: Alpha
+                remote_path: /remote/alpha
+            """);
+
+        var service = CreateService();
+
+        var loaded = await service.LoadAsync();
+
+        var directory = Assert.Single(loaded.AgentRemoteDirectories);
+        Assert.Equal("dir-a", directory.DirectoryId);
+        Assert.Equal("Alpha", directory.DisplayName);
+        Assert.Equal("/remote/alpha", directory.RemotePath);
+    }
+
+    [Fact]
+    public void AgentRemoteDirectoryModel_DoesNotExposeProfileBinding()
+    {
+        Assert.Null(typeof(AgentRemoteDirectory).GetProperty("ProfileId"));
     }
 
     [Fact]

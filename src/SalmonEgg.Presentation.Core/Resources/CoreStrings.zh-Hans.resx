@@ -581,4 +581,7 @@
   <data name="McpSettings_ClipboardFilled" xml:space="preserve">
     <value>已从剪贴板填入当前服务。</value>
   </data>
+  <data name="AcpRemoteDirectories_SaveValidationRemotePathRequired" xml:space="preserve">
+    <value>请填写绝对远端目录路径后再保存。</value>
+  </data>
 </root>

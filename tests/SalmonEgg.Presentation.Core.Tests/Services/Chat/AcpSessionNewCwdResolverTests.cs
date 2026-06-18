@@ -48,7 +48,7 @@ public sealed class AcpSessionNewCwdResolverTests
         var profile = new ServerConfiguration { Id = "profile-1", Transport = TransportType.WebSocket };
         var directories = new[]
         {
-            new AgentRemoteDirectory { ProfileId = "profile-1", DirectoryId = "dir-1", DisplayName = "Workspace", RemotePath = "/home/user/project" }
+            new AgentRemoteDirectory { DirectoryId = "dir-1", DisplayName = "Workspace", RemotePath = "/home/user/project" }
         };
 
         var result = AcpSessionNewCwdResolver.Resolve(
@@ -61,7 +61,7 @@ public sealed class AcpSessionNewCwdResolverTests
     }
 
     [Fact]
-    public void Resolve_RemoteWithUnconfiguredCwd_ReturnsFailure()
+    public void Resolve_RemoteWithUnconfiguredCwd_ReturnsRequestedPath()
     {
         var profile = new ServerConfiguration { Id = "profile-1", Transport = TransportType.WebSocket };
 
@@ -70,8 +70,8 @@ public sealed class AcpSessionNewCwdResolverTests
             profile: profile,
             remoteDirectories: Array.Empty<AgentRemoteDirectory>());
 
-        Assert.False(result.IsSuccess);
-        Assert.Null(result.Cwd);
-        Assert.Equal(AcpSessionNewCwdResolver.MissingRemoteCwdMessage, result.ErrorMessage);
+        Assert.True(result.IsSuccess);
+        Assert.Equal(@"C:\repos\local", result.Cwd);
+        Assert.Null(result.ErrorMessage);
     }
 }

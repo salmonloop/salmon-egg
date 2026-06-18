@@ -575,4 +575,7 @@ Create the corresponding Markdown file in:
   <data name="McpSettings_ClipboardFilled" xml:space="preserve">
     <value>Filled the current service from the clipboard.</value>
   </data>
+  <data name="AcpRemoteDirectories_SaveValidationRemotePathRequired" xml:space="preserve">
+    <value>Enter an absolute remote directory path before saving.</value>
+  </data>
 </root>

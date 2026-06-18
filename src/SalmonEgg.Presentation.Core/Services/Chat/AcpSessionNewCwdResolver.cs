@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using SalmonEgg.Domain.Models;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
@@ -30,41 +29,12 @@ public static class AcpSessionNewCwdResolver
             return new AcpSessionNewCwdResolution(true, GetDefaultStdioUserProfileDirectory(), null);
         }
 
-        if (string.IsNullOrWhiteSpace(trimmedCwd)
-            || string.IsNullOrWhiteSpace(profile?.Id)
-            || !IsConfiguredRemoteDirectory(trimmedCwd, profile.Id, remoteDirectories))
+        if (string.IsNullOrWhiteSpace(trimmedCwd))
         {
             return new AcpSessionNewCwdResolution(false, null, MissingRemoteCwdMessage);
         }
 
         return new AcpSessionNewCwdResolution(true, trimmedCwd, null);
-    }
-
-    private static bool IsConfiguredRemoteDirectory(
-        string requestedCwd,
-        string profileId,
-        IReadOnlyList<AgentRemoteDirectory>? remoteDirectories)
-    {
-        if (remoteDirectories is not { Count: > 0 })
-        {
-            return false;
-        }
-
-        foreach (var directory in remoteDirectories)
-        {
-            if (directory is null)
-            {
-                continue;
-            }
-
-            if (string.Equals(directory.ProfileId?.Trim(), profileId.Trim(), StringComparison.Ordinal)
-                && string.Equals(directory.RemotePath?.Trim(), requestedCwd, StringComparison.Ordinal))
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private static string? TrimOrNull(string? value)

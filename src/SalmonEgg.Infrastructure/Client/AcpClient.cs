@@ -363,6 +363,7 @@ namespace SalmonEgg.Infrastructure.Client
                     ErrorSeverity.Info,
                     nameof(CloseSessionAsync)));
 
+                _sessionManager.RemoveSession(@params.SessionId);
                 return SessionCloseResponse.Completed;
             }
 
@@ -381,11 +382,13 @@ namespace SalmonEgg.Infrastructure.Client
             if (!response.Result.HasValue ||
                 response.Result.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
             {
+                _sessionManager.RemoveSession(@params.SessionId);
                 return SessionCloseResponse.Completed;
             }
 
             var sessionCloseResponse = FromElement(response.Result.Value, AcpJsonContext.Default.SessionCloseResponse);
 
+            _sessionManager.RemoveSession(@params.SessionId);
             return sessionCloseResponse ?? SessionCloseResponse.Completed;
         }
 

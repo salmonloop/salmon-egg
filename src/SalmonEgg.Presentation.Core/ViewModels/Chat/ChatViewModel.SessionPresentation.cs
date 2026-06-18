@@ -107,7 +107,11 @@ public partial class ChatViewModel
 
     private void ApplySelectedProfileFromStore(string? profileId)
     {
-        _selectedProfileIdFromStore = profileId;
+        if (!string.Equals(_selectedProfileIntentIdFromStore, profileId, StringComparison.Ordinal))
+        {
+            _selectedProfileIntentIdFromStore = profileId;
+            OnPropertyChanged(nameof(SelectedProfileIntentId));
+        }
 
         var match = _profileSelectionResolver.ResolveById(_acpProfiles.Profiles, profileId);
         ApplyResolvedProfileSelection(
@@ -157,7 +161,7 @@ public partial class ChatViewModel
 
     private void OnAcpProfilesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        var profileId = _selectedProfileIdFromStore;
+        var profileId = _selectedProfileIntentIdFromStore;
         if (string.IsNullOrWhiteSpace(profileId))
         {
             return;
@@ -166,7 +170,7 @@ public partial class ChatViewModel
         _uiDispatcher.Enqueue(() =>
         {
             if (_disposed
-                || !string.Equals(_selectedProfileIdFromStore, profileId, StringComparison.Ordinal))
+                || !string.Equals(_selectedProfileIntentIdFromStore, profileId, StringComparison.Ordinal))
             {
                 return;
             }
@@ -377,6 +381,13 @@ public partial class ChatViewModel
     {
         if (!_suppressStoreProfileProjection)
         {
+            var nextProfileIntentId = value?.Id;
+            if (!string.Equals(_selectedProfileIntentIdFromStore, nextProfileIntentId, StringComparison.Ordinal))
+            {
+                _selectedProfileIntentIdFromStore = nextProfileIntentId;
+                OnPropertyChanged(nameof(SelectedProfileIntentId));
+            }
+
             _ = _chatConnectionStore.Dispatch(new SetSelectedProfileIntentAction(value?.Id));
         }
 

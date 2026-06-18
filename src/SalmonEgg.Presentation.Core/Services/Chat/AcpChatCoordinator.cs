@@ -10,6 +10,7 @@ using SalmonEgg.Domain.Models.Content;
 using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Presentation.Core.Mvux.Chat;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 
@@ -196,7 +197,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         var applyToken = applyScope.Token;
         var currentConnectionReuseKey = BuildConnectionReuseKey(transportConfiguration);
 
-        var previousConnectionState = CaptureConnectionState(sink);
+        var previousConnectionState = await CaptureConnectionStateAsync(sink, applyToken).ConfigureAwait(false);
         await _connectionCoordinator.SetConnectingAsync(selectedProfileId, applyToken).ConfigureAwait(false);
         var replaceIntent = connectionContext.PreserveConversation
             ? ServiceReplaceIntent.PoolOnly
@@ -737,12 +738,28 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         }
     }
 
-    private static AcpConnectionStateSnapshot CaptureConnectionState(IAcpChatCoordinatorSink sink)
-        => new(
+    private async Task<AcpConnectionStateSnapshot> CaptureConnectionStateAsync(
+        IAcpChatCoordinatorSink sink,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_connectionCoordinator is IAcpConnectionStateReader stateReader)
+        {
+            var state = await stateReader.GetCurrentStateAsync(cancellationToken).ConfigureAwait(false)
+                ?? ChatConnectionState.Empty;
+            return new(
+                state.ForegroundTransportProfileId,
+                state.ConnectionInstanceId,
+                state.Phase == ConnectionPhase.Connected,
+                state.Error);
+        }
+
+        return new(
             sink.SelectedProfileId,
             sink.ConnectionInstanceId,
             sink.IsConnected,
             sink.ConnectionErrorMessage);
+    }
 
     private static string? ResolveDisplayAgentName(AgentInfo? agentInfo)
     {

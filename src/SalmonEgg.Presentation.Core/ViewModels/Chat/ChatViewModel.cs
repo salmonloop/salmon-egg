@@ -186,6 +186,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private bool _suppressStorePromptProjection;
     private bool _suppressProfileSyncFromStore;
     private bool _suppressModeSelectionDispatch;
+    private string? _selectedProfileIntentIdFromStore;
     private string? _selectedProfileIdFromStore;
     private int _storeProjectionSequence;
     private readonly object _restoreSync = new();
@@ -3049,9 +3050,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
                 : Task.CompletedTask;
         }
 
-        public string GetActiveSessionCwdOrDefault() => _owner.GetActiveSessionCwdOrDefault();
+        public string? GetActiveSessionCwdOrDefault() => _owner.GetActiveSessionCwdOrDefault();
 
-        public string GetSessionCwdOrDefault(string conversationId) => _owner.GetSessionCwdOrDefault(conversationId);
+        public string? GetSessionCwdOrDefault(string conversationId) => _owner.GetSessionCwdOrDefault(conversationId);
 
         public Task SetIsHydratingAsync(bool isHydrating, CancellationToken cancellationToken = default)
         {

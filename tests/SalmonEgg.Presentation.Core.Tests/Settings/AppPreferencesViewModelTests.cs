@@ -181,7 +181,7 @@ public class AppPreferencesViewModelTests
         {
             AgentRemoteDirectories = new List<AgentRemoteDirectory>
             {
-                new() { ProfileId = "profile-a", DirectoryId = "dir-a", DisplayName = "Alpha", RemotePath = "/remote/alpha" }
+                new() { DirectoryId = "dir-a", DisplayName = "Alpha", RemotePath = "/remote/alpha" }
             }
         });
         var vm = CreateViewModel(settingsService);
@@ -189,7 +189,6 @@ public class AppPreferencesViewModelTests
         await settingsService.LoadCompletion;
 
         var directory = Assert.Single(vm.AgentRemoteDirectories);
-        Assert.Equal("profile-a", directory.ProfileId);
         Assert.Equal("dir-a", directory.DirectoryId);
         Assert.Equal("Alpha", directory.DisplayName);
         Assert.Equal("/remote/alpha", directory.RemotePath);
@@ -204,7 +203,6 @@ public class AppPreferencesViewModelTests
 
         vm.AgentRemoteDirectories.Add(new AgentRemoteDirectory
         {
-            ProfileId = " profile ",
             DirectoryId = " dir ",
             DisplayName = " Workspace ",
             RemotePath = " /remote/workspace "
@@ -212,10 +210,40 @@ public class AppPreferencesViewModelTests
 
         await WaitForConditionAsync(() =>
             settingsService.LastSaved?.AgentRemoteDirectories.Count == 1
-            && settingsService.LastSaved.AgentRemoteDirectories[0].ProfileId == "profile"
             && settingsService.LastSaved.AgentRemoteDirectories[0].DirectoryId == "dir"
             && settingsService.LastSaved.AgentRemoteDirectories[0].DisplayName == "Workspace"
             && settingsService.LastSaved.AgentRemoteDirectories[0].RemotePath == "/remote/workspace");
+    }
+
+    [Fact]
+    public async Task LoadAsync_CollapsesLegacyProfileBoundRemoteDirectoriesByRemotePath()
+    {
+        var settingsService = new FakeAppSettingsService(new AppSettings
+        {
+            AgentRemoteDirectories = new List<AgentRemoteDirectory>
+            {
+                new() { DirectoryId = "dir-a", DisplayName = "Alpha", RemotePath = "/remote/shared" },
+                new() { DirectoryId = "dir-b", DisplayName = "Beta", RemotePath = "/remote/shared" },
+                new() { DirectoryId = "dir-c", DisplayName = "Gamma", RemotePath = "/remote/other" }
+            }
+        });
+        var vm = CreateViewModel(settingsService);
+        await settingsService.LoadCompletion;
+
+        Assert.Collection(
+            vm.AgentRemoteDirectories,
+            first =>
+            {
+                Assert.Equal("dir-b", first.DirectoryId);
+                Assert.Equal("Beta", first.DisplayName);
+                Assert.Equal("/remote/shared", first.RemotePath);
+            },
+            second =>
+            {
+                Assert.Equal("dir-c", second.DirectoryId);
+                Assert.Equal("Gamma", second.DisplayName);
+                Assert.Equal("/remote/other", second.RemotePath);
+            });
     }
 
     [Fact]

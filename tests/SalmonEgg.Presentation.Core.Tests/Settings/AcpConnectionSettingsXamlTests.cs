@@ -217,6 +217,7 @@ public sealed class AcpConnectionSettingsXamlTests
         Assert.Contains("Command=\"{x:Bind ViewModel.Profiles.RefreshCommand}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Click=\"OnAddProfileClick\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ItemsSource=\"{x:Bind ViewModel.Profiles.ProfileItems, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ViewModel.CanChangeProfiles", xaml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -242,10 +243,18 @@ public sealed class AcpConnectionSettingsXamlTests
         var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AcpConnectionSettingsPage.xaml");
         Assert.Contains("ItemsSource=\"{x:Bind ViewModel.RemoteDirectoryRows, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Command=\"{x:Bind ViewModel.AddRemoteDirectoryCommand}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Text=\"{x:Bind DisplayName, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Text=\"{x:Bind RemotePath, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind BeginEditCommand, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind SaveCommand, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind CancelCommand, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind DisplayNameDraft, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind RemotePathDraft, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Visibility=\"{x:Bind IsEditing, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Visibility=\"{x:Bind IsEditing, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Text=\"{x:Bind DisplayName, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Text=\"{x:Bind RemotePath, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("PathMappingRows", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("LocalRootPath", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("为当前 Agent 配置", xaml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -255,7 +264,62 @@ public sealed class AcpConnectionSettingsXamlTests
         Assert.Contains("AutomationProperties.AutomationId=\"Acp.RemoteDirectories.Section\"", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"Acp.RemoteDirectories.List\"", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"Acp.RemoteDirectories.Add\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"Acp.RemoteDirectories.Edit\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"Acp.RemoteDirectories.Save\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"Acp.RemoteDirectories.Cancel\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"Acp.RemoteDirectories.Remove\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Acp.PathMappings", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AcpConnectionSettingsPage_RemoteDirectoriesEditor_HasLocalizedVisibleTextResources()
+    {
+        string[] resourceFiles =
+        [
+            @"SalmonEgg\SalmonEgg\Strings\zh-Hans\Resources.resw",
+            @"SalmonEgg\SalmonEgg\Strings\en\Resources.resw",
+            @"SalmonEgg\SalmonEgg\Strings\en-US\Resources.resw"
+        ];
+        string[] requiredResources =
+        [
+            "Acp_RemoteDirectoriesTitle.Text",
+            "Acp_RemoteDirectoriesAdd.Content",
+            "Acp_RemoteDirectoriesHint.Text",
+            "Acp_RemoteDirectoriesDisplayName.Header",
+            "Acp_RemoteDirectoriesDisplayName.PlaceholderText",
+            "Acp_RemoteDirectoriesRemotePath.Header",
+            "Acp_RemoteDirectoriesRemotePath.PlaceholderText",
+            "Acp_RemoteDirectoryEdit.Content",
+            "Acp_RemoteDirectorySave.Content",
+            "Acp_RemoteDirectoryCancel.Content",
+            "Acp_RemoteDirectoryDelete.Content",
+            "Acp_RemoteDirectoriesRemove.ToolTipService.ToolTip"
+        ];
+
+        foreach (var resourceFile in resourceFiles)
+        {
+            var resources = XDocument.Parse(LoadFile(resourceFile));
+
+            foreach (var resourceName in requiredResources)
+            {
+                Assert.True(
+                    resources.Descendants("data")
+                        .Any(data => string.Equals((string?)data.Attribute("name"), resourceName, StringComparison.Ordinal)),
+                    $"{resourceFile} must define {resourceName}.");
+            }
+        }
+    }
+
+    [Fact]
+    public void AcpConnectionSettingsPage_RemoteDirectoriesEditor_ZhHansPlaceholder_IsLocalized()
+    {
+        var resources = XDocument.Parse(LoadFile(@"SalmonEgg\SalmonEgg\Strings\zh-Hans\Resources.resw"));
+        var value = resources.Descendants("data")
+            .FirstOrDefault(data => string.Equals((string?)data.Attribute("name"), "Acp_RemoteDirectoriesDisplayName.PlaceholderText", StringComparison.Ordinal))
+            ?.Element("value")?
+            .Value;
+
+        Assert.Equal("工作区", value);
     }
 
     private static string LoadFile(string relativePath)

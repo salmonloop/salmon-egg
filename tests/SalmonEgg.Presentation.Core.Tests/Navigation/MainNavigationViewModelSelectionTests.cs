@@ -855,7 +855,6 @@ public sealed class MainNavigationViewModelSelectionTests
             var preferences = CreatePreferencesWithProject();
             preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory
             {
-                ProfileId = "profile-1",
                 DirectoryId = "dir-1",
                 DisplayName = "Worktrees",
                 RemotePath = "/remote/worktrees"

@@ -763,16 +763,34 @@
     <value>Add directory</value>
   </data>
   <data name="Acp_RemoteDirectoriesHint.Text" xml:space="preserve">
-    <value>Configure remote working directories available for new remote ACP sessions. Salmon Egg does not send local paths to the remote agent.</value>
+    <value>Configure shared remote working directories available for new remote ACP sessions. Salmon Egg does not send local paths to the remote agent.</value>
   </data>
   <data name="Acp_RemoteDirectoriesDisplayName.Header" xml:space="preserve">
     <value>Display name</value>
   </data>
+  <data name="Acp_RemoteDirectoriesDisplayName.PlaceholderText" xml:space="preserve">
+    <value>Workspace</value>
+  </data>
   <data name="Acp_RemoteDirectoriesRemotePath.Header" xml:space="preserve">
     <value>Remote directory</value>
   </data>
+  <data name="Acp_RemoteDirectoriesRemotePath.PlaceholderText" xml:space="preserve">
+    <value>/home/user/project</value>
+  </data>
   <data name="Acp_RemoteDirectoriesRemove.ToolTipService.ToolTip" xml:space="preserve">
     <value>Remove directory</value>
+  </data>
+  <data name="Acp_RemoteDirectoryEdit.Content" xml:space="preserve">
+    <value>Edit</value>
+  </data>
+  <data name="Acp_RemoteDirectorySave.Content" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="Acp_RemoteDirectoryCancel.Content" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="Acp_RemoteDirectoryDelete.Content" xml:space="preserve">
+    <value>Delete</value>
   </data>
   <data name="Start_Title.Text" xml:space="preserve">
     <value>Salmon Egg</value>

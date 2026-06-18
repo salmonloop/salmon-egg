@@ -10,6 +10,10 @@ public sealed class StartPageAcpSmokeTests
     private const string RemoteProfileName = "GUI Remote Mock Agent";
     private const string LocalProfileId = "gui-local-stdio-profile";
     private const string LocalProfileName = "GUI Local Stdio Agent";
+    private const string RemoteDirectoryId = "gui-remote-directory";
+    private const string RemoteDirectoryProjectId = "remote-directory:" + RemoteDirectoryId;
+    private const string RemoteDirectoryName = "GUI Remote Directory";
+    private const string RemoteDirectoryPath = "/remote/gui-project";
 
     private static readonly string[] ReadyModeLabels = ["Agent 01", "Planner 01"];
     private static readonly string[] UnavailableModeLabels =
@@ -41,8 +45,8 @@ public sealed class StartPageAcpSmokeTests
         OpenStartPage(session);
 
         Assert.True(
-            WaitUntilRemoteDraftBlocked(session, appData, TimeSpan.FromSeconds(20)),
-            BuildFailureMessage("Remote startup profile never settled into an unavailable state.", session, appData));
+            WaitUntilRemoteConnectionAttempted(appData, TimeSpan.FromSeconds(12)),
+            BuildFailureMessage("Remote startup profile never attempted a WebSocket connection.", session, appData));
 
         SelectAgentProfile(session, LocalProfileName, LocalProfileId);
 
@@ -72,8 +76,8 @@ public sealed class StartPageAcpSmokeTests
         SelectAgentProfile(session, RemoteProfileName, RemoteProfileId);
 
         Assert.True(
-            WaitUntilRemoteDraftBlocked(session, appData, TimeSpan.FromSeconds(20)),
-            BuildFailureMessage("Switching from local stdio to remote never settled into the expected unavailable state.", session, appData));
+            WaitUntilRemoteConnectionAttempted(appData, TimeSpan.FromSeconds(12)),
+            BuildFailureMessage("Switching from local stdio to remote never attempted a WebSocket connection.", session, appData));
 
         SelectAgentProfile(session, LocalProfileName, LocalProfileId);
 
@@ -109,15 +113,14 @@ public sealed class StartPageAcpSmokeTests
     }
 
     [SkippableFact]
-    public void RemoteProfile_WithUnmappedCwd_StaysUnavailableInsteadOfSilentlyBecomingReady()
+    public void RemoteProfile_WithoutRemoteDirectorySelection_RemainsLocallyUnavailable()
     {
-        using var appData = StartPageAcpSmokeData.CreateMappedProjectScenario(
+        using var appData = StartPageAcpSmokeData.CreateUnclassifiedScenario(
             startupProfileId: RemoteProfileId,
             remoteScenario: new GuiAppDataScope.MockAcpHarnessScenario
             {
                 TransportKind = GuiAppDataScope.MockAcpTransportKind.WebSocket,
-                InitializeBehavior = GuiAppDataScope.MockAcpInitializeBehavior.Success,
-                CwdAcceptancePolicy = GuiAppDataScope.MockAcpCwdAcceptancePolicy.RejectUnmappedRemote
+                InitializeBehavior = GuiAppDataScope.MockAcpInitializeBehavior.Success
             });
         using var session = WindowsGuiAppSession.LaunchFresh();
 
@@ -125,11 +128,60 @@ public sealed class StartPageAcpSmokeTests
 
         Assert.True(
             WaitUntilRemoteDraftBlocked(session, appData, TimeSpan.FromSeconds(20)),
-            BuildFailureMessage("Remote profile accepted an unmapped cwd or otherwise failed to remain unavailable.", session, appData));
+            BuildFailureMessage("Remote profile without a selected remote directory did not remain locally unavailable.", session, appData));
+
+        var appLogTail = appData.ReadLatestAppLogTail();
+        Assert.Contains(
+            "ACP new-session draft cwd resolution failed",
+            appLogTail,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "\"method\":\"session/new\"",
+            appLogTail,
+            StringComparison.Ordinal);
+    }
+
+    [SkippableFact]
+    public void RemoteProfile_WhenRemoteRejectsSelectedCwd_ProjectsRemoteFailureAfterSendingSessionNew()
+    {
+        using var appData = StartPageAcpSmokeData.CreateMappedProjectScenario(
+            startupProfileId: RemoteProfileId,
+            remoteScenario: new GuiAppDataScope.MockAcpHarnessScenario
+            {
+                TransportKind = GuiAppDataScope.MockAcpTransportKind.WebSocket,
+                InitializeBehavior = GuiAppDataScope.MockAcpInitializeBehavior.Success,
+                CwdAcceptancePolicy = GuiAppDataScope.MockAcpCwdAcceptancePolicy.RejectUnmappedRemote,
+                MappedRemoteCwd = "/remote/other"
+            });
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        OpenStartPage(session);
+
+        SelectComboBoxItemByAutomationId(session, "StartView.ProjectSelector", ProjectItemId(RemoteDirectoryProjectId));
+
+        Assert.True(
+            WaitUntilRemoteDraftBlocked(session, appData, TimeSpan.FromSeconds(20)),
+            BuildFailureMessage("Remote profile did not project the expected remote session/new failure.", session, appData));
+
+        var appLogTail = appData.ReadLatestAppLogTail(240);
+        var startedDraftIndex = appLogTail.LastIndexOf(
+            "Started ACP new-session draft request",
+            StringComparison.Ordinal);
+        Assert.True(startedDraftIndex >= 0, "Expected the remote selected cwd to reach session/new.");
+        var startedDraftTail = appLogTail[startedDraftIndex..];
+        Assert.Contains(
+            RemoteDirectoryPath,
+            startedDraftTail,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "ACP new-session draft cwd resolution failed",
+            startedDraftTail,
+            StringComparison.Ordinal);
     }
 
     private static void OpenStartPage(WindowsGuiAppSession session)
     {
+        session.ResizeMainWindow(width: 1400, height: 900);
         var startItem = session.FindByAutomationId("MainNav.Start", TimeSpan.FromSeconds(10));
         session.ActivateElement(startItem);
         Thread.Sleep(500);
@@ -167,6 +219,20 @@ public sealed class StartPageAcpSmokeTests
                 || appData.ReadLatestAppLogTail().Contains(
                     "Unable to load session configuration",
                     StringComparison.Ordinal),
+            timeout,
+            TimeSpan.FromMilliseconds(200));
+
+    private static bool WaitUntilRemoteConnectionAttempted(
+        StartPageAcpSmokeData appData,
+        TimeSpan timeout)
+        => WaitUntilAppLogContains(appData, "ACP candidate created. transport=\"WebSocket\"", timeout);
+
+    private static bool WaitUntilAppLogContains(
+        StartPageAcpSmokeData appData,
+        string expected,
+        TimeSpan timeout)
+        => WaitUntil(
+            () => appData.ReadLatestAppLogTail(240).Contains(expected, StringComparison.Ordinal),
             timeout,
             TimeSpan.FromMilliseconds(200));
 
@@ -295,12 +361,16 @@ public sealed class StartPageAcpSmokeTests
             $"AgentSelector={session.TryGetElementName("StartView.AgentSelector", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}",
             $"ModeSelector={session.TryGetElementName("StartView.ModeSelector", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}",
             $"ProjectSelector={session.TryGetElementName("StartView.ProjectSelector", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}",
+            $"DraftState={session.TryGetElementName("StartView.Automation.DraftState", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}",
             $"VisibleTexts=[{string.Join(" | ", session.GetVisibleTexts())}]",
             appData.ReadLatestAppLogTail(),
             appData.ReadBootLogTail());
 
     private static string AgentItemId(string profileId)
         => $"ComposerSelectorItem.Agent.{SanitizeAutomationSegment(profileId)}";
+
+    private static string ProjectItemId(string projectId)
+        => $"ComposerSelectorItem.Project.{SanitizeAutomationSegment(projectId)}";
 
     private static string SanitizeAutomationSegment(string value)
         => string.IsNullOrWhiteSpace(value)
@@ -347,7 +417,7 @@ public sealed class StartPageAcpSmokeTests
 
         public string ReadBootLogTail() => _scope.ReadBootLogTail();
 
-        public string ReadLatestAppLogTail() => _scope.ReadLatestAppLogTail();
+        public string ReadLatestAppLogTail(int lineCount = 80) => _scope.ReadLatestAppLogTail(lineCount);
 
         public void Dispose()
         {
@@ -377,6 +447,9 @@ public sealed class StartPageAcpSmokeTests
                 hasProject && !string.IsNullOrWhiteSpace(projectRootPath)
                     ? [("project-1", "GUI Project", projectRootPath)]
                     : [],
+                hasProject
+                    ? [(RemoteDirectoryId, RemoteDirectoryName, RemoteDirectoryPath)]
+                    : [],
                 hasProject ? "project-1" : "__unclassified__");
             WriteEmptyConversations(appDataRoot);
 
@@ -387,6 +460,7 @@ public sealed class StartPageAcpSmokeTests
             string appYamlPath,
             string startupProfileId,
             IReadOnlyList<(string ProjectId, string Name, string RootPath)> projects,
+            IReadOnlyList<(string DirectoryId, string DisplayName, string RemotePath)> remoteDirectories,
             string selectedProjectId)
         {
             var lines = new List<string>
@@ -409,6 +483,21 @@ public sealed class StartPageAcpSmokeTests
                     lines.Add($"  - project_id: '{EscapeYaml(project.ProjectId)}'");
                     lines.Add($"    name: '{EscapeYaml(project.Name)}'");
                     lines.Add($"    root_path: '{EscapeYaml(project.RootPath)}'");
+                }
+            }
+
+            if (remoteDirectories.Count == 0)
+            {
+                lines.Add("agent_remote_directories: []");
+            }
+            else
+            {
+                lines.Add("agent_remote_directories:");
+                foreach (var directory in remoteDirectories)
+                {
+                    lines.Add($"  - directory_id: '{EscapeYaml(directory.DirectoryId)}'");
+                    lines.Add($"    display_name: '{EscapeYaml(directory.DisplayName)}'");
+                    lines.Add($"    remote_path: '{EscapeYaml(directory.RemotePath)}'");
                 }
             }
 

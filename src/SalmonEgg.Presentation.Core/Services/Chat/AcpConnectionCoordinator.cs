@@ -27,7 +27,12 @@ public interface IAcpConnectionCoordinator
     Task ResyncAsync(IAcpChatCoordinatorSink sink, CancellationToken cancellationToken = default);
 }
 
-public sealed class AcpConnectionCoordinator : IAcpConnectionCoordinator
+internal interface IAcpConnectionStateReader
+{
+    ValueTask<ChatConnectionState> GetCurrentStateAsync(CancellationToken cancellationToken = default);
+}
+
+public sealed class AcpConnectionCoordinator : IAcpConnectionCoordinator, IAcpConnectionStateReader
 {
     private readonly IChatConnectionStore _store;
     private readonly ILogger<AcpConnectionCoordinator> _logger;
@@ -102,6 +107,12 @@ public sealed class AcpConnectionCoordinator : IAcpConnectionCoordinator
     {
         cancellationToken.ThrowIfCancellationRequested();
         await _store.Dispatch(new ResetConnectionStateAction()).ConfigureAwait(false);
+    }
+
+    public async ValueTask<ChatConnectionState> GetCurrentStateAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return await _store.GetCurrentStateAsync().ConfigureAwait(false);
     }
 
     public async Task ResyncAsync(IAcpChatCoordinatorSink sink, CancellationToken cancellationToken = default)

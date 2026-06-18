@@ -784,7 +784,6 @@ public sealed class StartViewModelTests
             });
             preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory
             {
-                ProfileId = "profile-1",
                 DirectoryId = "dir-remote",
                 DisplayName = "Remote",
                 RemotePath = "/remote/alpha"
@@ -915,6 +914,107 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
+    public async Task StartModeSelector_WhenDisplayedProfileIsStaleButIntentAndForegroundMatch_UsesAuthoritativeForegroundProfile()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            preferences.Projects.Add(new ProjectDefinition
+            {
+                ProjectId = "project-remote",
+                Name = "Remote Project",
+                RootPath = "/workspace/demo"
+            });
+            preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory
+            {
+                DirectoryId = "dir-remote",
+                DisplayName = "Remote Workspace",
+                RemotePath = "/workspace/demo"
+            });
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
+            {
+                Id = "profile-remote",
+                Name = "Remote Agent",
+                Transport = TransportType.WebSocket,
+                ServerUrl = "ws://127.0.0.1:3010/"
+            });
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
+            {
+                Id = "profile-local",
+                Name = "Local Agent",
+                Transport = TransportType.Stdio,
+                StdioCommand = "agent"
+            });
+
+            var chatService = CreateConnectedChatService();
+            chatService.SetupGet(service => service.AgentCapabilities)
+                .Returns(new AgentCapabilities(sessionCapabilities: new SessionCapabilities
+                {
+                    Close = new SessionCloseCapabilities()
+                }));
+            chatService.Setup(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+                .ReturnsAsync(new SessionNewResponse(
+                    "remote-1",
+                    new SessionModesState
+                    {
+                        CurrentModeId = "code",
+                        AvailableModes =
+                        [
+                            new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "code", Name = "Code" },
+                            new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "plan", Name = "Plan" }
+                        ]
+                    }));
+            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+
+            // Simulate the startup race from the real log: the visible selector still shows the
+            // stale local profile, but connection intent and authoritative foreground transport
+            // already belong to the remote profile.
+            chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[1];
+            await chat.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-remote"));
+            await chat.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-remote"));
+            await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-remote"));
+            await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(
+                chat.ViewModel,
+                preferences,
+                nav,
+                workflow.Object);
+            startViewModel.SelectedStartProjectId = "project-remote";
+
+            startViewModel.OnComposerLoaded();
+
+            var timeoutAt = DateTime.UtcNow.AddSeconds(3);
+            while (true)
+            {
+                var connectionState = await chat.GetConnectionStateAsync();
+                if (connectionState.NewSessionDraft is not null
+                    && string.Equals(connectionState.NewSessionDraft.ProfileId, "profile-remote", StringComparison.Ordinal)
+                    && string.Equals(connectionState.NewSessionDraft.ConnectionInstanceId, "conn-remote", StringComparison.Ordinal)
+                    && string.Equals(connectionState.NewSessionDraft.RemoteSessionId, "remote-1", StringComparison.Ordinal)
+                    && startViewModel.StartModeStage == StartSessionModeStage.Ready
+                    && startViewModel.StartModeOptions.Count == 2)
+                {
+                    break;
+                }
+
+                Assert.True(DateTime.UtcNow < timeoutAt, "Timed out waiting for the start draft to follow the authoritative foreground profile instead of the stale displayed profile.");
+                await Task.Delay(20);
+            }
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public async Task StartSessionDraft_WhenRemoteProfileHasConfiguredDirectory_UsesRemoteCwdForNewSession()
     {
         var originalContext = SynchronizationContext.Current;
@@ -931,7 +1031,6 @@ public sealed class StartViewModelTests
             });
             preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory
             {
-                ProfileId = "profile-1",
                 DirectoryId = "dir-alpha",
                 DisplayName = "Alpha",
                 RemotePath = "/home/ubuntu/Projects/Alpha"
@@ -1784,7 +1883,7 @@ public sealed class StartViewModelTests
             preferences.Projects.Add(new ProjectDefinition { ProjectId = "local-a", Name = "Local A", RootPath = @"C:\Repo\A" });
             preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory
             {
-                ProfileId = "profile-remote", DirectoryId = "dir-a", DisplayName = "Remote A", RemotePath = "/remote/a"
+                DirectoryId = "dir-a", DisplayName = "Remote A", RemotePath = "/remote/a"
             });
 
             using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
@@ -1802,6 +1901,64 @@ public sealed class StartViewModelTests
             Assert.Contains(items, item => item.SemanticValue == NavigationProjectIds.Unclassified && !item.IsSelectable);
             Assert.Contains(items, item => item.SemanticValue == "local-a" && !item.IsSelectable);
             Assert.Contains(items, item => item.SemanticValue == "remote-directory:dir-a" && item.IsSelectable);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public void StartProjectSelector_WhenSwitchingToRemoteProfileFromAgentSelector_ShowsConfiguredRemoteDirectories()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            preferences.Projects.Add(new ProjectDefinition { ProjectId = "local-a", Name = "Local A", RootPath = @"C:\Repo\A" });
+            preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory
+            {
+                DirectoryId = "dir-a",
+                DisplayName = "Remote A",
+                RemotePath = "/remote/a"
+            });
+
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
+            {
+                Id = "profile-local",
+                Name = "Local",
+                Transport = TransportType.Stdio,
+                StdioCommand = "local-agent"
+            });
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
+            {
+                Id = "profile-remote",
+                Name = "Remote",
+                Transport = TransportType.WebSocket,
+                ServerUrl = "ws://127.0.0.1:3010/"
+            });
+            chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[0];
+
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, Mock.Of<IChatLaunchWorkflow>());
+
+            Assert.DoesNotContain(
+                startViewModel.StartProjectSelectorItems,
+                item => string.Equals(item.SemanticValue, "remote-directory:dir-a", StringComparison.Ordinal));
+
+            var remoteAgentItem = Assert.Single(
+                startViewModel.StartAgentSelectorItems.Where(item =>
+                    string.Equals(item.SemanticValue, "profile-remote", StringComparison.Ordinal)));
+
+            startViewModel.SelectStartAgentDisplayCommand.Execute(remoteAgentItem);
+
+            Assert.Contains(
+                startViewModel.StartProjectSelectorItems,
+                item => string.Equals(item.SemanticValue, "remote-directory:dir-a", StringComparison.Ordinal)
+                        && item.IsSelectable);
         }
         finally
         {

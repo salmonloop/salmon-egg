@@ -51,6 +51,7 @@ public sealed class CoreStringResourceTests
     [InlineData("McpSettings_ImportFailed")]
     [InlineData("McpSettings_ClipboardEmpty")]
     [InlineData("McpSettings_ClipboardFilled")]
+    [InlineData("AcpRemoteDirectories_SaveValidationRemotePathRequired")]
     [InlineData("GamepadDiagnostics_StatusNotStarted")]
     [InlineData("GamepadDiagnostics_StatusMonitoring")]
     [InlineData("GamepadDiagnostics_StatusStopped")]

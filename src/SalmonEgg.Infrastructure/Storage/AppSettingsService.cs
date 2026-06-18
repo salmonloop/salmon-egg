@@ -156,7 +156,6 @@ public sealed class AppSettingsService : IAppSettingsService
 
             clone.Add(new AgentRemoteDirectory
             {
-                ProfileId = directory.ProfileId?.Trim() ?? string.Empty,
                 DirectoryId = directory.DirectoryId?.Trim() ?? string.Empty,
                 DisplayName = directory.DisplayName?.Trim() ?? string.Empty,
                 RemotePath = directory.RemotePath?.Trim() ?? string.Empty

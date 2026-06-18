@@ -1,3 +1,4 @@
+using System;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -12,9 +13,15 @@ public sealed partial class StartView : Page, IPrimaryContentFocusTarget
 {
     public StartViewModel ViewModel { get; }
 
+    public bool IsGuiAutomationMode { get; }
+
     public StartView()
     {
         ViewModel = App.ServiceProvider.GetRequiredService<StartViewModel>();
+        IsGuiAutomationMode = string.Equals(
+            Environment.GetEnvironmentVariable("SALMONEGG_GUI"),
+            "1",
+            StringComparison.Ordinal);
 
         InitializeComponent();
         ComposerShell.MoveUpEscapeHandler = HandlePromptMoveUpEscape;

@@ -186,7 +186,8 @@ public partial class ChatViewModel
                     connectionInstanceId!,
                     normalizedCwd,
                     requestVersion,
-                    chatService);
+                    chatService,
+                    cancellationToken);
                 inFlightRequestTask = StartInFlightNewSessionDraftRequest(request);
             }
         }
@@ -226,10 +227,31 @@ public partial class ChatViewModel
     {
         cancellationToken.ThrowIfCancellationRequested();
         var timeoutAt = DateTime.UtcNow.Add(NewSessionDraftProfileWaitTimeout);
+        var observedRequiredIntent = false;
         while (DateTime.UtcNow < timeoutAt)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var state = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
+            if (string.Equals(state.SelectedProfileIntentId, requiredProfileId, StringComparison.Ordinal))
+            {
+                observedRequiredIntent = true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(state.SelectedProfileIntentId)
+                && !string.Equals(state.SelectedProfileIntentId, requiredProfileId, StringComparison.Ordinal))
+            {
+                if (observedRequiredIntent)
+                {
+                    Logger.LogInformation(
+                        "New session draft preparation aborted because the selected profile intent changed. requiredProfileId={RequiredProfileId} currentSelectedProfileId={CurrentSelectedProfileId} currentForegroundProfileId={CurrentForegroundProfileId} currentPhase={Phase}",
+                        requiredProfileId,
+                        state.SelectedProfileIntentId,
+                        state.ForegroundTransportProfileId,
+                        state.Phase);
+                    return false;
+                }
+            }
+
             if (!string.IsNullOrWhiteSpace(requiredProfileId)
                 && _authoritativeConnectionResolver.TryResolveReadyForegroundConnection(
                     _chatService,
@@ -537,8 +559,7 @@ public partial class ChatViewModel
         NewSessionDraftState draft,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(draft.RemoteSessionId)
-            || chatService.AgentCapabilities?.SupportsSessionClose != true)
+        if (string.IsNullOrWhiteSpace(draft.RemoteSessionId))
         {
             return;
         }
@@ -551,21 +572,27 @@ public partial class ChatViewModel
         string sessionId,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(sessionId)
-            || chatService.AgentCapabilities?.SupportsSessionClose != true)
+        if (string.IsNullOrWhiteSpace(sessionId))
         {
             return;
         }
 
         try
         {
-            await chatService.CloseSessionAsync(
-                new SessionCloseParams(sessionId),
-                cancellationToken).ConfigureAwait(false);
+            if (chatService.AgentCapabilities?.SupportsSessionClose == true)
+            {
+                await chatService.CloseSessionAsync(
+                    new SessionCloseParams(sessionId),
+                    cancellationToken).ConfigureAwait(false);
+            }
         }
         catch (Exception ex)
         {
             Logger.LogDebug(ex, "Failed to close ACP new-session draft. sessionId={SessionId}", sessionId);
+        }
+        finally
+        {
+            _sessionManager.RemoveSession(sessionId);
         }
     }
 
@@ -735,6 +762,12 @@ public partial class ChatViewModel
         }
         catch (Exception ex)
         {
+            Logger.LogWarning(
+                ex,
+                "Failed to complete ACP new-session draft request. profileId={ProfileId} connectionInstanceId={ConnectionInstanceId} cwd={Cwd}",
+                request.ProfileId,
+                request.ConnectionInstanceId,
+                request.Cwd);
             await CompleteFailedNewSessionDraftRequestAsync(request, ex).ConfigureAwait(false);
         }
         finally
@@ -782,7 +815,18 @@ public partial class ChatViewModel
         try
         {
             var connectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
-            if (!ShouldAdoptNewSessionDraftRequestResponse(connectionState, request.RequestKey))
+            if (request.CancellationToken.IsCancellationRequested)
+            {
+                shouldDiscardResponse = true;
+                if (IsDesiredNewSessionDraftRequest(request.RequestKey))
+                {
+                    ClearDesiredNewSessionDraftRequestKey();
+                    await _chatConnectionStore.Dispatch(new ClearNewSessionDraftAction()).ConfigureAwait(false);
+                    await ApplyNewSessionDraftProjectionAsync(
+                        await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false)).ConfigureAwait(false);
+                }
+            }
+            else if (!ShouldAdoptNewSessionDraftRequestResponse(connectionState, request.RequestKey))
             {
                 shouldDiscardResponse = true;
             }
@@ -800,6 +844,12 @@ public partial class ChatViewModel
                 await _chatConnectionStore.Dispatch(new SetNewSessionDraftAction(readyDraft)).ConfigureAwait(false);
                 await ApplyNewSessionDraftProjectionAsync(
                     await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false)).ConfigureAwait(false);
+                Logger.LogInformation(
+                    "Applied ACP new-session draft response. profileId={ProfileId} connectionInstanceId={ConnectionInstanceId} remoteSessionId={RemoteSessionId} modeCount={ModeCount}",
+                    request.ProfileId,
+                    request.ConnectionInstanceId,
+                    response.SessionId,
+                    readyDraft.AvailableModes.Count);
             }
         }
         finally
@@ -953,5 +1003,6 @@ public partial class ChatViewModel
         string ConnectionInstanceId,
         string Cwd,
         long RequestVersion,
-        SalmonEgg.Application.Services.Chat.IChatService ChatService);
+        SalmonEgg.Application.Services.Chat.IChatService ChatService,
+        CancellationToken CancellationToken);
 }

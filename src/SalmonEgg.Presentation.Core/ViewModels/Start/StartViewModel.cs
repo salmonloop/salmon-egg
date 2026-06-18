@@ -195,6 +195,20 @@ public sealed partial class StartViewModel : ObservableObject
 
     public string StartSessionDraftErrorMessage => Chat.NewSessionDraftErrorMessage;
 
+    public string StartDraftAutomationState
+        => string.Join(
+            ";",
+            $"Stage={StartModeStage}",
+            $"Ready={Chat.IsNewSessionDraftReady}",
+            $"Loading={Chat.IsNewSessionDraftLoading}",
+            $"Pending={_isNewSessionDraftRefreshPending}",
+            $"Error={HasStartSessionDraftError}",
+            $"ModeCount={StartModeOptions.Count.ToString(CultureInfo.InvariantCulture)}",
+            $"SelectedProfile={Chat.SelectedAcpProfile?.Id ?? string.Empty}",
+            $"SelectedIntent={Chat.SelectedProfileIntentId ?? string.Empty}",
+            $"ConnectionId={Chat.ConnectionInstanceId ?? string.Empty}",
+            $"Message={StartSessionDraftErrorMessage}");
+
     public bool IsVoiceInputSupported => Chat.IsVoiceInputSupported;
 
     public bool CanStartVoiceInput => !IsStarting && Chat.CanStartVoiceInput;
@@ -509,6 +523,7 @@ public sealed partial class StartViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedStartAgentSelectorItem));
         OnPropertyChanged(nameof(SelectedStartModeSelectorItem));
         OnPropertyChanged(nameof(SelectedStartProjectSelectorItem));
+        OnPropertyChanged(nameof(StartDraftAutomationState));
     }
 
     private void OnPreferencesPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -613,10 +628,9 @@ public sealed partial class StartViewModel : ObservableObject
             options.Add(new StartProjectOptionViewModel(project.ProjectId, project.Name, isSelectable: !isRemoteProfile));
         }
 
-        if (isRemoteProfile && !string.IsNullOrWhiteSpace(Chat.SelectedAcpProfile?.Id))
+        if (isRemoteProfile)
         {
             foreach (var directory in _preferences.AgentRemoteDirectories
-                         .Where(d => string.Equals(d.ProfileId, Chat.SelectedAcpProfile!.Id, StringComparison.Ordinal))
                          .Where(d => !string.IsNullOrWhiteSpace(d.DirectoryId) && !string.IsNullOrWhiteSpace(d.RemotePath))
                          .OrderBy(d => string.IsNullOrWhiteSpace(d.DisplayName) ? d.RemotePath : d.DisplayName, StringComparer.Ordinal))
             {
@@ -743,6 +757,16 @@ public sealed partial class StartViewModel : ObservableObject
             return;
         }
 
+        if (string.Equals(e.PropertyName, nameof(ChatViewModel.SelectedProfileIntentId), StringComparison.Ordinal))
+        {
+            if (_isComposerLoaded)
+            {
+                QueueEnsureNewSessionDraft();
+            }
+
+            return;
+        }
+
         if (string.Equals(e.PropertyName, nameof(ChatViewModel.SelectedNewSessionDraftMode), StringComparison.Ordinal))
         {
             OnPropertyChanged(nameof(SelectedStartMode));
@@ -855,6 +879,7 @@ public sealed partial class StartViewModel : ObservableObject
         OnPropertyChanged(nameof(HasStartSessionDraftError));
         OnPropertyChanged(nameof(StartSessionDraftErrorMessage));
         RefreshAllSelectorProjections();
+        OnPropertyChanged(nameof(StartDraftAutomationState));
     }
 
     private void QueueEnsureNewSessionDraft()
@@ -879,9 +904,11 @@ public sealed partial class StartViewModel : ObservableObject
 
         try
         {
+            var preferredProfileId = await Chat.ResolvePreferredNewSessionDraftProfileIdAsync(cancellationToken)
+                .ConfigureAwait(true);
             await Chat.EnsureNewSessionDraftForProfileAsync(
                     ResolvePreviewCwd(),
-                    Chat.SelectedAcpProfile?.Id,
+                    preferredProfileId,
                     cancellationToken)
                 .ConfigureAwait(true);
         }

@@ -84,7 +84,7 @@
                                         Content="刷新"
                                         AutomationProperties.AutomationId="Acp.Profiles.Refresh"
                                         Command="{x:Bind ViewModel.Profiles.RefreshCommand}"
-                                        IsEnabled="{x:Bind ViewModel.Profiles.IsLoading, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"/>
+                                        IsEnabled="{x:Bind ViewModel.CanRefreshProfiles, Mode=OneWay}"/>
                                 <Button x:Name="AcpProfilesAddButton"
                                         x:Uid="Acp_ProfilesAdd"
                                         Content="新建配置"
@@ -221,11 +221,12 @@
                         </Grid>
 
                         <TextBlock x:Uid="Acp_RemoteDirectoriesHint"
-                                   Text="为当前 Agent 配置可用于新建远程 ACP 会话的远端工作目录。Salmon Egg 不会把本机路径发送给远端 Agent。"
+                                   Text="配置可用于新建远程 ACP 会话的通用远端工作目录。Salmon Egg 不会把本机路径发送给远端 Agent。"
                                    Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
 
                         <Border Style="{StaticResource SettingsSectionContainerStyle}">
-                            <ListView ItemsSource="{x:Bind ViewModel.RemoteDirectoryRows, Mode=OneWay}"
+                            <ListView x:Name="AcpRemoteDirectoriesList"
+                                      ItemsSource="{x:Bind ViewModel.RemoteDirectoryRows, Mode=OneWay}"
                                       SelectionMode="None"
                                       MinHeight="120"
                                       Background="Transparent"
@@ -233,30 +234,67 @@
                                       AutomationProperties.AutomationId="Acp.RemoteDirectories.List">
                                 <ListView.ItemTemplate>
                                     <DataTemplate x:DataType="vm:AcpRemoteDirectoryRowViewModel">
-                                        <Grid Style="{StaticResource SettingsRowGridStyle}"
-                                              ColumnDefinitions="*,Auto"
-                                              RowDefinitions="Auto,Auto"
-                                              RowSpacing="8">
-                                            <TextBox Grid.Row="0" Grid.Column="0"
-                                                     x:Uid="Acp_RemoteDirectoriesDisplayName"
-                                                     Header="显示名称"
-                                                     PlaceholderText="Workspace"
-                                                     Text="{x:Bind DisplayName, Mode=TwoWay}"/>
-                                            <TextBox Grid.Row="1" Grid.Column="0"
-                                                     x:Uid="Acp_RemoteDirectoriesRemotePath"
-                                                     Header="远端目录"
-                                                     PlaceholderText="/home/user/project"
-                                                     Text="{x:Bind RemotePath, Mode=TwoWay}"/>
-                                            <Button Grid.Row="0" Grid.RowSpan="2" Grid.Column="1"
-                                                    x:Uid="Acp_RemoteDirectoriesRemove"
-                                                    Command="{x:Bind RemoveCommand}"
-                                                    VerticalAlignment="Center">
-                                                <Button.Content>
-                                                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                                              Glyph="&#xE74D;"/>
-                                                </Button.Content>
-                                            </Button>
-                                        </Grid>
+                                        <StackPanel Spacing="10"
+                                                    Padding="{StaticResource SettingsRowPadding}">
+                                            <Grid ColumnDefinitions="*,Auto,Auto"
+                                                  ColumnSpacing="10"
+                                                  Visibility="{x:Bind IsEditing, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}">
+                                                <StackPanel Spacing="4"
+                                                            VerticalAlignment="Center">
+                                                    <TextBlock Text="{x:Bind SummaryTitle, Mode=OneWay}"
+                                                               Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                                    <TextBlock Text="{x:Bind RemotePath, Mode=OneWay}"
+                                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                                </StackPanel>
+
+                                                <Button Grid.Column="1"
+                                                        x:Uid="Acp_RemoteDirectoryEdit"
+                                                        Command="{x:Bind BeginEditCommand, Mode=OneWay}"
+                                                        AutomationProperties.AutomationId="Acp.RemoteDirectories.Edit"
+                                                        VerticalAlignment="Center"/>
+
+                                                <Button Grid.Column="2"
+                                                        x:Uid="Acp_RemoteDirectoriesRemove"
+                                                        Command="{x:Bind RemoveCommand}"
+                                                        AutomationProperties.AutomationId="Acp.RemoteDirectories.Remove"
+                                                        VerticalAlignment="Center">
+                                                    <Button.Content>
+                                                        <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                                                  Glyph="&#xE74D;"/>
+                                                    </Button.Content>
+                                                </Button>
+                                            </Grid>
+
+                                            <StackPanel Spacing="10"
+                                                        Visibility="{x:Bind IsEditing, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                <TextBox x:Uid="Acp_RemoteDirectoriesDisplayName"
+                                                         x:Name="AcpRemoteDirectoryDisplayNameBox"
+                                                         Header="显示名称"
+                                                         Text="{x:Bind DisplayNameDraft, Mode=TwoWay}"/>
+                                                <TextBox x:Uid="Acp_RemoteDirectoriesRemotePath"
+                                                         Header="远端目录"
+                                                         Text="{x:Bind RemotePathDraft, Mode=TwoWay}"/>
+                                                <TextBlock Text="{x:Bind ValidationMessage, Mode=OneWay}"
+                                                           Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                           Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                           Visibility="{x:Bind ValidationMessage, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                <Grid ColumnDefinitions="Auto,Auto,Auto,*"
+                                                      ColumnSpacing="8">
+                                                    <Button x:Uid="Acp_RemoteDirectorySave"
+                                                            Command="{x:Bind SaveCommand, Mode=OneWay}"
+                                                            AutomationProperties.AutomationId="Acp.RemoteDirectories.Save"
+                                                            Style="{StaticResource AccentButtonStyle}"/>
+                                                    <Button Grid.Column="1"
+                                                            x:Uid="Acp_RemoteDirectoryCancel"
+                                                            Command="{x:Bind CancelCommand, Mode=OneWay}"
+                                                            AutomationProperties.AutomationId="Acp.RemoteDirectories.Cancel"/>
+                                                    <Button Grid.Column="2"
+                                                            x:Uid="Acp_RemoteDirectoryDelete"
+                                                            Command="{x:Bind RemoveCommand}"
+                                                            AutomationProperties.AutomationId="Acp.RemoteDirectories.Remove"/>
+                                                </Grid>
+                                            </StackPanel>
+                                        </StackPanel>
                                     </DataTemplate>
                                 </ListView.ItemTemplate>
                             </ListView>

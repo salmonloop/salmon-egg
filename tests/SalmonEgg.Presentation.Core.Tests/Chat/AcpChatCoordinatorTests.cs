@@ -16,9 +16,11 @@ using SalmonEgg.Domain.Models.Plan;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Core.Tests.Threading;
+using Uno.Extensions.Reactive;
 using Xunit;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat;
@@ -913,6 +915,88 @@ public sealed class AcpChatCoordinatorTests
         connectionCoordinator.Verify(
             x => x.SetDisconnectedAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()),
             Times.Never);
+    }
+
+    [Fact]
+    public async Task ConnectToProfileAsync_CancelledBeforeCandidateCommit_RestoresPreviousForegroundConnectionNotSelectedIntent()
+    {
+        await using var connectionState = State.Value(
+            new object(),
+            () => ChatConnectionState.Empty with
+            {
+                Phase = ConnectionPhase.Connected,
+                SelectedProfileIntentId = "profile-remote",
+                ForegroundTransportProfileId = "profile-local",
+                ConnectionInstanceId = "conn-local",
+                Generation = 7
+            });
+        var store = new ChatConnectionStore(connectionState);
+        var connectionCoordinator = new AcpConnectionCoordinator(
+            store,
+            Mock.Of<ILogger<AcpConnectionCoordinator>>(),
+            new StaticMcpResolver([]));
+        var transport = new FakeTransportConfiguration();
+        var localInnerService = CreateChatService();
+        var localAdapter = new AcpChatServiceAdapter(
+            localInnerService.Object,
+            new AcpEventAdapter(_ => { }, new ImmediateUiDispatcher()));
+        var candidateService = CreateChatService();
+        var initializeStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowInitializeCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sink = new FakeSink
+        {
+            CurrentChatService = localAdapter,
+            IsConnected = true,
+            IsInitialized = true,
+            CurrentSessionId = "local-session-1",
+            SelectedProfileId = "profile-local",
+            ConnectionInstanceId = "conn-local"
+        };
+        var factory = new Mock<IAcpChatServiceFactory>();
+        var logger = new Mock<ILogger<AcpChatCoordinator>>();
+
+        candidateService
+            .Setup(x => x.InitializeAsync(It.IsAny<InitializeParams>()))
+            .Returns(async () =>
+            {
+                initializeStarted.TrySetResult(null);
+                await allowInitializeCompletion.Task;
+                return new InitializeResponse(1, new AgentInfo("agent", "1.0.0"), new AgentCapabilities());
+            });
+
+        factory
+            .Setup(x => x.CreateChatService(TransportType.WebSocket, null, null, "wss://agent.test"))
+            .Returns(candidateService.Object);
+
+        var sut = CreateCoordinator(
+            factory.Object,
+            logger.Object,
+            connectionCoordinator: connectionCoordinator,
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
+        var profile = new ServerConfiguration
+        {
+            Id = "profile-remote",
+            Name = "Remote Agent",
+            Transport = TransportType.WebSocket,
+            ServerUrl = "wss://agent.test"
+        };
+        using var cancellation = new CancellationTokenSource();
+
+        var connectTask = sut.ConnectToProfileAsync(profile, transport, sink, cancellation.Token);
+        await initializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        await store.Dispatch(new SetSelectedProfileIntentAction("profile-local"));
+        cancellation.Cancel();
+        allowInitializeCompletion.TrySetResult(null);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => connectTask);
+
+        var updated = await store.GetCurrentStateAsync();
+        Assert.Equal(ConnectionPhase.Connected, updated.Phase);
+        Assert.Equal("profile-local", updated.SelectedProfileIntentId);
+        Assert.Equal("profile-local", updated.ForegroundTransportProfileId);
+        Assert.Equal("conn-local", updated.ConnectionInstanceId);
     }
 
     [Fact]

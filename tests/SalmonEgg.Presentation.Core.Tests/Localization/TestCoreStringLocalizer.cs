@@ -80,6 +80,8 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["McpSettings_ImportFailed"] = "McpSettings_ImportFailed",
         ["McpSettings_ClipboardEmpty"] = "McpSettings_ClipboardEmpty",
         ["McpSettings_ClipboardFilled"] = "McpSettings_ClipboardFilled",
+        ["AcpRemoteDirectories_SaveValidationRemotePathRequired"] = "AcpRemoteDirectories_SaveValidationRemotePathRequired",
+        ["Acp_RemoteDirectoryDelete.Content"] = "Delete",
         ["Shortcuts_InvalidGestureMessage"] = "存在无效快捷键格式，请修正后保存。",
         ["Shortcuts_ConflictMessage"] = "存在冲突：{0}",
         ["Shortcuts_ConflictSeparator"] = "，",

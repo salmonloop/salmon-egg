@@ -87,7 +87,7 @@ public sealed class ProjectAffinityResolverTests
             Projects: Array.Empty<ProjectDefinition>(),
             RemoteDirectories: new[]
             {
-                new AgentRemoteDirectory { ProfileId = "profile-1", DirectoryId = "dir-1", DisplayName = "Repo", RemotePath = "/remote/repo" }
+                new AgentRemoteDirectory { DirectoryId = "dir-1", DisplayName = "Repo", RemotePath = "/remote/repo" }
             },
             UnclassifiedProjectId: NavigationProjectIds.Unclassified));
 
@@ -110,7 +110,7 @@ public sealed class ProjectAffinityResolverTests
             Projects: Array.Empty<ProjectDefinition>(),
             RemoteDirectories: new[]
             {
-                new AgentRemoteDirectory { ProfileId = "profile-1", DirectoryId = "dir-1", DisplayName = "Repo", RemotePath = @"c:\remote\repo" }
+                new AgentRemoteDirectory { DirectoryId = "dir-1", DisplayName = "Repo", RemotePath = @"c:\remote\repo" }
             },
             UnclassifiedProjectId: NavigationProjectIds.Unclassified));
 
@@ -132,7 +132,7 @@ public sealed class ProjectAffinityResolverTests
             Projects: Array.Empty<ProjectDefinition>(),
             RemoteDirectories: new[]
             {
-                new AgentRemoteDirectory { ProfileId = "profile-1", DirectoryId = "dir-1", DisplayName = "Repo", RemotePath = "/remote/repo" }
+                new AgentRemoteDirectory { DirectoryId = "dir-1", DisplayName = "Repo", RemotePath = "/remote/repo" }
             },
             UnclassifiedProjectId: NavigationProjectIds.Unclassified));
 
@@ -227,7 +227,6 @@ public sealed class ProjectAffinityResolverTests
         {
             new AgentRemoteDirectory
             {
-                ProfileId = "profile-1",
                 DirectoryId = "dir-1",
                 DisplayName = "Repo",
                 RemotePath = "/remote/repo"
@@ -244,6 +243,33 @@ public sealed class ProjectAffinityResolverTests
 
         Assert.Equal("override", result.EffectiveProjectId);
         Assert.Equal(ProjectAffinitySource.Override, result.Source);
+    }
+
+    [Fact]
+    public void Resolve_RemoteSessionWithoutBoundProfile_CanStillMatchSharedRemoteDirectory()
+    {
+        var resolver = new ProjectAffinityResolver();
+
+        var result = resolver.Resolve(new ProjectAffinityRequest(
+            RemoteCwd: "/remote/repo",
+            BoundProfileId: null,
+            RemoteSessionId: "remote-1",
+            OverrideProjectId: null,
+            Projects: Array.Empty<ProjectDefinition>(),
+            RemoteDirectories: new[]
+            {
+                new AgentRemoteDirectory
+                {
+                    DirectoryId = "dir-1",
+                    DisplayName = "Repo",
+                    RemotePath = "/remote/repo"
+                }
+            },
+            UnclassifiedProjectId: NavigationProjectIds.Unclassified));
+
+        Assert.Equal(ProjectAffinitySource.RemoteDirectory, result.Source);
+        Assert.False(result.NeedsUserAttention);
+        Assert.Equal("Repo", result.RemoteDirectoryDisplayName);
     }
 
     [Fact]
