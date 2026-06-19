@@ -1578,11 +1578,20 @@ public sealed partial class RealUserConfigSmokeTests
             "StartView.ModeSelector did not appear for the real-config start composer.");
 
         var logCheckpoint = DateTimeOffset.Now - TimeSpan.FromSeconds(1);
-        SelectComboBoxItemByAutomationId(
-            session,
-            "StartView.AgentSelector",
-            scenario.RemoteProfileAutomationId,
-            scenario.RemoteProfileName);
+        if (!StartDraftAutomationStateContains(session, $"SelectedProfile={scenario.RemoteProfileId}"))
+        {
+            SelectComboBoxItemByAutomationId(
+                session,
+                "StartView.AgentSelector",
+                scenario.RemoteProfileAutomationId);
+            Assert.True(
+                WaitUntil(
+                    () => StartDraftAutomationStateContains(session, $"SelectedProfile={scenario.RemoteProfileId}")
+                        && StartDraftAutomationStateContains(session, $"SelectedIntent={scenario.RemoteProfileId}"),
+                    TimeSpan.FromSeconds(10),
+                    TimeSpan.FromMilliseconds(200)),
+                $"Start composer did not project selected real remote profile '{scenario.RemoteProfileName}'. DraftState='{session.TryGetElementName("StartView.Automation.DraftState", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}'.");
+        }
         Assert.True(
             session.WaitUntilOnscreen("StartView.ProjectSelector", TimeSpan.FromSeconds(10)),
             "StartView.ProjectSelector disappeared after selecting the real remote profile.");
@@ -1590,8 +1599,7 @@ public sealed partial class RealUserConfigSmokeTests
         SelectComboBoxItemByAutomationId(
             session,
             "StartView.ProjectSelector",
-            scenario.RemoteDirectoryAutomationId,
-            scenario.RemoteDirectoryDisplayName);
+            scenario.RemoteDirectoryAutomationId);
 
         var ready = WaitUntil(
             () => TryOpenStartModeSelectorAndDetectKnownMode(session),
@@ -2437,6 +2445,10 @@ public sealed partial class RealUserConfigSmokeTests
 
         return false;
     }
+
+    private static bool StartDraftAutomationStateContains(WindowsGuiAppSession session, string expectedFragment)
+        => session.TryGetElementName("StartView.Automation.DraftState", TimeSpan.FromMilliseconds(200))
+            ?.Contains(expectedFragment, StringComparison.Ordinal) == true;
 
     private static bool IsStartComposerModeUnavailable(WindowsGuiAppSession session)
         => session.TryFindVisibleTextAnywhere("模式不可用", TimeSpan.FromMilliseconds(120)) is not null
