@@ -21,6 +21,7 @@ namespace SalmonEgg.Presentation.Core.Services.Chat;
 public sealed class AcpChatCoordinator : IAcpConnectionCommands
 {
     private const int DefaultSessionUpdateBufferLimit = 256;
+    private const int DefaultConnectionTimeoutSeconds = 10;
 
     private readonly IAcpChatServiceFactory _chatServiceFactory;
     private readonly IAcpConnectionCoordinator _connectionCoordinator;
@@ -124,6 +125,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             sink,
             connectionContext,
             profile.Id,
+            ResolveInitializeTimeout(profile),
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -148,6 +150,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             sink,
             connectionContext,
             selectedProfileIdOverride: null,
+            ResolveInitializeTimeout(profile: null),
             cancellationToken).ConfigureAwait(false);
 
     private async Task<AcpTransportApplyResult> ApplyTransportConfigurationCoreAsync(
@@ -155,6 +158,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         IAcpChatCoordinatorSink sink,
         AcpConnectionContext connectionContext,
         string? selectedProfileIdOverride,
+        TimeSpan initializeTimeout,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(transportConfiguration);
@@ -264,9 +268,13 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             wrappedService = WrapChatService(candidateService, sink, applyToken);
             await _connectionCoordinator.SetInitializingAsync(selectedProfileId, applyToken).ConfigureAwait(false);
 
-            var initializeResponse = await wrappedService
-                .InitializeAsync(CreateDefaultInitializeParams())
-                .WaitAsync(applyToken)
+            var initializeResponse = await InitializeCandidateAsync(
+                    wrappedService,
+                    transportConfiguration.SelectedTransportType,
+                    selectedProfileId,
+                    connectionContext.ConversationId,
+                    initializeTimeout,
+                    applyToken)
                 .ConfigureAwait(false);
             _logger.LogInformation(
                 "ACP candidate initialized. transport={TransportType} conversationId={ConversationId}",
@@ -516,8 +524,13 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         var wrapped = WrapChatService(service, sink: null, cancellationToken);
         try
         {
-            var initializeResponse = await wrapped
-                .InitializeAsync(CreateDefaultInitializeParams())
+            var initializeResponse = await InitializeCandidateAsync(
+                    wrapped,
+                    transportConfiguration.SelectedTransportType,
+                    profile.Id,
+                    conversationId: null,
+                    ResolveInitializeTimeout(profile),
+                    cancellationToken)
                 .ConfigureAwait(false);
             var connectionInstanceId = CreateConnectionInstanceId();
             _connectionPoolManager.RecordSession(profile.Id, wrapped, initializeResponse, reuseKey, connectionInstanceId);
@@ -802,6 +815,48 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
 
         return new ApplyScope(this, scopeCts, callerToken);
     }
+
+    private static async Task<InitializeResponse> InitializeCandidateAsync(
+        IChatService chatService,
+        TransportType transportType,
+        string? profileId,
+        string? conversationId,
+        TimeSpan initializeTimeout,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await chatService
+                .InitializeAsync(CreateDefaultInitializeParams())
+                .WaitAsync(initializeTimeout, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (TimeoutException ex)
+        {
+            throw new TimeoutException(
+                CreateInitializeTimeoutMessage(transportType, profileId, conversationId, initializeTimeout),
+                ex);
+        }
+    }
+
+    private static TimeSpan ResolveInitializeTimeout(ServerConfiguration? profile)
+    {
+        var seconds = profile?.ConnectionTimeout > 0
+            ? profile.ConnectionTimeout
+            : DefaultConnectionTimeoutSeconds;
+        return TimeSpan.FromSeconds(seconds);
+    }
+
+    private static string CreateInitializeTimeoutMessage(
+        TransportType transportType,
+        string? profileId,
+        string? conversationId,
+        TimeSpan initializeTimeout)
+        => "Timed out waiting for ACP initialize response. "
+            + $"profileId={profileId ?? "(none)"} "
+            + $"transport={transportType} "
+            + $"timeoutSeconds={initializeTimeout.TotalSeconds:0.###} "
+            + $"conversationId={conversationId ?? "(none)"}";
 
     private bool ShouldKeepServiceAlive(IChatService? service, string? targetProfileId)
     {

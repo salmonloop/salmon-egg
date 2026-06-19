@@ -767,6 +767,127 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
+    public async Task StartModeSelector_WhenColdStartConnectionCompletesAfterInitialProfileWait_RetriesAndBecomesReady()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory
+            {
+                DirectoryId = "dir-alpha",
+                DisplayName = "Alpha",
+                RemotePath = "/home/ubuntu/Projects/Alpha"
+            });
+
+            var commands = new Mock<IAcpConnectionCommands>();
+            ChatViewModelHarness? chatHarness = null;
+            using var chat = CreateChatViewModel(
+                syncContext,
+                preferences,
+                Mock.Of<ISessionManager>(),
+                acpConnectionCommands: commands.Object);
+            chatHarness = chat;
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
+            {
+                Id = "profile-remote",
+                Name = "Remote Agent",
+                Transport = TransportType.WebSocket,
+                ServerUrl = "ws://127.0.0.1:3010/"
+            });
+            chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[0];
+
+            var chatService = CreateConnectedChatService();
+            var createCalls = new List<SessionNewParams>();
+            chatService
+                .Setup(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+                .Callback<SessionNewParams>(request => createCalls.Add(request))
+                .ReturnsAsync(new SessionNewResponse(
+                    "remote-draft-1",
+                    new SessionModesState
+                    {
+                        CurrentModeId = "code",
+                        AvailableModes =
+                        [
+                            new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "code", Name = "Code" },
+                            new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "plan", Name = "Plan" }
+                        ]
+                    }));
+            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+            commands
+                .Setup(command => command.ConnectToProfileAsync(
+                    It.Is<ServerConfiguration>(profile => string.Equals(profile.Id, "profile-2", StringComparison.Ordinal)),
+                    It.IsAny<IAcpTransportConfiguration>(),
+                    It.IsAny<IAcpChatCoordinatorSink>(),
+                    It.IsAny<CancellationToken>()))
+                .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, CancellationToken>(
+                    async (_, _, _, _) =>
+                    {
+                        Assert.NotNull(chatHarness);
+                        await chatHarness!.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+                        await chatHarness.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-2"));
+                        await chatHarness.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-2"));
+                        await chatHarness.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+                        return new AcpTransportApplyResult(chatService.Object, new InitializeResponse());
+                    });
+            await chat.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-remote"));
+            await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connecting));
+
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(
+                chat.ViewModel,
+                preferences,
+                nav,
+                workflow.Object);
+            startViewModel.SelectedStartProjectId = "remote-directory:dir-alpha";
+            startViewModel.OnComposerLoaded();
+
+            await WaitForConditionAsync(
+                () => startViewModel.StartDraftAutomationState.Contains("Pending=True", StringComparison.Ordinal),
+                timeoutMilliseconds: 1000);
+            await WaitForConditionAsync(
+                () => startViewModel.StartDraftAutomationState.Contains("Pending=False", StringComparison.Ordinal),
+                timeoutMilliseconds: 3500);
+            Assert.Empty(createCalls);
+
+            await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-remote"));
+            await chat.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-remote"));
+            await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+
+            var recovered = await WaitForConditionOrFalseAsync(
+                () => startViewModel.StartModeStage == StartSessionModeStage.Ready
+                    && startViewModel.IsStartModeSelectorEnabled
+                    && startViewModel.StartModeOptions.Count == 2
+                    && !startViewModel.HasStartSessionDraftError,
+                timeoutMilliseconds: 3000);
+            var recoveredState = await chat.GetConnectionStateAsync();
+            Assert.True(
+                recovered,
+                $"Start draft did not recover. automation={startViewModel.StartDraftAutomationState}; " +
+                $"phase={recoveredState.Phase}; intent={recoveredState.SelectedProfileIntentId}; " +
+                $"foreground={recoveredState.ForegroundTransportProfileId}; conn={recoveredState.ConnectionInstanceId}; " +
+                $"draftPhase={recoveredState.NewSessionDraft?.Phase.ToString() ?? "null"}; " +
+                $"draftProfile={recoveredState.NewSessionDraft?.ProfileId ?? "null"}; " +
+                $"draftError={recoveredState.NewSessionDraft?.Error ?? "null"}; " +
+                $"createCalls={createCalls.Count}");
+
+            var finalState = await chat.GetConnectionStateAsync();
+            Assert.Equal("profile-remote", finalState.NewSessionDraft?.ProfileId);
+            Assert.Equal("conn-remote", finalState.NewSessionDraft?.ConnectionInstanceId);
+            Assert.Equal("remote-draft-1", finalState.NewSessionDraft?.RemoteSessionId);
+            Assert.Single(createCalls);
+            Assert.Equal("/home/ubuntu/Projects/Alpha", createCalls[0].Cwd);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public async Task StartModeSelector_WhenSupersededDraftResponseArrivesLate_PrefersNewestProfileDraft()
     {
         var originalContext = SynchronizationContext.Current;
@@ -1170,7 +1291,14 @@ public sealed class StartViewModelTests
                 RootPath = @"C:\Repo\Alpha"
             });
 
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var commands = new Mock<IAcpConnectionCommands>();
+            ChatViewModelHarness? chatHarness = null;
+            using var chat = CreateChatViewModel(
+                syncContext,
+                preferences,
+                Mock.Of<ISessionManager>(),
+                acpConnectionCommands: commands.Object);
+            chatHarness = chat;
             chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
             {
                 Id = "profile-1",
@@ -1204,6 +1332,29 @@ public sealed class StartViewModelTests
                         ]
                     }));
             await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+            commands
+                .Setup(command => command.ConnectToProfileAsync(
+                    It.IsAny<ServerConfiguration>(),
+                    It.IsAny<IAcpTransportConfiguration>(),
+                    It.IsAny<IAcpChatCoordinatorSink>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new AcpTransportApplyResult(chatService.Object, new InitializeResponse()));
+            commands
+                .Setup(command => command.ConnectToProfileAsync(
+                    It.Is<ServerConfiguration>(profile => string.Equals(profile.Id, "profile-2", StringComparison.Ordinal)),
+                    It.IsAny<IAcpTransportConfiguration>(),
+                    It.IsAny<IAcpChatCoordinatorSink>(),
+                    It.IsAny<CancellationToken>()))
+                .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, CancellationToken>(
+                    async (_, _, _, _) =>
+                    {
+                        Assert.NotNull(chatHarness);
+                        await chatHarness!.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+                        await chatHarness.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-2"));
+                        await chatHarness.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-2"));
+                        await chatHarness.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+                        return new AcpTransportApplyResult(chatService.Object, new InitializeResponse());
+                    });
 
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
@@ -1241,10 +1392,105 @@ public sealed class StartViewModelTests
                 await Task.Delay(20);
             }
 
-            await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connecting));
-            await chat.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-2"));
-            await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-2"));
+            var recovered = await WaitForConditionOrFalseAsync(
+                () => startViewModel.StartModeStage == StartSessionModeStage.Ready
+                    && startViewModel.IsStartModeSelectorEnabled
+                    && startViewModel.StartModeOptions.Count == 2
+                    && !startViewModel.HasStartSessionDraftError,
+                timeoutMilliseconds: 3000);
+
+            var finalState = await chat.GetConnectionStateAsync();
+            Assert.True(
+                recovered,
+                $"Start draft did not recover. automation={startViewModel.StartDraftAutomationState}; " +
+                $"phase={finalState.Phase}; intent={finalState.SelectedProfileIntentId}; " +
+                $"foreground={finalState.ForegroundTransportProfileId}; conn={finalState.ConnectionInstanceId}; " +
+                $"draftPhase={finalState.NewSessionDraft?.Phase.ToString() ?? "null"}; " +
+                $"draftProfile={finalState.NewSessionDraft?.ProfileId ?? "null"}; " +
+                $"draftError={finalState.NewSessionDraft?.Error ?? "null"}; " +
+                $"createCalls={createCalls.Count}");
+            Assert.Equal("profile-2", finalState.NewSessionDraft?.ProfileId);
+            Assert.Equal("conn-2", finalState.NewSessionDraft?.ConnectionInstanceId);
+            Assert.Equal("remote-local", finalState.NewSessionDraft?.RemoteSessionId);
+            Assert.Single(createCalls);
+            Assert.Equal(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                createCalls[0].Cwd);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task StartSessionDraft_WhenRemoteProfileCwdFaults_SwitchingToConfiguredRemoteDirectory_RecoversReadyModes()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory
+            {
+                DirectoryId = "dir-alpha",
+                DisplayName = "Alpha",
+                RemotePath = "/home/ubuntu/Projects/Alpha"
+            });
+
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
+            {
+                Id = "profile-remote",
+                Name = "Remote Agent",
+                Transport = TransportType.WebSocket,
+                ServerUrl = "ws://127.0.0.1:3010/"
+            });
+            chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[0];
+
+            var chatService = CreateConnectedChatService();
+            var createCalls = new List<SessionNewParams>();
+            chatService
+                .Setup(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+                .Callback<SessionNewParams>(request => createCalls.Add(request))
+                .ReturnsAsync(new SessionNewResponse(
+                    "remote-draft-1",
+                    new SessionModesState
+                    {
+                        CurrentModeId = "code",
+                        AvailableModes =
+                        [
+                            new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "code", Name = "Code" },
+                            new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "plan", Name = "Plan" }
+                        ]
+                    }));
+            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(
+                chat.ViewModel,
+                preferences,
+                nav,
+                workflow.Object);
+
+            await chat.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-remote"));
+            await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-remote"));
+            await chat.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-remote"));
             await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+
+            startViewModel.OnComposerLoaded();
+
+            // Phase 1: With unclassified project selected (no cwd for remote), the draft should fault.
+            await WaitForConditionAsync(() => startViewModel.HasStartSessionDraftError);
+            Assert.Equal(
+                "Select a configured remote directory before creating a remote session.",
+                startViewModel.StartSessionDraftErrorMessage);
+            Assert.Empty(createCalls);
+
+            // Phase 2: Switch to a configured remote directory — this should trigger a new draft.
+            startViewModel.SelectedStartProjectId = "remote-directory:dir-alpha";
 
             await WaitForConditionAsync(
                 () => startViewModel.StartModeStage == StartSessionModeStage.Ready
@@ -1254,13 +1500,125 @@ public sealed class StartViewModelTests
                 timeoutMilliseconds: 3000);
 
             var finalState = await chat.GetConnectionStateAsync();
-            Assert.Equal("profile-2", finalState.NewSessionDraft?.ProfileId);
-            Assert.Equal("conn-2", finalState.NewSessionDraft?.ConnectionInstanceId);
-            Assert.Equal("remote-local", finalState.NewSessionDraft?.RemoteSessionId);
+            Assert.Equal("profile-remote", finalState.NewSessionDraft?.ProfileId);
+            Assert.Equal("conn-remote", finalState.NewSessionDraft?.ConnectionInstanceId);
+            Assert.Equal("remote-draft-1", finalState.NewSessionDraft?.RemoteSessionId);
             Assert.Single(createCalls);
-            Assert.Equal(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                createCalls[0].Cwd);
+            Assert.Equal("/home/ubuntu/Projects/Alpha", createCalls[0].Cwd);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task StartSessionDraft_WhenRemoteProfileCwdFaults_WithRegistry_SwitchingToRemoteDirectory_RecoversReadyModes()
+    {
+        // Production wires ChatViewModel with a non-null IAcpConnectionSessionRegistry, so
+        // AcpAuthoritativeConnectionResolver takes the registry branch. This test exercises that
+        // branch end-to-end: a recorded session matches the foreground connection identity, and
+        // switching the project to a configured remote directory must recover the mode selector.
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory
+            {
+                DirectoryId = "dir-alpha",
+                DisplayName = "Alpha",
+                RemotePath = "/home/ubuntu/Projects/Alpha"
+            });
+
+            var registry = new InMemoryAcpConnectionSessionRegistry();
+            using var chat = CreateChatViewModel(
+                syncContext,
+                preferences,
+                Mock.Of<ISessionManager>(),
+                connectionSessionRegistry: registry);
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
+            {
+                Id = "profile-remote",
+                Name = "Remote Agent",
+                Transport = TransportType.WebSocket,
+                ServerUrl = "ws://127.0.0.1:3010/"
+            });
+            chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[0];
+
+            // The registry branch resolves the authoritative ChatService from the recorded
+            // AcpConnectionSession, so CreateSessionAsync is invoked on the adapter's inner service.
+            // Use ONE mock service as both the foreground service and the adapter inner, and mock
+            // CreateSessionAsync on it so the draft can complete.
+            var createCalls = new List<SessionNewParams>();
+            var sharedChatService = CreateConnectedChatService();
+            sharedChatService
+                .Setup(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+                .Callback<SessionNewParams>(request => createCalls.Add(request))
+                .ReturnsAsync(new SessionNewResponse(
+                    "remote-draft-1",
+                    new SessionModesState
+                    {
+                        CurrentModeId = "code",
+                        AvailableModes =
+                        [
+                            new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "code", Name = "Code" },
+                            new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "plan", Name = "Plan" }
+                        ]
+                    }));
+            var authoritativeAdapter = new AcpChatServiceAdapter(
+                sharedChatService.Object,
+                new AcpEventAdapter(_ => { }, new ImmediateUiDispatcher()));
+            await chat.ViewModel.ReplaceChatServiceAsync(sharedChatService.Object);
+
+            // Record a session whose ConnectionInstanceId matches the foreground state below.
+            registry.Upsert(new AcpConnectionSession(
+                ProfileId: "profile-remote",
+                Service: authoritativeAdapter,
+                InitializeResponse: new InitializeResponse(),
+                ConnectionReuseKey: new AcpConnectionReuseKey(TransportType.WebSocket, string.Empty, string.Empty, "ws://127.0.0.1:3010/"),
+                ConnectionInstanceId: "conn-remote"));
+
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(
+                chat.ViewModel,
+                preferences,
+                nav,
+                workflow.Object);
+
+            await chat.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-remote"));
+            await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-remote"));
+            await chat.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-remote"));
+            await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+
+            startViewModel.OnComposerLoaded();
+
+            await WaitForConditionAsync(() => startViewModel.HasStartSessionDraftError);
+            var phase1State = await chat.GetConnectionStateAsync();
+            var phase1DraftPhase = phase1State.NewSessionDraft?.Phase;
+            var phase1Automation = startViewModel.StartDraftAutomationState;
+            Assert.True(
+                phase1DraftPhase == NewSessionDraftPhase.Faulted,
+                $"Phase1 did not fault. draftPhase={phase1DraftPhase?.ToString() ?? "null"}, automation={phase1Automation}, " +
+                $"foregroundProfile={phase1State.ForegroundTransportProfileId}, connId={phase1State.ConnectionInstanceId}, " +
+                $"phase={phase1State.Phase}, error={phase1State.Error ?? "(null)"}");
+
+            startViewModel.SelectedStartProjectId = "remote-directory:dir-alpha";
+
+            await WaitForConditionAsync(
+                () => startViewModel.StartModeStage == StartSessionModeStage.Ready
+                    && startViewModel.IsStartModeSelectorEnabled
+                    && startViewModel.StartModeOptions.Count == 2
+                    && !startViewModel.HasStartSessionDraftError,
+                timeoutMilliseconds: 3000);
+
+            var finalState = await chat.GetConnectionStateAsync();
+            Assert.Equal("profile-remote", finalState.NewSessionDraft?.ProfileId);
+            Assert.Equal("conn-remote", finalState.NewSessionDraft?.ConnectionInstanceId);
+            Assert.Single(createCalls);
+            Assert.Equal("/home/ubuntu/Projects/Alpha", createCalls[0].Cwd);
         }
         finally
         {
@@ -1334,6 +1692,101 @@ public sealed class StartViewModelTests
             Assert.Contains("Agent One", startViewModel.StartAgentSelectorProjection.DisplayItems.Select(item => item.DisplayName));
             Assert.Contains("Alpha", startViewModel.StartProjectSelectorProjection.DisplayItems.Select(item => item.DisplayName));
             Assert.False(startViewModel.StartSessionAndSendCommand.CanExecute(null));
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task StartModeSelector_WhenRequiredProfileConnectionFails_ShowsErrorInsteadOfUnresolved()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            var commands = new Mock<IAcpConnectionCommands>();
+            ChatViewModelHarness? chatHarness = null;
+            using var chat = CreateChatViewModel(
+                syncContext,
+                preferences,
+                Mock.Of<ISessionManager>(),
+                acpConnectionCommands: commands.Object);
+            chatHarness = chat;
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
+            {
+                Id = "profile-1",
+                Name = "Profile One",
+                Transport = TransportType.Stdio,
+                StdioCommand = "agent-1"
+            });
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
+            {
+                Id = "profile-2",
+                Name = "Profile Two",
+                Transport = TransportType.Stdio,
+                StdioCommand = "agent-2"
+            });
+
+            var chatService = CreateConnectedChatService();
+            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+            commands
+                .Setup(command => command.ConnectToProfileAsync(
+                    It.IsAny<ServerConfiguration>(),
+                    It.IsAny<IAcpTransportConfiguration>(),
+                    It.IsAny<IAcpChatCoordinatorSink>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new AcpTransportApplyResult(chatService.Object, new InitializeResponse()));
+            commands
+                .Setup(command => command.ConnectToProfileAsync(
+                    It.Is<ServerConfiguration>(profile => string.Equals(profile.Id, "profile-2", StringComparison.Ordinal)),
+                    It.IsAny<IAcpTransportConfiguration>(),
+                    It.IsAny<IAcpChatCoordinatorSink>(),
+                    It.IsAny<CancellationToken>()))
+                .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, CancellationToken>(
+                    async (_, _, _, _) =>
+                    {
+                        Assert.NotNull(chatHarness);
+                        await chatHarness!.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+                        await chatHarness.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-2"));
+                        await chatHarness.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-2"));
+                        await chatHarness.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+                        return new AcpTransportApplyResult(chatService.Object, new InitializeResponse());
+                    });
+
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+
+            await chat.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-1"));
+            await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
+            await chat.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+            await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+            startViewModel.OnComposerLoaded();
+
+            await WaitForConditionAsync(() => startViewModel.StartModeStage == StartSessionModeStage.Unavailable);
+
+            chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[1];
+
+            await WaitForConditionAsync(() =>
+                string.Equals(chat.ViewModel.SelectedProfileIntentId, "profile-2", StringComparison.Ordinal));
+
+            await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Disconnected, "profile switch failed"));
+
+            await WaitForConditionAsync(() =>
+                startViewModel.HasStartSessionDraftError
+                && startViewModel.StartModeSelectorProjection.PlaceholderKind == SelectorPlaceholderKind.Error);
+
+            Assert.Equal(
+                "Unable to load session configuration. Check the connection and try again.",
+                startViewModel.StartSessionDraftErrorMessage);
+            Assert.Equal(SelectorPlaceholderKind.Error, startViewModel.StartModeSelectorProjection.PlaceholderKind);
+            Assert.True(startViewModel.StartModeSelectorProjection.IsSubmitBlocked);
+            Assert.NotEqual(SelectorPlaceholderKind.Unresolved, startViewModel.StartModeSelectorProjection.PlaceholderKind);
+            Assert.False(startViewModel.IsStartModeSelectorEnabled);
         }
         finally
         {
@@ -1966,12 +2419,73 @@ public sealed class StartViewModelTests
         }
     }
 
+    [Fact]
+    public async Task StartAgentSelector_WhenSelectingProfile_RequestsProfileConnection()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            var commands = new Mock<IAcpConnectionCommands>();
+            var connectedProfileIds = new List<string?>();
+            commands
+                .Setup(x => x.ConnectToProfileAsync(
+                    It.IsAny<ServerConfiguration>(),
+                    It.IsAny<IAcpTransportConfiguration>(),
+                    It.IsAny<IAcpChatCoordinatorSink>(),
+                    It.IsAny<CancellationToken>()))
+                .Callback<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, CancellationToken>(
+                    (profile, _, _, _) => connectedProfileIds.Add(profile.Id))
+                .ReturnsAsync(new AcpTransportApplyResult(CreateConnectedChatService().Object, new InitializeResponse()));
+
+            using var chat = CreateChatViewModel(
+                syncContext,
+                preferences,
+                Mock.Of<ISessionManager>(),
+                acpConnectionCommands: commands.Object);
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
+            {
+                Id = "profile-local",
+                Name = "Local",
+                Transport = TransportType.Stdio,
+                StdioCommand = "local-agent"
+            });
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
+            {
+                Id = "profile-remote",
+                Name = "Remote",
+                Transport = TransportType.WebSocket,
+                ServerUrl = "ws://127.0.0.1:3010/"
+            });
+            chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[0];
+
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, Mock.Of<IChatLaunchWorkflow>());
+            var remoteAgentItem = Assert.Single(
+                startViewModel.StartAgentSelectorItems.Where(item =>
+                    string.Equals(item.SemanticValue, "profile-remote", StringComparison.Ordinal)));
+
+            startViewModel.SelectStartAgentDisplayCommand.Execute(remoteAgentItem);
+
+            await WaitForConditionAsync(() =>
+                connectedProfileIds.Contains("profile-remote", StringComparer.Ordinal));
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
     private static ChatViewModelHarness CreateChatViewModel(
         SynchronizationContext syncContext,
         AppPreferencesViewModel preferences,
         ISessionManager sessionManager,
         IVoiceInputService? voiceInputService = null,
-        IUiDispatcher? uiDispatcher = null)
+        IUiDispatcher? uiDispatcher = null,
+        IAcpConnectionSessionRegistry? connectionSessionRegistry = null,
+        IAcpConnectionCommands? acpConnectionCommands = null)
     {
         var state = State.Value(new object(), () => ChatState.Empty);
         var connectionState = State.Value(new object(), () => ChatConnectionState.Empty);
@@ -2039,7 +2553,8 @@ public sealed class StartViewModelTests
                 new StaticMcpResolver([]),
                 voiceInputService: voiceInputService,
                 conversationCatalogFacade: conversationCatalogFacade,
-                acpConnectionCommands: Mock.Of<IAcpConnectionCommands>());
+                acpConnectionCommands: acpConnectionCommands ?? Mock.Of<IAcpConnectionCommands>(),
+                connectionSessionRegistry: connectionSessionRegistry);
             conversationCatalogFacade.SetPanelCleanup(viewModel);
             return new ChatViewModelHarness(viewModel, state, connectionState, connectionStore, conversationCatalogPresenter, workspace);
         }
@@ -2189,6 +2704,22 @@ public sealed class StartViewModelTests
 
             await Task.Delay(pollDelayMilliseconds);
         }
+    }
+
+    private static async Task<bool> WaitForConditionOrFalseAsync(Func<bool> predicate, int timeoutMilliseconds = 2000, int pollDelayMilliseconds = 20)
+    {
+        var started = DateTime.UtcNow;
+        while (!predicate())
+        {
+            if ((DateTime.UtcNow - started).TotalMilliseconds >= timeoutMilliseconds)
+            {
+                return false;
+            }
+
+            await Task.Delay(pollDelayMilliseconds);
+        }
+
+        return true;
     }
 
     private sealed class FakeNavigationPaneState : INavigationPaneState

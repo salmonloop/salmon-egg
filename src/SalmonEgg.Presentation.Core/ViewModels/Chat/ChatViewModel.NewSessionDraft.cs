@@ -62,9 +62,21 @@ public partial class ChatViewModel
                 }
 
                 await ClearNewSessionDraftStateAsync().ConfigureAwait(false);
-                if (!await WaitForRequiredProfileIdentityAsync(
+                QueueRequiredProfileConnectionIfForegroundIsStale(
                     normalizedRequiredProfileId,
-                    cancellationToken).ConfigureAwait(false))
+                    connectionState);
+                var waitOutcome = await WaitForRequiredProfileIdentityAsync(
+                    normalizedRequiredProfileId,
+                    cancellationToken).ConfigureAwait(false);
+                if (waitOutcome.Status == RequiredProfileIdentityWaitStatus.ConnectionFailed)
+                {
+                    await PublishRequiredProfileConnectionFailureDraftAsync(
+                            normalizedRequiredProfileId,
+                            waitOutcome.ErrorMessage)
+                        .ConfigureAwait(false);
+                }
+
+                if (waitOutcome.Status != RequiredProfileIdentityWaitStatus.Ready)
                 {
                     return;
                 }
@@ -221,7 +233,7 @@ public partial class ChatViewModel
         }
     }
 
-    private async Task<bool> WaitForRequiredProfileIdentityAsync(
+    private async Task<RequiredProfileIdentityWaitOutcome> WaitForRequiredProfileIdentityAsync(
         string requiredProfileId,
         CancellationToken cancellationToken)
     {
@@ -248,7 +260,9 @@ public partial class ChatViewModel
                         state.SelectedProfileIntentId,
                         state.ForegroundTransportProfileId,
                         state.Phase);
-                    return false;
+                    return new RequiredProfileIdentityWaitOutcome(
+                        RequiredProfileIdentityWaitStatus.Superseded,
+                        ErrorMessage: null);
                 }
             }
 
@@ -261,7 +275,9 @@ public partial class ChatViewModel
                 && !string.IsNullOrWhiteSpace(snapshot.ProfileId)
                 && !string.IsNullOrWhiteSpace(snapshot.ConnectionInstanceId))
             {
-                return true;
+                return new RequiredProfileIdentityWaitOutcome(
+                    RequiredProfileIdentityWaitStatus.Ready,
+                    ErrorMessage: null);
             }
 
             if (state.Phase is ConnectionPhase.Disconnected or ConnectionPhase.Error)
@@ -272,7 +288,9 @@ public partial class ChatViewModel
                     state.SelectedProfileIntentId,
                     state.ForegroundTransportProfileId,
                     state.Phase);
-                return false;
+                return new RequiredProfileIdentityWaitOutcome(
+                    RequiredProfileIdentityWaitStatus.ConnectionFailed,
+                    state.Error);
             }
 
             await Task.Delay(NewSessionDraftProfileWaitDelay, cancellationToken).ConfigureAwait(false);
@@ -281,7 +299,9 @@ public partial class ChatViewModel
         Logger.LogWarning(
             "Timed out waiting for required profile identity before creating ACP new-session draft. requiredProfileId={RequiredProfileId}",
             requiredProfileId);
-        return false;
+        return new RequiredProfileIdentityWaitOutcome(
+            RequiredProfileIdentityWaitStatus.TimedOut,
+            ErrorMessage: null);
     }
 
     private async Task<AcpAuthoritativeConnectionSnapshot?> ResolveAuthoritativeNewSessionDraftConnectionAsync(
@@ -302,6 +322,31 @@ public partial class ChatViewModel
         }
 
         return null;
+    }
+
+    private void QueueRequiredProfileConnectionIfForegroundIsStale(
+        string requiredProfileId,
+        ChatConnectionState connectionState)
+    {
+        if (connectionState.Phase != ConnectionPhase.Connected
+            || string.Equals(connectionState.ForegroundTransportProfileId, requiredProfileId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var profile = ResolveNewSessionDraftProfile(requiredProfileId);
+        if (profile is null
+            || !string.Equals(profile.Id, requiredProfileId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        Logger.LogInformation(
+            "Queueing ACP profile connection before creating new-session draft. requiredProfileId={RequiredProfileId} currentForegroundProfileId={CurrentForegroundProfileId} currentConnectionInstanceId={CurrentConnectionInstanceId}",
+            requiredProfileId,
+            connectionState.ForegroundTransportProfileId,
+            connectionState.ConnectionInstanceId);
+        QueueSelectedProfileConnection(profile);
     }
 
     public async Task DiscardNewSessionDraftAsync(CancellationToken cancellationToken = default)
@@ -537,6 +582,36 @@ public partial class ChatViewModel
         }
 
         await _chatConnectionStore.Dispatch(new ClearNewSessionDraftAction()).ConfigureAwait(false);
+        await ApplyNewSessionDraftProjectionAsync(
+            await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false)).ConfigureAwait(false);
+    }
+
+    private async Task PublishRequiredProfileConnectionFailureDraftAsync(
+        string requiredProfileId,
+        string? errorMessage)
+    {
+        var current = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
+        if (!string.Equals(current.SelectedProfileIntentId, requiredProfileId, StringComparison.Ordinal)
+            || current.Phase is not (ConnectionPhase.Disconnected or ConnectionPhase.Error))
+        {
+            return;
+        }
+
+        var failed = CreateNewSessionDraftState(
+            requiredProfileId,
+            cwd: string.Empty,
+            remoteSessionId: null,
+            current.ConnectionInstanceId ?? string.Empty,
+            NewSessionDraftPhase.Faulted,
+            version: 0,
+            AcpSessionUpdateDelta.Empty,
+            isConfigAuthoritative: false) with
+        {
+            Error = string.IsNullOrWhiteSpace(errorMessage)
+                ? current.Error
+                : errorMessage
+        };
+        await _chatConnectionStore.Dispatch(new SetNewSessionDraftAction(failed)).ConfigureAwait(false);
         await ApplyNewSessionDraftProjectionAsync(
             await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false)).ConfigureAwait(false);
     }
@@ -1005,4 +1080,16 @@ public partial class ChatViewModel
         long RequestVersion,
         SalmonEgg.Application.Services.Chat.IChatService ChatService,
         CancellationToken CancellationToken);
+
+    private enum RequiredProfileIdentityWaitStatus
+    {
+        Ready = 0,
+        Superseded = 1,
+        ConnectionFailed = 2,
+        TimedOut = 3
+    }
+
+    private readonly record struct RequiredProfileIdentityWaitOutcome(
+        RequiredProfileIdentityWaitStatus Status,
+        string? ErrorMessage);
 }

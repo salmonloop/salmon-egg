@@ -142,6 +142,99 @@ public sealed class StartPageAcpSmokeTests
     }
 
     [SkippableFact]
+    public void LocalToRemoteProfile_ThenRemoteDirectorySelected_RecoversReadyModes()
+    {
+        // Reproduces a variant of the reported bug: start on a connected local stdio profile
+        // (Ready modes), switch the agent selector to a remote WebSocket profile that connects
+        // successfully, observe the mode selector go to "模式尚未就绪" while the project is 未归类,
+        // then switch the project to a configured remote directory and expect Ready to recover.
+        // This exercises the connection-switch path where registry/session identity drift is most
+        // likely to strand the draft.
+        using var appData = StartPageAcpSmokeData.CreateMappedProjectScenario(
+            startupProfileId: LocalProfileId,
+            remoteScenario: new GuiAppDataScope.MockAcpHarnessScenario
+            {
+                TransportKind = GuiAppDataScope.MockAcpTransportKind.WebSocket,
+                InitializeBehavior = GuiAppDataScope.MockAcpInitializeBehavior.Success,
+                SessionNewBehavior = GuiAppDataScope.MockAcpSessionNewBehavior.Success,
+                CwdAcceptancePolicy = GuiAppDataScope.MockAcpCwdAcceptancePolicy.AcceptAny,
+                ModesVariant = GuiAppDataScope.MockAcpModesVariant.Normal
+            });
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        OpenStartPage(session);
+
+        Assert.True(
+            WaitUntilStartModeReady(session, TimeSpan.FromSeconds(20)),
+            BuildFailureMessage("Local stdio startup did not expose ready modes.", session, appData));
+
+        SelectAgentProfile(session, RemoteProfileName, RemoteProfileId);
+
+        Assert.True(
+            WaitUntilRemoteConnectionAttempted(appData, TimeSpan.FromSeconds(12)),
+            BuildFailureMessage("Switching from local stdio to remote never attempted a WebSocket connection.", session, appData));
+
+        // After switching to the remote profile with no remote directory selected, the draft must
+        // stay blocked (cwd resolution failure) — the expected "模式尚未就绪" state.
+        Assert.True(
+            WaitUntilRemoteDraftBlocked(session, appData, TimeSpan.FromSeconds(20)),
+            BuildFailureMessage("Remote profile did not stay blocked before a remote directory was selected.", session, appData));
+
+        // Switch the project selector to the configured remote directory. Modes must recover to Ready.
+        SelectComboBoxItemByAutomationId(session, "StartView.ProjectSelector", ProjectItemId(RemoteDirectoryProjectId));
+
+        Assert.True(
+            WaitUntilStartModeReady(session, TimeSpan.FromSeconds(20)),
+            BuildFailureMessage("Switching the project to a configured remote directory did not recover ready modes after a local->remote profile switch.", session, appData));
+    }
+
+    [SkippableFact]
+    public void RemoteProfile_WhenConnectedAndRemoteDirectorySelected_RecoversReadyModes()
+    {
+        // Reproduces the reported bug: on the Start page, selecting a remote WebSocket ACP profile
+        // auto-switches the project selector to 未归类 (no cwd) so the mode selector correctly shows
+        // "模式尚未就绪". Switching the project to an already-configured remote directory must then
+        // re-fetch modes and recover to Ready. The remote harness accepts any cwd and returns modes.
+        using var appData = StartPageAcpSmokeData.CreateMappedProjectScenario(
+            startupProfileId: RemoteProfileId,
+            remoteScenario: new GuiAppDataScope.MockAcpHarnessScenario
+            {
+                TransportKind = GuiAppDataScope.MockAcpTransportKind.WebSocket,
+                InitializeBehavior = GuiAppDataScope.MockAcpInitializeBehavior.Success,
+                SessionNewBehavior = GuiAppDataScope.MockAcpSessionNewBehavior.Success,
+                CwdAcceptancePolicy = GuiAppDataScope.MockAcpCwdAcceptancePolicy.AcceptAny,
+                ModesVariant = GuiAppDataScope.MockAcpModesVariant.Normal
+            });
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        OpenStartPage(session);
+
+        // The startup remote profile has no selected remote directory yet, so the draft must stay
+        // blocked (cwd resolution failure) — this is the expected "模式尚未就绪" state.
+        Assert.True(
+            WaitUntilRemoteDraftBlocked(session, appData, TimeSpan.FromSeconds(20)),
+            BuildFailureMessage("Remote startup profile did not stay blocked before a remote directory was selected.", session, appData));
+
+        // Switch the project selector to the configured remote directory. The mode selector must
+        // recover to Ready (modes fetched from the remote session/new response).
+        SelectComboBoxItemByAutomationId(session, "StartView.ProjectSelector", ProjectItemId(RemoteDirectoryProjectId));
+
+        Assert.True(
+            WaitUntilStartModeReady(session, TimeSpan.FromSeconds(20)),
+            BuildFailureMessage("Switching the project to a configured remote directory did not recover ready modes.", session, appData));
+
+        var appLogTail = appData.ReadLatestAppLogTail(240);
+        Assert.Contains(
+            "Started ACP new-session draft request",
+            appLogTail,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            RemoteDirectoryPath,
+            appLogTail,
+            StringComparison.Ordinal);
+    }
+
+    [SkippableFact]
     public void RemoteProfile_WhenRemoteRejectsSelectedCwd_ProjectsRemoteFailureAfterSendingSessionNew()
     {
         using var appData = StartPageAcpSmokeData.CreateMappedProjectScenario(

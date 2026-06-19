@@ -474,6 +474,81 @@ public sealed class AcpChatCoordinatorTests
     }
 
     [Fact]
+    public async Task ConnectToProfileAsync_WhenInitializeDoesNotRespond_TimesOutAndDisposesCandidate()
+    {
+        var transport = new FakeTransportConfiguration();
+        var sink = new FakeSink();
+        var initializeStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var initializeBlocker = new TaskCompletionSource<InitializeResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var service = CreateChatService();
+        service
+            .Setup(x => x.InitializeAsync(It.IsAny<InitializeParams>()))
+            .Returns(() =>
+            {
+                initializeStarted.TrySetResult(null);
+                return initializeBlocker.Task;
+            });
+
+        var disconnectedErrors = new List<string?>();
+        var factory = new Mock<IAcpChatServiceFactory>();
+        var logger = new Mock<ILogger<AcpChatCoordinator>>();
+        var connectionCoordinator = new Mock<IAcpConnectionCoordinator>();
+        connectionCoordinator
+            .Setup(x => x.SetDisconnectedAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Callback<string?, CancellationToken>((error, _) => disconnectedErrors.Add(error))
+            .Returns(Task.CompletedTask);
+        factory
+            .Setup(x => x.CreateChatService(TransportType.WebSocket, null, null, "ws://127.0.0.1:3010/"))
+            .Returns(service.Object);
+
+        var sut = CreateCoordinator(
+            factory.Object,
+            logger.Object,
+            connectionCoordinator: connectionCoordinator.Object,
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
+        var profile = new ServerConfiguration
+        {
+            Id = "profile-remote",
+            Name = "Remote Agent",
+            Transport = TransportType.WebSocket,
+            ServerUrl = "ws://127.0.0.1:3010/",
+            ConnectionTimeout = 1
+        };
+
+        using var cts = new CancellationTokenSource();
+        var connectTask = sut.ConnectToProfileAsync(profile, transport, sink, cts.Token);
+
+        try
+        {
+            await initializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            var ex = await Assert.ThrowsAsync<TimeoutException>(
+                async () => await connectTask.WaitAsync(TimeSpan.FromSeconds(2)));
+
+            Assert.Contains("initialize", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("profile-remote", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("timeoutSeconds=1", ex.Message, StringComparison.Ordinal);
+            Assert.Contains(disconnectedErrors, error =>
+                error?.Contains("initialize", StringComparison.OrdinalIgnoreCase) == true
+                && error.Contains("profile-remote", StringComparison.Ordinal));
+            service.Verify(x => x.DisconnectAsync(), Times.Once);
+            Assert.Null(sink.CurrentChatService);
+        }
+        finally
+        {
+            initializeBlocker.TrySetCanceled();
+            cts.Cancel();
+            try
+            {
+                await connectTask.WaitAsync(TimeSpan.FromSeconds(2));
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    [Fact]
     public async Task ConnectToProfileAsync_WhenConversationIsPreserved_UsesPoolOnlyServiceReplaceIntent()
     {
         var transport = new FakeTransportConfiguration();

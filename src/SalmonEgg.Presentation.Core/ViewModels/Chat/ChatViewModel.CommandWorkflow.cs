@@ -511,6 +511,20 @@ public partial class ChatViewModel
         try
         {
             SetVoiceInputTransportState(VoiceInputTransportState.Authorizing);
+            var permission = await _voiceInputService.EnsurePermissionAsync(_voiceInputCts.Token).ConfigureAwait(false);
+            if (!permission.IsGranted && !permission.RequiresAuthorization)
+            {
+                ClearPendingVoiceInputAuthorizationRetry();
+                var permissionMessage = VoiceInputErrorMessageSanitizer.Normalize(
+                    permission.Message,
+                    "Voice input permission check failed.");
+                VoiceInputErrorMessage = permissionMessage;
+                ShowTransientNotificationToast(permissionMessage);
+                SetVoiceInputTransportState(VoiceInputTransportState.Idle);
+                TryDisposeVoiceInputCts();
+                return;
+            }
+
             requestId = Guid.NewGuid().ToString("N");
             var languageTag = ResolveVoiceInputLanguageTag();
             _transportVoiceInputRequestId = requestId;
@@ -738,7 +752,7 @@ public partial class ChatViewModel
         }
 
         if (!IsVoiceInputListening
-            && _voiceInputTransportState != VoiceInputTransportState.Starting)
+            && _voiceInputTransportState is VoiceInputTransportState.Idle or VoiceInputTransportState.Stopping)
         {
             return;
         }
@@ -751,7 +765,17 @@ public partial class ChatViewModel
 
         try
         {
-            await _voiceInputService.StopAsync();
+            var wasListening = IsVoiceInputListening;
+            var stopTask = _voiceInputService.StopAsync();
+            if (!wasListening && IsCurrentVoiceTransportRequest(requestId))
+            {
+                IsVoiceInputListening = false;
+                _activeVoiceInputRequestId = null;
+                ResetVoiceInputDiagnosticsState(requestId);
+                TryDisposeVoiceInputCts();
+            }
+
+            await stopTask;
             Logger.LogInformation(
                 "Voice input service stop completed in view model. RequestId={RequestId}",
                 requestId);

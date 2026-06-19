@@ -304,6 +304,50 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         [Fact]
+        public async Task InitializeAsync_WhenDisconnectedBeforeResponse_CancelsPendingInitialize()
+        {
+            var parser = new MessageParser();
+            var client = new AcpClient(_transportMock.Object, parser, null, _errorLoggerMock.Object);
+            var initializeSent = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            _transportMock
+                .Setup(t => t.SendMessageAsync(It.IsRegex("initialize"), It.IsAny<CancellationToken>()))
+                .Callback(() => initializeSent.TrySetResult(null))
+                .ReturnsAsync(true);
+            _transportMock
+                .Setup(t => t.DisconnectAsync())
+                .ReturnsAsync(true);
+
+            using var cts = new CancellationTokenSource();
+            var initializeTask = client.InitializeAsync(
+                new InitializeParams(
+                    new ClientInfo("Test", "1.0.0"),
+                    ClientCapabilityDefaults.Create()),
+                cts.Token);
+
+            try
+            {
+                await initializeSent.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+                await client.DisconnectAsync();
+
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                    async () => await initializeTask.WaitAsync(TimeSpan.FromSeconds(2)));
+            }
+            finally
+            {
+                cts.Cancel();
+                try
+                {
+                    await initializeTask.WaitAsync(TimeSpan.FromSeconds(2));
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        [Fact]
         public async Task InitializeAsync_WhenServerProtocolIsNewer_ThrowsProtocolVersionMismatch()
         {
             var parser = new MessageParser();

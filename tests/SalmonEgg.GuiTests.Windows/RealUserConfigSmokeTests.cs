@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.ComponentModel;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -1550,6 +1551,72 @@ public sealed partial class RealUserConfigSmokeTests
     }
 
     [SkippableFact]
+    public void StartComposer_WhenSelectingRealRemoteProfileAndRemoteDirectory_LoadsReadyModes()
+    {
+        GuiTestGate.RequireEnabled();
+
+        var scenario = RealUserConfigProbe.LoadStartComposerRemoteDirectoryScenario(
+            Environment.GetEnvironmentVariable("SALMONEGG_GUI_REAL_REMOTE_PROFILE_NAME") ?? "cc-ws1");
+        Skip.If(
+            scenario is null,
+            "Current real config does not expose the requested remote profile plus a configured remote directory for targeted start-composer validation.");
+
+        using var session = WindowsGuiAppSession.LaunchFresh();
+        session.ResizeMainWindow(width: 1400, height: 900);
+        var startItem = session.FindByAutomationId("MainNav.Start", TimeSpan.FromSeconds(10));
+        session.ActivateElement(startItem);
+        Thread.Sleep(500);
+
+        Assert.True(
+            session.WaitUntilOnscreen("StartView.AgentSelector", TimeSpan.FromSeconds(10)),
+            "StartView.AgentSelector did not appear for the real-config start composer.");
+        Assert.True(
+            session.WaitUntilOnscreen("StartView.ProjectSelector", TimeSpan.FromSeconds(10)),
+            "StartView.ProjectSelector did not appear for the real-config start composer.");
+        Assert.True(
+            session.WaitUntilOnscreen("StartView.ModeSelector", TimeSpan.FromSeconds(10)),
+            "StartView.ModeSelector did not appear for the real-config start composer.");
+
+        var logCheckpoint = DateTimeOffset.Now - TimeSpan.FromSeconds(1);
+        SelectComboBoxItemByAutomationId(
+            session,
+            "StartView.AgentSelector",
+            scenario.RemoteProfileAutomationId,
+            scenario.RemoteProfileName);
+        Assert.True(
+            session.WaitUntilOnscreen("StartView.ProjectSelector", TimeSpan.FromSeconds(10)),
+            "StartView.ProjectSelector disappeared after selecting the real remote profile.");
+
+        SelectComboBoxItemByAutomationId(
+            session,
+            "StartView.ProjectSelector",
+            scenario.RemoteDirectoryAutomationId,
+            scenario.RemoteDirectoryDisplayName);
+
+        var ready = WaitUntil(
+            () => TryOpenStartModeSelectorAndDetectKnownMode(session),
+            TimeSpan.FromSeconds(30),
+            TimeSpan.FromMilliseconds(300));
+        var logVerified = RealUserConfigProbe.WaitForRecentAppLogContainsAll(
+            logCheckpoint,
+            TimeSpan.FromSeconds(5),
+            [
+                $"Started ACP new-session draft request. profileId={scenario.RemoteProfileId}",
+                $"cwd={scenario.RemoteDirectoryPath}",
+                $"Applied ACP new-session draft response. profileId={scenario.RemoteProfileId}",
+                "modeCount="
+            ],
+            out var recentLogTail);
+
+        Assert.True(
+            ready,
+            $"Start composer mode selector did not expose ready modes for real remote profile '{scenario.RemoteProfileName}' and remote directory '{scenario.RemoteDirectoryDisplayName}'. AgentSelector='{session.TryGetElementName("StartView.AgentSelector", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}' ProjectSelector='{session.TryGetElementName("StartView.ProjectSelector", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}' ModeSelector='{session.TryGetElementName("StartView.ModeSelector", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}'.");
+        Assert.True(
+            logVerified,
+            $"Real remote start-composer run did not log a fresh session/new response for profile '{scenario.RemoteProfileName}' and cwd '{scenario.RemoteDirectoryPath}'. Recent log tail:{Environment.NewLine}{recentLogTail}");
+    }
+
+    [SkippableFact]
     public void RandomSwitchBetweenLocalRemote_WithOneSecondCadence_RemainsInteractive()
     {
         GuiTestGate.RequireEnabled();
@@ -2285,20 +2352,44 @@ public sealed partial class RealUserConfigSmokeTests
         var target = session.FindVisibleTextAnywhere(expectedVisibleName, TimeSpan.FromSeconds(5))
             ?? throw new TimeoutException(
                 $"Could not find combo-box item '{expectedVisibleName}' after opening selector '{selectorAutomationId}'.");
-        session.ActivateElement(FindSelectableAncestor(target));
+        SelectComboBoxItemElement(session, FindSelectableAncestor(target));
+        var selected = WaitUntil(
+            () =>
+            {
+                var current = session.TryGetElementName(selectorAutomationId, TimeSpan.FromMilliseconds(120));
+                return string.Equals(current?.Trim(), expectedVisibleName, StringComparison.Ordinal);
+            },
+            TimeSpan.FromSeconds(5),
+            TimeSpan.FromMilliseconds(120));
+        if (!selected)
+        {
+            throw new Xunit.Sdk.XunitException(
+                $"Selector '{selectorAutomationId}' did not settle to '{expectedVisibleName}' after selecting visible text. Current='{session.TryGetElementName(selectorAutomationId, TimeSpan.FromMilliseconds(200)) ?? "<missing>"}'.");
+        }
     }
 
     private static void SelectComboBoxItemByAutomationId(
         WindowsGuiAppSession session,
         string selectorAutomationId,
+        string itemAutomationId)
+        => SelectComboBoxItemByAutomationId(session, selectorAutomationId, itemAutomationId, expectedVisibleName: null);
+
+    private static void SelectComboBoxItemByAutomationId(
+        WindowsGuiAppSession session,
+        string selectorAutomationId,
         string itemAutomationId,
-        string expectedVisibleName)
+        string? expectedVisibleName)
     {
         var selector = session.FindByAutomationId(selectorAutomationId, TimeSpan.FromSeconds(10));
         session.ClickElement(selector);
 
         var target = session.FindByAutomationIdAnywhere(itemAutomationId, TimeSpan.FromSeconds(5));
-        session.ActivateElement(FindSelectableAncestor(target));
+        SelectComboBoxItemElement(session, FindSelectableAncestor(target));
+        if (string.IsNullOrWhiteSpace(expectedVisibleName))
+        {
+            Thread.Sleep(300);
+            return;
+        }
 
         var selected = WaitUntil(
             () =>
@@ -3068,6 +3159,94 @@ public sealed partial class RealUserConfigSmokeTests
                 remoteProfile.Transport);
         }
 
+        public static StartComposerRemoteDirectoryScenario? LoadStartComposerRemoteDirectoryScenario(string remoteProfileName)
+        {
+            var appDataRoot = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "SalmonEgg");
+            var appYamlPath = Path.Combine(appDataRoot, "config", "app.yaml");
+            var serversRoot = Path.Combine(appDataRoot, "config", "servers");
+            if (!File.Exists(appYamlPath) || !Directory.Exists(serversRoot))
+            {
+                return null;
+            }
+
+            var profiles = Directory.EnumerateFiles(serversRoot, "*.yaml")
+                .Select(ReadServerProfile)
+                .Where(static profile => profile is not null)
+                .Cast<RealServerProfile>()
+                .ToArray();
+            if (profiles.Length == 0)
+            {
+                return null;
+            }
+
+            var remoteProfile = profiles
+                .Where(profile =>
+                    !string.Equals(profile.Transport, "stdio", StringComparison.OrdinalIgnoreCase)
+                    && LooksLikeUsableVisibleLabel(profile.Name)
+                    && string.Equals(profile.Name, remoteProfileName, StringComparison.Ordinal))
+                .OrderBy(static profile => profile.Name, StringComparer.Ordinal)
+                .FirstOrDefault();
+            if (remoteProfile is null)
+            {
+                return null;
+            }
+
+            var remoteDirectory = ReadRemoteDirectories(appYamlPath)
+                .FirstOrDefault(directory =>
+                    !string.IsNullOrWhiteSpace(directory.DirectoryId)
+                    && !string.IsNullOrWhiteSpace(directory.RemotePath)
+                    && LooksLikeUsableVisibleLabel(directory.DisplayName));
+            if (remoteDirectory is null)
+            {
+                return null;
+            }
+
+            var remoteDirectoryProjectId = $"remote-directory:{remoteDirectory.DirectoryId}";
+            return new StartComposerRemoteDirectoryScenario(
+                remoteProfile.Id,
+                remoteProfile.Name,
+                BuildComposerSelectorItemAutomationId("Agent", remoteProfile.Id),
+                remoteDirectory.DirectoryId,
+                remoteDirectory.DisplayName,
+                BuildComposerSelectorItemAutomationId("Project", remoteDirectoryProjectId),
+                remoteDirectory.RemotePath);
+        }
+
+        public static bool WaitForRecentAppLogContainsAll(
+            DateTimeOffset since,
+            TimeSpan timeout,
+            IReadOnlyCollection<string> expectedSubstrings,
+            out string recentLogTail)
+        {
+            var appDataRoot = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "SalmonEgg");
+            var logsRoot = Path.Combine(appDataRoot, "logs");
+            recentLogTail = string.Empty;
+            if (!Directory.Exists(logsRoot))
+            {
+                return false;
+            }
+
+            var deadline = DateTime.UtcNow + timeout;
+            while (DateTime.UtcNow < deadline)
+            {
+                var recentLines = ReadRecentAppLogLines(logsRoot, since).ToArray();
+                var tail = string.Join(Environment.NewLine, recentLines.TakeLast(120));
+                recentLogTail = tail;
+                if (expectedSubstrings.All(expected => tail.Contains(expected, StringComparison.Ordinal)))
+                {
+                    return true;
+                }
+
+                Thread.Sleep(200);
+            }
+
+            return false;
+        }
+
         private static HashSet<string> ReadReplayBackedRemoteSessionIds(string logsRoot)
         {
             var loadedSessionIds = new HashSet<string>(StringComparer.Ordinal);
@@ -3120,6 +3299,42 @@ public sealed partial class RealUserConfigSmokeTests
             }
         }
 
+        private static IEnumerable<string> ReadRecentAppLogLines(string logsRoot, DateTimeOffset since)
+        {
+            var logFiles = Directory.EnumerateFiles(logsRoot, "app-*.log")
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .Take(3)
+                .ToArray();
+
+            foreach (var logFile in logFiles)
+            {
+                foreach (var line in ReadLinesAllowSharedRead(logFile))
+                {
+                    if (TryParseAppLogTimestamp(line, out var timestamp)
+                        && timestamp >= since)
+                    {
+                        yield return line;
+                    }
+                }
+            }
+        }
+
+        private static bool TryParseAppLogTimestamp(string line, out DateTimeOffset timestamp)
+        {
+            if (line.Length < 30)
+            {
+                timestamp = default;
+                return false;
+            }
+
+            return DateTimeOffset.TryParseExact(
+                line[..30],
+                "yyyy-MM-dd HH:mm:ss.fff zzz",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out timestamp);
+        }
+
         private static string? ReadYamlScalar(string yamlPath, string key)
         {
             foreach (var line in File.ReadLines(yamlPath))
@@ -3130,10 +3345,110 @@ public sealed partial class RealUserConfigSmokeTests
                     continue;
                 }
 
-                return line[prefix.Length..].Trim();
+                return NormalizeYamlScalar(line[prefix.Length..]);
             }
 
             return null;
+        }
+
+        private static IReadOnlyList<RealRemoteDirectory> ReadRemoteDirectories(string appYamlPath)
+        {
+            var directories = new List<RealRemoteDirectory>();
+            string? directoryId = null;
+            string? displayName = null;
+            string? remotePath = null;
+            var inRemoteDirectories = false;
+
+            void Flush()
+            {
+                if (!string.IsNullOrWhiteSpace(directoryId)
+                    || !string.IsNullOrWhiteSpace(displayName)
+                    || !string.IsNullOrWhiteSpace(remotePath))
+                {
+                    directories.Add(new RealRemoteDirectory(
+                        directoryId ?? string.Empty,
+                        string.IsNullOrWhiteSpace(displayName) ? remotePath ?? string.Empty : displayName!,
+                        remotePath ?? string.Empty));
+                }
+
+                directoryId = null;
+                displayName = null;
+                remotePath = null;
+            }
+
+            foreach (var rawLine in File.ReadLines(appYamlPath))
+            {
+                var trimmed = rawLine.Trim();
+                if (string.Equals(trimmed, "agent_remote_directories:", StringComparison.Ordinal))
+                {
+                    inRemoteDirectories = true;
+                    continue;
+                }
+
+                if (!inRemoteDirectories)
+                {
+                    continue;
+                }
+
+                if (trimmed.Length == 0)
+                {
+                    continue;
+                }
+
+                if (!rawLine.StartsWith(" ", StringComparison.Ordinal)
+                    && !rawLine.StartsWith("-", StringComparison.Ordinal))
+                {
+                    break;
+                }
+
+                if (trimmed.StartsWith("- ", StringComparison.Ordinal))
+                {
+                    Flush();
+                    trimmed = trimmed[2..].Trim();
+                }
+
+                if (TryReadYamlInlineScalar(trimmed, "directory_id", out var parsedDirectoryId))
+                {
+                    directoryId = parsedDirectoryId;
+                }
+                else if (TryReadYamlInlineScalar(trimmed, "display_name", out var parsedDisplayName))
+                {
+                    displayName = parsedDisplayName;
+                }
+                else if (TryReadYamlInlineScalar(trimmed, "remote_path", out var parsedRemotePath))
+                {
+                    remotePath = parsedRemotePath;
+                }
+            }
+
+            Flush();
+            return directories;
+        }
+
+        private static bool TryReadYamlInlineScalar(string line, string key, out string? value)
+        {
+            var prefix = key + ":";
+            if (!line.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                value = null;
+                return false;
+            }
+
+            value = NormalizeYamlScalar(line[prefix.Length..]);
+            return true;
+        }
+
+        private static string NormalizeYamlScalar(string value)
+        {
+            var trimmed = value.Trim();
+            if (trimmed.Length >= 2
+                && ((trimmed[0] == '\'' && trimmed[^1] == '\'')
+                    || (trimmed[0] == '"' && trimmed[^1] == '"')))
+            {
+                return trimmed[1..^1];
+            }
+
+            return trimmed;
         }
 
         private static RealServerProfile? ReadServerProfile(string yamlPath)
@@ -3189,6 +3504,22 @@ public sealed partial class RealUserConfigSmokeTests
                     || string.Equals(StdioCommand, "codex-acp", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(StdioCommand, "opencode", StringComparison.OrdinalIgnoreCase);
         }
+
+        private sealed record RealRemoteDirectory(
+            string DirectoryId,
+            string DisplayName,
+            string RemotePath);
+    }
+
+    private static void SelectComboBoxItemElement(WindowsGuiAppSession session, AutomationElement item)
+    {
+        if (item.Patterns.SelectionItem.IsSupported)
+        {
+            item.Patterns.SelectionItem.Pattern.Select();
+            return;
+        }
+
+        session.ActivateElement(item);
     }
 
     private sealed record StartComposerRoundTripScenario(
@@ -3200,6 +3531,14 @@ public sealed partial class RealUserConfigSmokeTests
         string RemoteProfileAutomationId,
         string RemoteProfileTransport);
 
+    private sealed record StartComposerRemoteDirectoryScenario(
+        string RemoteProfileId,
+        string RemoteProfileName,
+        string RemoteProfileAutomationId,
+        string RemoteDirectoryId,
+        string RemoteDirectoryDisplayName,
+        string RemoteDirectoryAutomationId,
+        string RemoteDirectoryPath);
 
     [GeneratedRegex("\\\"sessionId\\\":\\\"([^\\\"]+)\\\"", RegexOptions.Compiled)]
     private static partial Regex SessionIdRegex();

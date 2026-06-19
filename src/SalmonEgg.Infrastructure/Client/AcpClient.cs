@@ -731,6 +731,7 @@ namespace SalmonEgg.Infrastructure.Client
         public async Task<bool> DisconnectAsync()
         {
             _messageLoopCts?.Cancel();
+            CancelPendingRequests();
 
             await _transport.DisconnectAsync();
             return true;
@@ -759,11 +760,31 @@ namespace SalmonEgg.Infrastructure.Client
             {
                 throw new OperationCanceledException(cancellationToken);
             }
+            catch (TaskCanceledException ex)
+            {
+                throw new OperationCanceledException(
+                    "ACP request was canceled because the transport disconnected.",
+                    ex);
+            }
             catch (Exception ex)
             {
                 _errorLogger.LogError(new ErrorLogEntry("REQ_ERROR", $"[AcpClient.SendRequestAsync] Request {requestIdStr} failed: {ex.Message}", ErrorSeverity.Error, "SendRequestAsync", null, ex));
-                _pendingRequests.TryRemove(requestIdStr, out _);
                 throw;
+            }
+            finally
+            {
+                _pendingRequests.TryRemove(requestIdStr, out _);
+            }
+        }
+
+        private void CancelPendingRequests()
+        {
+            foreach (var pendingRequest in _pendingRequests)
+            {
+                if (_pendingRequests.TryRemove(pendingRequest.Key, out var pending))
+                {
+                    pending.TrySetCanceled();
+                }
             }
         }
 

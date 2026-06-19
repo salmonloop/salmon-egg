@@ -1799,7 +1799,9 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
     public async Task CreateNewSessionCommand_BindsRemoteSessionToActivatedLocalConversation()
     {
         await using var fixture = CreateViewModel();
-        fixture.Preferences.LastSelectedServerId = "profile-1";
+        await SelectProfileForTestAsync(
+            fixture,
+            new ServerConfiguration { Id = "profile-1", Name = "Profile 1", Transport = TransportType.Stdio });
 
         var chatService = CreateConnectedChatService();
         chatService.Setup(s => s.CreateSessionAsync(It.IsAny<SessionNewParams>()))
@@ -2153,7 +2155,9 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
     public async Task CreateNewSessionCommand_ProjectsOnlyHydratedConversationState()
     {
         await using var fixture = CreateViewModel();
-        fixture.Preferences.LastSelectedServerId = "profile-1";
+        await SelectProfileForTestAsync(
+            fixture,
+            new ServerConfiguration { Id = "profile-1", Name = "Profile 1", Transport = TransportType.Stdio });
 
         var chatService = new Mock<IChatService>();
         chatService.Setup(s => s.CreateSessionAsync(It.IsAny<SessionNewParams>()))
@@ -2169,6 +2173,10 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
     public async Task CreateNewSessionCommand_WritesHydratedConversationOnly()
     {
         await using var fixture = CreateViewModel();
+        await SelectProfileForTestAsync(
+            fixture,
+            new ServerConfiguration { Id = "profile-1", Name = "Profile 1", Transport = TransportType.Stdio });
+
         var chatService = new Mock<IChatService>();
         chatService.Setup(s => s.CreateSessionAsync(It.IsAny<SessionNewParams>()))
             .ReturnsAsync(new SessionNewResponse("remote-1"));
@@ -2943,7 +2951,9 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
             Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
                 .Add("conv-2", new ConversationBindingSlice("conv-2", "remote-2", "profile-2"))
         });
+        await fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-2"));
         await fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-2"));
+        await fixture.ApplyCurrentStoreProjectionAsync();
 
         await WaitForConditionAsync(() =>
             Task.FromResult(string.Equals(fixture.ViewModel.SelectedAcpProfile?.Id, "profile-2", StringComparison.Ordinal)));
@@ -3305,7 +3315,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         await using var fixture = CreateViewModel(
             acpConnectionCommands: commands.Object,
             configurationService: configurationService);
-        fixture.Preferences.LastSelectedServerId = "profile-1";
+        await fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-1"));
 
         await fixture.ViewModel.TryAutoConnectAsync(CancellationToken.None);
         Assert.Equal(0, connectCalls);
@@ -4182,6 +4192,17 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
     }
 
+    private static async Task SelectProfileForTestAsync(ViewModelFixture fixture, ServerConfiguration profile)
+    {
+        if (!fixture.Profiles.Profiles.Any(candidate => string.Equals(candidate.Id, profile.Id, StringComparison.Ordinal)))
+        {
+            fixture.Profiles.Profiles.Add(profile);
+        }
+
+        await fixture.ViewModel.SelectProfileAsync(profile);
+        await fixture.ApplyCurrentStoreProjectionAsync();
+    }
+
     private static async Task WaitForQueueingConversationReadyAsync(
         QueueingSynchronizationContext syncContext,
         ViewModelFixture fixture,
@@ -4478,10 +4499,18 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
     [Fact]
     public async Task EnsureNewSessionDraftAsync_WhenSelectedIntentAlreadyPointsToRemoteButForegroundIsStillLocal_WaitsInsteadOfFaulting()
     {
-        await using var fixture = CreateViewModel();
+        var commands = new Mock<IAcpConnectionCommands>();
+        await using var fixture = CreateViewModel(acpConnectionCommands: commands.Object);
         var chatService = CreateConnectedChatService();
         chatService.Setup(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()))
             .ReturnsAsync(new SessionNewResponse("remote-draft"));
+        commands
+            .Setup(command => command.ConnectToProfileAsync(
+                It.Is<ServerConfiguration>(profile => string.Equals(profile.Id, "profile-2", StringComparison.Ordinal)),
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AcpTransportApplyResult(chatService.Object, new InitializeResponse()));
 
         fixture.Profiles.Profiles.Add(new ServerConfiguration
         {
@@ -4514,6 +4543,11 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
         var connectionState = await fixture.GetConnectionStateAsync();
         Assert.Null(connectionState.NewSessionDraft);
+        commands.Verify(command => command.ConnectToProfileAsync(
+            It.Is<ServerConfiguration>(profile => string.Equals(profile.Id, "profile-2", StringComparison.Ordinal)),
+            It.IsAny<IAcpTransportConfiguration>(),
+            It.IsAny<IAcpChatCoordinatorSink>(),
+            It.IsAny<CancellationToken>()), Times.Once);
         chatService.Verify(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()), Times.Never);
     }
 
@@ -4561,6 +4595,116 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         await ensureTask;
         Assert.Null((await fixture.GetConnectionStateAsync()).NewSessionDraft);
         chatService.Verify(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task EnsureNewSessionDraftAsync_WhenRequiredProfileConnectionFails_ProjectsDraftError()
+    {
+        await using var fixture = CreateViewModel();
+        var chatService = CreateConnectedChatService();
+
+        await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+        await fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-1"));
+        await fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+
+        var ensureTask = fixture.ViewModel.EnsureNewSessionDraftForProfileAsync(
+            @"C:\Repo\App",
+            requiredProfileId: "profile-2");
+        await Task.Delay(25);
+        await fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-2"));
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Disconnected, "profile switch failed"));
+        await ensureTask;
+
+        await WaitForConditionAsync(() =>
+            Task.FromResult(fixture.ViewModel.HasNewSessionDraftError));
+
+        var connectionState = await fixture.GetConnectionStateAsync();
+        Assert.Equal(ConnectionPhase.Disconnected, connectionState.Phase);
+        Assert.NotNull(connectionState.NewSessionDraft);
+        Assert.Equal(NewSessionDraftPhase.Faulted, connectionState.NewSessionDraft!.Phase);
+        Assert.Equal("profile-2", connectionState.NewSessionDraft.ProfileId);
+        Assert.Equal("profile switch failed", connectionState.NewSessionDraft.Error);
+        Assert.Equal(
+            "Unable to load session configuration. Check the connection and try again.",
+            fixture.ViewModel.NewSessionDraftErrorMessage);
+        Assert.False(fixture.ViewModel.IsNewSessionDraftReady);
+        Assert.False(fixture.ViewModel.IsNewSessionDraftLoading);
+        chatService.Verify(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task EnsureNewSessionDraftAsync_WhenRequiredProfileIntentIsNotForeground_QueuesProfileConnection()
+    {
+        var commands = new Mock<IAcpConnectionCommands>();
+        ViewModelFixture? fixture = null;
+        var chatService = CreateConnectedChatService();
+        chatService
+            .Setup(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+            .ReturnsAsync(new SessionNewResponse(
+                "remote-draft",
+                new SessionModesState
+                {
+                    CurrentModeId = "code",
+                    AvailableModes =
+                    [
+                        new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "code", Name = "Code" }
+                    ]
+                }));
+        commands
+            .Setup(command => command.ConnectToProfileAsync(
+                It.Is<ServerConfiguration>(profile => string.Equals(profile.Id, "profile-remote", StringComparison.Ordinal)),
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<CancellationToken>()))
+            .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, CancellationToken>(
+                async (_, _, _, _) =>
+                {
+                    Assert.NotNull(fixture);
+                    await fixture!.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+                    await fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-remote"));
+                    await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-remote"));
+                    await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+                    return new AcpTransportApplyResult(chatService.Object, new InitializeResponse());
+                });
+
+        await using var ownedFixture = CreateViewModel(acpConnectionCommands: commands.Object);
+        fixture = ownedFixture;
+        ownedFixture.Profiles.Profiles.Add(new ServerConfiguration
+        {
+            Id = "profile-local",
+            Name = "Local Agent",
+            Transport = TransportType.Stdio,
+            StdioCommand = "agent"
+        });
+        ownedFixture.Profiles.Profiles.Add(new ServerConfiguration
+        {
+            Id = "profile-remote",
+            Name = "Remote Agent",
+            Transport = TransportType.WebSocket,
+            ServerUrl = "ws://127.0.0.1:3010/"
+        });
+
+        await ownedFixture.ViewModel.ReplaceChatServiceAsync(CreateConnectedChatService().Object);
+        await ownedFixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-remote"));
+        await ownedFixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-local"));
+        await ownedFixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-local"));
+        await ownedFixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+
+        await ownedFixture.ViewModel.EnsureNewSessionDraftForProfileAsync(
+            @"C:\Repo\App",
+            requiredProfileId: "profile-remote");
+
+        commands.Verify(command => command.ConnectToProfileAsync(
+            It.Is<ServerConfiguration>(profile => string.Equals(profile.Id, "profile-remote", StringComparison.Ordinal)),
+            It.IsAny<IAcpTransportConfiguration>(),
+            It.IsAny<IAcpChatCoordinatorSink>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+        var connectionState = await ownedFixture.GetConnectionStateAsync();
+        Assert.Equal(NewSessionDraftPhase.Ready, connectionState.NewSessionDraft?.Phase);
+        Assert.Equal("profile-remote", connectionState.NewSessionDraft?.ProfileId);
+        Assert.Equal("conn-remote", connectionState.NewSessionDraft?.ConnectionInstanceId);
     }
 
     [Fact]
@@ -4635,7 +4779,8 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             fixture.ViewModel.EnsureNewSessionDraftAsync(@"C:\Repo\App", cts.Token));
 
-        Assert.Null((await fixture.GetConnectionStateAsync()).NewSessionDraft);
+        await WaitForConditionAsync(async () =>
+            (await fixture.GetConnectionStateAsync()).NewSessionDraft is null);
         chatService.Verify(service => service.CloseSessionAsync(
             It.Is<SessionCloseParams>(p => p.SessionId == "remote-draft"),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -9397,7 +9542,9 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
     public async Task HydrateActiveConversationAsync_WhenSessionLoadReturnsBeforeReplayStarts_KeepsOverlayVisibleUntilLateReplayProjects()
     {
         var syncContext = new QueueingSynchronizationContext();
-        await using var fixture = CreateViewModel(syncContext);
+        var sessionManager = CreateSessionManagerWithStore();
+        await sessionManager.Object.CreateSessionAsync("conv-1", @"C:\repo\one");
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
 
         var loadReturned = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -9426,17 +9573,16 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
                 .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
         });
         await DispatchConnectedAsync(fixture, "profile-1");
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
         syncContext.RunAll();
 
         var hydrationTask = fixture.ViewModel.HydrateActiveConversationAsync();
 
-        while (!loadReturned.Task.IsCompleted)
+        await WaitForConditionAsync(() =>
         {
-            if (!syncContext.RunNext())
-            {
-                await Task.Delay(10);
-            }
-        }
+            syncContext.RunAll();
+            return Task.FromResult(loadReturned.Task.IsCompleted);
+        }, timeoutMilliseconds: 2000);
 
         syncContext.RunAll();
 
@@ -9456,7 +9602,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         Assert.True(
             await hydrationTask
             || fixture.ViewModel.MessageHistory.Any(message =>
-                string.Equals(message.TextContent, "late replay after title", StringComparison.Ordinal)),
+                string.Equals(message.TextContent, "late replay", StringComparison.Ordinal)),
             fixture.ViewModel.ErrorMessage);
         await WaitForConditionAsync(async () =>
         {
@@ -9608,7 +9754,9 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
     public async Task HydrateActiveConversationAsync_WhenCompletionModeIsLoadResponse_CompletesBeforeReplayStarts()
     {
         var syncContext = new QueueingSynchronizationContext();
-        await using var fixture = CreateViewModel(syncContext);
+        var sessionManager = CreateSessionManagerWithStore();
+        await sessionManager.Object.CreateSessionAsync("conv-1", @"C:\repo\one");
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
         await WaitForConditionAsync(() =>
         {
             syncContext.RunAll();
@@ -9648,13 +9796,11 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
         var hydrationTask = fixture.ViewModel.HydrateActiveConversationAsync();
 
-        while (!loadReturned.Task.IsCompleted)
+        await WaitForConditionAsync(() =>
         {
-            if (!syncContext.RunNext())
-            {
-                await Task.Delay(10);
-            }
-        }
+            syncContext.RunAll();
+            return Task.FromResult(loadReturned.Task.IsCompleted);
+        }, timeoutMilliseconds: 2000);
 
         allowLoadCompletion.TrySetResult(null);
 
@@ -9681,7 +9827,9 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
     public async Task HydrateActiveConversationAsync_WhenReplayArrivesBeforeLoadResponse_BuffersReplayUntilTransportCompletes()
     {
         var syncContext = new QueueingSynchronizationContext();
-        await using var fixture = CreateViewModel(syncContext);
+        var sessionManager = CreateSessionManagerWithStore();
+        await sessionManager.Object.CreateSessionAsync("conv-1", @"C:\repo\one");
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
 
         var loadStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
         var allowLoadCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -9748,7 +9896,9 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
     public async Task HydrateActiveConversationAsync_WhenCompletionModeIsLoadResponseAndReplayIsEmpty_DismissesOverlayAfterLoadResponse()
     {
         var syncContext = new QueueingSynchronizationContext();
-        await using var fixture = CreateViewModel(syncContext);
+        var sessionManager = CreateSessionManagerWithStore();
+        await sessionManager.Object.CreateSessionAsync("conv-1", @"C:\repo\one");
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
         await WaitForConditionAsync(() =>
         {
             syncContext.RunAll();
@@ -9792,7 +9942,9 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
     public async Task HydrateActiveConversationAsync_WhenReplayStartsWithPlanUpdate_ProjectsReplayFacts()
     {
         var syncContext = new QueueingSynchronizationContext();
-        await using var fixture = CreateViewModel(syncContext);
+        var sessionManager = CreateSessionManagerWithStore();
+        await sessionManager.Object.CreateSessionAsync("conv-1", @"C:\repo\one");
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
 
         ReplayLoadChatService? innerChatService = null;
         innerChatService = new ReplayLoadChatService
@@ -9847,7 +9999,9 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
     public async Task HydrateActiveConversationAsync_WhenReplayStartsWithSessionInfoUpdate_ProjectsReplayFacts()
     {
         var syncContext = new QueueingSynchronizationContext();
-        await using var fixture = CreateViewModel(syncContext);
+        var sessionManager = CreateSessionManagerWithStore();
+        await sessionManager.Object.CreateSessionAsync("conv-1", @"C:\repo\one");
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
 
         ReplayLoadChatService? innerChatService = null;
         innerChatService = new ReplayLoadChatService
@@ -9898,7 +10052,9 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
     public async Task HydrateActiveConversationAsync_WhenReplayArrivesInBursts_KeepsOverlayVisibleUntilReplaySettles()
     {
         var syncContext = new QueueingSynchronizationContext();
-        await using var fixture = CreateViewModel(syncContext);
+        var sessionManager = CreateSessionManagerWithStore();
+        await sessionManager.Object.CreateSessionAsync("conv-1", @"C:\repo\one");
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
 
         var loadReturned = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
         var allowLoadCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -9932,13 +10088,11 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
         var hydrationTask = fixture.ViewModel.HydrateActiveConversationAsync();
 
-        while (!loadReturned.Task.IsCompleted)
+        await WaitForConditionAsync(() =>
         {
-            if (!syncContext.RunNext())
-            {
-                await Task.Delay(10);
-            }
-        }
+            syncContext.RunAll();
+            return Task.FromResult(loadReturned.Task.IsCompleted);
+        }, timeoutMilliseconds: 2000);
 
         syncContext.RunAll();
 
@@ -9962,7 +10116,9 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
     public async Task HydrateActiveConversationAsync_WhenFirstReplayOnlyRestoresKnownPrompt_KeepsOverlayVisibleUntilAdditionalHistoryArrives()
     {
         var syncContext = new QueueingSynchronizationContext();
-        await using var fixture = CreateViewModel(syncContext);
+        var sessionManager = CreateSessionManagerWithStore();
+        await sessionManager.Object.CreateSessionAsync("conv-1", @"C:\repo\one");
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
 
         var loadReturned = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
         var allowLoadCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -10009,13 +10165,11 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
         var hydrationTask = fixture.ViewModel.HydrateActiveConversationAsync();
 
-        while (!loadReturned.Task.IsCompleted)
+        await WaitForConditionAsync(() =>
         {
-            if (!syncContext.RunNext())
-            {
-                await Task.Delay(10);
-            }
-        }
+            syncContext.RunAll();
+            return Task.FromResult(loadReturned.Task.IsCompleted);
+        }, timeoutMilliseconds: 2000);
 
         syncContext.RunAll();
         await Task.Delay(100);
