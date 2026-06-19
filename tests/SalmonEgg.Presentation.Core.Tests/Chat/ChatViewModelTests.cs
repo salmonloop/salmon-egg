@@ -4626,9 +4626,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         Assert.Equal(NewSessionDraftPhase.Faulted, connectionState.NewSessionDraft!.Phase);
         Assert.Equal("profile-2", connectionState.NewSessionDraft.ProfileId);
         Assert.Equal("profile switch failed", connectionState.NewSessionDraft.Error);
-        Assert.Equal(
-            "Unable to load session configuration. Check the connection and try again.",
-            fixture.ViewModel.NewSessionDraftErrorMessage);
+        Assert.Equal("profile switch failed", fixture.ViewModel.NewSessionDraftErrorMessage);
         Assert.False(fixture.ViewModel.IsNewSessionDraftReady);
         Assert.False(fixture.ViewModel.IsNewSessionDraftLoading);
         chatService.Verify(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()), Times.Never);
@@ -4781,6 +4779,121 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
         await WaitForConditionAsync(async () =>
             (await fixture.GetConnectionStateAsync()).NewSessionDraft is null);
+        chatService.Verify(service => service.CloseSessionAsync(
+            It.Is<SessionCloseParams>(p => p.SessionId == "remote-draft"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task EnsureNewSessionDraftAsync_WhenJoinedRequestStillDesired_AdoptsResponseAfterOriginalTokenCancels()
+    {
+        await using var fixture = CreateViewModel();
+        using var firstCts = new CancellationTokenSource();
+        using var secondCts = new CancellationTokenSource();
+        var createStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowCreateResponse = new TaskCompletionSource<SessionNewResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var chatService = CreateConnectedChatService();
+        chatService.Setup(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+            .Returns(() =>
+            {
+                createStarted.TrySetResult(null);
+                return allowCreateResponse.Task;
+            });
+
+        await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+        await fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+
+        var firstEnsure = fixture.ViewModel.EnsureNewSessionDraftAsync(@"C:\Repo\App", firstCts.Token);
+        await createStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        var secondEnsure = fixture.ViewModel.EnsureNewSessionDraftAsync(@"C:\Repo\App", secondCts.Token);
+        await Task.Delay(50);
+
+        firstCts.Cancel();
+        allowCreateResponse.SetResult(new SessionNewResponse(
+            "remote-draft",
+            new SessionModesState
+            {
+                CurrentModeId = "default",
+                AvailableModes =
+                [
+                    new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "default", Name = "Default" }
+                ]
+            }));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => firstEnsure);
+        await secondEnsure;
+
+        var connectionState = await fixture.GetConnectionStateAsync();
+        Assert.Equal(NewSessionDraftPhase.Ready, connectionState.NewSessionDraft?.Phase);
+        Assert.Equal("remote-draft", connectionState.NewSessionDraft?.RemoteSessionId);
+        Assert.Equal("default", connectionState.NewSessionDraft?.SelectedModeId);
+        Assert.True(fixture.ViewModel.IsNewSessionDraftReady);
+        chatService.Verify(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()), Times.Once);
+        chatService.Verify(service => service.CloseSessionAsync(
+            It.IsAny<SessionCloseParams>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task EnsureNewSessionDraftAsync_WhenJoinedRequestLatestTokenCancels_ClosesResponse()
+    {
+        await using var fixture = CreateViewModel();
+        using var firstCts = new CancellationTokenSource();
+        using var secondCts = new CancellationTokenSource();
+        var createStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowCreateResponse = new TaskCompletionSource<SessionNewResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var closeCalled = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var chatService = CreateConnectedChatService();
+        chatService.SetupGet(service => service.AgentCapabilities)
+            .Returns(new AgentCapabilities(sessionCapabilities: new SessionCapabilities
+            {
+                Close = new SessionCloseCapabilities()
+            }));
+        chatService.Setup(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+            .Returns(() =>
+            {
+                createStarted.TrySetResult(null);
+                return allowCreateResponse.Task;
+            });
+        chatService.Setup(service => service.CloseSessionAsync(
+                It.Is<SessionCloseParams>(p => p.SessionId == "remote-draft"),
+                It.IsAny<CancellationToken>()))
+            .Callback(() => closeCalled.TrySetResult(null))
+            .ReturnsAsync(SessionCloseResponse.Completed);
+
+        await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+        await fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+
+        var firstEnsure = fixture.ViewModel.EnsureNewSessionDraftAsync(@"C:\Repo\App", firstCts.Token);
+        await createStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        var secondEnsure = fixture.ViewModel.EnsureNewSessionDraftAsync(@"C:\Repo\App", secondCts.Token);
+        await Task.Delay(50);
+
+        firstCts.Cancel();
+        secondCts.Cancel();
+        allowCreateResponse.SetResult(new SessionNewResponse(
+            "remote-draft",
+            new SessionModesState
+            {
+                CurrentModeId = "default",
+                AvailableModes =
+                [
+                    new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "default", Name = "Default" }
+                ]
+            }));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => firstEnsure);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => secondEnsure);
+        await closeCalled.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        var connectionState = await fixture.GetConnectionStateAsync();
+        Assert.Null(connectionState.NewSessionDraft);
+        Assert.False(fixture.ViewModel.IsNewSessionDraftReady);
+        chatService.Verify(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()), Times.Once);
         chatService.Verify(service => service.CloseSessionAsync(
             It.Is<SessionCloseParams>(p => p.SessionId == "remote-draft"),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -15897,10 +16010,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
             return Task.FromResult(fixture.ViewModel.HasNewSessionDraftError);
         });
 
-        Assert.Equal(
-            "Unable to load session configuration. Check the connection and try again.",
-            fixture.ViewModel.NewSessionDraftErrorMessage);
-        Assert.DoesNotContain("session/new failed", fixture.ViewModel.NewSessionDraftErrorMessage, StringComparison.Ordinal);
+        Assert.Equal("session/new failed", fixture.ViewModel.NewSessionDraftErrorMessage);
         Assert.False(fixture.ViewModel.IsNewSessionDraftReady);
         Assert.False(fixture.ViewModel.IsNewSessionDraftLoading);
     }

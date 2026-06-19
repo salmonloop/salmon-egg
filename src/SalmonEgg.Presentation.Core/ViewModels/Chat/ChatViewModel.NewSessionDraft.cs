@@ -23,6 +23,7 @@ public partial class ChatViewModel
     private readonly object _newSessionDraftRequestSync = new();
     private readonly Dictionary<NewSessionDraftRequestKey, Task> _inFlightNewSessionDraftRequests = new();
     private NewSessionDraftRequestKey? _desiredNewSessionDraftRequestKey;
+    private CancellationToken _desiredNewSessionDraftCancellationToken;
 
     public async Task EnsureNewSessionDraftAsync(string? cwd, CancellationToken cancellationToken = default)
         => await EnsureNewSessionDraftForProfileAsync(cwd, requiredProfileId: null, cancellationToken).ConfigureAwait(false);
@@ -153,7 +154,7 @@ public partial class ChatViewModel
                 connectionInstanceId ?? string.Empty,
                 normalizedCwd);
 
-            SetDesiredNewSessionDraftRequestKey(requestKey);
+            SetDesiredNewSessionDraftRequest(requestKey, cancellationToken);
 
             var existingDraft = connectionState.NewSessionDraft;
             if (IsReusableNewSessionDraft(existingDraft, profileId!, connectionInstanceId!, normalizedCwd))
@@ -797,9 +798,16 @@ public partial class ChatViewModel
             : profileId.Trim();
 
     private static string NormalizeNewSessionDraftError(string? error)
-        => string.Equals(error, AcpSessionNewCwdResolver.MissingRemoteCwdMessage, StringComparison.Ordinal)
-            ? error ?? AcpSessionNewCwdResolver.MissingRemoteCwdMessage
-            : "Unable to load session configuration. Check the connection and try again.";
+    {
+        if (string.Equals(error, AcpSessionNewCwdResolver.MissingRemoteCwdMessage, StringComparison.Ordinal))
+        {
+            return AcpSessionNewCwdResolver.MissingRemoteCwdMessage;
+        }
+
+        return string.IsNullOrWhiteSpace(error)
+            ? "Unable to load session configuration. Check the connection and try again."
+            : error.Trim();
+    }
 
     private ServerConfiguration? ResolveNewSessionDraftProfile(string? profileId)
     {
@@ -890,16 +898,13 @@ public partial class ChatViewModel
         try
         {
             var connectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
-            if (request.CancellationToken.IsCancellationRequested)
+            if (IsDesiredNewSessionDraftRequestCancellationRequested(request.RequestKey))
             {
                 shouldDiscardResponse = true;
-                if (IsDesiredNewSessionDraftRequest(request.RequestKey))
-                {
-                    ClearDesiredNewSessionDraftRequestKey();
-                    await _chatConnectionStore.Dispatch(new ClearNewSessionDraftAction()).ConfigureAwait(false);
-                    await ApplyNewSessionDraftProjectionAsync(
-                        await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false)).ConfigureAwait(false);
-                }
+                ClearDesiredNewSessionDraftRequestKey();
+                await _chatConnectionStore.Dispatch(new ClearNewSessionDraftAction()).ConfigureAwait(false);
+                await ApplyNewSessionDraftProjectionAsync(
+                    await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false)).ConfigureAwait(false);
             }
             else if (!ShouldAdoptNewSessionDraftRequestResponse(connectionState, request.RequestKey))
             {
@@ -1042,11 +1047,14 @@ public partial class ChatViewModel
         }
     }
 
-    private void SetDesiredNewSessionDraftRequestKey(NewSessionDraftRequestKey requestKey)
+    private void SetDesiredNewSessionDraftRequest(
+        NewSessionDraftRequestKey requestKey,
+        CancellationToken cancellationToken)
     {
         lock (_newSessionDraftRequestSync)
         {
             _desiredNewSessionDraftRequestKey = requestKey;
+            _desiredNewSessionDraftCancellationToken = cancellationToken;
         }
     }
 
@@ -1055,6 +1063,7 @@ public partial class ChatViewModel
         lock (_newSessionDraftRequestSync)
         {
             _desiredNewSessionDraftRequestKey = null;
+            _desiredNewSessionDraftCancellationToken = default;
         }
     }
 
@@ -1064,6 +1073,16 @@ public partial class ChatViewModel
         {
             return _desiredNewSessionDraftRequestKey is { } desired
                 && desired.Equals(requestKey);
+        }
+    }
+
+    private bool IsDesiredNewSessionDraftRequestCancellationRequested(NewSessionDraftRequestKey requestKey)
+    {
+        lock (_newSessionDraftRequestSync)
+        {
+            return _desiredNewSessionDraftRequestKey is { } desired
+                && desired.Equals(requestKey)
+                && _desiredNewSessionDraftCancellationToken.IsCancellationRequested;
         }
     }
 

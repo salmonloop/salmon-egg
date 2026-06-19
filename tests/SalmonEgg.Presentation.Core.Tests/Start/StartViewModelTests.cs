@@ -637,10 +637,7 @@ public sealed class StartViewModelTests
 
             Assert.True(startViewModel.IsInputEnabled);
             Assert.True(startViewModel.HasStartSessionDraftError);
-            Assert.Equal(
-                "Unable to load session configuration. Check the connection and try again.",
-                startViewModel.StartSessionDraftErrorMessage);
-            Assert.DoesNotContain("session/new failed", startViewModel.StartSessionDraftErrorMessage, StringComparison.Ordinal);
+            Assert.Equal("session/new failed", startViewModel.StartSessionDraftErrorMessage);
             Assert.False(startViewModel.IsStartModeSelectorEnabled);
             Assert.False(startViewModel.StartSessionAndSendCommand.CanExecute(null));
         }
@@ -1709,13 +1706,11 @@ public sealed class StartViewModelTests
         {
             var preferences = CreatePreferences();
             var commands = new Mock<IAcpConnectionCommands>();
-            ChatViewModelHarness? chatHarness = null;
             using var chat = CreateChatViewModel(
                 syncContext,
                 preferences,
                 Mock.Of<ISessionManager>(),
                 acpConnectionCommands: commands.Object);
-            chatHarness = chat;
             chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
             {
                 Id = "profile-1",
@@ -1746,16 +1741,7 @@ public sealed class StartViewModelTests
                     It.IsAny<IAcpTransportConfiguration>(),
                     It.IsAny<IAcpChatCoordinatorSink>(),
                     It.IsAny<CancellationToken>()))
-                .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, CancellationToken>(
-                    async (_, _, _, _) =>
-                    {
-                        Assert.NotNull(chatHarness);
-                        await chatHarness!.ViewModel.ReplaceChatServiceAsync(chatService.Object);
-                        await chatHarness.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-2"));
-                        await chatHarness.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-2"));
-                        await chatHarness.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
-                        return new AcpTransportApplyResult(chatService.Object, new InitializeResponse());
-                    });
+                .ThrowsAsync(new InvalidOperationException("profile switch failed"));
 
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
@@ -1774,15 +1760,11 @@ public sealed class StartViewModelTests
             await WaitForConditionAsync(() =>
                 string.Equals(chat.ViewModel.SelectedProfileIntentId, "profile-2", StringComparison.Ordinal));
 
-            await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Disconnected, "profile switch failed"));
-
             await WaitForConditionAsync(() =>
                 startViewModel.HasStartSessionDraftError
                 && startViewModel.StartModeSelectorProjection.PlaceholderKind == SelectorPlaceholderKind.Error);
 
-            Assert.Equal(
-                "Unable to load session configuration. Check the connection and try again.",
-                startViewModel.StartSessionDraftErrorMessage);
+            Assert.Equal("profile switch failed", startViewModel.StartSessionDraftErrorMessage);
             Assert.Equal(SelectorPlaceholderKind.Error, startViewModel.StartModeSelectorProjection.PlaceholderKind);
             Assert.True(startViewModel.StartModeSelectorProjection.IsSubmitBlocked);
             Assert.NotEqual(SelectorPlaceholderKind.Unresolved, startViewModel.StartModeSelectorProjection.PlaceholderKind);
