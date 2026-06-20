@@ -175,6 +175,7 @@ public sealed partial class StartViewModel : ObservableObject
             _nav.ClearPendingProjectForNewSession();
             OnPropertyChanged(nameof(SelectedStartProjectId));
             RefreshAllSelectorProjections();
+            RefreshStartSessionDraftErrorProjection();
             StartSessionAndSendCommand.NotifyCanExecuteChanged();
             OnPropertyChanged(nameof(CanStartSessionAndSendUi));
             QueueEnsureNewSessionDraft();
@@ -191,9 +192,11 @@ public sealed partial class StartViewModel : ObservableObject
 
     public bool IsStartModeSelectorEnabled => _startSessionModeSnapshot.IsEnabled;
 
-    public bool HasStartSessionDraftError => Chat.HasNewSessionDraftError;
+    public bool HasStartSessionDraftError
+        => Chat.HasNewSessionDraftError && !IsExpectedRemoteDirectorySelectionState();
 
-    public string StartSessionDraftErrorMessage => Chat.NewSessionDraftErrorMessage;
+    public string StartSessionDraftErrorMessage
+        => HasStartSessionDraftError ? Chat.NewSessionDraftErrorMessage : string.Empty;
 
     public string StartDraftAutomationState
         => string.Join(
@@ -362,10 +365,10 @@ public sealed partial class StartViewModel : ObservableObject
     {
         _isComposerLoaded = false;
         CancelNewSessionDraftRefresh();
-        TrackComposerUnloadCleanup(Chat.DiscardNewSessionDraftAsync());
+        TrackNewSessionDraftDiscard(Chat.DiscardNewSessionDraftAsync());
     }
 
-    private void TrackComposerUnloadCleanup(Task cleanupTask)
+    private void TrackNewSessionDraftDiscard(Task cleanupTask)
     {
         _composerUnloadCleanupTask = cleanupTask;
         _composerUnloadCleanupObservationTask = cleanupTask.ContinueWith(
@@ -374,7 +377,7 @@ public sealed partial class StartViewModel : ObservableObject
                 var logger = (ILogger<StartViewModel>)state!;
                 logger.LogWarning(
                     task.Exception,
-                    "Failed to discard ACP new-session draft when the start composer unloaded.");
+                    "Failed to discard ACP new-session draft.");
             },
             _logger,
             CancellationToken.None,
@@ -458,16 +461,21 @@ public sealed partial class StartViewModel : ObservableObject
     private SelectorProjectionResult ResolveStartModeSelectorProjection()
     {
         var identity = BuildStartModeIdentity();
+        var showRemoteDirectoryPrompt = IsExpectedRemoteDirectorySelectionState();
+        var hasDraftError = Chat.HasNewSessionDraftError && !showRemoteDirectoryPrompt;
+        IReadOnlyList<SessionModeViewModel> modeOptions = showRemoteDirectoryPrompt
+            ? Array.Empty<SessionModeViewModel>()
+            : StartModeOptions;
         var policy = _modeSelectorPolicy.Project(new ModeSelectorPolicyInput(
             identity,
             identity,
-            StartModeOptions,
-            SelectedStartMode?.ModeId,
-            Chat.IsNewSessionDraftReady,
-            _isNewSessionDraftRefreshPending || Chat.IsNewSessionDraftLoading,
-            Chat.HasNewSessionDraftError,
-            StartModeOptions.Count > 0 || Chat.HasNewSessionDraftError,
-            ResolveModeSelectorPlaceholderLabels()));
+            modeOptions,
+            showRemoteDirectoryPrompt ? null : SelectedStartMode?.ModeId,
+            !showRemoteDirectoryPrompt && Chat.IsNewSessionDraftReady,
+            !showRemoteDirectoryPrompt && (_isNewSessionDraftRefreshPending || Chat.IsNewSessionDraftLoading),
+            hasDraftError,
+            (!showRemoteDirectoryPrompt && StartModeOptions.Count > 0) || hasDraftError,
+            ResolveModeSelectorPlaceholderLabels(showRemoteDirectoryPrompt)));
 
         return _selectorProjectionPresenter.Present(new SelectorProjectionInput(
             ComposerSelectorKind.Mode,
@@ -607,6 +615,31 @@ public sealed partial class StartViewModel : ObservableObject
         => StartProjectOptions.FirstOrDefault(option =>
             string.Equals(option.ProjectId, SelectedStartProjectId, StringComparison.Ordinal));
 
+    private bool IsRemoteDirectorySelectionRequiredForStart()
+    {
+        if (!IsSelectedProfileRemote())
+        {
+            return false;
+        }
+
+        var selectedOption = ResolveSelectedProjectOption();
+        return string.IsNullOrWhiteSpace(selectedOption?.RemoteCwd);
+    }
+
+    private bool IsExpectedRemoteDirectorySelectionState()
+    {
+        if (!IsRemoteDirectorySelectionRequiredForStart())
+        {
+            return false;
+        }
+
+        return !Chat.HasNewSessionDraftError
+            || string.Equals(
+                Chat.NewSessionDraftErrorMessage,
+                AcpSessionNewCwdResolver.MissingRemoteCwdMessage,
+                StringComparison.Ordinal);
+    }
+
     private IReadOnlyList<StartProjectOptionViewModel> BuildStartProjectOptions()
     {
         var isRemoteProfile = IsSelectedProfileRemote();
@@ -690,9 +723,11 @@ public sealed partial class StartViewModel : ObservableObject
             ? NavigationProjectIds.Unclassified
             : projectId;
 
-    private ModeSelectorPlaceholderLabels ResolveModeSelectorPlaceholderLabels()
+    private ModeSelectorPlaceholderLabels ResolveModeSelectorPlaceholderLabels(bool remoteSelectionRequired = false)
         => new(
-            Unresolved: Localize("Selector_Mode_Unresolved", "模式尚未就绪"),
+            Unresolved: remoteSelectionRequired
+                ? Localize("Selector_Mode_RemoteSelectionRequired", "请选择远程工作目录")
+                : Localize("Selector_Mode_Unresolved", "模式尚未就绪"),
             Loading: Localize("Selector_Mode_Loading", "正在加载模式..."),
             Error: Localize("Selector_Mode_Error", "模式不可用"),
             Default: Localize("Selector_Mode_Default", "默认模式"));
@@ -708,7 +743,7 @@ public sealed partial class StartViewModel : ObservableObject
         => new(
             Unresolved: Localize("Selector_Project_Unresolved", "项目不可用"),
             Fallback: Localize("Nav_Unclassified", "未归类"),
-            RemoteSelectionRequired: Localize("Selector_Project_RemoteSelectionRequired", "请选择远端目录"));
+            RemoteSelectionRequired: Localize("Selector_Project_RemoteSelectionRequired", "请选择远程工作目录"));
 
     private string Localize(string key, string fallback)
     {
@@ -748,6 +783,7 @@ public sealed partial class StartViewModel : ObservableObject
         if (string.Equals(e.PropertyName, nameof(ChatViewModel.SelectedAcpProfile), StringComparison.Ordinal))
         {
             RefreshStartProjectOptions();
+            RefreshStartSessionDraftErrorProjection();
             StartSessionAndSendCommand.NotifyCanExecuteChanged();
             OnPropertyChanged(nameof(CanStartSessionAndSendUi));
             if (_isComposerLoaded)
@@ -891,6 +927,17 @@ public sealed partial class StartViewModel : ObservableObject
 
         _newSessionDraftCts?.Cancel();
         _newSessionDraftCts?.Dispose();
+        _newSessionDraftCts = null;
+
+        if (IsRemoteDirectorySelectionRequiredForStart())
+        {
+            SetNewSessionDraftRefreshPending(false);
+            TrackNewSessionDraftDiscard(Chat.DiscardNewSessionDraftAsync());
+            RefreshStartModeProjection();
+            RefreshStartSessionDraftErrorProjection();
+            return;
+        }
+
         var refreshCts = new CancellationTokenSource();
         _newSessionDraftCts = refreshCts;
         SetNewSessionDraftRefreshPending(true);

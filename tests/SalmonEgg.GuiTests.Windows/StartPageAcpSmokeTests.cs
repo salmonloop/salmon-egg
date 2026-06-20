@@ -24,9 +24,14 @@ public sealed class StartPageAcpSmokeTests
         "模式尚未就绪"
     ];
 
+    private static readonly string[] RemoteDirectoryPromptLabels =
+    [
+        "Select a remote working directory",
+        "请选择远程工作目录"
+    ];
+
     private static readonly string[] RemoteBlockedErrorLabels =
     [
-        "Select a configured remote directory before creating a remote session.",
         "Unable to load session configuration. Check the connection and try again."
     ];
 
@@ -131,10 +136,6 @@ public sealed class StartPageAcpSmokeTests
             BuildFailureMessage("Remote profile without a selected remote directory did not remain locally unavailable.", session, appData));
 
         var appLogTail = appData.ReadLatestAppLogTail();
-        Assert.Contains(
-            "ACP new-session draft cwd resolution failed",
-            appLogTail,
-            StringComparison.Ordinal);
         Assert.DoesNotContain(
             "\"method\":\"session/new\"",
             appLogTail,
@@ -146,7 +147,7 @@ public sealed class StartPageAcpSmokeTests
     {
         // Reproduces a variant of the reported bug: start on a connected local stdio profile
         // (Ready modes), switch the agent selector to a remote WebSocket profile that connects
-        // successfully, observe the mode selector go to "模式尚未就绪" while the project is 未归类,
+        // successfully, observe the mode selector ask for a remote working directory while the project is 未归类,
         // then switch the project to a configured remote directory and expect Ready to recover.
         // This exercises the connection-switch path where registry/session identity drift is most
         // likely to strand the draft.
@@ -175,7 +176,7 @@ public sealed class StartPageAcpSmokeTests
             BuildFailureMessage("Switching from local stdio to remote never attempted a WebSocket connection.", session, appData));
 
         // After switching to the remote profile with no remote directory selected, the draft must
-        // stay blocked (cwd resolution failure) — the expected "模式尚未就绪" state.
+        // stay blocked until the user selects a remote working directory.
         Assert.True(
             WaitUntilRemoteDraftBlocked(session, appData, TimeSpan.FromSeconds(20)),
             BuildFailureMessage("Remote profile did not stay blocked before a remote directory was selected.", session, appData));
@@ -196,8 +197,8 @@ public sealed class StartPageAcpSmokeTests
     public void RemoteProfile_WhenConnectedAndRemoteDirectorySelected_RecoversReadyModes()
     {
         // Reproduces the reported bug: on the Start page, selecting a remote WebSocket ACP profile
-        // auto-switches the project selector to 未归类 (no cwd) so the mode selector correctly shows
-        // "模式尚未就绪". Switching the project to an already-configured remote directory must then
+        // auto-switches the project selector to 未归类 (no cwd) so the mode selector asks for
+        // a remote working directory. Switching the project to an already-configured remote directory must then
         // re-fetch modes and recover to Ready. The remote harness accepts any cwd and returns modes.
         using var appData = StartPageAcpSmokeData.CreateMappedProjectScenario(
             startupProfileId: RemoteProfileId,
@@ -214,7 +215,7 @@ public sealed class StartPageAcpSmokeTests
         OpenStartPage(session);
 
         // The startup remote profile has no selected remote directory yet, so the draft must stay
-        // blocked (cwd resolution failure) — this is the expected "模式尚未就绪" state.
+        // blocked until the user selects a remote working directory.
         Assert.True(
             WaitUntilRemoteDraftBlocked(session, appData, TimeSpan.FromSeconds(20)),
             BuildFailureMessage("Remote startup profile did not stay blocked before a remote directory was selected.", session, appData));
@@ -317,6 +318,7 @@ public sealed class StartPageAcpSmokeTests
         TimeSpan timeout)
         => WaitUntil(
             () => IsStartComposerModeUnavailable(session)
+                || IsStartComposerBlockedByRemoteDirectoryPrompt(session)
                 || IsStartComposerBlockedByError(session)
                 || appData.ReadLatestAppLogTail().Contains(
                     "ACP new-session draft cwd resolution failed",
@@ -370,6 +372,9 @@ public sealed class StartPageAcpSmokeTests
 
     private static bool IsStartComposerModeUnavailable(WindowsGuiAppSession session)
         => UnavailableModeLabels.Any(label => session.TryFindVisibleTextAnywhere(label, TimeSpan.FromMilliseconds(120)) is not null);
+
+    private static bool IsStartComposerBlockedByRemoteDirectoryPrompt(WindowsGuiAppSession session)
+        => RemoteDirectoryPromptLabels.Any(label => session.TryFindVisibleTextAnywhere(label, TimeSpan.FromMilliseconds(120)) is not null);
 
     private static bool IsStartComposerBlockedByError(WindowsGuiAppSession session)
         => RemoteBlockedErrorLabels.Any(label => session.TryFindVisibleTextAnywhere(label, TimeSpan.FromMilliseconds(120)) is not null);

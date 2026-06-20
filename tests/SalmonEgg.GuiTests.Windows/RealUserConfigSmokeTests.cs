@@ -2444,6 +2444,8 @@ public sealed partial class RealUserConfigSmokeTests
     private static bool IsStartComposerModeUnavailable(WindowsGuiAppSession session)
         => session.TryFindVisibleTextAnywhere("模式不可用", TimeSpan.FromMilliseconds(120)) is not null
             || session.TryFindVisibleTextAnywhere("模式尚未就绪", TimeSpan.FromMilliseconds(120)) is not null
+            || session.TryFindVisibleTextAnywhere("请选择远程工作目录", TimeSpan.FromMilliseconds(120)) is not null
+            || session.TryFindVisibleTextAnywhere("Select a remote working directory", TimeSpan.FromMilliseconds(120)) is not null
             || session.TryFindVisibleTextAnywhere("正在加载模式...", TimeSpan.FromMilliseconds(120)) is not null;
 
     private static bool WaitUntilNavigationActivationStarted(

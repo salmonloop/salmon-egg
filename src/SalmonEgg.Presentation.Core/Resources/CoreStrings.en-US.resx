@@ -24,6 +24,9 @@
   <data name="Selector_Mode_Unresolved" xml:space="preserve">
     <value>Mode is not ready</value>
   </data>
+  <data name="Selector_Mode_RemoteSelectionRequired" xml:space="preserve">
+    <value>Select a remote working directory</value>
+  </data>
   <data name="Selector_Mode_Loading" xml:space="preserve">
     <value>Loading modes...</value>
   </data>
@@ -47,6 +50,9 @@
   </data>
   <data name="Selector_Project_Unresolved" xml:space="preserve">
     <value>Project unavailable</value>
+  </data>
+  <data name="Selector_Project_RemoteSelectionRequired" xml:space="preserve">
+    <value>Select a remote working directory</value>
   </data>
   <data name="SettingsSection_General" xml:space="preserve">
     <value>General</value>

@@ -39,6 +39,7 @@ public sealed class StartViewModelTests
 {
     private static readonly TimeSpan PreviousFixedDraftIdentityWaitTimeout = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan DraftIdentityWaitRegressionBuffer = TimeSpan.FromMilliseconds(150);
+    private const string RemoteDirectoryPrompt = "请选择远程工作目录";
 
     [Fact]
     public async Task StartSessionAndSendAsync_DoesNotInvokeWorkflow_WhenPromptIsBlank()
@@ -975,13 +976,22 @@ public sealed class StartViewModelTests
 
             allowProfileConnection.SetResult(null);
 
-            await WaitForConditionAsync(
+            var recovered = await WaitForConditionOrFalseAsync(
                 () => startViewModel.StartModeStage == StartSessionModeStage.Ready
                     && startViewModel.IsStartModeSelectorEnabled
                     && createCallCount == 2,
-                timeoutMilliseconds: 3000);
+                timeoutMilliseconds: 6000);
 
             var finalState = await chat.GetConnectionStateAsync();
+            Assert.True(
+                recovered,
+                $"Start draft did not recover after delayed profile connection. automation={startViewModel.StartDraftAutomationState}; " +
+                $"phase={finalState.Phase}; intent={finalState.SelectedProfileIntentId}; " +
+                $"foreground={finalState.ForegroundTransportProfileId}; conn={finalState.ConnectionInstanceId}; " +
+                $"draftPhase={finalState.NewSessionDraft?.Phase.ToString() ?? "null"}; " +
+                $"draftProfile={finalState.NewSessionDraft?.ProfileId ?? "null"}; " +
+                $"draftError={finalState.NewSessionDraft?.Error ?? "null"}; " +
+                $"createCallCount={createCallCount}");
             Assert.Equal("profile-2", finalState.NewSessionDraft?.ProfileId);
             Assert.Equal("conn-2", finalState.NewSessionDraft?.ConnectionInstanceId);
             Assert.Equal("remote-draft-2", finalState.NewSessionDraft?.RemoteSessionId);
@@ -1213,7 +1223,7 @@ public sealed class StartViewModelTests
                 preferences,
                 nav,
                 workflow.Object);
-            startViewModel.SelectedStartProjectId = "project-remote";
+            startViewModel.SelectedStartProjectId = "remote-directory:dir-remote";
 
             startViewModel.OnComposerLoaded();
 
@@ -1332,7 +1342,7 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
-    public async Task StartSessionDraft_WhenRemoteProfileHasNoResolvableCwd_ShowsExplicitRemoteCwdError()
+    public async Task StartSessionDraft_WhenRemoteProfileHasNoResolvableCwd_ShowsRemoteDirectoryPromptWithoutDraftError()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -1368,11 +1378,17 @@ public sealed class StartViewModelTests
 
             startViewModel.OnComposerLoaded();
 
-            await WaitForConditionAsync(() => startViewModel.HasStartSessionDraftError);
+            await WaitForConditionAsync(() =>
+                startViewModel.StartModeSelectorProjection.IsSubmitBlocked
+                && string.Equals(startViewModel.StartModeSelectorProjection.SubmitBlockReason, RemoteDirectoryPrompt, StringComparison.Ordinal));
 
-            Assert.Equal(
-                "Select a configured remote directory before creating a remote session.",
-                startViewModel.StartSessionDraftErrorMessage);
+            Assert.False(startViewModel.HasStartSessionDraftError);
+            Assert.Equal(string.Empty, startViewModel.StartSessionDraftErrorMessage);
+            Assert.Equal(SelectorPlaceholderKind.Unresolved, startViewModel.StartModeSelectorProjection.PlaceholderKind);
+            Assert.Equal(RemoteDirectoryPrompt, startViewModel.SelectedStartModeSelectorItem?.DisplayName);
+            Assert.True(startViewModel.StartProjectSelectorProjection.IsSubmitBlocked);
+            Assert.Equal(RemoteDirectoryPrompt, startViewModel.StartProjectSelectorProjection.SubmitBlockReason);
+            Assert.Equal(RemoteDirectoryPrompt, startViewModel.SelectedStartProjectSelectorItem?.DisplayName);
             chatService.Verify(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()), Times.Never);
         }
         finally
@@ -1477,10 +1493,11 @@ public sealed class StartViewModelTests
 
             startViewModel.OnComposerLoaded();
 
-            await WaitForConditionAsync(() => startViewModel.HasStartSessionDraftError);
-            Assert.Equal(
-                "Select a configured remote directory before creating a remote session.",
-                startViewModel.StartSessionDraftErrorMessage);
+            await WaitForConditionAsync(() =>
+                startViewModel.StartModeSelectorProjection.IsSubmitBlocked
+                && string.Equals(startViewModel.StartModeSelectorProjection.SubmitBlockReason, RemoteDirectoryPrompt, StringComparison.Ordinal));
+            Assert.False(startViewModel.HasStartSessionDraftError);
+            Assert.Equal(RemoteDirectoryPrompt, startViewModel.SelectedStartModeSelectorItem?.DisplayName);
             Assert.Empty(createCalls);
 
             chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[1];
@@ -1588,11 +1605,12 @@ public sealed class StartViewModelTests
 
             startViewModel.OnComposerLoaded();
 
-            // Phase 1: With unclassified project selected (no cwd for remote), the draft should fault.
-            await WaitForConditionAsync(() => startViewModel.HasStartSessionDraftError);
-            Assert.Equal(
-                "Select a configured remote directory before creating a remote session.",
-                startViewModel.StartSessionDraftErrorMessage);
+            // Phase 1: With unclassified project selected (no cwd for remote), the UI should ask for a remote directory without projecting a draft error.
+            await WaitForConditionAsync(() =>
+                startViewModel.StartModeSelectorProjection.IsSubmitBlocked
+                && string.Equals(startViewModel.StartModeSelectorProjection.SubmitBlockReason, RemoteDirectoryPrompt, StringComparison.Ordinal));
+            Assert.False(startViewModel.HasStartSessionDraftError);
+            Assert.Equal(RemoteDirectoryPrompt, startViewModel.SelectedStartModeSelectorItem?.DisplayName);
             Assert.Empty(createCalls);
 
             // Phase 2: Switch to a configured remote directory — this should trigger a new draft.
@@ -1701,15 +1719,19 @@ public sealed class StartViewModelTests
 
             startViewModel.OnComposerLoaded();
 
-            await WaitForConditionAsync(() => startViewModel.HasStartSessionDraftError);
+            await WaitForConditionAsync(() =>
+                startViewModel.StartModeSelectorProjection.IsSubmitBlocked
+                && string.Equals(startViewModel.StartModeSelectorProjection.SubmitBlockReason, RemoteDirectoryPrompt, StringComparison.Ordinal));
             var phase1State = await chat.GetConnectionStateAsync();
-            var phase1DraftPhase = phase1State.NewSessionDraft?.Phase;
             var phase1Automation = startViewModel.StartDraftAutomationState;
             Assert.True(
-                phase1DraftPhase == NewSessionDraftPhase.Faulted,
-                $"Phase1 did not fault. draftPhase={phase1DraftPhase?.ToString() ?? "null"}, automation={phase1Automation}, " +
+                phase1State.NewSessionDraft is null,
+                $"Phase1 created a draft even though no remote directory was selected. draftPhase={phase1State.NewSessionDraft?.Phase.ToString() ?? "null"}, automation={phase1Automation}, " +
                 $"foregroundProfile={phase1State.ForegroundTransportProfileId}, connId={phase1State.ConnectionInstanceId}, " +
                 $"phase={phase1State.Phase}, error={phase1State.Error ?? "(null)"}");
+            Assert.False(startViewModel.HasStartSessionDraftError);
+            Assert.Equal(RemoteDirectoryPrompt, startViewModel.SelectedStartModeSelectorItem?.DisplayName);
+            Assert.Empty(createCalls);
 
             startViewModel.SelectedStartProjectId = "remote-directory:dir-alpha";
 
@@ -1772,6 +1794,12 @@ public sealed class StartViewModelTests
         {
             var preferences = CreatePreferences();
             preferences.Projects.Add(new ProjectDefinition { ProjectId = "project-a", Name = "Alpha", RootPath = @"C:\Repo\Alpha" });
+            preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory
+            {
+                DirectoryId = "dir-alpha",
+                DisplayName = "Alpha Remote",
+                RemotePath = "/remote/alpha"
+            });
             using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             chat.ViewModel.AcpProfileList.Add(new ServerConfiguration { Id = "profile-1", Name = "Agent One", Transport = TransportType.HttpSse, ServerUrl = "https://example.test" });
             chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[0];
@@ -1784,6 +1812,7 @@ public sealed class StartViewModelTests
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+            startViewModel.SelectedStartProjectId = "remote-directory:dir-alpha";
 
             await chat.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-1"));
             await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
@@ -1793,10 +1822,11 @@ public sealed class StartViewModelTests
 
             await WaitForConditionAsync(() => startViewModel.HasStartSessionDraftError);
 
+            Assert.Equal("session/new failed", startViewModel.StartSessionDraftErrorMessage);
             Assert.Equal(SelectorPlaceholderKind.Error, startViewModel.StartModeSelectorProjection.PlaceholderKind);
             Assert.True(startViewModel.StartModeSelectorProjection.IsSubmitBlocked);
             Assert.Contains("Agent One", startViewModel.StartAgentSelectorProjection.DisplayItems.Select(item => item.DisplayName));
-            Assert.Contains("Alpha", startViewModel.StartProjectSelectorProjection.DisplayItems.Select(item => item.DisplayName));
+            Assert.Contains("Alpha Remote", startViewModel.StartProjectSelectorProjection.DisplayItems.Select(item => item.DisplayName));
             Assert.False(startViewModel.StartSessionAndSendCommand.CanExecute(null));
         }
         finally
@@ -2001,6 +2031,11 @@ public sealed class StartViewModelTests
             chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[1];
 
             Assert.False(startViewModel.IsStartModeSelectorEnabled);
+            Assert.True(startViewModel.StartModeSelectorProjection.IsSubmitBlocked);
+            Assert.Equal(RemoteDirectoryPrompt, startViewModel.StartModeSelectorProjection.SubmitBlockReason);
+            Assert.Equal(RemoteDirectoryPrompt, startViewModel.SelectedStartModeSelectorItem?.DisplayName);
+            Assert.DoesNotContain("Code", startViewModel.StartModeSelectorProjection.DisplayItems.Select(item => item.DisplayName));
+            Assert.DoesNotContain("Plan", startViewModel.StartModeSelectorProjection.DisplayItems.Select(item => item.DisplayName));
         }
         finally
         {

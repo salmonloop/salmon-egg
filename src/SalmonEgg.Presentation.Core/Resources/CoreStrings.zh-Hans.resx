@@ -18,6 +18,9 @@
   <data name="Selector_Mode_Unresolved" xml:space="preserve">
     <value>模式尚未就绪</value>
   </data>
+  <data name="Selector_Mode_RemoteSelectionRequired" xml:space="preserve">
+    <value>请选择远程工作目录</value>
+  </data>
   <data name="Selector_Mode_Loading" xml:space="preserve">
     <value>正在加载模式...</value>
   </data>
@@ -41,6 +44,9 @@
   </data>
   <data name="Selector_Project_Unresolved" xml:space="preserve">
     <value>项目不可用</value>
+  </data>
+  <data name="Selector_Project_RemoteSelectionRequired" xml:space="preserve">
+    <value>请选择远程工作目录</value>
   </data>
   <data name="SettingsSection_General" xml:space="preserve">
     <value>常规</value>
