@@ -48,6 +48,7 @@ namespace SalmonEgg.Infrastructure.Client
         private readonly object _lock = new();
         private bool _disposed;
         private CancellationTokenSource? _messageLoopCts;
+        private string? _lastTransportErrorMessage;
 
         private bool _isInitialized;
         private AgentInfo? _agentInfo;
@@ -156,15 +157,16 @@ namespace SalmonEgg.Infrastructure.Client
                    throw new InvalidOperationException("客户端已初始化");
                }
 
-               // 确保传输层已连接
-              if (!_transport.IsConnected)
-              {
-                  var connected = await _transport.ConnectAsync(cancellationToken).ConfigureAwait(false);
-                  if (!connected)
-                  {
-                      throw new InvalidOperationException("无法连接到传输层");
-                  }
-              }
+            // 确保传输层已连接
+            if (!_transport.IsConnected)
+            {
+                ClearLastTransportError();
+                var connected = await _transport.ConnectAsync(cancellationToken).ConfigureAwait(false);
+                if (!connected)
+                {
+                    throw new InvalidOperationException(CreateTransportConnectFailureMessage());
+                }
+            }
 
                // 发送 initialize 请求
                var request = new JsonRpcRequest(
@@ -750,7 +752,13 @@ namespace SalmonEgg.Infrastructure.Client
             try
             {
                 var json = _parser.SerializeMessage(request);
-                await _transport.SendMessageAsync(json, cancellationToken).ConfigureAwait(false);
+                ClearLastTransportError();
+                var sent = await _transport.SendMessageAsync(json, cancellationToken).ConfigureAwait(false);
+                if (!sent)
+                {
+                    throw new InvalidOperationException(CreateTransportSendFailureMessage(request.Method));
+                }
+
                 using var cancellationRegistration = cancellationToken.Register(
                     static state => ((TaskCompletionSource<JsonRpcResponse>)state!).TrySetCanceled(),
                     tcs);
@@ -777,13 +785,21 @@ namespace SalmonEgg.Infrastructure.Client
             }
         }
 
-        private void CancelPendingRequests()
+        private void CancelPendingRequests(string? transportErrorMessage = null)
         {
             foreach (var pendingRequest in _pendingRequests)
             {
                 if (_pendingRequests.TryRemove(pendingRequest.Key, out var pending))
                 {
-                    pending.TrySetCanceled();
+                    if (string.IsNullOrWhiteSpace(transportErrorMessage))
+                    {
+                        pending.TrySetCanceled();
+                    }
+                    else
+                    {
+                        pending.TrySetException(new InvalidOperationException(
+                            CreateTransportDisconnectedMessage(transportErrorMessage)));
+                    }
                 }
             }
         }
@@ -1586,7 +1602,13 @@ namespace SalmonEgg.Infrastructure.Client
         /// </summary>
         private void OnTransportError(object? sender, TransportErrorEventArgs e)
         {
-            OnErrorOccurred(EnrichTransportErrorMessage(e.ErrorMessage));
+            var enrichedErrorMessage = EnrichTransportErrorMessage(e.ErrorMessage);
+            _lastTransportErrorMessage = enrichedErrorMessage;
+            OnErrorOccurred(enrichedErrorMessage);
+            if (!_transport.IsConnected)
+            {
+                CancelPendingRequests(enrichedErrorMessage);
+            }
         }
 
         /// <summary>
@@ -1619,6 +1641,33 @@ namespace SalmonEgg.Infrastructure.Client
                 ? errorMessage
                 : errorMessage + sshBridgeGuidance;
         }
+
+        private void ClearLastTransportError()
+        {
+            _lastTransportErrorMessage = null;
+        }
+
+        private string CreateTransportConnectFailureMessage()
+        {
+            var transportErrorMessage = _lastTransportErrorMessage;
+            return string.IsNullOrWhiteSpace(transportErrorMessage)
+                ? "无法连接到传输层"
+                : "无法连接到传输层：" + transportErrorMessage;
+        }
+
+        private string CreateTransportSendFailureMessage(string method)
+        {
+            var transportErrorMessage = _lastTransportErrorMessage;
+            var requestDescription = string.IsNullOrWhiteSpace(method)
+                ? "ACP request"
+                : $"ACP request '{method}'";
+            return string.IsNullOrWhiteSpace(transportErrorMessage)
+                ? $"{requestDescription} was not sent because the transport reported a send failure."
+                : $"{requestDescription} was not sent because the transport reported a send failure: {transportErrorMessage}";
+        }
+
+        private static string CreateTransportDisconnectedMessage(string transportErrorMessage)
+            => "ACP request failed because the transport disconnected: " + transportErrorMessage;
 
         /// <summary>
         /// 处理消息循环。

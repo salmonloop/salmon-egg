@@ -348,6 +348,114 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         [Fact]
+        public async Task InitializeAsync_WhenTransportConnectReturnsFalse_IncludesLastTransportError()
+        {
+            var parser = new MessageParser();
+            _transportMock.SetupGet(t => t.IsConnected).Returns(false);
+            _transportMock
+                .Setup(t => t.ConnectAsync(It.IsAny<CancellationToken>()))
+                .Callback(() => _transportMock.Raise(
+                    t => t.ErrorOccurred += null,
+                    new TransportErrorEventArgs("无法启动进程：stdio command not found")))
+                .ReturnsAsync(false);
+            var client = new AcpClient(_transportMock.Object, parser, null, _errorLoggerMock.Object);
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                client.InitializeAsync(new InitializeParams(
+                    new ClientInfo("Test", "1.0.0"),
+                    ClientCapabilityDefaults.Create())));
+
+            Assert.Contains("无法启动进程：stdio command not found", ex.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task InitializeAsync_WhenTransportDisconnectsBeforeResponse_IncludesTransportError()
+        {
+            var parser = new MessageParser();
+            var isConnected = true;
+            _transportMock.SetupGet(t => t.IsConnected).Returns(() => isConnected);
+            var client = new AcpClient(_transportMock.Object, parser, null, _errorLoggerMock.Object);
+            var initializeSent = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            _transportMock
+                .Setup(t => t.SendMessageAsync(It.IsRegex("initialize"), It.IsAny<CancellationToken>()))
+                .Callback(() => initializeSent.TrySetResult(null))
+                .ReturnsAsync(true);
+
+            using var cts = new CancellationTokenSource();
+            var initializeTask = client.InitializeAsync(
+                new InitializeParams(
+                    new ClientInfo("Test", "1.0.0"),
+                    ClientCapabilityDefaults.Create()),
+                cts.Token);
+
+            try
+            {
+                await initializeSent.Task.WaitAsync(TimeSpan.FromSeconds(2));
+                isConnected = false;
+                _transportMock.Raise(
+                    t => t.ErrorOccurred += null,
+                    new TransportErrorEventArgs("Agent 进程已退出"));
+
+                var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+                    async () => await initializeTask.WaitAsync(TimeSpan.FromSeconds(2)));
+                Assert.Contains("Agent 进程已退出", ex.Message, StringComparison.Ordinal);
+            }
+            finally
+            {
+                cts.Cancel();
+                try
+                {
+                    await initializeTask.WaitAsync(TimeSpan.FromSeconds(2));
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        [Fact]
+        public async Task CreateSessionAsync_WhenTransportSendReturnsFalse_IncludesTransportError()
+        {
+            var parser = new MessageParser();
+            var client = await CreateInitializedClientAsync();
+            var sessionNewSent = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            _transportMock
+                .Setup(t => t.SendMessageAsync(It.IsRegex("session/new"), It.IsAny<CancellationToken>()))
+                .Callback(() =>
+                {
+                    _transportMock.Raise(
+                        t => t.ErrorOccurred += null,
+                        new TransportErrorEventArgs("发送消息失败：broken pipe"));
+                    sessionNewSent.TrySetResult(null);
+                })
+                .ReturnsAsync(false);
+
+            using var cts = new CancellationTokenSource();
+            var createTask = client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null), cts.Token);
+
+            try
+            {
+                await sessionNewSent.Task.WaitAsync(TimeSpan.FromSeconds(2));
+                var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+                    async () => await createTask.WaitAsync(TimeSpan.FromSeconds(2)));
+                Assert.Contains("发送消息失败：broken pipe", ex.Message, StringComparison.Ordinal);
+            }
+            finally
+            {
+                cts.Cancel();
+                try
+                {
+                    await createTask.WaitAsync(TimeSpan.FromSeconds(2));
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        [Fact]
         public async Task InitializeAsync_WhenServerProtocolIsNewer_ThrowsProtocolVersionMismatch()
         {
             var parser = new MessageParser();
