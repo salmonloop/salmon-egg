@@ -555,8 +555,8 @@ public static class DependencyInjection
                 sp.GetRequiredService<INavigationCoordinator>(),
                 sp.GetRequiredService<MainNavigationViewModel>(),
                 sp.GetRequiredService<ILogger<StartViewModel>>(),
-                sp.GetRequiredService<IChatLaunchWorkflow>(),
                 sp.GetRequiredService<IChatConnectionStore>(),
+                sp.GetRequiredService<IChatLaunchWorkflow>(),
                 sp.GetRequiredService<IConversationCatalogReadModel>(),
                 sp.GetRequiredService<IStringLocalizer<CoreStrings>>()));
         services.AddSingleton<IChatLaunchWorkflow>(sp =>

@@ -405,6 +405,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
             nav: nav,
             logger: Mock.Of<ILogger<StartViewModel>>(),
             chatLaunchWorkflow: workflow,
+            chatConnectionStore: fixture.ConnectionStore,
             conversationCatalog: Mock.Of<IConversationCatalogReadModel>());
 
     private static DisplayCatalogTestScope CreateDisplayCatalogPresenter(
@@ -5680,6 +5681,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         public ChatConversationWorkspace Workspace => _workspace;
         public AppPreferencesViewModel Preferences { get; }
         public AcpProfilesViewModel Profiles { get; }
+        public IChatConnectionStore ConnectionStore => _connectionStore;
         public RecordingChatStore ChatStore => _chatStore;
         public Mock<ILogger<ChatViewModel>> ViewModelLogger { get; }
 

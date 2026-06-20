@@ -56,7 +56,7 @@ public sealed class StartViewModelTests
 
             var startLogger = new Mock<ILogger<StartViewModel>>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object, startLogger.Object);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object, startLogger.Object);
 
             startViewModel.StartPrompt = "   ";
 
@@ -83,7 +83,7 @@ public sealed class StartViewModelTests
             var workflow = new Mock<IChatLaunchWorkflow>();
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
             await MakeStartDraftReadyAsync(chat, startViewModel);
 
             startViewModel.StartPrompt = "  hello  ";
@@ -113,7 +113,7 @@ public sealed class StartViewModelTests
                 .ThrowsAsync(new InvalidOperationException("boom"));
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
             await MakeStartDraftReadyAsync(chat, startViewModel);
 
             startViewModel.StartPrompt = "hello";
@@ -142,7 +142,7 @@ public sealed class StartViewModelTests
             var workflow = new Mock<IChatLaunchWorkflow>();
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
 
             chat.ViewModel.CurrentPrompt = "chat draft";
             startViewModel.OnComposerLoaded();
@@ -172,7 +172,7 @@ public sealed class StartViewModelTests
             using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
 
             startViewModel.OnComposerLoaded();
             startViewModel.StartPrompt = "prefilled draft";
@@ -198,7 +198,7 @@ public sealed class StartViewModelTests
             using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
 
             var option = Assert.Single(startViewModel.StartProjectOptions);
 
@@ -229,7 +229,7 @@ public sealed class StartViewModelTests
             navigationCoordinator.Setup(x => x.ActivateStartAsync("project-a")).ReturnsAsync(true);
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences, navigationCoordinator.Object);
             await nav.PrepareStartForProjectAsync("project-a");
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
 
             Assert.Equal("project-a", startViewModel.SelectedStartProjectId);
         }
@@ -270,7 +270,7 @@ public sealed class StartViewModelTests
                 });
 
             var startViewModel = CreateStartViewModel(
-                chat.ViewModel,
+                chat,
                 preferences,
                 nav,
                 workflow.Object,
@@ -301,7 +301,7 @@ public sealed class StartViewModelTests
             var navigationCoordinator = new Mock<INavigationCoordinator>();
             navigationCoordinator.Setup(x => x.ActivateStartAsync("project-a")).ReturnsAsync(true);
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences, navigationCoordinator.Object);
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
             var observedSelectionRefresh = false;
             startViewModel.PropertyChanged += (_, e) =>
             {
@@ -353,7 +353,7 @@ public sealed class StartViewModelTests
                         ProjectAffinityOverrideProjectId: "project-a")
                 });
             var startViewModel = CreateStartViewModel(
-                chat.ViewModel,
+                chat,
                 preferences,
                 nav,
                 workflow.Object,
@@ -399,7 +399,7 @@ public sealed class StartViewModelTests
                 });
 
             var startViewModel = CreateStartViewModel(
-                chat.ViewModel,
+                chat,
                 preferences,
                 nav,
                 workflow.Object,
@@ -430,7 +430,7 @@ public sealed class StartViewModelTests
             var conversationCatalog = new ConversationCatalogPresenter(dispatcher);
 
             var startViewModel = CreateStartViewModel(
-                chat.ViewModel,
+                chat,
                 preferences,
                 nav,
                 workflow.Object,
@@ -477,7 +477,7 @@ public sealed class StartViewModelTests
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(
-                chat.ViewModel,
+                chat,
                 preferences,
                 nav,
                 workflow.Object);
@@ -516,7 +516,7 @@ public sealed class StartViewModelTests
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(
-                chat.ViewModel,
+                chat,
                 preferences,
                 nav,
                 workflow.Object);
@@ -546,7 +546,7 @@ public sealed class StartViewModelTests
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(
-                chat.ViewModel,
+                chat,
                 preferences,
                 nav,
                 workflow.Object);
@@ -581,7 +581,7 @@ public sealed class StartViewModelTests
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(
-                chat.ViewModel,
+                chat,
                 preferences,
                 nav,
                 workflow.Object);
@@ -631,7 +631,7 @@ public sealed class StartViewModelTests
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(
-                chat.ViewModel,
+                chat,
                 preferences,
                 nav,
                 workflow.Object);
@@ -713,7 +713,7 @@ public sealed class StartViewModelTests
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(
-                chat.ViewModel,
+                chat,
                 preferences,
                 nav,
                 workflow.Object);
@@ -820,7 +820,7 @@ public sealed class StartViewModelTests
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(
-                chat.ViewModel,
+                chat,
                 preferences,
                 nav,
                 workflow.Object);
@@ -962,7 +962,7 @@ public sealed class StartViewModelTests
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(
-                chat.ViewModel,
+                chat,
                 preferences,
                 nav,
                 workflow.Object);
@@ -1087,7 +1087,7 @@ public sealed class StartViewModelTests
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(
-                chat.ViewModel,
+                chat,
                 preferences,
                 nav,
                 workflow.Object);
@@ -1229,7 +1229,7 @@ public sealed class StartViewModelTests
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(
-                chat.ViewModel,
+                chat,
                 preferences,
                 nav,
                 workflow.Object);
@@ -1326,7 +1326,7 @@ public sealed class StartViewModelTests
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(
-                chat.ViewModel,
+                chat,
                 preferences,
                 nav,
                 workflow.Object);
@@ -1376,7 +1376,7 @@ public sealed class StartViewModelTests
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(
-                chat.ViewModel,
+                chat,
                 preferences,
                 nav,
                 workflow.Object);
@@ -1491,7 +1491,7 @@ public sealed class StartViewModelTests
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(
-                chat.ViewModel,
+                chat,
                 preferences,
                 nav,
                 workflow.Object);
@@ -1603,7 +1603,7 @@ public sealed class StartViewModelTests
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(
-                chat.ViewModel,
+                chat,
                 preferences,
                 nav,
                 workflow.Object);
@@ -1717,7 +1717,7 @@ public sealed class StartViewModelTests
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(
-                chat.ViewModel,
+                chat,
                 preferences,
                 nav,
                 workflow.Object);
@@ -1777,7 +1777,7 @@ public sealed class StartViewModelTests
             var workflow = new Mock<IChatLaunchWorkflow>();
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
 
             var slots = startViewModel.ComposerSelectorSlots;
 
@@ -1821,7 +1821,7 @@ public sealed class StartViewModelTests
 
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
             startViewModel.SelectedStartProjectId = "remote-directory:dir-alpha";
 
             await chat.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-1"));
@@ -1894,7 +1894,7 @@ public sealed class StartViewModelTests
 
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
 
             await chat.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-1"));
             await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
@@ -1938,7 +1938,7 @@ public sealed class StartViewModelTests
 
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
 
             await MakeStartDraftReadyAsync(chat, startViewModel);
             startViewModel.StartPrompt = "launch";
@@ -1965,7 +1965,7 @@ public sealed class StartViewModelTests
             using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
 
             Assert.Equal(SelectorPlaceholderKind.Default, startViewModel.StartAgentSelectorProjection.PlaceholderKind);
             Assert.Equal("未选择 Agent", startViewModel.SelectedStartAgentSelectorItem?.DisplayName);
@@ -1990,7 +1990,7 @@ public sealed class StartViewModelTests
             using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
 
             await MakeStartDraftReadyAsync(chat, startViewModel);
             var originalMode = startViewModel.SelectedStartMode;
@@ -2024,7 +2024,7 @@ public sealed class StartViewModelTests
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(
-                chat.ViewModel,
+                chat,
                 preferences,
                 nav,
                 workflow.Object);
@@ -2067,7 +2067,7 @@ public sealed class StartViewModelTests
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(
-                chat.ViewModel,
+                chat,
                 preferences,
                 nav,
                 workflow.Object);
@@ -2109,7 +2109,7 @@ public sealed class StartViewModelTests
             using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>(), voiceInput);
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
 
             startViewModel.StartPrompt = "start draft";
 
@@ -2144,7 +2144,7 @@ public sealed class StartViewModelTests
             using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>(), voiceInput);
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
 
             startViewModel.StartPrompt = "start draft";
             var expectedPrompt = "start draft dictated prompt";
@@ -2180,7 +2180,7 @@ public sealed class StartViewModelTests
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(
-                chat.ViewModel,
+                chat,
                 preferences,
                 nav,
                 workflow.Object);
@@ -2218,7 +2218,7 @@ public sealed class StartViewModelTests
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(
-                chat.ViewModel,
+                chat,
                 preferences,
                 nav,
                 workflow.Object);
@@ -2266,7 +2266,7 @@ public sealed class StartViewModelTests
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             _ = CreateStartViewModel(
-                chat.ViewModel,
+                chat,
                 preferences,
                 nav,
                 workflow.Object);
@@ -2299,7 +2299,7 @@ public sealed class StartViewModelTests
             using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
 
             startViewModel.SelectedStartProjectId = "project-b";
 
@@ -2332,7 +2332,7 @@ public sealed class StartViewModelTests
             using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
 
             startViewModel.SelectedStartProjectId = NavigationProjectIds.Unclassified;
 
@@ -2357,7 +2357,7 @@ public sealed class StartViewModelTests
             using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
 
             preferences.Projects.Add(new ProjectDefinition { ProjectId = "project-c", Name = "Cargo", RootPath = @"C:\Repo\Cargo" });
             preferences.Projects.Add(new ProjectDefinition { ProjectId = "project-a", Name = "Alpha", RootPath = @"C:\Repo\Alpha" });
@@ -2395,7 +2395,7 @@ public sealed class StartViewModelTests
                 });
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
             await MakeStartDraftReadyAsync(chat, startViewModel);
             startViewModel.StartPrompt = "launch";
 
@@ -2435,7 +2435,7 @@ public sealed class StartViewModelTests
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var loggerMock = new Mock<ILogger<StartViewModel>>();
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, workflow.Object, loggerMock.Object);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object, loggerMock.Object);
             await MakeStartDraftReadyAsync(chat, startViewModel);
             startViewModel.StartPrompt = "launch";
 
@@ -2483,7 +2483,7 @@ public sealed class StartViewModelTests
             chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[0];
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, Mock.Of<IChatLaunchWorkflow>());
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, Mock.Of<IChatLaunchWorkflow>());
 
             var items = startViewModel.StartProjectSelectorItems;
 
@@ -2532,7 +2532,7 @@ public sealed class StartViewModelTests
             chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[0];
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, Mock.Of<IChatLaunchWorkflow>());
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, Mock.Of<IChatLaunchWorkflow>());
 
             Assert.DoesNotContain(
                 startViewModel.StartProjectSelectorItems,
@@ -2598,7 +2598,7 @@ public sealed class StartViewModelTests
             chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[0];
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-            var startViewModel = CreateStartViewModel(chat.ViewModel, preferences, nav, Mock.Of<IChatLaunchWorkflow>());
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, Mock.Of<IChatLaunchWorkflow>());
             var remoteAgentItem = Assert.Single(
                 startViewModel.StartAgentSelectorItems.Where(item =>
                     string.Equals(item.SemanticValue, "profile-remote", StringComparison.Ordinal)));
@@ -2760,7 +2760,7 @@ public sealed class StartViewModelTests
     }
 
     private static StartViewModel CreateStartViewModel(
-        ChatViewModel chatViewModel,
+        ChatViewModelHarness chat,
         AppPreferencesViewModel preferences,
         MainNavigationViewModel nav,
         IChatLaunchWorkflow workflow,
@@ -2768,7 +2768,7 @@ public sealed class StartViewModelTests
         IConversationCatalogReadModel? conversationCatalog = null)
     {
         return new StartViewModel(
-            chatViewModel: chatViewModel,
+            chatViewModel: chat.ViewModel,
             sessionManager: Mock.Of<ISessionManager>(),
             preferences: preferences,
             projectPreferences: new NavigationProjectPreferencesAdapter(preferences),
@@ -2777,6 +2777,7 @@ public sealed class StartViewModelTests
             nav: nav,
             logger: logger ?? Mock.Of<ILogger<StartViewModel>>(),
             chatLaunchWorkflow: workflow,
+            chatConnectionStore: chat.ConnectionStore,
             conversationCatalog: conversationCatalog);
     }
 
@@ -3007,6 +3008,7 @@ public sealed class StartViewModelTests
         private readonly IState<ChatState> _state;
         private readonly IState<ChatConnectionState> _connectionState;
         private readonly IChatConnectionStore _connectionStore;
+        public IChatConnectionStore ConnectionStore => _connectionStore;
         public ConversationCatalogPresenter Presenter { get; }
         public ChatViewModel ViewModel { get; }
         public ChatConversationWorkspace Workspace { get; }

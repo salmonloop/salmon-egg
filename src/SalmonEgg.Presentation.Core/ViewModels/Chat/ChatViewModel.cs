@@ -1356,8 +1356,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     }
 
-    internal IChatConnectionStore ConnectionStore => _chatConnectionStore;
-
     private void OnConversationWorkspacePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         switch (e.PropertyName)

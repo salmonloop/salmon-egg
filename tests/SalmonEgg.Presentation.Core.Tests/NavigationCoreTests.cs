@@ -973,6 +973,14 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
+    public void ChatViewModel_DoesNotExposeConnectionStoreAsProjectionApi()
+    {
+        var code = LoadFile(@"src\SalmonEgg.Presentation.Core\ViewModels\Chat\ChatViewModel.cs");
+
+        Assert.DoesNotContain("IChatConnectionStore ConnectionStore =>", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ChatViewModel_MainPartial_StaysBelowFourThousandLines()
     {
         var code = LoadFile(@"src\SalmonEgg.Presentation.Core\ViewModels\Chat\ChatViewModel.cs");

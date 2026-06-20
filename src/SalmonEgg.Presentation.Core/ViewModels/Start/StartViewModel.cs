@@ -238,8 +238,8 @@ public sealed partial class StartViewModel : ObservableObject
         INavigationCoordinator navigationCoordinator,
         MainNavigationViewModel nav,
         ILogger<StartViewModel> logger,
+        IChatConnectionStore chatConnectionStore,
         IChatLaunchWorkflow? chatLaunchWorkflow = null,
-        IChatConnectionStore? chatConnectionStore = null,
         IConversationCatalogReadModel? conversationCatalog = null,
         IStringLocalizer<CoreStrings>? localizer = null)
     {
@@ -251,14 +251,14 @@ public sealed partial class StartViewModel : ObservableObject
         ArgumentNullException.ThrowIfNull(navigationCoordinator);
         _nav = nav ?? throw new ArgumentNullException(nameof(nav));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _chatConnectionStore = chatConnectionStore ?? Chat.ConnectionStore;
+        _chatConnectionStore = chatConnectionStore ?? throw new ArgumentNullException(nameof(chatConnectionStore));
         _conversationCatalog = conversationCatalog ?? NoOpConversationCatalogReadModel.Instance;
         _localizer = localizer;
         StartProjectOptions = new ReadOnlyObservableCollection<StartProjectOptionViewModel>(_startProjectOptions);
         _chatLaunchWorkflow = chatLaunchWorkflow ?? new ChatLaunchWorkflow(
             new ChatLaunchWorkflowChatFacadeAdapter(
                 Chat,
-                chatConnectionStore ?? throw new ArgumentNullException(nameof(chatConnectionStore))),
+                _chatConnectionStore),
             sessionManager,
             navigationCoordinator,
             ResolveDefaultCwd);
