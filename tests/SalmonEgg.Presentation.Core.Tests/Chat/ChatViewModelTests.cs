@@ -54,7 +54,7 @@ using Xunit;
 namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
 [Collection("NonParallel")]
-    public partial class ChatViewModelTests
+public partial class ChatViewModelTests
 {
     private static ViewModelFixture CreateViewModel(
         SynchronizationContext? syncContext = null,

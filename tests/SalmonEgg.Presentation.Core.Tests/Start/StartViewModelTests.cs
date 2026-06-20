@@ -2472,13 +2472,18 @@ public sealed class StartViewModelTests
             preferences.Projects.Add(new ProjectDefinition { ProjectId = "local-a", Name = "Local A", RootPath = @"C:\Repo\A" });
             preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory
             {
-                DirectoryId = "dir-a", DisplayName = "Remote A", RemotePath = "/remote/a"
+                DirectoryId = "dir-a",
+                DisplayName = "Remote A",
+                RemotePath = "/remote/a"
             });
 
             using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
             {
-                Id = "profile-remote", Name = "Remote", Transport = TransportType.WebSocket, ServerUrl = "ws://127.0.0.1:3010/"
+                Id = "profile-remote",
+                Name = "Remote",
+                Transport = TransportType.WebSocket,
+                ServerUrl = "ws://127.0.0.1:3010/"
             });
             chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[0];
 

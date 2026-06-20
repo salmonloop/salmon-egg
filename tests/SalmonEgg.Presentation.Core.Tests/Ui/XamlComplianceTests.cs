@@ -22,6 +22,27 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void WinUiXamlCompiler_UsesSdkProvidedMetadataWithoutCustomReferenceInjection()
+    {
+        var project = LoadText(@"SalmonEgg\SalmonEgg\SalmonEgg.csproj");
+
+        Assert.DoesNotContain("AddWinSdkXamlReferences", project, StringComparison.Ordinal);
+        Assert.DoesNotContain("XamlReferencesToCompile Include=", project, StringComparison.Ordinal);
+        Assert.DoesNotContain("Microsoft.WinUI.dll", project, StringComparison.Ordinal);
+        Assert.DoesNotContain("microsoft.windowsappsdk.interactiveexperiences", project, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void WasmSettingsNavigationSmoke_ClicksSettingsThroughStableAutomationId()
+    {
+        var script = LoadText(@"scripts\gates\wasm-settings-navigation-smoke.mjs");
+
+        Assert.Contains("SettingsItem", script, StringComparison.Ordinal);
+        Assert.Contains("automationIds", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("await clickVisibleText(page, [\"设置\", \"Settings\"]);", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SessionGuiRegressionScript_CoversInstalledMsixRightPanelAuxiliaryPanelPath()
     {
         var script = LoadText(@".tools\run-session-gui-regression.ps1");
