@@ -626,6 +626,58 @@ public sealed class AcpConnectionSettingsViewModelTests
         Assert.Equal(new[] { "Alpha", "Beta" }, profiles.ProfileItems.Select(item => item.Name));
     }
 
+    [Fact]
+    public async Task RefreshCommand_WhenExistingProfileIsRenamed_UpdatesSettingsProfileItem()
+    {
+        var preferences = await CreatePreferencesAsync();
+        var configurations = new[]
+        {
+            new ServerConfiguration
+            {
+                Id = "profile-a",
+                Name = "Alpha",
+                Transport = TransportType.Stdio,
+                StdioCommand = "alpha-acp"
+            }
+        };
+
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .Setup(service => service.ListConfigurationsAsync())
+            .ReturnsAsync(() => configurations);
+
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        var profiles = new AcpProfilesViewModel(
+            configurationService.Object,
+            preferences,
+            NullLogger<AcpProfilesViewModel>.Instance,
+            registry,
+            registry,
+            new TestConnectionCommands(),
+            NullLoggerFactory.Instance,
+            new ImmediateUiDispatcher(),
+            new TestCoreStringLocalizer());
+
+        await profiles.RefreshCommand.ExecuteAsync(null);
+        var item = Assert.Single(profiles.ProfileItems);
+        Assert.Equal("Alpha", item.Name);
+
+        configurations[0] = new ServerConfiguration
+        {
+            Id = "profile-a",
+            Name = "Alpha Renamed",
+            Transport = TransportType.WebSocket,
+            ServerUrl = "ws://localhost:9001"
+        };
+
+        await profiles.RefreshCommand.ExecuteAsync(null);
+
+        var updated = Assert.Single(profiles.ProfileItems);
+        Assert.Same(item, updated);
+        Assert.Equal("Alpha Renamed", updated.Name);
+        Assert.Equal("ws://localhost:9001", updated.EndpointDescription);
+    }
+
     private static async Task<AppPreferencesViewModel> CreatePreferencesAsync(
         bool supportsStdioTransport = true,
         bool supportsLocalTerminal = true)

@@ -726,7 +726,7 @@ public sealed partial class StartViewModel : ObservableObject
     private ModeSelectorPlaceholderLabels ResolveModeSelectorPlaceholderLabels(bool remoteSelectionRequired = false)
         => new(
             Unresolved: remoteSelectionRequired
-                ? Localize("Selector_Mode_RemoteSelectionRequired", "请选择远程工作目录")
+                ? Localize("Selector_Mode_RemoteSelectionRequired", "请先选择远程项目")
                 : Localize("Selector_Mode_Unresolved", "模式尚未就绪"),
             Loading: Localize("Selector_Mode_Loading", "正在加载模式..."),
             Error: Localize("Selector_Mode_Error", "模式不可用"),
@@ -743,7 +743,7 @@ public sealed partial class StartViewModel : ObservableObject
         => new(
             Unresolved: Localize("Selector_Project_Unresolved", "项目不可用"),
             Fallback: Localize("Nav_Unclassified", "未归类"),
-            RemoteSelectionRequired: Localize("Selector_Project_RemoteSelectionRequired", "请选择远程工作目录"));
+            RemoteSelectionRequired: Localize("Selector_Project_RemoteSelectionRequired", "请选择远程项目"));
 
     private string Localize(string key, string fallback)
     {

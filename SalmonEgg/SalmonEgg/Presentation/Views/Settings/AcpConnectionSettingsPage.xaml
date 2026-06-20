@@ -35,7 +35,7 @@
                                    Text="ACP Agent"
                                    Style="{StaticResource SettingsPageTitleTextStyle}"/>
                         <TextBlock x:Uid="Acp_PageSummary"
-                                   Text="管理 ACP 连接配置、远端目录，以及会话加载策略。"
+                                   Text="管理 ACP 连接配置、远程项目，以及会话加载策略。"
                                    Style="{StaticResource SettingsPageSummaryTextStyle}"/>
                     </StackPanel>
 
@@ -204,24 +204,24 @@
                         </Border>
                     </StackPanel>
 
-                    <!-- Remote directories -->
+                    <!-- Remote projects -->
                     <StackPanel Spacing="12"
                                 AutomationProperties.AutomationId="Acp.RemoteDirectories.Section">
                         <Grid ColumnDefinitions="*,Auto">
                             <TextBlock x:Uid="Acp_RemoteDirectoriesTitle"
-                                       Text="远端目录"
+                                       Text="远程项目"
                                        Style="{StaticResource SettingsSectionTitleTextStyle}"
                                        VerticalAlignment="Center"/>
                             <Button Grid.Column="1"
                                     x:Name="AcpRemoteDirectoriesAddButton"
                                     x:Uid="Acp_RemoteDirectoriesAdd"
-                                    Content="新增目录"
+                                    Content="新增远程项目"
                                     Command="{x:Bind ViewModel.AddRemoteDirectoryCommand}"
                                     AutomationProperties.AutomationId="Acp.RemoteDirectories.Add"/>
                         </Grid>
 
                         <TextBlock x:Uid="Acp_RemoteDirectoriesHint"
-                                   Text="配置可用于新建远程 ACP 会话的通用远端工作目录。Salmon Egg 不会把本机路径发送给远端 Agent。"
+                                   Text="远程项目是一组用于远程 ACP 会话的 ACP 工作路径。新建会话时会把这里的远端路径作为 ACP cwd；不会发送本机路径。"
                                    Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
 
                         <Border Style="{StaticResource SettingsSectionContainerStyle}">
@@ -272,7 +272,7 @@
                                                          Header="显示名称"
                                                          Text="{x:Bind DisplayNameDraft, Mode=TwoWay}"/>
                                                 <TextBox x:Uid="Acp_RemoteDirectoriesRemotePath"
-                                                         Header="远端目录"
+                                                         Header="ACP 工作路径"
                                                          Text="{x:Bind RemotePathDraft, Mode=TwoWay}"/>
                                                 <TextBlock Text="{x:Bind ValidationMessage, Mode=OneWay}"
                                                            Style="{StaticResource SettingsRowDescriptionTextStyle}"

@@ -1559,7 +1559,7 @@ public sealed partial class RealUserConfigSmokeTests
             Environment.GetEnvironmentVariable("SALMONEGG_GUI_REAL_REMOTE_PROFILE_NAME") ?? "cc-ws1");
         Skip.If(
             scenario is null,
-            "Current real config does not expose the requested remote profile plus a configured remote directory for targeted start-composer validation.");
+            "Current real config does not expose the requested remote profile plus a configured remote project for targeted start-composer validation.");
 
         using var session = WindowsGuiAppSession.LaunchFresh();
         session.ResizeMainWindow(width: 1400, height: 900);
@@ -1620,7 +1620,7 @@ public sealed partial class RealUserConfigSmokeTests
 
         Assert.True(
             ready,
-            $"Start composer mode selector did not expose ready modes for real remote profile '{scenario.RemoteProfileName}' and remote directory '{scenario.RemoteDirectoryDisplayName}'. AgentSelector='{session.TryGetElementName("StartView.AgentSelector", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}' ProjectSelector='{session.TryGetElementName("StartView.ProjectSelector", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}' ModeSelector='{session.TryGetElementName("StartView.ModeSelector", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}'.");
+            $"Start composer mode selector did not expose ready modes for real remote profile '{scenario.RemoteProfileName}' and remote project '{scenario.RemoteDirectoryDisplayName}'. AgentSelector='{session.TryGetElementName("StartView.AgentSelector", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}' ProjectSelector='{session.TryGetElementName("StartView.ProjectSelector", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}' ModeSelector='{session.TryGetElementName("StartView.ModeSelector", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}'.");
         Assert.True(
             logVerified,
             $"Real remote start-composer run did not log a fresh session/new response for profile '{scenario.RemoteProfileName}' and cwd '{scenario.RemoteDirectoryPath}'. Recent log tail:{Environment.NewLine}{recentLogTail}");
@@ -2444,8 +2444,10 @@ public sealed partial class RealUserConfigSmokeTests
     private static bool IsStartComposerModeUnavailable(WindowsGuiAppSession session)
         => session.TryFindVisibleTextAnywhere("模式不可用", TimeSpan.FromMilliseconds(120)) is not null
             || session.TryFindVisibleTextAnywhere("模式尚未就绪", TimeSpan.FromMilliseconds(120)) is not null
-            || session.TryFindVisibleTextAnywhere("请选择远程工作目录", TimeSpan.FromMilliseconds(120)) is not null
-            || session.TryFindVisibleTextAnywhere("Select a remote working directory", TimeSpan.FromMilliseconds(120)) is not null
+            || session.TryFindVisibleTextAnywhere("请先选择远程项目", TimeSpan.FromMilliseconds(120)) is not null
+            || session.TryFindVisibleTextAnywhere("请选择远程项目", TimeSpan.FromMilliseconds(120)) is not null
+            || session.TryFindVisibleTextAnywhere("Select a remote project first", TimeSpan.FromMilliseconds(120)) is not null
+            || session.TryFindVisibleTextAnywhere("Select a remote project", TimeSpan.FromMilliseconds(120)) is not null
             || session.TryFindVisibleTextAnywhere("正在加载模式...", TimeSpan.FromMilliseconds(120)) is not null;
 
     private static bool WaitUntilNavigationActivationStarted(

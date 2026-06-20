@@ -622,7 +622,7 @@
     <value>ACP Agent</value>
   </data>
   <data name="Acp_PageSummary.Text" xml:space="preserve">
-    <value>管理 ACP 连接配置、远端目录，以及会话加载策略。</value>
+    <value>管理 ACP 连接配置、远程项目，以及会话加载策略。</value>
   </data>
   <data name="Acp_GlobalTitle.Text" xml:space="preserve">
     <value>全局 ACP 配置</value>
@@ -670,28 +670,28 @@
     <value>删除</value>
   </data>
   <data name="Acp_RemoteDirectoriesTitle.Text" xml:space="preserve">
-    <value>远端目录</value>
+    <value>远程项目</value>
   </data>
   <data name="Acp_RemoteDirectoriesAdd.Content" xml:space="preserve">
-    <value>新增目录</value>
+    <value>新增远程项目</value>
   </data>
   <data name="Acp_RemoteDirectoriesHint.Text" xml:space="preserve">
-    <value>配置可用于新建远程 ACP 会话的通用远端工作目录。Salmon Egg 不会把本机路径发送给远端 Agent。</value>
+    <value>远程项目是一组用于远程 ACP 会话的 ACP 工作路径。新建会话时会把这里的远端路径作为 ACP cwd；不会发送本机路径。</value>
   </data>
   <data name="Acp_RemoteDirectoriesDisplayName.Header" xml:space="preserve">
-    <value>显示名称</value>
+    <value>项目名称</value>
   </data>
   <data name="Acp_RemoteDirectoriesDisplayName.PlaceholderText" xml:space="preserve">
-    <value>工作区</value>
+    <value>生产环境</value>
   </data>
   <data name="Acp_RemoteDirectoriesRemotePath.Header" xml:space="preserve">
-    <value>远端目录</value>
+    <value>ACP 工作路径</value>
   </data>
   <data name="Acp_RemoteDirectoriesRemotePath.PlaceholderText" xml:space="preserve">
     <value>/home/user/project</value>
   </data>
   <data name="Acp_RemoteDirectoriesRemove.ToolTipService.ToolTip" xml:space="preserve">
-    <value>移除目录</value>
+    <value>移除远程项目</value>
   </data>
   <data name="Acp_RemoteDirectoryEdit.Content" xml:space="preserve">
     <value>编辑</value>

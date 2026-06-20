@@ -24,10 +24,12 @@ public sealed class StartPageAcpSmokeTests
         "模式尚未就绪"
     ];
 
-    private static readonly string[] RemoteDirectoryPromptLabels =
+    private static readonly string[] RemoteProjectPromptLabels =
     [
-        "Select a remote working directory",
-        "请选择远程工作目录"
+        "Select a remote project first",
+        "Select a remote project",
+        "请先选择远程项目",
+        "请选择远程项目"
     ];
 
     private static readonly string[] RemoteBlockedErrorLabels =
@@ -133,7 +135,7 @@ public sealed class StartPageAcpSmokeTests
 
         Assert.True(
             WaitUntilRemoteDraftBlocked(session, appData, TimeSpan.FromSeconds(20)),
-            BuildFailureMessage("Remote profile without a selected remote directory did not remain locally unavailable.", session, appData));
+            BuildFailureMessage("Remote profile without a selected remote project did not remain locally unavailable.", session, appData));
 
         var appLogTail = appData.ReadLatestAppLogTail();
         Assert.DoesNotContain(
@@ -147,8 +149,8 @@ public sealed class StartPageAcpSmokeTests
     {
         // Reproduces a variant of the reported bug: start on a connected local stdio profile
         // (Ready modes), switch the agent selector to a remote WebSocket profile that connects
-        // successfully, observe the mode selector ask for a remote working directory while the project is 未归类,
-        // then switch the project to a configured remote directory and expect Ready to recover.
+        // successfully, observe the mode selector ask for a remote project while the project is 未归类,
+        // then switch the project to a configured remote project and expect Ready to recover.
         // This exercises the connection-switch path where registry/session identity drift is most
         // likely to strand the draft.
         using var appData = StartPageAcpSmokeData.CreateMappedProjectScenario(
@@ -175,13 +177,13 @@ public sealed class StartPageAcpSmokeTests
             WaitUntilRemoteConnectionAttempted(appData, TimeSpan.FromSeconds(12)),
             BuildFailureMessage("Switching from local stdio to remote never attempted a WebSocket connection.", session, appData));
 
-        // After switching to the remote profile with no remote directory selected, the draft must
-        // stay blocked until the user selects a remote working directory.
+        // After switching to the remote profile with no remote project selected, the draft must
+        // stay blocked until the user selects a remote project.
         Assert.True(
             WaitUntilRemoteDraftBlocked(session, appData, TimeSpan.FromSeconds(20)),
-            BuildFailureMessage("Remote profile did not stay blocked before a remote directory was selected.", session, appData));
+            BuildFailureMessage("Remote profile did not stay blocked before a remote project was selected.", session, appData));
 
-        // Switch the project selector to the configured remote directory. Modes must recover to Ready.
+        // Switch the project selector to the configured remote project. Modes must recover to Ready.
         SelectComboBoxItemByAutomationId(
             session,
             "StartView.ProjectSelector",
@@ -190,7 +192,7 @@ public sealed class StartPageAcpSmokeTests
 
         Assert.True(
             WaitUntilStartModeReady(session, TimeSpan.FromSeconds(20)),
-            BuildFailureMessage("Switching the project to a configured remote directory did not recover ready modes after a local->remote profile switch.", session, appData));
+            BuildFailureMessage("Switching the project to a configured remote project did not recover ready modes after a local->remote profile switch.", session, appData));
     }
 
     [SkippableFact]
@@ -198,7 +200,7 @@ public sealed class StartPageAcpSmokeTests
     {
         // Reproduces the reported bug: on the Start page, selecting a remote WebSocket ACP profile
         // auto-switches the project selector to 未归类 (no cwd) so the mode selector asks for
-        // a remote working directory. Switching the project to an already-configured remote directory must then
+        // a remote project. Switching the project to an already-configured remote project must then
         // re-fetch modes and recover to Ready. The remote harness accepts any cwd and returns modes.
         using var appData = StartPageAcpSmokeData.CreateMappedProjectScenario(
             startupProfileId: RemoteProfileId,
@@ -214,13 +216,13 @@ public sealed class StartPageAcpSmokeTests
 
         OpenStartPage(session);
 
-        // The startup remote profile has no selected remote directory yet, so the draft must stay
-        // blocked until the user selects a remote working directory.
+        // The startup remote profile has no selected remote project yet, so the draft must stay
+        // blocked until the user selects a remote project.
         Assert.True(
             WaitUntilRemoteDraftBlocked(session, appData, TimeSpan.FromSeconds(20)),
-            BuildFailureMessage("Remote startup profile did not stay blocked before a remote directory was selected.", session, appData));
+            BuildFailureMessage("Remote startup profile did not stay blocked before a remote project was selected.", session, appData));
 
-        // Switch the project selector to the configured remote directory. The mode selector must
+        // Switch the project selector to the configured remote project. The mode selector must
         // recover to Ready (modes fetched from the remote session/new response).
         SelectComboBoxItemByAutomationId(
             session,
@@ -230,7 +232,7 @@ public sealed class StartPageAcpSmokeTests
 
         Assert.True(
             WaitUntilStartModeReady(session, TimeSpan.FromSeconds(20)),
-            BuildFailureMessage("Switching the project to a configured remote directory did not recover ready modes.", session, appData));
+            BuildFailureMessage("Switching the project to a configured remote project did not recover ready modes.", session, appData));
 
         var appLogTail = appData.ReadLatestAppLogTail(240);
         Assert.Contains(
@@ -374,7 +376,7 @@ public sealed class StartPageAcpSmokeTests
         => UnavailableModeLabels.Any(label => session.TryFindVisibleTextAnywhere(label, TimeSpan.FromMilliseconds(120)) is not null);
 
     private static bool IsStartComposerBlockedByRemoteDirectoryPrompt(WindowsGuiAppSession session)
-        => RemoteDirectoryPromptLabels.Any(label => session.TryFindVisibleTextAnywhere(label, TimeSpan.FromMilliseconds(120)) is not null);
+        => RemoteProjectPromptLabels.Any(label => session.TryFindVisibleTextAnywhere(label, TimeSpan.FromMilliseconds(120)) is not null);
 
     private static bool IsStartComposerBlockedByError(WindowsGuiAppSession session)
         => RemoteBlockedErrorLabels.Any(label => session.TryFindVisibleTextAnywhere(label, TimeSpan.FromMilliseconds(120)) is not null);

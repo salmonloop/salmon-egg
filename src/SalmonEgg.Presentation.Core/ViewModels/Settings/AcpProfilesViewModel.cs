@@ -292,6 +292,10 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
                     ProfileItems.Insert(i, itemVm);
                 }
             }
+            else
+            {
+                existing.UpdateProfile(config);
+            }
             // Note: we don't re-order existing VMs for performance (a future enhancement).
         }
     }

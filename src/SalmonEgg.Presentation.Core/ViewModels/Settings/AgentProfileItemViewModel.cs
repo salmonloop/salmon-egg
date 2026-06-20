@@ -60,12 +60,25 @@ public sealed partial class AgentProfileItemViewModel : ObservableObject, IDispo
     // ── Display data (read-only, derived from ServerConfiguration) ──────────
 
     public string ProfileId { get; }
-    public string Name { get; }
+
+    private string _name;
+
+    public string Name
+    {
+        get => _name;
+        private set => SetProperty(ref _name, value);
+    }
 
     /// <summary>
     /// Human-readable endpoint hint (host:port or process path).
     /// </summary>
-    public string EndpointDescription { get; }
+    private string _endpointDescription;
+
+    public string EndpointDescription
+    {
+        get => _endpointDescription;
+        private set => SetProperty(ref _endpointDescription, value);
+    }
 
     /// <summary>
     /// The transport-specific FontIcon glyph code extracted from the server configuration.
@@ -83,7 +96,7 @@ public sealed partial class AgentProfileItemViewModel : ObservableObject, IDispo
 
     // ── Underlying config (needed to invoke connect) ─────────────────────────
 
-    private readonly ServerConfiguration _profile;
+    private ServerConfiguration _profile;
 
     // ── Constructor ──────────────────────────────────────────────────────────
 
@@ -111,8 +124,8 @@ public sealed partial class AgentProfileItemViewModel : ObservableObject, IDispo
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
 
         ProfileId = profile.Id;
-        Name = profile.Name;
-        EndpointDescription = BuildEndpointDescription(profile);
+        _name = profile.Name;
+        _endpointDescription = BuildEndpointDescription(profile);
 
         // Seed state from the current registry snapshot so the card looks right
         // immediately without waiting for the next event.
@@ -120,6 +133,20 @@ public sealed partial class AgentProfileItemViewModel : ObservableObject, IDispo
 
         // Subscribe for future changes.
         _events.ProfileConnectionChanged += OnProfileConnectionChanged;
+    }
+
+    internal void UpdateProfile(ServerConfiguration profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        if (!string.Equals(profile.Id, ProfileId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _profile = profile;
+        Name = profile.Name;
+        EndpointDescription = BuildEndpointDescription(profile);
+        OnPropertyChanged(nameof(TransportGlyph));
     }
 
     // ── Commands ─────────────────────────────────────────────────────────────

@@ -319,13 +319,43 @@ public sealed class AcpConnectionSettingsXamlTests
             ?.Element("value")?
             .Value;
 
-        Assert.Equal("工作区", value);
+        Assert.Equal("生产环境", value);
+    }
+
+    [Fact]
+    public void AcpConnectionSettingsPage_RemoteDirectoriesEditor_UserCopyUsesRemoteProjectTerminology()
+    {
+        var zhHans = XDocument.Parse(LoadFile(@"SalmonEgg\SalmonEgg\Strings\zh-Hans\Resources.resw"));
+        var en = XDocument.Parse(LoadFile(@"SalmonEgg\SalmonEgg\Strings\en\Resources.resw"));
+
+        Assert.Equal("远程项目", GetResourceValue(zhHans, "Acp_RemoteDirectoriesTitle.Text"));
+        Assert.Equal("新增远程项目", GetResourceValue(zhHans, "Acp_RemoteDirectoriesAdd.Content"));
+        Assert.Contains("ACP 工作路径", GetResourceValue(zhHans, "Acp_RemoteDirectoriesHint.Text"), StringComparison.Ordinal);
+        Assert.Equal("ACP 工作路径", GetResourceValue(zhHans, "Acp_RemoteDirectoriesRemotePath.Header"));
+        Assert.DoesNotContain("远端目录", GetResourceValue(zhHans, "Acp_PageSummary.Text"), StringComparison.Ordinal);
+        Assert.DoesNotContain("远端工作目录", GetResourceValue(zhHans, "Acp_RemoteDirectoriesHint.Text"), StringComparison.Ordinal);
+
+        Assert.Equal("Remote projects", GetResourceValue(en, "Acp_RemoteDirectoriesTitle.Text"));
+        Assert.Equal("Add remote project", GetResourceValue(en, "Acp_RemoteDirectoriesAdd.Content"));
+        Assert.Contains("ACP working paths", GetResourceValue(en, "Acp_RemoteDirectoriesHint.Text"), StringComparison.Ordinal);
+        Assert.Equal("ACP working path", GetResourceValue(en, "Acp_RemoteDirectoriesRemotePath.Header"));
     }
 
     private static string LoadFile(string relativePath)
     {
         var root = FindRepoRoot();
         return File.ReadAllText(Path.Combine(root, NormalizeRelativePath(relativePath)));
+    }
+
+    private static string GetResourceValue(XDocument resources, string name)
+    {
+        var value = resources.Descendants("data")
+            .FirstOrDefault(data => string.Equals((string?)data.Attribute("name"), name, StringComparison.Ordinal))
+            ?.Element("value")?
+            .Value;
+
+        Assert.False(string.IsNullOrWhiteSpace(value), $"Resource '{name}' must define a non-empty value.");
+        return value!;
     }
 
     private static string FindRepoRoot()

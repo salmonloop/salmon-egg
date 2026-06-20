@@ -139,6 +139,25 @@ public sealed class CoreStringResourceTests
         Assert.True(failures.Length == 0, string.Join(Environment.NewLine, failures));
     }
 
+    [Fact]
+    public void RemoteProjectCopy_UsesProjectTerminologyForUserVisibleCoreMessages()
+    {
+        var zhHans = XDocument.Load(Path.Combine(FindRepoRoot(), NormalizeRelativePath(@"src\SalmonEgg.Presentation.Core\Resources\CoreStrings.zh-Hans.resx")));
+        var en = XDocument.Load(Path.Combine(FindRepoRoot(), NormalizeRelativePath(@"src\SalmonEgg.Presentation.Core\Resources\CoreStrings.en.resx")));
+
+        Assert.Equal("请先选择远程项目", GetResourceValue(zhHans, "Selector_Mode_RemoteSelectionRequired"));
+        Assert.Equal("请选择远程项目", GetResourceValue(zhHans, "Selector_Project_RemoteSelectionRequired"));
+        Assert.Equal("已匹配已配置的远程项目。", GetResourceValue(zhHans, "Discover_AffinityStatusRemoteDirectory"));
+        Assert.Equal("远程 ACP 工作路径需要指定项目。", GetResourceValue(zhHans, "Discover_AffinityStatusNeedsMapping"));
+        Assert.Equal("远程元数据没有可用 ACP 工作路径。", GetResourceValue(zhHans, "Discover_AffinityStatusMissingCwd"));
+
+        Assert.Equal("Select a remote project first", GetResourceValue(en, "Selector_Mode_RemoteSelectionRequired"));
+        Assert.Equal("Select a remote project", GetResourceValue(en, "Selector_Project_RemoteSelectionRequired"));
+        Assert.Equal("Matched a configured remote project.", GetResourceValue(en, "Discover_AffinityStatusRemoteDirectory"));
+        Assert.Equal("Remote ACP working path needs a project assignment.", GetResourceValue(en, "Discover_AffinityStatusNeedsMapping"));
+        Assert.Equal("Remote metadata has no usable ACP working path.", GetResourceValue(en, "Discover_AffinityStatusMissingCwd"));
+    }
+
     private static readonly string[] CoreStringResourcePaths =
     [
         @"src\SalmonEgg.Presentation.Core\Resources\CoreStrings.resx",
@@ -152,6 +171,18 @@ public sealed class CoreStringResourceTests
 
     private static string CoreStringResourceDirectory()
         => Path.Combine(FindRepoRoot(), NormalizeRelativePath(@"src\SalmonEgg.Presentation.Core\Resources"));
+
+    private static string GetResourceValue(XDocument resources, string key)
+    {
+        var value = resources
+            .Descendants("data")
+            .FirstOrDefault(data => string.Equals((string?)data.Attribute("name"), key, StringComparison.Ordinal))
+            ?.Element("value")
+            ?.Value;
+
+        Assert.False(string.IsNullOrWhiteSpace(value), $"{key} must define a non-empty value.");
+        return value!;
+    }
 
     private static string FindRepoRoot()
     {

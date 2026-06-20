@@ -25,7 +25,7 @@
     <value>Mode is not ready</value>
   </data>
   <data name="Selector_Mode_RemoteSelectionRequired" xml:space="preserve">
-    <value>Select a remote working directory</value>
+    <value>Select a remote project first</value>
   </data>
   <data name="Selector_Mode_Loading" xml:space="preserve">
     <value>Loading modes...</value>
@@ -52,7 +52,7 @@
     <value>Project unavailable</value>
   </data>
   <data name="Selector_Project_RemoteSelectionRequired" xml:space="preserve">
-    <value>Select a remote working directory</value>
+    <value>Select a remote project</value>
   </data>
   <data name="SettingsSection_General" xml:space="preserve">
     <value>General</value>
@@ -223,16 +223,16 @@
     <value>Using local project override.</value>
   </data>
   <data name="Discover_AffinityStatusRemoteDirectory" xml:space="preserve">
-    <value>Matched a configured remote directory.</value>
+    <value>Matched a configured remote project.</value>
   </data>
   <data name="Discover_AffinityStatusDirectMatch" xml:space="preserve">
     <value>Matched by local project path.</value>
   </data>
   <data name="Discover_AffinityStatusNeedsMapping" xml:space="preserve">
-    <value>Remote working directory needs a project assignment.</value>
+    <value>Remote ACP working path needs a project assignment.</value>
   </data>
   <data name="Discover_AffinityStatusMissingCwd" xml:space="preserve">
-    <value>Remote metadata has no usable working directory.</value>
+    <value>Remote metadata has no usable ACP working path.</value>
   </data>
   <data name="Discover_AffinityStatusUnclassified" xml:space="preserve">
     <value>No matching local project.</value>
@@ -582,6 +582,6 @@ Create the corresponding Markdown file in:
     <value>Filled the current service from the clipboard.</value>
   </data>
   <data name="AcpRemoteDirectories_SaveValidationRemotePathRequired" xml:space="preserve">
-    <value>Enter an absolute remote directory path before saving.</value>
+    <value>Enter an absolute remote project path before saving.</value>
   </data>
 </root>

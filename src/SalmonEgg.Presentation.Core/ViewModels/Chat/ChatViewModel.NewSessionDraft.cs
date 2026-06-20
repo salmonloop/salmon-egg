@@ -548,8 +548,13 @@ public partial class ChatViewModel
     private async Task ApplyNewSessionDraftProjectionAsync(ChatConnectionState connectionState)
     {
         var draft = ResolveEffectiveNewSessionDraft(connectionState);
+        var storeState = await _chatStore.GetCurrentStateAsync().ConfigureAwait(false);
+        var connectionProjection = CreateProjection(storeState, connectionState);
         await PostToUiAsync(() =>
         {
+            ApplyConversationStatusProjection(connectionProjection);
+            ApplyConnectionAndAgentProjection(connectionProjection);
+
             IsNewSessionDraftLoading = draft?.Phase is NewSessionDraftPhase.Creating or NewSessionDraftPhase.Promoting or NewSessionDraftPhase.Closing;
             IsNewSessionDraftReady = draft?.Phase == NewSessionDraftPhase.Ready;
             NewSessionDraftErrorMessage = draft?.Phase == NewSessionDraftPhase.Faulted

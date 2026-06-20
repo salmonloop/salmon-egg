@@ -1221,6 +1221,16 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void ChatInputArea_SelectorItems_DisableNativeComboBoxItemsFromViewModelProjection()
+    {
+        var chatInputXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml");
+
+        Assert.Contains("x:Key=\"ComposerSelectorComboBoxItemStyle\"", chatInputXaml, StringComparison.Ordinal);
+        Assert.Contains("<Setter Property=\"IsEnabled\" Value=\"{Binding IsSelectable}\"", chatInputXaml, StringComparison.Ordinal);
+        Assert.Equal(3, CountOccurrences(chatInputXaml, "ItemContainerStyle=\"{StaticResource ComposerSelectorComboBoxItemStyle}\""));
+    }
+
+    [Fact]
     public void ChatView_UsesDeferredTranscriptLoadingWithoutWholePageLifecycleHack()
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml");
@@ -2809,6 +2819,19 @@ public sealed class XamlComplianceTests
 
     private static string NormalizeRelativePath(string relativePath)
         => relativePath.Replace('\\', Path.DirectorySeparatorChar);
+
+    private static int CountOccurrences(string value, string fragment)
+    {
+        var count = 0;
+        var index = 0;
+        while ((index = value.IndexOf(fragment, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += fragment.Length;
+        }
+
+        return count;
+    }
 
     private static bool HasAttributeByLocalName(XElement element, string localName)
         => element.Attributes().Any(attribute => string.Equals(attribute.Name.LocalName, localName, StringComparison.Ordinal));

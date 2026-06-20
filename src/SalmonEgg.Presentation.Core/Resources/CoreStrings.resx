@@ -19,7 +19,7 @@
     <value>模式尚未就绪</value>
   </data>
   <data name="Selector_Mode_RemoteSelectionRequired" xml:space="preserve">
-    <value>请选择远程工作目录</value>
+    <value>请先选择远程项目</value>
   </data>
   <data name="Selector_Mode_Loading" xml:space="preserve">
     <value>正在加载模式...</value>
@@ -46,7 +46,7 @@
     <value>项目不可用</value>
   </data>
   <data name="Selector_Project_RemoteSelectionRequired" xml:space="preserve">
-    <value>请选择远程工作目录</value>
+    <value>请选择远程项目</value>
   </data>
   <data name="SettingsSection_General" xml:space="preserve">
     <value>常规</value>
@@ -221,16 +221,16 @@
     <value>已应用本地项目覆盖。</value>
   </data>
   <data name="Discover_AffinityStatusRemoteDirectory" xml:space="preserve">
-    <value>已匹配已配置的远端目录。</value>
+    <value>已匹配已配置的远程项目。</value>
   </data>
   <data name="Discover_AffinityStatusDirectMatch" xml:space="preserve">
     <value>已匹配本地项目路径。</value>
   </data>
   <data name="Discover_AffinityStatusNeedsMapping" xml:space="preserve">
-    <value>远程工作目录需要指定项目。</value>
+    <value>远程 ACP 工作路径需要指定项目。</value>
   </data>
   <data name="Discover_AffinityStatusMissingCwd" xml:space="preserve">
-    <value>远程元数据没有可用工作目录。</value>
+    <value>远程元数据没有可用 ACP 工作路径。</value>
   </data>
   <data name="Discover_AffinityStatusUnclassified" xml:space="preserve">
     <value>未匹配到本地项目。</value>
@@ -588,6 +588,6 @@
     <value>已从剪贴板填入当前服务。</value>
   </data>
   <data name="AcpRemoteDirectories_SaveValidationRemotePathRequired" xml:space="preserve">
-    <value>请填写绝对远端目录路径后再保存。</value>
+    <value>请填写远程项目的绝对路径后再保存。</value>
   </data>
 </root>

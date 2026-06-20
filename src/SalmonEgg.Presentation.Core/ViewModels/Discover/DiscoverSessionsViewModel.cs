@@ -588,10 +588,10 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
         return resolution.Source switch
         {
             ProjectAffinitySource.Override => Localize("Discover_AffinityStatusOverride", "Using local project override."),
-            ProjectAffinitySource.RemoteDirectory => Localize("Discover_AffinityStatusRemoteDirectory", "Matched a configured remote directory."),
+            ProjectAffinitySource.RemoteDirectory => Localize("Discover_AffinityStatusRemoteDirectory", "Matched a configured remote project."),
             ProjectAffinitySource.DirectMatch => Localize("Discover_AffinityStatusDirectMatch", "Matched by local project path."),
-            ProjectAffinitySource.NeedsMapping => Localize("Discover_AffinityStatusNeedsMapping", "Remote working directory needs a project assignment."),
-            ProjectAffinitySource.Unclassified when string.Equals(resolution.Reason, "MissingCwd", StringComparison.Ordinal) => Localize("Discover_AffinityStatusMissingCwd", "Remote metadata has no usable working directory."),
+            ProjectAffinitySource.NeedsMapping => Localize("Discover_AffinityStatusNeedsMapping", "Remote ACP working path needs a project assignment."),
+            ProjectAffinitySource.Unclassified when string.Equals(resolution.Reason, "MissingCwd", StringComparison.Ordinal) => Localize("Discover_AffinityStatusMissingCwd", "Remote metadata has no usable ACP working path."),
             ProjectAffinitySource.Unclassified => Localize("Discover_AffinityStatusUnclassified", "No matching local project."),
             _ => Localize("Discover_AffinityStatusUnknown", "No project affinity information.")
         };

@@ -709,7 +709,7 @@
     <value>ACP Agent</value>
   </data>
   <data name="Acp_PageSummary.Text" xml:space="preserve">
-    <value>Manage ACP connection profiles, remote directories, and session loading policy.</value>
+    <value>Manage ACP connection profiles, remote projects, and session loading policy.</value>
   </data>
   <data name="Acp_GlobalTitle.Text" xml:space="preserve">
     <value>Global ACP configuration</value>
@@ -757,28 +757,28 @@
     <value>Delete</value>
   </data>
   <data name="Acp_RemoteDirectoriesTitle.Text" xml:space="preserve">
-    <value>Remote directories</value>
+    <value>Remote projects</value>
   </data>
   <data name="Acp_RemoteDirectoriesAdd.Content" xml:space="preserve">
-    <value>Add directory</value>
+    <value>Add remote project</value>
   </data>
   <data name="Acp_RemoteDirectoriesHint.Text" xml:space="preserve">
-    <value>Configure shared remote working directories available for new remote ACP sessions. Salmon Egg does not send local paths to the remote agent.</value>
+    <value>Remote projects are ACP working paths for remote sessions. New sessions use the remote path as the ACP cwd; Salmon Egg does not send local paths to the remote agent.</value>
   </data>
   <data name="Acp_RemoteDirectoriesDisplayName.Header" xml:space="preserve">
-    <value>Display name</value>
+    <value>Project name</value>
   </data>
   <data name="Acp_RemoteDirectoriesDisplayName.PlaceholderText" xml:space="preserve">
-    <value>Workspace</value>
+    <value>Production</value>
   </data>
   <data name="Acp_RemoteDirectoriesRemotePath.Header" xml:space="preserve">
-    <value>Remote directory</value>
+    <value>ACP working path</value>
   </data>
   <data name="Acp_RemoteDirectoriesRemotePath.PlaceholderText" xml:space="preserve">
     <value>/home/user/project</value>
   </data>
   <data name="Acp_RemoteDirectoriesRemove.ToolTipService.ToolTip" xml:space="preserve">
-    <value>Remove directory</value>
+    <value>Remove remote project</value>
   </data>
   <data name="Acp_RemoteDirectoryEdit.Content" xml:space="preserve">
     <value>Edit</value>
