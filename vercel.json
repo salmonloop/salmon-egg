@@ -30,7 +30,7 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!manifest\\.webmanifest$|service-worker\\.js$|package_|_framework|assets|Assets).*)",
+      "source": "/((?!manifest\\.webmanifest$|service-worker\\.js$|package_|_framework|assets|Assets|_vercel).*)",
       "destination": "/index.html"
     }
   ]
