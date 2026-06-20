@@ -18,7 +18,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat;
 
 public partial class ChatViewModel
 {
-    private static readonly TimeSpan NewSessionDraftProfileWaitTimeout = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan NewSessionDraftProfileWaitFallbackTimeout = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan NewSessionDraftProfileWaitDelay = TimeSpan.FromMilliseconds(50);
     private readonly object _newSessionDraftRequestSync = new();
     private readonly Dictionary<NewSessionDraftRequestKey, Task> _inFlightNewSessionDraftRequests = new();
@@ -239,7 +239,8 @@ public partial class ChatViewModel
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var timeoutAt = DateTime.UtcNow.Add(NewSessionDraftProfileWaitTimeout);
+        var timeout = ResolveRequiredProfileIdentityWaitTimeout(requiredProfileId);
+        var timeoutAt = DateTime.UtcNow.Add(timeout);
         var observedRequiredIntent = false;
         while (DateTime.UtcNow < timeoutAt)
         {
@@ -298,11 +299,20 @@ public partial class ChatViewModel
         }
 
         Logger.LogWarning(
-            "Timed out waiting for required profile identity before creating ACP new-session draft. requiredProfileId={RequiredProfileId}",
-            requiredProfileId);
+            "Timed out waiting for required profile identity before creating ACP new-session draft. requiredProfileId={RequiredProfileId} timeoutSeconds={TimeoutSeconds}",
+            requiredProfileId,
+            timeout.TotalSeconds);
         return new RequiredProfileIdentityWaitOutcome(
             RequiredProfileIdentityWaitStatus.TimedOut,
             ErrorMessage: null);
+    }
+
+    private TimeSpan ResolveRequiredProfileIdentityWaitTimeout(string requiredProfileId)
+    {
+        var profile = ResolveNewSessionDraftProfile(requiredProfileId);
+        return profile?.ConnectionTimeout > 0
+            ? TimeSpan.FromSeconds(profile.ConnectionTimeout)
+            : NewSessionDraftProfileWaitFallbackTimeout;
     }
 
     private async Task<AcpAuthoritativeConnectionSnapshot?> ResolveAuthoritativeNewSessionDraftConnectionAsync(
