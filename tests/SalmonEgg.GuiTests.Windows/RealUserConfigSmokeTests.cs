@@ -1583,7 +1583,8 @@ public sealed partial class RealUserConfigSmokeTests
             SelectComboBoxItemByAutomationId(
                 session,
                 "StartView.AgentSelector",
-                scenario.RemoteProfileAutomationId);
+                scenario.RemoteProfileAutomationId,
+                scenario.RemoteProfileName);
             Assert.True(
                 WaitUntil(
                     () => StartDraftAutomationStateContains(session, $"SelectedProfile={scenario.RemoteProfileId}")
@@ -1599,7 +1600,8 @@ public sealed partial class RealUserConfigSmokeTests
         SelectComboBoxItemByAutomationId(
             session,
             "StartView.ProjectSelector",
-            scenario.RemoteDirectoryAutomationId);
+            scenario.RemoteDirectoryAutomationId,
+            scenario.RemoteDirectoryDisplayName);
 
         var ready = WaitUntil(
             () => TryOpenStartModeSelectorAndDetectKnownMode(session),
@@ -2379,25 +2381,14 @@ public sealed partial class RealUserConfigSmokeTests
     private static void SelectComboBoxItemByAutomationId(
         WindowsGuiAppSession session,
         string selectorAutomationId,
-        string itemAutomationId)
-        => SelectComboBoxItemByAutomationId(session, selectorAutomationId, itemAutomationId, expectedVisibleName: null);
-
-    private static void SelectComboBoxItemByAutomationId(
-        WindowsGuiAppSession session,
-        string selectorAutomationId,
         string itemAutomationId,
-        string? expectedVisibleName)
+        string expectedVisibleName)
     {
         var selector = session.FindByAutomationId(selectorAutomationId, TimeSpan.FromSeconds(10));
         session.ClickElement(selector);
 
         var target = session.FindByAutomationIdAnywhere(itemAutomationId, TimeSpan.FromSeconds(5));
         SelectComboBoxItemElement(session, FindSelectableAncestor(target));
-        if (string.IsNullOrWhiteSpace(expectedVisibleName))
-        {
-            Thread.Sleep(300);
-            return;
-        }
 
         var selected = WaitUntil(
             () =>

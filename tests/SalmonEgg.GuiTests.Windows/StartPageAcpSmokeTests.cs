@@ -181,7 +181,11 @@ public sealed class StartPageAcpSmokeTests
             BuildFailureMessage("Remote profile did not stay blocked before a remote directory was selected.", session, appData));
 
         // Switch the project selector to the configured remote directory. Modes must recover to Ready.
-        SelectComboBoxItemByAutomationId(session, "StartView.ProjectSelector", ProjectItemId(RemoteDirectoryProjectId));
+        SelectComboBoxItemByAutomationId(
+            session,
+            "StartView.ProjectSelector",
+            ProjectItemId(RemoteDirectoryProjectId),
+            RemoteDirectoryName);
 
         Assert.True(
             WaitUntilStartModeReady(session, TimeSpan.FromSeconds(20)),
@@ -217,7 +221,11 @@ public sealed class StartPageAcpSmokeTests
 
         // Switch the project selector to the configured remote directory. The mode selector must
         // recover to Ready (modes fetched from the remote session/new response).
-        SelectComboBoxItemByAutomationId(session, "StartView.ProjectSelector", ProjectItemId(RemoteDirectoryProjectId));
+        SelectComboBoxItemByAutomationId(
+            session,
+            "StartView.ProjectSelector",
+            ProjectItemId(RemoteDirectoryProjectId),
+            RemoteDirectoryName);
 
         Assert.True(
             WaitUntilStartModeReady(session, TimeSpan.FromSeconds(20)),
@@ -250,7 +258,11 @@ public sealed class StartPageAcpSmokeTests
 
         OpenStartPage(session);
 
-        SelectComboBoxItemByAutomationId(session, "StartView.ProjectSelector", ProjectItemId(RemoteDirectoryProjectId));
+        SelectComboBoxItemByAutomationId(
+            session,
+            "StartView.ProjectSelector",
+            ProjectItemId(RemoteDirectoryProjectId),
+            RemoteDirectoryName);
 
         Assert.True(
             WaitUntilRemoteDraftBlocked(session, appData, TimeSpan.FromSeconds(20)),
@@ -373,11 +385,14 @@ public sealed class StartPageAcpSmokeTests
         var target = session.FindVisibleTextAnywhere(expectedVisibleName, TimeSpan.FromSeconds(5))
             ?? throw new TimeoutException(
                 $"Could not find combo-box item '{expectedVisibleName}' after opening selector '{selectorAutomationId}'.");
-        session.ActivateElement(FindSelectableAncestor(target));
+        SelectComboBoxItemElement(session, FindSelectableAncestor(target));
 
         Assert.True(
             WaitUntil(
-                () => session.TryFindVisibleTextAnywhere(expectedVisibleName, TimeSpan.FromMilliseconds(150)) is not null,
+                () => string.Equals(
+                    session.TryGetElementName(selectorAutomationId, TimeSpan.FromMilliseconds(150))?.Trim(),
+                    expectedVisibleName,
+                    StringComparison.Ordinal),
                 TimeSpan.FromSeconds(5),
                 TimeSpan.FromMilliseconds(120)),
             $"Selector '{selectorAutomationId}' did not visibly settle to '{expectedVisibleName}'.");
@@ -386,14 +401,24 @@ public sealed class StartPageAcpSmokeTests
     private static void SelectComboBoxItemByAutomationId(
         WindowsGuiAppSession session,
         string selectorAutomationId,
-        string itemAutomationId)
+        string itemAutomationId,
+        string expectedVisibleName)
     {
         var selector = session.FindByAutomationId(selectorAutomationId, TimeSpan.FromSeconds(10));
         session.ClickElement(selector);
 
         var target = session.FindByAutomationIdAnywhere(itemAutomationId, TimeSpan.FromSeconds(5));
-        session.ActivateElement(FindSelectableAncestor(target));
-        Thread.Sleep(300);
+        SelectComboBoxItemElement(session, FindSelectableAncestor(target));
+
+        Assert.True(
+            WaitUntil(
+                () => string.Equals(
+                    session.TryGetElementName(selectorAutomationId, TimeSpan.FromMilliseconds(150))?.Trim(),
+                    expectedVisibleName,
+                    StringComparison.Ordinal),
+                TimeSpan.FromSeconds(5),
+                TimeSpan.FromMilliseconds(120)),
+            $"Selector '{selectorAutomationId}' did not visibly settle to '{expectedVisibleName}'.");
     }
 
     private static void SelectAgentProfile(
@@ -407,12 +432,20 @@ public sealed class StartPageAcpSmokeTests
         var visibleTarget = session.TryFindVisibleTextAnywhere(expectedVisibleName, TimeSpan.FromSeconds(3));
         if (visibleTarget is not null)
         {
-            session.ActivateElement(FindSelectableAncestor(visibleTarget));
-            Thread.Sleep(300);
+            SelectComboBoxItemElement(session, FindSelectableAncestor(visibleTarget));
+            Assert.True(
+                WaitUntil(
+                    () => string.Equals(
+                        session.TryGetElementName("StartView.AgentSelector", TimeSpan.FromMilliseconds(150))?.Trim(),
+                        expectedVisibleName,
+                        StringComparison.Ordinal),
+                    TimeSpan.FromSeconds(5),
+                    TimeSpan.FromMilliseconds(120)),
+                $"Agent selector did not visibly settle to '{expectedVisibleName}'.");
             return;
         }
 
-        SelectComboBoxItemByAutomationId(session, "StartView.AgentSelector", AgentItemId(profileId));
+        SelectComboBoxItemByAutomationId(session, "StartView.AgentSelector", AgentItemId(profileId), expectedVisibleName);
     }
 
     private static AutomationElement FindSelectableAncestor(AutomationElement element)
@@ -429,6 +462,17 @@ public sealed class StartPageAcpSmokeTests
         }
 
         throw new Xunit.Sdk.XunitException("Could not find a selectable ancestor for the combo-box item.");
+    }
+
+    private static void SelectComboBoxItemElement(WindowsGuiAppSession session, AutomationElement item)
+    {
+        if (item.Patterns.SelectionItem.IsSupported)
+        {
+            item.Patterns.SelectionItem.Pattern.Select();
+            return;
+        }
+
+        session.ActivateElement(item);
     }
 
     private static bool WaitUntil(Func<bool> condition, TimeSpan timeout, TimeSpan pollInterval)

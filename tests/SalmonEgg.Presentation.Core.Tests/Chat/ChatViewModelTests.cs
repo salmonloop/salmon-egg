@@ -4436,7 +4436,6 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         var ensureTask = fixture.ViewModel.EnsureNewSessionDraftForProfileAsync(
             @"C:\Repo\App",
             requiredProfileId: "profile-2");
-        await Task.Delay(25);
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connecting));
         await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-2"));
         await fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-2"));
@@ -4475,14 +4474,15 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         var ensureTask = fixture.ViewModel.EnsureNewSessionDraftForProfileAsync(
             @"C:\Repo\App",
             requiredProfileId: "profile-2");
-        await Task.Delay(25);
         await fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-2"));
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connecting));
         await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-2"));
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
 
-        await Task.Delay(100);
-        Assert.False(ensureTask.IsCompleted);
+        await AssertTaskDoesNotCompleteWithinAsync(
+            ensureTask,
+            TimeSpan.FromMilliseconds(100),
+            "Draft creation must wait until the foreground profile matches the selected profile intent.");
         chatService.Verify(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()), Times.Never);
 
         await fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-2"));
@@ -4612,7 +4612,6 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         var ensureTask = fixture.ViewModel.EnsureNewSessionDraftForProfileAsync(
             @"C:\Repo\App",
             requiredProfileId: "profile-2");
-        await Task.Delay(25);
         await fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-2"));
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Disconnected, "profile switch failed"));
         await ensureTask;
@@ -5119,6 +5118,15 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
         }
 
         Assert.True(await predicate().ConfigureAwait(false), "Timed out waiting for expected asynchronous condition.");
+    }
+
+    private static async Task AssertTaskDoesNotCompleteWithinAsync(
+        Task task,
+        TimeSpan observationWindow,
+        string because)
+    {
+        var completed = await Task.WhenAny(task, Task.Delay(observationWindow)).ConfigureAwait(false);
+        Assert.True(!ReferenceEquals(task, completed) && !task.IsCompleted, because);
     }
 
     private static Task WaitForPendingSessionUpdatesAsync(ChatViewModel viewModel)

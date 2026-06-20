@@ -37,6 +37,9 @@ namespace SalmonEgg.Presentation.Core.Tests.Start;
 [Collection("NonParallel")]
 public sealed class StartViewModelTests
 {
+    private static readonly TimeSpan PreviousFixedDraftIdentityWaitTimeout = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan DraftIdentityWaitRegressionBuffer = TimeSpan.FromMilliseconds(150);
+
     [Fact]
     public async Task StartSessionAndSendAsync_DoesNotInvokeWorkflow_WhenPromptIsBlank()
     {
@@ -764,7 +767,7 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
-    public async Task StartModeSelector_WhenColdStartConnectionCompletesDuringProfileWait_RetriesAndBecomesReady()
+    public async Task StartModeSelector_WhenColdStartConnectionCompletesAfterPreviousFixedIdentityWait_RetriesAndBecomesReady()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -779,14 +782,10 @@ public sealed class StartViewModelTests
                 RemotePath = "/home/ubuntu/Projects/Alpha"
             });
 
-            var commands = new Mock<IAcpConnectionCommands>();
-            ChatViewModelHarness? chatHarness = null;
             using var chat = CreateChatViewModel(
                 syncContext,
                 preferences,
-                Mock.Of<ISessionManager>(),
-                acpConnectionCommands: commands.Object);
-            chatHarness = chat;
+                Mock.Of<ISessionManager>());
             chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
             {
                 Id = "profile-remote",
@@ -813,22 +812,6 @@ public sealed class StartViewModelTests
                         ]
                     }));
             await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object);
-            commands
-                .Setup(command => command.ConnectToProfileAsync(
-                    It.Is<ServerConfiguration>(profile => string.Equals(profile.Id, "profile-2", StringComparison.Ordinal)),
-                    It.IsAny<IAcpTransportConfiguration>(),
-                    It.IsAny<IAcpChatCoordinatorSink>(),
-                    It.IsAny<CancellationToken>()))
-                .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, CancellationToken>(
-                    async (_, _, _, _) =>
-                    {
-                        Assert.NotNull(chatHarness);
-                        await chatHarness!.ViewModel.ReplaceChatServiceAsync(chatService.Object);
-                        await chatHarness.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-2"));
-                        await chatHarness.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-2"));
-                        await chatHarness.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
-                        return new AcpTransportApplyResult(chatService.Object, new InitializeResponse());
-                    });
             await chat.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-remote"));
             await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connecting));
 
@@ -843,10 +826,14 @@ public sealed class StartViewModelTests
             startViewModel.OnComposerLoaded();
 
             await WaitForConditionAsync(
-                () => startViewModel.StartDraftAutomationState.Contains("Pending=True", StringComparison.Ordinal),
+                () => startViewModel.StartModeStage == StartSessionModeStage.Loading
+                    && startViewModel.StartModeSelectorProjection.PlaceholderKind == SelectorPlaceholderKind.Loading
+                    && !startViewModel.HasStartSessionDraftError,
                 timeoutMilliseconds: 1000);
-            await Task.Delay(TimeSpan.FromMilliseconds(2300));
-            Assert.Contains("Pending=True", startViewModel.StartDraftAutomationState, StringComparison.Ordinal);
+            await WaitPastPreviousFixedDraftIdentityWaitAsync();
+            Assert.Equal(StartSessionModeStage.Loading, startViewModel.StartModeStage);
+            Assert.Equal(SelectorPlaceholderKind.Loading, startViewModel.StartModeSelectorProjection.PlaceholderKind);
+            Assert.False(startViewModel.HasStartSessionDraftError);
             Assert.Empty(createCalls);
 
             await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-remote"));
@@ -884,7 +871,7 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
-    public async Task StartModeSelector_WhenProfileInitializeExceedsDraftIdentityWait_KeepsLoadingUntilConnected()
+    public async Task StartModeSelector_WhenProfileInitializeExceedsPreviousFixedIdentityWait_KeepsLoadingUntilConnected()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -979,10 +966,11 @@ public sealed class StartViewModelTests
             chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[1];
             await profileConnectionStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
-            await Task.Delay(TimeSpan.FromMilliseconds(2300));
+            await WaitPastPreviousFixedDraftIdentityWaitAsync();
 
             Assert.Equal(StartSessionModeStage.Loading, startViewModel.StartModeStage);
-            Assert.Contains("Pending=True", startViewModel.StartDraftAutomationState, StringComparison.Ordinal);
+            Assert.Equal(SelectorPlaceholderKind.Loading, startViewModel.StartModeSelectorProjection.PlaceholderKind);
+            Assert.False(startViewModel.HasStartSessionDraftError);
             Assert.Equal(1, createCallCount);
 
             allowProfileConnection.SetResult(null);
@@ -2808,6 +2796,9 @@ public sealed class StartViewModelTests
             await Task.Delay(pollDelayMilliseconds);
         }
     }
+
+    private static Task WaitPastPreviousFixedDraftIdentityWaitAsync()
+        => Task.Delay(PreviousFixedDraftIdentityWaitTimeout + DraftIdentityWaitRegressionBuffer);
 
     private static async Task<bool> WaitForConditionOrFalseAsync(Func<bool> predicate, int timeoutMilliseconds = 2000, int pollDelayMilliseconds = 20)
     {
