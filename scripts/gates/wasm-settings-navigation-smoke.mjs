@@ -30,10 +30,16 @@ try {
   await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
   await page.waitForSelector('[aria-label="StartView.Title"]', { timeout: 60_000 });
 
-  await clickVisibleNavigationTarget(page, {
+  const settingsNavigationTarget = {
     labels: ["设置", "Settings"],
     automationIds: ["SettingsItem"]
+  };
+
+  await ensureVisibleNavigationTarget(page, settingsNavigationTarget, {
+    labels: [],
+    automationIds: ["TitleBar.ToggleSidebar"]
   });
+  await clickVisibleNavigationTarget(page, settingsNavigationTarget);
   await waitForBodyText(page, /常规|General|外观|Appearance|ACP \/ Agent/, "settings shell");
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -210,72 +216,7 @@ function collectTopNavigationButtonCandidateDebug() {
 }
 
 async function clickVisibleNavigationTarget(page, options) {
-  const point = await page.evaluate(input => {
-    const labels = input.labels ?? [];
-    const automationIds = input.automationIds ?? [];
-    const nodes = Array.from(document.querySelectorAll("body *"))
-      .map(element => {
-        const rect = element.getBoundingClientRect();
-        const style = getComputedStyle(element);
-        const text = (element.textContent ?? "").trim();
-        const aria = element.getAttribute("aria-label") ?? "";
-        const automationId =
-          element.getAttribute("data-automation-id")
-          ?? element.getAttribute("data-automationid")
-          ?? element.getAttribute("automationid")
-          ?? "";
-
-        return {
-          element,
-          rect,
-          text,
-          aria,
-          automationId,
-          display: style.display,
-          visibility: style.visibility,
-          automationMatch: automationIds.includes(aria) || automationIds.includes(automationId),
-          textMatch: labels.includes(text) || labels.includes(aria)
-        };
-      })
-      .filter(candidate =>
-        (candidate.automationMatch || candidate.textMatch)
-        && candidate.rect.width > 0
-        && candidate.rect.height > 0
-        && candidate.display !== "none"
-        && candidate.visibility !== "hidden"
-        && candidate.rect.left >= -1
-        && candidate.rect.top >= -1
-        && candidate.rect.left <= innerWidth
-        && candidate.rect.top <= innerHeight);
-
-    nodes.sort((left, right) => {
-      if (left.automationMatch !== right.automationMatch) {
-        return left.automationMatch ? -1 : 1;
-      }
-
-      return (left.rect.width * left.rect.height) - (right.rect.width * right.rect.height);
-    });
-
-    const target = nodes[0]?.element;
-    if (!target) {
-      return null;
-    }
-
-    const clickable =
-      target.closest(".uno-navigationviewitem")
-      ?? target.closest("[role='button']")
-      ?? target.closest("button")
-      ?? target;
-    const clickableRect = clickable.getBoundingClientRect();
-    const rect = clickableRect.width > 0 && clickableRect.height > 0
-      ? clickableRect
-      : target.getBoundingClientRect();
-
-    return {
-      x: rect.left + rect.width / 2,
-      y: rect.top + rect.height / 2
-    };
-  }, options);
+  const point = await page.evaluate(findVisibleNavigationTargetPoint, options);
 
   if (!point) {
     const candidates = await page.evaluate(collectVisibleNavigationTargetDebug);
@@ -287,6 +228,82 @@ async function clickVisibleNavigationTarget(page, options) {
   }
 
   await page.mouse.click(point.x, point.y);
+}
+
+async function ensureVisibleNavigationTarget(page, targetOptions, openerOptions) {
+  if (await page.evaluate(findVisibleNavigationTargetPoint, targetOptions)) {
+    return;
+  }
+
+  await clickVisibleNavigationTarget(page, openerOptions);
+  await page.waitForFunction(findVisibleNavigationTargetPoint, targetOptions, { timeout: 30_000 });
+}
+
+function findVisibleNavigationTargetPoint(input) {
+  const labels = input.labels ?? [];
+  const automationIds = input.automationIds ?? [];
+  const nodes = Array.from(document.querySelectorAll("body *"))
+    .map(element => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      const text = (element.textContent ?? "").trim();
+      const aria = element.getAttribute("aria-label") ?? "";
+      const automationId =
+        element.getAttribute("data-automation-id")
+        ?? element.getAttribute("data-automationid")
+        ?? element.getAttribute("automationid")
+        ?? "";
+
+      return {
+        element,
+        rect,
+        text,
+        aria,
+        automationId,
+        display: style.display,
+        visibility: style.visibility,
+        automationMatch: automationIds.includes(aria) || automationIds.includes(automationId),
+        textMatch: labels.includes(text) || labels.includes(aria)
+      };
+    })
+    .filter(candidate =>
+      (candidate.automationMatch || candidate.textMatch)
+      && candidate.rect.width > 0
+      && candidate.rect.height > 0
+      && candidate.display !== "none"
+      && candidate.visibility !== "hidden"
+      && candidate.rect.left >= -1
+      && candidate.rect.top >= -1
+      && candidate.rect.left <= innerWidth
+      && candidate.rect.top <= innerHeight);
+
+  nodes.sort((left, right) => {
+    if (left.automationMatch !== right.automationMatch) {
+      return left.automationMatch ? -1 : 1;
+    }
+
+    return (left.rect.width * left.rect.height) - (right.rect.width * right.rect.height);
+  });
+
+  const target = nodes[0]?.element;
+  if (!target) {
+    return null;
+  }
+
+  const clickable =
+    target.closest(".uno-navigationviewitem")
+    ?? target.closest("[role='button']")
+    ?? target.closest("button")
+    ?? target;
+  const clickableRect = clickable.getBoundingClientRect();
+  const rect = clickableRect.width > 0 && clickableRect.height > 0
+    ? clickableRect
+    : target.getBoundingClientRect();
+
+  return {
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2
+  };
 }
 
 function collectVisibleNavigationTargetDebug() {

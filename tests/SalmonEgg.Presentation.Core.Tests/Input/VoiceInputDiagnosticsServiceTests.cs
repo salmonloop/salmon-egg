@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Domain.Models.Diagnostics;
@@ -24,9 +25,9 @@ public sealed class VoiceInputDiagnosticsServiceTests
         var snapshot = await sut.GetSnapshotAsync();
 
         Assert.True(snapshot.IsSupported);
-        Assert.Equal("zh-CN", snapshot.CurrentLanguageTag);
         Assert.NotNull(snapshot.LatestSession);
         Assert.Equal("bfa3b5645fa647a49f2506074d59bbac", snapshot.LatestSession!.RequestId);
+        Assert.Equal("zh-CN", snapshot.LatestSession.LanguageTag);
         Assert.Equal(VoiceInputDiagnosticSessionOutcome.ReadyWithoutRecognition, snapshot.LatestSession.Outcome);
         Assert.NotNull(snapshot.LatestSession.RecognizerReadyAt);
         Assert.NotNull(snapshot.LatestSession.StartRequestedAt);
@@ -38,6 +39,17 @@ public sealed class VoiceInputDiagnosticsServiceTests
         Assert.Equal(0, snapshot.LatestSession.FinalResultCount);
         Assert.Equal(0, snapshot.LatestSession.EmptyPartialResultCount);
         Assert.Equal(0, snapshot.LatestSession.EmptyFinalResultCount);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_ReportsCurrentUiCultureAsCurrentLanguageTag()
+    {
+        using var culture = new CurrentUiCultureScope("zh-CN");
+        var sut = CreateService(string.Empty, VoiceInputPermissionResult.Granted());
+
+        var snapshot = await sut.GetSnapshotAsync();
+
+        Assert.Equal("zh-CN", snapshot.CurrentLanguageTag);
     }
 
     [Fact]
@@ -267,5 +279,26 @@ public sealed class VoiceInputDiagnosticsServiceTests
 
         public Task<VoiceInputRuntimeDiagnostics> GetRuntimeDiagnosticsAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(_snapshot);
+    }
+
+    private sealed class CurrentUiCultureScope : IDisposable
+    {
+        private readonly CultureInfo _originalCulture;
+        private readonly CultureInfo _originalUiCulture;
+
+        public CurrentUiCultureScope(string cultureName)
+        {
+            _originalCulture = CultureInfo.CurrentCulture;
+            _originalUiCulture = CultureInfo.CurrentUICulture;
+            var culture = CultureInfo.GetCultureInfo(cultureName);
+            CultureInfo.CurrentCulture = culture;
+            CultureInfo.CurrentUICulture = culture;
+        }
+
+        public void Dispose()
+        {
+            CultureInfo.CurrentCulture = _originalCulture;
+            CultureInfo.CurrentUICulture = _originalUiCulture;
+        }
     }
 }

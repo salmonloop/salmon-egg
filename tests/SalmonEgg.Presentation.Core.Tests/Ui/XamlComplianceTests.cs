@@ -43,6 +43,15 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void WasmSettingsNavigationSmoke_OpensMainNavigationThroughVisibleTitleBarToggle()
+    {
+        var script = LoadText(@"scripts\gates\wasm-settings-navigation-smoke.mjs");
+
+        Assert.Contains("TitleBar.ToggleSidebar", script, StringComparison.Ordinal);
+        Assert.Contains("ensureVisibleNavigationTarget", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CoreGateScript_StopsWhenNativeGateCommandFails()
     {
         var script = LoadText(@"scripts\gates\run-core-gates.ps1");
