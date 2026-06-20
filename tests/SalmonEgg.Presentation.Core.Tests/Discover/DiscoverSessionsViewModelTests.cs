@@ -92,7 +92,7 @@ public sealed class DiscoverSessionsViewModelTests
             Assert.Equal(ProjectAffinitySource.Unclassified, unclassifiedRow.AffinitySource);
             Assert.Equal("Unclassified", unclassifiedRow.ProjectAffinityBadgeText);
             Assert.False(unclassifiedRow.NeedsUserAttention);
-            Assert.Contains("working directory", unclassifiedRow.AffinityStatusText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("ACP working path", unclassifiedRow.AffinityStatusText, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -1133,9 +1133,12 @@ public sealed class DiscoverSessionsViewModelTests
         AcpProfilesViewModel profilesViewModel,
         ServerConfiguration? profile)
     {
-        var field = typeof(AcpProfilesViewModel).GetField("_selectedProfile", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-        Assert.NotNull(field);
-        field.SetValue(profilesViewModel, profile);
+        var idField = typeof(AcpProfilesViewModel).GetField("_selectedProfileId", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        var snapshotField = typeof(AcpProfilesViewModel).GetField("_selectedProfileSnapshot", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(idField);
+        Assert.NotNull(snapshotField);
+        idField.SetValue(profilesViewModel, profile?.Id);
+        snapshotField.SetValue(profilesViewModel, profile);
     }
 
     private sealed class CountingSynchronizationContext : SynchronizationContext, IUiDispatcher

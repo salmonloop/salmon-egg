@@ -833,8 +833,17 @@ public sealed class StartViewModelTests
                     && !startViewModel.HasStartSessionDraftError,
                 timeoutMilliseconds: 1000);
             await WaitPastPreviousFixedDraftIdentityWaitAsync();
-            Assert.Equal(StartSessionModeStage.Loading, startViewModel.StartModeStage);
-            Assert.Equal(SelectorPlaceholderKind.Loading, startViewModel.StartModeSelectorProjection.PlaceholderKind);
+            var pendingWaitState = await chat.GetConnectionStateAsync();
+            Assert.True(
+                startViewModel.StartModeStage == StartSessionModeStage.Loading,
+                $"Start mode should keep loading while the selected profile connection is still pending. automation={startViewModel.StartDraftAutomationState}; " +
+                $"phase={pendingWaitState.Phase}; intent={pendingWaitState.SelectedProfileIntentId}; foreground={pendingWaitState.ForegroundTransportProfileId}; " +
+                $"conn={pendingWaitState.ConnectionInstanceId}; draftPhase={pendingWaitState.NewSessionDraft?.Phase.ToString() ?? "null"}");
+            Assert.True(
+                startViewModel.StartModeSelectorProjection.PlaceholderKind == SelectorPlaceholderKind.Loading,
+                $"Start mode placeholder should keep loading while the selected profile connection is still pending. automation={startViewModel.StartDraftAutomationState}; " +
+                $"phase={pendingWaitState.Phase}; intent={pendingWaitState.SelectedProfileIntentId}; foreground={pendingWaitState.ForegroundTransportProfileId}; " +
+                $"conn={pendingWaitState.ConnectionInstanceId}; draftPhase={pendingWaitState.NewSessionDraft?.Phase.ToString() ?? "null"}");
             Assert.False(startViewModel.HasStartSessionDraftError);
             Assert.Empty(createCalls);
 

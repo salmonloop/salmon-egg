@@ -37,30 +37,29 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private ObservableCollection<ServerConfiguration> _profiles = new();
 
-    [ObservableProperty]
-    private ServerConfiguration? _selectedProfile;
+    private string? _selectedProfileId;
+    private ServerConfiguration? _selectedProfileSnapshot;
 
-    [ObservableProperty]
-    private AgentProfileItemViewModel? _selectedProfileItem;
+    public string? SelectedProfileId
+    {
+        get => _selectedProfileId;
+        set => SetSelectedProfileId(value);
+    }
+
+    public ServerConfiguration? SelectedProfile
+    {
+        get => ResolveSelectedProfile();
+        set => SetSelectedProfileId(value?.Id, value);
+    }
+
+    public AgentProfileItemViewModel? SelectedProfileItem
+    {
+        get => ResolveSelectedProfileItem();
+        set => SetSelectedProfileId(value?.ProfileId);
+    }
 
     [ObservableProperty]
     private bool _isLoading;
-
-    partial void OnSelectedProfileItemChanged(AgentProfileItemViewModel? value)
-    {
-        if (value != null)
-        {
-            var profile = Profiles.FirstOrDefault(p => p.Id == value.ProfileId);
-            if (SelectedProfile != profile)
-            {
-                SelectedProfile = profile;
-            }
-        }
-        else
-        {
-            SelectedProfile = null;
-        }
-    }
 
     // ── New: per-profile item VMs for the Settings card list ─────────────────
 
@@ -162,6 +161,8 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
 
             await MarshalToUiAsync(() =>
             {
+                var preferredSelectedProfileId = SelectedProfileId ?? _preferences.LastSelectedServerId;
+
                 // Keep the settings list visible even if legacy collection observers fail while projecting to older surfaces.
                 RebuildProfileItems(ordered);
 
@@ -172,9 +173,10 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
                     Profiles.Add(cfg);
                 }
 
-                if (!string.IsNullOrWhiteSpace(_preferences.LastSelectedServerId))
+                var nextSelectedProfileId = ResolveAvailableProfileId(preferredSelectedProfileId);
+                if (!SetSelectedProfileId(nextSelectedProfileId))
                 {
-                    SelectedProfile = Profiles.FirstOrDefault(p => p.Id == _preferences.LastSelectedServerId);
+                    NotifySelectedProfileProjectionChanged();
                 }
             }).ConfigureAwait(false);
         }
@@ -204,10 +206,6 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
             await MarshalToUiAsync(() =>
             {
                 Profiles.Remove(profile);
-                if (SelectedProfile?.Id == profile.Id)
-                {
-                    SelectedProfile = null;
-                }
 
                 // Remove the matching item VM.
                 var item = ProfileItems.FirstOrDefault(vm => vm.ProfileId == profile.Id);
@@ -215,6 +213,11 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
                 {
                     ProfileItems.Remove(item);
                     item.Dispose();
+                }
+
+                if (string.Equals(SelectedProfileId, profile.Id, StringComparison.Ordinal))
+                {
+                    SetSelectedProfileId(null);
                 }
             }).ConfigureAwait(false);
         }
@@ -235,7 +238,7 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
         {
             await _configurationService.SaveConfigurationAsync(profile).ConfigureAwait(false);
             await RefreshAsync().ConfigureAwait(false);
-            SelectById(profile.Id);
+            await SelectByIdAsync(profile.Id).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -295,8 +298,12 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
             else
             {
                 existing.UpdateProfile(config);
+                var currentIndex = ProfileItems.IndexOf(existing);
+                if (currentIndex >= 0 && currentIndex != i)
+                {
+                    ProfileItems.Move(currentIndex, i);
+                }
             }
-            // Note: we don't re-order existing VMs for performance (a future enhancement).
         }
     }
 
@@ -320,19 +327,76 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
             _localizer);
     }
 
-    private void SelectById(string? id)
+    private Task SelectByIdAsync(string? id)
     {
         if (string.IsNullOrWhiteSpace(id))
         {
-            return;
+            return Task.CompletedTask;
         }
 
-        _ = MarshalToUiAsync(() =>
+        return MarshalToUiAsync(() => SetSelectedProfileId(ResolveAvailableProfileId(id)));
+    }
+
+    private ServerConfiguration? ResolveSelectedProfile()
+    {
+        if (string.IsNullOrWhiteSpace(SelectedProfileId))
         {
-            var profile = Profiles.FirstOrDefault(p => p.Id == id);
-            SelectedProfile = profile;
-            SelectedProfileItem = ProfileItems.FirstOrDefault(vm => vm.ProfileId == id);
-        });
+            return null;
+        }
+
+        return ResolveProfileById(SelectedProfileId)
+            ?? (IsProfileSnapshotForId(_selectedProfileSnapshot, SelectedProfileId) ? _selectedProfileSnapshot : null);
+    }
+
+    private AgentProfileItemViewModel? ResolveSelectedProfileItem()
+        => string.IsNullOrWhiteSpace(SelectedProfileId)
+            ? null
+            : ProfileItems.FirstOrDefault(item => string.Equals(item.ProfileId, SelectedProfileId, StringComparison.Ordinal));
+
+    private string? ResolveAvailableProfileId(string? profileId)
+        => string.IsNullOrWhiteSpace(profileId)
+            ? null
+            : Profiles.Any(profile => string.Equals(profile.Id, profileId, StringComparison.Ordinal))
+                ? profileId
+                : null;
+
+    private bool SetSelectedProfileId(string? profileId, ServerConfiguration? profileSnapshot = null)
+    {
+        var normalized = string.IsNullOrWhiteSpace(profileId) ? null : profileId;
+        var nextSnapshot = ResolveProfileById(normalized)
+            ?? (IsProfileSnapshotForId(profileSnapshot, normalized) ? profileSnapshot : null);
+        var idChanged = !string.Equals(_selectedProfileId, normalized, StringComparison.Ordinal);
+        var snapshotChanged = !ReferenceEquals(_selectedProfileSnapshot, nextSnapshot);
+        if (!idChanged && !snapshotChanged)
+        {
+            return false;
+        }
+
+        _selectedProfileId = normalized;
+        _selectedProfileSnapshot = nextSnapshot;
+        if (idChanged)
+        {
+            OnPropertyChanged(nameof(SelectedProfileId));
+        }
+
+        NotifySelectedProfileProjectionChanged();
+        return true;
+    }
+
+    private ServerConfiguration? ResolveProfileById(string? profileId)
+        => string.IsNullOrWhiteSpace(profileId)
+            ? null
+            : Profiles.FirstOrDefault(profile => string.Equals(profile.Id, profileId, StringComparison.Ordinal));
+
+    private static bool IsProfileSnapshotForId(ServerConfiguration? profile, string? profileId)
+        => profile is not null
+            && !string.IsNullOrWhiteSpace(profileId)
+            && string.Equals(profile.Id, profileId, StringComparison.Ordinal);
+
+    private void NotifySelectedProfileProjectionChanged()
+    {
+        OnPropertyChanged(nameof(SelectedProfile));
+        OnPropertyChanged(nameof(SelectedProfileItem));
     }
 
     // ── IDisposable ───────────────────────────────────────────────────────────

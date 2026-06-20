@@ -23,7 +23,7 @@ public static class StartSessionModePolicy
             return StartSessionModeStage.Submitting;
         }
 
-        if (state.IsDraftRefreshPending || state.IsDraftLoading)
+        if (state.IsConnectionInProgress || state.IsDraftRefreshPending || state.IsDraftLoading)
         {
             return StartSessionModeStage.Loading;
         }

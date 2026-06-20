@@ -11,6 +11,7 @@ public sealed class StartSessionModePolicyTests
         var snapshot = StartSessionModePolicy.Compute(new StartSessionModeState(
             IsStarting: false,
             IsConnectionReady: false,
+            IsConnectionInProgress: false,
             IsDraftRefreshPending: false,
             IsDraftLoading: false,
             IsDraftReady: false,
@@ -27,7 +28,25 @@ public sealed class StartSessionModePolicyTests
         var snapshot = StartSessionModePolicy.Compute(new StartSessionModeState(
             IsStarting: false,
             IsConnectionReady: false,
+            IsConnectionInProgress: false,
             IsDraftRefreshPending: true,
+            IsDraftLoading: false,
+            IsDraftReady: false,
+            ModeCount: 0));
+
+        Assert.Equal(StartSessionModeStage.Loading, snapshot.Stage);
+        Assert.False(snapshot.IsEnabled);
+        Assert.False(snapshot.CanSubmitPrompt);
+    }
+
+    [Fact]
+    public void Compute_WhenConnectionIsStillInProgress_ShowsLoadingSelector()
+    {
+        var snapshot = StartSessionModePolicy.Compute(new StartSessionModeState(
+            IsStarting: false,
+            IsConnectionReady: false,
+            IsConnectionInProgress: true,
+            IsDraftRefreshPending: false,
             IsDraftLoading: false,
             IsDraftReady: false,
             ModeCount: 0));
@@ -43,6 +62,7 @@ public sealed class StartSessionModePolicyTests
         var snapshot = StartSessionModePolicy.Compute(new StartSessionModeState(
             IsStarting: false,
             IsConnectionReady: true,
+            IsConnectionInProgress: false,
             IsDraftRefreshPending: false,
             IsDraftLoading: false,
             IsDraftReady: true,
@@ -59,6 +79,7 @@ public sealed class StartSessionModePolicyTests
         var snapshot = StartSessionModePolicy.Compute(new StartSessionModeState(
             IsStarting: false,
             IsConnectionReady: true,
+            IsConnectionInProgress: false,
             IsDraftRefreshPending: true,
             IsDraftLoading: false,
             IsDraftReady: true,
@@ -75,6 +96,7 @@ public sealed class StartSessionModePolicyTests
         var snapshot = StartSessionModePolicy.Compute(new StartSessionModeState(
             IsStarting: false,
             IsConnectionReady: false,
+            IsConnectionInProgress: false,
             IsDraftRefreshPending: false,
             IsDraftLoading: false,
             IsDraftReady: true,

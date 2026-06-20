@@ -13,6 +13,7 @@ using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Resources;
+using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Core.ViewModels.Composer;
@@ -30,6 +31,7 @@ public sealed partial class StartViewModel : ObservableObject
     private readonly INavigationProjectSelectionStore _projectSelectionStore;
     private readonly MainNavigationViewModel _nav;
     private readonly IChatLaunchWorkflow _chatLaunchWorkflow;
+    private readonly IChatConnectionStore _chatConnectionStore;
     private readonly IConversationCatalogReadModel _conversationCatalog;
     private readonly IStringLocalizer<CoreStrings>? _localizer;
     private readonly ILogger<StartViewModel> _logger;
@@ -41,6 +43,7 @@ public sealed partial class StartViewModel : ObservableObject
     private StartSessionModeSnapshot _startSessionModeSnapshot = StartSessionModePolicy.Compute(new StartSessionModeState(
         IsStarting: false,
         IsConnectionReady: false,
+        IsConnectionInProgress: false,
         IsDraftRefreshPending: false,
         IsDraftLoading: false,
         IsDraftReady: false,
@@ -248,6 +251,7 @@ public sealed partial class StartViewModel : ObservableObject
         ArgumentNullException.ThrowIfNull(navigationCoordinator);
         _nav = nav ?? throw new ArgumentNullException(nameof(nav));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _chatConnectionStore = chatConnectionStore ?? Chat.ConnectionStore;
         _conversationCatalog = conversationCatalog ?? NoOpConversationCatalogReadModel.Instance;
         _localizer = localizer;
         StartProjectOptions = new ReadOnlyObservableCollection<StartProjectOptionViewModel>(_startProjectOptions);
@@ -463,6 +467,7 @@ public sealed partial class StartViewModel : ObservableObject
         var identity = BuildStartModeIdentity();
         var showRemoteDirectoryPrompt = IsExpectedRemoteDirectorySelectionState();
         var hasDraftError = Chat.HasNewSessionDraftError && !showRemoteDirectoryPrompt;
+        var isConnectionInProgress = IsConnectionInProgressForStart();
         IReadOnlyList<SessionModeViewModel> modeOptions = showRemoteDirectoryPrompt
             ? Array.Empty<SessionModeViewModel>()
             : StartModeOptions;
@@ -472,7 +477,7 @@ public sealed partial class StartViewModel : ObservableObject
             modeOptions,
             showRemoteDirectoryPrompt ? null : SelectedStartMode?.ModeId,
             !showRemoteDirectoryPrompt && Chat.IsNewSessionDraftReady,
-            !showRemoteDirectoryPrompt && (_isNewSessionDraftRefreshPending || Chat.IsNewSessionDraftLoading),
+            !showRemoteDirectoryPrompt && (isConnectionInProgress || _isNewSessionDraftRefreshPending || Chat.IsNewSessionDraftLoading),
             hasDraftError,
             (!showRemoteDirectoryPrompt && StartModeOptions.Count > 0) || hasDraftError,
             ResolveModeSelectorPlaceholderLabels(showRemoteDirectoryPrompt)));
@@ -836,20 +841,7 @@ public sealed partial class StartViewModel : ObservableObject
             || string.Equals(e.PropertyName, nameof(ChatViewModel.IsInitializing), StringComparison.Ordinal)
             || string.Equals(e.PropertyName, nameof(ChatViewModel.ConnectionInstanceId), StringComparison.Ordinal))
         {
-            if (_isComposerLoaded && (Chat.IsConnecting || Chat.IsInitializing))
-            {
-                SetNewSessionDraftRefreshPending(true);
-                return;
-            }
-
-            if (_isComposerLoaded && Chat.IsConnected)
-            {
-                QueueEnsureNewSessionDraft();
-                return;
-            }
-
-            SetNewSessionDraftRefreshPending(false);
-            RefreshStartModeState();
+            QueueApplyConnectionProjectionChange();
             return;
         }
 
@@ -884,6 +876,45 @@ public sealed partial class StartViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowVoiceInputStopButton));
         StartVoiceInputCommand.NotifyCanExecuteChanged();
         StopVoiceInputCommand.NotifyCanExecuteChanged();
+    }
+
+    private void QueueApplyConnectionProjectionChange()
+    {
+        var task = ApplyConnectionProjectionChangeAsync();
+        _ = task.ContinueWith(
+            completedTask =>
+            {
+                _logger.LogDebug(
+                    completedTask.Exception,
+                    "Failed to apply start connection projection change.");
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+    }
+
+    private async Task ApplyConnectionProjectionChangeAsync()
+    {
+        var state = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
+        await Chat.Dispatcher.EnqueueAsync(() => ApplyConnectionProjectionChange(state)).ConfigureAwait(false);
+    }
+
+    private void ApplyConnectionProjectionChange(ChatConnectionState state)
+    {
+        if (_isComposerLoaded && state.Phase is ConnectionPhase.Connecting or ConnectionPhase.Initializing)
+        {
+            SetNewSessionDraftRefreshPending(true);
+            return;
+        }
+
+        if (_isComposerLoaded && state.Phase == ConnectionPhase.Connected)
+        {
+            QueueEnsureNewSessionDraft();
+            return;
+        }
+
+        SetNewSessionDraftRefreshPending(false);
+        RefreshStartModeState();
     }
 
     private void OnConversationCatalogPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -971,11 +1002,29 @@ public sealed partial class StartViewModel : ObservableObject
             if (ReferenceEquals(_newSessionDraftCts, refreshCts))
             {
                 _newSessionDraftCts = null;
-                SetNewSessionDraftRefreshPending(false);
+                if (await ShouldKeepNewSessionDraftRefreshPendingAsync().ConfigureAwait(true))
+                {
+                    SetNewSessionDraftRefreshPending(true);
+                }
+                else
+                {
+                    SetNewSessionDraftRefreshPending(false);
+                }
             }
 
             refreshCts.Dispose();
         }
+    }
+
+    private async Task<bool> ShouldKeepNewSessionDraftRefreshPendingAsync()
+    {
+        var state = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(true);
+
+        return !Chat.IsNewSessionDraftReady
+            && !Chat.HasNewSessionDraftError
+            && string.IsNullOrWhiteSpace(state.Error)
+            && !string.IsNullOrWhiteSpace(state.SelectedProfileIntentId)
+            && state.Phase is ConnectionPhase.Connecting or ConnectionPhase.Initializing;
     }
 
     private void CancelNewSessionDraftRefresh()
@@ -1004,7 +1053,8 @@ public sealed partial class StartViewModel : ObservableObject
         RefreshAllSelectorProjections();
         var nextSnapshot = StartSessionModePolicy.Compute(new StartSessionModeState(
             IsStarting: IsStarting,
-            IsConnectionReady: Chat.IsConnected && !Chat.IsConnecting && !Chat.IsInitializing,
+            IsConnectionReady: IsConnectionReadyForStart(),
+            IsConnectionInProgress: IsConnectionInProgressForStart(),
             IsDraftRefreshPending: _isNewSessionDraftRefreshPending,
             IsDraftLoading: Chat.IsNewSessionDraftLoading,
             IsDraftReady: Chat.IsNewSessionDraftReady,
@@ -1045,6 +1095,12 @@ public sealed partial class StartViewModel : ObservableObject
 
         return _projectPreferences.TryGetProjectRootPath(SelectedStartProjectId);
     }
+
+    private bool IsConnectionReadyForStart()
+        => Chat.IsConnected && !Chat.IsConnecting && !Chat.IsInitializing;
+
+    private bool IsConnectionInProgressForStart()
+        => Chat.IsConnecting || Chat.IsInitializing;
 
     private sealed class NoOpConversationCatalogReadModel : IConversationCatalogReadModel
     {

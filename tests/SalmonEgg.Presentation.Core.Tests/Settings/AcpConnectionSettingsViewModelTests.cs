@@ -678,6 +678,128 @@ public sealed class AcpConnectionSettingsViewModelTests
         Assert.Equal("ws://localhost:9001", updated.EndpointDescription);
     }
 
+    [Fact]
+    public async Task RefreshCommand_WhenProfileRenameChangesSortOrder_ReordersSettingsProfileItems()
+    {
+        var preferences = await CreatePreferencesAsync();
+        var configurations = new[]
+        {
+            new ServerConfiguration
+            {
+                Id = "profile-a",
+                Name = "Alpha",
+                Transport = TransportType.Stdio,
+                StdioCommand = "alpha-acp"
+            },
+            new ServerConfiguration
+            {
+                Id = "profile-b",
+                Name = "Beta",
+                Transport = TransportType.WebSocket,
+                ServerUrl = "ws://localhost:9002"
+            }
+        };
+
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .Setup(service => service.ListConfigurationsAsync())
+            .ReturnsAsync(() => configurations);
+
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        var profiles = new AcpProfilesViewModel(
+            configurationService.Object,
+            preferences,
+            NullLogger<AcpProfilesViewModel>.Instance,
+            registry,
+            registry,
+            new TestConnectionCommands(),
+            NullLoggerFactory.Instance,
+            new ImmediateUiDispatcher(),
+            new TestCoreStringLocalizer());
+
+        await profiles.RefreshCommand.ExecuteAsync(null);
+        profiles.SelectedProfileItem = profiles.ProfileItems.Single(item => item.ProfileId == "profile-b");
+
+        configurations = new[]
+        {
+            new ServerConfiguration
+            {
+                Id = "profile-a",
+                Name = "Zeta",
+                Transport = TransportType.Stdio,
+                StdioCommand = "alpha-acp"
+            },
+            new ServerConfiguration
+            {
+                Id = "profile-b",
+                Name = "Aardvark",
+                Transport = TransportType.WebSocket,
+                ServerUrl = "ws://localhost:9002"
+            }
+        };
+
+        await profiles.RefreshCommand.ExecuteAsync(null);
+
+        Assert.Equal(new[] { "profile-b", "profile-a" }, profiles.ProfileItems.Select(item => item.ProfileId));
+        Assert.Equal("profile-b", profiles.SelectedProfileItem?.ProfileId);
+        Assert.Equal("profile-b", profiles.SelectedProfile?.Id);
+    }
+
+    [Fact]
+    public async Task SelectedProfile_WhenSetDirectly_UpdatesSettingsProfileItemSelection()
+    {
+        var preferences = await CreatePreferencesAsync();
+        using var profiles = await CreateProfilesWithItemsAsync(preferences);
+
+        profiles.SelectedProfile = profiles.Profiles.Single(profile => profile.Id == "profile-b");
+
+        Assert.Equal("profile-b", profiles.SelectedProfile?.Id);
+        Assert.Equal("profile-b", profiles.SelectedProfileItem?.ProfileId);
+    }
+
+    [Fact]
+    public async Task RefreshCommand_WhenSelectedProfileObjectIsReplaced_PreservesSelectionByProfileId()
+    {
+        var preferences = await CreatePreferencesAsync();
+        var configurations = new[]
+        {
+            new ServerConfiguration { Id = "profile-a", Name = "Alpha" },
+            new ServerConfiguration { Id = "profile-b", Name = "Beta" }
+        };
+
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .Setup(service => service.ListConfigurationsAsync())
+            .ReturnsAsync(() => configurations);
+
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        var profiles = new AcpProfilesViewModel(
+            configurationService.Object,
+            preferences,
+            NullLogger<AcpProfilesViewModel>.Instance,
+            registry,
+            registry,
+            new TestConnectionCommands(),
+            NullLoggerFactory.Instance,
+            new ImmediateUiDispatcher(),
+            new TestCoreStringLocalizer());
+
+        await profiles.RefreshCommand.ExecuteAsync(null);
+        profiles.SelectedProfile = profiles.Profiles.Single(profile => profile.Id == "profile-b");
+
+        configurations = new[]
+        {
+            new ServerConfiguration { Id = "profile-a", Name = "Alpha" },
+            new ServerConfiguration { Id = "profile-b", Name = "Beta Renamed" }
+        };
+
+        await profiles.RefreshCommand.ExecuteAsync(null);
+
+        Assert.Same(profiles.Profiles.Single(profile => profile.Id == "profile-b"), profiles.SelectedProfile);
+        Assert.Equal("profile-b", profiles.SelectedProfileItem?.ProfileId);
+        Assert.Equal("Beta Renamed", profiles.SelectedProfileItem?.Name);
+    }
+
     private static async Task<AppPreferencesViewModel> CreatePreferencesAsync(
         bool supportsStdioTransport = true,
         bool supportsLocalTerminal = true)

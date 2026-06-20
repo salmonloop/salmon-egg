@@ -1356,6 +1356,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     }
 
+    internal IChatConnectionStore ConnectionStore => _chatConnectionStore;
+
     private void OnConversationWorkspacePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         switch (e.PropertyName)
@@ -2585,7 +2587,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             return;
         }
 
-        if (IsConnected || IsConnecting || IsInitializing)
+        if (connectionState.Phase is ConnectionPhase.Connected or ConnectionPhase.Connecting or ConnectionPhase.Initializing
+            || IsConnected
+            || IsConnecting
+            || IsInitializing)
         {
             return;
         }
