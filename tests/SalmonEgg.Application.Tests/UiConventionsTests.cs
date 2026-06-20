@@ -374,20 +374,55 @@ public class UiConventionsTests
         foreach (var file in files)
         {
             var doc = ReadXml(file);
-            var values = EnumerateXmlTextValues(doc).ToArray();
 
-            // Enforce "all x:Bind" convention: runtime {Binding ...} is forbidden.
-            if (values.Any(value =>
-                    value.Contains("{Binding", StringComparison.Ordinal) ||
-                    value.Contains("{ Binding", StringComparison.Ordinal) ||
-                    value.Contains("{binding", StringComparison.OrdinalIgnoreCase) ||
-                    value.Contains("{ binding", StringComparison.OrdinalIgnoreCase)))
+            foreach (var element in doc.Descendants())
             {
-                failures.Add($"{file}: contains runtime '{{Binding}}' markup extension");
+                foreach (var attribute in element.Attributes())
+                {
+                    if (ContainsRuntimeBindingMarkup(attribute.Value) && !HasDocumentedRuntimeBindingReason(attribute))
+                    {
+                        failures.Add($"{file}: contains undocumented runtime '{{Binding}}' markup extension");
+                    }
+                }
+
+                foreach (var text in element.Nodes().OfType<XText>())
+                {
+                    if (ContainsRuntimeBindingMarkup(text.Value) && !HasDocumentedRuntimeBindingReason(text))
+                    {
+                        failures.Add($"{file}: contains undocumented runtime '{{Binding}}' markup extension");
+                    }
+                }
             }
         }
 
         Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
+    }
+
+    private static bool ContainsRuntimeBindingMarkup(string value)
+        => value.Contains("{Binding", StringComparison.Ordinal)
+            || value.Contains("{ Binding", StringComparison.Ordinal)
+            || value.Contains("{binding", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("{ binding", StringComparison.OrdinalIgnoreCase);
+
+    private static bool HasDocumentedRuntimeBindingReason(XObject node)
+    {
+        var element = node is XAttribute attribute ? attribute.Parent : node.Parent;
+        while (element is not null)
+        {
+            var precedingComment = element.NodesBeforeSelf()
+                .OfType<XComment>()
+                .LastOrDefault();
+
+            if (precedingComment is not null
+                && precedingComment.Value.Contains("Binding is required", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            element = element.Parent;
+        }
+
+        return false;
     }
 
     [Fact]

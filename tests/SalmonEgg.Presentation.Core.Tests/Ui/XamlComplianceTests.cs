@@ -43,6 +43,16 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void CoreGateScript_StopsWhenNativeGateCommandFails()
+    {
+        var script = LoadText(@"scripts\gates\run-core-gates.ps1");
+
+        Assert.Contains("Invoke-GateCommand", script, StringComparison.Ordinal);
+        Assert.Contains("$LASTEXITCODE -ne 0", script, StringComparison.Ordinal);
+        Assert.Contains("exit $LASTEXITCODE", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SessionGuiRegressionScript_CoversInstalledMsixRightPanelAuxiliaryPanelPath()
     {
         var script = LoadText(@".tools\run-session-gui-regression.ps1");
