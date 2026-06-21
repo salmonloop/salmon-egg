@@ -20,7 +20,9 @@ public sealed class ConfigurationManagerTests : IDisposable
         Directory.CreateDirectory(_testDirectory);
         Environment.SetEnvironmentVariable("SALMONEGG_APPDATA_ROOT", Path.Combine(_testDirectory, "SalmonEgg"), EnvironmentVariableTarget.Process);
 
-        _secureStorage = new SecureStorage();
+        _secureStorage = new AppFileStoreSecureStorage(
+            new FileSystemAppFileStore(),
+            System.IO.Path.Combine(_testDirectory, "SalmonEgg", "SecureStorage"));
         _configManager = new ConfigurationManager(_secureStorage, new FileSystemAppFileStore(), new AppDataService());
     }
 

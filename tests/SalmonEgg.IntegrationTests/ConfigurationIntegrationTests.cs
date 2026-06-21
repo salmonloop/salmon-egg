@@ -14,7 +14,7 @@ namespace SalmonEgg.IntegrationTests;
 public sealed class ConfigurationIntegrationTests : IDisposable
 {
     private readonly string _testDirectory;
-    private readonly SecureStorage _secureStorage;
+    private readonly ISecureStorage _secureStorage;
     private readonly ConfigurationManager _configManager;
 
     public ConfigurationIntegrationTests()
@@ -23,7 +23,9 @@ public sealed class ConfigurationIntegrationTests : IDisposable
         Directory.CreateDirectory(_testDirectory);
         Environment.SetEnvironmentVariable("SALMONEGG_APPDATA_ROOT", Path.Combine(_testDirectory, "SalmonEgg"), EnvironmentVariableTarget.Process);
 
-        _secureStorage = new SecureStorage();
+        _secureStorage = new AppFileStoreSecureStorage(
+            new FileSystemAppFileStore(),
+            System.IO.Path.Combine(_testDirectory, "SalmonEgg", "SecureStorage"));
         _configManager = new ConfigurationManager(_secureStorage, new FileSystemAppFileStore(), new AppDataService());
     }
 
