@@ -131,14 +131,16 @@ public sealed class WasmStartupAssetsTests
     }
 
     [Fact]
-    public void DependencyInjection_RegistersBrowserWasmFilePersistenceWithoutPersistingSecrets()
+    public void DependencyInjection_RegistersBrowserWasmFilePersistenceAndFileBackedSecureStorage()
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\DependencyInjection.cs");
 
         Assert.Contains("services.AddSingleton<IFileSystemPersistence, WasmFileSystemPersistence>();", code, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<IFileSystemPersistence, NoOpFileSystemPersistence>();", code, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<IAppFileStore>(sp => new FileSystemAppFileStore(sp.GetRequiredService<IFileSystemPersistence>()));", code, StringComparison.Ordinal);
-        Assert.Contains("services.AddSingleton<ISecureStorage, VolatileSecureStorage>();", code, StringComparison.Ordinal);
+        // Non-Windows platforms persist secrets via AppFileStoreSecureStorage (backed by IAppFileStore/IDBFS on WASM).
+        Assert.DoesNotContain("services.AddSingleton<ISecureStorage, VolatileSecureStorage>();", code, StringComparison.Ordinal);
+        Assert.Contains("new AppFileStoreSecureStorage(", code, StringComparison.Ordinal);
     }
 
     [Fact]

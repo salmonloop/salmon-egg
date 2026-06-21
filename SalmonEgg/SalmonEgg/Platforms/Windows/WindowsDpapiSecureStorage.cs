@@ -15,13 +15,14 @@ public sealed class WindowsDpapiSecureStorage : ISecureStorage
     public WindowsDpapiSecureStorage()
     {
         _storageDirectory = Path.Combine(SalmonEggPaths.GetAppDataRootPath(), "SecureStorage");
-        Directory.CreateDirectory(_storageDirectory);
+        // Storage directory is created lazily on first write to avoid touching the filesystem at construction time.
     }
 
     public async Task SaveAsync(string key, string value)
     {
         ValidateKey(key);
         ArgumentNullException.ThrowIfNull(value);
+        Directory.CreateDirectory(_storageDirectory);
 
         var path = GetFilePath(key);
         var bytes = Encoding.UTF8.GetBytes(value);

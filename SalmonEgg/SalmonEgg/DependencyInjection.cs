@@ -207,16 +207,7 @@ public static class DependencyInjection
         services.AddSingleton<IGamepadShortcutDispatcher, MainShellGamepadShortcutDispatcher>();
         services.AddSingleton<IGamepadContextIntentDispatcher, MainShellGamepadContextIntentDispatcher>();
 
-        // Secure Storage
-#if WINDOWS
-        services.AddSingleton<ISecureStorage, WindowsDpapiSecureStorage>();
-#elif __WASM__ || __ANDROID__ || __IOS__
-        services.AddSingleton<ISecureStorage, VolatileSecureStorage>();
-#else
-        services.AddSingleton<ISecureStorage, SecureStorage>();
-#endif
-
-        // File system persistence
+        // File system persistence -- must be registered before IAppFileStore and ISecureStorage.
 #if __WASM__
         if (OperatingSystem.IsBrowser())
         {
@@ -232,6 +223,19 @@ public static class DependencyInjection
 
         // App settings (config/app.yaml)
         services.AddSingleton<IAppFileStore>(sp => new FileSystemAppFileStore(sp.GetRequiredService<IFileSystemPersistence>()));
+
+        // Secure Storage
+        // Windows: DPAPI (hardware-bound, user-scoped encryption).
+        // All other platforms: AppFileStoreSecureStorage backed by IAppFileStore so secrets
+        // flow through the same IFileSystemPersistence path (including IDBFS on WASM).
+#if WINDOWS
+        services.AddSingleton<ISecureStorage, WindowsDpapiSecureStorage>();
+#else
+        services.AddSingleton<ISecureStorage>(sp =>
+            new AppFileStoreSecureStorage(
+                sp.GetRequiredService<IAppFileStore>(),
+                System.IO.Path.Combine(sp.GetRequiredService<IAppDataService>().AppDataRootPath, "SecureStorage")));
+#endif
         services.AddSingleton<IAppSettingsService, AppSettingsService>();
         services.AddSingleton<IMcpSettingsService, McpSettingsService>();
         services.AddSingleton<IAppDataService, AppDataService>();
