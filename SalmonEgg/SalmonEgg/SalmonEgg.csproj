@@ -11,6 +11,7 @@
     <StaticWebAssetsFingerprintContent>false</StaticWebAssetsFingerprintContent>
     <!-- Browser app data uses /local/SalmonEgg; enable Uno's IndexedDB-backed filesystem explicitly. -->
     <WasmShellEnableIDBFS>true</WasmShellEnableIDBFS>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Keep only shipped UI cultures to reduce wasm satellite payload size. -->
     <SatelliteResourceLanguages>en;en-US;zh-Hans</SatelliteResourceLanguages>
   </PropertyGroup>
@@ -45,6 +46,14 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Console" />
     <PackageReference Include="Serilog.Extensions.Logging" />
     <PackageReference Include="Uno.Extensions.Reactive" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-browserwasm'">
+    <WasmShellNativeFileReference Include="Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-storage.js" />
+    <Content Include="Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-storage.js">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>salmon-egg-wasm-storage.js</TargetPath>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>

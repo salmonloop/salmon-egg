@@ -51,6 +51,47 @@ public sealed class WasmStartupAssetsTests
         var browserWasmPropertyGroup = LoadBrowserWasmPropertyGroup();
 
         Assert.Equal("true", browserWasmPropertyGroup.Element("WasmShellEnableIDBFS")?.Value);
+        Assert.Equal("true", browserWasmPropertyGroup.Element("AllowUnsafeBlocks")?.Value);
+    }
+
+    [Fact]
+    public void Project_IncludesWasmFileSystemPersistenceInterop()
+    {
+        var project = XDocument.Parse(LoadFile(@"SalmonEgg\SalmonEgg\SalmonEgg.csproj"));
+
+        var nativeFileReference = project
+            .Descendants("WasmShellNativeFileReference")
+            .Single(element => string.Equals(
+                (string?)element.Attribute("Include"),
+                @"Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-storage.js",
+                StringComparison.Ordinal));
+        Assert.Equal("'$(TargetFramework)' == 'net10.0-browserwasm'", (string?)nativeFileReference.Parent?.Attribute("Condition"));
+        var contentReference = project
+            .Descendants("Content")
+            .Single(element => string.Equals(
+                (string?)element.Attribute("Include"),
+                @"Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-storage.js",
+                StringComparison.Ordinal));
+        Assert.Equal("salmon-egg-wasm-storage.js", contentReference.Element("TargetPath")?.Value);
+        Assert.Equal("PreserveNewest", contentReference.Element("CopyToOutputDirectory")?.Value);
+
+        var script = LoadFile(@"SalmonEgg\SalmonEgg\Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-storage.js");
+        Assert.Contains("syncFileSystem(true)", script, StringComparison.Ordinal);
+        Assert.Contains("syncFileSystem(false)", script, StringComparison.Ordinal);
+        Assert.Contains("globalThis.Windows?.Storage?.StorageFolder", script, StringComparison.Ordinal);
+        Assert.Contains("synchronizeFileSystem(populateFromBackingStore", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("globalThis.Module", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("globalThis.FS", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("getLocationProtocol", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("location.protocol", script, StringComparison.Ordinal);
+
+        var persistence = LoadFile(@"SalmonEgg\SalmonEgg\Platforms\WebAssembly\WasmFileSystemPersistence.cs");
+        Assert.Contains(".ImportAsync(StorageModuleName, StorageModuleName", persistence, StringComparison.Ordinal);
+        Assert.Contains("EnsureStorageModuleImportedAsync", persistence, StringComparison.Ordinal);
+
+        var endpointContext = LoadFile(@"SalmonEgg\SalmonEgg\Platforms\WebAssembly\WasmTransportEndpointAccessContext.cs");
+        Assert.Contains("JSHost.GlobalThis", endpointContext, StringComparison.Ordinal);
+        Assert.DoesNotContain("JSImport(\"getLocationProtocol\"", endpointContext, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -87,6 +128,17 @@ public sealed class WasmStartupAssetsTests
         Assert.Contains("services.AddSingleton<ITerminalSessionManager, UnsupportedTerminalSessionManager>();", code, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<IStdioTransportFactory, UnsupportedStdioTransportFactory>();", code, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<IPlatformShellService, UnsupportedPlatformShellService>();", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DependencyInjection_RegistersBrowserWasmFilePersistenceWithoutPersistingSecrets()
+    {
+        var code = LoadFile(@"SalmonEgg\SalmonEgg\DependencyInjection.cs");
+
+        Assert.Contains("services.AddSingleton<IFileSystemPersistence, WasmFileSystemPersistence>();", code, StringComparison.Ordinal);
+        Assert.Contains("services.AddSingleton<IFileSystemPersistence, NoOpFileSystemPersistence>();", code, StringComparison.Ordinal);
+        Assert.Contains("services.AddSingleton<IAppFileStore>(sp => new FileSystemAppFileStore(sp.GetRequiredService<IFileSystemPersistence>()));", code, StringComparison.Ordinal);
+        Assert.Contains("services.AddSingleton<ISecureStorage, VolatileSecureStorage>();", code, StringComparison.Ordinal);
     }
 
     [Fact]

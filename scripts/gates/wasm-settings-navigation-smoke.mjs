@@ -39,8 +39,11 @@ try {
     labels: [],
     automationIds: ["TitleBar.ToggleSidebar"]
   });
-  await clickVisibleNavigationTarget(page, settingsNavigationTarget);
-  await waitForBodyText(page, /常规|General|外观|Appearance|ACP \/ Agent/, "settings shell");
+  await clickVisibleNavigationTargetUntilBodyText(
+    page,
+    settingsNavigationTarget,
+    /常规|General|外观|Appearance|ACP \/ Agent/,
+    "settings shell");
 
   await page.setViewportSize({ width: 390, height: 844 });
   await waitForBodyText(page, /常规|General|外观|Appearance|ACP \/ Agent/, "settings shell at mobile viewport");
@@ -53,16 +56,14 @@ try {
     throw new Error("Settings overflow menu did not expose expected section labels.");
   }
 
-  await clickVisibleNavigationTarget(page, {
-    labels: ["诊断与日志", "Diagnostics"],
-    automationIds: ["SettingsNav.Diagnostics"]
-  });
-  await page.waitForTimeout(3_000);
-
-  const bodyText = await page.locator("body").innerText();
-  if (!/Diagnostics and logs|诊断与日志|Live logs|日志/.test(bodyText)) {
-    throw new Error("Diagnostics settings page did not render after overflow navigation.");
-  }
+  await clickVisibleNavigationTargetUntilBodyText(
+    page,
+    {
+      labels: ["诊断与日志", "Diagnostics"],
+      automationIds: ["SettingsNav.Diagnostics"]
+    },
+    /Diagnostics and logs|诊断与日志|Live logs|日志/,
+    "diagnostics settings page");
 
   if (fatalConsoleMessages.length > 0) {
     throw new Error(`Fatal console errors detected: ${JSON.stringify(fatalConsoleMessages, null, 2)}`);
@@ -93,16 +94,37 @@ async function clickTopNavigationOverflow(page) {
   await page.mouse.click(point.x, point.y);
 }
 
-async function waitForBodyText(page, pattern, label) {
+async function waitForBodyText(page, pattern, label, timeoutMs = 30_000) {
   await page.waitForFunction(
     source => new RegExp(source).test(document.body?.innerText ?? ""),
     pattern.source,
-    { timeout: 30_000 });
+    { timeout: timeoutMs });
 
   const bodyText = await page.locator("body").innerText();
   if (!pattern.test(bodyText)) {
     throw new Error(`Expected ${label} text was not visible.`);
   }
+}
+
+async function clickVisibleNavigationTargetUntilBodyText(page, options, pattern, label) {
+  const deadline = Date.now() + 30_000;
+  let lastError;
+
+  while (Date.now() < deadline) {
+    try {
+      await clickVisibleNavigationTarget(page, options);
+      await waitForBodyText(page, pattern, label, Math.min(1_500, Math.max(250, deadline - Date.now())));
+      return;
+    } catch (error) {
+      lastError = error;
+      await page.waitForTimeout(250);
+    }
+  }
+
+  const bodyText = await page.locator("body").innerText().catch(() => "");
+  throw new Error(
+    `Expected ${label} text was not visible after clicking navigation target. `
+    + `Last error: ${lastError?.message ?? lastError}. Body: ${bodyText.slice(0, 1_000)}`);
 }
 
 function findTopNavigationOverflowPoint() {

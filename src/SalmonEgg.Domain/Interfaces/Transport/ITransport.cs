@@ -117,9 +117,28 @@ namespace SalmonEgg.Domain.Interfaces.Transport
         /// <param name="exception">异常对象</param>
         public TransportErrorEventArgs(string errorMessage, Exception? exception = null)
         {
-            ErrorMessage = errorMessage;
+            ErrorMessage = CreateErrorMessage(errorMessage, exception);
             Exception = exception;
             ErrorTime = DateTime.UtcNow;
+        }
+
+        private static string CreateErrorMessage(string errorMessage, Exception? exception)
+        {
+            var trimmedMessage = errorMessage?.Trim() ?? string.Empty;
+            var exceptionMessage = exception?.Message?.Trim();
+
+            if (string.IsNullOrWhiteSpace(trimmedMessage))
+            {
+                return exceptionMessage ?? string.Empty;
+            }
+
+            if (string.IsNullOrWhiteSpace(exceptionMessage)
+                || trimmedMessage.Contains(exceptionMessage, StringComparison.Ordinal))
+            {
+                return trimmedMessage;
+            }
+
+            return trimmedMessage + ": " + exceptionMessage;
         }
     }
 }

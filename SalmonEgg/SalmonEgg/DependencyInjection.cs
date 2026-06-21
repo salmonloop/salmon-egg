@@ -216,8 +216,22 @@ public static class DependencyInjection
         services.AddSingleton<ISecureStorage, SecureStorage>();
 #endif
 
+        // File system persistence
+#if __WASM__
+        if (OperatingSystem.IsBrowser())
+        {
+            services.AddSingleton<IFileSystemPersistence, WasmFileSystemPersistence>();
+        }
+        else
+        {
+            services.AddSingleton<IFileSystemPersistence, NoOpFileSystemPersistence>();
+        }
+#else
+        services.AddSingleton<IFileSystemPersistence, NoOpFileSystemPersistence>();
+#endif
+
         // App settings (config/app.yaml)
-        services.AddSingleton<IAppFileStore, FileSystemAppFileStore>();
+        services.AddSingleton<IAppFileStore>(sp => new FileSystemAppFileStore(sp.GetRequiredService<IFileSystemPersistence>()));
         services.AddSingleton<IAppSettingsService, AppSettingsService>();
         services.AddSingleton<IMcpSettingsService, McpSettingsService>();
         services.AddSingleton<IAppDataService, AppDataService>();
@@ -227,6 +241,19 @@ public static class DependencyInjection
         services.AddSingleton<IConversationStore, ConversationStore>();
         services.AddSingleton<IPlatformCapabilityService, PlatformCapabilityService>();
         services.AddSingleton<ITransportSupportPolicy, TransportSupportPolicy>();
+#if __WASM__
+        if (OperatingSystem.IsBrowser())
+        {
+            services.AddSingleton<ITransportEndpointAccessContext, WasmTransportEndpointAccessContext>();
+        }
+        else
+        {
+            services.AddSingleton<ITransportEndpointAccessContext, DefaultTransportEndpointAccessContext>();
+        }
+#else
+        services.AddSingleton<ITransportEndpointAccessContext, DefaultTransportEndpointAccessContext>();
+#endif
+        services.AddSingleton<ITransportEndpointAccessPolicy, TransportEndpointAccessPolicy>();
         services.AddSingleton<IPlatformIconService, PlatformIconService>();
         services.AddSingleton<IAppStartupService, AppStartupService>();
         services.AddSingleton<IAppLanguageService, AppLanguageService>();
@@ -240,11 +267,15 @@ public static class DependencyInjection
                 ? new DesktopStdioTransportFactory()
                 : new UnsupportedStdioTransportFactory());
 #endif
-        services.AddSingleton<SalmonEgg.Domain.Interfaces.ITransportFactory>(sp =>
+        services.AddSingleton<TransportFactory>(sp =>
             new TransportFactory(
                 sp.GetRequiredService<Serilog.ILogger>(),
                 sp.GetRequiredService<ITransportSupportPolicy>(),
                 sp.GetRequiredService<IStdioTransportFactory>()));
+        services.AddSingleton<SalmonEgg.Domain.Interfaces.ITransportFactory>(sp =>
+            new EndpointValidatingTransportFactory(
+                sp.GetRequiredService<TransportFactory>(),
+                sp.GetRequiredService<ITransportEndpointAccessPolicy>()));
         services.AddSingleton<IDiagnosticsBundleService, SalmonEgg.Infrastructure.Services.DiagnosticsBundleService>();
         services.AddSingleton<ILiveLogStreamService, SalmonEgg.Infrastructure.Services.LiveLogStreamService>();
 #if __WASM__

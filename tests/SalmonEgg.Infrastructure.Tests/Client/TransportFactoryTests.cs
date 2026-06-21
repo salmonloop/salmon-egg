@@ -126,6 +126,21 @@ public sealed class TransportFactoryTests
     }
 
     [Fact]
+    public void CreateTransport_WebSocket_Should_Throw_When_EndpointPolicyRejectsUrl()
+    {
+        var factory = new EndpointValidatingTransportFactory(
+            CreateFactory(),
+            new RejectingTransportEndpointAccessPolicy(
+                "Browser HTTPS pages cannot connect to ws:// WebSocket endpoints. Use wss://."));
+
+        var ex = Assert.Throws<NotSupportedException>(() =>
+            factory.CreateTransport(TransportType.WebSocket, url: "ws://129.146.110.11:3011/message"));
+
+        Assert.Contains("Browser HTTPS", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("wss://", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CreateTransport_HttpSse_Should_Throw_When_Url_Empty()
     {
         var factory = CreateFactory();
@@ -166,5 +181,18 @@ public sealed class TransportFactoryTests
         capabilities.SetupGet(c => c.SupportsLocalTerminal).Returns(true);
         capabilities.SetupGet(c => c.SupportsInteractiveTerminalSurface).Returns(true);
         return capabilities;
+    }
+
+    private sealed class RejectingTransportEndpointAccessPolicy : ITransportEndpointAccessPolicy
+    {
+        private readonly string _message;
+
+        public RejectingTransportEndpointAccessPolicy(string message)
+        {
+            _message = message;
+        }
+
+        public TransportEndpointAccessResult Validate(TransportType transport, string? endpoint)
+            => new(false, _message);
     }
 }

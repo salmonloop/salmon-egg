@@ -77,7 +77,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var parser = new MessageParser();
             var client = await CreateInitializedClientAsync(
                 new AgentCapabilities(loadSession: true));
-            
+
             SetupJsonRpcResponse(
                 "session/new",
                 JsonSerializer.SerializeToElement(new SessionNewResponse("session-123"), parser.Options),
@@ -366,6 +366,32 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                     ClientCapabilityDefaults.Create())));
 
             Assert.Contains("无法启动进程：stdio command not found", ex.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task InitializeAsync_WhenTransportConnectErrorHasException_IncludesRawExceptionMessage()
+        {
+            var parser = new MessageParser();
+            _transportMock.SetupGet(t => t.IsConnected).Returns(false);
+            _transportMock
+                .Setup(t => t.ConnectAsync(It.IsAny<CancellationToken>()))
+                .Callback(() => _transportMock.Raise(
+                    t => t.ErrorOccurred += null,
+                    new TransportErrorEventArgs(
+                        "Failed to connect transport",
+                        new InvalidOperationException(
+                            "Failed to construct 'WebSocket': An insecure WebSocket connection may not be initiated from a page loaded over HTTPS."))))
+                .ReturnsAsync(false);
+            var client = new AcpClient(_transportMock.Object, parser, null, _errorLoggerMock.Object);
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                client.InitializeAsync(new InitializeParams(
+                    new ClientInfo("Test", "1.0.0"),
+                    ClientCapabilityDefaults.Create())));
+
+            Assert.Contains("Failed to connect transport", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("insecure WebSocket connection", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("HTTPS", ex.Message, StringComparison.Ordinal);
         }
 
         [Fact]
