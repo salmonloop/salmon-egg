@@ -2459,7 +2459,7 @@ public sealed class XamlComplianceTests
         Assert.Contains("IPrimaryContentFocusTarget", code, StringComparison.Ordinal);
         Assert.Contains("FindSuggestionButton(ViewModel.Suggestions[0].AutomationId)", code, StringComparison.Ordinal);
         Assert.Contains("promptBox.XYFocusUp = firstSuggestion;", code, StringComparison.Ordinal);
-        Assert.Contains("button.XYFocusDown = FindPromptBox();", code, StringComparison.Ordinal);
+        Assert.Contains("button.XYFocusDown = downTarget;", code, StringComparison.Ordinal);
         Assert.DoesNotContain("TryConsumeNavigationIntent", code, StringComparison.Ordinal);
         Assert.DoesNotContain("TryMoveFocusedSuggestion", code, StringComparison.Ordinal);
         Assert.DoesNotContain("ResolveFocusedSuggestionIndex", code, StringComparison.Ordinal);

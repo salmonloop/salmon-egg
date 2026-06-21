@@ -629,7 +629,7 @@ public sealed class NavigationCoreTests
 
         Assert.Contains("ComposerShell.MoveUpEscapeHandler = HandlePromptMoveUpEscape;", code, StringComparison.Ordinal);
         Assert.Contains("promptBox.XYFocusUp = firstSuggestion;", code, StringComparison.Ordinal);
-        Assert.Contains("button.XYFocusDown = FindPromptBox();", code, StringComparison.Ordinal);
+        Assert.Contains("button.XYFocusDown = downTarget;", code, StringComparison.Ordinal);
     }
 
     [Fact]

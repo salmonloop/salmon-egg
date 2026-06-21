@@ -101,13 +101,27 @@ public sealed partial class StartView : Page, IPrimaryContentFocusTarget
                 continue;
             }
 
-            button.XYFocusLeft = i > 0
+            var leftTarget = i > 0
                 ? FindSuggestionButton(ViewModel.Suggestions[i - 1].AutomationId)
                 : null;
-            button.XYFocusRight = i + 1 < ViewModel.Suggestions.Count
+            if (leftTarget is not null)
+            {
+                button.XYFocusLeft = leftTarget;
+            }
+
+            var rightTarget = i + 1 < ViewModel.Suggestions.Count
                 ? FindSuggestionButton(ViewModel.Suggestions[i + 1].AutomationId)
                 : null;
-            button.XYFocusDown = FindPromptBox();
+            if (rightTarget is not null)
+            {
+                button.XYFocusRight = rightTarget;
+            }
+
+            var downTarget = FindPromptBox();
+            if (downTarget is not null)
+            {
+                button.XYFocusDown = downTarget;
+            }
         }
     }
 
