@@ -18,211 +18,211 @@ namespace SalmonEgg.Infrastructure.Client;
 /// </summary>
 public class TransportFactory : ITransportFactory
 {
-   private readonly ILogger _logger;
-   private readonly ITransportSupportPolicy _transportSupportPolicy;
-   private readonly IStdioTransportFactory _stdioTransportFactory;
+    private readonly ILogger _logger;
+    private readonly ITransportSupportPolicy _transportSupportPolicy;
+    private readonly IStdioTransportFactory _stdioTransportFactory;
 
-   /// <summary>
-   /// 创建 <see cref="TransportFactory"/> 的新实例。
-   /// </summary>
-   /// <param name="logger">日志记录器实例</param>
-   public TransportFactory(
-       ILogger logger,
-       ITransportSupportPolicy transportSupportPolicy,
-       IStdioTransportFactory stdioTransportFactory)
-   {
-       _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-       _transportSupportPolicy = transportSupportPolicy ?? throw new ArgumentNullException(nameof(transportSupportPolicy));
-       _stdioTransportFactory = stdioTransportFactory ?? throw new ArgumentNullException(nameof(stdioTransportFactory));
-   }
+    /// <summary>
+    /// 创建 <see cref="TransportFactory"/> 的新实例。
+    /// </summary>
+    /// <param name="logger">日志记录器实例</param>
+    public TransportFactory(
+        ILogger logger,
+        ITransportSupportPolicy transportSupportPolicy,
+        IStdioTransportFactory stdioTransportFactory)
+    {
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _transportSupportPolicy = transportSupportPolicy ?? throw new ArgumentNullException(nameof(transportSupportPolicy));
+        _stdioTransportFactory = stdioTransportFactory ?? throw new ArgumentNullException(nameof(stdioTransportFactory));
+    }
 
-   /// <summary>
-   /// 根据指定的传输类型创建新的传输实例。
-   /// </summary>
-   /// <param name="transportType">传输类型（Stdio, WebSocket, HttpSse）</param>
-   /// <param name="command">命令（仅用于 Stdio 传输）</param>
-   /// <param name="args">命令行参数（仅用于 Stdio 传输）</param>
-   /// <param name="url">连接 URL（用于 WebSocket 和 HttpSse 传输）</param>
-   /// <returns>新创建的 <see cref="ITransport"/> 实例</returns>
-   /// <exception cref="ArgumentException">当传输类型不支持或必要参数缺失时抛出</exception>
-   /// <exception cref="NotSupportedException">当指定的传输类型未实现时抛出</exception>
-   public SalmonEgg.Domain.Interfaces.Transport.ITransport CreateTransport(
-       TransportType transportType,
-       string? command = null,
-       string? args = null,
-       string? url = null)
-   {
-       _logger.Information("正在创建传输实例：{TransportType}", transportType);
-       var webSocketConnectTimeout = TimeSpan.FromSeconds(AcpConnectionTimeoutPolicy.DefaultSeconds);
+    /// <summary>
+    /// 根据指定的传输类型创建新的传输实例。
+    /// </summary>
+    /// <param name="transportType">传输类型（Stdio, WebSocket, HttpSse）</param>
+    /// <param name="command">命令（仅用于 Stdio 传输）</param>
+    /// <param name="args">命令行参数（仅用于 Stdio 传输）</param>
+    /// <param name="url">连接 URL（用于 WebSocket 和 HttpSse 传输）</param>
+    /// <returns>新创建的 <see cref="ITransport"/> 实例</returns>
+    /// <exception cref="ArgumentException">当传输类型不支持或必要参数缺失时抛出</exception>
+    /// <exception cref="NotSupportedException">当指定的传输类型未实现时抛出</exception>
+    public SalmonEgg.Domain.Interfaces.Transport.ITransport CreateTransport(
+        TransportType transportType,
+        string? command = null,
+        string? args = null,
+        string? url = null)
+    {
+        _logger.Information("正在创建传输实例：{TransportType}", transportType);
+        var webSocketConnectTimeout = TimeSpan.FromSeconds(AcpConnectionTimeoutPolicy.DefaultSeconds);
 
-       return CreateTransportCore(transportType, command, args, url, webSocketConnectTimeout);
-   }
+        return CreateTransportCore(transportType, command, args, url, webSocketConnectTimeout);
+    }
 
-   public SalmonEgg.Domain.Interfaces.Transport.ITransport CreateTransport(ServerConfiguration configuration)
-   {
-       if (configuration == null)
-       {
-           throw new ArgumentNullException(nameof(configuration));
-       }
+    public SalmonEgg.Domain.Interfaces.Transport.ITransport CreateTransport(ServerConfiguration configuration)
+    {
+        if (configuration == null)
+        {
+            throw new ArgumentNullException(nameof(configuration));
+        }
 
-       _logger.Information("正在根据配置创建传输实例：{TransportType}, {ProfileId}", configuration.Transport, configuration.Id);
-       var webSocketConnectTimeout = AcpConnectionTimeoutPolicy.ResolveTimeout(configuration.ConnectionTimeout);
+        _logger.Information("正在根据配置创建传输实例：{TransportType}, {ProfileId}", configuration.Transport, configuration.Id);
+        var webSocketConnectTimeout = AcpConnectionTimeoutPolicy.ResolveTimeout(configuration.ConnectionTimeout);
 
-       return CreateTransportCore(
-           configuration.Transport,
-           configuration.Transport == TransportType.Stdio ? configuration.StdioCommand : null,
-           configuration.Transport == TransportType.Stdio ? configuration.StdioArgs : null,
-           configuration.Transport == TransportType.Stdio ? null : configuration.ServerUrl,
-           webSocketConnectTimeout);
-   }
+        return CreateTransportCore(
+            configuration.Transport,
+            configuration.Transport == TransportType.Stdio ? configuration.StdioCommand : null,
+            configuration.Transport == TransportType.Stdio ? configuration.StdioArgs : null,
+            configuration.Transport == TransportType.Stdio ? null : configuration.ServerUrl,
+            webSocketConnectTimeout);
+    }
 
-   private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateTransportCore(
-       TransportType transportType,
-       string? command,
-       string? args,
-       string? url,
-       TimeSpan webSocketConnectTimeout)
-   {
-       _logger.Information("正在创建传输实例：{TransportType}", transportType);
+    private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateTransportCore(
+        TransportType transportType,
+        string? command,
+        string? args,
+        string? url,
+        TimeSpan webSocketConnectTimeout)
+    {
+        _logger.Information("正在创建传输实例：{TransportType}", transportType);
 
-       return transportType switch
-       {
-           TransportType.Stdio => CreateStdioTransport(command, args),
-           TransportType.WebSocket => CreateWebSocketTransport(url, webSocketConnectTimeout),
-           TransportType.HttpSse => CreateHttpSseTransport(url),
-           _ => throw new NotSupportedException($"不支持的传输类型：{transportType}")
-       };
-   }
+        return transportType switch
+        {
+            TransportType.Stdio => CreateStdioTransport(command, args),
+            TransportType.WebSocket => CreateWebSocketTransport(url, webSocketConnectTimeout),
+            TransportType.HttpSse => CreateHttpSseTransport(url),
+            _ => throw new NotSupportedException($"不支持的传输类型：{transportType}")
+        };
+    }
 
-   /// <summary>
-   /// 创建 Stdio 传输实例。
-   /// </summary>
-   /// <param name="command">命令</param>
-   /// <param name="args">命令行参数</param>
-   /// <returns>Stdio 传输实例</returns>
-   /// <exception cref="ArgumentException">当命令为空时抛出</exception>
-   private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateStdioTransport(
-       string? command,
-       string? args)
-   {
-       if (!_transportSupportPolicy.IsSupported(TransportType.Stdio))
-       {
-           throw new NotSupportedException(
-               _transportSupportPolicy.GetUnsupportedReason(TransportType.Stdio)
-               ?? "Stdio transport is not supported on this platform.");
-       }
+    /// <summary>
+    /// 创建 Stdio 传输实例。
+    /// </summary>
+    /// <param name="command">命令</param>
+    /// <param name="args">命令行参数</param>
+    /// <returns>Stdio 传输实例</returns>
+    /// <exception cref="ArgumentException">当命令为空时抛出</exception>
+    private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateStdioTransport(
+        string? command,
+        string? args)
+    {
+        if (!_transportSupportPolicy.IsSupported(TransportType.Stdio))
+        {
+            throw new NotSupportedException(
+                _transportSupportPolicy.GetUnsupportedReason(TransportType.Stdio)
+                ?? "Stdio transport is not supported on this platform.");
+        }
 
-       if (string.IsNullOrWhiteSpace(command))
-       {
-           throw new ArgumentException("Stdio 传输必须指定命令", nameof(command));
-       }
+        if (string.IsNullOrWhiteSpace(command))
+        {
+            throw new ArgumentException("Stdio 传输必须指定命令", nameof(command));
+        }
 
-       _logger.Information("创建 Stdio 传输：Command={Command}, Args={Args}", command, args);
+        _logger.Information("创建 Stdio 传输：Command={Command}, Args={Args}", command, args);
 
-       // Stdio remains a subprocess transport even when the subprocess is a bridge such as ssh.
-       var argsArray = ParseCommandLineArguments(args);
+        // Stdio remains a subprocess transport even when the subprocess is a bridge such as ssh.
+        var argsArray = ParseCommandLineArguments(args);
 
-       return _stdioTransportFactory.Create(command.Trim(), argsArray, Encoding.UTF8);
-   }
+        return _stdioTransportFactory.Create(command.Trim(), argsArray, Encoding.UTF8);
+    }
 
-   private static string[] ParseCommandLineArguments(string? args)
-   {
-       if (string.IsNullOrWhiteSpace(args))
-       {
-           return Array.Empty<string>();
-       }
+    private static string[] ParseCommandLineArguments(string? args)
+    {
+        if (string.IsNullOrWhiteSpace(args))
+        {
+            return Array.Empty<string>();
+        }
 
-       var results = new List<string>();
-       var current = new StringBuilder();
-       char? activeQuote = null;
+        var results = new List<string>();
+        var current = new StringBuilder();
+        char? activeQuote = null;
 
-       foreach (var character in args)
-       {
-           if ((character == '"' || character == '\''))
-           {
-               if (activeQuote == character)
-               {
-                   activeQuote = null;
-                   continue;
-               }
+        foreach (var character in args)
+        {
+            if ((character == '"' || character == '\''))
+            {
+                if (activeQuote == character)
+                {
+                    activeQuote = null;
+                    continue;
+                }
 
-               if (activeQuote == null)
-               {
-                   activeQuote = character;
-                   continue;
-               }
-           }
+                if (activeQuote == null)
+                {
+                    activeQuote = character;
+                    continue;
+                }
+            }
 
-           if (char.IsWhiteSpace(character) && activeQuote == null)
-           {
-               if (current.Length == 0)
-               {
-                   continue;
-               }
+            if (char.IsWhiteSpace(character) && activeQuote == null)
+            {
+                if (current.Length == 0)
+                {
+                    continue;
+                }
 
-               results.Add(current.ToString());
-               current.Clear();
-               continue;
-           }
+                results.Add(current.ToString());
+                current.Clear();
+                continue;
+            }
 
-           current.Append(character);
-       }
+            current.Append(character);
+        }
 
-       if (current.Length > 0)
-       {
-           results.Add(current.ToString());
-       }
+        if (current.Length > 0)
+        {
+            results.Add(current.ToString());
+        }
 
-       return results.ToArray();
-   }
+        return results.ToArray();
+    }
 
-   /// <summary>
-   /// 创建 WebSocket 传输实例。
-   /// </summary>
-   /// <param name="url">WebSocket URL</param>
-   /// <returns>WebSocket 传输实例</returns>
-   /// <exception cref="ArgumentException">当 URL 为空或无效时抛出</exception>
-   private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateWebSocketTransport(string? url, TimeSpan connectTimeout)
-   {
-       if (string.IsNullOrWhiteSpace(url))
-       {
-           throw new ArgumentException("WebSocket 传输必须指定 URL", nameof(url));
-       }
+    /// <summary>
+    /// 创建 WebSocket 传输实例。
+    /// </summary>
+    /// <param name="url">WebSocket URL</param>
+    /// <returns>WebSocket 传输实例</returns>
+    /// <exception cref="ArgumentException">当 URL 为空或无效时抛出</exception>
+    private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateWebSocketTransport(string? url, TimeSpan connectTimeout)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            throw new ArgumentException("WebSocket 传输必须指定 URL", nameof(url));
+        }
 
-       if (!Uri.TryCreate(url, UriKind.Absolute, out _))
-       {
-           throw new ArgumentException($"无效的 WebSocket URL: {url}", nameof(url));
-       }
+        if (!Uri.TryCreate(url, UriKind.Absolute, out _))
+        {
+            throw new ArgumentException($"无效的 WebSocket URL: {url}", nameof(url));
+        }
 
-       _logger.Information("创建 WebSocket 传输：Url={Url}", url);
+        _logger.Information("创建 WebSocket 传输：Url={Url}", url);
 
-       var logger = _logger;
-       var inner = new SalmonEgg.Infrastructure.Network.WebSocketTransport(logger, connectTimeout: connectTimeout);
-       return new NetworkTransportAdapter(inner, url.Trim());
-   }
+        var logger = _logger;
+        var inner = new SalmonEgg.Infrastructure.Network.WebSocketTransport(logger, connectTimeout: connectTimeout);
+        return new NetworkTransportAdapter(inner, url.Trim());
+    }
 
-   /// <summary>
-   /// 创建 HTTP SSE 传输实例。
-   /// </summary>
-   /// <param name="url">HTTP SSE URL</param>
-   /// <returns>HTTP SSE 传输实例</returns>
-   /// <exception cref="ArgumentException">当 URL 为空或无效时抛出</exception>
-   private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateHttpSseTransport(string? url)
-   {
-       if (string.IsNullOrWhiteSpace(url))
-       {
-           throw new ArgumentException("HTTP SSE 传输必须指定 URL", nameof(url));
-       }
+    /// <summary>
+    /// 创建 HTTP SSE 传输实例。
+    /// </summary>
+    /// <param name="url">HTTP SSE URL</param>
+    /// <returns>HTTP SSE 传输实例</returns>
+    /// <exception cref="ArgumentException">当 URL 为空或无效时抛出</exception>
+    private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateHttpSseTransport(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            throw new ArgumentException("HTTP SSE 传输必须指定 URL", nameof(url));
+        }
 
-       if (!Uri.TryCreate(url, UriKind.Absolute, out _))
-       {
-           throw new ArgumentException($"无效的 HTTP SSE URL: {url}", nameof(url));
-       }
+        if (!Uri.TryCreate(url, UriKind.Absolute, out _))
+        {
+            throw new ArgumentException($"无效的 HTTP SSE URL: {url}", nameof(url));
+        }
 
-       _logger.Information("创建 HTTP SSE 传输：Url={Url}", url);
+        _logger.Information("创建 HTTP SSE 传输：Url={Url}", url);
 
-       var logger = _logger;
-       var inner = new SalmonEgg.Infrastructure.Network.HttpSseTransport(logger);
-       return new NetworkTransportAdapter(inner, url.Trim());
-   }
+        var logger = _logger;
+        var inner = new SalmonEgg.Infrastructure.Network.HttpSseTransport(logger);
+        return new NetworkTransportAdapter(inner, url.Trim());
+    }
 }
