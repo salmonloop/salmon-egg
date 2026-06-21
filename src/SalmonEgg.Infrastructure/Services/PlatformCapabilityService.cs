@@ -20,13 +20,7 @@ public sealed class PlatformCapabilityService : IPlatformCapabilityService
 
     public bool SupportsStdioTransport => IsDesktopProcessHost;
 
-    public bool SupportsInteractiveTerminalSurface
-    {
-        get
-        {
-            return RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
-        }
-    }
+    public bool SupportsInteractiveTerminalSurface => IsDesktopProcessHost;
 
     public bool SupportsLocalTerminal => SupportsStdioTransport && SupportsInteractiveTerminalSurface;
 
