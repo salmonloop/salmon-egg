@@ -4374,6 +4374,14 @@ public partial class ChatViewModelTests
                 It.Is<SessionCloseParams>(p => p.SessionId == "remote-draft"),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(SessionCloseResponse.Completed);
+        fixture.Profiles.Profiles.Add(new ServerConfiguration
+        {
+            Id = "profile-2",
+            Name = "Remote Agent",
+            Transport = TransportType.WebSocket,
+            ServerUrl = "ws://127.0.0.1:3010/",
+            ConnectionTimeout = 1
+        });
         var draft = new NewSessionDraftState(
             ProfileId: "profile-1",
             Cwd: @"C:\Repo\App",
@@ -4395,7 +4403,7 @@ public partial class ChatViewModelTests
         await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object);
         await fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
         await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
-        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Initializing));
         await fixture.DispatchConnectionAsync(new SetNewSessionDraftAction(draft));
 
         await fixture.ViewModel.EnsureNewSessionDraftForProfileAsync(
@@ -4525,7 +4533,8 @@ public partial class ChatViewModelTests
             Id = "profile-2",
             Name = "Remote Agent",
             Transport = TransportType.WebSocket,
-            ServerUrl = "ws://127.0.0.1:3010/"
+            ServerUrl = "ws://127.0.0.1:3010/",
+            ConnectionTimeout = 1
         });
 
         await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object);
