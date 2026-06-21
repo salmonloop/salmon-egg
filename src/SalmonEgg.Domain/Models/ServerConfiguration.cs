@@ -64,7 +64,7 @@ namespace SalmonEgg.Domain.Models
         /// <summary>
         /// 连接超时（秒）
         /// </summary>
-        public int ConnectionTimeout { get; set; } = 10;
+        public int ConnectionTimeout { get; set; } = AcpConnectionTimeoutPolicy.DefaultSeconds;
 
         public string EndpointDisplay
         {

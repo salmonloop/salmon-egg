@@ -6,6 +6,7 @@ using Serilog;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Infrastructure.Client;
+using SalmonEgg.Infrastructure.Network;
 using SalmonEgg.Infrastructure.Transport;
 using Xunit;
 
@@ -23,6 +24,40 @@ public sealed class TransportFactoryTests
         var transport = factory.CreateTransport(TransportType.WebSocket, url: "wss://example.com/socket");
 
         Assert.IsType<NetworkTransportAdapter>(transport);
+    }
+
+    [Fact]
+    public void CreateTransport_WebSocketProfile_Should_UseConfiguredConnectionTimeout()
+    {
+        var factory = CreateFactory();
+        var profile = new ServerConfiguration
+        {
+            Id = "profile-1",
+            Name = "Remote Agent",
+            Transport = TransportType.WebSocket,
+            ServerUrl = "wss://example.com/socket",
+            ConnectionTimeout = 180
+        };
+
+        var transport = factory.CreateTransport(profile);
+
+        var adapter = Assert.IsType<NetworkTransportAdapter>(transport);
+        var innerField = typeof(NetworkTransportAdapter).GetField("_inner", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        var inner = Assert.IsType<WebSocketTransport>(innerField?.GetValue(adapter));
+        Assert.Equal(TimeSpan.FromSeconds(180), inner.ConnectTimeout);
+    }
+
+    [Fact]
+    public void CreateTransport_WebSocketWithoutProfile_Should_UseSharedDefaultConnectionTimeout()
+    {
+        var factory = CreateFactory();
+
+        var transport = factory.CreateTransport(TransportType.WebSocket, url: "wss://example.com/socket");
+
+        var adapter = Assert.IsType<NetworkTransportAdapter>(transport);
+        var innerField = typeof(NetworkTransportAdapter).GetField("_inner", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        var inner = Assert.IsType<WebSocketTransport>(innerField?.GetValue(adapter));
+        Assert.Equal(TimeSpan.FromSeconds(AcpConnectionTimeoutPolicy.DefaultSeconds), inner.ConnectTimeout);
     }
 
     [Fact]

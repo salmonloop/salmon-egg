@@ -232,6 +232,23 @@ public sealed class ConfigurationManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task LoadConfigurationAsync_WhenConnectionTimeoutMissing_UsesSharedDefault()
+    {
+        var config = CreateTestConfiguration("missing-timeout-001");
+        await _configManager.SaveConfigurationAsync(config);
+
+        var path = GetServerYamlPath(config.Id);
+        var yaml = await File.ReadAllTextAsync(path);
+        yaml = yaml.Replace($"connection_timeout_seconds: {config.ConnectionTimeout}{Environment.NewLine}", string.Empty, StringComparison.Ordinal);
+        await File.WriteAllTextAsync(path, yaml);
+
+        var loaded = await _configManager.LoadConfigurationAsync(config.Id);
+
+        Assert.NotNull(loaded);
+        Assert.Equal(AcpConnectionTimeoutPolicy.DefaultSeconds, loaded!.ConnectionTimeout);
+    }
+
+    [Fact]
     public async Task DeleteConfigurationAsync_RemovesYamlAndSecrets()
     {
         var config = CreateTestConfiguration("to-delete-001");

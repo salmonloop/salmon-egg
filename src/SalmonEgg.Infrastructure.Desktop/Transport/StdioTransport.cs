@@ -26,6 +26,7 @@ namespace SalmonEgg.Infrastructure.Transport
         private StreamReader? _stdout;
         private StreamReader? _stderr;
         private CancellationTokenSource? _readCts;
+        private static readonly TimeSpan StartupObservationTimeout = TimeSpan.FromMilliseconds(500);
         private readonly string _command;
         private readonly string[] _args;
         private readonly Encoding _encoding;
@@ -57,7 +58,10 @@ namespace SalmonEgg.Infrastructure.Transport
         /// <param name="command">Agent 可执行文件的命令</param>
         /// <param name="args">命令行参数</param>
         /// <param name="encoding">字符编码</param>
-        public StdioTransport(string command, string[]? args = null, Encoding? encoding = null)
+        public StdioTransport(
+            string command,
+            string[]? args = null,
+            Encoding? encoding = null)
         {
             // 去除命令和参数中的首尾空格（避免意外输入导致找不到文件）
             string trimmedCommand = (command ?? string.Empty).Trim();
@@ -166,8 +170,7 @@ namespace SalmonEgg.Infrastructure.Transport
                 _stdout = _process.StandardOutput;
                 _stderr = _process.StandardError;
 
-                // 等待进程真正启动（最多 5 秒）
-                await Task.Delay(500, cancellationToken).ConfigureAwait(false);
+                await Task.Delay(StartupObservationTimeout, cancellationToken).ConfigureAwait(false);
 
                 if (!_process.HasExited)
                 {

@@ -21,7 +21,6 @@ namespace SalmonEgg.Presentation.Core.Services.Chat;
 public sealed class AcpChatCoordinator : IAcpConnectionCommands
 {
     private const int DefaultSessionUpdateBufferLimit = 256;
-    private const int DefaultConnectionTimeoutSeconds = 10;
 
     private readonly IAcpChatServiceFactory _chatServiceFactory;
     private readonly IAcpConnectionCoordinator _connectionCoordinator;
@@ -124,6 +123,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             transportConfiguration,
             sink,
             connectionContext,
+            profileForServiceCreation: profile,
             profile.Id,
             ResolveInitializeTimeout(profile),
             cancellationToken).ConfigureAwait(false);
@@ -149,6 +149,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             transportConfiguration,
             sink,
             connectionContext,
+            profileForServiceCreation: null,
             selectedProfileIdOverride: null,
             ResolveInitializeTimeout(profile: null),
             cancellationToken).ConfigureAwait(false);
@@ -157,6 +158,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         IAcpTransportConfiguration transportConfiguration,
         IAcpChatCoordinatorSink sink,
         AcpConnectionContext connectionContext,
+        ServerConfiguration? profileForServiceCreation,
         string? selectedProfileIdOverride,
         TimeSpan initializeTimeout,
         CancellationToken cancellationToken)
@@ -253,11 +255,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         var connectionInstanceId = CreateConnectionInstanceId();
         try
         {
-            candidateService = _chatServiceFactory.CreateChatService(
-                transportConfiguration.SelectedTransportType,
-                transportConfiguration.SelectedTransportType == TransportType.Stdio ? transportConfiguration.StdioCommand : null,
-                transportConfiguration.SelectedTransportType == TransportType.Stdio ? transportConfiguration.StdioArgs : null,
-                transportConfiguration.SelectedTransportType == TransportType.Stdio ? null : transportConfiguration.RemoteUrl);
+            candidateService = CreateCandidateChatService(transportConfiguration, profileForServiceCreation);
             _logger.LogInformation(
                 "ACP candidate created. transport={TransportType} conversationId={ConversationId} preserveConversation={PreserveConversation}",
                 transportConfiguration.SelectedTransportType,
@@ -396,6 +394,22 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         }
     }
 
+    private IChatService CreateCandidateChatService(
+        IAcpTransportConfiguration transportConfiguration,
+        ServerConfiguration? profileForServiceCreation)
+    {
+        if (profileForServiceCreation is not null)
+        {
+            return _chatServiceFactory.CreateChatService(profileForServiceCreation);
+        }
+
+        return _chatServiceFactory.CreateChatService(
+            transportConfiguration.SelectedTransportType,
+            transportConfiguration.SelectedTransportType == TransportType.Stdio ? transportConfiguration.StdioCommand : null,
+            transportConfiguration.SelectedTransportType == TransportType.Stdio ? transportConfiguration.StdioArgs : null,
+            transportConfiguration.SelectedTransportType == TransportType.Stdio ? null : transportConfiguration.RemoteUrl);
+    }
+
     public async Task<AcpRemoteSessionResult> EnsureRemoteSessionAsync(
         IAcpChatCoordinatorSink sink,
         Func<CancellationToken, Task<bool>> authenticateAsync,
@@ -515,11 +529,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             return new AcpTransportApplyResult(cachedSession.Service, cachedSession.InitializeResponse);
         }
 
-        var service = _chatServiceFactory.CreateChatService(
-            transportConfiguration.SelectedTransportType,
-            transportConfiguration.SelectedTransportType == TransportType.Stdio ? transportConfiguration.StdioCommand : null,
-            transportConfiguration.SelectedTransportType == TransportType.Stdio ? transportConfiguration.StdioArgs : null,
-            transportConfiguration.SelectedTransportType == TransportType.Stdio ? null : transportConfiguration.RemoteUrl);
+        var service = _chatServiceFactory.CreateChatService(profile);
 
         var wrapped = WrapChatService(service, sink: null, cancellationToken);
         try
@@ -824,39 +834,17 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         TimeSpan initializeTimeout,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            return await chatService
-                .InitializeAsync(CreateDefaultInitializeParams())
-                .WaitAsync(initializeTimeout, cancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (TimeoutException ex)
-        {
-            throw new TimeoutException(
-                CreateInitializeTimeoutMessage(transportType, profileId, conversationId, initializeTimeout),
-                ex);
-        }
+        return await AcpInitializeTimeout.WaitForInitializeAsync(
+            chatService,
+            transportType,
+            profileId,
+            conversationId,
+            initializeTimeout,
+            cancellationToken).ConfigureAwait(false);
     }
 
     private static TimeSpan ResolveInitializeTimeout(ServerConfiguration? profile)
-    {
-        var seconds = profile?.ConnectionTimeout > 0
-            ? profile.ConnectionTimeout
-            : DefaultConnectionTimeoutSeconds;
-        return TimeSpan.FromSeconds(seconds);
-    }
-
-    private static string CreateInitializeTimeoutMessage(
-        TransportType transportType,
-        string? profileId,
-        string? conversationId,
-        TimeSpan initializeTimeout)
-        => "Timed out waiting for ACP initialize response. "
-            + $"profileId={profileId ?? "(none)"} "
-            + $"transport={transportType} "
-            + $"timeoutSeconds={initializeTimeout.TotalSeconds:0.###} "
-            + $"conversationId={conversationId ?? "(none)"}";
+        => AcpInitializeTimeout.Resolve(profile);
 
     private bool ShouldKeepServiceAlive(IChatService? service, string? targetProfileId)
     {

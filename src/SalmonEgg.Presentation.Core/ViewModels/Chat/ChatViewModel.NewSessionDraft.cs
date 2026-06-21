@@ -18,7 +18,6 @@ namespace SalmonEgg.Presentation.ViewModels.Chat;
 
 public partial class ChatViewModel
 {
-    private static readonly TimeSpan NewSessionDraftProfileWaitFallbackTimeout = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan NewSessionDraftProfileWaitDelay = TimeSpan.FromMilliseconds(50);
     private readonly object _newSessionDraftRequestSync = new();
     private readonly Dictionary<NewSessionDraftRequestKey, Task> _inFlightNewSessionDraftRequests = new();
@@ -310,9 +309,7 @@ public partial class ChatViewModel
     private TimeSpan ResolveRequiredProfileIdentityWaitTimeout(string requiredProfileId)
     {
         var profile = ResolveNewSessionDraftProfile(requiredProfileId);
-        return profile?.ConnectionTimeout > 0
-            ? TimeSpan.FromSeconds(profile.ConnectionTimeout)
-            : NewSessionDraftProfileWaitFallbackTimeout;
+        return AcpConnectionTimeoutPolicy.ResolveTimeout(profile?.ConnectionTimeout ?? 0);
     }
 
     private async Task<AcpAuthoritativeConnectionSnapshot?> ResolveAuthoritativeNewSessionDraftConnectionAsync(

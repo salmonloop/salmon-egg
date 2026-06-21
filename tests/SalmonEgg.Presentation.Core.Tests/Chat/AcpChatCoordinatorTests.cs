@@ -87,17 +87,6 @@ public sealed class AcpChatCoordinatorTests
         var factory = new Mock<IAcpChatServiceFactory>();
         var logger = new Mock<ILogger<AcpChatCoordinator>>();
         var connectionCoordinator = new Mock<IAcpConnectionCoordinator>();
-
-        factory
-            .Setup(x => x.CreateChatService(TransportType.Stdio, "agent.exe", "--serve", null))
-            .Returns(service.Object);
-
-        var sut = CreateCoordinator(
-            factory.Object,
-            logger.Object,
-            connectionCoordinator: connectionCoordinator.Object,
-            transportSupportPolicy: CreateTransportSupportPolicy(),
-            mcpServerProvider: EmptyMcpServerProvider);
         var profile = new ServerConfiguration
         {
             Id = "profile-1",
@@ -106,6 +95,14 @@ public sealed class AcpChatCoordinatorTests
             StdioCommand = "agent.exe",
             StdioArgs = "--serve"
         };
+        SetupProfileChatService(factory, profile, service.Object);
+
+        var sut = CreateCoordinator(
+            factory.Object,
+            logger.Object,
+            connectionCoordinator: connectionCoordinator.Object,
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
 
         var result = await sut.ConnectToProfileAsync(profile, transport, sink);
 
@@ -157,9 +154,15 @@ public sealed class AcpChatCoordinatorTests
             cleaner,
             Mock.Of<ILogger<AcpConnectionPoolManager>>());
 
-        factory
-            .Setup(x => x.CreateChatService(TransportType.Stdio, "agent.exe", "--serve", null))
-            .Returns(service.Object);
+        var profile = new ServerConfiguration
+        {
+            Id = "profile-1",
+            Name = "Local Agent",
+            Transport = TransportType.Stdio,
+            StdioCommand = "agent.exe",
+            StdioArgs = "--serve"
+        };
+        SetupProfileChatService(factory, profile, service.Object);
 
         var sut = CreateCoordinator(
             factory.Object,
@@ -170,14 +173,6 @@ public sealed class AcpChatCoordinatorTests
             connectionPoolManager: poolManager,
             transportSupportPolicy: CreateTransportSupportPolicy(),
             mcpServerProvider: EmptyMcpServerProvider);
-        var profile = new ServerConfiguration
-        {
-            Id = "profile-1",
-            Name = "Local Agent",
-            Transport = TransportType.Stdio,
-            StdioCommand = "agent.exe",
-            StdioArgs = "--serve"
-        };
 
         await sut.ConnectToProfileAsync(profile, transport, sink);
 
@@ -242,20 +237,9 @@ public sealed class AcpChatCoordinatorTests
             "profile-1",
             ImmutableHashSet.Create(StringComparer.Ordinal, "profile-a"));
 
-        factory
-            .Setup(x => x.CreateChatService(TransportType.Stdio, "agent.exe", "--serve", null))
-            .Returns(service.Object);
         snapshotProvider
             .Setup(x => x.GetSnapshotAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedSnapshot);
-
-        var sut = CreateCoordinator(
-            factory.Object,
-            logger.Object,
-            connectionPoolManager: poolManager,
-            connectionDependencySnapshotProvider: snapshotProvider.Object,
-            transportSupportPolicy: CreateTransportSupportPolicy(),
-            mcpServerProvider: EmptyMcpServerProvider);
         var profile = new ServerConfiguration
         {
             Id = "profile-1",
@@ -264,6 +248,15 @@ public sealed class AcpChatCoordinatorTests
             StdioCommand = "agent.exe",
             StdioArgs = "--serve"
         };
+        SetupProfileChatService(factory, profile, service.Object);
+
+        var sut = CreateCoordinator(
+            factory.Object,
+            logger.Object,
+            connectionPoolManager: poolManager,
+            connectionDependencySnapshotProvider: snapshotProvider.Object,
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
 
         await sut.ConnectToProfileAsync(profile, transport, sink);
 
@@ -288,15 +281,6 @@ public sealed class AcpChatCoordinatorTests
             .Setup(x => x.InitializeAsync(It.IsAny<InitializeParams>()))
             .ReturnsAsync(new InitializeResponse(1, new AgentInfo("agent-p2", "1.0.0"), new AgentCapabilities()));
 
-        factory
-            .Setup(x => x.CreateChatService(TransportType.Stdio, "agent-1.exe", "--serve-1", null))
-            .Returns(profile1Service.Object);
-        factory
-            .Setup(x => x.CreateChatService(TransportType.Stdio, "agent-2.exe", "--serve-2", null))
-            .Returns(profile2Service.Object);
-
-        var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
-
         var profile1 = new ServerConfiguration
         {
             Id = "profile-1",
@@ -313,6 +297,10 @@ public sealed class AcpChatCoordinatorTests
             StdioCommand = "agent-2.exe",
             StdioArgs = "--serve-2"
         };
+        SetupProfileChatService(factory, profile1, profile1Service.Object);
+        SetupProfileChatService(factory, profile2, profile2Service.Object);
+
+        var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
         var first = await sut.ConnectToProfileAsync(profile1, transport, sink);
         var second = await sut.ConnectToProfileAsync(profile2, transport, sink);
@@ -328,8 +316,8 @@ public sealed class AcpChatCoordinatorTests
         profile2Service.Verify(x => x.InitializeAsync(It.IsAny<InitializeParams>()), Times.Once);
         profile1Service.Verify(x => x.DisconnectAsync(), Times.Never);
         profile2Service.Verify(x => x.DisconnectAsync(), Times.Never);
-        factory.Verify(x => x.CreateChatService(TransportType.Stdio, "agent-1.exe", "--serve-1", null), Times.Once);
-        factory.Verify(x => x.CreateChatService(TransportType.Stdio, "agent-2.exe", "--serve-2", null), Times.Once);
+        VerifyProfileChatServiceCreated(factory, profile1, Times.Once());
+        VerifyProfileChatServiceCreated(factory, profile2, Times.Once());
     }
 
     [Fact]
@@ -393,9 +381,15 @@ public sealed class AcpChatCoordinatorTests
             .Callback<string?, CancellationToken>((id, _) => connectionInstanceIds.Add(id))
             .Returns(Task.CompletedTask);
 
-        factory
-            .Setup(x => x.CreateChatService(TransportType.Stdio, "agent-1.exe", "--serve-1", null))
-            .Returns(profileService.Object);
+        var profile = new ServerConfiguration
+        {
+            Id = "profile-1",
+            Name = "Agent 1",
+            Transport = TransportType.Stdio,
+            StdioCommand = "agent-1.exe",
+            StdioArgs = "--serve-1"
+        };
+        SetupProfileChatService(factory, profile, profileService.Object);
 
         var sut = CreateCoordinator(
             factory.Object,
@@ -406,14 +400,6 @@ public sealed class AcpChatCoordinatorTests
             connectionPoolManager: poolManager,
             transportSupportPolicy: CreateTransportSupportPolicy(),
             mcpServerProvider: EmptyMcpServerProvider);
-        var profile = new ServerConfiguration
-        {
-            Id = "profile-1",
-            Name = "Agent 1",
-            Transport = TransportType.Stdio,
-            StdioCommand = "agent-1.exe",
-            StdioArgs = "--serve-1"
-        };
 
         var first = await sut.ConnectToProfileAsync(profile, transport, sink);
         var second = await sut.ConnectToProfileAsync(profile, transport, sink);
@@ -421,7 +407,7 @@ public sealed class AcpChatCoordinatorTests
         Assert.Same(first.ChatService, second.ChatService);
         profileService.Verify(x => x.InitializeAsync(It.IsAny<InitializeParams>()), Times.Once);
         profileService.Verify(x => x.DisconnectAsync(), Times.Never);
-        factory.Verify(x => x.CreateChatService(TransportType.Stdio, "agent-1.exe", "--serve-1", null), Times.Once);
+        VerifyProfileChatServiceCreated(factory, profile, Times.Once());
         Assert.Equal(2, connectionInstanceIds.Count);
         Assert.False(string.IsNullOrWhiteSpace(connectionInstanceIds[0]));
         Assert.Equal(connectionInstanceIds[0], connectionInstanceIds[1]);
@@ -447,11 +433,6 @@ public sealed class AcpChatCoordinatorTests
 
         var factory = new Mock<IAcpChatServiceFactory>();
         var logger = new Mock<ILogger<AcpChatCoordinator>>();
-        factory
-            .Setup(x => x.CreateChatService(TransportType.Stdio, "agent.exe", "--serve", null))
-            .Returns(service.Object);
-
-        var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
         var profile = new ServerConfiguration
         {
             Id = "profile-1",
@@ -460,6 +441,9 @@ public sealed class AcpChatCoordinatorTests
             StdioCommand = "agent.exe",
             StdioArgs = "--serve"
         };
+        SetupProfileChatService(factory, profile, service.Object);
+
+        var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
         using var cts = new CancellationTokenSource();
         var connectTask = sut.ConnectToProfileAsync(profile, transport, sink, cts.Token);
@@ -497,16 +481,6 @@ public sealed class AcpChatCoordinatorTests
             .Setup(x => x.SetDisconnectedAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .Callback<string?, CancellationToken>((error, _) => disconnectedErrors.Add(error))
             .Returns(Task.CompletedTask);
-        factory
-            .Setup(x => x.CreateChatService(TransportType.WebSocket, null, null, "ws://127.0.0.1:3010/"))
-            .Returns(service.Object);
-
-        var sut = CreateCoordinator(
-            factory.Object,
-            logger.Object,
-            connectionCoordinator: connectionCoordinator.Object,
-            transportSupportPolicy: CreateTransportSupportPolicy(),
-            mcpServerProvider: EmptyMcpServerProvider);
         var profile = new ServerConfiguration
         {
             Id = "profile-remote",
@@ -515,6 +489,14 @@ public sealed class AcpChatCoordinatorTests
             ServerUrl = "ws://127.0.0.1:3010/",
             ConnectionTimeout = 1
         };
+        SetupProfileChatService(factory, profile, service.Object);
+
+        var sut = CreateCoordinator(
+            factory.Object,
+            logger.Object,
+            connectionCoordinator: connectionCoordinator.Object,
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
 
         using var cts = new CancellationTokenSource();
         var connectTask = sut.ConnectToProfileAsync(profile, transport, sink, cts.Token);
@@ -557,11 +539,6 @@ public sealed class AcpChatCoordinatorTests
         var factory = new Mock<IAcpChatServiceFactory>();
         var logger = new Mock<ILogger<AcpChatCoordinator>>();
 
-        factory
-            .Setup(x => x.CreateChatService(TransportType.Stdio, "agent.exe", "--serve", null))
-            .Returns(service.Object);
-
-        var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
         var profile = new ServerConfiguration
         {
             Id = "profile-1",
@@ -570,6 +547,9 @@ public sealed class AcpChatCoordinatorTests
             StdioCommand = "agent.exe",
             StdioArgs = "--serve"
         };
+        SetupProfileChatService(factory, profile, service.Object);
+
+        var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
         await sut.ConnectToProfileAsync(
             profile,
@@ -594,12 +574,6 @@ public sealed class AcpChatCoordinatorTests
             .Setup(x => x.InitializeAsync(It.IsAny<InitializeParams>()))
             .ReturnsAsync(new InitializeResponse(1, new AgentInfo("agent", "1.0.0"), new AgentCapabilities()));
 
-        factory
-            .Setup(x => x.CreateChatService(TransportType.Stdio, "  agent.exe  ", " --serve   --mode   plan ", null))
-            .Returns(service.Object);
-
-        var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
-
         var profileWithSpacing = new ServerConfiguration
         {
             Id = "profile-1",
@@ -616,6 +590,9 @@ public sealed class AcpChatCoordinatorTests
             StdioCommand = "agent.exe",
             StdioArgs = "--serve --mode plan"
         };
+        SetupProfileChatService(factory, profileWithSpacing, service.Object);
+
+        var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
         var first = await sut.ConnectToProfileAsync(profileWithSpacing, transport, sink);
         var second = await sut.ConnectToProfileAsync(normalizedProfile, transport, sink);
@@ -623,8 +600,8 @@ public sealed class AcpChatCoordinatorTests
         Assert.Same(first.ChatService, second.ChatService);
         service.Verify(x => x.InitializeAsync(It.IsAny<InitializeParams>()), Times.Once);
         service.Verify(x => x.DisconnectAsync(), Times.Never);
-        factory.Verify(x => x.CreateChatService(TransportType.Stdio, "  agent.exe  ", " --serve   --mode   plan ", null), Times.Once);
-        factory.Verify(x => x.CreateChatService(TransportType.Stdio, "agent.exe", "--serve --mode plan", null), Times.Never);
+        VerifyProfileChatServiceCreated(factory, profileWithSpacing, Times.Once());
+        VerifyProfileChatServiceCreated(factory, normalizedProfile, Times.Never());
     }
 
     [Fact]
@@ -660,23 +637,6 @@ public sealed class AcpChatCoordinatorTests
             .Callback<string?, CancellationToken>((id, _) => connectionInstanceIds.Add(id))
             .Returns(Task.CompletedTask);
 
-        factory
-            .Setup(x => x.CreateChatService(TransportType.Stdio, "agent-old.exe", "--serve-old", null))
-            .Returns(firstService.Object);
-        factory
-            .Setup(x => x.CreateChatService(TransportType.Stdio, "agent-new.exe", "--serve-new", null))
-            .Returns(secondService.Object);
-
-        var sut = CreateCoordinator(
-            factory.Object,
-            logger.Object,
-            connectionCoordinator: connectionCoordinator.Object,
-            sessionRegistry: registry,
-            sessionCleaner: cleaner,
-            connectionPoolManager: poolManager,
-            transportSupportPolicy: CreateTransportSupportPolicy(),
-            mcpServerProvider: EmptyMcpServerProvider);
-
         var oldProfile = new ServerConfiguration
         {
             Id = "profile-1",
@@ -693,6 +653,18 @@ public sealed class AcpChatCoordinatorTests
             StdioCommand = "agent-new.exe",
             StdioArgs = "--serve-new"
         };
+        SetupProfileChatService(factory, oldProfile, firstService.Object);
+        SetupProfileChatService(factory, newProfile, secondService.Object);
+
+        var sut = CreateCoordinator(
+            factory.Object,
+            logger.Object,
+            connectionCoordinator: connectionCoordinator.Object,
+            sessionRegistry: registry,
+            sessionCleaner: cleaner,
+            connectionPoolManager: poolManager,
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
 
         var first = await sut.ConnectToProfileAsync(oldProfile, transport, sink);
         var second = await sut.ConnectToProfileAsync(newProfile, transport, sink);
@@ -727,12 +699,6 @@ public sealed class AcpChatCoordinatorTests
             .Setup(x => x.InitializeAsync(It.IsAny<InitializeParams>()))
             .ReturnsAsync(new InitializeResponse(1, new AgentInfo("agent-fresh", "1.0.0"), new AgentCapabilities()));
 
-        factory
-            .SetupSequence(x => x.CreateChatService(TransportType.Stdio, "agent.exe", "--serve", null))
-            .Returns(staleService.Object)
-            .Returns(freshService.Object);
-
-        var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
         var profile = new ServerConfiguration
         {
             Id = "profile-1",
@@ -741,6 +707,13 @@ public sealed class AcpChatCoordinatorTests
             StdioCommand = "agent.exe",
             StdioArgs = "--serve"
         };
+        factory
+            .SetupSequence(x => x.CreateChatService(It.Is<ServerConfiguration>(candidate =>
+                MatchesProfile(candidate, profile))))
+            .Returns(staleService.Object)
+            .Returns(freshService.Object);
+
+        var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
         var first = await sut.ConnectToProfileAsync(profile, transport, sink);
         staleConnected = false;
@@ -752,7 +725,7 @@ public sealed class AcpChatCoordinatorTests
         Assert.Same(second.ChatService, third.ChatService);
         Assert.Equal("agent-fresh", sink.AgentName);
         staleService.Verify(x => x.DisconnectAsync(), Times.Once);
-        factory.Verify(x => x.CreateChatService(TransportType.Stdio, "agent.exe", "--serve", null), Times.Exactly(2));
+        VerifyProfileChatServiceCreated(factory, profile, Times.Exactly(2));
     }
 
     [Fact]
@@ -770,17 +743,6 @@ public sealed class AcpChatCoordinatorTests
             new AcpConnectionEvictionOptions(),
             new Mock<ILogger<AcpConnectionSessionCleaner>>().Object);
 
-        factory
-            .Setup(x => x.CreateChatService(TransportType.Stdio, "agent.exe", "--serve", null))
-            .Returns(service.Object);
-
-        var sut = CreateCoordinator(
-            factory.Object,
-            logger.Object,
-            sessionRegistry: registry,
-            sessionCleaner: cleaner,
-            transportSupportPolicy: CreateTransportSupportPolicy(),
-            mcpServerProvider: EmptyMcpServerProvider);
         var profile = new ServerConfiguration
         {
             Id = "profile-1",
@@ -789,6 +751,15 @@ public sealed class AcpChatCoordinatorTests
             StdioCommand = "agent.exe",
             StdioArgs = "--serve"
         };
+        SetupProfileChatService(factory, profile, service.Object);
+
+        var sut = CreateCoordinator(
+            factory.Object,
+            logger.Object,
+            sessionRegistry: registry,
+            sessionCleaner: cleaner,
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
 
         await sut.ConnectToProfileAsync(profile, transport, sink);
         Assert.True(registry.TryGetByProfile("profile-1", out var cached));
@@ -804,7 +775,7 @@ public sealed class AcpChatCoordinatorTests
             refreshed.LastUsedUtc > oldTimestamp,
             $"Expected cached session LastUsedUtc to be refreshed. old={oldTimestamp:O}, current={refreshed.LastUsedUtc:O}");
         service.Verify(x => x.InitializeAsync(It.IsAny<InitializeParams>()), Times.Once);
-        factory.Verify(x => x.CreateChatService(TransportType.Stdio, "agent.exe", "--serve", null), Times.Once);
+        VerifyProfileChatServiceCreated(factory, profile, Times.Once());
     }
 
     [Fact]
@@ -826,15 +797,6 @@ public sealed class AcpChatCoordinatorTests
             .Setup(x => x.InitializeAsync(It.IsAny<InitializeParams>()))
             .ReturnsAsync(new InitializeResponse(1, new AgentInfo("agent-p2", "1.0.0"), new AgentCapabilities()));
 
-        factory
-            .Setup(x => x.CreateChatService(TransportType.Stdio, "agent-1.exe", "--serve-1", null))
-            .Returns(staleBackgroundService.Object);
-        factory
-            .Setup(x => x.CreateChatService(TransportType.Stdio, "agent-2.exe", "--serve-2", null))
-            .Returns(activeService.Object);
-
-        var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
-
         var profile1 = new ServerConfiguration
         {
             Id = "profile-1",
@@ -851,6 +813,10 @@ public sealed class AcpChatCoordinatorTests
             StdioCommand = "agent-2.exe",
             StdioArgs = "--serve-2"
         };
+        SetupProfileChatService(factory, profile1, staleBackgroundService.Object);
+        SetupProfileChatService(factory, profile2, activeService.Object);
+
+        var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
         await sut.ConnectToProfileAsync(profile1, transport, sink);
         var second = await sut.ConnectToProfileAsync(profile2, transport, sink);
@@ -864,8 +830,8 @@ public sealed class AcpChatCoordinatorTests
         Assert.Same(second.ChatService, third.ChatService);
         Assert.Equal("agent-p2", sink.AgentName);
         staleBackgroundService.Verify(x => x.DisconnectAsync(), Times.Once);
-        factory.Verify(x => x.CreateChatService(TransportType.Stdio, "agent-1.exe", "--serve-1", null), Times.Once);
-        factory.Verify(x => x.CreateChatService(TransportType.Stdio, "agent-2.exe", "--serve-2", null), Times.Once);
+        VerifyProfileChatServiceCreated(factory, profile1, Times.Once());
+        VerifyProfileChatServiceCreated(factory, profile2, Times.Once());
     }
 
     [Fact]
@@ -1039,16 +1005,6 @@ public sealed class AcpChatCoordinatorTests
                 return new InitializeResponse(1, new AgentInfo("agent", "1.0.0"), new AgentCapabilities());
             });
 
-        factory
-            .Setup(x => x.CreateChatService(TransportType.WebSocket, null, null, "wss://agent.test"))
-            .Returns(candidateService.Object);
-
-        var sut = CreateCoordinator(
-            factory.Object,
-            logger.Object,
-            connectionCoordinator: connectionCoordinator,
-            transportSupportPolicy: CreateTransportSupportPolicy(),
-            mcpServerProvider: EmptyMcpServerProvider);
         var profile = new ServerConfiguration
         {
             Id = "profile-remote",
@@ -1056,6 +1012,14 @@ public sealed class AcpChatCoordinatorTests
             Transport = TransportType.WebSocket,
             ServerUrl = "wss://agent.test"
         };
+        SetupProfileChatService(factory, profile, candidateService.Object);
+
+        var sut = CreateCoordinator(
+            factory.Object,
+            logger.Object,
+            connectionCoordinator: connectionCoordinator,
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
         using var cancellation = new CancellationTokenSource();
 
         var connectTask = sut.ConnectToProfileAsync(profile, transport, sink, cancellation.Token);
@@ -1763,16 +1727,13 @@ public sealed class AcpChatCoordinatorTests
         var factory = new Mock<IAcpChatServiceFactory>();
         var logger = new Mock<ILogger<AcpChatCoordinator>>();
 
-        factory
-            .Setup(x => x.CreateChatService(TransportType.Stdio, "agent.exe", "--serve", null))
-            .Returns(service.Object);
-
         var provider = new SettingsAcpMcpServerProvider(new FakeMcpSettingsService(settings));
         var sut = CreateCoordinator(
             factory.Object,
             logger.Object,
             CreateTransportSupportPolicy(),
             mcpServerProvider: provider);
+        SetupProfileChatService(factory, profile, service.Object);
 
         await sut.ConnectToProfileAsync(profile, transport, sink);
 
@@ -1808,16 +1769,13 @@ public sealed class AcpChatCoordinatorTests
         var factory = new Mock<IAcpChatServiceFactory>();
         var logger = new Mock<ILogger<AcpChatCoordinator>>();
 
-        factory
-            .Setup(x => x.CreateChatService(TransportType.Stdio, "agent.exe", "--serve", null))
-            .Returns(service.Object);
-
         var provider = new SettingsAcpMcpServerProvider(new FakeMcpSettingsService(settings));
         var sut = CreateCoordinator(
             factory.Object,
             logger.Object,
             CreateTransportSupportPolicy(),
             mcpServerProvider: provider);
+        SetupProfileChatService(factory, profile, service.Object);
 
         await sut.ConnectToProfileAsync(profile, transport, sink);
         settings.Servers.Clear();
@@ -2475,10 +2433,6 @@ public sealed class AcpChatCoordinatorTests
             SelectedProfileId = "profile-a"
         };
 
-        factory
-            .Setup(x => x.CreateChatService(TransportType.Stdio, "agent.exe", "--serve", null))
-            .Returns(service.Object);
-
         var sut = CreateCoordinator(
             factory.Object,
             logger.Object,
@@ -2495,6 +2449,8 @@ public sealed class AcpChatCoordinatorTests
             StdioArgs = "--serve"
         };
         var transport = new FakeTransportConfiguration();
+
+        SetupProfileChatService(factory, profile, service.Object);
 
         var result = await sut.ConnectProfileInPoolAsync(profile, transport);
 
@@ -2513,10 +2469,6 @@ public sealed class AcpChatCoordinatorTests
         var factory = new Mock<IAcpChatServiceFactory>();
         var logger = new Mock<ILogger<AcpChatCoordinator>>();
 
-        factory
-            .Setup(x => x.CreateChatService(TransportType.Stdio, "agent.exe", "--serve", null))
-            .Returns(service.Object);
-
         var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
         var profile = new ServerConfiguration
         {
@@ -2527,6 +2479,11 @@ public sealed class AcpChatCoordinatorTests
             StdioArgs = "--serve"
         };
         var transport = new FakeTransportConfiguration();
+
+        factory
+            .Setup(x => x.CreateChatService(It.Is<ServerConfiguration>(candidate =>
+                string.Equals(candidate.Id, profile.Id, StringComparison.Ordinal))))
+            .Returns(service.Object);
 
         var first = await sut.ConnectProfileInPoolAsync(profile, transport);
         var second = await sut.ConnectProfileInPoolAsync(profile, transport);
@@ -2610,10 +2567,6 @@ public sealed class AcpChatCoordinatorTests
         var logger = new Mock<ILogger<AcpChatCoordinator>>();
         var registry = new InMemoryAcpConnectionSessionRegistry();
 
-        factory
-            .Setup(x => x.CreateChatService(TransportType.Stdio, "agent.exe", "--serve", null))
-            .Returns(service.Object);
-
         var sut = CreateCoordinator(
             factory.Object,
             logger.Object,
@@ -2629,6 +2582,11 @@ public sealed class AcpChatCoordinatorTests
             StdioArgs = "--serve"
         };
         var transport = new FakeTransportConfiguration();
+
+        factory
+            .Setup(x => x.CreateChatService(It.Is<ServerConfiguration>(candidate =>
+                string.Equals(candidate.Id, profile.Id, StringComparison.Ordinal))))
+            .Returns(service.Object);
 
         await sut.ConnectProfileInPoolAsync(profile, transport);
         Assert.True(registry.TryGetByProfile("profile-1", out _));
@@ -2679,6 +2637,32 @@ public sealed class AcpChatCoordinatorTests
 
         Assert.Single(updates);
     }
+
+    private static void SetupProfileChatService(
+        Mock<IAcpChatServiceFactory> factory,
+        ServerConfiguration profile,
+        IChatService service)
+        => factory
+            .Setup(x => x.CreateChatService(It.Is<ServerConfiguration>(candidate =>
+                MatchesProfile(candidate, profile))))
+            .Returns(service);
+
+    private static void VerifyProfileChatServiceCreated(
+        Mock<IAcpChatServiceFactory> factory,
+        ServerConfiguration profile,
+        Times times)
+        => factory.Verify(
+            x => x.CreateChatService(It.Is<ServerConfiguration>(candidate =>
+                MatchesProfile(candidate, profile))),
+            times);
+
+    private static bool MatchesProfile(ServerConfiguration candidate, ServerConfiguration expected)
+        => string.Equals(candidate.Id, expected.Id, StringComparison.Ordinal)
+            && candidate.Transport == expected.Transport
+            && string.Equals(candidate.StdioCommand, expected.StdioCommand, StringComparison.Ordinal)
+            && string.Equals(candidate.StdioArgs, expected.StdioArgs, StringComparison.Ordinal)
+            && string.Equals(candidate.ServerUrl, expected.ServerUrl, StringComparison.Ordinal)
+            && candidate.ConnectionTimeout == expected.ConnectionTimeout;
 
     private static Mock<IChatService> CreateChatService(AgentCapabilities? agentCapabilities = null)
     {

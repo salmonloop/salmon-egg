@@ -19,4 +19,7 @@ public sealed class ChatServiceFactoryAdapter : IAcpChatServiceFactory
         string? args = null,
         string? url = null)
         => _inner.CreateChatService(transportType, command, args, url);
+
+    public IChatService CreateChatService(ServerConfiguration configuration)
+        => _inner.CreateChatService(configuration);
 }

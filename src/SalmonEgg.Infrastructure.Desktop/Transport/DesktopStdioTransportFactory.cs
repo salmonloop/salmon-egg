@@ -6,7 +6,10 @@ namespace SalmonEgg.Infrastructure.Transport;
 
 public sealed class DesktopStdioTransportFactory : IStdioTransportFactory
 {
-    public ITransport Create(string command, string[] args, Encoding encoding)
+    public ITransport Create(
+        string command,
+        string[] args,
+        Encoding encoding)
     {
         if (string.IsNullOrWhiteSpace(command))
         {

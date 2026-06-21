@@ -207,7 +207,7 @@ public sealed class ConfigurationManager : IConfigurationService
             StdioCommand = yamlModel.StdioCommand ?? string.Empty,
             StdioArgs = yamlModel.StdioArgs ?? string.Empty,
             Transport = TransportFromString(yamlModel.Transport),
-            ConnectionTimeout = yamlModel.ConnectionTimeoutSeconds > 0 ? yamlModel.ConnectionTimeoutSeconds : 10
+            ConnectionTimeout = AcpConnectionTimeoutPolicy.ResolveSeconds(yamlModel.ConnectionTimeoutSeconds)
         };
 
         if (yamlModel.Proxy is { Enabled: true })

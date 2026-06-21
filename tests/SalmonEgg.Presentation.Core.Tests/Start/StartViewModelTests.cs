@@ -674,14 +674,16 @@ public sealed class StartViewModelTests
                 Id = "profile-1",
                 Name = "Agent 1",
                 Transport = TransportType.Stdio,
-                StdioCommand = "acp-one"
+                StdioCommand = "acp-one",
+                ConnectionTimeout = 10
             });
             chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
             {
                 Id = "profile-2",
                 Name = "Agent 2",
                 Transport = TransportType.Stdio,
-                StdioCommand = "acp-two"
+                StdioCommand = "acp-two",
+                ConnectionTimeout = 10
             });
             chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[0];
 

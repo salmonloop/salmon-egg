@@ -1,4 +1,5 @@
 using System;
+using SalmonEgg.Domain.Models;
 namespace SalmonEgg.Infrastructure.Storage.YamlModels;
 
 internal sealed class ServerConfigurationYamlV1
@@ -19,7 +20,7 @@ internal sealed class ServerConfigurationYamlV1
 
     public string StdioArgs { get; set; } = string.Empty;
 
-    public int ConnectionTimeoutSeconds { get; set; } = 10;
+    public int ConnectionTimeoutSeconds { get; set; } = AcpConnectionTimeoutPolicy.DefaultSeconds;
 
     public AuthenticationYamlV1 Authentication { get; set; } = new();
 

@@ -53,11 +53,42 @@ public class TransportFactory : ITransportFactory
        string? url = null)
    {
        _logger.Information("正在创建传输实例：{TransportType}", transportType);
+       var webSocketConnectTimeout = TimeSpan.FromSeconds(AcpConnectionTimeoutPolicy.DefaultSeconds);
+
+       return CreateTransportCore(transportType, command, args, url, webSocketConnectTimeout);
+   }
+
+   public SalmonEgg.Domain.Interfaces.Transport.ITransport CreateTransport(ServerConfiguration configuration)
+   {
+       if (configuration == null)
+       {
+           throw new ArgumentNullException(nameof(configuration));
+       }
+
+       _logger.Information("正在根据配置创建传输实例：{TransportType}, {ProfileId}", configuration.Transport, configuration.Id);
+       var webSocketConnectTimeout = AcpConnectionTimeoutPolicy.ResolveTimeout(configuration.ConnectionTimeout);
+
+       return CreateTransportCore(
+           configuration.Transport,
+           configuration.Transport == TransportType.Stdio ? configuration.StdioCommand : null,
+           configuration.Transport == TransportType.Stdio ? configuration.StdioArgs : null,
+           configuration.Transport == TransportType.Stdio ? null : configuration.ServerUrl,
+           webSocketConnectTimeout);
+   }
+
+   private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateTransportCore(
+       TransportType transportType,
+       string? command,
+       string? args,
+       string? url,
+       TimeSpan webSocketConnectTimeout)
+   {
+       _logger.Information("正在创建传输实例：{TransportType}", transportType);
 
        return transportType switch
        {
            TransportType.Stdio => CreateStdioTransport(command, args),
-           TransportType.WebSocket => CreateWebSocketTransport(url),
+           TransportType.WebSocket => CreateWebSocketTransport(url, webSocketConnectTimeout),
            TransportType.HttpSse => CreateHttpSseTransport(url),
            _ => throw new NotSupportedException($"不支持的传输类型：{transportType}")
        };
@@ -70,7 +101,9 @@ public class TransportFactory : ITransportFactory
    /// <param name="args">命令行参数</param>
    /// <returns>Stdio 传输实例</returns>
    /// <exception cref="ArgumentException">当命令为空时抛出</exception>
-   private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateStdioTransport(string? command, string? args)
+   private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateStdioTransport(
+       string? command,
+       string? args)
    {
        if (!_transportSupportPolicy.IsSupported(TransportType.Stdio))
        {
@@ -149,7 +182,7 @@ public class TransportFactory : ITransportFactory
    /// <param name="url">WebSocket URL</param>
    /// <returns>WebSocket 传输实例</returns>
    /// <exception cref="ArgumentException">当 URL 为空或无效时抛出</exception>
-   private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateWebSocketTransport(string? url)
+   private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateWebSocketTransport(string? url, TimeSpan connectTimeout)
    {
        if (string.IsNullOrWhiteSpace(url))
        {
@@ -164,7 +197,7 @@ public class TransportFactory : ITransportFactory
        _logger.Information("创建 WebSocket 传输：Url={Url}", url);
 
        var logger = _logger;
-       var inner = new SalmonEgg.Infrastructure.Network.WebSocketTransport(logger);
+       var inner = new SalmonEgg.Infrastructure.Network.WebSocketTransport(logger, connectTimeout: connectTimeout);
        return new NetworkTransportAdapter(inner, url.Trim());
    }
 

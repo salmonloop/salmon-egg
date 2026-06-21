@@ -135,14 +135,17 @@ public sealed class DiscoverSessionsConnectionFacade : IDiscoverSessionsConnecti
 
             UpdateConnectionState(isConnecting: true, isInitializing: false, isConnected: false, errorMessage: null, currentChatService: null);
 
-            candidateService = _chatServiceFactory.CreateChatService(
-                profile.Transport,
-                profile.Transport == TransportType.Stdio ? profile.StdioCommand : null,
-                profile.Transport == TransportType.Stdio ? profile.StdioArgs : null,
-                profile.Transport == TransportType.Stdio ? null : profile.ServerUrl);
+            candidateService = _chatServiceFactory.CreateChatService(profile);
 
             UpdateConnectionState(isConnecting: false, isInitializing: true, isConnected: false, errorMessage: null, currentChatService: null);
-            await candidateService.InitializeAsync(AcpInitializeRequestFactory.CreateDefault()).ConfigureAwait(false);
+            await AcpInitializeTimeout.WaitForInitializeAsync(
+                    candidateService,
+                    profile.Transport,
+                    profile.Id,
+                    conversationId: null,
+                    AcpInitializeTimeout.Resolve(profile),
+                    cancellationToken)
+                .ConfigureAwait(false);
 
             if (!IsLatestConnectRequest(requestVersion, cancellationToken))
             {

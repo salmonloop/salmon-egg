@@ -67,7 +67,11 @@ public partial class ConfigurationEditorViewModel(
     private string _proxyUrl = string.Empty;
 
     [ObservableProperty]
-    private int _connectionTimeout = 10;
+    private int _connectionTimeout = AcpConnectionTimeoutPolicy.DefaultSeconds;
+
+    public int ConnectionTimeoutMinimum => AcpConnectionTimeoutPolicy.MinimumSeconds;
+
+    public int ConnectionTimeoutMaximum => AcpConnectionTimeoutPolicy.MaximumSeconds;
 
     public bool IsEditing { get; private set; }
     public ServerConfiguration Configuration { get; private set; } = new();
@@ -84,7 +88,7 @@ public partial class ConfigurationEditorViewModel(
             ServerUrl = string.Empty,
             StdioCommand = string.Empty,
             StdioArgs = string.Empty,
-            ConnectionTimeout = 10
+            ConnectionTimeout = AcpConnectionTimeoutPolicy.DefaultSeconds
         };
 
         Name = Configuration.Name;
@@ -148,7 +152,7 @@ public partial class ConfigurationEditorViewModel(
             Name = "New Configuration",
             ServerUrl = "ws://localhost:8080",
             Transport = _transportSupportPolicy.DefaultTransport,
-            ConnectionTimeout = 10
+            ConnectionTimeout = AcpConnectionTimeoutPolicy.DefaultSeconds
         };
         Name = Configuration.Name;
         ServerUrl = Configuration.ServerUrl;
@@ -180,7 +184,7 @@ public partial class ConfigurationEditorViewModel(
             ServerUrl = transport == TransportType.Stdio ? string.Empty : (transportConfig.RemoteUrl ?? string.Empty),
             StdioCommand = transport == TransportType.Stdio ? (transportConfig.StdioCommand ?? string.Empty) : string.Empty,
             StdioArgs = transport == TransportType.Stdio ? (transportConfig.StdioArgs ?? string.Empty) : string.Empty,
-            ConnectionTimeout = 10
+            ConnectionTimeout = AcpConnectionTimeoutPolicy.DefaultSeconds
         };
 
         Name = Configuration.Name;

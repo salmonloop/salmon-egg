@@ -47,10 +47,10 @@ namespace SalmonEgg.Application.Validators
 
             // Validate connection timeout
             RuleFor(x => x.ConnectionTimeout)
-                .GreaterThan(0)
+                .GreaterThanOrEqualTo(AcpConnectionTimeoutPolicy.MinimumSeconds)
                 .WithMessage("Connection timeout must be greater than 0 seconds")
-                .LessThanOrEqualTo(60)
-                .WithMessage("Connection timeout cannot exceed 60 seconds");
+                .LessThanOrEqualTo(AcpConnectionTimeoutPolicy.MaximumSeconds)
+                .WithMessage($"Connection timeout cannot exceed {AcpConnectionTimeoutPolicy.MaximumSeconds} seconds");
 
             // Validate authentication configuration (if present)
             When(x => x.Authentication != null, () =>

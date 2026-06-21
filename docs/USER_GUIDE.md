@@ -25,7 +25,7 @@
          - 命令: `ssh`
          - 参数: `-T -o BatchMode=yes -o RequestTTY=no -o LogLevel=ERROR user@host /opt/acp/bin/agent stdio`
      - **心跳间隔**: 心跳消息间隔（默认 30 秒）
-     - **连接超时**: 连接超时时间（默认 10 秒）
+     - **连接超时**: ACP 连接 / initialize 等待时间（默认 120 秒，可在设置中调整，当前最大 600 秒）
      - **认证信息**（可选）:
        - Token: 认证令牌
        - API Key: API 密钥
@@ -53,7 +53,7 @@ name: "远程 SSH Agent"
 transport: "stdio"
 stdio_command: "ssh"
 stdio_args: "-T -o BatchMode=yes -o RequestTTY=no -o LogLevel=ERROR user@host /opt/acp/bin/agent stdio"
-connection_timeout_seconds: 10
+connection_timeout_seconds: 120
 authentication:
   mode: "none"
 proxy:

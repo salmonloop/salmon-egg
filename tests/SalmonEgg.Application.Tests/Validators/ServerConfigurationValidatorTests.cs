@@ -110,12 +110,31 @@ public sealed class ServerConfigurationValidatorTests
     }
 
     [Fact]
-    public void Validate_WhenConnectionTimeoutIsGreaterThan60_ShouldHaveError()
+    public void Validate_WhenConnectionTimeoutIsMaximum_ShouldNotHaveError()
     {
-        var configuration = new ServerConfiguration { ConnectionTimeout = 61 };
+        var configuration = new ServerConfiguration
+        {
+            Id = "valid",
+            Name = "valid",
+            Transport = TransportType.Stdio,
+            StdioCommand = "cmd",
+            ConnectionTimeout = AcpConnectionTimeoutPolicy.MaximumSeconds
+        };
+
+        var result = _validator.TestValidate(configuration);
+        result.ShouldNotHaveValidationErrorFor(x => x.ConnectionTimeout);
+    }
+
+    [Fact]
+    public void Validate_WhenConnectionTimeoutIsGreaterThanMaximum_ShouldHaveError()
+    {
+        var configuration = new ServerConfiguration
+        {
+            ConnectionTimeout = AcpConnectionTimeoutPolicy.MaximumSeconds + 1
+        };
         var result = _validator.TestValidate(configuration);
         result.ShouldHaveValidationErrorFor(x => x.ConnectionTimeout)
-            .WithErrorMessage("Connection timeout cannot exceed 60 seconds");
+            .WithErrorMessage($"Connection timeout cannot exceed {AcpConnectionTimeoutPolicy.MaximumSeconds} seconds");
     }
 
     [Fact]

@@ -38,4 +38,29 @@ public sealed class EndpointValidatingTransportFactory : ITransportFactory
 
         return _inner.CreateTransport(transportType, command, args, url);
     }
+
+    public ITransport CreateTransport(ServerConfiguration configuration)
+    {
+        if (configuration == null)
+        {
+            throw new ArgumentNullException(nameof(configuration));
+        }
+
+        if (configuration.Transport is TransportType.WebSocket or TransportType.HttpSse)
+        {
+            var endpoint = configuration.Transport == TransportType.Stdio
+                ? null
+                : configuration.ServerUrl;
+            var result = _endpointAccessPolicy.Validate(configuration.Transport, endpoint);
+            if (!result.IsAllowed)
+            {
+                throw new NotSupportedException(
+                    string.IsNullOrWhiteSpace(result.ErrorMessage)
+                        ? $"Transport endpoint is not supported on this platform. transport={configuration.Transport} endpoint={endpoint}"
+                        : result.ErrorMessage);
+            }
+        }
+
+        return _inner.CreateTransport(configuration);
+    }
 }

@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using Xunit;
@@ -77,6 +78,43 @@ public sealed class DiscoverSessionsConnectionFacadeTests
                 It.IsAny<string?>(),
                 It.IsAny<string?>()),
             Times.Never);
+    }
+
+    [Fact]
+    public async Task ConnectToProfileAsync_WhenInitializeExceedsProfileTimeout_ThrowsTimeoutException()
+    {
+        var factory = new Mock<IAcpChatServiceFactory>(MockBehavior.Strict);
+        var service = new Mock<IChatService>(MockBehavior.Strict);
+        var sut = new DiscoverSessionsConnectionFacade(
+            factory.Object,
+            CreateTransportSupportPolicy(supportsStdioTransport: true),
+            NullLogger<DiscoverSessionsConnectionFacade>.Instance);
+        var profile = new ServerConfiguration
+        {
+            Id = "profile-timeout",
+            Name = "Remote Agent",
+            Transport = TransportType.WebSocket,
+            ServerUrl = "wss://example.com/socket",
+            ConnectionTimeout = 1
+        };
+
+        service.SetupGet(x => x.IsConnected).Returns(true);
+        service.SetupGet(x => x.IsInitialized).Returns(false);
+        service.Setup(x => x.InitializeAsync(It.IsAny<InitializeParams>()))
+            .Returns(async () =>
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5));
+                return new InitializeResponse();
+            });
+        service.Setup(x => x.DisconnectAsync()).ReturnsAsync(true);
+        factory.Setup(x => x.CreateChatService(profile)).Returns(service.Object);
+
+        var ex = await Assert.ThrowsAsync<TimeoutException>(() => sut.ConnectToProfileAsync(profile));
+
+        Assert.Contains("profile-timeout", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("timeoutSeconds=1", ex.Message, StringComparison.Ordinal);
+        Assert.False(sut.IsConnected);
+        Assert.Equal(ex.Message, sut.ConnectionErrorMessage);
     }
 
     private static ITransportSupportPolicy CreateTransportSupportPolicy(bool supportsStdioTransport)

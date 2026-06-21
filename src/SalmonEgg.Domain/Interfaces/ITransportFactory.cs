@@ -26,4 +26,6 @@ public interface ITransportFactory
         string? command = null,
         string? args = null,
         string? url = null);
+
+    ITransport CreateTransport(ServerConfiguration configuration);
 }

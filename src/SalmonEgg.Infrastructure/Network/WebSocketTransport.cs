@@ -5,6 +5,7 @@ using System.Reactive.Subjects;
 using System.Threading;
 using System.Threading.Tasks;
 using Serilog;
+using SalmonEgg.Domain.Models;
 using Websocket.Client;
 
 namespace SalmonEgg.Infrastructure.Network
@@ -20,19 +21,23 @@ namespace SalmonEgg.Infrastructure.Network
         private IWebsocketClient? _client;
         private readonly Subject<string> _messagesSubject;
         private readonly BehaviorSubject<TransportState> _stateSubject;
+        private readonly TimeSpan _connectTimeout;
         private bool _disposed;
 
         /// <summary>
         /// Initializes a new instance of the WebSocketTransport class.
         /// </summary>
         /// <param name="logger">Logger instance for logging transport events.</param>
-        public WebSocketTransport(ILogger logger, Uri? proxyUri = null)
+        public WebSocketTransport(ILogger logger, Uri? proxyUri = null, TimeSpan? connectTimeout = null)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _proxyUri = proxyUri;
             _messagesSubject = new Subject<string>();
             _stateSubject = new BehaviorSubject<TransportState>(TransportState.Disconnected);
+            _connectTimeout = connectTimeout ?? TimeSpan.FromSeconds(AcpConnectionTimeoutPolicy.DefaultSeconds);
         }
+
+        public TimeSpan ConnectTimeout => _connectTimeout;
 
         /// <inheritdoc />
         public IObservable<string> Messages => _messagesSubject;
@@ -73,10 +78,9 @@ namespace SalmonEgg.Infrastructure.Network
                 await _client.Start();
 
                 // Wait for connection to be established or timeout
-                var connectionTimeout = TimeSpan.FromSeconds(10);
                 var startTime = DateTime.UtcNow;
 
-                while (!_client.IsRunning && DateTime.UtcNow - startTime < connectionTimeout)
+                while (!_client.IsRunning && DateTime.UtcNow - startTime < _connectTimeout)
                 {
                     if (ct.IsCancellationRequested)
                     {
@@ -88,7 +92,7 @@ namespace SalmonEgg.Infrastructure.Network
 
                 if (!_client.IsRunning)
                 {
-                    throw new TimeoutException($"Failed to connect to {url} within {connectionTimeout.TotalSeconds} seconds");
+                    throw new TimeoutException($"Failed to connect to {url} within {_connectTimeout.TotalSeconds} seconds");
                 }
 
                 _stateSubject.OnNext(TransportState.Connected);

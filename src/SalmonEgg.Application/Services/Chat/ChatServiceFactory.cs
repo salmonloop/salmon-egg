@@ -67,4 +67,17 @@ public class ChatServiceFactory
         // 3. 创建 Chat 服务
         return _decorateChatService(new ChatService(acpClient, _errorLogger, _sessionManager));
     }
+
+    public IChatService CreateChatService(ServerConfiguration configuration)
+    {
+        if (configuration == null)
+        {
+            throw new ArgumentNullException(nameof(configuration));
+        }
+        _logger?.Information("正在根据配置创建新的 ChatService 实例：ProfileId={ProfileId}, TransportType={TransportType}", configuration.Id, configuration.Transport);
+
+        var transport = _transportFactory.CreateTransport(configuration);
+        var acpClient = _acpClientFactory.CreateClient(transport);
+        return _decorateChatService(new ChatService(acpClient, _errorLogger, _sessionManager));
+    }
 }

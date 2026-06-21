@@ -106,6 +106,8 @@ public interface IAcpConnectionCommands
 /// </summary>
 public interface IAcpChatServiceFactory
 {
+    IChatService CreateChatService(ServerConfiguration configuration);
+
     IChatService CreateChatService(
         TransportType transportType,
         string? command = null,
