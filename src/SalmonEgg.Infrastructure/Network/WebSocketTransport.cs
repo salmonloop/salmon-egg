@@ -1,6 +1,7 @@
 using System;
 using System.Net;
 using System.Net.WebSockets;
+using System.Reactive.Disposables;
 using System.Reactive.Subjects;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,7 +19,9 @@ namespace SalmonEgg.Infrastructure.Network
     {
         private readonly ILogger _logger;
         private readonly Uri? _proxyUri;
+        private readonly Func<Uri, Uri?, IWebsocketClient> _clientFactory;
         private IWebsocketClient? _client;
+        private IDisposable? _clientSubscriptions;
         private readonly Subject<string> _messagesSubject;
         private readonly BehaviorSubject<TransportState> _stateSubject;
         private readonly TimeSpan _connectTimeout;
@@ -29,9 +32,23 @@ namespace SalmonEgg.Infrastructure.Network
         /// </summary>
         /// <param name="logger">Logger instance for logging transport events.</param>
         public WebSocketTransport(ILogger logger, Uri? proxyUri = null, TimeSpan? connectTimeout = null)
+            : this(
+                logger,
+                proxyUri,
+                connectTimeout,
+                static (uri, proxy) => new WebsocketClient(uri, () => CreateNativeClient(proxy)))
+        {
+        }
+
+        internal WebSocketTransport(
+            ILogger logger,
+            Uri? proxyUri,
+            TimeSpan? connectTimeout,
+            Func<Uri, Uri?, IWebsocketClient> clientFactory)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _proxyUri = proxyUri;
+            _clientFactory = clientFactory ?? throw new ArgumentNullException(nameof(clientFactory));
             _messagesSubject = new Subject<string>();
             _stateSubject = new BehaviorSubject<TransportState>(TransportState.Disconnected);
             _connectTimeout = connectTimeout ?? TimeSpan.FromSeconds(AcpConnectionTimeoutPolicy.DefaultSeconds);
@@ -64,42 +81,66 @@ namespace SalmonEgg.Infrastructure.Network
                 _stateSubject.OnNext(TransportState.Connecting);
                 _logger.Information("Connecting to WebSocket server at {Url}", url);
 
-                // Create WebSocket client
+                DisposeClient();
+
                 var uri = new Uri(url);
-                _client = new WebsocketClient(uri, () => CreateNativeClient(_proxyUri));
+                _client = _clientFactory(uri, _proxyUri);
 
-                // Configure reconnection strategy (disabled for manual control)
                 _client.ReconnectTimeout = null;
-
-                // Subscribe to WebSocket events
                 SubscribeToWebSocketEvents();
 
-                // Start the WebSocket connection
+                var connectionSignal = new TaskCompletionSource<DisconnectionInfo?>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var connectionStateProjectedByEvent = false;
+                using var connectionSubscriptions = new CompositeDisposable(
+                    _client.ReconnectionHappened.Subscribe(_ =>
+                    {
+                        connectionStateProjectedByEvent = true;
+                        connectionSignal.TrySetResult(null);
+                    }),
+                    _client.DisconnectionHappened.Subscribe(info =>
+                    {
+                        if (info.Type == DisconnectionType.Exit || info.Type == DisconnectionType.ByUser)
+                        {
+                            return;
+                        }
+
+                        connectionSignal.TrySetResult(info);
+                    }));
+
                 await _client.Start();
 
-                // Wait for connection to be established or timeout
-                var startTime = DateTime.UtcNow;
+                if (_client.IsRunning)
+                {
+                    connectionSignal.TrySetResult(null);
+                }
 
-                while (!_client.IsRunning && DateTime.UtcNow - startTime < _connectTimeout)
+                var completedTask = await Task.WhenAny(connectionSignal.Task, Task.Delay(_connectTimeout, ct));
+                if (completedTask != connectionSignal.Task)
                 {
                     if (ct.IsCancellationRequested)
                     {
                         throw new OperationCanceledException("Connection cancelled by user", ct);
                     }
 
-                    await Task.Delay(100, ct);
-                }
-
-                if (!_client.IsRunning)
-                {
                     throw new TimeoutException($"Failed to connect to {url} within {_connectTimeout.TotalSeconds} seconds");
                 }
 
-                _stateSubject.OnNext(TransportState.Connected);
+                var disconnection = await connectionSignal.Task;
+                if (disconnection != null)
+                {
+                    throw CreateConnectFailure(url, disconnection);
+                }
+
+                if (!connectionStateProjectedByEvent)
+                {
+                    _stateSubject.OnNext(TransportState.Connected);
+                }
+
                 _logger.Information("Successfully connected to WebSocket server at {Url}", url);
             }
             catch (Exception ex)
             {
+                DisposeClient();
                 _stateSubject.OnNext(TransportState.Error);
                 _logger.Error(ex, "Failed to connect to WebSocket server at {Url}", url);
                 throw;
@@ -165,46 +206,43 @@ namespace SalmonEgg.Infrastructure.Network
         private void SubscribeToWebSocketEvents()
         {
             var client = _client ?? throw new InvalidOperationException("WebSocket client is not initialized.");
+            _clientSubscriptions?.Dispose();
 
-            // Handle incoming messages
-            client.MessageReceived.Subscribe(msg =>
-            {
-                if (msg.MessageType == System.Net.WebSockets.WebSocketMessageType.Text)
+            _clientSubscriptions = new CompositeDisposable(
+                client.MessageReceived.Subscribe(msg =>
                 {
-                    var text = msg.Text;
-                    if (string.IsNullOrEmpty(text))
+                    if (msg.MessageType == System.Net.WebSockets.WebSocketMessageType.Text)
                     {
-                        _logger.Debug("Received empty WebSocket message");
-                        return;
+                        var text = msg.Text;
+                        if (string.IsNullOrEmpty(text))
+                        {
+                            _logger.Debug("Received empty WebSocket message");
+                            return;
+                        }
+
+                        _logger.Debug("Received message: {Message}", text);
+                        _messagesSubject.OnNext(text);
                     }
-
-                    _logger.Debug("Received message: {Message}", text);
-                    _messagesSubject.OnNext(text);
-                }
-            });
-
-            // Handle reconnection events
-            client.ReconnectionHappened.Subscribe(info =>
-            {
-                _logger.Information("WebSocket reconnection happened: {Type}", info.Type);
-                _stateSubject.OnNext(TransportState.Connected);
-            });
-
-            // Handle disconnection events
-            client.DisconnectionHappened.Subscribe(info =>
-            {
-                _logger.Warning("WebSocket disconnection happened: {Type}, {CloseStatus}",
-                    info.Type, info.CloseStatus);
-
-                if (info.Type != DisconnectionType.Exit)
+                }),
+                client.ReconnectionHappened.Subscribe(info =>
                 {
-                    _stateSubject.OnNext(TransportState.Error);
-                }
-                else
+                    _logger.Information("WebSocket reconnection happened: {Type}", info.Type);
+                    _stateSubject.OnNext(TransportState.Connected);
+                }),
+                client.DisconnectionHappened.Subscribe(info =>
                 {
-                    _stateSubject.OnNext(TransportState.Disconnected);
-                }
-            });
+                    _logger.Warning("WebSocket disconnection happened: {Type}, {CloseStatus}",
+                        info.Type, info.CloseStatus);
+
+                    if (info.Type != DisconnectionType.Exit)
+                    {
+                        _stateSubject.OnNext(TransportState.Error);
+                    }
+                    else
+                    {
+                        _stateSubject.OnNext(TransportState.Disconnected);
+                    }
+                }));
         }
 
         /// <summary>
@@ -237,8 +275,7 @@ namespace SalmonEgg.Infrastructure.Network
                         _ = DisconnectAsync();
                     }
 
-                    // Dispose the WebSocket client
-                    _client?.Dispose();
+                    DisposeClient();
 
                     // Complete the subjects
                     _messagesSubject?.OnCompleted();
@@ -256,6 +293,24 @@ namespace SalmonEgg.Infrastructure.Network
             }
 
             _disposed = true;
+        }
+
+        private void DisposeClient()
+        {
+            _clientSubscriptions?.Dispose();
+            _clientSubscriptions = null;
+
+            _client?.Dispose();
+            _client = null;
+        }
+
+        private static InvalidOperationException CreateConnectFailure(string url, DisconnectionInfo disconnection)
+        {
+            var message = disconnection.CloseStatus.HasValue
+                ? $"WebSocket connection to {url} closed before becoming ready: {disconnection.Type} ({disconnection.CloseStatus})"
+                : $"WebSocket connection to {url} closed before becoming ready: {disconnection.Type}";
+
+            return new InvalidOperationException(message, disconnection.Exception);
         }
 
         internal static ClientWebSocket CreateNativeClient(Uri? proxyUri = null)

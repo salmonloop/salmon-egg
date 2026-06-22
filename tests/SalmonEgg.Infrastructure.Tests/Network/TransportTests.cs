@@ -1,4 +1,4 @@
-using System;using System.Collections.Generic;using System.Net;using System.Net.Http;using System.Net.WebSockets;using System.Reactive.Subjects;using System.Threading;using System.Threading.Tasks;using Moq;using Serilog;using SalmonEgg.Infrastructure.Network;using Xunit;
+using System;using System.Collections.Generic;using System.Diagnostics;using System.Net;using System.Net.Http;using System.Net.WebSockets;using System.Reactive.Subjects;using System.Threading;using System.Threading.Tasks;using Moq;using Serilog;using SalmonEgg.Infrastructure.Network;using Websocket.Client;using Xunit;
 
 namespace SalmonEgg.Infrastructure.Tests.Network
 {
@@ -24,6 +24,67 @@ namespace SalmonEgg.Infrastructure.Tests.Network
             // Act & Assert
             await Assert.ThrowsAsync<ArgumentException>(() =>
                 transport.ConnectAsync(string.Empty, CancellationToken.None));
+        }
+
+        [Fact]
+        public async Task WebSocketTransport_ConnectAsync_ShouldFailPromptly_WhenDisconnectedBeforeReady()
+        {
+            var reconnections = new Subject<ReconnectionInfo>();
+            var disconnections = new Subject<DisconnectionInfo>();
+            var messages = new Subject<ResponseMessage>();
+            var client = CreateMockClient(reconnections, disconnections, messages, out _);
+            var transport = new WebSocketTransport(
+                _mockLogger.Object,
+                proxyUri: null,
+                connectTimeout: TimeSpan.FromSeconds(5),
+                clientFactory: (_, _) => client.Object);
+            var stopwatch = Stopwatch.StartNew();
+
+            client
+                .Setup(x => x.Start())
+                .Returns(Task.CompletedTask)
+                .Callback(() => disconnections.OnNext(DisconnectionInfo.Create(
+                    DisconnectionType.Error,
+                    null!,
+                    new WebSocketException("bridge rejected connection"))));
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                transport.ConnectAsync("ws://localhost:3012/acp/ws", CancellationToken.None));
+
+            stopwatch.Stop();
+
+            Assert.Contains("closed before becoming ready", exception.Message);
+            Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(1), $"Expected prompt failure, actual: {stopwatch.Elapsed}");
+            Assert.IsType<WebSocketException>(exception.InnerException);
+        }
+
+        [Fact]
+        public async Task WebSocketTransport_ConnectAsync_ShouldEmitConnectedOnce_WhenReadyEventArrives()
+        {
+            var reconnections = new Subject<ReconnectionInfo>();
+            var disconnections = new Subject<DisconnectionInfo>();
+            var messages = new Subject<ResponseMessage>();
+            var client = CreateMockClient(reconnections, disconnections, messages, out var isRunning);
+            var transport = new WebSocketTransport(
+                _mockLogger.Object,
+                proxyUri: null,
+                connectTimeout: TimeSpan.FromSeconds(5),
+                clientFactory: (_, _) => client.Object);
+            var states = new List<TransportState>();
+            transport.StateChanges.Subscribe(states.Add);
+
+            client
+                .Setup(x => x.Start())
+                .Returns(Task.CompletedTask)
+                .Callback(() =>
+                {
+                    isRunning.Value = true;
+                    reconnections.OnNext(ReconnectionInfo.Create(ReconnectionType.Initial));
+                });
+
+            await transport.ConnectAsync("ws://localhost:3012/acp/ws", CancellationToken.None);
+
+            Assert.Single(states.FindAll(state => state == TransportState.Connected));
         }
 
         [Fact]
@@ -221,6 +282,32 @@ namespace SalmonEgg.Infrastructure.Tests.Network
 
             // Assert
             Assert.NotNull(transport.Messages);
+        }
+
+        private static Mock<IWebsocketClient> CreateMockClient(
+            IObservable<ReconnectionInfo> reconnections,
+            IObservable<DisconnectionInfo> disconnections,
+            IObservable<ResponseMessage> messages,
+            out Box<bool> isRunning)
+        {
+            var running = new Box<bool>(false);
+            isRunning = running;
+            var client = new Mock<IWebsocketClient>(MockBehavior.Strict);
+
+            client.SetupGet(x => x.IsRunning).Returns(() => running.Value);
+            client.SetupGet(x => x.ReconnectionHappened).Returns(reconnections);
+            client.SetupGet(x => x.DisconnectionHappened).Returns(disconnections);
+            client.SetupGet(x => x.MessageReceived).Returns(messages);
+            client.SetupProperty(x => x.ReconnectTimeout);
+            client.Setup(x => x.Start()).Returns(Task.CompletedTask);
+            client.Setup(x => x.Dispose());
+
+            return client;
+        }
+
+        private sealed class Box<T>(T value)
+        {
+            public T Value { get; set; } = value;
         }
     }
 }
