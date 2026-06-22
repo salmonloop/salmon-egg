@@ -2551,6 +2551,8 @@ public sealed class StartViewModelTests
 
             startViewModel.SelectStartAgentDisplayCommand.Execute(remoteAgentItem);
 
+            Assert.Equal("profile-remote", chat.ViewModel.SelectedAcpProfile?.Id);
+
             Assert.Contains(
                 startViewModel.StartProjectSelectorItems,
                 item => string.Equals(item.SemanticValue, "remote-directory:dir-a", StringComparison.Ordinal)

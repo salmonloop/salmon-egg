@@ -107,6 +107,17 @@ public partial class ChatViewModel
 
     private void ApplySelectedProfileFromStore(string? profileId)
     {
+        if (_hasPendingSelectedProfileIntent)
+        {
+            if (!string.Equals(_pendingSelectedProfileIntentId, profileId, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _hasPendingSelectedProfileIntent = false;
+            _pendingSelectedProfileIntentId = null;
+        }
+
         if (!string.Equals(_selectedProfileIntentIdFromStore, profileId, StringComparison.Ordinal))
         {
             _selectedProfileIntentIdFromStore = profileId;
@@ -382,6 +393,8 @@ public partial class ChatViewModel
         if (!_suppressStoreProfileProjection)
         {
             var nextProfileIntentId = value?.Id;
+            _pendingSelectedProfileIntentId = nextProfileIntentId;
+            _hasPendingSelectedProfileIntent = true;
             if (!string.Equals(_selectedProfileIntentIdFromStore, nextProfileIntentId, StringComparison.Ordinal))
             {
                 _selectedProfileIntentIdFromStore = nextProfileIntentId;

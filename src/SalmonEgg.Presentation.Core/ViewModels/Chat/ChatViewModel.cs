@@ -187,6 +187,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private bool _suppressProfileSyncFromStore;
     private bool _suppressModeSelectionDispatch;
     private string? _selectedProfileIntentIdFromStore;
+    private string? _pendingSelectedProfileIntentId;
+    private bool _hasPendingSelectedProfileIntent;
     private string? _selectedProfileIdFromStore;
     private int _storeProjectionSequence;
     private readonly object _restoreSync = new();
@@ -1709,7 +1711,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         await _chatConnectionStore
             .Dispatch(new SetSelectedProfileIntentAction(profile.Id))
             .ConfigureAwait(false);
-        await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        await ApplyCurrentStoreProjectionAsync(null, cancellationToken).ConfigureAwait(false);
     }
 
     // Partial method implementations called by source-generated code.
@@ -1824,10 +1827,24 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         return PostToUiAsync(() => IsLayoutLoading = value);
     }
 
-    private async Task ApplyCurrentStoreProjectionAsync(long? activationVersion = null)
+    private Task ApplyCurrentStoreProjectionAsync(long? activationVersion = null)
+        => ApplyCurrentStoreProjectionAsync(activationVersion, CancellationToken.None);
+
+    private async Task ApplyCurrentStoreProjectionAsync(
+        long? activationVersion,
+        CancellationToken cancellationToken = default)
     {
+        var storeProjectionToken = _storeStateCts?.Token ?? CancellationToken.None;
+        using var linkedProjectionCts = cancellationToken.CanBeCanceled && storeProjectionToken.CanBeCanceled
+            ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, storeProjectionToken)
+            : null;
+        var projectionCancellationToken = linkedProjectionCts?.Token
+            ?? (cancellationToken.CanBeCanceled ? cancellationToken : storeProjectionToken);
+
+        projectionCancellationToken.ThrowIfCancellationRequested();
         var state = await _chatStore.GetCurrentStateAsync().ConfigureAwait(false);
         var connectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
+        projectionCancellationToken.ThrowIfCancellationRequested();
         var projection = CreateProjection(state, connectionState);
         if (activationVersion.HasValue
             && !ShouldApplyStoreProjection(projection, activationVersion.Value))
@@ -1837,7 +1854,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
         var uiProjectionTask = PostToUiAsync(() =>
         {
-            if (_disposed)
+            if (_disposed || projectionCancellationToken.IsCancellationRequested)
             {
                 return;
             }
@@ -1849,7 +1866,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
             ApplyStoreProjection(projection);
         });
-        await AwaitUiProjectionAsync(uiProjectionTask, _storeStateCts?.Token ?? CancellationToken.None).ConfigureAwait(false);
+        await AwaitUiProjectionAsync(uiProjectionTask, projectionCancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -2736,9 +2753,23 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             var scopedSink = CreateScopedAcpCoordinatorSink(connectionContext);
             await PostToUiAsync(() =>
             {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                var previousSuppressProfileSyncFromStore = _suppressProfileSyncFromStore;
                 _suppressAutoConnectFromPreferenceChange = true;
-                _acpProfiles.MarkLastConnected(profile);
-                _acpProfiles.SelectedProfile = ResolveLoadedProfileSelection(profile);
+                _suppressProfileSyncFromStore = true;
+                try
+                {
+                    _acpProfiles.MarkLastConnected(profile);
+                    _acpProfiles.SelectedProfile = ResolveLoadedProfileSelection(profile);
+                }
+                finally
+                {
+                    _suppressProfileSyncFromStore = previousSuppressProfileSyncFromStore;
+                }
             }).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             var result = await _conversationProfileConnectionGateway
@@ -2758,6 +2789,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
             await PostToUiAsync(() =>
             {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+
                 _authenticationCoordinator.CacheAuthMethods(result.InitializeResponse);
                 _authenticationCoordinator.ClearAuthenticationRequirement(_acpConnectionCoordinator);
                 _ = _authenticationCoordinator.UpdateAgentInfoAsync(_chatService, _chatStore, SelectedProfileId);
@@ -2769,12 +2805,17 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         {
             throw;
         }
+        catch (Exception) when (cancellationToken.IsCancellationRequested)
+        {
+            throw new OperationCanceledException(cancellationToken);
+        }
         catch (Exception ex)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             await _chatConnectionStore
                 .Dispatch(new SetConnectionPhaseAction(ConnectionPhase.Disconnected, ex.Message))
                 .ConfigureAwait(false);
-            await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
+            await ApplyCurrentStoreProjectionAsync(null, cancellationToken).ConfigureAwait(false);
             Logger.LogError(ex, "Failed to connect to ACP profile {ProfileId}", profile.Id);
             throw;
         }

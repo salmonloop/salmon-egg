@@ -2865,6 +2865,30 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task SelectedAcpProfile_Change_DoesNotBlockLaterAuthoritativeStoreSelection()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        var profile1 = new ServerConfiguration { Id = "profile-1", Name = "Profile 1", Transport = TransportType.Stdio };
+        var profile2 = new ServerConfiguration { Id = "profile-2", Name = "Profile 2", Transport = TransportType.Stdio };
+        fixture.Profiles.Profiles.Add(profile1);
+        fixture.Profiles.Profiles.Add(profile2);
+
+        fixture.ViewModel.SelectedAcpProfile = profile1;
+        await WaitForConditionAsync(async () =>
+        {
+            var state = await fixture.GetConnectionStateAsync();
+            return string.Equals(state.SelectedProfileIntentId, "profile-1", StringComparison.Ordinal);
+        });
+
+        await fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-2"));
+        await fixture.ApplyCurrentStoreProjectionAsync();
+
+        Assert.Equal("profile-2", fixture.ViewModel.SelectedProfileIntentId);
+        Assert.Same(profile2, fixture.ViewModel.SelectedAcpProfile);
+    }
+
+    [Fact]
     public async Task AcpProfileList_AddForStoredSelection_DefersSelectedProfileProjectionUntilCollectionObserversCanSettle()
     {
         var syncContext = new QueueingSynchronizationContext();
