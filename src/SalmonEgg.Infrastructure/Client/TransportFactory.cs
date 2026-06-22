@@ -73,7 +73,8 @@ public class TransportFactory : ITransportFactory
             configuration.Transport == TransportType.Stdio ? configuration.StdioCommand : null,
             configuration.Transport == TransportType.Stdio ? configuration.StdioArgs : null,
             configuration.Transport == TransportType.Stdio ? null : configuration.ServerUrl,
-            webSocketConnectTimeout);
+            webSocketConnectTimeout,
+            configuration.Proxy);
     }
 
     private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateTransportCore(
@@ -81,14 +82,15 @@ public class TransportFactory : ITransportFactory
         string? command,
         string? args,
         string? url,
-        TimeSpan webSocketConnectTimeout)
+        TimeSpan webSocketConnectTimeout,
+        ProxyConfig? proxy = null)
     {
         _logger.Information("正在创建传输实例：{TransportType}", transportType);
 
         return transportType switch
         {
             TransportType.Stdio => CreateStdioTransport(command, args),
-            TransportType.WebSocket => CreateWebSocketTransport(url, webSocketConnectTimeout),
+            TransportType.WebSocket => CreateWebSocketTransport(url, webSocketConnectTimeout, proxy),
             TransportType.HttpSse => CreateHttpSseTransport(url),
             _ => throw new NotSupportedException($"不支持的传输类型：{transportType}")
         };
@@ -182,7 +184,7 @@ public class TransportFactory : ITransportFactory
     /// <param name="url">WebSocket URL</param>
     /// <returns>WebSocket 传输实例</returns>
     /// <exception cref="ArgumentException">当 URL 为空或无效时抛出</exception>
-    private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateWebSocketTransport(string? url, TimeSpan connectTimeout)
+    private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateWebSocketTransport(string? url, TimeSpan connectTimeout, ProxyConfig? proxy)
     {
         if (string.IsNullOrWhiteSpace(url))
         {
@@ -197,7 +199,13 @@ public class TransportFactory : ITransportFactory
         _logger.Information("创建 WebSocket 传输：Url={Url}", url);
 
         var logger = _logger;
-        var inner = new SalmonEgg.Infrastructure.Network.WebSocketTransport(logger, connectTimeout: connectTimeout);
+        var proxyUri = proxy is { Enabled: true } && !string.IsNullOrWhiteSpace(proxy.ProxyUrl)
+            ? new Uri(proxy.ProxyUrl, UriKind.Absolute)
+            : null;
+        var inner = new SalmonEgg.Infrastructure.Network.WebSocketTransport(
+            logger,
+            proxyUri: proxyUri,
+            connectTimeout: connectTimeout);
         return new NetworkTransportAdapter(inner, url.Trim());
     }
 
