@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json;
 
 namespace SalmonEgg.Domain.Models.JsonRpc
 {
@@ -25,7 +26,7 @@ namespace SalmonEgg.Domain.Models.JsonRpc
         /// <param name="message">异常消息</param>
         /// <param name="errorData">可选的附加数据</param>
         public AcpException(int errorCode, string message, object? errorData = null)
-            : base(message)
+            : base(FormatMessage(message, errorData))
         {
             ErrorCode = errorCode;
             ErrorData = errorData;
@@ -39,7 +40,7 @@ namespace SalmonEgg.Domain.Models.JsonRpc
         /// <param name="innerException">内部异常</param>
         /// <param name="errorData">可选的附加数据</param>
         public AcpException(int errorCode, string message, Exception innerException, object? errorData = null)
-            : base(message, innerException)
+            : base(FormatMessage(message, errorData), innerException)
         {
             ErrorCode = errorCode;
             ErrorData = errorData;
@@ -173,6 +174,65 @@ namespace SalmonEgg.Domain.Models.JsonRpc
             return new AcpException(
                 JsonRpcErrorCode.ProtocolVersionMismatch,
                 $"Protocol version mismatch. Expected: {expected}, Actual: {actual}");
+        }
+
+        private static string FormatMessage(string message, object? errorData)
+        {
+            var detail = ExtractErrorDetail(errorData);
+            if (string.IsNullOrWhiteSpace(detail) ||
+                string.Equals(message, detail, StringComparison.Ordinal))
+            {
+                return message;
+            }
+
+            return message + ": " + detail;
+        }
+
+        private static string? ExtractErrorDetail(object? errorData)
+        {
+            if (errorData is null)
+            {
+                return null;
+            }
+
+            if (errorData is string text)
+            {
+                return string.IsNullOrWhiteSpace(text) ? null : text;
+            }
+
+            if (errorData is JsonElement element)
+            {
+                return ExtractJsonElementDetail(element);
+            }
+
+            return errorData.ToString();
+        }
+
+        private static string? ExtractJsonElementDetail(JsonElement element)
+        {
+            if (element.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            {
+                return null;
+            }
+
+            if (element.ValueKind == JsonValueKind.String)
+            {
+                return element.GetString();
+            }
+
+            if (element.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var propertyName in new[] { "details", "detail", "message", "error" })
+                {
+                    if (element.TryGetProperty(propertyName, out var property) &&
+                        property.ValueKind == JsonValueKind.String)
+                    {
+                        return property.GetString();
+                    }
+                }
+            }
+
+            return element.GetRawText();
         }
     }
 }
