@@ -196,10 +196,10 @@ public sealed partial class StartViewModel : ObservableObject
     public bool IsStartModeSelectorEnabled => _startSessionModeSnapshot.IsEnabled;
 
     public bool HasStartSessionDraftError
-        => Chat.HasNewSessionDraftError && !IsExpectedRemoteDirectorySelectionState();
+        => !string.IsNullOrWhiteSpace(StartSessionDraftErrorMessage);
 
     public string StartSessionDraftErrorMessage
-        => HasStartSessionDraftError ? Chat.NewSessionDraftErrorMessage : string.Empty;
+        => ResolveStartSessionDraftErrorMessage();
 
     public string StartDraftAutomationState
         => string.Join(
@@ -467,6 +467,8 @@ public sealed partial class StartViewModel : ObservableObject
         var identity = BuildStartModeIdentity();
         var showRemoteDirectoryPrompt = IsExpectedRemoteDirectorySelectionState();
         var hasDraftError = Chat.HasNewSessionDraftError && !showRemoteDirectoryPrompt;
+        var hasConnectionError = Chat.HasConnectionError && !showRemoteDirectoryPrompt;
+        var hasModeError = hasDraftError || hasConnectionError;
         var isConnectionInProgress = IsConnectionInProgressForStart();
         IReadOnlyList<SessionModeViewModel> modeOptions = showRemoteDirectoryPrompt
             ? Array.Empty<SessionModeViewModel>()
@@ -478,8 +480,8 @@ public sealed partial class StartViewModel : ObservableObject
             showRemoteDirectoryPrompt ? null : SelectedStartMode?.ModeId,
             !showRemoteDirectoryPrompt && Chat.IsNewSessionDraftReady,
             !showRemoteDirectoryPrompt && (isConnectionInProgress || _isNewSessionDraftRefreshPending || Chat.IsNewSessionDraftLoading),
-            hasDraftError,
-            (!showRemoteDirectoryPrompt && StartModeOptions.Count > 0) || hasDraftError,
+            hasModeError,
+            (!showRemoteDirectoryPrompt && StartModeOptions.Count > 0) || hasModeError,
             ResolveModeSelectorPlaceholderLabels(showRemoteDirectoryPrompt)));
 
         return _selectorProjectionPresenter.Present(new SelectorProjectionInput(
@@ -737,6 +739,31 @@ public sealed partial class StartViewModel : ObservableObject
             Error: Localize("Selector_Mode_Error", "模式不可用"),
             Default: Localize("Selector_Mode_Default", "默认模式"));
 
+    private string ResolveStartSessionDraftErrorMessage()
+    {
+        if (IsExpectedRemoteDirectorySelectionState())
+        {
+            return string.Empty;
+        }
+
+        if (Chat.HasNewSessionDraftError)
+        {
+            return Chat.NewSessionDraftErrorMessage;
+        }
+
+        if (_isNewSessionDraftRefreshPending || Chat.IsNewSessionDraftLoading || Chat.IsNewSessionDraftReady)
+        {
+            return string.Empty;
+        }
+
+        if (Chat.HasConnectionError && !string.IsNullOrWhiteSpace(Chat.ConnectionErrorMessage))
+        {
+            return Chat.ConnectionErrorMessage!;
+        }
+
+        return string.Empty;
+    }
+
     private AgentSelectorPlaceholderLabels ResolveAgentSelectorPlaceholderLabels()
         => new(
             Loading: Localize("Selector_Agent_Loading", "正在连接 Agent..."),
@@ -836,9 +863,19 @@ public sealed partial class StartViewModel : ObservableObject
             return;
         }
 
+        var isConnectionErrorProjectionChange =
+            string.Equals(e.PropertyName, nameof(ChatViewModel.HasConnectionError), StringComparison.Ordinal)
+            || string.Equals(e.PropertyName, nameof(ChatViewModel.ConnectionErrorMessage), StringComparison.Ordinal);
+
+        if (isConnectionErrorProjectionChange)
+        {
+            RefreshStartSessionDraftErrorProjection();
+        }
+
         if (string.Equals(e.PropertyName, nameof(ChatViewModel.IsConnected), StringComparison.Ordinal)
             || string.Equals(e.PropertyName, nameof(ChatViewModel.IsConnecting), StringComparison.Ordinal)
             || string.Equals(e.PropertyName, nameof(ChatViewModel.IsInitializing), StringComparison.Ordinal)
+            || isConnectionErrorProjectionChange
             || string.Equals(e.PropertyName, nameof(ChatViewModel.ConnectionInstanceId), StringComparison.Ordinal))
         {
             QueueApplyConnectionProjectionChange();
@@ -943,9 +980,14 @@ public sealed partial class StartViewModel : ObservableObject
 
     private void RefreshStartSessionDraftErrorProjection()
     {
+        RaiseStartSessionDraftErrorPropertiesChanged();
+        RefreshAllSelectorProjections();
+    }
+
+    private void RaiseStartSessionDraftErrorPropertiesChanged()
+    {
         OnPropertyChanged(nameof(HasStartSessionDraftError));
         OnPropertyChanged(nameof(StartSessionDraftErrorMessage));
-        RefreshAllSelectorProjections();
         OnPropertyChanged(nameof(StartDraftAutomationState));
     }
 
@@ -1046,6 +1088,7 @@ public sealed partial class StartViewModel : ObservableObject
         _isNewSessionDraftRefreshPending = value;
         RefreshStartModeState();
         RefreshAllSelectorProjections();
+        RaiseStartSessionDraftErrorPropertiesChanged();
     }
 
     private void RefreshStartModeState()
