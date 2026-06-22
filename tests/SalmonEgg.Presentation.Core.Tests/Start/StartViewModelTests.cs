@@ -1917,6 +1917,7 @@ public sealed class StartViewModelTests
 
             Assert.Equal("profile switch failed", startViewModel.StartSessionDraftErrorMessage);
             Assert.Equal(SelectorPlaceholderKind.Error, startViewModel.StartModeSelectorProjection.PlaceholderKind);
+            Assert.Equal("模式不可用", startViewModel.SelectedStartModeSelectorItem?.DisplayName);
             Assert.True(startViewModel.StartModeSelectorProjection.IsSubmitBlocked);
             Assert.NotEqual(SelectorPlaceholderKind.Unresolved, startViewModel.StartModeSelectorProjection.PlaceholderKind);
             Assert.False(startViewModel.IsStartModeSelectorEnabled);
@@ -2005,6 +2006,41 @@ public sealed class StartViewModelTests
             startViewModel.SelectStartModeDisplayCommand.Execute(staleItem);
 
             Assert.Same(originalMode, startViewModel.SelectedStartMode);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task StartModeSelector_WhenConnectionFailsWithoutDraftError_SeparatesSelectorStatusFromErrorMessage()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
+
+            startViewModel.OnComposerLoaded();
+            await chat.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-codex"));
+            await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(
+                ConnectionPhase.Disconnected,
+                "Internal error: Already initialized"));
+
+            await WaitForConditionAsync(() =>
+                startViewModel.StartModeSelectorProjection.PlaceholderKind == SelectorPlaceholderKind.Error);
+
+            Assert.True(startViewModel.HasStartSessionDraftError);
+            Assert.Equal("Internal error: Already initialized", startViewModel.StartSessionDraftErrorMessage);
+            Assert.Equal("模式不可用", startViewModel.SelectedStartModeSelectorItem?.DisplayName);
+            Assert.Equal("模式不可用", startViewModel.StartModeSelectorProjection.SubmitBlockReason);
+            Assert.False(startViewModel.IsStartModeSelectorEnabled);
         }
         finally
         {
