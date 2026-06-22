@@ -255,6 +255,23 @@ public class UiConventionsTests
     }
 
     [Fact]
+    public void PackageManifest_ShouldDeclareInternetClientCapability()
+    {
+        var repoRoot = FindRepoRoot();
+        var manifestFile = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Package.appxmanifest");
+        var document = ReadXml(manifestFile);
+
+        var capabilities = document
+            .Descendants()
+            .Where(element => string.Equals(element.Name.LocalName, "Capability", StringComparison.Ordinal))
+            .Select(element => GetAttributeValueByLocalName(element, "Name"))
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.Contains("internetClient", capabilities);
+    }
+
+    [Fact]
     public void UnoSingleProject_ShouldDeclareCustomPngAsUnoIconSourceAndWindowsIco()
     {
         var repoRoot = FindRepoRoot();
