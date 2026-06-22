@@ -2394,17 +2394,7 @@ public partial class ChatViewModel
         string profileId,
         CancellationToken cancellationToken)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        if (string.IsNullOrWhiteSpace(profileId))
-        {
-            return null;
-        }
-
-        await EnsureAcpProfilesLoadedAsync().ConfigureAwait(false);
-        cancellationToken.ThrowIfCancellationRequested();
-
-        return _acpProfiles.Profiles.FirstOrDefault(p => string.Equals(p.Id, profileId, StringComparison.Ordinal))
-            ?? await _configurationService.LoadConfigurationAsync(profileId);
+        return await LoadCanonicalProfileConfigurationAsync(profileId, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<bool> IsRemoteConnectionReadyAsync(

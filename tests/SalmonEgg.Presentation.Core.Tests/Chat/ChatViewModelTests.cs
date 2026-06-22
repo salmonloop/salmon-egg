@@ -3217,8 +3217,7 @@ public partial class ChatViewModelTests
         await using var fixture = CreateViewModel(acpConnectionCommands: commands.Object);
         var profile = new ServerConfiguration { Id = "profile-1", Name = "Profile 1", Transport = TransportType.Stdio };
         fixture.Profiles.Profiles.Add(profile);
-
-        fixture.Preferences.LastSelectedServerId = profile.Id;
+        await fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction(profile.Id));
 
         using var firstAttempt = new CancellationTokenSource();
         var firstTask = fixture.ViewModel.TryAutoConnectAsync(firstAttempt.Token);
@@ -3271,6 +3270,49 @@ public partial class ChatViewModelTests
                 It.IsAny<IAcpChatCoordinatorSink>(),
                 It.IsAny<CancellationToken>()),
             Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public async Task TryAutoConnectAsync_PrefersPersistedProfileOverStaleLoadedProfile()
+    {
+        ServerConfiguration? connectedProfile = null;
+        var commands = new Mock<IAcpConnectionCommands>();
+        commands
+            .Setup(x => x.ConnectToProfileAsync(
+                It.IsAny<ServerConfiguration>(),
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, CancellationToken>(
+                (profile, _, _, _) => connectedProfile = profile)
+            .ReturnsAsync(new AcpTransportApplyResult(Mock.Of<IChatService>(), new InitializeResponse()));
+
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService.Setup(x => x.LoadConfigurationAsync("profile-1")).ReturnsAsync(
+            new ServerConfiguration
+            {
+                Id = "profile-1",
+                Name = "Persisted Profile",
+                Transport = TransportType.WebSocket,
+                ServerUrl = "ws://codexacp.shangxin.me/acp/ws"
+            });
+
+        await using var fixture = CreateViewModel(
+            acpConnectionCommands: commands.Object,
+            configurationService: configurationService);
+        fixture.Profiles.Profiles.Add(new ServerConfiguration
+        {
+            Id = "profile-1",
+            Name = "Stale InMemory Profile",
+            Transport = TransportType.WebSocket,
+            ServerUrl = "ws://codexacp.shangxin.me/message"
+        });
+        await fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-1"));
+
+        await fixture.ViewModel.TryAutoConnectAsync(CancellationToken.None);
+
+        Assert.NotNull(connectedProfile);
+        Assert.Equal("ws://codexacp.shangxin.me/acp/ws", connectedProfile!.ServerUrl);
     }
 
     [Fact]

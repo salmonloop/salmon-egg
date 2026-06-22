@@ -2577,6 +2577,28 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         }
     }
 
+    private async Task<ServerConfiguration?> LoadCanonicalProfileConfigurationAsync(
+        string? profileId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(profileId))
+        {
+            return null;
+        }
+
+        var persisted = await _configurationService.LoadConfigurationAsync(profileId).ConfigureAwait(false);
+        if (persisted is not null)
+        {
+            return persisted;
+        }
+
+        await EnsureAcpProfilesLoadedAsync().ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return _acpProfiles.Profiles.FirstOrDefault(p => string.Equals(p.Id, profileId, StringComparison.Ordinal));
+    }
+
     public async Task TryAutoConnectAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -2624,10 +2646,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             await EnsureAcpProfilesLoadedAsync();
             cancellationToken.ThrowIfCancellationRequested();
 
-            ServerConfiguration? config;
-            // The config may not be loaded into the list yet (e.g. first launch), so we load by id as fallback.
-            config = _acpProfiles.Profiles.FirstOrDefault(p => p.Id == profileId)
-                    ?? await _configurationService.LoadConfigurationAsync(profileId);
+            var config = await LoadCanonicalProfileConfigurationAsync(profileId, cancellationToken).ConfigureAwait(false);
 
             if (config == null)
             {
