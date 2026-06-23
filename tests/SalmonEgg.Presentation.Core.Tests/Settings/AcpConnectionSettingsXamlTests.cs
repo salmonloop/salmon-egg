@@ -192,6 +192,7 @@ public sealed class AcpConnectionSettingsXamlTests
             "Acp_GlobalEnabledDescription.Text",
             "Acp_GlobalEnabledSwitch.OnContent",
             "Acp_GlobalEnabledSwitch.OffContent",
+            "Acp_ProfileReconnect.Text",
             "AgentProfileEditor_CurrentConnectionSavedNoticeMessage"
         ];
 
@@ -234,9 +235,9 @@ public sealed class AcpConnectionSettingsXamlTests
         Assert.Contains("SelectionMode=\"Single\"", xaml, StringComparison.Ordinal);
         Assert.Contains("<ToggleSwitch", xaml, StringComparison.Ordinal);
         Assert.Contains("IsOn=\"{x:Bind IsConnected, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("x:Uid=\"Acp_ProfileReconnect\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Command=\"{x:Bind ReconnectCommand, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Visibility=\"{x:Bind IsStableConnected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind ReconnectCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind Acp_ProfileReconnectText}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("<MenuFlyoutSeparator", xaml, StringComparison.Ordinal);
         Assert.Contains("Visibility=\"{x:Bind IsTransitioning, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Visibility=\"{x:Bind IsStableDisconnected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Toggled=\"OnProfileConnectionToggleToggled\"", xaml, StringComparison.Ordinal);

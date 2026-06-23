@@ -179,30 +179,18 @@
 
                                             <Grid Grid.RowSpan="2"
                                                   Grid.Column="2"
-                                                  ColumnDefinitions="Auto,Auto,Auto"
+                                                  ColumnDefinitions="Auto,Auto"
                                                   ColumnSpacing="10"
                                                   VerticalAlignment="Center"
                                                   HorizontalAlignment="Right">
-                                                <Button VerticalAlignment="Center"
-                                                        x:Uid="Acp_ProfileReconnect"
-                                                        Command="{x:Bind ReconnectCommand, Mode=OneWay}"
-                                                        Visibility="{x:Bind IsStableConnected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                        ToolTipService.ToolTip="重新连接"
-                                                        AutomationProperties.AutomationId="Acp.Profile.Reconnect">
-                                                    <Button.Content>
-                                                        <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE72C;"/>
-                                                    </Button.Content>
-                                                </Button>
-
                                                 <ToggleSwitch VerticalAlignment="Center"
-                                                              Grid.Column="1"
                                                               OffContent=""
                                                               OnContent=""
                                                               IsOn="{x:Bind IsConnected, Mode=OneWay}"
                                                               IsEnabled="{x:Bind IsConnecting, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"
                                                               Toggled="OnProfileConnectionToggleToggled"/>
 
-                                                <Button Grid.Column="2"
+                                                <Button Grid.Column="1"
                                                         VerticalAlignment="Center"
                                                         x:Uid="Acp_ProfileMore"
                                                         ToolTipService.ToolTip="更多">
@@ -211,6 +199,15 @@
                                                     </Button.Content>
                                                     <Button.Flyout>
                                                         <MenuFlyout>
+                                                            <MenuFlyoutItem Text="{x:Bind Acp_ProfileReconnectText}"
+                                                                            Command="{x:Bind ReconnectCommand}"
+                                                                            Visibility="{x:Bind IsStableConnected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                                            AutomationProperties.AutomationId="Acp.Profile.Reconnect">
+                                                                <MenuFlyoutItem.Icon>
+                                                                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE72C;"/>
+                                                                </MenuFlyoutItem.Icon>
+                                                            </MenuFlyoutItem>
+                                                            <MenuFlyoutSeparator Visibility="{x:Bind IsStableConnected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                             <MenuFlyoutItem x:Uid="Acp_ProfileEdit"
                                                                             Text="编辑"
                                                                             Tag="{x:Bind ProfileId}"

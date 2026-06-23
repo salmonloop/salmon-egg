@@ -117,6 +117,11 @@ public sealed partial class AgentProfileItemViewModel : ObservableObject, IDispo
             ? _localizer["AgentProfile_StatusConnected"]
             : _localizer["AgentProfile_StatusDisconnected"];
 
+    /// <summary>
+    /// Localized text for the reconnect menu item in the "more" flyout.
+    /// </summary>
+    public string Acp_ProfileReconnectText => _localizer["Acp_ProfileReconnect.Text"];
+
     public IAsyncRelayCommand<bool> ApplyConnectionToggleRequestCommand { get; }
 
     public IAsyncRelayCommand ReconnectCommand { get; }

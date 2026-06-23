@@ -750,7 +750,7 @@
   <data name="Acp_ProfileMore.ToolTipService.ToolTip" xml:space="preserve">
     <value>More</value>
   </data>
-  <data name="Acp_ProfileReconnect.ToolTipService.ToolTip" xml:space="preserve">
+  <data name="Acp_ProfileReconnect.Text" xml:space="preserve">
     <value>Reconnect</value>
   </data>
   <data name="Acp_ProfileConnect.Text" xml:space="preserve">
