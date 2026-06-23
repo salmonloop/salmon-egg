@@ -86,7 +86,9 @@ public sealed class WasmStartupAssetsTests
         Assert.DoesNotContain("location.protocol", script, StringComparison.Ordinal);
 
         var persistence = LoadFile(@"SalmonEgg\SalmonEgg\Platforms\WebAssembly\WasmFileSystemPersistence.cs");
-        Assert.Contains(".ImportAsync(StorageModuleName, StorageModuleName", persistence, StringComparison.Ordinal);
+        // ImportAsync 的第二个参数会直接喂给浏览器 import()，必须是相对/绝对 URL，禁止 bare specifier。
+        Assert.Contains(".ImportAsync(StorageModuleName, StorageModuleUrl", persistence, StringComparison.Ordinal);
+        Assert.Contains("StorageModuleUrl = \"./\" + StorageModuleName", persistence, StringComparison.Ordinal);
         Assert.Contains("EnsureStorageModuleImportedAsync", persistence, StringComparison.Ordinal);
 
         var endpointContext = LoadFile(@"SalmonEgg\SalmonEgg\Platforms\WebAssembly\WasmTransportEndpointAccessContext.cs");

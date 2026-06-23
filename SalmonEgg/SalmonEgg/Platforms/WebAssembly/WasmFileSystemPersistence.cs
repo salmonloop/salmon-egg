@@ -11,6 +11,7 @@ namespace SalmonEgg.Platforms.WebAssembly;
 public sealed partial class WasmFileSystemPersistence : IFileSystemPersistence
 {
     private const string StorageModuleName = "salmon-egg-wasm-storage.js";
+    private const string StorageModuleUrl = "./" + StorageModuleName;
 
     private static readonly SemaphoreSlim StorageModuleLock = new(1, 1);
     private static JSObject? _storageModule;
@@ -45,7 +46,7 @@ public sealed partial class WasmFileSystemPersistence : IFileSystemPersistence
             }
 
             _storageModule = await JSHost
-                .ImportAsync(StorageModuleName, StorageModuleName, cancellationToken)
+                .ImportAsync(StorageModuleName, StorageModuleUrl, cancellationToken)
                 .ConfigureAwait(false);
         }
         finally
