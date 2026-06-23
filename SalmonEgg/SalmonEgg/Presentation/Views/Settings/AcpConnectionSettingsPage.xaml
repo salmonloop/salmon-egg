@@ -141,7 +141,7 @@
                                                     <Border CornerRadius="12"
                                                             Padding="8,4"
                                                             Background="{ThemeResource SystemFillColorSuccessBackgroundBrush}"
-                                                            Visibility="{x:Bind IsConnected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                            Visibility="{x:Bind IsStableConnected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                                                         <TextBlock Text="{x:Bind StatusLabel, Mode=OneWay}"
                                                                    FontSize="12"
                                                                    FontWeight="Medium"
@@ -150,8 +150,18 @@
 
                                                     <Border CornerRadius="12"
                                                             Padding="8,4"
+                                                            Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
+                                                            Visibility="{x:Bind IsTransitioning, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                        <TextBlock Text="{x:Bind StatusLabel, Mode=OneWay}"
+                                                                   FontSize="12"
+                                                                   FontWeight="Medium"
+                                                                   Foreground="{ThemeResource SystemFillColorCautionBrush}"/>
+                                                    </Border>
+
+                                                    <Border CornerRadius="12"
+                                                            Padding="8,4"
                                                             Background="{ThemeResource SystemFillColorNeutralBrush}"
-                                                            Visibility="{x:Bind IsNotConnected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                            Visibility="{x:Bind IsStableDisconnected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                                                         <TextBlock Text="{x:Bind StatusLabel, Mode=OneWay}"
                                                                    FontSize="12"
                                                                    FontWeight="Medium"
@@ -169,18 +179,30 @@
 
                                             <Grid Grid.RowSpan="2"
                                                   Grid.Column="2"
-                                                  ColumnDefinitions="Auto,Auto"
+                                                  ColumnDefinitions="Auto,Auto,Auto"
                                                   ColumnSpacing="10"
                                                   VerticalAlignment="Center"
                                                   HorizontalAlignment="Right">
+                                                <Button VerticalAlignment="Center"
+                                                        x:Uid="Acp_ProfileReconnect"
+                                                        Command="{x:Bind ReconnectCommand, Mode=OneWay}"
+                                                        Visibility="{x:Bind IsStableConnected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                        ToolTipService.ToolTip="重新连接"
+                                                        AutomationProperties.AutomationId="Acp.Profile.Reconnect">
+                                                    <Button.Content>
+                                                        <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE72C;"/>
+                                                    </Button.Content>
+                                                </Button>
+
                                                 <ToggleSwitch VerticalAlignment="Center"
+                                                              Grid.Column="1"
                                                               OffContent=""
                                                               OnContent=""
                                                               IsOn="{x:Bind IsConnected, Mode=OneWay}"
                                                               IsEnabled="{x:Bind IsConnecting, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"
                                                               Toggled="OnProfileConnectionToggleToggled"/>
 
-                                                <Button Grid.Column="1"
+                                                <Button Grid.Column="2"
                                                         VerticalAlignment="Center"
                                                         x:Uid="Acp_ProfileMore"
                                                         ToolTipService.ToolTip="更多">

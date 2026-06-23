@@ -521,6 +521,12 @@
   <data name="AgentProfile_StatusConnecting" xml:space="preserve">
     <value>连接中...</value>
   </data>
+  <data name="AgentProfile_StatusDisconnecting" xml:space="preserve">
+    <value>断开中...</value>
+  </data>
+  <data name="AgentProfile_StatusReconnecting" xml:space="preserve">
+    <value>重连中...</value>
+  </data>
   <data name="AgentProfile_StatusConnected" xml:space="preserve">
     <value>已连接</value>
   </data>

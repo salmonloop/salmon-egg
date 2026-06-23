@@ -779,6 +779,191 @@ public sealed class AcpConnectionSettingsViewModelTests
     }
 
     [Fact]
+    public async Task ApplyConnectionToggleRequest_WhenConnectFails_ClearsConnectingAndReprojectsDisconnectedState()
+    {
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        var commands = new TestConnectionCommands { ConnectProfileInPoolException = new InvalidOperationException("connect failed") };
+        using var item = CreateAgentProfileItem("profile-a", registry, commands);
+        var changed = new List<string?>();
+        item.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
+
+        await item.ApplyConnectionToggleRequestCommand.ExecuteAsync(true);
+
+        Assert.False(item.IsConnected);
+        Assert.False(item.IsConnecting);
+        Assert.Contains(nameof(AgentProfileItemViewModel.IsConnected), changed);
+    }
+
+    [Fact]
+    public void ApplyConnectionToggleRequestCommand_WhenConnectIsPending_UsesConnectingLabelAndKeepsAuthoritativeSwitchState()
+    {
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        var pending = new TaskCompletionSource();
+        var commands = new TestConnectionCommands { ConnectProfileInPoolTask = pending };
+        using var item = CreateAgentProfileItem("profile-a", registry, commands);
+        var changed = new List<string?>();
+        item.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
+
+        try
+        {
+            _ = item.ApplyConnectionToggleRequestCommand.ExecuteAsync(true);
+
+            Assert.True(item.IsConnecting);
+            Assert.False(item.IsConnected);
+            Assert.True(item.IsTransitioning);
+            Assert.False(item.IsStableConnected);
+            Assert.False(item.IsStableDisconnected);
+            Assert.Equal("连接中...", item.StatusLabel);
+            Assert.Contains(nameof(AgentProfileItemViewModel.IsConnected), changed);
+        }
+        finally
+        {
+            pending.TrySetResult();
+        }
+    }
+
+    [Fact]
+    public async Task ApplyConnectionToggleRequest_WhenDisconnectFails_ClearsConnectingAndReprojectsConnectedState()
+    {
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        registry.Upsert(new AcpConnectionSession(
+            "profile-a",
+            null!,
+            new InitializeResponse(),
+            default));
+        var commands = new TestConnectionCommands { DisconnectProfileInPoolException = new InvalidOperationException("disconnect failed") };
+        using var item = CreateAgentProfileItem("profile-a", registry, commands);
+        var changed = new List<string?>();
+        item.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
+
+        await item.ApplyConnectionToggleRequestCommand.ExecuteAsync(false);
+
+        Assert.True(item.IsConnected);
+        Assert.False(item.IsConnecting);
+        Assert.Contains(nameof(AgentProfileItemViewModel.IsConnected), changed);
+    }
+
+    [Fact]
+    public void ApplyConnectionToggleRequestCommand_WhenDisconnectIsPending_UsesDisconnectingLabelAndKeepsAuthoritativeSwitchState()
+    {
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        registry.Upsert(new AcpConnectionSession(
+            "profile-a",
+            null!,
+            new InitializeResponse(),
+            default));
+        var pending = new TaskCompletionSource();
+        var commands = new TestConnectionCommands { DisconnectProfileInPoolTask = pending };
+        using var item = CreateAgentProfileItem("profile-a", registry, commands);
+        var changed = new List<string?>();
+        item.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
+
+        try
+        {
+            _ = item.ApplyConnectionToggleRequestCommand.ExecuteAsync(false);
+
+            Assert.True(item.IsConnecting);
+            Assert.True(item.IsConnected);
+            Assert.True(item.IsTransitioning);
+            Assert.False(item.IsStableConnected);
+            Assert.False(item.IsStableDisconnected);
+            Assert.Equal("断开中...", item.StatusLabel);
+            Assert.Contains(nameof(AgentProfileItemViewModel.IsConnected), changed);
+        }
+        finally
+        {
+            pending.TrySetResult();
+        }
+    }
+
+    [Fact]
+    public async Task ApplyConnectionToggleRequest_WhenRequestedStateAlreadyMatches_DoesNothing()
+    {
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        var commands = new TestConnectionCommands();
+        using var item = CreateAgentProfileItem("profile-a", registry, commands);
+
+        await item.ApplyConnectionToggleRequestCommand.ExecuteAsync(false);
+
+        Assert.False(item.IsConnected);
+        Assert.False(item.IsConnecting);
+        Assert.Empty(commands.PoolConnectedProfiles);
+        Assert.Empty(commands.PoolDisconnectedProfileIds);
+    }
+
+    [Fact]
+    public async Task ReconnectCommand_WhenStableConnected_DisconnectsThenConnectsProfile()
+    {
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        registry.Upsert(new AcpConnectionSession(
+            "profile-a",
+            null!,
+            new InitializeResponse(),
+            default));
+        var commands = new TestConnectionCommands();
+        using var item = CreateAgentProfileItem("profile-a", registry, commands);
+
+        await item.ReconnectCommand.ExecuteAsync(null);
+
+        Assert.Equal(new[] { "disconnect:profile-a", "connect:profile-a" }, commands.PoolOperations);
+        Assert.False(item.IsConnecting);
+    }
+
+    [Fact]
+    public void ReconnectCommand_WhenDisconnectedOrTransitioning_IsDisabled()
+    {
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        var pending = new TaskCompletionSource();
+        var commands = new TestConnectionCommands { ConnectProfileInPoolTask = pending };
+        using var item = CreateAgentProfileItem("profile-a", registry, commands);
+
+        Assert.False(item.ReconnectCommand.CanExecute(null));
+
+        try
+        {
+            _ = item.ApplyConnectionToggleRequestCommand.ExecuteAsync(true);
+
+            Assert.False(item.ReconnectCommand.CanExecute(null));
+        }
+        finally
+        {
+            pending.TrySetResult();
+        }
+    }
+
+    [Fact]
+    public void ReconnectCommand_WhenDisconnectEventArrivesBeforeReconnectCompletes_RemainsReconnecting()
+    {
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        registry.Upsert(new AcpConnectionSession(
+            "profile-a",
+            null!,
+            new InitializeResponse(),
+            default));
+        var pendingReconnect = new TaskCompletionSource();
+        var commands = new TestConnectionCommands
+        {
+            DisconnectProfileInPoolCallback = () => registry.RemoveByProfile("profile-a"),
+            ConnectProfileInPoolTask = pendingReconnect
+        };
+        using var item = CreateAgentProfileItem("profile-a", registry, commands);
+
+        try
+        {
+            _ = item.ReconnectCommand.ExecuteAsync(null);
+
+            Assert.True(item.IsConnecting);
+            Assert.False(item.IsConnected);
+            Assert.True(item.IsTransitioning);
+            Assert.Equal("重连中...", item.StatusLabel);
+        }
+        finally
+        {
+            pendingReconnect.TrySetResult();
+        }
+    }
+
+    [Fact]
     public async Task RefreshCommand_WhenProfileRenameChangesSortOrder_ReordersSettingsProfileItems()
     {
         var preferences = await CreatePreferencesAsync();
@@ -1012,6 +1197,19 @@ public sealed class AcpConnectionSettingsViewModelTests
         return profiles;
     }
 
+    private static AgentProfileItemViewModel CreateAgentProfileItem(
+        string profileId,
+        InMemoryAcpConnectionSessionRegistry registry,
+        TestConnectionCommands commands)
+        => new(
+            new ServerConfiguration { Id = profileId, Name = profileId },
+            registry,
+            registry,
+            commands,
+            NullLogger<AgentProfileItemViewModel>.Instance,
+            new ImmediateUiDispatcher(),
+            new TestCoreStringLocalizer());
+
     private static void SelectProfile(AcpConnectionSettingsViewModel viewModel, string profileId)
     {
         var profile = viewModel.Profiles.Profiles.FirstOrDefault(
@@ -1140,6 +1338,12 @@ public sealed class AcpConnectionSettingsViewModelTests
         public List<ServerConfiguration> ConnectedProfiles { get; } = new();
         public List<ServerConfiguration> PoolConnectedProfiles { get; } = new();
         public List<string> PoolDisconnectedProfileIds { get; } = new();
+        public Exception? ConnectProfileInPoolException { get; set; }
+        public Exception? DisconnectProfileInPoolException { get; set; }
+        public TaskCompletionSource? ConnectProfileInPoolTask { get; set; }
+        public TaskCompletionSource? DisconnectProfileInPoolTask { get; set; }
+        public Action? DisconnectProfileInPoolCallback { get; set; }
+        public List<string> PoolOperations { get; } = new();
 
         public Task ConnectToAcpProfileAsync(ServerConfiguration profile)
         {
@@ -1149,14 +1353,27 @@ public sealed class AcpConnectionSettingsViewModelTests
 
         public Task ConnectProfileInPoolAsync(ServerConfiguration profile)
         {
+            if (ConnectProfileInPoolException is not null)
+            {
+                throw ConnectProfileInPoolException;
+            }
+
             PoolConnectedProfiles.Add(profile);
-            return Task.CompletedTask;
+            PoolOperations.Add($"connect:{profile.Id}");
+            return ConnectProfileInPoolTask?.Task ?? Task.CompletedTask;
         }
 
         public Task DisconnectProfileInPoolAsync(string profileId)
         {
+            if (DisconnectProfileInPoolException is not null)
+            {
+                throw DisconnectProfileInPoolException;
+            }
+
             PoolDisconnectedProfileIds.Add(profileId);
-            return Task.CompletedTask;
+            PoolOperations.Add($"disconnect:{profileId}");
+            DisconnectProfileInPoolCallback?.Invoke();
+            return DisconnectProfileInPoolTask?.Task ?? Task.CompletedTask;
         }
     }
 

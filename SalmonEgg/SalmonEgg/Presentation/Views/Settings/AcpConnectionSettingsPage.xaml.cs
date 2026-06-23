@@ -187,12 +187,12 @@ public sealed partial class AcpConnectionSettingsPage : SettingsPageBase
             return;
         }
 
-        if (!item.ToggleConnectionCommand.CanExecute(null))
+        if (!item.ApplyConnectionToggleRequestCommand.CanExecute(toggle.IsOn))
         {
             return;
         }
 
-        await item.ToggleConnectionCommand.ExecuteAsync(null);
+        await item.ApplyConnectionToggleRequestCommand.ExecuteAsync(toggle.IsOn);
     }
 
     private static T? FindDescendant<T>(DependencyObject root, Func<T, bool> predicate)

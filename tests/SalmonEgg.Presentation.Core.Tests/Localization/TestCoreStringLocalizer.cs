@@ -65,6 +65,8 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["SettingsSearchSubtitle_Diagnostics"] = "日志和调试信息",
         ["SettingsSearchSubtitle_About"] = "版本和许可证信息",
         ["AgentProfile_StatusConnecting"] = "连接中...",
+        ["AgentProfile_StatusDisconnecting"] = "断开中...",
+        ["AgentProfile_StatusReconnecting"] = "重连中...",
         ["AgentProfile_StatusConnected"] = "已连接",
         ["AgentProfile_StatusDisconnected"] = "未连接",
         ["McpSettings_LoadFailed"] = "未能读取 MCP 配置。",

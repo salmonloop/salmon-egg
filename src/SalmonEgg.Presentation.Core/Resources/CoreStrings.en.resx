@@ -515,6 +515,12 @@ Create the corresponding Markdown file in:
   <data name="AgentProfile_StatusConnecting" xml:space="preserve">
     <value>Connecting...</value>
   </data>
+  <data name="AgentProfile_StatusDisconnecting" xml:space="preserve">
+    <value>Disconnecting...</value>
+  </data>
+  <data name="AgentProfile_StatusReconnecting" xml:space="preserve">
+    <value>Reconnecting...</value>
+  </data>
   <data name="AgentProfile_StatusConnected" xml:space="preserve">
     <value>Connected</value>
   </data>
