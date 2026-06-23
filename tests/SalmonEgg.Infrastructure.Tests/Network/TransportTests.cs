@@ -240,6 +240,17 @@ namespace SalmonEgg.Infrastructure.Tests.Network
             Assert.False(client.Options.Proxy is WebProxy);
         }
 
+        [Fact]
+        public void WebSocketTransport_CreateClient_ShouldUseProvidedConnectTimeout()
+        {
+            var client = WebSocketTransport.CreateClient(
+                new Uri("ws://localhost:3012/acp/ws"),
+                new ProxyConfig { Mode = ProxyMode.None },
+                TimeSpan.FromSeconds(120));
+
+            Assert.Equal(TimeSpan.FromSeconds(120), client.ConnectTimeout);
+        }
+
         /// <summary>
         /// Tests WebSocket transport state changes
         /// </summary>

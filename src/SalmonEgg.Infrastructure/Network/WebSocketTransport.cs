@@ -5,6 +5,7 @@ using System.Reactive.Disposables;
 using System.Reactive.Subjects;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Diagnostics;
 using Serilog;
 using SalmonEgg.Domain.Models;
 using Websocket.Client;
@@ -36,7 +37,7 @@ namespace SalmonEgg.Infrastructure.Network
                 logger,
                 proxyConfiguration,
                 connectTimeout,
-                static (uri, proxy) => new WebsocketClient(uri, () => CreateNativeClient(proxy)))
+                (uri, proxy) => CreateClient(uri, proxy, connectTimeout ?? TimeSpan.FromSeconds(AcpConnectionTimeoutPolicy.DefaultSeconds)))
         {
         }
 
@@ -80,8 +81,13 @@ namespace SalmonEgg.Infrastructure.Network
 
             try
             {
+                var stopwatch = Stopwatch.StartNew();
                 _stateSubject.OnNext(TransportState.Connecting);
-                _logger.Information("Connecting to WebSocket server at {Url}", url);
+                _logger.Information(
+                    "Connecting to WebSocket server at {Url}. proxyMode={ProxyMode} timeoutSeconds={TimeoutSeconds}",
+                    url,
+                    _proxyConfiguration.Mode,
+                    _connectTimeout.TotalSeconds);
 
                 DisposeClient();
 
@@ -110,6 +116,11 @@ namespace SalmonEgg.Infrastructure.Network
                     }));
 
                 await _client.Start();
+                _logger.Information(
+                    "WebSocket Start returned for {Url}. elapsedMs={ElapsedMs} isRunning={IsRunning}",
+                    url,
+                    stopwatch.ElapsedMilliseconds,
+                    _client.IsRunning);
 
                 if (_client.IsRunning)
                 {
@@ -144,7 +155,12 @@ namespace SalmonEgg.Infrastructure.Network
             {
                 DisposeClient();
                 _stateSubject.OnNext(TransportState.Error);
-                _logger.Error(ex, "Failed to connect to WebSocket server at {Url}", url);
+                _logger.Error(
+                    ex,
+                    "Failed to connect to WebSocket server at {Url}. proxyMode={ProxyMode} timeoutSeconds={TimeoutSeconds}",
+                    url,
+                    _proxyConfiguration.Mode,
+                    _connectTimeout.TotalSeconds);
                 throw;
             }
         }
@@ -233,8 +249,12 @@ namespace SalmonEgg.Infrastructure.Network
                 }),
                 client.DisconnectionHappened.Subscribe(info =>
                 {
-                    _logger.Warning("WebSocket disconnection happened: {Type}, {CloseStatus}",
-                        info.Type, info.CloseStatus);
+                    _logger.Warning(
+                        "WebSocket disconnection happened: {Type}, {CloseStatus}, exceptionType={ExceptionType}, exceptionMessage={ExceptionMessage}",
+                        info.Type,
+                        info.CloseStatus,
+                        info.Exception?.GetType().FullName,
+                        info.Exception?.Message);
 
                     if (info.Type != DisconnectionType.Exit)
                     {
@@ -338,6 +358,16 @@ namespace SalmonEgg.Infrastructure.Network
                 default:
                     throw new InvalidOperationException($"Unsupported proxy mode: {mode}");
             }
+
+            return client;
+        }
+
+        internal static WebsocketClient CreateClient(Uri uri, ProxyConfig? proxyConfiguration, TimeSpan connectTimeout)
+        {
+            var client = new WebsocketClient(uri, () => CreateNativeClient(proxyConfiguration))
+            {
+                ConnectTimeout = connectTimeout
+            };
 
             return client;
         }

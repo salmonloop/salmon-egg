@@ -349,11 +349,6 @@ public partial class ChatViewModel
             return;
         }
 
-        Logger.LogInformation(
-            "Queueing ACP profile connection before creating new-session draft. requiredProfileId={RequiredProfileId} currentForegroundProfileId={CurrentForegroundProfileId} currentConnectionInstanceId={CurrentConnectionInstanceId}",
-            requiredProfileId,
-            connectionState.ForegroundTransportProfileId,
-            connectionState.ConnectionInstanceId);
         QueueSelectedProfileConnection(profile);
     }
 
