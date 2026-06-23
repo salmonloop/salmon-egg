@@ -118,6 +118,7 @@ public sealed partial class AgentProfileEditorPage : SettingsPageBase
 
         await _profiles.RefreshAsync();
         _profiles.SelectedProfile = _profiles.Profiles.FirstOrDefault(p => p.Id == ViewModel.Configuration.Id);
+        _profiles.ShowSavedCurrentConnectionNoticeIfNeeded(ViewModel.Configuration.Id);
 
         OnBackClick(sender, e);
     }

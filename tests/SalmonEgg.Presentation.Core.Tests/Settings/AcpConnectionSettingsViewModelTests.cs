@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Tests.Localization;
@@ -676,6 +677,105 @@ public sealed class AcpConnectionSettingsViewModelTests
         Assert.Same(item, updated);
         Assert.Equal("Alpha Renamed", updated.Name);
         Assert.Equal("ws://localhost:9001", updated.EndpointDescription);
+    }
+
+    [Fact]
+    public async Task ShowSavedCurrentConnectionNoticeIfNeeded_WhenProfileIsConnected_ShowsReconnectPrompt()
+    {
+        var preferences = await CreatePreferencesAsync();
+        var configurations = new[]
+        {
+            new ServerConfiguration
+            {
+                Id = "profile-a",
+                Name = "Alpha",
+                Transport = TransportType.WebSocket,
+                ServerUrl = "ws://localhost:9001"
+            }
+        };
+
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .Setup(service => service.ListConfigurationsAsync())
+            .ReturnsAsync(configurations);
+
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        registry.Upsert(new AcpConnectionSession(
+            "profile-a",
+            null!,
+            new InitializeResponse(),
+            new AcpConnectionReuseKey(TransportType.WebSocket, string.Empty, string.Empty, "ws://localhost:9001")));
+
+        var profiles = new AcpProfilesViewModel(
+            configurationService.Object,
+            preferences,
+            NullLogger<AcpProfilesViewModel>.Instance,
+            registry,
+            registry,
+            new TestConnectionCommands(),
+            NullLoggerFactory.Instance,
+            new ImmediateUiDispatcher(),
+            new TestCoreStringLocalizer());
+
+        await profiles.RefreshCommand.ExecuteAsync(null);
+
+        profiles.ShowSavedCurrentConnectionNoticeIfNeeded("profile-a");
+
+        Assert.True(profiles.IsSavedCurrentConnectionNoticeOpen);
+        Assert.Equal("AgentProfileEditor_CurrentConnectionSavedNoticeMessage", profiles.SavedCurrentConnectionNoticeMessage);
+    }
+
+    [Fact]
+    public async Task ShowSavedCurrentConnectionNoticeIfNeeded_WhenProfileIsNotConnected_DoesNotShowReconnectPrompt()
+    {
+        var preferences = await CreatePreferencesAsync();
+        using var profiles = await CreateProfilesWithItemsAsync(preferences);
+
+        profiles.ShowSavedCurrentConnectionNoticeIfNeeded("profile-a");
+
+        Assert.False(profiles.IsSavedCurrentConnectionNoticeOpen);
+        Assert.Empty(profiles.SavedCurrentConnectionNoticeMessage);
+    }
+
+    [Fact]
+    public async Task DismissSavedCurrentConnectionNotice_ClosesReconnectPrompt()
+    {
+        var preferences = await CreatePreferencesAsync();
+        var configurations = new[]
+        {
+            new ServerConfiguration { Id = "profile-a", Name = "Alpha" }
+        };
+
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .Setup(service => service.ListConfigurationsAsync())
+            .ReturnsAsync(configurations);
+
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        registry.Upsert(new AcpConnectionSession(
+            "profile-a",
+            null!,
+            new InitializeResponse(),
+            default));
+
+        var profiles = new AcpProfilesViewModel(
+            configurationService.Object,
+            preferences,
+            NullLogger<AcpProfilesViewModel>.Instance,
+            registry,
+            registry,
+            new TestConnectionCommands(),
+            NullLoggerFactory.Instance,
+            new ImmediateUiDispatcher(),
+            new TestCoreStringLocalizer());
+
+        await profiles.RefreshCommand.ExecuteAsync(null);
+        profiles.ShowSavedCurrentConnectionNoticeIfNeeded("profile-a");
+
+        profiles.DismissSavedCurrentConnectionNotice();
+
+        Assert.False(profiles.IsSavedCurrentConnectionNoticeOpen);
+        Assert.Empty(profiles.SavedCurrentConnectionNoticeMessage);
     }
 
     [Fact]

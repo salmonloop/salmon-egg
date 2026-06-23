@@ -61,6 +61,12 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private bool _isLoading;
 
+    [ObservableProperty]
+    private bool _isSavedCurrentConnectionNoticeOpen;
+
+    [ObservableProperty]
+    private string _savedCurrentConnectionNoticeMessage = string.Empty;
+
     // ── New: per-profile item VMs for the Settings card list ─────────────────
 
     /// <summary>
@@ -139,6 +145,32 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
     public void MarkLastConnected(ServerConfiguration? profile)
     {
         _preferences.LastSelectedServerId = profile?.Id;
+    }
+
+    public void ShowSavedCurrentConnectionNoticeIfNeeded(string? profileId)
+    {
+        if (string.IsNullOrWhiteSpace(profileId))
+        {
+            DismissSavedCurrentConnectionNotice();
+            return;
+        }
+
+        var item = ProfileItems.FirstOrDefault(vm => string.Equals(vm.ProfileId, profileId, StringComparison.Ordinal));
+        if (item?.IsConnected != true)
+        {
+            DismissSavedCurrentConnectionNotice();
+            return;
+        }
+
+        SavedCurrentConnectionNoticeMessage = _localizer?["AgentProfileEditor_CurrentConnectionSavedNoticeMessage"]
+            ?? "配置已保存。当前连接仍使用旧配置，重新连接后生效。";
+        IsSavedCurrentConnectionNoticeOpen = true;
+    }
+
+    public void DismissSavedCurrentConnectionNotice()
+    {
+        IsSavedCurrentConnectionNoticeOpen = false;
+        SavedCurrentConnectionNoticeMessage = string.Empty;
     }
 
     // ── Commands ──────────────────────────────────────────────────────────────

@@ -191,7 +191,8 @@ public sealed class AcpConnectionSettingsXamlTests
             "Acp_GlobalEnabledTitle.Text",
             "Acp_GlobalEnabledDescription.Text",
             "Acp_GlobalEnabledSwitch.OnContent",
-            "Acp_GlobalEnabledSwitch.OffContent"
+            "Acp_GlobalEnabledSwitch.OffContent",
+            "AgentProfileEditor_CurrentConnectionSavedNoticeMessage"
         ];
 
         foreach (var resourceFile in resourceFiles)
@@ -214,6 +215,9 @@ public sealed class AcpConnectionSettingsXamlTests
         var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AcpConnectionSettingsPage.xaml");
 
         Assert.Contains("x:Uid=\"Acp_ProfilesTitle\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Severity=\"Informational\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("IsOpen=\"{x:Bind ViewModel.Profiles.IsSavedCurrentConnectionNoticeOpen, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Message=\"{x:Bind ViewModel.Profiles.SavedCurrentConnectionNoticeMessage, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Command=\"{x:Bind ViewModel.Profiles.RefreshCommand}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Click=\"OnAddProfileClick\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ItemsSource=\"{x:Bind ViewModel.Profiles.ProfileItems, Mode=OneWay}\"", xaml, StringComparison.Ordinal);

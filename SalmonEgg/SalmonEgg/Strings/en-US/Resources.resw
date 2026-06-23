@@ -738,6 +738,9 @@
   <data name="Acp_ProfilesTitle.Text" xml:space="preserve">
     <value>ACP connection profiles</value>
   </data>
+  <data name="AgentProfileEditor_CurrentConnectionSavedNoticeMessage" xml:space="preserve">
+    <value>Profile saved. The current connection is still using the previous configuration; reconnect to apply the changes.</value>
+  </data>
   <data name="Acp_ProfilesRefresh.Content" xml:space="preserve">
     <value>Refresh</value>
   </data>

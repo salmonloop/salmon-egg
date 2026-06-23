@@ -94,6 +94,11 @@
                             </StackPanel>
                         </Grid>
 
+                        <InfoBar IsOpen="{x:Bind ViewModel.Profiles.IsSavedCurrentConnectionNoticeOpen, Mode=TwoWay}"
+                                 Severity="Informational"
+                                 Message="{x:Bind ViewModel.Profiles.SavedCurrentConnectionNoticeMessage, Mode=OneWay}"
+                                 IsClosable="True"/>
+
                         <Border Style="{StaticResource SettingsSectionContainerStyle}">
                             <ListView ItemsSource="{x:Bind ViewModel.Profiles.ProfileItems, Mode=OneWay}"
                                       SelectedItem="{x:Bind ViewModel.Profiles.SelectedProfileItem, Mode=TwoWay}"
