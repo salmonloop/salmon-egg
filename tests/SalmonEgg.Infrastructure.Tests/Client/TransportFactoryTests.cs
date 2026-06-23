@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Net;
 using System.Runtime.InteropServices;
 using Moq;
 using Serilog;
@@ -45,6 +46,84 @@ public sealed class TransportFactoryTests
         var innerField = typeof(NetworkTransportAdapter).GetField("_inner", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
         var inner = Assert.IsType<WebSocketTransport>(innerField?.GetValue(adapter));
         Assert.Equal(TimeSpan.FromSeconds(180), inner.ConnectTimeout);
+    }
+
+    [Fact]
+    public void CreateTransport_WebSocketProfileWithCustomProxy_Should_AssignExplicitProxy()
+    {
+        var factory = CreateFactory();
+        var profile = new ServerConfiguration
+        {
+            Id = "profile-1",
+            Name = "Remote Agent",
+            Transport = TransportType.WebSocket,
+            ServerUrl = "ws://example.com/acp/ws",
+            Proxy = new ProxyConfig
+            {
+                Mode = ProxyMode.Custom,
+                ProxyUrl = "http://proxy.example.com:8080"
+            }
+        };
+
+        var transport = factory.CreateTransport(profile);
+
+        var adapter = Assert.IsType<NetworkTransportAdapter>(transport);
+        var innerField = typeof(NetworkTransportAdapter).GetField("_inner", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        var inner = Assert.IsType<WebSocketTransport>(innerField?.GetValue(adapter));
+        var client = WebSocketTransport.CreateNativeClient(inner.ProxyConfiguration);
+        var proxy = Assert.IsType<WebProxy>(client.Options.Proxy);
+        Assert.Equal(new Uri("http://proxy.example.com:8080"), proxy.Address);
+    }
+
+    [Fact]
+    public void CreateTransport_WebSocketProfileWithNoneProxy_Should_DisableSystemProxy()
+    {
+        var factory = CreateFactory();
+        var profile = new ServerConfiguration
+        {
+            Id = "profile-1",
+            Name = "Remote Agent",
+            Transport = TransportType.WebSocket,
+            ServerUrl = "ws://example.com/acp/ws",
+            Proxy = new ProxyConfig
+            {
+                Mode = ProxyMode.None
+            }
+        };
+
+        var transport = factory.CreateTransport(profile);
+
+        var adapter = Assert.IsType<NetworkTransportAdapter>(transport);
+        var innerField = typeof(NetworkTransportAdapter).GetField("_inner", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        var inner = Assert.IsType<WebSocketTransport>(innerField?.GetValue(adapter));
+        var client = WebSocketTransport.CreateNativeClient(inner.ProxyConfiguration);
+        Assert.Null(client.Options.Proxy);
+    }
+
+    [Fact]
+    public void CreateTransport_WebSocketProfileWithSystemProxy_Should_PreserveSystemProxyResolution()
+    {
+        var factory = CreateFactory();
+        var profile = new ServerConfiguration
+        {
+            Id = "profile-1",
+            Name = "Remote Agent",
+            Transport = TransportType.WebSocket,
+            ServerUrl = "ws://example.com/acp/ws",
+            Proxy = new ProxyConfig
+            {
+                Mode = ProxyMode.System
+            }
+        };
+
+        var transport = factory.CreateTransport(profile);
+
+        var adapter = Assert.IsType<NetworkTransportAdapter>(transport);
+        var innerField = typeof(NetworkTransportAdapter).GetField("_inner", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        var inner = Assert.IsType<WebSocketTransport>(innerField?.GetValue(adapter));
+        var client = WebSocketTransport.CreateNativeClient(inner.ProxyConfiguration);
+        Assert.NotNull(client.Options.Proxy);
+        Assert.False(client.Options.Proxy is WebProxy);
     }
 
     [Fact]

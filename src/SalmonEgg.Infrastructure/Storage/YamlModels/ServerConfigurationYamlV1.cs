@@ -34,6 +34,8 @@ internal sealed class AuthenticationYamlV1
 
 internal sealed class ProxyYamlV1
 {
+    public string Mode { get; set; } = string.Empty;
+
     public bool Enabled { get; set; }
 
     public string ProxyUrl { get; set; } = string.Empty;

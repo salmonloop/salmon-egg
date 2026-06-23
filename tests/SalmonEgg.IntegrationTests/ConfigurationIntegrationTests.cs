@@ -61,7 +61,7 @@ public sealed class ConfigurationIntegrationTests : IDisposable
             },
             Proxy = new ProxyConfig
             {
-                Enabled = true,
+                Mode = ProxyMode.Custom,
                 ProxyUrl = "http://proxy.integration.com:8080"
             }
         };
@@ -81,8 +81,40 @@ public sealed class ConfigurationIntegrationTests : IDisposable
         Assert.NotNull(loaded.Authentication);
         Assert.Equal("integration-token-123", loaded.Authentication!.Token);
         Assert.NotNull(loaded.Proxy);
-        Assert.Equal(config.Proxy!.Enabled, loaded.Proxy!.Enabled);
+        Assert.Equal(config.Proxy!.Mode, loaded.Proxy!.Mode);
         Assert.Equal(config.Proxy.ProxyUrl, loaded.Proxy.ProxyUrl);
+    }
+
+    [Fact]
+    public async Task LoadLegacyProxyYaml_ShouldMigrateEnabledFlagToProxyMode()
+    {
+        const string configId = "legacy-proxy-config";
+        var yaml = """
+schema_version: 1
+updated_at_utc: 2026-06-23T00:00:00.0000000+00:00
+id: legacy-proxy-config
+name: Legacy Proxy
+transport: websocket
+server_url: ws://legacy.example.com/acp/ws
+stdio_command: ''
+stdio_args: ''
+connection_timeout_seconds: 30
+authentication:
+  mode: none
+proxy:
+  enabled: true
+  proxy_url: http://legacy-proxy.example.com:8080
+""";
+
+        Directory.CreateDirectory(Path.GetDirectoryName(GetServerYamlPath(configId))!);
+        await File.WriteAllTextAsync(GetServerYamlPath(configId), yaml);
+
+        var loaded = await _configManager.LoadConfigurationAsync(configId);
+
+        Assert.NotNull(loaded);
+        Assert.NotNull(loaded!.Proxy);
+        Assert.Equal(ProxyMode.Custom, loaded.Proxy!.Mode);
+        Assert.Equal("http://legacy-proxy.example.com:8080", loaded.Proxy.ProxyUrl);
     }
 
     [Fact]

@@ -405,7 +405,7 @@ namespace SalmonEgg.Infrastructure.Tests.Network
                 Transport = TransportType.WebSocket,
                 Proxy = new ProxyConfig
                 {
-                    Enabled = true,
+                    Mode = ProxyMode.Custom,
                     ProxyUrl = "http://proxy.example.com:8080"
                 }
             };

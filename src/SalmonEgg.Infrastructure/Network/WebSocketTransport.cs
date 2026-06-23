@@ -18,8 +18,8 @@ namespace SalmonEgg.Infrastructure.Network
     public class WebSocketTransport : ITransport, IDisposable
     {
         private readonly ILogger _logger;
-        private readonly Uri? _proxyUri;
-        private readonly Func<Uri, Uri?, IWebsocketClient> _clientFactory;
+        private readonly ProxyConfig _proxyConfiguration;
+        private readonly Func<Uri, ProxyConfig, IWebsocketClient> _clientFactory;
         private IWebsocketClient? _client;
         private IDisposable? _clientSubscriptions;
         private readonly Subject<string> _messagesSubject;
@@ -31,10 +31,10 @@ namespace SalmonEgg.Infrastructure.Network
         /// Initializes a new instance of the WebSocketTransport class.
         /// </summary>
         /// <param name="logger">Logger instance for logging transport events.</param>
-        public WebSocketTransport(ILogger logger, Uri? proxyUri = null, TimeSpan? connectTimeout = null)
+        public WebSocketTransport(ILogger logger, ProxyConfig? proxyConfiguration = null, TimeSpan? connectTimeout = null)
             : this(
                 logger,
-                proxyUri,
+                proxyConfiguration,
                 connectTimeout,
                 static (uri, proxy) => new WebsocketClient(uri, () => CreateNativeClient(proxy)))
         {
@@ -42,12 +42,12 @@ namespace SalmonEgg.Infrastructure.Network
 
         internal WebSocketTransport(
             ILogger logger,
-            Uri? proxyUri,
+            ProxyConfig? proxyConfiguration,
             TimeSpan? connectTimeout,
-            Func<Uri, Uri?, IWebsocketClient> clientFactory)
+            Func<Uri, ProxyConfig, IWebsocketClient> clientFactory)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _proxyUri = proxyUri;
+            _proxyConfiguration = CloneProxyConfiguration(proxyConfiguration);
             _clientFactory = clientFactory ?? throw new ArgumentNullException(nameof(clientFactory));
             _messagesSubject = new Subject<string>();
             _stateSubject = new BehaviorSubject<TransportState>(TransportState.Disconnected);
@@ -55,6 +55,8 @@ namespace SalmonEgg.Infrastructure.Network
         }
 
         public TimeSpan ConnectTimeout => _connectTimeout;
+
+        internal ProxyConfig ProxyConfiguration => CloneProxyConfiguration(_proxyConfiguration);
 
         /// <inheritdoc />
         public IObservable<string> Messages => _messagesSubject;
@@ -84,7 +86,7 @@ namespace SalmonEgg.Infrastructure.Network
                 DisposeClient();
 
                 var uri = new Uri(url);
-                _client = _clientFactory(uri, _proxyUri);
+                _client = _clientFactory(uri, _proxyConfiguration);
 
                 _client.ReconnectTimeout = null;
                 SubscribeToWebSocketEvents();
@@ -313,11 +315,38 @@ namespace SalmonEgg.Infrastructure.Network
             return new InvalidOperationException(message, disconnection.Exception);
         }
 
-        internal static ClientWebSocket CreateNativeClient(Uri? proxyUri = null)
+        internal static ClientWebSocket CreateNativeClient(ProxyConfig? proxyConfiguration = null)
         {
             var client = new ClientWebSocket();
-            client.Options.Proxy = proxyUri == null ? null : new WebProxy(proxyUri);
+            var mode = proxyConfiguration?.Mode ?? ProxyMode.None;
+
+            switch (mode)
+            {
+                case ProxyMode.None:
+                    client.Options.Proxy = null;
+                    break;
+                case ProxyMode.System:
+                    break;
+                case ProxyMode.Custom:
+                    if (string.IsNullOrWhiteSpace(proxyConfiguration?.ProxyUrl))
+                    {
+                        throw new InvalidOperationException("Custom proxy mode requires a proxy URL.");
+                    }
+
+                    client.Options.Proxy = new WebProxy(new Uri(proxyConfiguration.ProxyUrl, UriKind.Absolute));
+                    break;
+                default:
+                    throw new InvalidOperationException($"Unsupported proxy mode: {mode}");
+            }
+
             return client;
         }
+
+        private static ProxyConfig CloneProxyConfiguration(ProxyConfig? proxyConfiguration)
+            => new()
+            {
+                Mode = proxyConfiguration?.Mode ?? ProxyMode.None,
+                ProxyUrl = proxyConfiguration?.ProxyUrl
+            };
     }
 }

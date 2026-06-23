@@ -1,3 +1,4 @@
+using System;
 using FluentValidation;
 using SalmonEgg.Domain.Models;
 
@@ -65,12 +66,16 @@ namespace SalmonEgg.Application.Validators
                     .WithMessage("Authentication must provide exactly one of Token or ApiKey");
             });
 
-            // Validate proxy configuration (if enabled)
-            When(x => x.Proxy != null && x.Proxy.Enabled, () =>
+            RuleFor(x => x.Proxy)
+                .Must(proxy => proxy == null || Enum.IsDefined(typeof(ProxyMode), proxy.Mode))
+                .WithMessage("Invalid proxy mode");
+
+            // Validate proxy configuration (if custom)
+            When(x => x.Proxy != null && x.Proxy.Mode == ProxyMode.Custom, () =>
             {
                 RuleFor(x => x.Proxy!.ProxyUrl)
                     .NotEmpty()
-                    .WithMessage("Proxy URL must be provided when proxy is enabled")
+                    .WithMessage("Proxy URL must be provided when custom proxy is selected")
                     .Must(BeValidProxyUrl)
                     .WithMessage("Invalid proxy URL format");
             });

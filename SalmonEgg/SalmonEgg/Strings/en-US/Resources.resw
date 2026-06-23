@@ -1104,8 +1104,8 @@
   <data name="AgentProfileEditorProxyTitle.Text" xml:space="preserve">
     <value>Proxy</value>
   </data>
-  <data name="AgentProfileEditorProxyEnabled.Header" xml:space="preserve">
-    <value>Enable proxy</value>
+  <data name="AgentProfileEditorProxyMode.Header" xml:space="preserve">
+    <value>Proxy mode</value>
   </data>
   <data name="AgentProfileEditorProxyUrl.Header" xml:space="preserve">
     <value>Proxy URL</value>

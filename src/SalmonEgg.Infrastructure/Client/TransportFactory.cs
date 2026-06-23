@@ -199,12 +199,9 @@ public class TransportFactory : ITransportFactory
         _logger.Information("创建 WebSocket 传输：Url={Url}", url);
 
         var logger = _logger;
-        var proxyUri = proxy is { Enabled: true } && !string.IsNullOrWhiteSpace(proxy.ProxyUrl)
-            ? new Uri(proxy.ProxyUrl, UriKind.Absolute)
-            : null;
         var inner = new SalmonEgg.Infrastructure.Network.WebSocketTransport(
             logger,
-            proxyUri: proxyUri,
+            proxyConfiguration: proxy,
             connectTimeout: connectTimeout);
         return new NetworkTransportAdapter(inner, url.Trim());
     }

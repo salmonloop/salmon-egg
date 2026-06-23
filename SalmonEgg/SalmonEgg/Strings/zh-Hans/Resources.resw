@@ -1047,8 +1047,8 @@
   <data name="AgentProfileEditorProxyTitle.Text" xml:space="preserve">
     <value>代理</value>
   </data>
-  <data name="AgentProfileEditorProxyEnabled.Header" xml:space="preserve">
-    <value>启用代理</value>
+  <data name="AgentProfileEditorProxyMode.Header" xml:space="preserve">
+    <value>代理模式</value>
   </data>
   <data name="AgentProfileEditorProxyUrl.Header" xml:space="preserve">
     <value>代理 URL</value>

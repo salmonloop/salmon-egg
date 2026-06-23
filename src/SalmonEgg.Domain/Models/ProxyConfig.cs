@@ -6,9 +6,9 @@ namespace SalmonEgg.Domain.Models
     public class ProxyConfig
     {
         /// <summary>
-        /// 是否启用代理
+        /// 代理模式
         /// </summary>
-        public bool Enabled { get; set; }
+        public ProxyMode Mode { get; set; } = ProxyMode.None;
 
         /// <summary>
         /// 代理服务器 URL

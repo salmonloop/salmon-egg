@@ -191,9 +191,11 @@ public sealed class ConfigurationManager : IConfigurationService
             StdioArgs = config.StdioArgs,
             ConnectionTimeoutSeconds = config.ConnectionTimeout,
             Authentication = new AuthenticationYamlV1 { Mode = mode },
-            Proxy = config.Proxy is { Enabled: true }
-                ? new ProxyYamlV1 { Enabled = true, ProxyUrl = config.Proxy.ProxyUrl ?? string.Empty }
-                : new ProxyYamlV1 { Enabled = false, ProxyUrl = string.Empty }
+            Proxy = new ProxyYamlV1
+            {
+                Mode = ProxyModeToString(config.Proxy?.Mode ?? ProxyMode.None),
+                ProxyUrl = config.Proxy?.Mode == ProxyMode.Custom ? config.Proxy.ProxyUrl ?? string.Empty : string.Empty
+            }
         };
     }
 
@@ -210,14 +212,14 @@ public sealed class ConfigurationManager : IConfigurationService
             ConnectionTimeout = AcpConnectionTimeoutPolicy.ResolveSeconds(yamlModel.ConnectionTimeoutSeconds)
         };
 
-        if (yamlModel.Proxy is { Enabled: true })
+        var proxyMode = ProxyModeFromYaml(yamlModel.Proxy);
+        config.Proxy = new ProxyConfig
         {
-            config.Proxy = new ProxyConfig
-            {
-                Enabled = true,
-                ProxyUrl = string.IsNullOrWhiteSpace(yamlModel.Proxy.ProxyUrl) ? null : yamlModel.Proxy.ProxyUrl
-            };
-        }
+            Mode = proxyMode,
+            ProxyUrl = proxyMode == ProxyMode.Custom && !string.IsNullOrWhiteSpace(yamlModel.Proxy.ProxyUrl)
+                ? yamlModel.Proxy.ProxyUrl
+                : null
+        };
 
         return config;
     }
@@ -315,6 +317,32 @@ public sealed class ConfigurationManager : IConfigurationService
             "http_sse" => TransportType.HttpSse,
             "websocket" => TransportType.WebSocket,
             _ => TransportType.WebSocket
+        };
+    }
+
+    private static string ProxyModeToString(ProxyMode mode) =>
+        mode switch
+        {
+            ProxyMode.System => "system",
+            ProxyMode.Custom => "custom",
+            _ => "none"
+        };
+
+    private static ProxyMode ProxyModeFromYaml(ProxyYamlV1? proxy)
+    {
+        if (proxy is null)
+        {
+            return ProxyMode.None;
+        }
+
+        var mode = (proxy.Mode ?? string.Empty).Trim().ToLowerInvariant();
+        return mode switch
+        {
+            "system" => ProxyMode.System,
+            "custom" => ProxyMode.Custom,
+            "none" => ProxyMode.None,
+            _ when proxy.Enabled => ProxyMode.Custom,
+            _ => ProxyMode.None
         };
     }
 

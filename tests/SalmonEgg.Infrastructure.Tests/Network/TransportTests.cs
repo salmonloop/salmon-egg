@@ -1,4 +1,4 @@
-using System;using System.Collections.Generic;using System.Diagnostics;using System.Net;using System.Net.Http;using System.Net.WebSockets;using System.Reactive.Subjects;using System.Threading;using System.Threading.Tasks;using Moq;using Serilog;using SalmonEgg.Infrastructure.Network;using Websocket.Client;using Xunit;
+using System;using System.Collections.Generic;using System.Diagnostics;using System.Net;using System.Net.Http;using System.Net.WebSockets;using System.Reactive.Subjects;using System.Threading;using System.Threading.Tasks;using Moq;using Serilog;using SalmonEgg.Domain.Models;using SalmonEgg.Infrastructure.Network;using Websocket.Client;using Xunit;
 
 namespace SalmonEgg.Infrastructure.Tests.Network
 {
@@ -35,7 +35,7 @@ namespace SalmonEgg.Infrastructure.Tests.Network
             var client = CreateMockClient(reconnections, disconnections, messages, out _);
             var transport = new WebSocketTransport(
                 _mockLogger.Object,
-                proxyUri: null,
+                proxyConfiguration: null,
                 connectTimeout: TimeSpan.FromSeconds(5),
                 clientFactory: (_, _) => client.Object);
             var stopwatch = Stopwatch.StartNew();
@@ -67,7 +67,7 @@ namespace SalmonEgg.Infrastructure.Tests.Network
             var client = CreateMockClient(reconnections, disconnections, messages, out var isRunning);
             var transport = new WebSocketTransport(
                 _mockLogger.Object,
-                proxyUri: null,
+                proxyConfiguration: null,
                 connectTimeout: TimeSpan.FromSeconds(5),
                 clientFactory: (_, _) => client.Object);
             var states = new List<TransportState>();
@@ -218,10 +218,26 @@ namespace SalmonEgg.Infrastructure.Tests.Network
         {
             var proxyUri = new Uri("http://proxy.example.com:8080");
 
-            var client = WebSocketTransport.CreateNativeClient(proxyUri);
+            var client = WebSocketTransport.CreateNativeClient(new ProxyConfig
+            {
+                Mode = ProxyMode.Custom,
+                ProxyUrl = proxyUri.ToString()
+            });
 
             var proxy = Assert.IsType<WebProxy>(client.Options.Proxy);
             Assert.Equal(proxyUri, proxy.Address);
+        }
+
+        [Fact]
+        public void WebSocketTransport_CreateNativeClient_ShouldPreserveSystemProxy_WhenConfigured()
+        {
+            var client = WebSocketTransport.CreateNativeClient(new ProxyConfig
+            {
+                Mode = ProxyMode.System
+            });
+
+            Assert.NotNull(client.Options.Proxy);
+            Assert.False(client.Options.Proxy is WebProxy);
         }
 
         /// <summary>

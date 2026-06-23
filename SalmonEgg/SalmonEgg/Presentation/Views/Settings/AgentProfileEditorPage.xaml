@@ -96,12 +96,20 @@
                                              Password="{x:Bind ViewModel.ApiKey, Mode=TwoWay}"/>
 
                                 <TextBlock x:Uid="AgentProfileEditorProxyTitle" FontWeight="SemiBold" Margin="0,8,0,0"/>
-                                <ToggleSwitch x:Uid="AgentProfileEditorProxyEnabled"
-                                              HorizontalAlignment="Stretch"
-                                              IsOn="{x:Bind ViewModel.ProxyEnabled, Mode=TwoWay}"/>
+                                <ComboBox x:Uid="AgentProfileEditorProxyMode"
+                                          HorizontalAlignment="Stretch"
+                                          ItemsSource="{x:Bind ViewModel.ProxyModeOptions, Mode=OneWay}"
+                                          SelectedItem="{x:Bind ViewModel.SelectedProxyModeOption, Mode=TwoWay}"
+                                          IsFocusEngagementEnabled="True">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:ProxyModeOption">
+                                            <TextBlock Text="{x:Bind Name, Mode=OneWay}"/>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
                                 <TextBox x:Uid="AgentProfileEditorProxyUrl"
                                          HorizontalAlignment="Stretch"
-                                         IsEnabled="{x:Bind ViewModel.ProxyEnabled, Mode=OneWay}"
+                                         IsEnabled="{x:Bind ViewModel.IsCustomProxy, Mode=OneWay}"
                                          Text="{x:Bind ViewModel.ProxyUrl, Mode=TwoWay}"/>
 
                                 <TextBlock x:Uid="AgentProfileEditorConnectionTitle" FontWeight="SemiBold" Margin="0,8,0,0"/>
