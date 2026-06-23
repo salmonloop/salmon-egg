@@ -15,7 +15,7 @@ using MarkdownTextBlockControl = CommunityToolkit.WinUI.UI.Controls.MarkdownText
 
 namespace SalmonEgg.Controls;
 
-public sealed class MarkdownTextPresenter : Grid
+public sealed partial class MarkdownTextPresenter : Grid
 {
 #if WINDOWS
     private readonly MarkdownTextBlockControl _selectableMarkdown;
@@ -153,7 +153,12 @@ public sealed class MarkdownTextPresenter : Grid
         set => SetValue(IsTextSelectionEnabledProperty, value);
     }
 
-    public Brush? Foreground
+    // On Android, View.Foreground exists → new is required (CS0114 without it).
+    // On desktop/wasm, View.Foreground is absent → new triggers CS0109.
+    // Suppress CS0109 to keep all TFMs warning-free.
+#pragma warning disable CS0109
+    public new Brush? Foreground
+#pragma warning restore CS0109
     {
         get => (Brush?)GetValue(ForegroundProperty);
         set => SetValue(ForegroundProperty, value);

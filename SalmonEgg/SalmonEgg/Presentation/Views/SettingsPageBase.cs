@@ -18,7 +18,7 @@ namespace SalmonEgg.Presentation.Views;
 /// <summary>
 /// Base class for Settings sub-pages providing a standard BreadcrumbBar model.
 /// </summary>
-public class SettingsPageBase : Page, IGamepadContextIntentConsumer
+public partial class SettingsPageBase : Page, IGamepadContextIntentConsumer
 {
     private static readonly ResourceLoader ResourceLoader = ResourceLoader.GetForViewIndependentUse();
 
