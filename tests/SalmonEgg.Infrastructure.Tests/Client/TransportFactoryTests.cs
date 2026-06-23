@@ -140,6 +140,21 @@ public sealed class TransportFactoryTests
     }
 
     [Fact]
+    public void CreateTransport_WebSocketWithoutProfile_Should_UseSharedDefaultProxyMode()
+    {
+        var factory = CreateFactory();
+
+        var transport = factory.CreateTransport(TransportType.WebSocket, url: "wss://example.com/socket");
+
+        var adapter = Assert.IsType<NetworkTransportAdapter>(transport);
+        var innerField = typeof(NetworkTransportAdapter).GetField("_inner", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        var inner = Assert.IsType<WebSocketTransport>(innerField?.GetValue(adapter));
+        var client = WebSocketTransport.CreateNativeClient(inner.ProxyConfiguration);
+        Assert.NotNull(client.Options.Proxy);
+        Assert.False(client.Options.Proxy is WebProxy);
+    }
+
+    [Fact]
     public void CreateTransport_HttpSse_Should_Return_NetworkTransportAdapter()
     {
         var factory = CreateFactory();

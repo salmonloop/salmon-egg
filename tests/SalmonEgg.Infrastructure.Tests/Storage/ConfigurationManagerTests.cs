@@ -251,6 +251,31 @@ public sealed class ConfigurationManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task LoadConfigurationAsync_WhenProxyBlockMissing_UsesSharedDefaultProxyMode()
+    {
+        var config = CreateTestConfiguration("missing-proxy-001");
+        await _configManager.SaveConfigurationAsync(config);
+
+        var path = GetServerYamlPath(config.Id);
+        var yaml = await File.ReadAllTextAsync(path);
+        var proxyMode = ProxyConfig.DefaultMode switch
+        {
+            ProxyMode.System => "system",
+            ProxyMode.Custom => "custom",
+            _ => "none"
+        };
+        var proxyBlock = $"proxy:{Environment.NewLine}  mode: {proxyMode}{Environment.NewLine}  enabled: false{Environment.NewLine}  proxy_url: ''{Environment.NewLine}";
+        yaml = yaml.Replace(proxyBlock, string.Empty, StringComparison.Ordinal);
+        await File.WriteAllTextAsync(path, yaml);
+
+        var loaded = await _configManager.LoadConfigurationAsync(config.Id);
+
+        Assert.NotNull(loaded);
+        Assert.NotNull(loaded!.Proxy);
+        Assert.Equal(ProxyConfig.DefaultMode, loaded.Proxy!.Mode);
+    }
+
+    [Fact]
     public async Task DeleteConfigurationAsync_RemovesYamlAndSecrets()
     {
         var config = CreateTestConfiguration("to-delete-001");

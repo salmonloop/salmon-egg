@@ -206,11 +206,12 @@ namespace SalmonEgg.Infrastructure.Tests.Network
         }
 
         [Fact]
-        public void WebSocketTransport_CreateNativeClient_ShouldDisableSystemProxy_ByDefault()
+        public void WebSocketTransport_CreateNativeClient_ShouldUseSystemProxy_ByDefault()
         {
             var client = WebSocketTransport.CreateNativeClient();
 
-            Assert.Null(client.Options.Proxy);
+            Assert.NotNull(client.Options.Proxy);
+            Assert.False(client.Options.Proxy is WebProxy);
         }
 
         [Fact]

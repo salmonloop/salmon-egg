@@ -92,6 +92,25 @@ public sealed class ConfigurationEditorViewModelTests
     }
 
     [Fact]
+    public void LoadBlankConfiguration_Should_DefaultToSystemProxyMode()
+    {
+        var validator = new ServerConfigurationValidator();
+        var configurationService = new Mock<IConfigurationService>();
+        var transportSupportPolicy = CreateTransportSupportPolicy(supportsStdioTransport: true);
+        var logger = new Mock<ILogger<ConfigurationEditorViewModel>>();
+        var viewModel = new ConfigurationEditorViewModel(
+            validator,
+            configurationService.Object,
+            transportSupportPolicy,
+            logger.Object);
+
+        viewModel.LoadBlankConfiguration();
+
+        Assert.Equal(ProxyMode.System, viewModel.ProxyMode);
+        Assert.Equal(ProxyMode.System, viewModel.SelectedProxyModeOption?.Mode);
+    }
+
+    [Fact]
     public void LoadConfiguration_Should_ProjectSystemProxyMode()
     {
         var validator = new ServerConfigurationValidator();

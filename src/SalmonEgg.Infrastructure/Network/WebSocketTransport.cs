@@ -338,7 +338,7 @@ namespace SalmonEgg.Infrastructure.Network
         internal static ClientWebSocket CreateNativeClient(ProxyConfig? proxyConfiguration = null)
         {
             var client = new ClientWebSocket();
-            var mode = proxyConfiguration?.Mode ?? ProxyMode.None;
+            var mode = proxyConfiguration?.Mode ?? ProxyConfig.DefaultMode;
 
             switch (mode)
             {
@@ -375,7 +375,7 @@ namespace SalmonEgg.Infrastructure.Network
         private static ProxyConfig CloneProxyConfiguration(ProxyConfig? proxyConfiguration)
             => new()
             {
-                Mode = proxyConfiguration?.Mode ?? ProxyMode.None,
+                Mode = proxyConfiguration?.Mode ?? ProxyConfig.DefaultMode,
                 ProxyUrl = proxyConfiguration?.ProxyUrl
             };
     }

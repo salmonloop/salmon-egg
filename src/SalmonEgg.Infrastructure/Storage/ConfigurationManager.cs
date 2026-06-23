@@ -193,7 +193,7 @@ public sealed class ConfigurationManager : IConfigurationService
             Authentication = new AuthenticationYamlV1 { Mode = mode },
             Proxy = new ProxyYamlV1
             {
-                Mode = ProxyModeToString(config.Proxy?.Mode ?? ProxyMode.None),
+                Mode = ProxyModeToString(config.Proxy?.Mode ?? ProxyConfig.DefaultMode),
                 ProxyUrl = config.Proxy?.Mode == ProxyMode.Custom ? config.Proxy.ProxyUrl ?? string.Empty : string.Empty
             }
         };
@@ -332,7 +332,7 @@ public sealed class ConfigurationManager : IConfigurationService
     {
         if (proxy is null)
         {
-            return ProxyMode.None;
+            return ProxyConfig.DefaultMode;
         }
 
         var mode = (proxy.Mode ?? string.Empty).Trim().ToLowerInvariant();
@@ -342,7 +342,7 @@ public sealed class ConfigurationManager : IConfigurationService
             "custom" => ProxyMode.Custom,
             "none" => ProxyMode.None,
             _ when proxy.Enabled => ProxyMode.Custom,
-            _ => ProxyMode.None
+            _ => ProxyConfig.DefaultMode
         };
     }
 

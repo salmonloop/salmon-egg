@@ -5,10 +5,12 @@ namespace SalmonEgg.Domain.Models
     /// </summary>
     public class ProxyConfig
     {
+        public const ProxyMode DefaultMode = ProxyMode.System;
+
         /// <summary>
         /// 代理模式
         /// </summary>
-        public ProxyMode Mode { get; set; } = ProxyMode.None;
+        public ProxyMode Mode { get; set; } = DefaultMode;
 
         /// <summary>
         /// 代理服务器 URL

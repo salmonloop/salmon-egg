@@ -66,7 +66,7 @@ public partial class ConfigurationEditorViewModel(
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsCustomProxy))]
-    private ProxyMode _proxyMode = ProxyMode.None;
+    private ProxyMode _proxyMode = ProxyConfig.DefaultMode;
 
     [ObservableProperty]
     private string _proxyUrl = string.Empty;
@@ -107,9 +107,9 @@ public partial class ConfigurationEditorViewModel(
         SelectedTransportOption = TransportOptions.FirstOrDefault(o => o.Type == Transport) ?? TransportOptions.FirstOrDefault();
         Token = string.Empty;
         ApiKey = string.Empty;
-        ProxyMode = ProxyMode.None;
+        ProxyMode = ProxyConfig.DefaultMode;
         ProxyUrl = string.Empty;
-        SelectedProxyModeOption = ProxyModeOptions.FirstOrDefault(o => o.Mode == ProxyMode.None) ?? ProxyModeOptions.FirstOrDefault();
+        SelectedProxyModeOption = ProxyModeOptions.FirstOrDefault(o => o.Mode == ProxyConfig.DefaultMode) ?? ProxyModeOptions.FirstOrDefault();
         ConnectionTimeout = Configuration.ConnectionTimeout;
         ClearError();
     }
@@ -171,7 +171,7 @@ public partial class ConfigurationEditorViewModel(
         }
         else
         {
-            ProxyMode = ProxyMode.None;
+            ProxyMode = ProxyConfig.DefaultMode;
             ProxyUrl = string.Empty;
         }
 
@@ -198,9 +198,9 @@ public partial class ConfigurationEditorViewModel(
         SelectedTransportOption = TransportOptions.FirstOrDefault(o => o.Type == Transport) ?? TransportOptions.FirstOrDefault();
         Token = string.Empty;
         ApiKey = string.Empty;
-        ProxyMode = ProxyMode.None;
+        ProxyMode = ProxyConfig.DefaultMode;
         ProxyUrl = string.Empty;
-        SelectedProxyModeOption = ProxyModeOptions.FirstOrDefault(o => o.Mode == ProxyMode.None) ?? ProxyModeOptions.FirstOrDefault();
+        SelectedProxyModeOption = ProxyModeOptions.FirstOrDefault(o => o.Mode == ProxyConfig.DefaultMode) ?? ProxyModeOptions.FirstOrDefault();
     }
 
     public void LoadNewFromTransportConfig(TransportConfigViewModel transportConfig, string? name = null)
@@ -232,9 +232,9 @@ public partial class ConfigurationEditorViewModel(
         SelectedTransportOption = TransportOptions.FirstOrDefault(o => o.Type == Transport) ?? TransportOptions.FirstOrDefault();
         Token = string.Empty;
         ApiKey = string.Empty;
-        ProxyMode = ProxyMode.None;
+        ProxyMode = ProxyConfig.DefaultMode;
         ProxyUrl = string.Empty;
-        SelectedProxyModeOption = ProxyModeOptions.FirstOrDefault(o => o.Mode == ProxyMode.None) ?? ProxyModeOptions.FirstOrDefault();
+        SelectedProxyModeOption = ProxyModeOptions.FirstOrDefault(o => o.Mode == ProxyConfig.DefaultMode) ?? ProxyModeOptions.FirstOrDefault();
     }
 
     [RelayCommand]
@@ -317,8 +317,8 @@ public partial class ConfigurationEditorViewModel(
     private static ObservableCollection<ProxyModeOption> CreateProxyModeOptions()
         => new()
         {
-            new ProxyModeOption(ProxyMode.None, "不使用代理"),
             new ProxyModeOption(ProxyMode.System, "使用系统代理"),
+            new ProxyModeOption(ProxyMode.None, "不使用代理"),
             new ProxyModeOption(ProxyMode.Custom, "自定义代理")
         };
 
