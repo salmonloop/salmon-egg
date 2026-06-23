@@ -24,16 +24,20 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\SalmonEgg.Domain\SalmonEgg.Domain.csproj"
                       SetTargetFramework="TargetFramework=net10.0"
-                      SkipGetTargetFrameworkProperties="true" />
+                      SkipGetTargetFrameworkProperties="true"
+                      GlobalPropertiesToRemove="RuntimeIdentifier" />
     <ProjectReference Include="..\..\src\SalmonEgg.Application\SalmonEgg.Application.csproj"
                       SetTargetFramework="TargetFramework=net10.0"
-                      SkipGetTargetFrameworkProperties="true" />
+                      SkipGetTargetFrameworkProperties="true"
+                      GlobalPropertiesToRemove="RuntimeIdentifier" />
     <ProjectReference Include="..\..\src\SalmonEgg.Infrastructure\SalmonEgg.Infrastructure.csproj"
                       SetTargetFramework="TargetFramework=net10.0"
-                      SkipGetTargetFrameworkProperties="true" />
+                      SkipGetTargetFrameworkProperties="true"
+                      GlobalPropertiesToRemove="RuntimeIdentifier" />
     <ProjectReference Include="..\..\src\SalmonEgg.Infrastructure.Desktop\SalmonEgg.Infrastructure.Desktop.csproj"
                       SetTargetFramework="TargetFramework=net10.0"
                       SkipGetTargetFrameworkProperties="true"
+                      GlobalPropertiesToRemove="RuntimeIdentifier"
                       Condition="'$(SalmonEggSupportsDesktopProcessHost)' != 'false'" />
     <ProjectReference Include="..\..\src\SalmonEgg.Presentation.Core\SalmonEgg.Presentation.Core.csproj" />
   </ItemGroup>
