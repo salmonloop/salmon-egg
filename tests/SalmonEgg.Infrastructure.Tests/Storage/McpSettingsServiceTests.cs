@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging.Abstractions;
 using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Infrastructure.Storage;
 using Xunit;
@@ -219,8 +220,31 @@ public sealed class McpSettingsServiceTests : IDisposable
         Assert.False(Directory.Exists(Path.Combine(_testDirectory, "SalmonEgg", "config")));
     }
 
+    [Fact]
+    public async Task SaveAsync_WhenExistingFileIsCorruptedYaml_OverwritesAndLoadsBack()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(GetMcpYamlPath())!);
+        await File.WriteAllTextAsync(GetMcpYamlPath(), ":\n  - definitely not yaml");
+
+        var service = CreateService();
+        var settings = new McpSettings
+        {
+            Servers =
+            [
+                new StdioMcpServer("filesystem", "/usr/bin/mcp-filesystem", ["--stdio"], [])
+            ]
+        };
+
+        await service.SaveAsync(settings);
+
+        var loaded = await service.LoadAsync();
+        var server = Assert.IsType<StdioMcpServer>(Assert.Single(loaded.Servers));
+        Assert.Equal("filesystem", server.Name);
+        Assert.Equal("/usr/bin/mcp-filesystem", server.Command);
+    }
+
     private McpSettingsService CreateService()
-        => new(new FileSystemAppFileStore(), new AppDataService());
+        => new(new FileSystemAppFileStore(), new AppDataService(), NullLogger<McpSettingsService>.Instance);
 
     private string GetMcpYamlPath()
         => Path.Combine(_testDirectory, "SalmonEgg", "config", "mcp.yaml");

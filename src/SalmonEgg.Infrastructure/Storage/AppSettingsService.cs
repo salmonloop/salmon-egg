@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Infrastructure.Storage.YamlModels;
@@ -14,12 +15,14 @@ public sealed class AppSettingsService : IAppSettingsService
     private const int CurrentSchemaVersion = 1;
 
     private readonly IAppFileStore _fileStore;
+    private readonly ILogger<AppSettingsService> _logger;
     private readonly string _appYamlPath;
 
-    public AppSettingsService(IAppFileStore fileStore, IAppDataService appData)
+    public AppSettingsService(IAppFileStore fileStore, IAppDataService appData, ILogger<AppSettingsService> logger)
     {
         _fileStore = fileStore ?? throw new ArgumentNullException(nameof(fileStore));
         if (appData is null) throw new ArgumentNullException(nameof(appData));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         _appYamlPath = System.IO.Path.Combine(appData.ConfigRootPath, "app.yaml");
     }
@@ -133,9 +136,11 @@ public sealed class AppSettingsService : IAppSettingsService
         {
             throw;
         }
-        catch
+        catch (YamlException ex)
         {
-            throw new InvalidOperationException("Existing app.yaml is unreadable; refusing to overwrite.");
+            // 文件存在但 YAML 已损坏（例如 WASM IDBFS 在浏览器崩溃后被截断）。
+            // 允许用合法数据覆写——拒绝写入会把用户锁在无法保存的死路上。
+            _logger.LogWarning(ex, "Existing app settings file {Path} is corrupted; will overwrite with new data", appYamlPath);
         }
     }
 

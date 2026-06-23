@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Infrastructure.Storage.YamlModels;
@@ -15,12 +16,14 @@ public sealed class McpSettingsService : IMcpSettingsService
     private const int CurrentSchemaVersion = 1;
 
     private readonly IAppFileStore _fileStore;
+    private readonly ILogger<McpSettingsService> _logger;
     private readonly string _mcpYamlPath;
 
-    public McpSettingsService(IAppFileStore fileStore, IAppDataService appData)
+    public McpSettingsService(IAppFileStore fileStore, IAppDataService appData, ILogger<McpSettingsService> logger)
     {
         _fileStore = fileStore ?? throw new ArgumentNullException(nameof(fileStore));
         if (appData is null) throw new ArgumentNullException(nameof(appData));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         _mcpYamlPath = System.IO.Path.Combine(appData.ConfigRootPath, "mcp.yaml");
     }
@@ -119,9 +122,11 @@ public sealed class McpSettingsService : IMcpSettingsService
         {
             throw;
         }
-        catch
+        catch (YamlException ex)
         {
-            throw new InvalidOperationException("Existing mcp.yaml is unreadable; refusing to overwrite.");
+            // 文件存在但 YAML 已损坏（例如 WASM IDBFS 在浏览器崩溃后被截断）。
+            // 允许用合法数据覆写——拒绝写入会把用户锁在无法保存的死路上。
+            _logger.LogWarning(ex, "Existing MCP settings file {Path} is corrupted; will overwrite with new data", _mcpYamlPath);
         }
     }
 }

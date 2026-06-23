@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging.Abstractions;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Infrastructure.Storage;
 using Xunit;
@@ -20,10 +21,10 @@ public sealed class ConfigurationManagerTests : IDisposable
         Directory.CreateDirectory(_testDirectory);
         Environment.SetEnvironmentVariable("SALMONEGG_APPDATA_ROOT", Path.Combine(_testDirectory, "SalmonEgg"), EnvironmentVariableTarget.Process);
 
-        _secureStorage = new AppFileStoreSecureStorage(
-            new FileSystemAppFileStore(),
+        _secureStorage = new AppFileStoreSecureStorage(
+            new FileSystemAppFileStore(),
             System.IO.Path.Combine(_testDirectory, "SalmonEgg", "SecureStorage"));
-        _configManager = new ConfigurationManager(_secureStorage, new FileSystemAppFileStore(), new AppDataService());
+        _configManager = new ConfigurationManager(_secureStorage, new FileSystemAppFileStore(), new AppDataService(), NullLogger<ConfigurationManager>.Instance);
     }
 
     public void Dispose()
@@ -166,7 +167,7 @@ public sealed class ConfigurationManagerTests : IDisposable
     [Fact]
     public async Task LoadConfigurationAsync_WhenConfigurationFileCannotBeRead_ReturnsNull()
     {
-        var manager = new ConfigurationManager(_secureStorage, new FailingAppFileStore(), new AppDataService());
+        var manager = new ConfigurationManager(_secureStorage, new FailingAppFileStore(), new AppDataService(), NullLogger<ConfigurationManager>.Instance);
 
         var loaded = await manager.LoadConfigurationAsync("unreadable");
 
@@ -194,7 +195,7 @@ public sealed class ConfigurationManagerTests : IDisposable
     [Fact]
     public async Task ListConfigurationsAsync_WhenConfigurationDirectoryCannotBeEnumerated_ReturnsEmptyList()
     {
-        var manager = new ConfigurationManager(_secureStorage, new FailingAppFileStore(), new AppDataService());
+        var manager = new ConfigurationManager(_secureStorage, new FailingAppFileStore(), new AppDataService(), NullLogger<ConfigurationManager>.Instance);
 
         var configs = await manager.ListConfigurationsAsync();
 
@@ -273,6 +274,24 @@ public sealed class ConfigurationManagerTests : IDisposable
         Assert.NotNull(loaded);
         Assert.NotNull(loaded!.Proxy);
         Assert.Equal(ProxyConfig.DefaultMode, loaded.Proxy!.Mode);
+    }
+
+    [Fact]
+    public async Task SaveConfigurationAsync_WhenExistingFileIsCorruptedYaml_OverwritesAndLoadsBack()
+    {
+        var configId = "corrupted-then-save-001";
+        var path = GetServerYamlPath(configId);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(path, ":\n  - definitely not yaml");
+
+        var config = CreateTestConfiguration(configId);
+        await _configManager.SaveConfigurationAsync(config);
+
+        var loaded = await _configManager.LoadConfigurationAsync(configId);
+        Assert.NotNull(loaded);
+        Assert.Equal(config.Id, loaded!.Id);
+        Assert.Equal(config.Name, loaded.Name);
+        Assert.Equal(config.ServerUrl, loaded.ServerUrl);
     }
 
     [Fact]

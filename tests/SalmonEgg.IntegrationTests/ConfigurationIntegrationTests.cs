@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging.Abstractions;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Infrastructure.Storage;
 using Xunit;
@@ -23,10 +24,10 @@ public sealed class ConfigurationIntegrationTests : IDisposable
         Directory.CreateDirectory(_testDirectory);
         Environment.SetEnvironmentVariable("SALMONEGG_APPDATA_ROOT", Path.Combine(_testDirectory, "SalmonEgg"), EnvironmentVariableTarget.Process);
 
-        _secureStorage = new AppFileStoreSecureStorage(
-            new FileSystemAppFileStore(),
+        _secureStorage = new AppFileStoreSecureStorage(
+            new FileSystemAppFileStore(),
             System.IO.Path.Combine(_testDirectory, "SalmonEgg", "SecureStorage"));
-        _configManager = new ConfigurationManager(_secureStorage, new FileSystemAppFileStore(), new AppDataService());
+        _configManager = new ConfigurationManager(_secureStorage, new FileSystemAppFileStore(), new AppDataService(), NullLogger<ConfigurationManager>.Instance);
     }
 
     public void Dispose()

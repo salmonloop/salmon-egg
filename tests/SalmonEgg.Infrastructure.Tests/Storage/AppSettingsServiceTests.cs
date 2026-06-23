@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging.Abstractions;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Infrastructure.Storage;
 using Xunit;
@@ -286,9 +287,24 @@ public sealed class AppSettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task SaveAsync_WhenExistingFileIsCorruptedYaml_OverwritesAndLoadsBack()
+    {
+        var appYamlPath = Path.Combine(_testDirectory, "SalmonEgg", "config", "app.yaml");
+        Directory.CreateDirectory(Path.GetDirectoryName(appYamlPath)!);
+        await File.WriteAllTextAsync(appYamlPath, ":\n  - definitely not yaml");
+
+        var service = CreateService();
+        await service.SaveAsync(new AppSettings { Theme = "Dark", Language = "zh-Hans" });
+
+        var loaded = await service.LoadAsync();
+        Assert.Equal("Dark", loaded.Theme);
+        Assert.Equal("zh-Hans", loaded.Language);
+    }
+
+    [Fact]
     public async Task LoadAsync_WhenSettingsFileCannotBeRead_ReturnsDefaults()
     {
-        var service = new AppSettingsService(new FailingAppFileStore(), new AppDataService());
+        var service = new AppSettingsService(new FailingAppFileStore(), new AppDataService(), NullLogger<AppSettingsService>.Instance);
 
         var loaded = await service.LoadAsync();
 
@@ -296,5 +312,5 @@ public sealed class AppSettingsServiceTests : IDisposable
     }
 
     private AppSettingsService CreateService()
-        => new(new FileSystemAppFileStore(), new AppDataService());
+        => new(new FileSystemAppFileStore(), new AppDataService(), NullLogger<AppSettingsService>.Instance);
 }

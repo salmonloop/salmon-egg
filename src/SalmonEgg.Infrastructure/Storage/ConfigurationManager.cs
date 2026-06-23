@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Infrastructure.Storage.YamlModels;
@@ -22,13 +23,15 @@ public sealed class ConfigurationManager : IConfigurationService
 
     private readonly ISecureStorage _secureStorage;
     private readonly IAppFileStore _fileStore;
+    private readonly ILogger<ConfigurationManager> _logger;
     private readonly string _serversDirectory;
 
-    public ConfigurationManager(ISecureStorage secureStorage, IAppFileStore fileStore, IAppDataService appData)
+    public ConfigurationManager(ISecureStorage secureStorage, IAppFileStore fileStore, IAppDataService appData, ILogger<ConfigurationManager> logger)
     {
         _secureStorage = secureStorage ?? throw new ArgumentNullException(nameof(secureStorage));
         _fileStore = fileStore ?? throw new ArgumentNullException(nameof(fileStore));
         if (appData is null) throw new ArgumentNullException(nameof(appData));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         _serversDirectory = System.IO.Path.Combine(appData.ConfigRootPath, "servers");
     }
@@ -403,10 +406,11 @@ public sealed class ConfigurationManager : IConfigurationService
         {
             throw;
         }
-        catch
+        catch (YamlException ex)
         {
-            // If the file exists but can't be parsed, we still refuse to overwrite to avoid data loss.
-            throw new InvalidOperationException("Existing configuration file is unreadable; refusing to overwrite.");
+            // 文件存在但 YAML 已损坏（例如 WASM IDBFS 在浏览器崩溃后被截断）。
+            // 允许用合法数据覆写——拒绝写入会把用户锁在无法保存的死路上。
+            _logger.LogWarning(ex, "Existing configuration file {Path} is corrupted; will overwrite with new data", serverPath);
         }
     }
 }
