@@ -360,6 +360,12 @@ public partial class ChatViewModel
             OnPropertyChanged(nameof(ConnectionInstanceId));
         }
 
+        if (!string.Equals(_foregroundTransportProfileIdFromStore, projection.ForegroundTransportProfileId, StringComparison.Ordinal))
+        {
+            _foregroundTransportProfileIdFromStore = projection.ForegroundTransportProfileId;
+            OnPropertyChanged(nameof(ForegroundTransportProfileId));
+        }
+
         CurrentConnectionStatus = projection.ConnectionStatus;
         ConnectionErrorMessage = projection.ConnectionError;
         IsAuthenticationRequired = projection.IsAuthenticationRequired;

@@ -338,11 +338,11 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         {
             if (shouldConnect)
             {
-                await _connectionCommands.ConnectProfileInPoolAsync(profile);
+                await _connectionCommands.ConnectProfileAsync(profile);
                 return;
             }
 
-            await _connectionCommands.DisconnectProfileInPoolAsync(profile.Id);
+            await _connectionCommands.DisconnectProfileAsync(profile);
         }
         catch (Exception ex)
         {

@@ -86,6 +86,8 @@ public partial class ChatViewModel
 
     public string? SelectedProfileId => _selectedProfileIdFromStore;
 
+    public string? ForegroundTransportProfileId => _foregroundTransportProfileIdFromStore;
+
     public async Task<string?> ResolvePreferredNewSessionDraftProfileIdAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();

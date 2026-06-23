@@ -30,13 +30,26 @@ public interface ISettingsAcpConnectionCommands
 
     Task ConnectToAcpProfileAsync(ServerConfiguration profile);
 
-    Task ConnectProfileInPoolAsync(ServerConfiguration profile);
+    Task ConnectProfileAsync(ServerConfiguration profile);
 
-    Task DisconnectProfileInPoolAsync(string profileId);
+    Task DisconnectProfileAsync(ServerConfiguration profile);
+
+    Task ReconnectProfileAsync(ServerConfiguration profile);
 }
 
 public interface ISettingsAcpTransportConfiguration : IAcpTransportConfiguration, INotifyPropertyChanged
 {
+}
+
+public interface ISettingsForegroundChatConnection : ISettingsAcpConnectionState
+{
+    TransportConfigViewModel TransportConfig { get; }
+
+    IAsyncRelayCommand DisconnectCommand { get; }
+
+    IAsyncRelayCommand<ServerConfiguration> ConnectToAcpProfileCommand { get; }
+
+    string? ForegroundTransportProfileId { get; }
 }
 
 public interface ISettingsChatConnection : ISettingsAcpConnectionState, ISettingsAcpConnectionCommands
@@ -126,9 +139,11 @@ internal sealed class CompositeSettingsChatConnection : ISettingsChatConnection
 
     public Task ConnectToAcpProfileAsync(ServerConfiguration profile) => _commands.ConnectToAcpProfileAsync(profile);
 
-    public Task ConnectProfileInPoolAsync(ServerConfiguration profile) => _commands.ConnectProfileInPoolAsync(profile);
+    public Task ConnectProfileAsync(ServerConfiguration profile) => _commands.ConnectProfileAsync(profile);
 
-    public Task DisconnectProfileInPoolAsync(string profileId) => _commands.DisconnectProfileInPoolAsync(profileId);
+    public Task DisconnectProfileAsync(ServerConfiguration profile) => _commands.DisconnectProfileAsync(profile);
+
+    public Task ReconnectProfileAsync(ServerConfiguration profile) => _commands.ReconnectProfileAsync(profile);
 }
 
 /// <summary>
@@ -149,62 +164,98 @@ public sealed class LazySettingsAcpConnectionCommandsAdapter : ISettingsAcpConne
     public Task ConnectToAcpProfileAsync(ServerConfiguration profile)
         => _inner.Value.ConnectToAcpProfileAsync(profile);
 
-    public Task ConnectProfileInPoolAsync(ServerConfiguration profile)
-        => _inner.Value.ConnectProfileInPoolAsync(profile);
+    public Task ConnectProfileAsync(ServerConfiguration profile)
+        => _inner.Value.ConnectProfileAsync(profile);
 
-    public Task DisconnectProfileInPoolAsync(string profileId)
-        => _inner.Value.DisconnectProfileInPoolAsync(profileId);
+    public Task DisconnectProfileAsync(ServerConfiguration profile)
+        => _inner.Value.DisconnectProfileAsync(profile);
+
+    public Task ReconnectProfileAsync(ServerConfiguration profile)
+        => _inner.Value.ReconnectProfileAsync(profile);
 }
 
 public sealed class SettingsChatConnectionAdapter : ISettingsChatConnection
 {
-    private readonly ChatViewModel _chatViewModel;
+    private readonly ISettingsForegroundChatConnection _foregroundConnection;
     private readonly IAcpConnectionCommands _connectionCommands;
     private readonly ISettingsAcpTransportConfiguration _transportConfig;
 
-    public SettingsChatConnectionAdapter(ChatViewModel chatViewModel, IAcpConnectionCommands connectionCommands)
+    public SettingsChatConnectionAdapter(ISettingsForegroundChatConnection foregroundConnection, IAcpConnectionCommands connectionCommands)
     {
-        _chatViewModel = chatViewModel ?? throw new ArgumentNullException(nameof(chatViewModel));
+        _foregroundConnection = foregroundConnection ?? throw new ArgumentNullException(nameof(foregroundConnection));
         _connectionCommands = connectionCommands ?? throw new ArgumentNullException(nameof(connectionCommands));
-        _transportConfig = new SettingsTransportConfigurationAdapter(_chatViewModel.TransportConfig);
+        _transportConfig = new SettingsTransportConfigurationAdapter(_foregroundConnection.TransportConfig);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged
     {
-        add => _chatViewModel.PropertyChanged += value;
-        remove => _chatViewModel.PropertyChanged -= value;
+        add => _foregroundConnection.PropertyChanged += value;
+        remove => _foregroundConnection.PropertyChanged -= value;
     }
 
     public ISettingsAcpTransportConfiguration TransportConfig => _transportConfig;
 
-    public string? AgentName => _chatViewModel.AgentName;
+    public string? AgentName => _foregroundConnection.AgentName;
 
-    public string? AgentVersion => _chatViewModel.AgentVersion;
+    public string? AgentVersion => _foregroundConnection.AgentVersion;
 
-    public bool IsConnecting => _chatViewModel.IsConnecting;
+    public bool IsConnecting => _foregroundConnection.IsConnecting;
 
-    public bool IsInitializing => _chatViewModel.IsInitializing;
+    public bool IsInitializing => _foregroundConnection.IsInitializing;
 
-    public bool IsConnected => _chatViewModel.IsConnected;
+    public bool IsConnected => _foregroundConnection.IsConnected;
 
-    public string? ConnectionErrorMessage => _chatViewModel.ConnectionErrorMessage;
+    public string? ConnectionErrorMessage => _foregroundConnection.ConnectionErrorMessage;
 
-    public bool HasConnectionError => _chatViewModel.HasConnectionError;
+    public bool HasConnectionError => _foregroundConnection.HasConnectionError;
 
-    public IAsyncRelayCommand DisconnectCommand => _chatViewModel.DisconnectCommand;
+    public IAsyncRelayCommand DisconnectCommand => _foregroundConnection.DisconnectCommand;
 
     public Task ConnectToAcpProfileAsync(ServerConfiguration profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
-        return _chatViewModel.ConnectToAcpProfileCommand.ExecuteAsync(profile);
+        return _foregroundConnection.ConnectToAcpProfileCommand.ExecuteAsync(profile);
     }
 
-    public Task ConnectProfileInPoolAsync(ServerConfiguration profile)
+    public Task ConnectProfileAsync(ServerConfiguration profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
+        if (ShouldUseForegroundConnection(profile.Id))
+        {
+            return ConnectToAcpProfileAsync(profile);
+        }
+
         return _connectionCommands.ConnectProfileInPoolAsync(profile, _transportConfig);
     }
 
-    public Task DisconnectProfileInPoolAsync(string profileId)
-        => _connectionCommands.DisconnectProfileInPoolAsync(profileId);
+    public Task DisconnectProfileAsync(ServerConfiguration profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        if (ShouldUseForegroundConnection(profile.Id))
+        {
+            return _foregroundConnection.DisconnectCommand.ExecuteAsync(null);
+        }
+
+        return _connectionCommands.DisconnectProfileInPoolAsync(profile.Id);
+    }
+
+    public async Task ReconnectProfileAsync(ServerConfiguration profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        if (ShouldUseForegroundConnection(profile.Id))
+        {
+            await _foregroundConnection.DisconnectCommand.ExecuteAsync(null).ConfigureAwait(false);
+            await ConnectToAcpProfileAsync(profile).ConfigureAwait(false);
+            return;
+        }
+
+        await _connectionCommands.DisconnectProfileInPoolAsync(profile.Id).ConfigureAwait(false);
+        await _connectionCommands.ConnectProfileInPoolAsync(profile, _transportConfig).ConfigureAwait(false);
+    }
+
+    // Settings profile actions must route through the same authoritative foreground identity
+    // that drives chat/start-page state; only non-foreground profiles may be managed as warm pool entries.
+    private bool ShouldUseForegroundConnection(string? profileId)
+        => !string.IsNullOrWhiteSpace(profileId)
+           && string.Equals(_foregroundConnection.ForegroundTransportProfileId, profileId, StringComparison.Ordinal);
 }

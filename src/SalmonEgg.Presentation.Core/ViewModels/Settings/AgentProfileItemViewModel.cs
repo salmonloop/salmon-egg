@@ -219,7 +219,7 @@ public sealed partial class AgentProfileItemViewModel : ObservableObject, IDispo
         IsConnecting = true;
         try
         {
-            await _commands.ConnectProfileInPoolAsync(_profile).ConfigureAwait(false);
+            await _commands.ConnectProfileAsync(_profile).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -251,7 +251,7 @@ public sealed partial class AgentProfileItemViewModel : ObservableObject, IDispo
         IsConnecting = true;
         try
         {
-            await _commands.DisconnectProfileInPoolAsync(ProfileId).ConfigureAwait(false);
+            await _commands.DisconnectProfileAsync(_profile).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -284,9 +284,7 @@ public sealed partial class AgentProfileItemViewModel : ObservableObject, IDispo
         IsConnecting = true;
         try
         {
-            await _commands.DisconnectProfileInPoolAsync(ProfileId).ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
-            await _commands.ConnectProfileInPoolAsync(_profile).ConfigureAwait(false);
+            await _commands.ReconnectProfileAsync(_profile).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {

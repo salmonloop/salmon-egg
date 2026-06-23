@@ -175,6 +175,40 @@ public sealed class AcpConnectionSettingsViewModelTests
     }
 
     [Fact]
+    public async Task SettingsChatConnectionAdapter_UsesForegroundTransportProfileIdentity_ForForegroundRouting()
+    {
+        var foreground = new TestForegroundSettingsConnection
+        {
+            ForegroundTransportProfileId = "profile-foreground"
+        };
+        var commands = new TestPoolConnectionCommands();
+        var adapter = new SettingsChatConnectionAdapter(foreground, commands);
+        var profile = new ServerConfiguration { Id = "profile-background", Name = "Background Profile" };
+
+        await adapter.ConnectProfileAsync(profile);
+
+        Assert.Empty(foreground.ForegroundConnectedProfiles);
+        Assert.Same(profile, Assert.Single(commands.PoolConnectedProfiles));
+    }
+
+    [Fact]
+    public async Task SettingsChatConnectionAdapter_ReconnectProfileAsync_ForForegroundProfile_DisconnectsBeforeReconnect()
+    {
+        var foreground = new TestForegroundSettingsConnection
+        {
+            ForegroundTransportProfileId = "profile-foreground"
+        };
+        var commands = new TestPoolConnectionCommands();
+        var adapter = new SettingsChatConnectionAdapter(foreground, commands);
+        var profile = new ServerConfiguration { Id = "profile-foreground", Name = "Foreground Profile" };
+
+        await adapter.ReconnectProfileAsync(profile);
+
+        Assert.Equal(new[] { "disconnect", "connect:profile-foreground" }, foreground.ForegroundOperations);
+        Assert.Empty(commands.PoolOperations);
+    }
+
+    [Fact]
     public async Task HandleConnectionToggleAsync_ConnectsSelectedProfileWhenRequested()
     {
         var preferences = await CreatePreferencesAsync();
@@ -198,7 +232,7 @@ public sealed class AcpConnectionSettingsViewModelTests
 
         await viewModel.HandleConnectionToggleAsync(true);
 
-        Assert.Same(profile, Assert.Single(commands.PoolConnectedProfiles));
+        Assert.Same(profile, Assert.Single(commands.ProfileConnectedProfiles));
         Assert.Empty(commands.ConnectedProfiles);
     }
 
@@ -226,7 +260,7 @@ public sealed class AcpConnectionSettingsViewModelTests
 
         await viewModel.HandleConnectionToggleAsync(false);
 
-        Assert.Equal("profile-1", Assert.Single(commands.PoolDisconnectedProfileIds));
+        Assert.Equal("profile-1", Assert.Single(commands.ProfileDisconnectedProfileIds));
         Assert.Empty(commands.ConnectedProfiles);
         Assert.Equal(0, commands.DisconnectCallCount);
     }
@@ -905,7 +939,7 @@ public sealed class AcpConnectionSettingsViewModelTests
 
         await item.ReconnectCommand.ExecuteAsync(null);
 
-        Assert.Equal(new[] { "disconnect:profile-a", "connect:profile-a" }, commands.PoolOperations);
+        Assert.Equal(new[] { "reconnect:profile-a" }, commands.ProfileOperations);
         Assert.False(item.IsConnecting);
     }
 
@@ -943,8 +977,8 @@ public sealed class AcpConnectionSettingsViewModelTests
         var pendingReconnect = new TaskCompletionSource();
         var commands = new TestConnectionCommands
         {
-            DisconnectProfileInPoolCallback = () => registry.RemoveByProfile("profile-a"),
-            ConnectProfileInPoolTask = pendingReconnect
+            ReconnectProfileCallback = () => registry.RemoveByProfile("profile-a"),
+            ReconnectProfileTask = pendingReconnect
         };
         using var item = CreateAgentProfileItem("profile-a", registry, commands);
 
@@ -1276,6 +1310,10 @@ public sealed class AcpConnectionSettingsViewModelTests
 
         public List<ServerConfiguration> ConnectedProfiles { get; } = new();
 
+        public List<ServerConfiguration> ProfileConnectedProfiles { get; } = new();
+        public List<string> ProfileDisconnectedProfileIds { get; } = new();
+        public List<string> ProfileOperations { get; } = new();
+
         public List<ServerConfiguration> PoolConnectedProfiles { get; } = new();
         public List<string> PoolDisconnectedProfileIds { get; } = new();
 
@@ -1294,6 +1332,127 @@ public sealed class AcpConnectionSettingsViewModelTests
         public Task DisconnectProfileInPoolAsync(string profileId)
         {
             PoolDisconnectedProfileIds.Add(profileId);
+            return Task.CompletedTask;
+        }
+
+        public Task ConnectProfileAsync(ServerConfiguration profile)
+        {
+            ProfileConnectedProfiles.Add(profile);
+            ProfileOperations.Add($"connect:{profile.Id}");
+            return Task.CompletedTask;
+        }
+
+        public Task DisconnectProfileAsync(ServerConfiguration profile)
+        {
+            ProfileDisconnectedProfileIds.Add(profile.Id);
+            ProfileOperations.Add($"disconnect:{profile.Id}");
+            return Task.CompletedTask;
+        }
+
+        public Task ReconnectProfileAsync(ServerConfiguration profile)
+        {
+            ProfileOperations.Add($"reconnect:{profile.Id}");
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class TestForegroundSettingsConnection : ISettingsForegroundChatConnection
+    {
+        public event PropertyChangedEventHandler? PropertyChanged
+        {
+            add { }
+            remove { }
+        }
+
+        public TransportConfigViewModel TransportConfig { get; } = new();
+
+        public string? AgentName { get; set; }
+
+        public string? AgentVersion { get; set; }
+
+        public bool IsConnecting { get; set; }
+
+        public bool IsInitializing { get; set; }
+
+        public bool IsConnected { get; set; }
+
+        public string? ConnectionErrorMessage { get; set; }
+
+        public bool HasConnectionError { get; set; }
+
+        public string? ForegroundTransportProfileId { get; set; }
+
+        public List<ServerConfiguration> ForegroundConnectedProfiles { get; } = new();
+
+        public List<string> ForegroundOperations { get; } = new();
+
+        public IAsyncRelayCommand DisconnectCommand => new AsyncRelayCommand(() =>
+        {
+            ForegroundOperations.Add("disconnect");
+            return Task.CompletedTask;
+        });
+
+        public IAsyncRelayCommand<ServerConfiguration> ConnectToAcpProfileCommand => new AsyncRelayCommand<ServerConfiguration>(profile =>
+        {
+            if (profile is not null)
+            {
+                ForegroundConnectedProfiles.Add(profile);
+                ForegroundOperations.Add($"connect:{profile.Id}");
+            }
+
+            return Task.CompletedTask;
+        });
+    }
+
+    private sealed class TestPoolConnectionCommands : IAcpConnectionCommands
+    {
+        private static readonly AcpTransportApplyResult DummyApplyResult =
+            new(new Mock<SalmonEgg.Application.Services.Chat.IChatService>().Object, new InitializeResponse());
+
+        public List<ServerConfiguration> PoolConnectedProfiles { get; } = new();
+
+        public List<string> PoolDisconnectedProfileIds { get; } = new();
+
+        public List<string> PoolOperations { get; } = new();
+
+        public Task<AcpTransportApplyResult> ConnectToProfileAsync(ServerConfiguration profile, IAcpTransportConfiguration transportConfiguration, IAcpChatCoordinatorSink sink, System.Threading.CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public Task<AcpTransportApplyResult> ConnectToProfileAsync(ServerConfiguration profile, IAcpTransportConfiguration transportConfiguration, IAcpChatCoordinatorSink sink, AcpConnectionContext connectionContext, System.Threading.CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public Task<AcpTransportApplyResult> ApplyTransportConfigurationAsync(IAcpTransportConfiguration transportConfiguration, IAcpChatCoordinatorSink sink, bool preserveConversation, System.Threading.CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public Task<AcpTransportApplyResult> ApplyTransportConfigurationAsync(IAcpTransportConfiguration transportConfiguration, IAcpChatCoordinatorSink sink, AcpConnectionContext connectionContext, System.Threading.CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public Task<AcpRemoteSessionResult> EnsureRemoteSessionAsync(IAcpChatCoordinatorSink sink, Func<System.Threading.CancellationToken, Task<bool>> authenticateAsync, System.Threading.CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public Task<AcpPromptDispatchResult> SendPromptAsync(string promptText, string? promptMessageId, IAcpChatCoordinatorSink sink, Func<System.Threading.CancellationToken, Task<bool>> authenticateAsync, System.Threading.CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public Task<AcpPromptDispatchResult> DispatchPromptToRemoteSessionAsync(string remoteSessionId, string promptText, string? promptMessageId, IAcpChatCoordinatorSink sink, Func<System.Threading.CancellationToken, Task<bool>> authenticateAsync, System.Threading.CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public Task CancelPromptAsync(IAcpChatCoordinatorSink sink, string? reason = null, System.Threading.CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public Task DisconnectAsync(IAcpChatCoordinatorSink sink, System.Threading.CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public Task<AcpTransportApplyResult> ConnectProfileInPoolAsync(ServerConfiguration profile, IAcpTransportConfiguration transportConfiguration, System.Threading.CancellationToken cancellationToken = default)
+        {
+            PoolConnectedProfiles.Add(profile);
+            PoolOperations.Add($"connect:{profile.Id}");
+            return Task.FromResult(DummyApplyResult);
+        }
+
+        public Task DisconnectProfileInPoolAsync(string profileId, System.Threading.CancellationToken cancellationToken = default)
+        {
+            PoolDisconnectedProfileIds.Add(profileId);
+            PoolOperations.Add($"disconnect:{profileId}");
             return Task.CompletedTask;
         }
     }
@@ -1336,6 +1495,9 @@ public sealed class AcpConnectionSettingsViewModelTests
         public int DisconnectCallCount { get; private set; }
 
         public List<ServerConfiguration> ConnectedProfiles { get; } = new();
+        public List<ServerConfiguration> ProfileConnectedProfiles { get; } = new();
+        public List<string> ProfileDisconnectedProfileIds { get; } = new();
+        public List<string> ProfileOperations { get; } = new();
         public List<ServerConfiguration> PoolConnectedProfiles { get; } = new();
         public List<string> PoolDisconnectedProfileIds { get; } = new();
         public Exception? ConnectProfileInPoolException { get; set; }
@@ -1343,7 +1505,9 @@ public sealed class AcpConnectionSettingsViewModelTests
         public TaskCompletionSource? ConnectProfileInPoolTask { get; set; }
         public TaskCompletionSource? DisconnectProfileInPoolTask { get; set; }
         public Action? DisconnectProfileInPoolCallback { get; set; }
+        public Action? ReconnectProfileCallback { get; set; }
         public List<string> PoolOperations { get; } = new();
+        public TaskCompletionSource? ReconnectProfileTask { get; set; }
 
         public Task ConnectToAcpProfileAsync(ServerConfiguration profile)
         {
@@ -1374,6 +1538,28 @@ public sealed class AcpConnectionSettingsViewModelTests
             PoolOperations.Add($"disconnect:{profileId}");
             DisconnectProfileInPoolCallback?.Invoke();
             return DisconnectProfileInPoolTask?.Task ?? Task.CompletedTask;
+        }
+
+        public Task ConnectProfileAsync(ServerConfiguration profile)
+        {
+            ProfileConnectedProfiles.Add(profile);
+            ProfileOperations.Add($"connect:{profile.Id}");
+            return ConnectProfileInPoolTask?.Task ?? Task.CompletedTask;
+        }
+
+        public Task DisconnectProfileAsync(ServerConfiguration profile)
+        {
+            ProfileDisconnectedProfileIds.Add(profile.Id);
+            ProfileOperations.Add($"disconnect:{profile.Id}");
+            DisconnectProfileInPoolCallback?.Invoke();
+            return DisconnectProfileInPoolTask?.Task ?? Task.CompletedTask;
+        }
+
+        public Task ReconnectProfileAsync(ServerConfiguration profile)
+        {
+            ProfileOperations.Add($"reconnect:{profile.Id}");
+            ReconnectProfileCallback?.Invoke();
+            return ReconnectProfileTask?.Task ?? Task.CompletedTask;
         }
     }
 
