@@ -51,7 +51,6 @@ public sealed partial class SettingsShellPage : Page, IPrimaryContentFocusTarget
         AttachSectionNavigation();
         NavigateFrameToSection(section.Key);
         QueueRefreshCurrentSectionFocusTargets();
-        QueueFocusCurrentSectionNavigationItem();
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
@@ -89,12 +88,6 @@ public sealed partial class SettingsShellPage : Page, IPrimaryContentFocusTarget
     {
         var section = ViewModel.SelectSection(args.Key);
         NavigateFrameToSection(section.Key);
-        QueueFocusCurrentSectionNavigationItem();
-    }
-
-    private void QueueFocusCurrentSectionNavigationItem()
-    {
-        _ = DispatcherQueue.TryEnqueue(() => _ = TryFocusCurrentSectionNavigationItem());
     }
 
     private void NavigateFrameToSection(string key)

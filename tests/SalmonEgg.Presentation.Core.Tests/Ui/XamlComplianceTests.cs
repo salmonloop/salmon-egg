@@ -2688,6 +2688,16 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void SettingsShellPage_DoesNotQueueSectionNavigationFocusAfterSectionActivation()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\SettingsShellPage.xaml.cs");
+
+        Assert.Contains("public bool TryFocusPrimaryContentTarget()", code, StringComparison.Ordinal);
+        Assert.Contains("=> TryFocusCurrentSectionNavigationItem();", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("QueueFocusCurrentSectionNavigationItem", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SettingsPages_KeepSectionTraversalOnNativeDirectionalNavigation()
     {
         var diagnosticsXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DiagnosticsSettingsPage.xaml");
