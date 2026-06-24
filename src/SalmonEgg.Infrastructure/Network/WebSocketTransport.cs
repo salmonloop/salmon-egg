@@ -332,6 +332,13 @@ namespace SalmonEgg.Infrastructure.Network
                 ? $"WebSocket connection to {url} closed before becoming ready: {disconnection.Type} ({disconnection.CloseStatus})"
                 : $"WebSocket connection to {url} closed before becoming ready: {disconnection.Type}";
 
+            var exceptionMessage = disconnection.Exception?.Message?.Trim();
+            if (!string.IsNullOrWhiteSpace(exceptionMessage)
+                && !message.Contains(exceptionMessage, StringComparison.Ordinal))
+            {
+                message += $": {exceptionMessage}";
+            }
+
             return new InvalidOperationException(message, disconnection.Exception);
         }
 

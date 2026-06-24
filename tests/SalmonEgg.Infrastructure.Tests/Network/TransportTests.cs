@@ -54,6 +54,7 @@ namespace SalmonEgg.Infrastructure.Tests.Network
             stopwatch.Stop();
 
             Assert.Contains("closed before becoming ready", exception.Message);
+            Assert.Contains("bridge rejected connection", exception.Message);
             Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(1), $"Expected prompt failure, actual: {stopwatch.Elapsed}");
             Assert.IsType<WebSocketException>(exception.InnerException);
         }
