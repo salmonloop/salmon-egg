@@ -258,8 +258,13 @@ namespace SalmonEgg.Infrastructure.Client
                 throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse session/new response");
             }
 
-            // 创建会话记录
-            await _sessionManager.CreateSessionAsync(sessionNewResponse.SessionId, @params.Cwd).ConfigureAwait(false);
+            // A session/update notification can arrive before the session/new response and
+            // create the local tracking entry first. The response is authoritative, but the
+            // local cache write must remain idempotent.
+            if (_sessionManager.GetSession(sessionNewResponse.SessionId) is null)
+            {
+                await _sessionManager.CreateSessionAsync(sessionNewResponse.SessionId, @params.Cwd).ConfigureAwait(false);
+            }
 
             return sessionNewResponse;
         }

@@ -60,6 +60,36 @@ namespace SalmonEgg.Infrastructure.Tests.Network
         }
 
         [Fact]
+        public async Task WebSocketTransport_ConnectAsync_WhenServerReturnsNon101_ShouldIncludeActionableEndpointHint()
+        {
+            var reconnections = new Subject<ReconnectionInfo>();
+            var disconnections = new Subject<DisconnectionInfo>();
+            var messages = new Subject<ResponseMessage>();
+            var client = CreateMockClient(reconnections, disconnections, messages, out _);
+            var transport = new WebSocketTransport(
+                _mockLogger.Object,
+                proxyConfiguration: null,
+                connectTimeout: TimeSpan.FromSeconds(5),
+                clientFactory: (_, _) => client.Object);
+
+            client
+                .Setup(x => x.Start())
+                .Returns(Task.CompletedTask)
+                .Callback(() => disconnections.OnNext(DisconnectionInfo.Create(
+                    DisconnectionType.Error,
+                    null!,
+                    new WebSocketException("Received network error or non-101 status code."))));
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                transport.ConnectAsync("ws://ccacp.shangxin.me/acp/ws", CancellationToken.None));
+
+            Assert.Contains("non-101 status code", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("redirect", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("wss://", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("ws://ccacp.shangxin.me/acp/ws", exception.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
         public async Task WebSocketTransport_ConnectAsync_ShouldEmitConnectedOnce_WhenReadyEventArrives()
         {
             var reconnections = new Subject<ReconnectionInfo>();

@@ -32,6 +32,28 @@ public sealed class TransportEndpointAccessPolicyTests
     }
 
     [Fact]
+    public void Validate_WebSocketRemoteWsFromHttpBrowserOrigin_Should_BeAllowed()
+    {
+        var policy = new TransportEndpointAccessPolicy(
+            new TestTransportEndpointAccessContext(browserHosted: true, secureOrigin: false));
+
+        var result = policy.Validate(TransportType.WebSocket, "ws://ccacp.shangxin.me/acp/ws");
+
+        Assert.True(result.IsAllowed);
+    }
+
+    [Fact]
+    public void Validate_WebSocketLocalhostWsFromHttpBrowserOrigin_Should_BeAllowedForLocalDevelopment()
+    {
+        var policy = new TransportEndpointAccessPolicy(
+            new TestTransportEndpointAccessContext(browserHosted: true, secureOrigin: false));
+
+        var result = policy.Validate(TransportType.WebSocket, "ws://localhost:3011/message");
+
+        Assert.True(result.IsAllowed);
+    }
+
+    [Fact]
     public void Validate_WebSocketWsFromDesktopHost_Should_BeAllowed()
     {
         var policy = new TransportEndpointAccessPolicy(

@@ -41,7 +41,8 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         private async Task<AcpClient> CreateInitializedClientAsync(
             AgentCapabilities? capabilities = null,
             ClientCapabilities? clientCapabilities = null,
-            ITerminalSessionManager? terminalSessionManager = null)
+            ITerminalSessionManager? terminalSessionManager = null,
+            ISessionManager? sessionManager = null)
         {
             var parser = new MessageParser(); // Use real parser for serialization
 
@@ -50,6 +51,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 parser,
                 null,
                 _errorLoggerMock.Object,
+                sessionManager: sessionManager,
                 terminalSessionManager: terminalSessionManager);
 
             // Mock InitializeAsync response
@@ -86,6 +88,25 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             var result = await client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null));
             Assert.Equal("session-123", result.SessionId);
+        }
+
+        [Fact]
+        public async Task CreateSessionAsync_WhenSessionAlreadyTrackedFromUpdate_ShouldReturnResponse()
+        {
+            var parser = new MessageParser();
+            var sessionManager = new SessionManager();
+            var client = await CreateInitializedClientAsync(sessionManager: sessionManager);
+            await sessionManager.CreateSessionAsync("session-123", AbsoluteCwd);
+
+            SetupJsonRpcResponse(
+                "session/new",
+                JsonSerializer.SerializeToElement(new SessionNewResponse("session-123"), parser.Options),
+                parser);
+
+            var result = await client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null));
+
+            Assert.Equal("session-123", result.SessionId);
+            Assert.NotNull(sessionManager.GetSession("session-123"));
         }
 
         [Fact]

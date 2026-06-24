@@ -18,6 +18,9 @@
        - `HTTP SSE`: 远程 HTTP SSE ACP 服务
      - **服务器 URL**: 当传输类型为 WebSocket / HTTP SSE 时填写
        - WebSocket 格式: `ws://localhost:8080` 或 `wss://your-server.com`
+       - 浏览器/WASM 下，`http://` 页面可以发起 `ws://`，`https://` 页面不能发起 `ws://`（浏览器 mixed-content 限制）
+       - 远端 `ws://` 必须直接完成 WebSocket `101 Switching Protocols` 升级；如果反向代理或 Cloudflare 把 HTTP 请求 `301/302` 到 HTTPS，浏览器 WebSocket 不会把它当成可用连接继续跳转
+       - SalmonEgg 不会静默把用户配置的 `ws://` 改成 `wss://`；如果服务端只接受 TLS，请在 ACP profile 里手动填写对应的 `wss://...` 地址
        - HTTP SSE 格式: `http://localhost:8080/sse` 或 `https://your-server.com/sse`
      - **Stdio 命令 / 参数**: 当传输类型为 `Stdio（子进程）` 时填写
        - 本地示例: `python` + `server.py --port 8080`

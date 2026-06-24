@@ -339,7 +339,29 @@ namespace SalmonEgg.Infrastructure.Network
                 message += $": {exceptionMessage}";
             }
 
+            message = AppendEndpointDiagnosticHint(url, exceptionMessage, message);
+
             return new InvalidOperationException(message, disconnection.Exception);
+        }
+
+        private static string AppendEndpointDiagnosticHint(string url, string? exceptionMessage, string message)
+        {
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
+                || !string.Equals(uri.Scheme, "ws", StringComparison.OrdinalIgnoreCase))
+            {
+                return message;
+            }
+
+            if (string.IsNullOrWhiteSpace(exceptionMessage)
+                || !exceptionMessage.Contains("non-101", StringComparison.OrdinalIgnoreCase))
+            {
+                return message;
+            }
+
+            return message
+                + " The endpoint did not complete a WebSocket 101 upgrade. "
+                + "For browser/WASM clients, verify the ws:// endpoint does not redirect and that the configured path accepts WebSocket Upgrade directly; "
+                + "if the server intentionally requires TLS, update the ACP profile to the matching wss:// endpoint.";
         }
 
         internal static ClientWebSocket CreateNativeClient(ProxyConfig? proxyConfiguration = null)
