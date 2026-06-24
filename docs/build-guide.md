@@ -133,6 +133,27 @@ dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj \
 
 WASM 调试前必须先清理旧的 `WasmAppHost`。如果端口仍由其它目录的旧构建占用，浏览器可能拿到旧 `package_*` / `dotnet.*.js` 哈希，表现为 `_framework/dotnet.*.js` 404、加载进度条无限停住或 502。若要连当前 worktree 的 WasmHost 也一起清掉，可运行 `pwsh -File scripts/dev/stop-stale-wasm-hosts.ps1 -IncludeCurrentWorktree`。
 
+WASM 持久化与能力边界：
+
+- `net10.0-browserwasm` 启用了 Uno IDBFS，用于 `/local/SalmonEgg` 下的非敏感应用数据；
+- 当前已确认会持久化浏览器 IndexedDB-backed 文件系统的数据包括：应用设置、ACP profile YAML、以及其它走应用文件存储抽象的普通配置；
+- 安全存储仍然不是 IDBFS 的职责；WASM 继续使用 volatile secure storage，不能把“配置持久化”误解成“安全凭据也持久化”；
+- WASM 不会向 ACP Server 声明 `clientCapabilities.fs`，也不会把 `terminal` 声明为 `true`；
+- 设置页中的本地目录打开/导出等桌面入口在 WASM 上必须保持受限。
+
+WASM smoke gate：
+
+```bash
+scripts/gates/run-wasm-smoke-gates.sh Debug
+```
+
+该 gate 会构建当前 `net10.0-browserwasm` 产物、静态托管 `wwwroot`，然后用 Playwright/Chromium 覆盖：
+
+- 设置页顶部原生 `NavigationView` overflow；
+- `ACP / Agent` profile 保存并刷新后仍可见；
+- ACP `initialize` 不宣告 `fs` / `terminal=true`；
+- `数据与存储` 页面上的受限桌面文件系统入口不会越过平台能力边界。
+
 发布后的文件可以部署到任何静态网站托管服务（如 Azure Static Web Apps、GitHub Pages、Netlify 等）。
 
 ### Android

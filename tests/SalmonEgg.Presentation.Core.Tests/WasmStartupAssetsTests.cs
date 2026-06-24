@@ -72,7 +72,7 @@ public sealed class WasmStartupAssetsTests
                 (string?)element.Attribute("Include"),
                 @"Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-storage.js",
                 StringComparison.Ordinal));
-        Assert.Equal("salmon-egg-wasm-storage.js", contentReference.Element("TargetPath")?.Value);
+        Assert.Equal("_framework/salmon-egg-wasm-storage.js", contentReference.Element("TargetPath")?.Value);
         Assert.Equal("PreserveNewest", contentReference.Element("CopyToOutputDirectory")?.Value);
 
         var script = LoadFile(@"SalmonEgg\SalmonEgg\Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-storage.js");
@@ -86,14 +86,22 @@ public sealed class WasmStartupAssetsTests
         Assert.DoesNotContain("location.protocol", script, StringComparison.Ordinal);
 
         var persistence = LoadFile(@"SalmonEgg\SalmonEgg\Platforms\WebAssembly\WasmFileSystemPersistence.cs");
-        // ImportAsync 的第二个参数会直接喂给浏览器 import()，必须是相对/绝对 URL，禁止 bare specifier。
+        // ImportAsync 的第二个参数会直接喂给浏览器 import()，必须是相对/绝对 URL，
+        // 且在 Uno 的 package_<hash> 打包前缀下需要跟随 authoritative app base。
         Assert.Contains(".ImportAsync(StorageModuleName, StorageModuleUrl", persistence, StringComparison.Ordinal);
-        Assert.Contains("StorageModuleUrl = \"./\" + StorageModuleName", persistence, StringComparison.Ordinal);
+        Assert.Contains("ResolveStorageModuleUrl()", persistence, StringComparison.Ordinal);
+        Assert.Contains("UNO_BOOTSTRAP_APP_BASE", persistence, StringComparison.Ordinal);
+        Assert.Contains("_framework/{StorageModuleName}", persistence, StringComparison.Ordinal);
+        Assert.Contains("ApplicationData.Current.LocalFolder.CreateFolderAsync(\"SalmonEgg\"", persistence, StringComparison.Ordinal);
         Assert.Contains("EnsureStorageModuleImportedAsync", persistence, StringComparison.Ordinal);
 
         var endpointContext = LoadFile(@"SalmonEgg\SalmonEgg\Platforms\WebAssembly\WasmTransportEndpointAccessContext.cs");
         Assert.Contains("JSHost.GlobalThis", endpointContext, StringComparison.Ordinal);
         Assert.DoesNotContain("JSImport(\"getLocationProtocol\"", endpointContext, StringComparison.Ordinal);
+
+        var paths = LoadFile(@"src\SalmonEgg.Infrastructure\Storage\SalmonEggPaths.cs");
+        Assert.Contains("OperatingSystem.IsBrowser()", paths, StringComparison.Ordinal);
+        Assert.DoesNotContain("#elif __WASM__", paths, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -181,6 +189,27 @@ public sealed class WasmStartupAssetsTests
         Assert.Contains("dotnet workload list", script, StringComparison.Ordinal);
         Assert.Contains("workload_install_args=(wasm-tools --skip-manifest-update --disable-parallel --no-http-cache)", script, StringComparison.Ordinal);
         Assert.Contains("dotnet workload install \"${workload_install_args[@]}\"", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WasmSmokeGate_RunsFileSystemAvailabilitySmoke()
+    {
+        var gate = LoadFile(@"scripts\gates\run-wasm-smoke-gates.sh");
+
+        Assert.Contains("wasm-file-system-availability-smoke.mjs", gate, StringComparison.Ordinal);
+        Assert.Contains("Run WASM file system availability smoke", gate, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WasmFileSystemAvailabilitySmoke_CoversPersistenceAndDesktopCapabilityBoundary()
+    {
+        var smoke = LoadFile(@"scripts\gates\wasm-file-system-availability-smoke.mjs");
+
+        Assert.Contains("indexedDB.deleteDatabase", smoke, StringComparison.Ordinal);
+        Assert.Contains("DataStorage.CacheRetention", smoke, StringComparison.Ordinal);
+        Assert.Contains("DataStorage.OpenCacheFolder", smoke, StringComparison.Ordinal);
+        Assert.Contains("DataStorage.OpenExports", smoke, StringComparison.Ordinal);
+        Assert.Contains("expectNoAdvertisedFileSystemCapability", smoke, StringComparison.Ordinal);
     }
 
     private static string LoadFile(string relativePath)

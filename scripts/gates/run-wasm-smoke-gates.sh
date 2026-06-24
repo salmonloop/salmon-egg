@@ -23,6 +23,15 @@ cleanup() {
 
 trap cleanup EXIT
 
+run_playwright_smoke() {
+  if command -v xvfb-run >/dev/null 2>&1; then
+    xvfb-run -a node "$@"
+    return
+  fi
+
+  node "$@"
+}
+
 PORT="${SALMONEGG_WASM_SMOKE_PORT:-$(python3 - <<'PY'
 import socket
 
@@ -32,6 +41,9 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
 PY
 )}"
 BASE_URL="http://${HOST}:${PORT}/"
+
+echo "[gate] Clean browserwasm output"
+dotnet clean "${PROJECT}" -c "${CONFIGURATION}" -f net10.0-browserwasm -v minimal
 
 echo "[gate] Restore browserwasm dependencies"
 dotnet restore "${PROJECT}"
@@ -68,6 +80,7 @@ echo "[gate] Static server ready pid=${SERVER_PID} base=${BASE_URL}"
 
 PLAYWRIGHT_WORKDIR="$(mktemp -d)"
 cp "${REPO_ROOT}/scripts/gates/wasm-settings-navigation-smoke.mjs" "${PLAYWRIGHT_WORKDIR}/"
+cp "${REPO_ROOT}/scripts/gates/wasm-file-system-availability-smoke.mjs" "${PLAYWRIGHT_WORKDIR}/"
 
 echo "[gate] Install Playwright package"
 npm --prefix "${PLAYWRIGHT_WORKDIR}" install --no-audit --no-fund --no-save playwright
@@ -76,8 +89,13 @@ echo "[gate] Install Playwright Chromium"
 npm --prefix "${PLAYWRIGHT_WORKDIR}" exec -- playwright install chromium
 
 echo "[gate] Run WASM settings navigation smoke"
-xvfb-run -a node \
+run_playwright_smoke \
   "${PLAYWRIGHT_WORKDIR}/wasm-settings-navigation-smoke.mjs" \
+  "${BASE_URL}"
+
+echo "[gate] Run WASM file system availability smoke"
+run_playwright_smoke \
+  "${PLAYWRIGHT_WORKDIR}/wasm-file-system-availability-smoke.mjs" \
   "${BASE_URL}"
 
 echo "[gate] WASM smoke gates passed"

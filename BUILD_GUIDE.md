@@ -146,11 +146,34 @@ dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj \
 scripts/gates/run-wasm-smoke-gates.sh Debug
 ```
 
-该 gate 会构建当前 `net10.0-browserwasm` 产物、静态托管 `wwwroot`，再用 Playwright/Chromium 在窄屏视口执行设置页顶部原生 `NavigationView` overflow 路径。它补充 Windows self-hosted FlaUI gate，专门覆盖 WASM 浏览器里的原生 Uno 控件行为。
+该 gate 会构建当前 `net10.0-browserwasm` 产物、静态托管 `wwwroot`，再用 Playwright/Chromium 执行两条 WASM 浏览器路径：
+
+- 设置页顶部原生 `NavigationView` overflow 导航；
+- `ACP / Agent` 与 `数据与存储` 的文件系统可用性 smoke：保存 ACP WebSocket profile、刷新后确认配置仍存在、验证 WASM 不声明 `clientCapabilities.fs` / `terminal=true`，并确认受限平台不会暴露桌面文件系统入口。
+
+它补充 Windows self-hosted FlaUI gate，专门覆盖 WASM 浏览器里的原生 Uno 控件行为与当前构建产物的浏览器持久化链路。
 
 #### WebAssembly 持久化策略
 
-Uno 官方 IDBFS 文档要求通过 `<WasmShellEnableIDBFS>true</WasmShellEnableIDBFS>` 显式启用浏览器 IndexedDB-backed 文件系统。本仓库在 `net10.0-browserwasm` 上启用该构建能力，用于 `/local/SalmonEgg` 下的非敏感应用数据。安全存储仍由平台服务决定，WASM 继续使用 volatile secure storage，不能把 IndexedDB 文件系统冒充为平台安全凭据存储。
+Uno 官方 IDBFS 文档要求通过 `<WasmShellEnableIDBFS>true</WasmShellEnableIDBFS>` 显式启用浏览器 IndexedDB-backed 文件系统。本仓库在 `net10.0-browserwasm` 上启用该构建能力，用于 `/local/SalmonEgg` 下的非敏感应用数据。
+
+当前已确认的 WASM 持久化范围：
+
+- 应用设置；
+- ACP profile YAML；
+- 其它走应用文件存储抽象的非敏感配置数据。
+
+当前不应混淆的边界：
+
+- 浏览器 IndexedDB-backed 文件系统只负责非敏感应用数据持久化；
+- 安全存储仍由平台安全存储服务决定；WASM 继续使用 volatile secure storage；
+- 因此“WASM 可以持久化 ACP 配置 / 普通设置”与“WASM 没有持久化安全凭据存储”可以同时成立。
+
+ACP / 文件系统能力边界：
+
+- WASM 目标不会向 ACP Server 声明 `clientCapabilities.fs`；
+- WASM 目标不会把 `terminal` 宣告为 `true`；
+- 设置页里“打开本地目录 / 导出目录”这类桌面文件系统入口在 WASM 上必须保持受限，不得绕过平台能力边界产生本地副作用。
 
 ### 6. 发布应用
 

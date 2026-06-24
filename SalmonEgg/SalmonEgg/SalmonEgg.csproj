@@ -56,7 +56,7 @@
     <WasmShellNativeFileReference Include="Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-storage.js" />
     <Content Include="Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-storage.js">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <TargetPath>salmon-egg-wasm-storage.js</TargetPath>
+      <TargetPath>_framework/salmon-egg-wasm-storage.js</TargetPath>
     </Content>
   </ItemGroup>
 

@@ -13,6 +13,13 @@ public static class SalmonEggPaths
             return overrideRoot;
         }
 
+#if NET10_0_OR_GREATER
+        if (OperatingSystem.IsBrowser())
+        {
+            return "/local/SalmonEgg";
+        }
+#endif
+
 #if __ANDROID__
         return Path.Combine(
             Android.App.Application.Context.FilesDir?.AbsolutePath
@@ -29,8 +36,6 @@ public static class SalmonEggPaths
         return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SalmonEgg");
 #elif WINDOWS || WINDOWS_UWP
         return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SalmonEgg");
-#elif __WASM__
-        return "/local/SalmonEgg";
 #else
         return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SalmonEgg");
 #endif
