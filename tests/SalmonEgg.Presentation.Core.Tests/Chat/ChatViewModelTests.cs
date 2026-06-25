@@ -10780,9 +10780,9 @@ public partial class ChatViewModelTests
             return Task.FromResult(
                 (loadStarted.Task.IsCompleted || string.Equals(fixture.ViewModel.CurrentSessionId, "conv-remote", StringComparison.Ordinal))
                 && runtimeState.ActiveSessionActivation is { SessionId: "existing-owner", Phase: SessionActivationPhase.RemoteHydrationPending }
-            && runtimeState.IsSessionActivationInProgress
-            && runtimeState.LatestActivationToken == 41
-            && string.Equals(runtimeState.DesiredSessionId, "existing-owner", StringComparison.Ordinal));
+                && runtimeState.IsSessionActivationInProgress
+                && runtimeState.LatestActivationToken == 41
+                && string.Equals(runtimeState.DesiredSessionId, "existing-owner", StringComparison.Ordinal));
         });
 
         allowLoadCompletion.TrySetResult(null);
