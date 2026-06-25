@@ -149,7 +149,8 @@ scripts/gates/run-wasm-smoke-gates.sh Debug
 该 gate 会构建当前 `net10.0-browserwasm` 产物、静态托管 `wwwroot`，再用 Playwright/Chromium 执行两条 WASM 浏览器路径：
 
 - 设置页顶部原生 `NavigationView` overflow 导航；
-- `ACP / Agent` 与 `数据与存储` 的文件系统可用性 smoke：保存 ACP WebSocket profile、刷新后确认配置仍存在、验证 WASM 不声明 `clientCapabilities.fs` / `terminal=true`，并确认受限平台不会暴露桌面文件系统入口。
+- `ACP / Agent` 与 `数据与存储` 的文件系统可用性 smoke：保存 ACP WebSocket profile、保存 remote directory、刷新后确认配置仍存在、验证 WASM 不声明 `clientCapabilities.fs` / `terminal=true`，并确认受限平台不会暴露桌面文件系统入口；
+- WASM ACP 全链路 smoke：用同一 profile 和 remote directory 从 Start 页面创建远端会话，断言 mock ACP Server 收到 `initialize`、`session/new`（`cwd` 为所选 remote path）和 `session/prompt`，并确认 agent reply 投影到 Chat UI。
 
 它补充 Windows self-hosted FlaUI gate，专门覆盖 WASM 浏览器里的原生 Uno 控件行为与当前构建产物的浏览器持久化链路。
 

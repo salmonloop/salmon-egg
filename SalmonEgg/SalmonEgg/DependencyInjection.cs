@@ -731,20 +731,11 @@ public static class DependencyInjection
 
         return () =>
         {
-            var pending = navigationViewModel.ConsumePendingProjectRootPath();
-            string? lastSelectedRoot = null;
-
-            var projectId = preferences.LastSelectedProjectId;
-            if (!string.IsNullOrWhiteSpace(projectId))
-            {
-                var project = preferences.Projects.FirstOrDefault(p => string.Equals(p.ProjectId, projectId, StringComparison.Ordinal));
-                if (project != null && !string.IsNullOrWhiteSpace(project.RootPath))
-                {
-                    lastSelectedRoot = project.RootPath;
-                }
-            }
-
-            return SessionCwdResolver.Resolve(pending, lastSelectedRoot);
+            return StartSessionCwdResolver.Resolve(
+                navigationViewModel.ConsumePendingProjectRootPath(),
+                preferences.LastSelectedProjectId,
+                preferences.Projects,
+                preferences.AgentRemoteDirectories);
         };
     }
 

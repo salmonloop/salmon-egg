@@ -8,6 +8,10 @@ const fatalConsolePattern =
 const dataStorageCacheRetentionAutomationId = "DataStorage.CacheRetention";
 const dataStorageOpenCacheFolderAutomationId = "DataStorage.OpenCacheFolder";
 const dataStorageOpenExportsAutomationId = "DataStorage.OpenExports";
+const remoteDirectoryName = `WASM remote project ${Date.now()}`;
+const remoteDirectoryPath = `/remote/wasm-full-chain-${Date.now()}`;
+const fullChainPromptText = `WASM full chain prompt ${Date.now()}`;
+const fullChainAgentReplyText = `WASM full chain agent reply ${Date.now()}`;
 const domHelperScript = `
 (() => {
   window.__salmoneggSmoke = {
@@ -191,20 +195,30 @@ try {
   const profileName = `WASM smoke ${Date.now()}`;
   await createWebSocketProfile(page, profileName, acpServer.url);
   await expectProfilePresence(page, profileName, "saved ACP profile");
+  await createRemoteDirectory(page, remoteDirectoryName, remoteDirectoryPath);
 
   await page.waitForTimeout(1_500);
   await expectPersistedProfileAfterReload(page, profileName);
+  await expectRemoteDirectoryPresence(page, remoteDirectoryName, remoteDirectoryPath, "persisted remote directory");
 
   await ensureGlobalAcpEnabled(page);
   await clickProfileConnectionToggle(page, profileName);
   const initializeRequest = await waitForInitializeWithDiagnostics(acpServer, page, profileName);
   expectNoAdvertisedFileSystemCapability(initializeRequest);
+  await createSessionAndSendPromptFromStart(
+    page,
+    acpServer,
+    profileName,
+    remoteDirectoryName,
+    remoteDirectoryPath,
+    fullChainPromptText,
+    fullChainAgentReplyText);
 
   if (fatalConsoleMessages.length > 0) {
     throw new Error(`Fatal console errors detected: ${JSON.stringify(fatalConsoleMessages, null, 2)}`);
   }
 
-  console.log("WASM file system availability smoke passed");
+  console.log("WASM file system availability and ACP chat full-chain smoke passed");
 } finally {
   await browser.close();
   await acpServer.close();
@@ -358,6 +372,28 @@ async function createWebSocketProfile(page, profileName, serverUrl) {
 
 async function expectProfilePresence(page, profileName, label) {
   await waitForBodyText(page, new RegExp(escapeRegExp(profileName)), label);
+}
+
+async function createRemoteDirectory(page, displayName, remotePath) {
+  await scrollToVisibleNavigationTarget(page, { labels: ["新增远程项目", "Add remote project"], automationIds: ["Acp.RemoteDirectories.Add"] });
+  await clickVisibleNavigationTarget(page, { labels: ["新增远程项目", "Add remote project"], automationIds: ["Acp.RemoteDirectories.Add"] });
+  await waitForBodyText(page, /显示名称|Project name|ACP 工作路径|ACP working path/, "remote directory editor");
+
+  const fields = await page.evaluate(collectVisibleTextInputPoints);
+  const editableFields = fields.filter(field => field.top >= 120);
+  if (editableFields.length < 2) {
+    throw new Error(`Expected two remote directory editor fields. Fields=${JSON.stringify(fields)}`);
+  }
+
+  await typeIntoField(page, editableFields[0], displayName);
+  await typeIntoField(page, editableFields[1], remotePath);
+  await clickVisibleNavigationTarget(page, { labels: ["保存", "Save"], automationIds: ["Acp.RemoteDirectories.Save"] });
+  await expectRemoteDirectoryPresence(page, displayName, remotePath, "saved remote directory");
+}
+
+async function expectRemoteDirectoryPresence(page, displayName, remotePath, label) {
+  await waitForBodyText(page, new RegExp(escapeRegExp(displayName)), `${label} name`);
+  await waitForBodyText(page, new RegExp(escapeRegExp(remotePath)), `${label} path`);
 }
 
 async function expectPersistedProfileAfterReload(page, profileName) {
@@ -531,6 +567,80 @@ async function waitForInitializeWithDiagnostics(acpServer, page, profileName) {
   }
 }
 
+async function createSessionAndSendPromptFromStart(
+  page,
+  acpServer,
+  profileName,
+  directoryName,
+  directoryPath,
+  promptText,
+  expectedAgentReply) {
+  await clickVisibleNavigationTargetUntilBodyText(
+    page,
+    { labels: ["Start", "开始"], automationIds: ["MainNav.Start"] },
+    /Salmon Egg/,
+    "start page");
+  await page.waitForSelector('[aria-label="StartView.PromptBox"]', { timeout: 30_000 });
+
+  await selectComboBoxItem(
+    page,
+    "StartView.AgentSelector",
+    profileName);
+  await selectComboBoxItem(
+    page,
+    "StartView.ProjectSelector",
+    directoryName,
+    { verifySelectionText: false, keyboardSelectVisibleItem: true });
+  const sessionNewRequest = await waitForSessionNewWithDiagnostics(acpServer, page);
+  const requestedCwd = sessionNewRequest?.params?.cwd;
+  if (requestedCwd !== directoryPath) {
+    throw new Error(`session/new used unexpected cwd. Expected=${directoryPath} Request=${JSON.stringify(sessionNewRequest)}`);
+  }
+
+  await waitForBodyText(page, /Agent 01|Planner 01/, "ready ACP modes after remote directory selection", 30_000);
+  await typeIntoAutomationTextBox(page, "StartView.PromptBox", promptText);
+  await clickStartComposerSendButton(page);
+
+  const promptRequest = await waitForSessionPromptWithDiagnostics(acpServer, page);
+  const promptTextFromRequest = extractPromptText(promptRequest);
+  if (promptTextFromRequest !== promptText) {
+    throw new Error(`session/prompt used unexpected text. Expected=${promptText} Request=${JSON.stringify(promptRequest)}`);
+  }
+
+  await waitForBodyText(page, /ChatView\.MessagesList|Salmon Egg|WASM full chain agent reply/, "chat view after prompt", 30_000);
+  await waitForBodyText(page, new RegExp(escapeRegExp(expectedAgentReply)), "agent reply projected into chat UI", 30_000);
+}
+
+async function waitForSessionNewWithDiagnostics(acpServer, page) {
+  try {
+    return await acpServer.waitForSessionNew();
+  } catch (error) {
+    const debug = {
+      body: (await page.locator("body").innerText().catch(() => "")).slice(0, 2_000),
+      comboBoxes: await page.evaluate(collectVisibleComboBoxDebug),
+      navigation: await page.evaluate(collectVisibleNavigationTargetDebug)
+    };
+    throw new Error(
+      `Timed out waiting for ACP session/new request. PageDebug=${JSON.stringify(debug)} `
+      + `Cause=${error?.message ?? error}`);
+  }
+}
+
+async function waitForSessionPromptWithDiagnostics(acpServer, page) {
+  try {
+    return await acpServer.waitForSessionPrompt();
+  } catch (error) {
+    const debug = {
+      body: (await page.locator("body").innerText().catch(() => "")).slice(0, 2_000),
+      comboBoxes: await page.evaluate(collectVisibleComboBoxDebug),
+      interactive: await page.evaluate(collectVisibleInteractiveDebug)
+    };
+    throw new Error(
+      `Timed out waiting for ACP session/prompt request. PageDebug=${JSON.stringify(debug)} `
+      + `Cause=${error?.message ?? error}`);
+  }
+}
+
 async function expectControlDoesNotEscapePage(page, options, stayOnPagePattern) {
   const beforeUrl = page.url();
   const state = await page.evaluate(readControlEnabledState, options);
@@ -587,6 +697,248 @@ async function clickTopNavigationOverflow(page) {
   await page.mouse.click(point.x, point.y);
 }
 
+async function scrollToVisibleNavigationTarget(page, options) {
+  if (await page.evaluate(findVisibleNavigationTargetPoint, options)) {
+    return;
+  }
+
+  const scrolled = await page.evaluate(input => {
+    const labels = input.labels ?? [];
+    const automationIds = input.automationIds ?? [];
+    const normalize = value => (value ?? "").trim().toLowerCase();
+    const target = Array.from(document.querySelectorAll("body *"))
+      .find(element => {
+        const text = (element.textContent ?? "").trim();
+        const aria = element.getAttribute("aria-label") ?? "";
+        const automationId =
+          element.getAttribute("data-automation-id")
+          ?? element.getAttribute("data-automationid")
+          ?? element.getAttribute("automationid")
+          ?? "";
+        return automationIds.includes(aria)
+          || automationIds.includes(automationId)
+          || labels.map(normalize).includes(normalize(text))
+          || labels.map(normalize).includes(normalize(aria));
+      });
+
+    target?.scrollIntoView({ block: "center", inline: "nearest" });
+    return Boolean(target);
+  }, options);
+
+  if (!scrolled) {
+    return;
+  }
+
+  await page.waitForFunction(findVisibleNavigationTargetPoint, options, { timeout: 5_000 });
+}
+
+async function selectComboBoxItem(page, selectorAutomationId, expectedVisibleName, options = {}) {
+  const deadline = Date.now() + 30_000;
+  let lastError;
+
+  while (Date.now() < deadline) {
+    await clickVisibleControl(page, { labels: [], automationIds: [selectorAutomationId] });
+    try {
+      await page.waitForFunction(
+        findVisibleNavigationTargetPoint,
+        { labels: [expectedVisibleName], automationIds: [] },
+        { timeout: Math.min(3_000, Math.max(250, deadline - Date.now())) });
+      break;
+    } catch (error) {
+      lastError = error;
+      await page.keyboard.press("Escape").catch(() => {});
+      await page.waitForTimeout(500);
+    }
+  }
+
+  if (!await page.evaluate(findVisibleNavigationTargetPoint, { labels: [expectedVisibleName], automationIds: [] })) {
+    const debug = {
+      body: (await page.locator("body").innerText().catch(() => "")).slice(0, 2_000),
+      comboBoxes: await page.evaluate(collectVisibleComboBoxDebug),
+      navigation: await page.evaluate(collectVisibleNavigationTargetDebug)
+    };
+    throw new Error(
+      `ComboBox '${selectorAutomationId}' did not expose item '${expectedVisibleName}'. `
+      + `Debug=${JSON.stringify(debug)} Cause=${lastError?.message ?? lastError}`);
+  }
+
+  if (options.keyboardSelectVisibleItem === true) {
+    const itemIndex = await page.evaluate(findVisibleComboBoxItemIndex, expectedVisibleName);
+    if (itemIndex < 0) {
+      throw new Error(`ComboBox '${selectorAutomationId}' item '${expectedVisibleName}' disappeared before keyboard selection.`);
+    }
+
+    await page.keyboard.press("Home");
+    for (let i = 0; i < itemIndex; i += 1) {
+      await page.keyboard.press("ArrowDown");
+    }
+    await page.keyboard.press("Enter");
+  } else {
+    await clickVisibleNavigationTarget(page, { labels: [expectedVisibleName], automationIds: [] });
+  }
+
+  if (options.verifySelectionText === false) {
+    return;
+  }
+
+  await page.waitForFunction(
+    input => {
+      const control = window.__salmoneggSmoke.findVisibleControl({ automationIds: [input.selectorAutomationId] }, [], [input.selectorAutomationId]);
+      if ((control?.textContent ?? "").includes(input.expectedVisibleName)
+        || (control?.getAttribute("aria-label") ?? "").includes(input.expectedVisibleName)) {
+        return true;
+      }
+
+      const selectorIndexByAutomationId = new Map([
+        ["StartView.AgentSelector", 0],
+        ["StartView.ModeSelector", 1],
+        ["StartView.ProjectSelector", 2]
+      ]);
+      const selectorIndex = selectorIndexByAutomationId.get(input.selectorAutomationId);
+      if (selectorIndex === undefined) {
+        return false;
+      }
+
+      const comboBoxes = Array.from(document.querySelectorAll("body *"))
+        .map(element => {
+          const rect = element.getBoundingClientRect();
+          const style = getComputedStyle(element);
+          const className = element.className?.toString?.() ?? "";
+          return {
+            element,
+            rect,
+            className,
+            role: element.getAttribute("role") ?? "",
+            display: style.display,
+            visibility: style.visibility
+          };
+        })
+        .filter(candidate =>
+          (candidate.role === "combobox" || candidate.className.toLowerCase().includes("combobox"))
+          && candidate.rect.width > 0
+          && candidate.rect.height > 0
+          && candidate.display !== "none"
+          && candidate.visibility !== "hidden"
+          && candidate.rect.left >= -1
+          && candidate.rect.top >= innerHeight * 0.55
+          && candidate.rect.left <= innerWidth
+          && candidate.rect.top <= innerHeight)
+        .sort((left, right) => (left.rect.top - right.rect.top) || (left.rect.left - right.rect.left));
+      return (comboBoxes[selectorIndex]?.element.textContent ?? "").includes(input.expectedVisibleName);
+    },
+    { selectorAutomationId, expectedVisibleName },
+    { timeout: 10_000 });
+}
+
+function findVisibleComboBoxItemIndex(expectedVisibleName) {
+  const items = Array.from(document.querySelectorAll("body *"))
+    .map(element => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      const className = element.className?.toString?.() ?? "";
+      return {
+        text: (element.textContent ?? "").trim(),
+        rect,
+        className,
+        role: element.getAttribute("role") ?? "",
+        display: style.display,
+        visibility: style.visibility
+      };
+    })
+    .filter(candidate =>
+      (candidate.role === "option" || candidate.className.toLowerCase().includes("comboboxitem"))
+      && candidate.rect.width > 0
+      && candidate.rect.height > 0
+      && candidate.display !== "none"
+      && candidate.visibility !== "hidden"
+      && candidate.rect.left >= -1
+      && candidate.rect.top >= -1
+      && candidate.rect.left <= innerWidth
+      && candidate.rect.top <= innerHeight)
+    .sort((left, right) => (left.rect.top - right.rect.top) || (left.rect.left - right.rect.left));
+
+  return items.findIndex(item => item.text === expectedVisibleName);
+}
+
+async function clickVisibleControl(page, options) {
+  const point = await page.evaluate(findVisibleControlPoint, options)
+    ?? await page.evaluate(findStartComposerSelectorFallbackPoint, options);
+  if (!point) {
+    const debug = {
+      interactive: await page.evaluate(collectVisibleInteractiveDebug),
+      comboBoxes: await page.evaluate(collectVisibleComboBoxDebug),
+      navigation: await page.evaluate(collectVisibleNavigationTargetDebug)
+    };
+    throw new Error(`No visible control found for ${JSON.stringify(options)}. Candidates=${JSON.stringify(debug)}`);
+  }
+
+  await page.mouse.click(point.x, point.y);
+}
+
+async function typeIntoAutomationTextBox(page, automationId, value) {
+  const point = await page.evaluate(findVisibleControlPoint, { labels: [], automationIds: [automationId] });
+  if (!point) {
+    const inputs = await page.evaluate(collectVisibleTextInputPoints);
+    throw new Error(`No visible text box found for automation id '${automationId}'. Inputs=${JSON.stringify(inputs)}`);
+  }
+
+  await page.mouse.click(point.x, point.y);
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
+  await page.keyboard.type(value);
+}
+
+async function clickStartComposerSendButton(page) {
+  const point = await page.evaluate(() => {
+    const buttons = Array.from(document.querySelectorAll("button,[role='button'],.uno-button"))
+      .map(element => {
+        const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        return {
+          element,
+          rect,
+          text: (element.textContent ?? "").trim(),
+          aria: element.getAttribute("aria-label") ?? "",
+          className: element.className?.toString?.() ?? "",
+          display: style.display,
+          visibility: style.visibility,
+          disabled:
+            element.disabled === true
+            || element.getAttribute("disabled") != null
+            || element.getAttribute("aria-disabled") === "true"
+            || element.className?.toString?.().toLowerCase().includes("disabled")
+        };
+      })
+      .filter(candidate =>
+        candidate.rect.width > 0
+        && candidate.rect.height > 0
+        && candidate.display !== "none"
+        && candidate.visibility !== "hidden"
+        && !candidate.disabled
+        && candidate.rect.top >= innerHeight * 0.75
+        && candidate.rect.left >= 0
+        && candidate.rect.left <= innerWidth
+        && candidate.rect.top <= innerHeight)
+      .sort((left, right) => right.rect.right - left.rect.right);
+
+    const target = buttons[0];
+    if (!target) {
+      return null;
+    }
+
+    return {
+      x: target.rect.left + target.rect.width / 2,
+      y: target.rect.top + target.rect.height / 2
+    };
+  });
+
+  if (!point) {
+    const debug = await page.evaluate(collectVisibleInteractiveDebug);
+    throw new Error(`Start composer send button was not visible. Debug=${JSON.stringify(debug)}`);
+  }
+
+  await page.mouse.click(point.x, point.y);
+}
+
 async function waitForBodyText(page, pattern, label, timeoutMs = 30_000) {
   await page.waitForFunction(
     source => new RegExp(source).test(document.body?.innerText ?? ""),
@@ -633,6 +985,18 @@ async function clickVisibleNavigationTarget(page, options) {
   }
 
   await page.mouse.click(point.x, point.y);
+}
+
+function extractPromptText(promptRequest) {
+  const prompt = promptRequest?.params?.prompt;
+  if (!Array.isArray(prompt)) {
+    return null;
+  }
+
+  return prompt
+    .filter(block => block?.type === "text")
+    .map(block => block.text ?? "")
+    .join("");
 }
 
 async function ensureVisibleNavigationTarget(page, targetOptions, openerOptions) {
@@ -697,6 +1061,7 @@ function findVisibleNavigationTargetPoint(input) {
 
   const clickable =
     target.closest(".uno-navigationviewitem")
+    ?? target.closest(".uno-comboboxitem")
     ?? target.closest(".uno-button")
     ?? target.closest("[role='button']")
     ?? target.closest("button")
@@ -728,6 +1093,103 @@ function findVisibleControlPoint(input) {
     x: rect.left + rect.width / 2,
     y: rect.top + rect.height / 2
   };
+}
+
+function findStartComposerSelectorFallbackPoint(input) {
+  const automationIds = input.automationIds ?? [];
+  const selectorIndexByAutomationId = new Map([
+    ["StartView.AgentSelector", 0],
+    ["StartView.ModeSelector", 1],
+    ["StartView.ProjectSelector", 2]
+  ]);
+  const targetAutomationId = automationIds.find(id => selectorIndexByAutomationId.has(id));
+  if (!targetAutomationId) {
+    return null;
+  }
+
+  const comboBoxes = Array.from(document.querySelectorAll("body *"))
+    .map(element => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      const className = element.className?.toString?.() ?? "";
+      return {
+        element,
+        rect,
+        className,
+        role: element.getAttribute("role") ?? "",
+        display: style.display,
+        visibility: style.visibility
+      };
+    })
+    .filter(candidate =>
+      (candidate.role === "combobox" || candidate.className.toLowerCase().includes("combobox"))
+      && candidate.rect.width > 0
+      && candidate.rect.height > 0
+      && candidate.display !== "none"
+      && candidate.visibility !== "hidden"
+      && candidate.rect.left >= -1
+      && candidate.rect.top >= -1
+      && candidate.rect.left <= innerWidth
+      && candidate.rect.top <= innerHeight
+      && candidate.rect.top > innerHeight * 0.55)
+    .sort((left, right) => (left.rect.top - right.rect.top) || (left.rect.left - right.rect.left));
+  const target = comboBoxes[selectorIndexByAutomationId.get(targetAutomationId)];
+  if (!target) {
+    return null;
+  }
+
+  return {
+    x: target.rect.left + target.rect.width / 2,
+    y: target.rect.top + target.rect.height / 2
+  };
+}
+
+function collectVisibleComboBoxDebug() {
+  return Array.from(document.querySelectorAll("body *"))
+    .map(element => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      const className = element.className?.toString?.() ?? "";
+      return {
+        element,
+        rect,
+        className,
+        role: element.getAttribute("role") ?? "",
+        text: (element.textContent ?? "").trim(),
+        aria: element.getAttribute("aria-label") ?? "",
+        automationId:
+          element.getAttribute("data-automation-id")
+          ?? element.getAttribute("data-automationid")
+          ?? element.getAttribute("automationid")
+          ?? "",
+        display: style.display,
+        visibility: style.visibility
+      };
+    })
+    .filter(candidate =>
+      (candidate.role === "combobox" || candidate.className.toLowerCase().includes("combobox"))
+      && candidate.rect.width > 0
+      && candidate.rect.height > 0
+      && candidate.display !== "none"
+      && candidate.visibility !== "hidden"
+      && candidate.rect.left >= -1
+      && candidate.rect.top >= -1
+      && candidate.rect.left <= innerWidth
+      && candidate.rect.top <= innerHeight)
+    .map(candidate => ({
+      text: candidate.text,
+      aria: candidate.aria,
+      automationId: candidate.automationId,
+      role: candidate.role,
+      className: candidate.className,
+      rect: {
+        left: Math.round(candidate.rect.left),
+        top: Math.round(candidate.rect.top),
+        width: Math.round(candidate.rect.width),
+        height: Math.round(candidate.rect.height)
+      }
+    }))
+    .slice(0, 40);
 }
 
 function readControlEnabledState(input) {
@@ -1077,11 +1539,22 @@ function collectVisibleInteractiveDebug() {
 
 async function startAcpWebSocketServer() {
   let initializeRequest;
+  let sessionNewRequest;
+  let sessionPromptRequest;
   let resolveInitialize;
+  let resolveSessionNew;
+  let resolveSessionPrompt;
   const initializePromise = new Promise(resolve => {
     resolveInitialize = resolve;
   });
+  const sessionNewPromise = new Promise(resolve => {
+    resolveSessionNew = resolve;
+  });
+  const sessionPromptPromise = new Promise(resolve => {
+    resolveSessionPrompt = resolve;
+  });
   const sockets = new Set();
+  const sessionId = "wasm-full-chain-session-01";
 
   const server = createServer();
   server.on("upgrade", (request, socket) => {
@@ -1116,7 +1589,7 @@ async function startAcpWebSocketServer() {
         if (message.method === "initialize") {
           initializeRequest = message;
           resolveInitialize(message);
-          socket.write(encodeWebSocketTextFrame(JSON.stringify({
+          writeJsonRpc(socket, {
             jsonrpc: "2.0",
             id: message.id,
             result: {
@@ -1128,7 +1601,79 @@ async function startAcpWebSocketServer() {
               },
               agentCapabilities: {}
             }
-          })));
+          });
+          continue;
+        }
+
+        if (message.method === "session/new") {
+          sessionNewRequest = message;
+          resolveSessionNew(message);
+          writeJsonRpc(socket, {
+            jsonrpc: "2.0",
+            id: message.id,
+            result: {
+              sessionId,
+              modes: {
+                currentModeId: "planner",
+                availableModes: [
+                  {
+                    id: "agent",
+                    name: "Agent 01",
+                    description: "General conversation mode"
+                  },
+                  {
+                    id: "planner",
+                    name: "Planner 01",
+                    description: "Structured planning mode"
+                  }
+                ]
+              },
+              configOptions: [
+                {
+                  id: "mode",
+                  name: "Mode",
+                  description: "Conversation mode",
+                  type: "select",
+                  currentValue: "planner",
+                  options: [
+                    {
+                      value: "agent",
+                      name: "Agent 01"
+                    },
+                    {
+                      value: "planner",
+                      name: "Planner 01"
+                    }
+                  ]
+                }
+              ]
+            }
+          });
+          writeSessionUpdate(socket, sessionId, {
+            sessionUpdate: "session_info_update",
+            title: "WASM full chain session"
+          });
+          continue;
+        }
+
+        if (message.method === "session/prompt") {
+          sessionPromptRequest = message;
+          resolveSessionPrompt(message);
+          writeSessionUpdate(socket, sessionId, {
+            sessionUpdate: "agent_message_chunk",
+            content: {
+              type: "text",
+              text: fullChainAgentReplyText
+            }
+          });
+          writeJsonRpc(socket, {
+            jsonrpc: "2.0",
+            id: message.id,
+            result: {
+              stopReason: "end_turn",
+              userMessageId: message.params?.messageId ?? null
+            }
+          });
         }
       }
     });
@@ -1160,6 +1705,20 @@ async function startAcpWebSocketServer() {
         }
       }
     },
+    waitForSessionNew: async () => {
+      if (sessionNewRequest) {
+        return sessionNewRequest;
+      }
+
+      return await waitWithTimeout(sessionNewPromise, "Timed out waiting for ACP session/new request.", 30_000);
+    },
+    waitForSessionPrompt: async () => {
+      if (sessionPromptRequest) {
+        return sessionPromptRequest;
+      }
+
+      return await waitWithTimeout(sessionPromptPromise, "Timed out waiting for ACP session/prompt request.", 30_000);
+    },
     close: async () => {
       for (const socket of sockets) {
         socket.destroy();
@@ -1168,6 +1727,36 @@ async function startAcpWebSocketServer() {
       await new Promise(resolve => server.close(resolve));
     }
   };
+}
+
+async function waitWithTimeout(promise, message, timeoutMs) {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
+function writeSessionUpdate(socket, sessionId, update) {
+  writeJsonRpc(socket, {
+    jsonrpc: "2.0",
+    method: "session/update",
+    params: {
+      sessionId,
+      update
+    }
+  });
+}
+
+function writeJsonRpc(socket, message) {
+  socket.write(encodeWebSocketTextFrame(JSON.stringify(message)));
 }
 
 function readWebSocketTextFrames(buffer) {

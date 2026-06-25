@@ -150,8 +150,9 @@ scripts/gates/run-wasm-smoke-gates.sh Debug
 该 gate 会构建当前 `net10.0-browserwasm` 产物、静态托管 `wwwroot`，然后用 Playwright/Chromium 覆盖：
 
 - 设置页顶部原生 `NavigationView` overflow；
-- `ACP / Agent` profile 保存并刷新后仍可见；
+- `ACP / Agent` profile 与 remote directory 保存并刷新后仍可见；
 - ACP `initialize` 不宣告 `fs` / `terminal=true`；
+- 从 Start 页面按所选 remote directory 真正创建 ACP 会话，断言 `session/new.cwd` 等于 remote path，随后发送 `session/prompt` 并在 Chat UI 看到 agent reply；
 - `数据与存储` 页面上的受限桌面文件系统入口不会越过平台能力边界。
 
 发布后的文件可以部署到任何静态网站托管服务（如 Azure Static Web Apps、GitHub Pages、Netlify 等）。

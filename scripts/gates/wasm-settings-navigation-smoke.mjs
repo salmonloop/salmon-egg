@@ -48,20 +48,13 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await waitForBodyText(page, /常规|General|外观|Appearance|ACP \/ Agent/, "settings shell at mobile viewport");
 
-  await clickTopNavigationOverflow(page);
-  await waitForBodyText(page, /数据与存储|快捷键|诊断与日志|Data|Shortcuts|Diagnostics/, "settings overflow menu");
-
-  const overflowText = await page.locator("body").innerText();
-  if (!/数据与存储|快捷键|诊断与日志|Data|Shortcuts|Diagnostics/.test(overflowText)) {
-    throw new Error("Settings overflow menu did not expose expected section labels.");
-  }
-
-  await clickVisibleNavigationTargetUntilBodyText(
+  const diagnosticsTarget = {
+    labels: ["诊断与日志", "Diagnostics"],
+    automationIds: ["SettingsNav.Diagnostics"]
+  };
+  await clickTopNavigationOverflowTargetUntilBodyText(
     page,
-    {
-      labels: ["诊断与日志", "Diagnostics"],
-      automationIds: ["SettingsNav.Diagnostics"]
-    },
+    diagnosticsTarget,
     /Diagnostics and logs|诊断与日志|Live logs|日志/,
     "diagnostics settings page");
 
@@ -92,6 +85,38 @@ async function clickTopNavigationOverflow(page) {
   }
 
   await page.mouse.click(point.x, point.y);
+}
+
+async function clickTopNavigationOverflowTargetUntilBodyText(page, targetOptions, pattern, label) {
+  const deadline = Date.now() + 30_000;
+  let lastError;
+
+  while (Date.now() < deadline) {
+    try {
+      await clickTopNavigationOverflow(page);
+      await page.waitForFunction(
+        findVisibleNavigationTargetPoint,
+        targetOptions,
+        { timeout: Math.min(1_500, Math.max(250, deadline - Date.now())) });
+      const point = await page.evaluate(findVisibleNavigationTargetPoint, targetOptions);
+      if (!point) {
+        throw new Error(`Target disappeared before click: ${JSON.stringify(targetOptions)}`);
+      }
+
+      await page.mouse.click(point.x, point.y);
+      await waitForBodyText(page, pattern, label, Math.min(3_000, Math.max(250, deadline - Date.now())));
+      return;
+    } catch (error) {
+      lastError = error;
+      await page.keyboard.press("Escape").catch(() => {});
+      await page.waitForTimeout(250);
+    }
+  }
+
+  const candidates = await page.evaluate(collectVisibleNavigationTargetDebug);
+  throw new Error(
+    `Settings overflow menu did not activate target ${JSON.stringify(targetOptions)}. `
+    + `Last error: ${lastError?.message ?? lastError}. Candidates=${JSON.stringify(candidates)}`);
 }
 
 async function waitForBodyText(page, pattern, label, timeoutMs = 30_000) {

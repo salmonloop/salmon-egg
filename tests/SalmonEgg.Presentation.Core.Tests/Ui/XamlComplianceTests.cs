@@ -52,6 +52,19 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void WasmFileSystemSmoke_CoversAcpSessionCreationAndPrompt()
+    {
+        var script = LoadText(@"scripts\gates\wasm-file-system-availability-smoke.mjs");
+
+        Assert.Contains("\"session/new\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"session/prompt\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"session/update\"", script, StringComparison.Ordinal);
+        Assert.Contains("waitForSessionNew", script, StringComparison.Ordinal);
+        Assert.Contains("waitForSessionPrompt", script, StringComparison.Ordinal);
+        Assert.Contains("WASM full chain agent reply", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CoreGateScript_StopsWhenNativeGateCommandFails()
     {
         var script = LoadText(@"scripts\gates\run-core-gates.ps1");
