@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml.Media;
 using SalmonEgg.Domain.Models.Plan;
 
 namespace SalmonEgg.Presentation.Converters;
+
 /// <summary>
 /// 将计划条目状态转换为对应的颜色
 /// </summary>
@@ -22,8 +23,12 @@ public class PlanStatusToColorConverter : IValueConverter
                 PlanEntryStatus.Failed => new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 200, 40, 40)),
                 _ => new SolidColorBrush(Microsoft.UI.Colors.Gray)
             };
-            return new SolidColorBrush(Microsoft.UI.Colors.Gray);
+        }
+        return new SolidColorBrush(Microsoft.UI.Colors.Gray);
+    }
 
     public object ConvertBack(object value, Type targetType, object parameter, string language)
     {
         throw new NotImplementedException();
+    }
+}

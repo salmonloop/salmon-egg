@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media;
 
 namespace SalmonEgg.Presentation.Converters;
+
 /// <summary>
 /// 将消息方向转换为前景色（文本色）画刷
 /// 用户发出(True)返回 TextOnAccentFillColorPrimaryBrush
@@ -20,15 +21,23 @@ public class MessageDirectionToForegroundConverter : IValueConverter
                 if (Microsoft.UI.Xaml.Application.Current.Resources.TryGetValue("TextOnAccentFillColorPrimaryBrush", out var textOnAccent))
                 {
                     return textOnAccent;
+                }
+            }
             else
-                    {
-                        if (Microsoft.UI.Xaml.Application.Current.Resources.TryGetValue("TextFillColorPrimaryBrush", out var textPrimary))
-                        {
-                            return textPrimary;
+            {
+                if (Microsoft.UI.Xaml.Application.Current.Resources.TryGetValue("TextFillColorPrimaryBrush", out var textPrimary))
+                {
+                    return textPrimary;
+                }
+            }
+        }
 
-                            // Fallback
-                            return Microsoft.UI.Xaml.Application.Current.Resources["TextFillColorPrimaryBrush"];
+        // Fallback
+        return Microsoft.UI.Xaml.Application.Current.Resources["TextFillColorPrimaryBrush"];
+    }
 
     public object ConvertBack(object value, Type targetType, object parameter, string language)
     {
         throw new NotImplementedException();
+    }
+}

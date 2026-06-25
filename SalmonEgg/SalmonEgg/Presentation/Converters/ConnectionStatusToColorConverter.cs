@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Media;
 using SalmonEgg.Domain.Models;
 
 namespace SalmonEgg.Presentation.Converters;
+
 /// <summary>
 /// 将连接状态转换为颜色
 /// Requirements: 4.2
@@ -22,8 +23,12 @@ public class ConnectionStatusToColorConverter : IValueConverter
                 ConnectionStatus.Error => new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 239, 68, 68)),        // Red
                 _ => new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 156, 163, 175))                             // Gray
             };
-            return new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 156, 163, 175));
+        }
+        return new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 156, 163, 175));
+    }
 
     public object ConvertBack(object value, Type targetType, object parameter, string language)
     {
         throw new NotImplementedException();
+    }
+}

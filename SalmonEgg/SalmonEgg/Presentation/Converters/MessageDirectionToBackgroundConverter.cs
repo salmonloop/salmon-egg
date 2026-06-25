@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media;
 
 namespace SalmonEgg.Presentation.Converters;
+
 /// <summary>
 /// 将消息方向转换为背景色画刷
 /// 用户发出(True)返回 AccentFillColorDefaultBrush
@@ -20,15 +21,23 @@ public class MessageDirectionToBackgroundConverter : IValueConverter
                 if (Microsoft.UI.Xaml.Application.Current.Resources.TryGetValue("AccentFillColorDefaultBrush", out var accentBrush))
                 {
                     return accentBrush;
+                }
+            }
             else
-                    {
-                        if (Microsoft.UI.Xaml.Application.Current.Resources.TryGetValue("ControlFillColorSecondaryBrush", out var cardBrush))
-                        {
-                            return cardBrush;
+            {
+                if (Microsoft.UI.Xaml.Application.Current.Resources.TryGetValue("ControlFillColorSecondaryBrush", out var cardBrush))
+                {
+                    return cardBrush;
+                }
+            }
+        }
 
-                            // Fallback
-                            return Microsoft.UI.Xaml.Application.Current.Resources["LayerOnAcrylicFillColorDefaultBrush"];
+        // Fallback
+        return Microsoft.UI.Xaml.Application.Current.Resources["LayerOnAcrylicFillColorDefaultBrush"];
+    }
 
     public object ConvertBack(object value, Type targetType, object parameter, string language)
     {
         throw new NotImplementedException();
+    }
+}

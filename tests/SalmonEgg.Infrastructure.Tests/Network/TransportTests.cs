@@ -1,13 +1,4 @@
-using System;
-using System.Collections.Generic;
-using System.Net.Http;
-using System.Reactive.Subjects;
-using System.Threading;
-using System.Threading.Tasks;
-using Moq;
-using Serilog;
-using SalmonEgg.Infrastructure.Network;
-using Xunit;
+using System;using System.Collections.Generic;using System.Net.Http;using System.Reactive.Subjects;using System.Threading;using System.Threading.Tasks;using Moq;using Serilog;using SalmonEgg.Infrastructure.Network;using Xunit;
 
 namespace SalmonEgg.Infrastructure.Tests.Network
 {

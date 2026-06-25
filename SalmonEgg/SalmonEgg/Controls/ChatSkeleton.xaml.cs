@@ -10,9 +10,11 @@ public sealed partial class ChatSkeleton : UserControl
         InitializeComponent();
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+    }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
         => ShimmerStoryboard.Begin();
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
         => ShimmerStoryboard.Stop();
+}
