@@ -54,7 +54,7 @@ public sealed class ChatStateProjector : IChatStateProjector
         var isConnecting = connectionState.Phase == ConnectionPhase.Connecting;
         var isConnected = connectionState.Phase == ConnectionPhase.Connected;
         var isInitializing = connectionState.Phase == ConnectionPhase.Initializing;
-        var connectionStatus = connectionState.Phase == ConnectionPhase.Connected ? "Connected" : 
+        var connectionStatus = connectionState.Phase == ConnectionPhase.Connected ? "Connected" :
                                connectionState.Phase == ConnectionPhase.Initializing ? "Initializing..." :
                                connectionState.Phase == ConnectionPhase.Connecting ? "Connecting..." : "Disconnected";
         var connectionError = connectionState.Error;

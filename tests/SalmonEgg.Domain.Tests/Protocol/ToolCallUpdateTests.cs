@@ -20,7 +20,7 @@ public sealed class ToolCallUpdateTests
             PropertyNameCaseInsensitive = true,
             WriteIndented = false
         };
-        
+
         // Add the JsonPropertyNameEnumConverterFactory to honor JsonPropertyName attributes on enums
         _jsonOptions.Converters.Add(new JsonPropertyNameEnumConverterFactory());
     }

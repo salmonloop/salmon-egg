@@ -89,8 +89,8 @@ namespace SalmonEgg.Application.UseCases
                     Id = Guid.NewGuid().ToString(),
                     Type = "request",
                     Method = methodValue,
-                    Params = parameters != null 
-                        ? System.Text.Json.JsonSerializer.SerializeToElement(parameters) 
+                    Params = parameters != null
+                        ? System.Text.Json.JsonSerializer.SerializeToElement(parameters)
                         : (System.Text.Json.JsonElement?)null,
                     ProtocolVersion = "1.0",
                     Timestamp = DateTime.UtcNow
@@ -100,7 +100,7 @@ namespace SalmonEgg.Application.UseCases
 
                 // 4. 发送消息 (Requirement 4.3)
                 var sendResult = await _connectionManager.SendMessageAsync(message, CancellationToken.None);
-                
+
                 if (!sendResult.IsSuccess)
                 {
                     _logger.Error("发送消息失败: {Error}", sendResult.Error);
@@ -123,7 +123,7 @@ namespace SalmonEgg.Application.UseCases
                         _logger.Warning(
                             "收到错误响应，消息 ID: {MessageId}, 错误代码: {ErrorCode}, 错误消息: {ErrorMessage}",
                             response.Id, response.Error.Code, response.Error.Message);
-                        
+
                         return Result<AcpMessage>.Failure(
                             $"服务器返回错误 (代码 {response.Error.Code}): {response.Error.Message}");
                     }
@@ -140,7 +140,7 @@ namespace SalmonEgg.Application.UseCases
                     _logger.Error(
                         "等待响应超时 ({Timeout} 秒)，消息 ID: {MessageId}, 方法: {Method}",
                         timeoutSeconds, message.Id, methodValue);
-                    
+
                     return Result<AcpMessage>.Failure(
                         $"请求超时（{timeoutSeconds} 秒）：未收到服务器响应");
                 }

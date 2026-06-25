@@ -752,7 +752,8 @@ public partial class ChatViewModel
         _transientNotificationCts = new CancellationTokenSource();
         var token = _transientNotificationCts.Token;
 
-        _uiDispatcher.Enqueue(() => {
+        _uiDispatcher.Enqueue(() =>
+        {
             TransientNotificationMessage = message.Trim();
             ShowTransientNotification = true;
         });

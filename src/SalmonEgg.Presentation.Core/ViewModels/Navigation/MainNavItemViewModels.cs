@@ -71,8 +71,8 @@ public sealed partial class ProjectNavItemViewModel : MainNavItemViewModel
     }
 
     public ProjectNavItemViewModel(
-        ProjectDefinition project, 
-        bool isSystemProject, 
+        ProjectDefinition project,
+        bool isSystemProject,
         Func<string, Task> createSessionAsync,
         INavigationPaneState navigationState,
         IUiDispatcher uiDispatcher)

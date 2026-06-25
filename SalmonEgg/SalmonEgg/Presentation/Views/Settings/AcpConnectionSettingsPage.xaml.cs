@@ -38,7 +38,7 @@ public sealed partial class AcpConnectionSettingsPage : SettingsPageBase
         Frame?.Navigate(typeof(AgentProfileEditorPage), new AgentProfileEditorArgs(isEditing: true, profileId: profileId));
     }
 
-    
+
     private async void OnDeleteProfileMenuClick(object sender, RoutedEventArgs e)
     {
         if (sender is not MenuFlyoutItem item || item.Tag is not string profileId)

@@ -26,7 +26,7 @@ public class LoggingConfigurationTests
 
             // Assert
             Assert.NotNull(logger);
-            
+
             // 关闭 logger
             (logger as IDisposable)?.Dispose();
         }
@@ -55,7 +55,7 @@ public class LoggingConfigurationTests
             // Assert
             var logDirectory = Path.Combine(tempPath, "logs");
             Assert.True(Directory.Exists(logDirectory), "日志目录应该被创建");
-            
+
             // 关闭 logger
             (logger as IDisposable)?.Dispose();
         }
@@ -86,7 +86,7 @@ public class LoggingConfigurationTests
             Assert.NotNull(logger);
             // 验证 Debug 级别的日志可以被记录
             logger.Debug("Test debug message");
-            
+
             // 关闭 logger 以释放文件句柄
             (logger as IDisposable)?.Dispose();
         }
@@ -120,7 +120,7 @@ public class LoggingConfigurationTests
             // Act
             var logger = LoggingConfiguration.ConfigureLogging(tempPath);
             logger.Information("Test log message");
-            
+
             // 关闭 logger 以确保日志被写入
             (logger as IDisposable)?.Dispose();
 
@@ -152,7 +152,7 @@ public class LoggingConfigurationTests
             var logger = LoggingConfiguration.ConfigureLogging(tempPath);
             var testMessage = $"Test message {Guid.NewGuid()}";
             logger.Information(testMessage);
-            
+
             // 关闭 logger 以确保日志被写入
             (logger as IDisposable)?.Dispose();
 
@@ -189,7 +189,7 @@ public class LoggingConfigurationTests
             // Act
             var logger = LoggingConfiguration.ConfigureLogging(tempPath);
             logger.Information("Test message with thread ID");
-            
+
             // 关闭 logger 以确保日志被写入
             (logger as IDisposable)?.Dispose();
 

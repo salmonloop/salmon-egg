@@ -46,7 +46,7 @@ using SalmonEgg.Platforms.Windows;
 namespace SalmonEgg;
 
 /// <summary>
-    /// Dependency injection container configuration
+/// Dependency injection container configuration
 /// Requirements: 7.5
 /// </summary>
 public static class DependencyInjection
@@ -109,22 +109,22 @@ public static class DependencyInjection
 
         // Connection Manager (factory method supporting dynamic transport selection)
         services.AddSingleton<IConnectionManager>(sp =>
-        	{
-        				var protocolService = sp.GetRequiredService<IAcpProtocolService>();
-        				var logger = sp.GetRequiredService<Serilog.ILogger>();
+            {
+                var protocolService = sp.GetRequiredService<IAcpProtocolService>();
+                var logger = sp.GetRequiredService<Serilog.ILogger>();
 
-        				Infrastructure.Network.ITransport TransportFactory(TransportType type)
-        				{
-        					var l = sp.GetRequiredService<Serilog.ILogger>();
-        					return type switch
-        					{
-        						TransportType.HttpSse => new HttpSseTransport(l),
-        						_ => new WebSocketTransport(l)
-        					};
-        				}
+                Infrastructure.Network.ITransport TransportFactory(TransportType type)
+                {
+                    var l = sp.GetRequiredService<Serilog.ILogger>();
+                    return type switch
+                    {
+                        TransportType.HttpSse => new HttpSseTransport(l),
+                        _ => new WebSocketTransport(l)
+                    };
+                }
 
-        				return new ConnectionManager(protocolService, logger, TransportFactory);
-        			});
+                return new ConnectionManager(protocolService, logger, TransportFactory);
+            });
     }
 
     private static void RegisterInfrastructureServices(IServiceCollection services)

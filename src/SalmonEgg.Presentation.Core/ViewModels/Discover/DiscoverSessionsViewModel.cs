@@ -253,7 +253,7 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
         var cancellationToken = _refreshSessionsCts.Token;
 
         var generation = Interlocked.Increment(ref _refreshGeneration);
-        
+
         await PostToUiAsync(() =>
         {
             AgentSessions.Clear();
