@@ -87,6 +87,11 @@ public sealed class InMemoryAcpConnectionSessionRegistry : IAcpConnectionSession
         ArgumentNullException.ThrowIfNull(session);
         lock (_gate)
         {
+            if (_sessionsByProfile.TryGetValue(session.ProfileId, out var existingSession) && !ReferenceEquals(existingSession.Service, session.Service))
+            {
+                _profileIdByService.Remove(existingSession.Service);
+            }
+
             _sessionsByProfile[session.ProfileId] = session with
             {
                 LastUsedUtc = session.LastUsedUtc == default ? DateTime.UtcNow : session.LastUsedUtc
