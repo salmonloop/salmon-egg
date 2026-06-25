@@ -85,23 +85,7 @@ public sealed class PlatformShellService : IPlatformShellService
 
         try
         {
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = target,
-                    UseShellExecute = true
-                });
-                return Task.FromResult(true);
-            }
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                Process.Start("open", target);
-                return Task.FromResult(true);
-            }
-
-            Process.Start("xdg-open", target);
+            Process.Start(CreateLaunchProcessStartInfo(target));
             return Task.FromResult(true);
         }
         catch
@@ -109,4 +93,27 @@ public sealed class PlatformShellService : IPlatformShellService
             return Task.FromResult(false);
         }
     }
+
+    internal static ProcessStartInfo CreateLaunchProcessStartInfo(string target)
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            return new ProcessStartInfo
+            {
+                FileName = target,
+                UseShellExecute = true
+            };
+        }
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? "open" : "xdg-open",
+            UseShellExecute = false
+        };
+        startInfo.ArgumentList.Add(SanitizeUnixShellTarget(target));
+        return startInfo;
+    }
+
+    private static string SanitizeUnixShellTarget(string target)
+        => target.StartsWith("-", StringComparison.Ordinal) ? $"./{target}" : target;
 }
