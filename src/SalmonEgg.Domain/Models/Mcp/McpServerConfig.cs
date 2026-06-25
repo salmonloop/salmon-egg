@@ -110,7 +110,7 @@ namespace SalmonEgg.Domain.Models.Mcp
     /// <summary>
     /// SSE (Server-Sent Events) 类型的 MCP 服务器配置。
     /// 通过 SSE 流与服务器通信。
-    /// </summary>
+        /// </summary>
     public class SseMcpServer : McpServer
     {
         /// <summary>

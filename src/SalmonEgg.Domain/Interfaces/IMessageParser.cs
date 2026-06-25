@@ -49,9 +49,9 @@ namespace SalmonEgg.Domain.Interfaces
         /// <returns>JSON 字符串</returns>
         string SerializeMessage(JsonRpcMessage message);
 
-        /// <summary>
-        /// 获取 JsonSerializerOptions 实例供外部使用。
-        /// </summary>
-        JsonSerializerOptions Options { get; }
-    }
-}
+       /// <summary>
+       /// 获取 JsonSerializerOptions 实例供外部使用。
+       /// </summary>
+       JsonSerializerOptions Options { get; }
+       }
+   }

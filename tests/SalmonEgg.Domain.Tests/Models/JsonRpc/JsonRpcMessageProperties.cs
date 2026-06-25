@@ -267,7 +267,7 @@ namespace SalmonEgg.Domain.Tests.Models.JsonRpc
 
             Assert.That(hasResult, Is.True, "Response should have 'result' property");
             Assert.That(errorIsNull, Is.True, "Response should have 'error' property set to null");
-        }
+           }
 
         /// <summary>
         /// 属性 4：响应消息互斥字段验证（错误情况）
@@ -293,7 +293,7 @@ namespace SalmonEgg.Domain.Tests.Models.JsonRpc
 
             Assert.That(resultIsNull, Is.True, "Response should have 'result' property set to null");
             Assert.That(errorIsNotNull, Is.True, "Response should have a non-null 'error' property");
-        }
+           }
 
         /// <summary>
         /// 属性 5：错误码标准化

@@ -13,21 +13,21 @@ namespace SalmonEgg.Domain.Tests.Models.Content
     [TestFixture]
     public class ContentBlockProperties
     {
-        private readonly JsonSerializerOptions _jsonOptions;
+       private readonly JsonSerializerOptions _jsonOptions;
 
-        public ContentBlockProperties()
-        {
-            // 配置序列化选项：使用小写命名策略，以匹配 "type" 字段
-            _jsonOptions = new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                PropertyNameCaseInsensitive = true,
-                WriteIndented = false
-            };
+       public ContentBlockProperties()
+       {
+           // 配置序列化选项：使用小写命名策略，以匹配 "type" 字段
+           _jsonOptions = new JsonSerializerOptions
+           {
+               PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+               PropertyNameCaseInsensitive = true,
+               WriteIndented = false
+           };
 
-            // 添加 JsonPolymorphic 转换器支持
-            _jsonOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
-        }
+           // 添加 JsonPolymorphic 转换器支持
+           _jsonOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+       }
 
         [FsCheck.NUnit.Property(QuietOnSuccess = true)]
         public void TextContentBlock_PropertyRoundTrip_PreservesFidelity(

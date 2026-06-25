@@ -10775,12 +10775,12 @@ public partial class ChatViewModelTests
         await WaitForConditionAsync(() =>
         {
             syncContext.RunAll();
-            return Task.FromResult(
-                (loadStarted.Task.IsCompleted || string.Equals(fixture.ViewModel.CurrentSessionId, "conv-remote", StringComparison.Ordinal))
-                && runtimeState.ActiveSessionActivation is { SessionId: "existing-owner", Phase: SessionActivationPhase.RemoteHydrationPending }
-            && runtimeState.IsSessionActivationInProgress
-            && runtimeState.LatestActivationToken == 41
-            && string.Equals(runtimeState.DesiredSessionId, "existing-owner", StringComparison.Ordinal));
+                return Task.FromResult(
+                    (loadStarted.Task.IsCompleted || string.Equals(fixture.ViewModel.CurrentSessionId, "conv-remote", StringComparison.Ordinal))
+                    && runtimeState.ActiveSessionActivation is { SessionId: "existing-owner", Phase: SessionActivationPhase.RemoteHydrationPending }
+                && runtimeState.IsSessionActivationInProgress
+                && runtimeState.LatestActivationToken == 41
+                && string.Equals(runtimeState.DesiredSessionId, "existing-owner", StringComparison.Ordinal));
         });
 
         allowLoadCompletion.TrySetResult(null);

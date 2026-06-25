@@ -1,20 +1,21 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
-namespace SalmonEgg.Controls;
-
-public sealed partial class ChatSkeleton : UserControl
+namespace SalmonEgg.Controls
 {
-    public ChatSkeleton()
+    public sealed partial class ChatSkeleton : UserControl
     {
-        InitializeComponent();
-        Loaded += OnLoaded;
-        Unloaded += OnUnloaded;
+        public ChatSkeleton()
+        {
+            InitializeComponent();
+            Loaded += OnLoaded;
+            Unloaded += OnUnloaded;
+        }
+
+        private void OnLoaded(object sender, RoutedEventArgs e)
+            => ShimmerStoryboard.Begin();
+
+        private void OnUnloaded(object sender, RoutedEventArgs e)
+            => ShimmerStoryboard.Stop();
     }
-
-    private void OnLoaded(object sender, RoutedEventArgs e)
-        => ShimmerStoryboard.Begin();
-
-    private void OnUnloaded(object sender, RoutedEventArgs e)
-        => ShimmerStoryboard.Stop();
 }
