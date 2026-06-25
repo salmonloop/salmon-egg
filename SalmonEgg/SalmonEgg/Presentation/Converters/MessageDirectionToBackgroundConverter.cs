@@ -4,39 +4,39 @@ using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media;
 
 namespace SalmonEgg.Presentation.Converters;
-    /// <summary>
-    /// 将消息方向转换为背景色画刷
-    /// 用户发出(True)返回 AccentFillColorDefaultBrush
-    /// AI接收(False)返回 CardBackgroundFillColorDefaultBrush
-    /// </summary>
-    public class MessageDirectionToBackgroundConverter : IValueConverter
+/// <summary>
+/// 将消息方向转换为背景色画刷
+/// 用户发出(True)返回 AccentFillColorDefaultBrush
+/// AI接收(False)返回 CardBackgroundFillColorDefaultBrush
+/// </summary>
+public class MessageDirectionToBackgroundConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, string language)
     {
-        public object Convert(object value, Type targetType, object parameter, string language)
+        if (value is bool isOutgoing)
         {
-            if (value is bool isOutgoing)
+            if (isOutgoing)
             {
-                if (isOutgoing)
+                if (Microsoft.UI.Xaml.Application.Current.Resources.TryGetValue("AccentFillColorDefaultBrush", out var accentBrush))
                 {
-                    if (Microsoft.UI.Xaml.Application.Current.Resources.TryGetValue("AccentFillColorDefaultBrush", out var accentBrush))
-                    {
-                        return accentBrush;
-                    }
-                }
-                else
-                {
-                    if (Microsoft.UI.Xaml.Application.Current.Resources.TryGetValue("ControlFillColorSecondaryBrush", out var cardBrush))
-                    {
-                        return cardBrush;
-                    }
+                    return accentBrush;
                 }
             }
-            
-            // Fallback
-            return Microsoft.UI.Xaml.Application.Current.Resources["LayerOnAcrylicFillColorDefaultBrush"];
+            else
+            {
+                if (Microsoft.UI.Xaml.Application.Current.Resources.TryGetValue("ControlFillColorSecondaryBrush", out var cardBrush))
+                {
+                    return cardBrush;
+                }
+            }
         }
 
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            throw new NotImplementedException();
-        }
+        // Fallback
+        return Microsoft.UI.Xaml.Application.Current.Resources["LayerOnAcrylicFillColorDefaultBrush"];
     }
+
+    public object ConvertBack(object value, Type targetType, object parameter, string language)
+    {
+        throw new NotImplementedException();
+    }
+}
