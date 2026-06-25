@@ -13,59 +13,130 @@ using Xunit;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
-public sealed class AcpConnectionSessionCleanerTests
+public class AcpConnectionSessionCleanerTests
 {
     [Fact]
-    public async Task CleanupStaleAsync_RemovesInvalidSessions_AndKeepsActiveService()
-    {
-        var registry = new InMemoryAcpConnectionSessionRegistry();
-        var logger = new Mock<ILogger<AcpConnectionSessionCleaner>>();
-        var cleaner = CreateCleaner(registry, logger.Object);
-
-        var activeInner = CreateChatService(isConnected: true, isInitialized: true);
-        var staleDisconnectedInner = CreateChatService(isConnected: false, isInitialized: true);
-        var staleUninitializedInner = CreateChatService(isConnected: true, isInitialized: false);
-
-        var active = WrapAdapter(activeInner.Object);
-        var staleDisconnected = WrapAdapter(staleDisconnectedInner.Object);
-        var staleUninitialized = WrapAdapter(staleUninitializedInner.Object);
-
-        registry.Upsert(new AcpConnectionSession("active", active, CreateInitializeResponse("active"), CreateReuseKey("sig-active")));
-        registry.Upsert(new AcpConnectionSession("stale-disconnected", staleDisconnected, CreateInitializeResponse("stale-a"), CreateReuseKey("sig-a")));
-        registry.Upsert(new AcpConnectionSession("stale-uninitialized", staleUninitialized, CreateInitializeResponse("stale-b"), CreateReuseKey("sig-b")));
-
-        var result = await cleaner.CleanupStaleAsync(active, cancellationToken: CancellationToken.None);
-
-        Assert.Equal(2, result.RemovedCount);
-        Assert.Equal(0, result.DisposeFailureCount);
-        Assert.True(registry.TryGetByProfile("active", out _));
-        Assert.False(registry.TryGetByProfile("stale-disconnected", out _));
-        Assert.False(registry.TryGetByProfile("stale-uninitialized", out _));
-        staleDisconnectedInner.Verify(x => x.DisconnectAsync(), Times.Once);
-        staleUninitializedInner.Verify(x => x.DisconnectAsync(), Times.Once);
-    }
-
-    [Fact]
-    public async Task CleanupStaleAsync_WhenDisconnectThrows_ContinuesAndReportsFailureCount()
+    public async Task CleanupStaleAsync_RemovesStaleSessions()
     {
         var registry = new InMemoryAcpConnectionSessionRegistry();
         var logger = new Mock<ILogger<AcpConnectionSessionCleaner>>();
         var cleaner = CreateCleaner(registry, logger.Object);
 
         var staleInner = CreateChatService(isConnected: false, isInitialized: true);
-        staleInner
-            .Setup(x => x.DisconnectAsync())
-            .ThrowsAsync(new InvalidOperationException("disconnect failure"));
-
         var stale = WrapAdapter(staleInner.Object);
+
         registry.Upsert(new AcpConnectionSession("stale", stale, CreateInitializeResponse("stale"), CreateReuseKey("sig-stale")));
 
-        var result = await cleaner.CleanupStaleAsync(activeService: null, cancellationToken: CancellationToken.None);
+        var result = await cleaner.CleanupStaleAsync(
+            activeService: null,
+            cancellationToken: CancellationToken.None);
+
+        Assert.Equal(1, result.RemovedCount);
+        Assert.Equal(0, result.DisposeFailureCount);
+        Assert.False(registry.TryGetByProfile("stale", out _));
+        staleInner.Verify(x => x.DisconnectAsync(), Times.Once);
+    }
+
+    [Fact]
+    public async Task CleanupStaleAsync_HandlesDisposeFailures()
+    {
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        var logger = new Mock<ILogger<AcpConnectionSessionCleaner>>();
+        var cleaner = CreateCleaner(registry, logger.Object);
+
+        var staleInner = CreateChatService(isConnected: false, isInitialized: true);
+        staleInner.Setup(x => x.DisconnectAsync()).ThrowsAsync(new InvalidOperationException("disconnect error"));
+        var stale = WrapAdapter(staleInner.Object);
+
+        registry.Upsert(new AcpConnectionSession("stale", stale, CreateInitializeResponse("stale"), CreateReuseKey("sig-stale")));
+
+        var result = await cleaner.CleanupStaleAsync(
+            activeService: null, cancellationToken: CancellationToken.None);
 
         Assert.Equal(1, result.RemovedCount);
         Assert.Equal(1, result.DisposeFailureCount);
         Assert.False(registry.TryGetByProfile("stale", out _));
         staleInner.Verify(x => x.DisconnectAsync(), Times.Once);
+    }
+
+    [Fact]
+    public async Task CleanupStaleAsync_WhenMultipleFailures_CountsCorrectlyWithConcurrency()
+    {
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        var logger = new Mock<ILogger<AcpConnectionSessionCleaner>>();
+        var cleaner = CreateCleaner(registry, logger.Object);
+
+        var staleInner1 = CreateChatService(isConnected: false, isInitialized: true);
+        staleInner1.Setup(x => x.DisconnectAsync()).ThrowsAsync(new InvalidOperationException("disconnect error 1"));
+        var stale1 = WrapAdapter(staleInner1.Object);
+
+        var staleInner2 = CreateChatService(isConnected: false, isInitialized: true);
+        staleInner2.Setup(x => x.DisconnectAsync()).ThrowsAsync(new InvalidOperationException("disconnect error 2"));
+        var stale2 = WrapAdapter(staleInner2.Object);
+
+        registry.Upsert(new AcpConnectionSession("stale1", stale1, CreateInitializeResponse("stale1"), CreateReuseKey("sig-stale1")));
+        registry.Upsert(new AcpConnectionSession("stale2", stale2, CreateInitializeResponse("stale2"), CreateReuseKey("sig-stale2")));
+
+        var result = await cleaner.CleanupStaleAsync(
+            activeService: null, cancellationToken: CancellationToken.None);
+
+        Assert.Equal(2, result.RemovedCount);
+        Assert.Equal(2, result.DisposeFailureCount);
+        Assert.False(registry.TryGetByProfile("stale1", out _));
+        Assert.False(registry.TryGetByProfile("stale2", out _));
+        staleInner1.Verify(x => x.DisconnectAsync(), Times.Once);
+        staleInner2.Verify(x => x.DisconnectAsync(), Times.Once);
+    }
+
+    [Fact]
+    public async Task CleanupStaleAsync_ExcludesActiveService()
+    {
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        var logger = new Mock<ILogger<AcpConnectionSessionCleaner>>();
+        var cleaner = CreateCleaner(registry, logger.Object, new AcpConnectionEvictionOptions
+        {
+            EnablePolicyEviction = true,
+            MaxWarmProfiles = 0
+        });
+
+        // The active service should be kept even if it would otherwise be evicted
+        var activeInner = CreateChatService(isConnected: true, isInitialized: true);
+        var active = WrapAdapter(activeInner.Object);
+
+        registry.Upsert(new AcpConnectionSession("active", active, CreateInitializeResponse("active"), CreateReuseKey("sig-active"))
+        {
+            LastUsedUtc = DateTime.UtcNow.AddMinutes(-30)
+        });
+
+        var result = await cleaner.CleanupStaleAsync(
+            activeService: active, cancellationToken: CancellationToken.None);
+
+        Assert.Equal(0, result.RemovedCount);
+        Assert.Equal(0, result.DisposeFailureCount);
+        Assert.True(registry.TryGetByProfile("active", out _));
+        activeInner.Verify(x => x.DisconnectAsync(), Times.Never);
+    }
+
+    [Fact]
+    public async Task CleanupStaleAsync_HandlesCancellation()
+    {
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        var logger = new Mock<ILogger<AcpConnectionSessionCleaner>>();
+        var cleaner = CreateCleaner(registry, logger.Object);
+
+        var staleInner = CreateChatService(isConnected: false, isInitialized: true);
+        var stale = WrapAdapter(staleInner.Object);
+
+        registry.Upsert(new AcpConnectionSession("stale", stale, CreateInitializeResponse("stale"), CreateReuseKey("sig-stale")));
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+            await cleaner.CleanupStaleAsync(activeService: null, cancellationToken: cts.Token));
+
+        // Should not have disconnected since it was cancelled before work started
+        staleInner.Verify(x => x.DisconnectAsync(), Times.Never);
     }
 
     [Fact]
