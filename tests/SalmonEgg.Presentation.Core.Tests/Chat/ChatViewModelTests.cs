@@ -3999,6 +3999,109 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task StoreProjection_WhenLocalPromptEditIsPending_DoesNotApplyOlderDraftText()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        var viewModel = fixture.ViewModel;
+        syncContext.RunAll();
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            DraftText = string.Empty
+        });
+        syncContext.RunAll();
+
+        var staleState = await fixture.GetStateAsync();
+        viewModel.CurrentPrompt = "new instruction";
+        await Task.Delay(50);
+        syncContext.RunAll();
+
+        await fixture.UpdateStateAsync(_ => staleState with
+        {
+            HydratedConversationId = "conv-1",
+            DraftText = string.Empty,
+            Transcript = ImmutableList.Create(
+                new ConversationMessageSnapshot
+                {
+                    Id = "message-1",
+                    Timestamp = new DateTime(2026, 6, 25, 0, 0, 0, DateTimeKind.Utc),
+                    ContentType = "text",
+                    TextContent = "late replay projection"
+                })
+        });
+        syncContext.RunAll();
+
+        Assert.Equal("new instruction", viewModel.CurrentPrompt);
+
+        var confirmedState = await fixture.GetStateAsync();
+        await fixture.UpdateStateAsync(_ => confirmedState with
+        {
+            DraftText = "new instruction",
+            DraftRevision = Math.Max(confirmedState.DraftRevision, staleState.DraftRevision + 1)
+        });
+        syncContext.RunAll();
+
+        Assert.Equal("new instruction", viewModel.CurrentPrompt);
+    }
+
+    [Fact]
+    public async Task ApplyStoreProjection_WhenOnlyDraftTextChanges_KeepsTaskOverviewChangesStable()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        syncContext.RunAll();
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            ConversationContents = ImmutableDictionary<string, ConversationContentSlice>.Empty.Add(
+                "conv-1",
+                new ConversationContentSlice(
+                    ImmutableList.Create(
+                        new ConversationMessageSnapshot
+                        {
+                            Id = "message-1",
+                            Timestamp = new DateTime(2026, 6, 25, 0, 0, 0, DateTimeKind.Utc),
+                            ContentType = "tool_call",
+                            ToolCallContent = new List<ToolCallContent>
+                            {
+                                new DiffToolCallContent(
+                                    @"C:\Users\shang\Project\salmon-acp\README.md",
+                                    oldText: null,
+                                    newText: "updated")
+                            }
+                        }),
+                    ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                    ShowPlanPanel: false)),
+            Transcript = ImmutableList.Create(
+                new ConversationMessageSnapshot
+                {
+                    Id = "message-1",
+                    Timestamp = new DateTime(2026, 6, 25, 0, 0, 0, DateTimeKind.Utc),
+                    ContentType = "tool_call",
+                    ToolCallContent = new List<ToolCallContent>
+                    {
+                        new DiffToolCallContent(
+                            @"C:\Users\shang\Project\salmon-acp\README.md",
+                            oldText: null,
+                            newText: "updated")
+                    }
+                })
+        });
+        syncContext.RunAll();
+
+        var originalChanges = fixture.ViewModel.TaskOverviewChanges;
+        Assert.Single(originalChanges);
+
+        await fixture.DispatchAsync(new SetDraftTextAction("typing"));
+        syncContext.RunAll();
+
+        Assert.Same(originalChanges, fixture.ViewModel.TaskOverviewChanges);
+    }
+
+    [Fact]
     public async Task PlanEntries_CollectionChanges_RaiseDerivedPropertyNotifications()
     {
         var syncContext = new QueueingSynchronizationContext();

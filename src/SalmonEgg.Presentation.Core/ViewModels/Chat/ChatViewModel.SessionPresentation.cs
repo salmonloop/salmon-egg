@@ -209,16 +209,15 @@ public partial class ChatViewModel
             projection.Transcript,
             sessionChanged: true);
         ReplacePlanEntries(projection.PlanEntries);
-        RefreshTaskOverviewChanges(projection.Transcript);
+        RefreshTaskOverviewChanges(
+            projection.HydratedConversationId,
+            projection.Transcript,
+            forceRefresh: true);
     }
 
-    private void ApplyPromptAndProfileProjection(ChatUiProjection projection)
+    private void ApplyPromptAndProfileProjection(ChatUiProjection projection, bool sessionChanged)
     {
-        var draft = projection.CurrentPrompt;
-        if (!string.Equals(CurrentPrompt, draft, StringComparison.Ordinal))
-        {
-            CurrentPrompt = draft;
-        }
+        ApplyCurrentPromptProjection(projection, sessionChanged);
 
         ApplySelectedProfileFromStore(projection.SelectedProfileIntentId);
         var selectedProfileId = !string.IsNullOrWhiteSpace(projection.ChatOwnerProfileId)
@@ -231,6 +230,44 @@ public partial class ChatViewModel
         }
 
         _currentRemoteSessionId = projection.RemoteSessionId;
+    }
+
+    private void ApplyCurrentPromptProjection(ChatUiProjection projection, bool sessionChanged)
+    {
+        var draft = projection.CurrentPrompt;
+
+        if (sessionChanged)
+        {
+            ClearPendingLocalPromptProjection();
+            _minimumPromptDraftRevision = projection.DraftRevision;
+        }
+        else if (projection.DraftRevision < _minimumPromptDraftRevision)
+        {
+            return;
+        }
+        else if (_hasPendingLocalPromptProjection)
+        {
+            var sameConversation = string.Equals(
+                _pendingLocalPromptConversationId,
+                projection.HydratedConversationId,
+                StringComparison.Ordinal);
+
+            if (sameConversation && string.Equals(draft, _pendingLocalPromptText, StringComparison.Ordinal))
+            {
+                ClearPendingLocalPromptProjection();
+            }
+            else if (sameConversation)
+            {
+                return;
+            }
+        }
+
+        if (!string.Equals(CurrentPrompt, draft, StringComparison.Ordinal))
+        {
+            CurrentPrompt = draft;
+        }
+
+        _minimumPromptDraftRevision = Math.Max(_minimumPromptDraftRevision, projection.DraftRevision);
     }
 
     private void ApplyTranscriptAndPlanProjection(
@@ -256,7 +293,10 @@ public partial class ChatViewModel
             SyncPlanEntries(projection.PlanEntries);
         }
 
-        RefreshTaskOverviewChanges(projection.Transcript);
+        RefreshTaskOverviewChanges(
+            projection.HydratedConversationId,
+            projection.Transcript,
+            forceRefresh: false);
     }
 
     private void PublishProjectionRestoreReady(ChatUiProjection projection)

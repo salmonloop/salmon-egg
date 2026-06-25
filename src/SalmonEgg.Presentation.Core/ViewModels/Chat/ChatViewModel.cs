@@ -239,6 +239,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private ChatUiProjection? _pendingUiProjection;
     private int _pendingUiProjectionSequence;
     private bool _uiProjectionDrainScheduled;
+    private bool _hasPendingLocalPromptProjection;
+    private string? _pendingLocalPromptText;
+    private string? _pendingLocalPromptConversationId;
+    private long _minimumPromptDraftRevision;
+    private string? _taskOverviewTranscriptConversationId;
+    private IReadOnlyList<ConversationMessageSnapshot>? _taskOverviewTranscriptSource;
 
     private sealed class RemoteSessionRecoveryRequest : IDisposable
     {
@@ -1576,7 +1582,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         try
         {
             ApplySessionIdentityProjection(projection, out sessionChanged);
-            ApplyPromptAndProfileProjection(projection);
+            ApplyPromptAndProfileProjection(projection, sessionChanged);
             ApplyTranscriptAndPlanProjection(projection, sessionChanged);
             ApplyConversationStatusProjection(projection);
             ApplyConnectionAndAgentProjection(projection);
@@ -3291,8 +3297,20 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         OnPropertyChanged(nameof(ShouldShowTaskOverviewMorePlanItems));
     }
 
-    private void RefreshTaskOverviewChanges(IReadOnlyList<ConversationMessageSnapshot> transcript)
+    private void RefreshTaskOverviewChanges(
+        string? conversationId,
+        IReadOnlyList<ConversationMessageSnapshot> transcript,
+        bool forceRefresh)
     {
+        if (!forceRefresh
+            && ReferenceEquals(_taskOverviewTranscriptSource, transcript)
+            && string.Equals(_taskOverviewTranscriptConversationId, conversationId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _taskOverviewTranscriptConversationId = conversationId;
+        _taskOverviewTranscriptSource = transcript;
         TaskOverviewChanges = new ObservableCollection<TaskOverviewChangeViewModel>(
             _taskOverviewChangeProjectionCoordinator.Project(transcript));
     }

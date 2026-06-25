@@ -1359,13 +1359,65 @@ public partial class ChatViewModel
     {
         if (!_suppressStorePromptProjection)
         {
-            _ = _chatStore.Dispatch(new SetDraftTextAction(value));
+            _pendingLocalPromptText = value;
+            _pendingLocalPromptConversationId = CurrentSessionId;
+            _hasPendingLocalPromptProjection = true;
+            _ = DispatchDraftTextAsync(value, CurrentSessionId);
         }
 
         SendPromptCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(ComposerState));
         OnPropertyChanged(nameof(CanSendPromptUi));
         RefreshSlashStateFromPrompt();
+    }
+
+    /// <summary>
+    /// Dispatches the draft text to the store.  The pending local prompt guard is cleared by
+    /// <see cref="ApplyCurrentPromptProjection"/> once a projection arrives that already carries
+    /// the confirmed draft value, so there is no race between dispatch completion and the next
+    /// incoming projection.
+    /// </summary>
+    private async Task DispatchDraftTextAsync(string promptText, string? conversationId)
+    {
+        ChatState state;
+        try
+        {
+            await _chatStore.Dispatch(new SetDraftTextAction(promptText)).ConfigureAwait(false);
+            state = await _chatStore.GetCurrentStateAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex) when (!_disposed)
+        {
+            Logger.LogWarning(ex, "Failed to dispatch draft text to store");
+            return;
+        }
+        catch (Exception)
+        {
+            // Disposed; ignore.
+            return;
+        }
+
+        if (_disposed)
+        {
+            return;
+        }
+
+        await PostToUiAsync(() =>
+        {
+            if (!string.Equals(_pendingLocalPromptText, promptText, StringComparison.Ordinal)
+                || !string.Equals(_pendingLocalPromptConversationId, conversationId, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _minimumPromptDraftRevision = Math.Max(_minimumPromptDraftRevision, state.DraftRevision);
+        }).ConfigureAwait(false);
+    }
+
+    private void ClearPendingLocalPromptProjection()
+    {
+        _hasPendingLocalPromptProjection = false;
+        _pendingLocalPromptText = null;
+        _pendingLocalPromptConversationId = null;
     }
 
     partial void OnIsPromptInFlightChanged(bool value)

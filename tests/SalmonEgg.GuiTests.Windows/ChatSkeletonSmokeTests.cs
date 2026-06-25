@@ -619,6 +619,57 @@ public sealed class ChatSkeletonSmokeTests
     }
 
     [SkippableFact]
+    public void LargeRemoteSession_AfterHydration_InputTextStaysStableWhileProjectionsSettle()
+    {
+        const string promptText = "review the hydrated transcript and summarize the last three tool changes";
+        var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
+        Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", "1500");
+
+        try
+        {
+            using var appData = GuiAppDataScope.CreateDeterministicSlowRemoteReplayData(
+                cachedMessageCount: 1,
+                replayMessageCount: 120);
+            using var session = WindowsGuiAppSession.LaunchFresh();
+
+            var sessionItem = session.FindByAutomationId("MainNav.Session.gui-remote-conversation-01", TimeSpan.FromSeconds(15));
+            session.ActivateElement(sessionItem);
+
+            Assert.True(
+                session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(45)),
+                $"Large remote session did not finish hydration before input stability smoke.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+            var inputBox = session.FindByAutomationId("InputBox", TimeSpan.FromSeconds(10)).AsTextBox();
+            session.ClickElement(inputBox);
+            SetInputBoxValue(session, promptText);
+
+            Assert.True(
+                WaitForInputBoxValue(session, promptText, TimeSpan.FromSeconds(3)),
+                $"InputBox did not accept prompt text before stability observation. Actual='{ReadInputBoxValue(session)}'");
+
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+            while (DateTime.UtcNow < deadline)
+            {
+                var currentValue = ReadInputBoxValue(session);
+                if (!string.Equals(currentValue, promptText, StringComparison.Ordinal))
+                {
+                    ThrowWithScreenshot(
+                        session,
+                        appData,
+                        "large-remote-session-input-text-lost",
+                        $"InputBox text changed while hydrated large-session projections settled. Expected='{promptText}' Actual='{currentValue}'.");
+                }
+
+                Thread.Sleep(150);
+            }
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", previousSlowLoadDelay);
+        }
+    }
+
+    [SkippableFact]
     public void SelectLocalSession_TerminalPanel_ShowsPrompt_AndExecutesCommand()
     {
         const string guiLocalTerminalSmokeCommandEnvVar = "SALMONEGG_GUI_LOCAL_TERMINAL_SMOKE_COMMAND";
@@ -3448,6 +3499,40 @@ public sealed class ChatSkeletonSmokeTests
         }
 
         return false;
+    }
+
+    private static bool WaitForInputBoxValue(
+        WindowsGuiAppSession session,
+        string expectedValue,
+        TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (string.Equals(ReadInputBoxValue(session), expectedValue, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            Thread.Sleep(120);
+        }
+
+        return false;
+    }
+
+    private static string ReadInputBoxValue(WindowsGuiAppSession session)
+    {
+        var inputBox = session.FindByAutomationId("InputBox", TimeSpan.FromSeconds(2));
+        return inputBox.Patterns.Value.IsSupported
+            ? inputBox.Patterns.Value.Pattern.Value.Value
+            : inputBox.Name;
+    }
+
+    private static void SetInputBoxValue(WindowsGuiAppSession session, string value)
+    {
+        var inputBox = session.FindByAutomationId("InputBox", TimeSpan.FromSeconds(2));
+        Assert.True(inputBox.Patterns.Value.IsSupported, "InputBox must expose ValuePattern for IME-independent smoke input.");
+        inputBox.Patterns.Value.Pattern.SetValue(value);
     }
 
     private static string TryGetElementDisplayText(AutomationElement? element)

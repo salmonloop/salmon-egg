@@ -25,6 +25,7 @@ public record ChatState(
     ConversationUsageSnapshot? Usage = null,
     bool ShowPlanPanel = false,
     string DraftText = "",
+    long DraftRevision = 0,
     bool IsHydrating = false)
 {
     public static ChatState Empty { get; } = new();

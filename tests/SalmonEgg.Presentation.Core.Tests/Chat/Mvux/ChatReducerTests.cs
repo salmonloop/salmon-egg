@@ -37,6 +37,20 @@ public class ChatReducerTests
     }
 
     [Fact]
+    public void GivenState_WhenSetDraftText_ThenDraftRevisionIncrements()
+    {
+        // Arrange
+        var initialState = new ChatState(DraftText: "old", DraftRevision: 7);
+        var action = new SetDraftTextAction("hello");
+
+        // Act
+        var newState = ChatReducer.Reduce(initialState, action);
+
+        // Assert
+        Assert.Equal(8, newState.DraftRevision);
+    }
+
+    [Fact]
     public void GivenEmptyState_WhenSetBindingSlice_ThenBindingAndGenerationAreUpdated()
     {
         // Arrange

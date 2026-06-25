@@ -40,7 +40,11 @@ public static class ChatReducer
                 RuntimeStates = ImmutableDictionary<string, ConversationRuntimeSlice>.Empty
             }),
             SetIsHydratingAction setIsHydrating => Mutate(current, current with { IsHydrating = setIsHydrating.IsHydrating }),
-            SetDraftTextAction draftText => Mutate(current, current with { DraftText = draftText.Text }),
+            SetDraftTextAction draftText => Mutate(current, current with
+            {
+                DraftText = draftText.Text,
+                DraftRevision = checked(current.DraftRevision + 1)
+            }),
             BeginTurnAction begin => Mutate(current, current with
             {
                 ActiveTurn = new ActiveTurnState(
