@@ -11367,10 +11367,10 @@ public partial class ChatViewModelTests
         runtimeState.IsSessionActivationInProgress = true;
 
         Assert.False(fixture.ViewModel.ShouldShowActiveConversationRoot);
-        Assert.False(fixture.ViewModel.ShouldLoadActiveConversationRoot);
+        Assert.True(fixture.ViewModel.ShouldLoadActiveConversationRoot);
         Assert.False(fixture.ViewModel.ShouldShowSessionHeader);
         Assert.False(fixture.ViewModel.ShouldShowTranscriptSurface);
-        Assert.False(fixture.ViewModel.ShouldLoadTranscriptSurface);
+        Assert.True(fixture.ViewModel.ShouldLoadTranscriptSurface);
         Assert.False(fixture.ViewModel.ShouldShowConversationInputSurface);
         Assert.Equal(SessionNamePolicy.CreateDefault("conv-1"), fixture.ViewModel.CurrentSessionDisplayName);
         Assert.Equal(string.Empty, fixture.ViewModel.PresentedSessionHeaderDisplayName);
@@ -12427,10 +12427,10 @@ public partial class ChatViewModelTests
         syncContext.RunAll();
 
         Assert.False(fixture.ViewModel.ShouldShowActiveConversationRoot);
-        Assert.False(fixture.ViewModel.ShouldLoadActiveConversationRoot);
+        Assert.True(fixture.ViewModel.ShouldLoadActiveConversationRoot);
         Assert.False(fixture.ViewModel.ShouldShowSessionHeader);
         Assert.False(fixture.ViewModel.ShouldShowTranscriptSurface);
-        Assert.False(fixture.ViewModel.ShouldLoadTranscriptSurface);
+        Assert.True(fixture.ViewModel.ShouldLoadTranscriptSurface);
         Assert.False(fixture.ViewModel.ShouldShowConversationInputSurface);
 
         var switchTask = fixture.ViewModel.SwitchConversationAsync("conv-2");
@@ -12447,10 +12447,10 @@ public partial class ChatViewModelTests
         syncContext.RunAll();
 
         Assert.False(fixture.ViewModel.ShouldShowActiveConversationRoot);
-        Assert.False(fixture.ViewModel.ShouldLoadActiveConversationRoot);
+        Assert.True(fixture.ViewModel.ShouldLoadActiveConversationRoot);
         Assert.False(fixture.ViewModel.ShouldShowSessionHeader);
         Assert.False(fixture.ViewModel.ShouldShowTranscriptSurface);
-        Assert.False(fixture.ViewModel.ShouldLoadTranscriptSurface);
+        Assert.True(fixture.ViewModel.ShouldLoadTranscriptSurface);
         Assert.False(fixture.ViewModel.ShouldShowConversationInputSurface);
         Assert.Equal("conv-2", runtimeState.DesiredSessionId);
         Assert.True(runtimeState.IsSessionActivationInProgress);
