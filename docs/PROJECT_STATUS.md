@@ -1,135 +1,56 @@
-# 项目状态报告
+# 项目状态
 
-## 任务 1: 项目初始化和环境配置
+> 本文件仅作为里程碑记录参考。当前工作状态请查看 `git log` 和分支历史。
 
-### 已完成项
+## 已完成的主要里程碑
 
-✅ **四层架构项目结构**
-- `src/SalmonEgg.Domain` - 领域层 (.NET Standard 2.1)
-- `src/SalmonEgg.Application` - 应用层 (.NET Standard 2.1)
-- `src/SalmonEgg.Infrastructure` - 基础设施层 (.NET Standard 2.1)
-- `SalmonEgg/SalmonEgg` - Uno Platform 主项目
+### 基础架构
+- 四层架构（Domain / Application / Infrastructure / Presentation）建立完成
+- Uno Platform 单项目多 TFM 结构（MSIX / WASM / Desktop）
+- 跨平台 ViewModel 层（`SalmonEgg.Presentation.Core`）独立为共享库
+- 桌面专用基础设施（`SalmonEgg.Infrastructure.Desktop`）分层完成
+- DI 容器按平台条件区分桌面 / WASM 服务注册
 
-✅ **NuGet 包依赖配置**
+### ACP 协议
+- WebSocket / HTTP SSE / Stdio 三种传输全部实现
+- ACP 能力协商（`clientCapabilities`）按平台门控
+- 会话生命周期状态机（`Selecting → Selected → RemoteConnectionReady → Hydrated | Faulted`）
+- Warm Reuse 判定逻辑与全条件矩阵测试
 
-Infrastructure 层:
-- System.Text.Json 10.0.3
-- Websocket.Client 5.3.0
-- Polly 8.6.6
-- Serilog 4.3.1
-- Serilog.Sinks.File 7.0.0
-- Serilog.Sinks.Console 6.1.1
-- Microsoft.Extensions.DependencyInjection 10.0.3
+### 配置持久化
+- YAML 格式配置持久化（`docs/SPEC-CONFIG-PERSISTENCE-YAML.md`）
+- 原子写入（temp → flush → rename）
+- 安全存储（Windows Credential Manager / volatile WASM）
+- ACP profile YAML 在 WASM 通过 Uno IDBFS 持久化
 
-Application 层:
-- FluentValidation 11.9.2
-- Microsoft.Extensions.DependencyInjection.Abstractions 10.0.3
-- System.Reactive 6.1.0
+### WASM
+- Uno IDBFS 文件系统持久化（`/local/SalmonEgg`）
+- WASM smoke gate（`scripts/gates/run-wasm-smoke-gates.sh`）
+- Vercel 部署配置（`vercel.json`），输出目录 `publish/vercel-wasm/wwwroot`
+- 静态资源验证 gate（`scripts/gates/verify-wasm-static-assets.sh`）
 
-Presentation 层 (Uno Platform):
-- CommunityToolkit.Mvvm 8.4.0
-- Microsoft.Extensions.DependencyInjection 10.0.3
-- Microsoft.Extensions.Logging 10.0.3
-- Serilog.Extensions.Logging 9.0.0
+### 导航与会话
+- 导航 SSOT：`INavigationCoordinator → IConversationSessionSwitcher`
+- 全局搜索状态机（`Idle / Loading / Results / Empty / Error`，latest-wins）
+- 项目/远端目录 ID 构造与解析统一到 `ProjectSelectionCwdResolver`
+- `INavigationProjectPreferences.TryGetProjectCwd` 统一 CWD 解析
 
-✅ **目录结构**
-```
-src/
-├── SalmonEgg.Domain/
-│   ├── Models/
-│   ├── Services/
-│   └── Exceptions/
-├── SalmonEgg.Application/
-│   ├── Services/
-│   ├── UseCases/
-│   └── Common/
-└── SalmonEgg.Infrastructure/
-    ├── Network/
-    ├── Serialization/
-    ├── Storage/
-    └── Logging/
+### 测试
+- `SalmonEgg.Presentation.Core.Tests`：1800+ 测试
+- `SalmonEgg.Infrastructure.Tests`：300+ 测试
+- `SalmonEgg.GuiTests.Windows`：FlaUI GUI smoke（Windows）
+- WASM 全链路 smoke gate（构建 → 启动 → ACP 会话 → 发送消息）
 
-SalmonEgg/SalmonEgg/
-└── Presentation/
-    ├── Views/
-    ├── ViewModels/
-    └── Converters/
+### 手柄输入
+- `SalmonEgg.GamepadBridge.Windows`：标准 `Gamepad` + `RawGameController` 双通道
+- Axis 归一化与八向 switch 映射按官方 enum 离散值
+- 合同测试禁止重新引入 Raw fallback 跳过和 flags 解析
 
-tests/
-├── SalmonEgg.Domain.Tests/
-├── SalmonEgg.Application.Tests/
-└── SalmonEgg.Infrastructure.Tests/
-```
+## 当前状态（2026-06-25）
 
-✅ **依赖注入配置**
-- 创建了 `DependencyInjection.cs` 文件
-- 配置了 Serilog 日志系统
-- 预留了各层服务注册的位置
+- 分支：`develop`
+- .NET SDK：10.0.202
+- Uno SDK：6.5+
+- 所有测试通过，WASM smoke gate 通过
 
-✅ **日志配置**
-- 创建了 `LoggingConfiguration.cs`
-- 配置了控制台和文件日志输出
-- 日志文件轮转策略：10MB 限制，保留 7 天
-
-✅ **.gitignore 配置**
-- 添加了 .NET 项目标准忽略规则
-- 添加了 Uno Platform 特定忽略规则
-- 添加了各平台（Android、iOS、macOS、WebAssembly）的忽略规则
-
-✅ **项目引用关系**
-- Application 层引用 Domain 层
-- Infrastructure 层引用 Domain 层
-- Uno Platform 主项目引用所有三层
-
-### 待完成项（需要 .NET 10.0 SDK）
-
-⚠️ **Uno Platform 项目构建**
-- Uno Platform 6.5+ 要求 .NET 10.0 SDK
-- 当前系统安装的是 .NET 8.0 SDK
-- 需要升级到 .NET 10.0 SDK 才能构建和运行 Uno Platform 项目
-
-### 解决方案
-
-有两个选择：
-
-**选项 1: 升级到 .NET 10.0 SDK（推荐）**
-1. 从 https://dotnet.microsoft.com/download/dotnet/10.0 下载并安装 .NET 10.0 SDK
-2. 运行 `dotnet restore SalmonEgg.sln`
-3. 运行 `dotnet build SalmonEgg.sln`
-
-**选项 2: 降级 Uno Platform 版本**
-1. 修改 `SalmonEgg/global.json`，将 Uno.Sdk 版本降级到支持 .NET 8.0 的版本
-2. 修改 `SalmonEgg/SalmonEgg/SalmonEgg.csproj`，将目标框架改回 `net8.0-browserwasm;net8.0-desktop`
-3. 注意：可能会失去一些新功能
-
-### 验证步骤
-
-完成 .NET 10.0 SDK 安装后，运行以下命令验证：
-
-```bash
-# 验证 .NET 版本
-dotnet --version
-
-# 恢复依赖
-dotnet restore SalmonEgg.sln
-
-# 构建解决方案
-dotnet build SalmonEgg.sln --configuration Debug
-
-# 运行测试
-dotnet test
-
-# 运行 Uno Platform 应用（WinUI 3 MSIX）
-run.bat
-```
-
-### 下一步
-
-任务 1 的核心工作已完成：
-- ✅ 项目结构创建完成
-- ✅ NuGet 包配置完成
-- ✅ 依赖注入容器配置完成
-- ✅ 目录结构创建完成
-- ⚠️ 需要 .NET 10.0 SDK 才能完整验证
-
-可以继续进行任务 2（领域层实现），因为领域层使用 .NET Standard 2.1，不依赖 .NET 10.0。
+详细变更历史见 `git log`。

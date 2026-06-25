@@ -11,315 +11,135 @@ SalmonEgg 是一个基于 Uno Platform 的跨平台原生应用程序，实现 A
 > 行为级硬约束（会话切换 / 导航 / 搜索并发语义）见：`docs/hard-constraints-session-navigation-and-search.md`。  
 > 如与一般性描述冲突，以硬约束文档与 `AGENTS.md` 为准。
 
-### 四层架构
+### 分层架构
 
 ```
-Presentation Layer (UI)
+Presentation Layer (Uno/WinUI3 Views + ViewModels in Presentation.Core)
        ↓
-Application Layer
+Application Layer (Use Cases / Services)
        ↓
-Domain Layer
+Domain Layer (Models / Interfaces)
        ↑
-Infrastructure Layer
+Infrastructure Layer (Network / Storage / Logging)
 ```
 
-1. **Presentation Layer (表示层)**: Uno Platform 视图和 ViewModel
-2. **Application Layer (应用层)**: 应用服务、用例编排
-3. **Domain Layer (领域层)**: 核心业务逻辑、领域模型
-4. **Infrastructure Layer (基础设施层)**: 外部依赖实现（网络、存储、日志）
+各层职责：
 
-这种分层确保了：
-- 业务逻辑与 UI 框架解耦
-- 核心逻辑不依赖外部框架
-- 易于测试和维护
-- 支持未来的技术栈迁移
+1. **Presentation Layer**：Uno Platform XAML 视图 (`SalmonEgg/SalmonEgg/Presentation/`) 和跨平台共享 ViewModel/Service 逻辑 (`src/SalmonEgg.Presentation.Core/`)。View 完全由 ViewModel 驱动，不包含业务规则。
+2. **Application Layer** (`src/SalmonEgg.Application/`)：应用服务与用例编排。
+3. **Domain Layer** (`src/SalmonEgg.Domain/`)：核心业务模型与接口。纯 .NET，不引用 UI 类型。
+4. **Infrastructure Layer** (`src/SalmonEgg.Infrastructure/` + `src/SalmonEgg.Infrastructure.Desktop/`)：外部依赖实现（网络传输、存储、日志）。桌面专用能力（`Stdio` 子进程、本地文件系统）集中在 `Infrastructure.Desktop`。
+
+平台差异实现必须集中在 `SalmonEgg/SalmonEgg/Platforms/` 下或平台服务中，禁止散落在 ViewModel 或业务逻辑里。
 
 ## 项目结构
 
 ```
-SalmonEgg/
+SalmonEgg.sln
+├── SalmonEgg/
+│   └── SalmonEgg/                     # Uno Platform 主项目（单项目多 TFM）
+│       ├── Presentation/
+│       │   ├── Views/                 # XAML 视图
+│       │   ├── ViewModels/            # 平台视图绑定层（薄层）
+│       │   └── ...                    # Converters、Behaviors、Controls 等
+│       ├── Platforms/                 # 平台专用代码（Windows/WebAssembly/Desktop/...）
+│       └── DependencyInjection.cs     # DI 容器配置
+│
 ├── src/
-│   ├── SalmonEgg/                      # Uno Platform 共享项目（Presentation）
-│   │   ├── Presentation/
-│   │   │   ├── ViewModels/                # ViewModel 层
-│   │   │   ├── Views/                     # XAML 视图
-│   │   │   └── Converters/                # 值转换器
-│   │   ├── App.xaml                       # 应用程序入口
-│   │   └── DependencyInjection.cs         # DI 容器配置
+│   ├── SalmonEgg.Presentation.Core/   # 跨平台共享 ViewModel / Service 接口
+│   │   ├── ViewModels/                # 主要 ViewModel 实现（Navigation、Chat、Settings 等）
+│   │   └── Services/                  # Presentation 层服务接口与实现
 │   │
-│   ├── SalmonEgg.Application/          # 应用层（.NET Standard 2.1）
-│   │   ├── Services/                      # 应用服务接口和实现
-│   │   ├── UseCases/                      # 业务用例
-│   │   ├── Common/                        # 通用组件（Result 模式）
-│   │   └── Validators/                    # FluentValidation 验证器
+│   ├── SalmonEgg.Application/         # 应用层（用例 / 服务编排）
+│   │   ├── Services/                  # 应用服务
+│   │   └── UseCases/                  # 业务用例
 │   │
-│   ├── SalmonEgg.Domain/               # 领域层（.NET Standard 2.1）
-│   │   ├── Models/                        # 领域模型
-│   │   ├── Services/                      # 领域服务接口
-│   │   └── Exceptions/                    # 领域异常
+│   ├── SalmonEgg.Domain/              # 领域层（模型 / 接口）
+│   │   ├── Models/                    # 领域模型（ACP 消息、配置、会话等）
+│   │   └── Services/                  # 领域服务接口
 │   │
-│   └── SalmonEgg.Infrastructure/       # 基础设施层（.NET Standard 2.1）
-│       ├── Network/                       # 网络传输实现
-│       ├── Serialization/                 # 消息解析和序列化
-│       ├── Storage/                       # 持久化和配置
-│       └── Logging/                       # 日志配置
+│   ├── SalmonEgg.Infrastructure/      # 基础设施层（跨平台部分）
+│   │   ├── Client/                    # ACP 客户端与传输工厂
+│   │   ├── Network/                   # WebSocket / HTTP SSE 传输实现
+│   │   ├── Storage/                   # 配置持久化（YAML + 安全存储）
+│   │   └── Logging/                   # 日志配置
+│   │
+│   └── SalmonEgg.Infrastructure.Desktop/  # 基础设施层（桌面专用）
+│       ├── Services/                  # 桌面专用平台服务（文件系统访问等）
+│       └── Transport/                 # Stdio 子进程传输实现
 │
-├── tests/
-│   ├── SalmonEgg.Domain.Tests/
-│   ├── SalmonEgg.Application.Tests/
-│   └── SalmonEgg.Infrastructure.Tests/
-│
-├── docs/
-│   ├── architecture.md                    # 本文档
-│   ├── build-guide.md                     # 构建指南
-│   └── coding-standards.md                # 代码规范
-│
-└── SalmonEgg.sln
+└── tests/
+    ├── SalmonEgg.Application.Tests/
+    ├── SalmonEgg.Domain.Tests/
+    ├── SalmonEgg.Infrastructure.Tests/
+    ├── SalmonEgg.Presentation.Core.Tests/
+    ├── SalmonEgg.IntegrationTests/
+    ├── SalmonEgg.GamepadBridge.Windows/    # 手柄输入诊断（Windows）
+    └── SalmonEgg.GuiTests.Windows/         # GUI smoke（Windows FlaUI）
 ```
 
-## 组件关系图
+## 能力边界（跨平台）
 
-```mermaid
-graph TB
-    subgraph "Presentation Layer"
-        V[Views - Uno Platform]
-        VM[ViewModels]
-    end
+平台能力由统一的能力事实源（`IPlatformCapabilityService`）提供，禁止在 ViewModel 或业务层散落平台判断。
 
-    subgraph "Application Layer"
-        AS[Application Services]
-        UC[Use Cases]
-    end
+| 能力 | MSIX (Windows) | WASM | Desktop (Skia) |
+|------|:--------------:|:----:|:--------------:|
+| 本地文件系统访问 | ✅ | ❌ | ✅ |
+| Stdio 子进程 | ✅ | ❌ | ✅ |
+| 安全凭据存储 | Windows Credential Manager | Volatile（内存） | Keychain / Secret Service |
+| WebSocket (`ws://`) | ✅ | 仅 `http://` 来源下允许 | ✅ |
+| WebSocket (`wss://`) | ✅ | ✅ | ✅ |
+| ACP `clientCapabilities.fs` | ✅ | ❌（不声明） | ✅ |
+| ACP `terminal` | ✅ | ❌（不声明） | ✅ |
 
-    subgraph "Domain Layer"
-        DM[Domain Models]
-        DS[Domain Services]
-        INT[Interfaces]
-    end
+## 配置持久化
 
-    subgraph "Infrastructure Layer"
-        NET[Network - WebSocket/HTTP SSE]
-        STORE[Storage - Configuration]
-        LOG[Logging - Serilog]
-        SER[Serialization - System.Text.Json]
-    end
+详见 `docs/SPEC-CONFIG-PERSISTENCE-YAML.md`。
 
-    V --> VM
-    VM --> AS
-    AS --> UC
-    UC --> DS
-    UC --> DM
-    DS --> INT
-    NET -.implements.-> INT
-    STORE -.implements.-> INT
-    LOG -.implements.-> INT
-    SER -.implements.-> INT
-```
+- **非敏感配置**：YAML 文件，存储在平台 AppData 目录（Windows: `%LOCALAPPDATA%\SalmonEgg\`，WASM: 浏览器 IDBFS `/local/SalmonEgg`）。
+- **敏感信息**（Token / API Key）：仅通过平台安全存储（`ISecureStorage`）持久化，永不落盘到 YAML。
+- **WASM 持久化**：通过 Uno IDBFS 实现，可持久化 ACP profile YAML 和普通应用设置；安全凭据使用 volatile 存储（内存）。
 
-## 数据流
+## 传输层
 
-### 1. 连接流程
+支持三种 ACP 传输方式：
 
-```
-User Clicks "Connect"
-       ↓
-MainViewModel.ConnectAsync()
-       ↓
-ConnectionService.ConnectAsync(configId)
-       ↓
-ConnectToServerUseCase.ExecuteAsync(configId)
-       ↓
-1. Load configuration (ConfigurationManager)
-2. Validate configuration (FluentValidation)
-3. ConnectionManager.ConnectAsync(config)
-       ↓
-   a. Select transport (Stdio subprocess / WebSocket / HTTP SSE)
-   b. Establish connection
-   c. Send initialization message
-       ↓
-ConnectionStateChanges → MainViewModel
-       ↓
-UI Updates (status color, buttons enabled/disabled)
-```
+| 传输类型 | 适用平台 | 实现 |
+|----------|----------|------|
+| `WebSocket` | 全平台 | `src/SalmonEgg.Infrastructure/Network/` |
+| `HTTP SSE` | 全平台 | `src/SalmonEgg.Infrastructure/Network/` |
+| `Stdio` (含 SSH bridge) | 桌面（MSIX / Desktop） | `src/SalmonEgg.Infrastructure.Desktop/Transport/` |
 
-### 2. 消息发送流程
+> `ssh` 不是独立传输类型，SSH bridge 通过 `stdio` transport 的 `stdio_command`/`stdio_args` 字段配置。详见 `docs/SPEC-CONFIG-PERSISTENCE-YAML.md`。
 
-```
-User Enters Method/Parameters + Clicks "Send"
-       ↓
-MainViewModel.SendMessageAsync()
-       ↓
-MessageService.SendRequestAsync(method, parameters)
-       ↓
-SendMessageUseCase.ExecuteAsync(method, parameters)
-       ↓
-1. Validate input
-2. Check connection status
-3. Create ACP message
-4. ConnectionManager.SendMessageAsync(message)
-       ↓
-   Transport sends message via WebSocket/HTTP
-       ↓
-5. Wait for response (timeout: 30s)
-       ↓
-Response received → Message added to history
-       ↓
-UI Updates (message history list)
-```
+## 会话与导航
 
-### 3. 消息接收流程
+详见 `docs/hard-constraints-session-navigation-and-search.md`。
 
-```
-Server sends notification
-       ↓
-Transport receives message
-       ↓
-ConnectionManager.OnMessageReceived(json)
-       ↓
-1. Parse message (AcpMessageParser)
-2. Check if it's a response to pending request
-   - Yes: Complete TaskCompletionSource
-   - No: Add to incoming messages stream
-       ↓
-MainViewModel subscription receives update
-       ↓
-UI Updates (message history list)
-```
+会话激活的唯一 owner 是 `INavigationCoordinator -> IConversationSessionSwitcher` 链路。项目/远端目录 ID 的构造、解析与分类由 `ProjectSelectionCwdResolver` 统一提供，ViewModel 和平台服务只传递用户意图并调用该 owner。
 
-## 核心组件
+## 依赖注入
 
-### Domain Layer
-
-| 组件 | 职责 |
-|------|------|
-| `AcpMessage` | ACP 协议消息模型（Id, Type, Method, Params, Result, Error） |
-| `ConnectionState` | 连接状态模型（Status, ServerUrl, ConnectedAt, ErrorMessage） |
-| `ServerConfiguration` | 服务器配置模型（Id, Name, ServerUrl, Transport, Authentication） |
-| `IAcpProtocolService` | ACP 消息解析和序列化接口 |
-| `IConnectionManager` | 连接管理接口（连接、断开、发送消息） |
-
-### Application Layer
-
-| 组件 | 职责 |
-|------|------|
-| `ConnectToServerUseCase` | 连接到服务器的用例（加载配置、验证、建立连接） |
-| `SendMessageUseCase` | 发送消息的用例（验证输入、创建消息、等待响应） |
-| `DisconnectUseCase` | 断开连接的用例 |
-| `ConnectionService` | 封装连接用例，提供连接状态查询 |
-| `MessageService` | 封装消息发送用例，提供通知消息流 |
-| `Result<T>` | 操作结果模式（避免异常控制流） |
-
-### Infrastructure Layer
-
-| 组件 | 职责 |
-|------|------|
-| `AcpMessageParser` | 实现 `IAcpProtocolService`，使用 System.Text.Json 解析/序列化 |
-| `ConnectionManager` | 实现 `IConnectionManager`，管理连接生命周期 |
-| `StdioTransport` | 子进程 stdio 传输实现；可直接启动 Agent，也可启动 `ssh` 等桥接进程 |
-| `WebSocketTransport` | WebSocket 传输实现（使用 Websocket.Client 库） |
-| `HttpSseTransport` | HTTP SSE 传输实现 |
-| `ConfigurationManager` | 配置持久化管理（加密敏感信息） |
-| `SecureStorage` | 安全存储基础实现 |
-
-### Presentation Layer
-
-| 组件 | 职责 |
-|------|------|
-| `MainViewModel` | 主界面逻辑（连接、消息发送、历史显示） |
-| `SettingsViewModel` | 设置页面逻辑（配置管理） |
-| `ConfigurationEditorViewModel` | 配置编辑对话框逻辑 |
-| `MessageViewModel` | 消息历史项视图模型 |
-| `ConnectionStatusToColorConverter` | 连接状态到颜色的转换器 |
-
-## 依赖注入配置
-
-所有服务在 `DependencyInjection.cs` 中注册：
-
-```csharp
-public static class DependencyInjection
-{
-    public static IServiceCollection AddSalmonEgg(this IServiceCollection services)
-    {
-        ConfigureLogging(services);
-        RegisterDomainServices(services);
-        RegisterInfrastructureServices(services);
-        RegisterApplicationServices(services);
-        RegisterViewModels(services);
-        return services;
-    }
-    // ...
-}
-```
-
-### 服务生命周期
-
-| 服务 | 生命周期 | 原因 |
-|------|----------|------|
-| `IAcpProtocolService` | Singleton | 无状态，线程安全 |
-| `IConnectionManager` | Singleton | 管理全局连接状态 |
-| `IConfigurationService` | Singleton | 配置缓存和持久化 |
-| `IConnectionService` | Singleton | 封装单例的 ConnectionManager |
-| `IMessageService` | Singleton | 订阅全局消息流 |
-| ViewModels | Transient | 每次导航创建新实例 |
-
-## 扩展指南
-
-### 添加新的传输协议
-
-1. 在 Domain 层扩展 `TransportType` 枚举
-2. 在 Infrastructure 层创建新传输类实现 `ITransport` 接口
-3. 在 `DependencyInjection.cs` 中注册新传输
-4. 更新 `TransportFactory` 方法
-
-### 添加新的配置字段
-
-1. 在 `ServerConfiguration` 模型中添加属性
-2. 在 `ConfigurationEditorViewModel` 中添加对应属性
-3. 在 XAML 中添加输入控件
-4. 更新 `ServerConfigurationValidator` 添加验证规则
-
-### 添加新的 ViewModel
-
-1. 创建类继承 `ViewModelBase`
-2. 使用 `[ObservableProperty]` 特性声明属性
-3. 使用 `[RelayCommand]` 特性声明命令
-4. 在 `DependencyInjection.cs` 中注册
-
-## 测试策略
-
-### 单元测试
-
-- 领域层：验证模型和领域服务
-- 应用层：验证用例逻辑和服务编排
-- 基础设施层：验证传输、解析、存储实现
-
-### 属性测试（FsCheck）
-
-- 消息解析 Round-Trip 属性
-- 配置序列化 Round-Trip 属性
-- 连接状态转换属性
-
-### 集成测试
-
-- 端到端连接流程
-- 配置持久化流程
+所有服务在 `SalmonEgg/SalmonEgg/DependencyInjection.cs` 中注册，按平台条件区分桌面/WASM 专用实现。平台专用服务通过接口绑定，业务层只与接口交互。
 
 ## 技术选型
 
-| 技术 | 用途 | 选择理由 |
-|------|------|----------|
-| **Uno Platform** | 跨平台 UI 框架 | 官方推荐，支持多平台，与 WinUI 兼容 |
-| **CommunityToolkit.Mvvm** | MVVM 框架 | 轻量级，性能好，官方支持 |
-| **System.Text.Json** | JSON 序列化 | .NET 内置，性能优异 |
-| **Serilog** | 日志记录 | 结构化日志，丰富的 Sink 支持 |
-| **Websocket.Client** | WebSocket 客户端 | 成熟稳定，支持自动重连 |
-| **Polly** | 弹性处理 | 重试、断路器策略，行业标准 |
-| **FluentValidation** | 数据验证 | 流畅 API，易于测试 |
-| **Reactive Extensions** | 响应式编程 | 优雅处理异步流 |
+| 技术 | 用途 |
+|------|------|
+| **Uno Platform** | 跨平台 UI 框架（WinUI3 / Skia / WASM） |
+| **CommunityToolkit.Mvvm** | MVVM 代码生成（`ObservableProperty` / `RelayCommand`） |
+| **System.Text.Json** | JSON 序列化（必须使用源生成上下文） |
+| **YamlDotNet** | YAML 配置持久化 |
+| **Serilog** | 结构化日志 |
+| **System.Net.WebSockets** | WebSocket 传输 |
+| **Polly** | 重试 / 断路器策略 |
+| **xUnit + FsCheck** | 单元测试 + 属性测试 |
 
 ## 参考资料
 
 - [Uno Platform 官方文档](https://platform.uno/docs/)
 - [CommunityToolkit.Mvvm](https://learn.microsoft.com/dotnet/communitytoolkit/mvvm/)
-- [Clean Architecture](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
-- [ACP Protocol Specification](https://spec.modelcontextprotocol.io/)
+- [ACP 协议标准](https://agentclientprotocol.com/llms.txt)
+- 行为硬约束：`docs/hard-constraints-session-navigation-and-search.md`
+- 代码规范：`docs/coding-standards.md`
+- 构建指南：`BUILD_GUIDE.md`
