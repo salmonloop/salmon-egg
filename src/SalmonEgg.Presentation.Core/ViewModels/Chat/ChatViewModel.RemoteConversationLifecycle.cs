@@ -2520,7 +2520,8 @@ public partial class ChatViewModel
 
     private void ScheduleSessionSwitchOverlayDismissal(long activationVersion, string conversationId)
     {
-        _uiDispatcher.Enqueue(() => {
+        _uiDispatcher.Enqueue(() =>
+        {
             DismissSessionSwitchOverlay(activationVersion, conversationId);
         });
     }

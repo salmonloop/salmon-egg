@@ -495,14 +495,14 @@ public sealed partial class MiniChatView : Page
                 _projectionRestoreController.TryScheduleRetry(DispatcherQueue, TryApplyPendingProjectionRestore);
                 break;
 
-                case TranscriptProjectionRestoreResultKind.Confirmed:
-                    if (result.Token is { } token)
-                    {
-                        ApplyViewportActions(_viewportController.OnRestoreConfirmed(token, result.Generation));
-                    }
-                    break;
+            case TranscriptProjectionRestoreResultKind.Confirmed:
+                if (result.Token is { } token)
+                {
+                    ApplyViewportActions(_viewportController.OnRestoreConfirmed(token, result.Generation));
+                }
+                break;
 
-                case TranscriptProjectionRestoreResultKind.Unavailable:
+            case TranscriptProjectionRestoreResultKind.Unavailable:
                 ApplyViewportActions(_viewportController.OnRestoreUnavailable(
                     result.ConversationId ?? CurrentViewportConversationId,
                     result.Generation,
