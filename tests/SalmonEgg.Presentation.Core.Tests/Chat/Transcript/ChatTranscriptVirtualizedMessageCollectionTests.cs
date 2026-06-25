@@ -76,6 +76,37 @@ public sealed class ChatTranscriptVirtualizedMessageCollectionTests
     }
 
     [Fact]
+    public void Reset_WhenSameConversationChangesUncachedItem_PublishesReplaceForVirtualizedAdapter()
+    {
+        var sut = new ChatTranscriptVirtualizedMessageCollection();
+        var events = new List<NotifyCollectionChangedEventArgs>();
+        sut.CollectionChanged += (_, args) => events.Add(args);
+
+        sut.Reset("conv-1", BuildTranscript(1), Project, MatchesSnapshot);
+        events.Clear();
+
+        var changedTranscript = BuildTranscript(1).SetItem(
+            0,
+            new ConversationMessageSnapshot
+            {
+                Id = "message-0",
+                Timestamp = new DateTime(2026, 5, 8, 0, 0, 0, DateTimeKind.Utc),
+                ContentType = "text",
+                TextContent = "streamed"
+            });
+
+        sut.Reset("conv-1", changedTranscript, Project, MatchesSnapshot);
+
+        var replace = Assert.Single(events);
+        Assert.Equal(NotifyCollectionChangedAction.Replace, replace.Action);
+        Assert.Equal(0, replace.NewStartingIndex);
+        var newItem = Assert.IsType<ChatMessageViewModel>(Assert.Single(replace.NewItems!));
+        var oldItem = Assert.IsType<ChatMessageViewModel>(Assert.Single(replace.OldItems!));
+        Assert.Equal("streamed", newItem.TextContent);
+        Assert.Equal("Message 0", oldItem.TextContent);
+    }
+
+    [Fact]
     public void Reset_WhenSameConversationChangesCachedPrefixAndAppends_PublishesReplaceAndAddWithoutReset()
     {
         var sut = new ChatTranscriptVirtualizedMessageCollection();

@@ -131,7 +131,7 @@ public sealed class ChatTranscriptVirtualizedMessageCollection :
             return;
         }
 
-        PublishChangedCachedItems(oldTranscript, messages, sameConversation);
+        PublishChangedItems(oldTranscript, messages, sameConversation);
         if (addedCount > 0)
         {
             RaiseAppend(oldCount, addedCount);
@@ -285,39 +285,106 @@ public sealed class ChatTranscriptVirtualizedMessageCollection :
         return _matchesSnapshot(item, _transcript[index]);
     }
 
-    private void PublishChangedCachedItems(
+    private void PublishChangedItems(
         IImmutableList<ConversationMessageSnapshot> oldTranscript,
         IImmutableList<ConversationMessageSnapshot> newTranscript,
         bool sameConversation)
     {
-        if (!sameConversation || _matchesSnapshot is null)
+        if (!sameConversation || _matchesSnapshot is null || _projector is null)
         {
             _cache.Clear();
             return;
         }
 
-        foreach (var entry in _cache.ToArray())
+        var sharedCount = Math.Min(oldTranscript.Count, newTranscript.Count);
+        for (var index = 0; index < sharedCount; index++)
         {
-            if (entry.Key >= newTranscript.Count || entry.Key >= oldTranscript.Count)
+            if (_cache.TryGetValue(index, out var cachedItem))
             {
-                _cache.Remove(entry.Key);
+                if (!_matchesSnapshot(cachedItem, newTranscript[index]))
+                {
+                    var newItem = CreateItem(index);
+                    _cache[index] = newItem;
+                    RaiseReplace(index, cachedItem, newItem);
+                }
+
                 continue;
             }
 
-            if (!_matchesSnapshot(entry.Value, newTranscript[entry.Key]))
+            if (!SnapshotProjectionEquals(oldTranscript[index], newTranscript[index]))
             {
-                var oldItem = entry.Value;
-                var newItem = CreateItem(entry.Key);
-                _cache[entry.Key] = newItem;
-                CollectionChanged?.Invoke(
-                    this,
-                    new NotifyCollectionChangedEventArgs(
-                        NotifyCollectionChangedAction.Replace,
-                        newItem,
-                        oldItem,
-                        entry.Key));
+                RaiseReplace(
+                    index,
+                    _projector(oldTranscript[index], index),
+                    _projector(newTranscript[index], index));
             }
         }
+
+        foreach (var entry in _cache.ToArray())
+        {
+            if (entry.Key >= newTranscript.Count)
+            {
+                _cache.Remove(entry.Key);
+            }
+        }
+    }
+
+    private void RaiseReplace(
+        int index,
+        ChatMessageViewModel oldItem,
+        ChatMessageViewModel newItem)
+    {
+        CollectionChanged?.Invoke(
+            this,
+            new NotifyCollectionChangedEventArgs(
+                NotifyCollectionChangedAction.Replace,
+                newItem,
+                oldItem,
+                index));
+    }
+
+    private static bool SnapshotProjectionEquals(
+        ConversationMessageSnapshot oldSnapshot,
+        ConversationMessageSnapshot newSnapshot)
+        => ReferenceEquals(oldSnapshot, newSnapshot)
+           || (string.Equals(oldSnapshot.Id, newSnapshot.Id, StringComparison.Ordinal)
+               && oldSnapshot.Timestamp == newSnapshot.Timestamp
+               && oldSnapshot.IsOutgoing == newSnapshot.IsOutgoing
+               && string.Equals(oldSnapshot.ContentType ?? string.Empty, newSnapshot.ContentType ?? string.Empty, StringComparison.Ordinal)
+               && string.Equals(oldSnapshot.Title ?? string.Empty, newSnapshot.Title ?? string.Empty, StringComparison.Ordinal)
+               && string.Equals(oldSnapshot.TextContent ?? string.Empty, newSnapshot.TextContent ?? string.Empty, StringComparison.Ordinal)
+               && string.Equals(oldSnapshot.ImageData ?? string.Empty, newSnapshot.ImageData ?? string.Empty, StringComparison.Ordinal)
+               && string.Equals(oldSnapshot.ImageMimeType ?? string.Empty, newSnapshot.ImageMimeType ?? string.Empty, StringComparison.Ordinal)
+               && string.Equals(oldSnapshot.AudioData ?? string.Empty, newSnapshot.AudioData ?? string.Empty, StringComparison.Ordinal)
+               && string.Equals(oldSnapshot.AudioMimeType ?? string.Empty, newSnapshot.AudioMimeType ?? string.Empty, StringComparison.Ordinal)
+               && string.Equals(oldSnapshot.ToolCallId, newSnapshot.ToolCallId, StringComparison.Ordinal)
+               && oldSnapshot.ToolCallKind == newSnapshot.ToolCallKind
+               && oldSnapshot.ToolCallStatus == newSnapshot.ToolCallStatus
+               && string.Equals(oldSnapshot.ToolCallJson, newSnapshot.ToolCallJson, StringComparison.Ordinal)
+               && string.Equals(oldSnapshot.ToolCallRawInputJson, newSnapshot.ToolCallRawInputJson, StringComparison.Ordinal)
+               && string.Equals(oldSnapshot.ToolCallRawOutputJson, newSnapshot.ToolCallRawOutputJson, StringComparison.Ordinal)
+               && ToolCallContentSnapshots.SequenceEquals(oldSnapshot.ToolCallContent, newSnapshot.ToolCallContent)
+               && ToolCallContentSnapshots.LocationsSequenceEquals(oldSnapshot.ToolCallLocations, newSnapshot.ToolCallLocations)
+               && string.Equals(oldSnapshot.ModeId, newSnapshot.ModeId, StringComparison.Ordinal)
+               && PlanEntrySnapshotEquals(oldSnapshot.PlanEntry, newSnapshot.PlanEntry));
+
+    private static bool PlanEntrySnapshotEquals(
+        ConversationPlanEntrySnapshot? oldSnapshot,
+        ConversationPlanEntrySnapshot? newSnapshot)
+    {
+        if (oldSnapshot is null && newSnapshot is null)
+        {
+            return true;
+        }
+
+        if (oldSnapshot is null || newSnapshot is null)
+        {
+            return false;
+        }
+
+        return string.Equals(oldSnapshot.Content ?? string.Empty, newSnapshot.Content ?? string.Empty, StringComparison.Ordinal)
+            && oldSnapshot.Status == newSnapshot.Status
+            && oldSnapshot.Priority == newSnapshot.Priority;
     }
 
     private void RaiseAppend(int startIndex, int count)
