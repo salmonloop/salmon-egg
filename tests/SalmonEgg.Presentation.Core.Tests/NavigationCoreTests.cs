@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Core.Services.Navigation;
@@ -276,6 +277,29 @@ public sealed class NavigationCoreTests
         Assert.DoesNotContain("SelectionProjectionApplyGate", code, StringComparison.Ordinal);
         Assert.DoesNotContain("BeginSelectionInteraction", code, StringComparison.Ordinal);
         Assert.DoesNotContain("EndSelectionInteractionDeferred", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RemoteDirectoryProjectIdPrefix_IsOwnedByProjectSelectionCwdResolver()
+    {
+        var root = FindRepoRoot();
+        var ownerPath = Path.Combine(
+            root,
+            NormalizeRelativePath(@"src\SalmonEgg.Presentation.Core\Services\ProjectSelectionCwdResolver.cs"));
+        var ownerCode = File.ReadAllText(ownerPath);
+
+        Assert.Contains("RemoteDirectoryProjectIdPrefix = \"remote-directory:\"", ownerCode, StringComparison.Ordinal);
+
+        foreach (var path in EnumerateProductionCSharpFiles(root))
+        {
+            if (string.Equals(Path.GetFullPath(path), Path.GetFullPath(ownerPath), StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var code = File.ReadAllText(path);
+            Assert.DoesNotContain("remote-directory:", code, StringComparison.Ordinal);
+        }
     }
 
     [Fact]
@@ -1107,6 +1131,19 @@ public sealed class NavigationCoreTests
 
     private static string NormalizeRelativePath(string relativePath)
         => relativePath.Replace('\\', Path.DirectorySeparatorChar);
+
+    private static IEnumerable<string> EnumerateProductionCSharpFiles(string root)
+    {
+        foreach (var path in Directory.EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories))
+        {
+            yield return path;
+        }
+
+        foreach (var path in Directory.EnumerateFiles(Path.Combine(root, "SalmonEgg"), "*.cs", SearchOption.AllDirectories))
+        {
+            yield return path;
+        }
+    }
 
     private sealed class TestPageA;
 

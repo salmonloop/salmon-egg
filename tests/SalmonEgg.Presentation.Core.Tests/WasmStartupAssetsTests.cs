@@ -141,6 +141,22 @@ public sealed class WasmStartupAssetsTests
     }
 
     [Fact]
+    public void PresentationCore_DoesNotContainPlatformConditionalCompilation()
+    {
+        var root = RepoPath(@"src\SalmonEgg.Presentation.Core");
+        foreach (var file in Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
+        {
+            var code = File.ReadAllText(file);
+
+            Assert.DoesNotContain("__WASM__", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("#if WINDOWS", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("#elif WINDOWS", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("__ANDROID__", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("__IOS__", code, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public void DependencyInjection_RegistersBrowserWasmFilePersistenceAndFileBackedSecureStorage()
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\DependencyInjection.cs");

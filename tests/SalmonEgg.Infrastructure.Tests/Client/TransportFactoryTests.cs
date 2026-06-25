@@ -270,6 +270,27 @@ public sealed class TransportFactoryTests
     }
 
     [Fact]
+    public void CreateTransport_WebSocket_Should_NotRewriteConfigurationUrl_When_EndpointPolicyRejectsUrl()
+    {
+        var configuration = new ServerConfiguration
+        {
+            Id = "profile-1",
+            Name = "Profile 1",
+            Transport = TransportType.WebSocket,
+            ServerUrl = "ws://129.146.110.11:3011/message"
+        };
+        var factory = new EndpointValidatingTransportFactory(
+            CreateFactory(),
+            new RejectingTransportEndpointAccessPolicy(
+                "Browser HTTPS pages cannot connect to ws:// WebSocket endpoints. Use wss://."));
+
+        var ex = Assert.Throws<NotSupportedException>(() => factory.CreateTransport(configuration));
+
+        Assert.Contains("Browser HTTPS", ex.Message, StringComparison.Ordinal);
+        Assert.Equal("ws://129.146.110.11:3011/message", configuration.ServerUrl);
+    }
+
+    [Fact]
     public void CreateTransport_HttpSse_Should_Throw_When_Url_Empty()
     {
         var factory = CreateFactory();

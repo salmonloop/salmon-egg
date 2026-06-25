@@ -345,7 +345,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             return null;
         }
 
-        return _projectPreferences.TryGetProjectRootPath(projectId);
+        return _projectPreferences.TryGetProjectCwd(projectId);
     }
 
     public string? PeekPendingProjectIdForNewSession() => PendingProjectIdForNewSession;

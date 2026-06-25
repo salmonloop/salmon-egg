@@ -1520,6 +1520,59 @@ public sealed class MainNavigationViewModelSelectionTests
     }
 
     [Fact]
+    public async Task PrepareStartForProjectAsync_UsesRemoteDirectoryCwdForPendingProject()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var sessionManager = CreateSessionManager();
+            var preferences = CreatePreferencesWithProject();
+            preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory
+            {
+                DirectoryId = "dir-alpha",
+                DisplayName = "Remote Alpha",
+                RemotePath = "/remote/alpha"
+            });
+
+            var remoteProjectId = ProjectSelectionCwdResolver.BuildRemoteDirectoryProjectId("dir-alpha");
+            var chatCatalog = CreateChatSessionCatalog();
+            var navigationCoordinator = new Mock<INavigationCoordinator>();
+            navigationCoordinator
+                .Setup(coordinator => coordinator.ActivateStartAsync(remoteProjectId))
+                .ReturnsAsync(true);
+
+            using var navVm = new MainNavigationViewModel(
+                chatCatalog,
+                CreateProjectPreferences(preferences),
+                Mock.Of<IUiInteractionService>(),
+                navigationCoordinator.Object,
+                Mock.Of<ILogger<MainNavigationViewModel>>(),
+                navState,
+                Mock.Of<IShellLayoutMetricsSink>(),
+                new NavigationSelectionProjector(),
+                new ShellSelectionStateStore(),
+                new ShellNavigationRuntimeStateStore(),
+                CreatePresenter(chatCatalog),
+                new ProjectAffinityResolver(),
+                new ImmediateUiDispatcher(),
+                Mock.Of<IStringLocalizer<CoreStrings>>());
+
+            await navVm.PrepareStartForProjectAsync(remoteProjectId);
+
+            Assert.Equal("/remote/alpha", navVm.ConsumePendingProjectRootPath());
+            Assert.Null(navVm.PeekPendingProjectIdForNewSession());
+            navigationCoordinator.Verify(coordinator => coordinator.ActivateStartAsync(remoteProjectId), Times.Once);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public async Task PrepareStartForProjectAsync_DoesNotStorePendingProjectRoot_WhenCoordinatorFails()
     {
         var originalContext = SynchronizationContext.Current;

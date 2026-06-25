@@ -1,6 +1,5 @@
 using System;
 using System.Collections.ObjectModel;
-using System.Linq;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Presentation.ViewModels.Settings;
 
@@ -16,7 +15,7 @@ public interface INavigationProjectPreferences
 
     void AddProject(ProjectDefinition project);
 
-    string? TryGetProjectRootPath(string projectId);
+    string? TryGetProjectCwd(string projectId);
 }
 
 public sealed class NavigationProjectPreferencesAdapter : INavigationProjectPreferences
@@ -48,19 +47,6 @@ public sealed class NavigationProjectPreferencesAdapter : INavigationProjectPref
         _preferences.Projects.Add(project);
     }
 
-    public string? TryGetProjectRootPath(string projectId)
-    {
-        if (string.IsNullOrWhiteSpace(projectId))
-        {
-            return null;
-        }
-
-        var project = _preferences.Projects.FirstOrDefault(p => string.Equals(p.ProjectId, projectId, StringComparison.Ordinal));
-        if (project == null || string.IsNullOrWhiteSpace(project.RootPath))
-        {
-            return null;
-        }
-
-        return project.RootPath.Trim();
-    }
+    public string? TryGetProjectCwd(string projectId)
+        => ProjectSelectionCwdResolver.ResolveCwd(projectId, _preferences.Projects, _preferences.AgentRemoteDirectories);
 }

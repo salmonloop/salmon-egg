@@ -593,7 +593,7 @@ public sealed partial class StartViewModel : ObservableObject
             return selectedOption.RemoteCwd;
         }
 
-        var selectedRoot = _projectPreferences.TryGetProjectRootPath(SelectedStartProjectId);
+        var selectedRoot = _projectPreferences.TryGetProjectCwd(SelectedStartProjectId);
         _ = _nav.ConsumePendingProjectRootPath();
         return SessionCwdResolver.Resolve(selectedRoot, null);
     }
@@ -614,9 +614,6 @@ public sealed partial class StartViewModel : ObservableObject
 
     private bool IsSelectedProfileRemote()
         => Chat.SelectedAcpProfile?.Transport is TransportType.WebSocket or TransportType.HttpSse;
-
-    private static string BuildRemoteDirectoryProjectId(string directoryId)
-        => $"remote-directory:{directoryId}";
 
     private StartProjectOptionViewModel? ResolveSelectedProjectOption()
         => StartProjectOptions.FirstOrDefault(option =>
@@ -675,7 +672,7 @@ public sealed partial class StartViewModel : ObservableObject
                          .OrderBy(d => string.IsNullOrWhiteSpace(d.DisplayName) ? d.RemotePath : d.DisplayName, StringComparer.Ordinal))
             {
                 options.Add(new StartProjectOptionViewModel(
-                    BuildRemoteDirectoryProjectId(directory.DirectoryId),
+                    ProjectSelectionCwdResolver.BuildRemoteDirectoryProjectId(directory.DirectoryId),
                     string.IsNullOrWhiteSpace(directory.DisplayName) ? directory.RemotePath : directory.DisplayName,
                     isSelectable: true,
                     remoteCwd: directory.RemotePath));
@@ -1136,7 +1133,7 @@ public sealed partial class StartViewModel : ObservableObject
             return selectedOption.RemoteCwd;
         }
 
-        return _projectPreferences.TryGetProjectRootPath(SelectedStartProjectId);
+        return _projectPreferences.TryGetProjectCwd(SelectedStartProjectId);
     }
 
     private bool IsConnectionReadyForStart()
