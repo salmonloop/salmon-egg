@@ -653,6 +653,39 @@ public sealed class ShellFocusedActivationSmokeTests
     }
 
     [SkippableFact]
+    public void ChatInputArea_InputBox_VirtualGamepadY_KeepsFocusAfterVoiceButtonWasPreviouslyFocused()
+    {
+        GuiTestGate.RequireEnabled();
+
+        const string promptText = "focus must remain in the composer while voice state settles";
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData(withContent: true);
+        using var session = WindowsGuiAppSession.LaunchFresh();
+        using var gamepad = session.CreateConfiguredGamepadInput();
+
+        var inputBox = OpenChatSessionAndFocusInputBox(session, appData);
+        Skip.IfNot(
+            session.WaitUntilOnscreen("VoiceInputStartButton", TimeSpan.FromSeconds(3)),
+            "Voice input start button is not available in this environment.");
+
+        var voiceStartButton = session.FindByAutomationId("VoiceInputStartButton", TimeSpan.FromSeconds(5));
+        FocusAndAssert(session, voiceStartButton, "VoiceInputStartButton", "voice input start button");
+        FocusAndAssert(session, inputBox, "InputBox", "chat input box after visiting the voice button");
+        session.EnterText("InputBox", promptText);
+
+        Assert.Equal(promptText, session.TryGetValue(inputBox));
+
+        gamepad.PressShortcutVoiceToggle();
+
+        AssertFocusRemainsOnInputBox(
+            session,
+            automationId: "InputBox",
+            timeout: TimeSpan.FromSeconds(3),
+            failurePrefix: "Previously focused voice button stole focus from the chat input while voice state settled.",
+            bootLog: appData.ReadBootLogTail());
+        Assert.Equal(promptText, session.TryGetValue(inputBox));
+    }
+
+    [SkippableFact]
     public void MiniChatInputBox_VirtualGamepadY_KeepsFocusDuringVoiceToggle()
     {
         GuiTestGate.RequireEnabled();

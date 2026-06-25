@@ -306,6 +306,16 @@ public sealed class ChatViewXamlTests
     }
 
     [Fact]
+    public void ChatInputArea_ActionButtonFocusContinuation_IsScopedToCurrentActionButtonFocus()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml.cs");
+
+        Assert.Contains("IsActionButtonFocusContinuationActive(pendingActionButton)", code, StringComparison.Ordinal);
+        Assert.Contains("ClearPendingActionBoundaryContinuation(pendingActionButton);", code, StringComparison.Ordinal);
+        Assert.Contains("FindAncestorOrSelf<Button>(XamlFocusManager.GetFocusedElement(XamlRoot) as DependencyObject)", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void WindowsGuiAppSession_AnywhereLookupStaysWithinApplicationWindows()
     {
         var code = LoadText(@"tests\SalmonEgg.GuiTests.Windows\WindowsGuiAppSession.cs");

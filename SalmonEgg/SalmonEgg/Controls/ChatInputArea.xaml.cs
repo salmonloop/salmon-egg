@@ -219,6 +219,11 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
             return;
         }
 
+        if (TryAbortPendingActionBoundaryContinuationIfFocusMoved(pendingActionButton))
+        {
+            return;
+        }
+
         SchedulePendingActionActivationRestore(pendingActionButton, PendingActionActivationRestoreAttempts);
     }
 
@@ -261,6 +266,11 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
             || _pendingActionActivationRestoreRemainingAttempts <= 0)
         {
             StopPendingActionActivationRestore();
+            return;
+        }
+
+        if (TryAbortPendingActionBoundaryContinuationIfFocusMoved(pendingActionButton))
+        {
             return;
         }
 
@@ -365,6 +375,11 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
     {
         if (!ReferenceEquals(sender, _observedViewModel)
             || _pendingActionBoundaryContinuationSource is not Button pendingActionButton)
+        {
+            return;
+        }
+
+        if (TryAbortPendingActionBoundaryContinuationIfFocusMoved(pendingActionButton))
         {
             return;
         }
@@ -734,6 +749,11 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
         if (_pendingActionBoundaryContinuationSource is Button pendingActionButton
             && !IsVisibleAndEnabled(pendingActionButton))
         {
+            if (TryAbortPendingActionBoundaryContinuationIfFocusMoved(pendingActionButton))
+            {
+                return;
+            }
+
             if (TryContinuePendingActionBoundaryChange(pendingActionButton))
             {
                 return;
@@ -761,8 +781,30 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
         ScheduleReplacementActionContinuation(actionButton, remainingAttempts: 6);
     }
 
+    private bool IsActionButtonFocusContinuationActive(Button pendingActionButton)
+    {
+        if (XamlRoot is null)
+        {
+            return false;
+        }
+
+        var focusedButton = FindAncestorOrSelf<Button>(XamlFocusManager.GetFocusedElement(XamlRoot) as DependencyObject);
+        if (focusedButton is null)
+        {
+            return false;
+        }
+
+        return ReferenceEquals(focusedButton, pendingActionButton)
+               || EnumerateComposerActionButtons().Any(button => ReferenceEquals(button, focusedButton));
+    }
+
     private bool TryContinuePendingActionBoundaryChange(Button pendingActionButton)
     {
+        if (TryAbortPendingActionBoundaryContinuationIfFocusMoved(pendingActionButton))
+        {
+            return false;
+        }
+
         var continuationTarget = ResolvePendingActionContinuationTarget(pendingActionButton);
         if (continuationTarget is null)
         {
@@ -824,6 +866,11 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
 
         _ = DispatcherQueue.TryEnqueue(() =>
         {
+            if (TryAbortPendingActionBoundaryContinuationIfFocusMoved(previousActionButton))
+            {
+                return;
+            }
+
             if (FocusReplacementActionButton(previousActionButton))
             {
                 ClearPendingActionBoundaryContinuation(previousActionButton);
@@ -840,6 +887,18 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
         {
             _pendingActionBoundaryContinuationSource = null;
         }
+    }
+
+    private bool TryAbortPendingActionBoundaryContinuationIfFocusMoved(Button pendingActionButton)
+    {
+        if (IsActionButtonFocusContinuationActive(pendingActionButton))
+        {
+            return false;
+        }
+
+        ClearPendingActionBoundaryContinuation(pendingActionButton);
+        StopPendingActionActivationRestore();
+        return true;
     }
 
     private static void OnComposerFocusTopologyPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
