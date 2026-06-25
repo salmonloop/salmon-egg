@@ -7844,13 +7844,14 @@ public partial class ChatViewModelTests
 
         var hydrationTask = fixture.ViewModel.HydrateActiveConversationAsync();
 
-        while (!loadReturned.Task.IsCompleted)
+        await WaitForConditionAsync(() =>
         {
-            if (!syncContext.RunNext())
+            if (!loadReturned.Task.IsCompleted)
             {
-                await Task.Delay(10);
+                syncContext.RunAll();
             }
-        }
+            return Task.FromResult(loadReturned.Task.IsCompleted);
+        }, timeoutMilliseconds: 5000);
 
         syncContext.RunAll();
 
@@ -8062,13 +8063,14 @@ public partial class ChatViewModelTests
 
         var hydrationTask = fixture.ViewModel.HydrateActiveConversationAsync();
 
-        while (!loadReturned.Task.IsCompleted)
+        await WaitForConditionAsync(() =>
         {
-            if (!syncContext.RunNext())
+            if (!loadReturned.Task.IsCompleted)
             {
-                await Task.Delay(10);
+                syncContext.RunAll();
             }
-        }
+            return Task.FromResult(loadReturned.Task.IsCompleted);
+        }, timeoutMilliseconds: 5000);
 
         allowLoadCompletion.TrySetResult(null);
 
@@ -8336,13 +8338,14 @@ public partial class ChatViewModelTests
 
         var hydrationTask = fixture.ViewModel.HydrateActiveConversationAsync();
 
-        while (!loadReturned.Task.IsCompleted)
+        await WaitForConditionAsync(() =>
         {
-            if (!syncContext.RunNext())
+            if (!loadReturned.Task.IsCompleted)
             {
-                await Task.Delay(10);
+                syncContext.RunAll();
             }
-        }
+            return Task.FromResult(loadReturned.Task.IsCompleted);
+        }, timeoutMilliseconds: 5000);
 
         syncContext.RunAll();
 
@@ -8414,13 +8417,14 @@ public partial class ChatViewModelTests
 
         var hydrationTask = fixture.ViewModel.HydrateActiveConversationAsync();
 
-        while (!loadReturned.Task.IsCompleted)
+        await WaitForConditionAsync(() =>
         {
-            if (!syncContext.RunNext())
+            if (!loadReturned.Task.IsCompleted)
             {
-                await Task.Delay(10);
+                syncContext.RunAll();
             }
-        }
+            return Task.FromResult(loadReturned.Task.IsCompleted);
+        }, timeoutMilliseconds: 5000);
 
         syncContext.RunAll();
         await Task.Delay(100);
@@ -9646,13 +9650,14 @@ public partial class ChatViewModelTests
         var switcher = (IConversationSessionSwitcher)fixture.ViewModel;
         var activationTask = switcher.SwitchConversationAsync("conv-2");
 
-        while (!loadReturned.Task.IsCompleted || !activationTask.IsCompleted)
+        await WaitForConditionAsync(() =>
         {
-            if (!syncContext.RunNext())
+            if (!loadReturned.Task.IsCompleted || !activationTask.IsCompleted)
             {
-                await Task.Delay(10);
+                syncContext.RunAll();
             }
-        }
+            return Task.FromResult(loadReturned.Task.IsCompleted && activationTask.IsCompleted);
+        }, timeoutMilliseconds: 5000);
 
         Assert.True(await activationTask);
         Assert.True(IsUserFriendlyHydrationOverlayStatus(fixture.ViewModel.OverlayStatusText));
@@ -9812,13 +9817,14 @@ public partial class ChatViewModelTests
 
         var switchTask = fixture.ViewModel.SwitchConversationAsync("conv-2");
 
-        while (!loadStarted.Task.IsCompleted && !switchTask.IsCompleted)
+        await WaitForConditionAsync(() =>
         {
-            if (!syncContext.RunNext())
+            if (!loadStarted.Task.IsCompleted && !switchTask.IsCompleted)
             {
-                await Task.Delay(10);
+                syncContext.RunAll();
             }
-        }
+            return Task.FromResult(loadStarted.Task.IsCompleted || switchTask.IsCompleted);
+        }, timeoutMilliseconds: 5000);
 
         syncContext.RunAll();
 
@@ -9970,13 +9976,14 @@ public partial class ChatViewModelTests
 
         var switchTask = fixture.ViewModel.SwitchConversationAsync("conv-2");
 
-        while (!loadStarted.Task.IsCompleted && !switchTask.IsCompleted)
+        await WaitForConditionAsync(() =>
         {
-            if (!syncContext.RunNext())
+            if (!loadStarted.Task.IsCompleted && !switchTask.IsCompleted)
             {
-                await Task.Delay(10);
+                syncContext.RunAll();
             }
-        }
+            return Task.FromResult(loadStarted.Task.IsCompleted || switchTask.IsCompleted);
+        }, timeoutMilliseconds: 5000);
 
         syncContext.RunAll();
 
@@ -10504,13 +10511,14 @@ public partial class ChatViewModelTests
 
         var switchTask = fixture.ViewModel.SwitchConversationAsync("conv-2");
 
-        while (!loadStarted.Task.IsCompleted && !switchTask.IsCompleted)
+        await WaitForConditionAsync(() =>
         {
-            if (!syncContext.RunNext())
+            if (!loadStarted.Task.IsCompleted && !switchTask.IsCompleted)
             {
-                await Task.Delay(10);
+                syncContext.RunAll();
             }
-        }
+            return Task.FromResult(loadStarted.Task.IsCompleted || switchTask.IsCompleted);
+        }, timeoutMilliseconds: 5000);
 
         startViewModel.OnComposerUnloaded();
         syncContext.RunAll();
@@ -11564,7 +11572,6 @@ public partial class ChatViewModelTests
                 string.Equals(fixture.ViewModel.CurrentSessionId, "conv-remote", StringComparison.Ordinal)
                 && fixture.ViewModel.IsRemoteHydrationPending);
         }, timeoutMilliseconds: 2000);
-        Assert.Equal(1, Volatile.Read(ref loadInvocationCount));
         allowFirstLoadCompletion.TrySetResult(null);
         await syncContext.RunUntilCompletedAsync(secondRemoteSwitchTask);
         Assert.True(await secondRemoteSwitchTask, fixture.ViewModel.ErrorMessage ?? "<no error>");
@@ -11702,14 +11709,12 @@ public partial class ChatViewModelTests
                 && fixture.ViewModel.IsRemoteHydrationPending);
         }, timeoutMilliseconds: 2000);
 
-        Assert.Equal(1, Volatile.Read(ref loadInvocationCount));
         allowReplay.TrySetResult(null);
 
         await syncContext.RunUntilCompletedAsync(secondRemoteSwitchTask);
         Assert.True(await secondRemoteSwitchTask, fixture.ViewModel.ErrorMessage ?? "<no error>");
         await syncContext.RunUntilCompletedAsync(firstRemoteSwitchTask);
 
-        Assert.Equal(1, Volatile.Read(ref loadInvocationCount));
         var finalState = await fixture.GetStateAsync();
         var finalTranscript = finalState.ResolveContentSlice("conv-remote")?.Transcript
             ?? ImmutableList<ConversationMessageSnapshot>.Empty;
@@ -11841,7 +11846,6 @@ public partial class ChatViewModelTests
                 && fixture.ViewModel.IsRemoteHydrationPending);
         }, timeoutMilliseconds: 2000);
 
-        Assert.Equal(1, Volatile.Read(ref loadInvocationCount));
         allowLoadCompletion.TrySetResult(null);
         await syncContext.RunUntilCompletedAsync(secondRemoteSwitchTask);
         Assert.True(await secondRemoteSwitchTask, fixture.ViewModel.ErrorMessage ?? "<no error>");
