@@ -3,7 +3,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 
 namespace SalmonEgg.Presentation.Converters;
-
 /// <summary>
 /// 将布尔值转换为 Visibility
 /// Requirements: 4.2

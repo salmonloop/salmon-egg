@@ -4,7 +4,6 @@ using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media;
 
 namespace SalmonEgg.Presentation.Converters;
-
 /// <summary>
 /// 将消息方向转换为背景色画刷
 /// 用户发出(True)返回 AccentFillColorDefaultBrush

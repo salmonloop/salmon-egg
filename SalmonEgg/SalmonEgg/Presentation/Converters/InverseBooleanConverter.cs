@@ -2,7 +2,6 @@ using System;
 using Microsoft.UI.Xaml.Data;
 
 namespace SalmonEgg.Presentation.Converters;
-
 /// <summary>
 /// 将布尔值取反（返回 bool，不是 Visibility）
 /// 用于 IsEnabled 等需要 bool 的属性

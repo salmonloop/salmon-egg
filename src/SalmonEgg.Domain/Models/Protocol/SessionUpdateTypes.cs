@@ -258,10 +258,10 @@ namespace SalmonEgg.Domain.Models.Protocol
     public class PlanUpdate : SessionUpdate
     {
         /// <summary>
-        /// 计划条目列表（用于 plan 类型的更新）。
-        /// </summary>
-        [JsonPropertyName("entries")]
-        public List<SalmonEgg.Domain.Models.Plan.PlanEntry>? Entries { get; set; }
+       /// 计划条目列表（用于 plan 类型的更新）。
+       /// </summary>
+       [JsonPropertyName("entries")]
+       public List<SalmonEgg.Domain.Models.Plan.PlanEntry>? Entries { get; set; }
 
         /// <summary>
         /// 标题（可选）。
@@ -321,7 +321,7 @@ namespace SalmonEgg.Domain.Models.Protocol
     /// <summary>
     /// 配置更新。
     /// 用于通知客户端会话配置选项的变化。
-    /// </summary>
+        /// </summary>
     public class ConfigUpdateUpdate : SessionUpdate
     {
         /// <summary>

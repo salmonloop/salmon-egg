@@ -1139,28 +1139,28 @@ public sealed partial class MainPage : Page
                 _rightPanelAnimation.SnapTo(false, 0);
                 return;
             case AuxiliaryPanelAnimationAction.StartOpening:
-                {
-                    RightPanelTranslate.X = request.TravelDistance;
-                    RightPanelColumn.Opacity = 0;
-                    RightPanelColumn.Visibility = Visibility.Visible;
-                    var storyboard = (Storyboard)Resources["RightPanelSlideIn"];
-                    DetachRightPanelStoryboardHandlers();
-                    storyboard.Completed += OnRightPanelStoryboardCompleted;
-                    storyboard.Begin();
-                    return;
-                }
+            {
+                RightPanelTranslate.X = request.TravelDistance;
+                RightPanelColumn.Opacity = 0;
+                RightPanelColumn.Visibility = Visibility.Visible;
+                var storyboard = (Storyboard)Resources["RightPanelSlideIn"];
+                DetachRightPanelStoryboardHandlers();
+                storyboard.Completed += OnRightPanelStoryboardCompleted;
+                storyboard.Begin();
+                return;
+            }
             case AuxiliaryPanelAnimationAction.StartClosing:
-                {
-                    RightPanelColumn.Visibility = Visibility.Visible;
-                    RightPanelColumn.Opacity = 1;
-                    var storyboard = (Storyboard)Resources["RightPanelSlideOut"];
-                    var translateAnim = (DoubleAnimation)storyboard.Children[0];
-                    translateAnim.To = request.TravelDistance;
-                    DetachRightPanelStoryboardHandlers();
-                    storyboard.Completed += OnRightPanelStoryboardCompleted;
-                    storyboard.Begin();
-                    return;
-                }
+            {
+                RightPanelColumn.Visibility = Visibility.Visible;
+                RightPanelColumn.Opacity = 1;
+                var storyboard = (Storyboard)Resources["RightPanelSlideOut"];
+                var translateAnim = (DoubleAnimation)storyboard.Children[0];
+                translateAnim.To = request.TravelDistance;
+                DetachRightPanelStoryboardHandlers();
+                storyboard.Completed += OnRightPanelStoryboardCompleted;
+                storyboard.Begin();
+                return;
+            }
         }
     }
 
@@ -1179,35 +1179,35 @@ public sealed partial class MainPage : Page
                 _bottomPanelAnimation.SnapTo(false, 0);
                 return;
             case AuxiliaryPanelAnimationAction.StartOpening:
+            {
+                if (!TryApplyBottomPanelVisualState(true, 0, request.TravelDistance))
                 {
-                    if (!TryApplyBottomPanelVisualState(true, 0, request.TravelDistance))
-                    {
-                        _bottomPanelAnimation.SnapTo(false, 0);
-                        return;
-                    }
-
-                    var storyboard = (Storyboard)Resources["BottomPanelSlideUp"];
-                    DetachBottomPanelStoryboardHandlers();
-                    storyboard.Completed += OnBottomPanelStoryboardCompleted;
-                    storyboard.Begin();
+                    _bottomPanelAnimation.SnapTo(false, 0);
                     return;
                 }
+
+                var storyboard = (Storyboard)Resources["BottomPanelSlideUp"];
+                DetachBottomPanelStoryboardHandlers();
+                storyboard.Completed += OnBottomPanelStoryboardCompleted;
+                storyboard.Begin();
+                return;
+            }
             case AuxiliaryPanelAnimationAction.StartClosing:
+            {
+                if (!TryApplyBottomPanelVisualState(true, 1, null))
                 {
-                    if (!TryApplyBottomPanelVisualState(true, 1, null))
-                    {
-                        _bottomPanelAnimation.SnapTo(false, 0);
-                        return;
-                    }
-
-                    var storyboard = (Storyboard)Resources["BottomPanelSlideDown"];
-                    var translateAnim = (DoubleAnimation)storyboard.Children[0];
-                    translateAnim.To = request.TravelDistance;
-                    DetachBottomPanelStoryboardHandlers();
-                    storyboard.Completed += OnBottomPanelStoryboardCompleted;
-                    storyboard.Begin();
+                    _bottomPanelAnimation.SnapTo(false, 0);
                     return;
                 }
+
+                var storyboard = (Storyboard)Resources["BottomPanelSlideDown"];
+                var translateAnim = (DoubleAnimation)storyboard.Children[0];
+                translateAnim.To = request.TravelDistance;
+                DetachBottomPanelStoryboardHandlers();
+                storyboard.Completed += OnBottomPanelStoryboardCompleted;
+                storyboard.Begin();
+                return;
+            }
         }
     }
 

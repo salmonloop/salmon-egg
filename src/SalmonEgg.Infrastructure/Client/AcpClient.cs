@@ -175,29 +175,29 @@ namespace SalmonEgg.Infrastructure.Client
         /// <summary>
         /// 初始化与 Agent 的连接。
         /// </summary>
-        public async Task<InitializeResponse> InitializeAsync(InitializeParams @params, CancellationToken cancellationToken = default)
-        {
-            if (_isInitialized)
-            {
-                throw new InvalidOperationException("客户端已初始化");
-            }
+       public async Task<InitializeResponse> InitializeAsync(InitializeParams @params, CancellationToken cancellationToken = default)
+           {
+               if (_isInitialized)
+               {
+                   throw new InvalidOperationException("客户端已初始化");
+               }
 
-            // 确保传输层已连接
-            if (!_transport.IsConnected)
-            {
-                var connected = await _transport.ConnectAsync(cancellationToken).ConfigureAwait(false);
-                if (!connected)
-                {
-                    throw new InvalidOperationException("无法连接到传输层");
-                }
-            }
+               // 确保传输层已连接
+              if (!_transport.IsConnected)
+              {
+                  var connected = await _transport.ConnectAsync(cancellationToken).ConfigureAwait(false);
+                  if (!connected)
+                  {
+                      throw new InvalidOperationException("无法连接到传输层");
+                  }
+              }
 
-            // 发送 initialize 请求
-            var request = new JsonRpcRequest(
-                Interlocked.Increment(ref _nextMessageId),
-                "initialize",
-                JsonSerializer.SerializeToElement(@params, _parser.Options));
-            var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
+               // 发送 initialize 请求
+               var request = new JsonRpcRequest(
+                   Interlocked.Increment(ref _nextMessageId),
+                   "initialize",
+                   JsonSerializer.SerializeToElement(@params, _parser.Options));
+               var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
 
             // 验证响应
             var validationResult = _validator.ValidateResponse(response);
@@ -779,13 +779,13 @@ namespace SalmonEgg.Infrastructure.Client
                 };
 
                 var json = _parser.SerializeMessage(request);
-                await _transport.SendMessageAsync(json, cancellationToken).ConfigureAwait(false);
+               await _transport.SendMessageAsync(json, cancellationToken).ConfigureAwait(false);
 
-                // 等待响应或超时
-                using (var timeoutCts = new CancellationTokenSource(effectiveTimeout))
-                using (var waitCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token))
-                {
-                    var completedTask = await Task.WhenAny(tcs.Task, Task.Delay(Timeout.Infinite, waitCts.Token)).ConfigureAwait(false);
+               // 等待响应或超时
+               using (var timeoutCts = new CancellationTokenSource(effectiveTimeout))
+               using (var waitCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token))
+               {
+                   var completedTask = await Task.WhenAny(tcs.Task, Task.Delay(Timeout.Infinite, waitCts.Token)).ConfigureAwait(false);
                     if (completedTask == tcs.Task)
                     {
                         return await tcs.Task.ConfigureAwait(false);

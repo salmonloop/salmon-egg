@@ -124,67 +124,67 @@ public partial class ResourceViewModel : ObservableObject
         return $"{size:F2} {suffixes[i]}";
     }
 
-    /// <summary>
-    /// 从 ResourceContentBlock 创建 ResourceViewModel
-    /// </summary>
-    public static ResourceViewModel CreateFromContent(ResourceContentBlock block)
-    {
-        var resource = block.Resource;
-        var isText = resource.IsText;
-        var content = resource.Text ?? resource.Blob ?? string.Empty;
+   /// <summary>
+   /// 从 ResourceContentBlock 创建 ResourceViewModel
+   /// </summary>
+   public static ResourceViewModel CreateFromContent(ResourceContentBlock block)
+   {
+       var resource = block.Resource;
+       var isText = resource.IsText;
+       var content = resource.Text ?? resource.Blob ?? string.Empty;
 
-        return new ResourceViewModel
-        {
-            Uri = resource.Uri,
-            Name = ExtractNameFromUri(resource.Uri),
-            MimeType = resource.MimeType ?? "text/plain",
-            Content = content,
-            Title = "资源内容",
-            Description = null,
-            IsTextResource = isText,
-            IsBinaryResource = resource.IsBinary,
-            Size = content.Length
-        };
-    }
+       return new ResourceViewModel
+       {
+           Uri = resource.Uri,
+           Name = ExtractNameFromUri(resource.Uri),
+           MimeType = resource.MimeType ?? "text/plain",
+           Content = content,
+           Title = "资源内容",
+           Description = null,
+           IsTextResource = isText,
+           IsBinaryResource = resource.IsBinary,
+           Size = content.Length
+       };
+   }
 
-    /// <summary>
-    /// 从 URI 中提取名称
-    /// </summary>
-    private static string ExtractNameFromUri(string uri)
-    {
-        if (string.IsNullOrEmpty(uri)) return "Unknown Resource";
+   /// <summary>
+   /// 从 URI 中提取名称
+   /// </summary>
+   private static string ExtractNameFromUri(string uri)
+   {
+       if (string.IsNullOrEmpty(uri)) return "Unknown Resource";
 
-        try
-        {
-            var lastSlash = uri.LastIndexOf('/');
-            if (lastSlash >= 0 && lastSlash < uri.Length - 1)
-            {
-                return uri.Substring(lastSlash + 1);
-            }
-            return uri;
-        }
-        catch
-        {
-            return "Unknown Resource";
-        }
-    }
+       try
+       {
+           var lastSlash = uri.LastIndexOf('/');
+           if (lastSlash >= 0 && lastSlash < uri.Length - 1)
+           {
+               return uri.Substring(lastSlash + 1);
+           }
+           return uri;
+       }
+       catch
+       {
+           return "Unknown Resource";
+       }
+   }
 
-    /// <summary>
-    /// 从 ResourceLinkContentBlock 创建 ResourceViewModel
-    /// </summary>
-    public static ResourceViewModel CreateFromLink(ResourceLinkContentBlock block)
-    {
-        return new ResourceViewModel
-        {
-            Uri = block.Uri,
-            Name = block.Name ?? ExtractNameFromUri(block.Uri),
-            MimeType = block.MimeType ?? string.Empty,
-            LinkText = block.Name ?? block.Uri,
-            Title = block.Title ?? "资源链接",
-            Description = block.Description,
-            Size = block.Size,
-            IsTextResource = false,
-            IsBinaryResource = false
-        };
-    }
+   /// <summary>
+   /// 从 ResourceLinkContentBlock 创建 ResourceViewModel
+   /// </summary>
+   public static ResourceViewModel CreateFromLink(ResourceLinkContentBlock block)
+   {
+       return new ResourceViewModel
+       {
+           Uri = block.Uri,
+           Name = block.Name ?? ExtractNameFromUri(block.Uri),
+           MimeType = block.MimeType ?? string.Empty,
+           LinkText = block.Name ?? block.Uri,
+           Title = block.Title ?? "资源链接",
+           Description = block.Description,
+           Size = block.Size,
+           IsTextResource = false,
+           IsBinaryResource = false
+       };
+   }
 }
