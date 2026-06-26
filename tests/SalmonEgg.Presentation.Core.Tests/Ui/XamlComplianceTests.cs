@@ -1292,6 +1292,7 @@ public sealed class XamlComplianceTests
         var chatInputXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml");
 
         Assert.Contains("x:Key=\"ComposerSelectorComboBoxItemStyle\"", chatInputXaml, StringComparison.Ordinal);
+        Assert.Contains("BasedOn=\"{StaticResource DefaultComboBoxItemStyle}\"", chatInputXaml, StringComparison.Ordinal);
         Assert.Contains("<Setter Property=\"IsEnabled\" Value=\"{Binding IsSelectable}\"", chatInputXaml, StringComparison.Ordinal);
         Assert.Equal(4, CountOccurrences(chatInputXaml, "ItemContainerStyle=\"{StaticResource ComposerSelectorComboBoxItemStyle}\""));
     }
