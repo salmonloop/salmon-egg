@@ -120,6 +120,7 @@ public sealed class ChatTranscriptVirtualizedMessageCollection :
         var sameConversation = string.Equals(_conversationId, conversationId, StringComparison.Ordinal);
         var unchangedTranscript = sameConversation && ReferenceEquals(oldTranscript, messages);
         var addedCount = Math.Max(0, messages.Count - oldCount);
+        var isAppend = sameConversation && messages.Count > oldCount;
 
         _conversationId = conversationId;
         _transcript = messages;
@@ -131,7 +132,15 @@ public sealed class ChatTranscriptVirtualizedMessageCollection :
             return;
         }
 
-        PublishChangedItems(oldTranscript, messages, sameConversation);
+        if (isAppend)
+        {
+            PublishChangedCachedItems(oldTranscript, messages, sameConversation);
+        }
+        else
+        {
+            PublishChangedItems(oldTranscript, messages, sameConversation);
+        }
+
         if (addedCount > 0)
         {
             RaiseAppend(oldCount, addedCount);
@@ -283,6 +292,35 @@ public sealed class ChatTranscriptVirtualizedMessageCollection :
         }
 
         return _matchesSnapshot(item, _transcript[index]);
+    }
+
+    private void PublishChangedCachedItems(
+        IImmutableList<ConversationMessageSnapshot> oldTranscript,
+        IImmutableList<ConversationMessageSnapshot> newTranscript,
+        bool sameConversation)
+    {
+        if (!sameConversation || _matchesSnapshot is null)
+        {
+            _cache.Clear();
+            return;
+        }
+
+        foreach (var entry in _cache.ToArray())
+        {
+            if (entry.Key >= newTranscript.Count || entry.Key >= oldTranscript.Count)
+            {
+                _cache.Remove(entry.Key);
+                continue;
+            }
+
+            if (!_matchesSnapshot(entry.Value, newTranscript[entry.Key]))
+            {
+                var oldItem = entry.Value;
+                var newItem = CreateItem(entry.Key);
+                _cache[entry.Key] = newItem;
+                RaiseReplace(entry.Key, oldItem, newItem);
+            }
+        }
     }
 
     private void PublishChangedItems(

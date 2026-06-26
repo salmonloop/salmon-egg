@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Immutable;
 using System.Collections.Specialized;
+using System.Diagnostics;
 using System.Linq;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Presentation.ViewModels.Chat;
@@ -57,6 +58,27 @@ public sealed class ChatTranscriptVirtualizedMessageCollectionTests
         Assert.Empty(projectedIndexes);
         Assert.Equal("message-2", sut[2].Id);
         Assert.Equal([2], projectedIndexes);
+    }
+
+    [Fact]
+    public void Reset_WhenSameConversationReplaysSharedAppends_DoesNotRescanHistoricalPrefix()
+    {
+        var sut = new ChatTranscriptVirtualizedMessageCollection();
+        var transcript = BuildTranscript(1);
+        sut.Reset("conv-1", transcript, Project, MatchesSnapshot);
+
+        var elapsed = Stopwatch.StartNew();
+        for (var index = 1; index < 8_000; index++)
+        {
+            transcript = transcript.Add(CreateMessage(index));
+            sut.Reset("conv-1", transcript, Project, MatchesSnapshot);
+        }
+
+        elapsed.Stop();
+
+        Assert.True(
+            elapsed.Elapsed < TimeSpan.FromSeconds(1),
+            $"Replay append projection should stay bounded; elapsed={elapsed.Elapsed}.");
     }
 
     [Fact]
@@ -134,14 +156,17 @@ public sealed class ChatTranscriptVirtualizedMessageCollectionTests
 
     private static ImmutableList<ConversationMessageSnapshot> BuildTranscript(int count) =>
         Enumerable.Range(0, count)
-            .Select(index => new ConversationMessageSnapshot
-            {
-                Id = $"message-{index}",
-                Timestamp = new DateTime(2026, 5, 8, 0, 0, 0, DateTimeKind.Utc).AddSeconds(index),
-                ContentType = "text",
-                TextContent = $"Message {index}"
-            })
+            .Select(CreateMessage)
             .ToImmutableList();
+
+    private static ConversationMessageSnapshot CreateMessage(int index) =>
+        new()
+        {
+            Id = $"message-{index}",
+            Timestamp = new DateTime(2026, 5, 8, 0, 0, 0, DateTimeKind.Utc).AddSeconds(index),
+            ContentType = "text",
+            TextContent = $"Message {index}"
+        };
 
     private static ChatMessageViewModel Project(ConversationMessageSnapshot snapshot, int index) =>
         new()

@@ -237,6 +237,14 @@ public sealed class ChatViewXamlTests
     }
 
     [Fact]
+    public void ChatTranscriptItemsSource_DoesNotPublishSyntheticReplaceWhileForwardingAppend()
+    {
+        var itemsSourceCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Transcript\ListViewTranscriptItemsSource.cs");
+
+        Assert.DoesNotContain("PublishCachedReplacements", itemsSourceCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ChatView_GamepadNavigation_ConsumesTranscriptFocusWithoutBypassingNativeListView()
     {
         var chatViewCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
