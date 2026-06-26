@@ -465,6 +465,27 @@ public partial class ChatViewModel
         _ = SetNewSessionDraftModeAsync(mode.ModeId, token);
     }
 
+    private void QueueNewSessionDraftModelSelection(OptionValueViewModel? model)
+    {
+        try
+        {
+            _newSessionDraftModelSelectionCts?.Cancel();
+            _newSessionDraftModelSelectionCts?.Dispose();
+        }
+        catch
+        {
+        }
+
+        if (model is null || string.IsNullOrWhiteSpace(model.Value))
+        {
+            return;
+        }
+
+        _newSessionDraftModelSelectionCts = new CancellationTokenSource();
+        var token = _newSessionDraftModelSelectionCts.Token;
+        _ = SetNewSessionDraftModelAsync(model.Value, token);
+    }
+
     private async Task SetNewSessionDraftModeAsync(string modeId, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -537,6 +558,71 @@ public partial class ChatViewModel
         }
     }
 
+    private async Task SetNewSessionDraftModelAsync(string modelValue, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        await _newSessionDraftGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var connectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
+            var draft = connectionState.NewSessionDraft;
+            if (draft is null
+                || draft.Phase != NewSessionDraftPhase.Ready
+                || string.IsNullOrWhiteSpace(draft.RemoteSessionId)
+                || string.Equals(ResolveSelectedModelValue(draft.ConfigOptions), modelValue, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            if (!IsCurrentNewSessionDraft(connectionState, draft)
+                || _chatService is not { IsConnected: true, IsInitialized: true } chatService)
+            {
+                await ClearNewSessionDraftStateAsync().ConfigureAwait(false);
+                return;
+            }
+
+            var modelConfigId = ResolveModelConfigId(draft.ConfigOptions);
+            if (string.IsNullOrWhiteSpace(modelConfigId))
+            {
+                return;
+            }
+
+            var response = await chatService.SetSessionConfigOptionAsync(
+                new SessionSetConfigOptionParams(draft.RemoteSessionId!, modelConfigId!, modelValue)).ConfigureAwait(false);
+            if (response.ConfigOptions is null)
+            {
+                await ApplyNewSessionDraftProjectionAsync(connectionState).ConfigureAwait(false);
+                return;
+            }
+
+            var delta = _acpSessionUpdateProjector.Project(new SessionUpdateEventArgs(
+                draft.RemoteSessionId!,
+                new ConfigOptionUpdate
+                {
+                    ConfigOptions = response.ConfigOptions
+                }));
+
+            var updatedDraft = MergeNewSessionDraftDelta(draft, delta);
+            await _chatConnectionStore.Dispatch(new SetNewSessionDraftAction(updatedDraft)).ConfigureAwait(false);
+            await ApplyNewSessionDraftProjectionAsync(
+                await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false)).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to switch ACP new-session draft model.");
+            await ApplyNewSessionDraftProjectionAsync(
+                await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false)).ConfigureAwait(false);
+        }
+        finally
+        {
+            _newSessionDraftGate.Release();
+        }
+    }
+
     private async Task ApplyNewSessionDraftProjectionAsync(ChatConnectionState connectionState)
     {
         var draft = ResolveEffectiveNewSessionDraft(connectionState);
@@ -571,7 +657,21 @@ public partial class ChatViewModel
 
             SetSelectedNewSessionDraftModeWithoutDispatch(
                 _sessionOptionsPresenter.ResolveSelectedMode(_newSessionDraftModeOptions, projection.SelectedModeId));
+            if (!_sessionOptionsPresenter.OptionCollectionMatches(_newSessionDraftModelOptions, projection.ModelOptions))
+            {
+                _newSessionDraftModelOptions.Clear();
+                foreach (var model in projection.ModelOptions)
+                {
+                    _newSessionDraftModelOptions.Add(model);
+                }
+            }
+
+            _newSessionDraftModelConfigId = projection.ModelConfigId;
+            SetSelectedNewSessionDraftModelWithoutDispatch(
+                _sessionOptionsPresenter.ResolveSelectedModelOption(_newSessionDraftModelOptions, projection.SelectedModelValue));
             OnPropertyChanged(nameof(NewSessionDraftModeOptions));
+            OnPropertyChanged(nameof(NewSessionDraftModelOptions));
+            OnPropertyChanged(nameof(HasNewSessionDraftModelSelector));
         }).ConfigureAwait(false);
     }
 
@@ -634,6 +734,19 @@ public partial class ChatViewModel
         finally
         {
             _suppressNewSessionDraftModeSelectionDispatch = false;
+        }
+    }
+
+    private void SetSelectedNewSessionDraftModelWithoutDispatch(OptionValueViewModel? model)
+    {
+        _suppressNewSessionDraftModelSelectionDispatch = true;
+        try
+        {
+            SelectedNewSessionDraftModelOption = model;
+        }
+        finally
+        {
+            _suppressNewSessionDraftModelSelectionDispatch = false;
         }
     }
 
@@ -798,6 +911,14 @@ public partial class ChatViewModel
         => configOptions.FirstOrDefault(option =>
             string.Equals(option.Category, "mode", StringComparison.OrdinalIgnoreCase)
             || string.Equals(option.Id, "mode", StringComparison.OrdinalIgnoreCase))?.Id;
+
+    private static string? ResolveModelConfigId(IReadOnlyList<ConversationConfigOptionSnapshot> configOptions)
+        => configOptions.FirstOrDefault(option =>
+            string.Equals(option.Category, "model", StringComparison.OrdinalIgnoreCase))?.Id;
+
+    private static string? ResolveSelectedModelValue(IReadOnlyList<ConversationConfigOptionSnapshot> configOptions)
+        => configOptions.FirstOrDefault(option =>
+            string.Equals(option.Category, "model", StringComparison.OrdinalIgnoreCase))?.SelectedValue;
 
     private static string? NormalizeNewSessionDraftProfileId(string? profileId)
         => string.IsNullOrWhiteSpace(profileId)

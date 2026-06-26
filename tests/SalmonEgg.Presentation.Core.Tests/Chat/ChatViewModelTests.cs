@@ -5180,6 +5180,42 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task SelectedNewSessionDraftModel_WhenDraftUsesModelConfigOption_UpdatesRemoteDraftSession()
+    {
+        await using var fixture = CreateViewModel();
+        var chatService = CreateConnectedChatService();
+        chatService.SetupGet(service => service.AgentCapabilities)
+            .Returns(new AgentCapabilities(sessionCapabilities: new SessionCapabilities
+            {
+                Close = new SessionCloseCapabilities()
+            }));
+        chatService.Setup(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+            .ReturnsAsync(new SessionNewResponse(
+                "remote-draft",
+                configOptions: CreateModelConfigOptions("claude-sonnet")));
+        chatService.Setup(service => service.SetSessionConfigOptionAsync(
+                It.Is<SessionSetConfigOptionParams>(p =>
+                    p.SessionId == "remote-draft"
+                    && p.ConfigId == "model"
+                    && p.Value == "claude-opus")))
+            .ReturnsAsync(new SessionSetConfigOptionResponse(CreateModelConfigOptions("claude-opus")));
+
+        await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+        await fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+        await fixture.ViewModel.EnsureNewSessionDraftAsync(@"C:\Repo\App");
+
+        var opus = fixture.ViewModel.NewSessionDraftModelOptions.Single(model => model.Value == "claude-opus");
+        fixture.ViewModel.SelectedNewSessionDraftModelOption = opus;
+
+        await WaitForConditionAsync(() => Task.FromResult(
+            string.Equals(fixture.ViewModel.SelectedNewSessionDraftModelValue, "claude-opus", StringComparison.Ordinal)));
+
+        chatService.Verify(service => service.SetSessionConfigOptionAsync(It.IsAny<SessionSetConfigOptionParams>()), Times.Once);
+    }
+
+    [Fact]
     public async Task PromoteNewSessionDraftForLaunchAsync_BindsReadyDraftWithoutCreatingAnotherRemoteSession()
     {
         await using var fixture = CreateViewModel();
