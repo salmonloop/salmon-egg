@@ -1293,7 +1293,7 @@ public sealed class XamlComplianceTests
 
         Assert.Contains("x:Key=\"ComposerSelectorComboBoxItemStyle\"", chatInputXaml, StringComparison.Ordinal);
         Assert.Contains("<Setter Property=\"IsEnabled\" Value=\"{Binding IsSelectable}\"", chatInputXaml, StringComparison.Ordinal);
-        Assert.Equal(3, CountOccurrences(chatInputXaml, "ItemContainerStyle=\"{StaticResource ComposerSelectorComboBoxItemStyle}\""));
+        Assert.Equal(4, CountOccurrences(chatInputXaml, "ItemContainerStyle=\"{StaticResource ComposerSelectorComboBoxItemStyle}\""));
     }
 
     [Fact]

@@ -188,12 +188,16 @@ $script:initializeBehavior = To-LowerInvariant ([string](Get-ScenarioValue 'init
 $script:sessionNewBehavior = To-LowerInvariant ([string](Get-ScenarioValue 'sessionNewBehavior' 'Success'))
 $script:cwdAcceptancePolicy = To-LowerInvariant ([string](Get-ScenarioValue 'cwdAcceptancePolicy' 'AcceptAny'))
 $script:modesVariant = To-LowerInvariant ([string](Get-ScenarioValue 'modesVariant' 'Normal'))
+$script:includeModelConfig = [bool](Get-ScenarioValue 'includeModelConfig' $false)
+$script:requestLogPath = [string](Get-ScenarioValue 'requestLogPath' '')
 $script:acceptedCwd = [string](Get-ScenarioValue 'acceptedCwd' (Get-Location).Path)
 $script:mappedRemoteCwd = [string](Get-ScenarioValue 'mappedRemoteCwd' $script:acceptedCwd)
 $script:initializeDelayMs = Get-IntScenarioValue 'initializeDelayMs' 0
 $script:sessionNewDelayMs = Get-IntScenarioValue 'sessionNewDelayMs' 0
 $script:sessionNewErrorCode = Get-IntScenarioValue 'sessionNewErrorCode' -32602
 $script:sessionNewErrorMessage = [string](Get-ScenarioValue 'sessionNewErrorMessage' 'session/new rejected by GUI mock ACP harness.')
+$script:selectedModeId = 'planner'
+$script:selectedModelValue = 'claude-sonnet'
 $script:replayMessageCount = [int]([string]$env:SALMONEGG_GUI_FAKE_REMOTE_REPLAY_MESSAGE_COUNT)
 if ($script:replayMessageCount -le 0)
 {
@@ -224,6 +228,48 @@ function Write-JsonLine([hashtable]$payload)
 
     [Console]::Out.WriteLine($json)
     [Console]::Out.Flush()
+}
+
+function Get-RequestParamString($params, [string]$name)
+{
+    if ($null -eq $params -or $null -eq $params.PSObject.Properties[$name])
+    {
+        return $null
+    }
+
+    $value = $params.$name
+    if ($null -eq $value)
+    {
+        return $null
+    }
+
+    return [string]$value
+}
+
+function Write-AcpRequestLog([object]$message)
+{
+    if ([string]::IsNullOrWhiteSpace($script:requestLogPath))
+    {
+        return
+    }
+
+    $entry = [ordered]@{
+        method = [string]$message.method
+        sessionId = Get-RequestParamString $message.params 'sessionId'
+        configId = Get-RequestParamString $message.params 'configId'
+        value = Get-RequestParamString $message.params 'value'
+        modeId = Get-RequestParamString $message.params 'modeId'
+    }
+
+    $directory = [System.IO.Path]::GetDirectoryName($script:requestLogPath)
+    if (-not [string]::IsNullOrWhiteSpace($directory))
+    {
+        [System.IO.Directory]::CreateDirectory($directory) | Out-Null
+    }
+
+    $json = $entry | ConvertTo-Json -Compress -Depth 8
+    $encoding = [System.Text.UTF8Encoding]::new($false)
+    [System.IO.File]::AppendAllText($script:requestLogPath, $json + [Environment]::NewLine, $encoding)
 }
 
 function New-TextContent([string]$text)
@@ -294,7 +340,7 @@ function New-ModesState([string]$sessionSuffix)
     }
 
     return @{
-        currentModeId = 'planner'
+        currentModeId = $script:selectedModeId
         availableModes = @(
             @{
                 id = 'agent'
@@ -312,18 +358,17 @@ function New-ModesState([string]$sessionSuffix)
 
 function New-ConfigOptions([string]$sessionSuffix)
 {
-    if ($script:modesVariant -eq 'empty')
-    {
-        return ,@()
-    }
+    $configOptions = @()
 
-    return ,@(
-        @{
+    if ($script:modesVariant -ne 'empty')
+    {
+        $configOptions += @{
             id = 'mode'
             name = 'Mode'
             description = 'Conversation mode'
+            category = 'mode'
             type = 'select'
-            currentValue = 'planner'
+            currentValue = $script:selectedModeId
             options = @(
                 @{
                     value = 'agent'
@@ -335,7 +380,31 @@ function New-ConfigOptions([string]$sessionSuffix)
                 }
             )
         }
-    )
+    }
+
+    if ($script:includeModelConfig)
+    {
+        $configOptions += @{
+            id = 'model'
+            name = 'Model'
+            description = 'LLM model'
+            category = 'model'
+            type = 'select'
+            currentValue = $script:selectedModelValue
+            options = @(
+                @{
+                    value = 'claude-haiku'
+                    name = 'Haiku'
+                },
+                @{
+                    value = 'claude-sonnet'
+                    name = 'Sonnet'
+                }
+            )
+        }
+    }
+
+    return ,@($configOptions)
 }
 
 function New-LoadResult([string]$sessionSuffix)
@@ -465,6 +534,8 @@ function New-InitializeResponse
 
 function Handle-AcpMessage([object]$message)
 {
+    Write-AcpRequestLog $message
+
     $method = [string]$message.method
     switch ($method)
     {
@@ -589,6 +660,56 @@ function Handle-AcpMessage([object]$message)
                 sessionId = $script:sessionId
                 modes = $loadResult.modes
                 configOptions = $loadResult.configOptions
+            }
+            return
+        }
+
+        'session/set_config_option'
+        {
+            $requestedSessionId = [string]$message.params.sessionId
+            if ([string]::IsNullOrWhiteSpace($requestedSessionId))
+            {
+                $requestedSessionId = $script:sessionId
+            }
+
+            $configId = [string]$message.params.configId
+            $value = [string]$message.params.value
+            $normalizedConfigId = To-LowerInvariant $configId
+            switch ($normalizedConfigId)
+            {
+                'mode'
+                {
+                    if (-not [string]::IsNullOrWhiteSpace($value))
+                    {
+                        $script:selectedModeId = $value
+                    }
+                }
+                'model'
+                {
+                    if (-not [string]::IsNullOrWhiteSpace($value))
+                    {
+                        $script:selectedModelValue = $value
+                    }
+                }
+            }
+
+            $sessionSuffix = Resolve-SessionSuffix $requestedSessionId
+            Send-Response $message.id @{
+                configOptions = (New-ConfigOptions $sessionSuffix)
+            }
+            return
+        }
+
+        'session/set_mode'
+        {
+            $requestedModeId = [string]$message.params.modeId
+            if (-not [string]::IsNullOrWhiteSpace($requestedModeId))
+            {
+                $script:selectedModeId = $requestedModeId
+            }
+
+            Send-Response $message.id @{
+                modeId = $script:selectedModeId
             }
             return
         }

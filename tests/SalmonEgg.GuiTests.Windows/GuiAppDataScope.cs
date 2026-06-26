@@ -19,6 +19,7 @@ internal sealed class GuiAppDataScope : IDisposable
     private const string GuiControlFileEnvVar = "SALMONEGG_GUI_CONTROL_FILE";
     private const string MockAcpHarnessScenarioFileName = "mock-acp-harness.scenario.json";
     private const string MockAcpHarnessReadySignalFileName = "mock-acp-harness.ready";
+    private const string MockAcpHarnessRequestLogFileName = "mock-acp-requests.jsonl";
     private readonly string _appDataRoot;
     private readonly string _configDirectory;
     private readonly string _conversationsDirectory;
@@ -91,6 +92,8 @@ internal sealed class GuiAppDataScope : IDisposable
 
         public MockAcpModesVariant ModesVariant { get; init; } = MockAcpModesVariant.Normal;
 
+        public bool IncludeModelConfig { get; init; }
+
         public string SessionId { get; init; } = "gui-remote-session-01";
 
         public string? AcceptedCwd { get; init; }
@@ -105,6 +108,13 @@ internal sealed class GuiAppDataScope : IDisposable
 
         public string SessionNewErrorMessage { get; init; } = "session/new rejected by GUI mock ACP harness.";
     }
+
+    internal sealed record MockAcpRequestLogEntry(
+        string Method,
+        string? SessionId,
+        string? ConfigId,
+        string? Value,
+        string? ModeId);
 
     private GuiAppDataScope(
         string appDataRoot,
@@ -498,12 +508,17 @@ internal sealed class GuiAppDataScope : IDisposable
         var projectRootPath = Path.Combine(Path.GetTempPath(), "SalmonEgg.GuiTests", "mock-acp-project-1");
         var scenarioPath = Path.Combine(appDataRoot, "control", MockAcpHarnessScenarioFileName);
         var readySignalPath = Path.Combine(appDataRoot, "control", MockAcpHarnessReadySignalFileName);
+        var requestLogPath = Path.Combine(appDataRoot, "control", MockAcpHarnessRequestLogFileName);
         Directory.CreateDirectory(Path.GetDirectoryName(scenarioPath)!);
+        if (File.Exists(requestLogPath))
+        {
+            File.Delete(requestLogPath);
+        }
 
         var scenarioToWrite = NormalizeMockAcpHarnessScenario(scenario, projectRootPath);
         TestFileIo.WriteAllTextWithRetry(
             scenarioPath,
-            BuildMockAcpHarnessScenarioJson(scenarioToWrite),
+            BuildMockAcpHarnessScenarioJson(scenarioToWrite, appDataRoot),
             Encoding.UTF8);
 
         Process? mockAcpHarnessProcess = null;
@@ -839,6 +854,68 @@ internal sealed class GuiAppDataScope : IDisposable
         }
     }
 
+    public int CountMockAcpRequests(string method)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(method);
+
+        return ReadMockAcpRequestLogEntries()
+            .Count(entry => string.Equals(entry.Method, method, StringComparison.Ordinal));
+    }
+
+    public bool WaitForMockAcpRequestCount(
+        string method,
+        Func<MockAcpRequestLogEntry, bool> predicate,
+        int expectedCount,
+        TimeSpan timeout)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(method);
+        ArgumentNullException.ThrowIfNull(predicate);
+        if (expectedCount < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(expectedCount));
+        }
+
+        var stopwatch = Stopwatch.StartNew();
+        do
+        {
+            var count = ReadMockAcpRequestLogEntries()
+                .Count(entry => string.Equals(entry.Method, method, StringComparison.Ordinal) && predicate(entry));
+            if (count == expectedCount)
+            {
+                return true;
+            }
+
+            if (count > expectedCount)
+            {
+                return false;
+            }
+
+            Thread.Sleep(50);
+        }
+        while (stopwatch.Elapsed < timeout);
+
+        return ReadMockAcpRequestLogEntries()
+            .Count(entry => string.Equals(entry.Method, method, StringComparison.Ordinal) && predicate(entry)) == expectedCount;
+    }
+
+    public string ReadLatestMockAcpRequests(int lineCount = 40)
+    {
+        var requestLogPath = ResolveMockAcpRequestLogPath();
+        if (!File.Exists(requestLogPath))
+        {
+            return "<mock ACP request log missing>";
+        }
+
+        try
+        {
+            return ReadTailAllowSharedRead(requestLogPath, lineCount);
+        }
+        catch (Exception ex)
+        {
+            return $"<mock ACP request log unreadable: {ex.Message}>";
+        }
+    }
+
     public string ReadConversationsJson()
     {
         if (!File.Exists(_conversationsPath))
@@ -1070,10 +1147,16 @@ internal sealed class GuiAppDataScope : IDisposable
         Directory.CreateDirectory(_projectRootPath);
 
         var scenarioPath = Path.Combine(_appDataRoot, "control", MockAcpHarnessScenarioFileName);
+        var requestLogPath = Path.Combine(_appDataRoot, "control", MockAcpHarnessRequestLogFileName);
         Directory.CreateDirectory(Path.GetDirectoryName(scenarioPath)!);
+        if (File.Exists(requestLogPath))
+        {
+            File.Delete(requestLogPath);
+        }
+
         TestFileIo.WriteAllTextWithRetry(
             scenarioPath,
-            BuildMockAcpHarnessScenarioJson(NormalizeMockAcpHarnessScenario(scenario, _projectRootPath)),
+            BuildMockAcpHarnessScenarioJson(NormalizeMockAcpHarnessScenario(scenario, _projectRootPath), _appDataRoot),
             Encoding.UTF8);
 
         TestFileIo.WriteAllTextWithRetry(
@@ -1854,7 +1937,7 @@ internal sealed class GuiAppDataScope : IDisposable
         };
     }
 
-    private static string BuildMockAcpHarnessScenarioJson(MockAcpHarnessScenario scenario)
+    private static string BuildMockAcpHarnessScenarioJson(MockAcpHarnessScenario scenario, string appDataRoot)
     {
         var document = new
         {
@@ -1863,6 +1946,8 @@ internal sealed class GuiAppDataScope : IDisposable
             sessionNewBehavior = scenario.SessionNewBehavior.ToString(),
             cwdAcceptancePolicy = scenario.CwdAcceptancePolicy.ToString(),
             modesVariant = scenario.ModesVariant.ToString(),
+            includeModelConfig = scenario.IncludeModelConfig,
+            requestLogPath = Path.Combine(appDataRoot, "control", MockAcpHarnessRequestLogFileName),
             sessionId = scenario.SessionId,
             acceptedCwd = scenario.AcceptedCwd,
             mappedRemoteCwd = scenario.MappedRemoteCwd,
@@ -2067,6 +2152,61 @@ internal sealed class GuiAppDataScope : IDisposable
         }
 
         return snapshot;
+    }
+
+    private string ResolveMockAcpRequestLogPath()
+        => Path.Combine(_appDataRoot, "control", MockAcpHarnessRequestLogFileName);
+
+    private IReadOnlyList<MockAcpRequestLogEntry> ReadMockAcpRequestLogEntries()
+    {
+        var requestLogPath = ResolveMockAcpRequestLogPath();
+        if (!File.Exists(requestLogPath))
+        {
+            return Array.Empty<MockAcpRequestLogEntry>();
+        }
+
+        var entries = new List<MockAcpRequestLogEntry>();
+        using var stream = new FileStream(requestLogPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var reader = new StreamReader(stream);
+
+        while (reader.ReadLine() is { } line)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                continue;
+            }
+
+            try
+            {
+                using var document = JsonDocument.Parse(line.TrimStart('\uFEFF'));
+                var root = document.RootElement;
+                entries.Add(new MockAcpRequestLogEntry(
+                    ReadOptionalJsonString(root, "method") ?? string.Empty,
+                    ReadOptionalJsonString(root, "sessionId"),
+                    ReadOptionalJsonString(root, "configId"),
+                    ReadOptionalJsonString(root, "value"),
+                    ReadOptionalJsonString(root, "modeId")));
+            }
+            catch (JsonException)
+            {
+                // The harness appends JSONL while smoke tests poll it. Ignore any transient partial line.
+            }
+        }
+
+        return entries;
+    }
+
+    private static string? ReadOptionalJsonString(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var property)
+            || property.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return null;
+        }
+
+        return property.ValueKind == JsonValueKind.String
+            ? property.GetString()
+            : property.ToString();
     }
 
     private static string ReadTailAllowSharedRead(string path, int lineCount)
