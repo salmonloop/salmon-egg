@@ -428,6 +428,59 @@ public partial class ChatViewModel
             Error: Localize("Selector_Mode_Error", "模式不可用"),
             Default: Localize("Selector_Mode_Default", "默认模式"));
 
+    private SelectorProjectionResult ResolveChatModelSelectorProjection()
+    {
+        if (string.IsNullOrWhiteSpace(_modelConfigId))
+        {
+            return SelectorProjectionResult.Empty(ComposerSelectorKind.Model);
+        }
+
+        var identity = BuildModelSelectorIdentity(
+            SelectedProfileId,
+            ConnectionInstanceId,
+            GetActiveSessionCwdOrDefault(),
+            _modelConfigId,
+            _modelOptions.Count);
+        var policy = _modelSelectorPolicy.Project(new ModelSelectorPolicyInput(
+            Identity: identity,
+            CurrentIdentity: identity,
+            ModelOptions: _modelOptions,
+            SelectedModelValue: _selectedModelValue,
+            IsAuthoritative: IsSessionActive,
+            IsLoading: IsConnecting || IsInitializing,
+            HasError: HasConnectionError,
+            Labels: ResolveModelSelectorPlaceholderLabels()));
+
+        return _selectorProjectionPresenter.Present(new SelectorProjectionInput(
+            ComposerSelectorKind.Model,
+            policy.RealItems,
+            policy.SelectedSemanticValue,
+            policy.Placeholder,
+            policy.ReplaceSelectionWithPlaceholder,
+            policy.DisableRealItems,
+            policy.SelectorEnabled && AreComposerToolsEnabled));
+    }
+
+    private static string BuildModelSelectorIdentity(
+        string? profileId,
+        string? connectionInstanceId,
+        string? cwd,
+        string? modelConfigId,
+        long version)
+        => string.Join(
+            "|",
+            profileId ?? string.Empty,
+            connectionInstanceId ?? string.Empty,
+            cwd ?? string.Empty,
+            modelConfigId ?? string.Empty,
+            version.ToString(CultureInfo.InvariantCulture));
+
+    private ModelSelectorPlaceholderLabels ResolveModelSelectorPlaceholderLabels()
+        => new(
+            Unresolved: Localize("Selector_Model_Unresolved", "模型尚未就绪"),
+            Loading: Localize("Selector_Model_Loading", "正在加载模型..."),
+            Error: Localize("Selector_Model_Error", "模型不可用"));
+
     private string Localize(string key, string fallback)
     {
         if (_localizer is null)
@@ -475,6 +528,29 @@ public partial class ChatViewModel
         {
             SetModeCommand.Execute(mode);
         }
+    }
+
+    [RelayCommand]
+    private void SelectChatModelDisplay(ComposerSelectorItemViewModel? item)
+    {
+        if (item is null
+            || item.Kind != ComposerSelectorKind.Model
+            || item.IsPlaceholder
+            || !item.IsSelectable
+            || string.IsNullOrWhiteSpace(item.SemanticValue))
+        {
+            return;
+        }
+
+        var current = ChatModelSelectorItems.FirstOrDefault(candidate =>
+            string.Equals(candidate.SemanticValue, item.SemanticValue, StringComparison.Ordinal)
+            && string.Equals(candidate.Identity, item.Identity, StringComparison.Ordinal));
+        if (current is null)
+        {
+            return;
+        }
+
+        _ = SetModelAsync(item.SemanticValue);
     }
 
     [RelayCommand]
@@ -1277,6 +1353,60 @@ public partial class ChatViewModel
             conversationId,
             modeResponse,
             remoteSessionId).ConfigureAwait(true);
+    }
+
+    private async Task SetModelAsync(string? modelValue)
+    {
+        if (string.IsNullOrWhiteSpace(modelValue)
+            || string.Equals(_selectedModelValue, modelValue, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        try
+        {
+            IsBusy = true;
+            ClearError();
+
+            var activeBinding = await ResolveActiveConversationBindingAsync().ConfigureAwait(true);
+            if (string.IsNullOrWhiteSpace(activeBinding?.RemoteSessionId))
+            {
+                return;
+            }
+
+            await ApplyModelSelectionAsync(
+                activeBinding.ConversationId,
+                activeBinding.RemoteSessionId!,
+                modelValue).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to switch model");
+            SetError($"Failed to switch model: {ex.Message}");
+            await ApplyCurrentStoreProjectionAsync().ConfigureAwait(true);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private async Task ApplyModelSelectionAsync(
+        string conversationId,
+        string remoteSessionId,
+        string? modelValue)
+    {
+        if (_chatService is null
+            || string.IsNullOrWhiteSpace(remoteSessionId)
+            || string.IsNullOrWhiteSpace(_modelConfigId)
+            || string.IsNullOrWhiteSpace(modelValue))
+        {
+            return;
+        }
+
+        var response = await _chatService.SetSessionConfigOptionAsync(
+            new SessionSetConfigOptionParams(remoteSessionId, _modelConfigId, modelValue)).ConfigureAwait(true);
+        await ApplySessionConfigOptionResponseAsync(conversationId, response, remoteSessionId).ConfigureAwait(true);
     }
 
     [RelayCommand]

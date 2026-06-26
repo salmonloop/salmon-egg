@@ -115,6 +115,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly VoiceInputUiStatePresenter _voiceInputUiStatePresenter = new();
     private readonly SelectorProjectionPresenter _selectorProjectionPresenter = new();
     private readonly ModeSelectorPolicy _modeSelectorPolicy = new();
+    private readonly ModelSelectorPolicy _modelSelectorPolicy = new();
     private readonly ChatAskUserStatePresenter _askUserStatePresenter;
     private readonly ChatPlanPanelStatePresenter _planPanelStatePresenter;
     private readonly ChatPlanEntriesProjectionCoordinator _planEntriesProjectionCoordinator;
@@ -155,6 +156,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly SemaphoreSlim _newSessionDraftGate = new(1, 1);
     private IChatService? _chatService;
     private IReadOnlyList<McpServer> _currentMcpServers = Array.Empty<McpServer>();
+    private IReadOnlyList<OptionValueViewModel> _modelOptions = Array.Empty<OptionValueViewModel>();
     private readonly IUiDispatcher _uiDispatcher;
     private readonly IConversationPreviewStore _previewStore;
     private readonly IPlatformShellService _platformShell;
@@ -831,6 +833,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     public SelectorProjectionResult ChatModeSelectorProjection => ResolveChatModeSelectorProjection();
 
+    public SelectorProjectionResult ChatModelSelectorProjection => ResolveChatModelSelectorProjection();
+
     public ComposerSelectorSlotsPresentation ComposerSelectorSlots
         => new(
             Agent: ComposerSelectorSlotPresentation.Hidden(),
@@ -841,13 +845,26 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
                 SelectedItem: SelectedChatModeSelectorItem,
                 SelectionCommand: SelectChatModeDisplayCommand),
             Project: ComposerSelectorSlotPresentation.Hidden(),
-            Model: ComposerSelectorSlotPresentation.Hidden());
+            Model: string.IsNullOrWhiteSpace(_modelConfigId)
+                ? ComposerSelectorSlotPresentation.Hidden()
+                : new ComposerSelectorSlotPresentation(
+                    IsVisible: true,
+                    IsEnabled: AreComposerToolsEnabled && ChatModelSelectorProjection.IsEnabled,
+                    Items: ChatModelSelectorItems,
+                    SelectedItem: SelectedChatModelSelectorItem,
+                    SelectionCommand: SelectChatModelDisplayCommand));
 
     public IReadOnlyList<ComposerSelectorItemViewModel> ChatModeSelectorItems
         => ChatModeSelectorProjection.DisplayItems;
 
+    public IReadOnlyList<ComposerSelectorItemViewModel> ChatModelSelectorItems
+        => ChatModelSelectorProjection.DisplayItems;
+
     public ComposerSelectorItemViewModel? SelectedChatModeSelectorItem
         => ChatModeSelectorProjection.SelectedDisplayItem;
+
+    public ComposerSelectorItemViewModel? SelectedChatModelSelectorItem
+        => ChatModelSelectorProjection.SelectedDisplayItem;
 
     public bool IsInputEnabled => ResolveInputState().IsInputEnabled;
 
@@ -1122,6 +1139,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     private readonly HashSet<string> _configAuthoritativeConversationIds = new(StringComparer.Ordinal);
     private string? _modeConfigId;
+    private string? _modelConfigId;
+    private string? _selectedModelValue;
 
     // Slash command completion
     [ObservableProperty]
@@ -1541,9 +1560,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         OnPropertyChanged(nameof(ComposerState));
         OnPropertyChanged(nameof(VoiceInputUiState));
         OnPropertyChanged(nameof(ChatModeSelectorProjection));
+        OnPropertyChanged(nameof(ChatModelSelectorProjection));
         OnPropertyChanged(nameof(ComposerSelectorSlots));
         OnPropertyChanged(nameof(ChatModeSelectorItems));
+        OnPropertyChanged(nameof(ChatModelSelectorItems));
         OnPropertyChanged(nameof(SelectedChatModeSelectorItem));
+        OnPropertyChanged(nameof(SelectedChatModelSelectorItem));
         OnPropertyChanged(nameof(IsInputEnabled));
         OnPropertyChanged(nameof(IsTextInputEnabled));
         OnPropertyChanged(nameof(AreComposerToolsEnabled));

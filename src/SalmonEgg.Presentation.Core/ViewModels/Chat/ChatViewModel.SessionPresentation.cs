@@ -166,6 +166,9 @@ public partial class ChatViewModel
 
         ShowConfigOptionsPanel = projection.ShowConfigOptionsPanel;
         _modeConfigId = projection.ModeConfigId;
+        _modelOptions = projection.ModelOptions;
+        _modelConfigId = projection.ModelConfigId;
+        _selectedModelValue = projection.SelectedModelValue;
         SetSelectedModeWithoutDispatch(_sessionOptionsPresenter.ResolveSelectedMode(AvailableModes, projection.SelectedModeId));
         NotifyComposerProjectionChanged();
     }

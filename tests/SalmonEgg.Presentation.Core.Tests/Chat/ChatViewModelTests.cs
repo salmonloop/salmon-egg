@@ -391,6 +391,69 @@ public partial class ChatViewModelTests
             Times.Never);
     }
 
+    [Fact]
+    public async Task ComposerSelectorSlots_ShowModelOnlyWhenModelConfigExists()
+    {
+        await using var fixture = CreateViewModel();
+        var viewModel = fixture.ViewModel;
+
+        Assert.False(viewModel.ComposerSelectorSlots.Model.IsVisible);
+
+        await fixture.DispatchAsync(new SetBindingSliceAction(new ConversationBindingSlice("conv-1", "remote-1", "profile-1")));
+        await fixture.DispatchAsync(new SelectConversationAction("conv-1"));
+        await fixture.DispatchAsync(new SetConversationSessionStateAction(
+            "conv-1",
+            ImmutableList<ConversationModeOptionSnapshot>.Empty,
+            SelectedModeId: null,
+            ConfigOptions: CreateModelConfigSnapshots("claude-sonnet").ToImmutableList(),
+            ShowConfigOptionsPanel: true));
+
+        viewModel.IsConnected = true;
+        viewModel.IsSessionActive = true;
+
+        var slots = viewModel.ComposerSelectorSlots;
+        Assert.True(slots.Model.IsVisible);
+        Assert.True(slots.Model.IsEnabled);
+        Assert.Same(viewModel.SelectChatModelDisplayCommand, slots.Model.SelectionCommand);
+        Assert.Equal("claude-sonnet", slots.Model.SelectedItem?.SemanticValue);
+    }
+
+    [Fact]
+    public async Task SelectChatModelDisplay_WhenModelConfigExists_SetsAcpConfigOption()
+    {
+        await using var fixture = CreateViewModel();
+        var viewModel = fixture.ViewModel;
+        var chatService = CreateConnectedChatService();
+        chatService
+            .Setup(service => service.SetSessionConfigOptionAsync(It.Is<SessionSetConfigOptionParams>(p =>
+                p.SessionId == "remote-1"
+                && p.ConfigId == "model"
+                && p.Value == "claude-opus")))
+            .ReturnsAsync(new SessionSetConfigOptionResponse(CreateModelConfigOptions("claude-opus")));
+        viewModel.ReplaceChatService(chatService.Object);
+
+        await fixture.DispatchAsync(new SetBindingSliceAction(new ConversationBindingSlice("conv-1", "remote-1", "profile-1")));
+        await fixture.DispatchAsync(new SelectConversationAction("conv-1"));
+        await fixture.DispatchAsync(new SetConversationSessionStateAction(
+            "conv-1",
+            ImmutableList<ConversationModeOptionSnapshot>.Empty,
+            SelectedModeId: null,
+            ConfigOptions: CreateModelConfigSnapshots("claude-sonnet").ToImmutableList(),
+            ShowConfigOptionsPanel: true));
+
+        viewModel.IsConnected = true;
+        viewModel.IsSessionActive = true;
+
+        var opus = viewModel.ChatModelSelectorItems.Single(item => item.SemanticValue == "claude-opus");
+        viewModel.SelectChatModelDisplayCommand.Execute(opus);
+
+        await WaitForConditionAsync(() => Task.FromResult(
+            string.Equals(viewModel.SelectedChatModelSelectorItem?.SemanticValue, "claude-opus", StringComparison.Ordinal)));
+
+        chatService.Verify(service => service.SetSessionConfigOptionAsync(It.IsAny<SessionSetConfigOptionParams>()), Times.Once);
+        chatService.Verify(service => service.SetSessionModeAsync(It.IsAny<SessionSetModeParams>()), Times.Never);
+    }
+
     private static StartViewModel CreateStartViewModelForChatFixture(
         ViewModelFixture fixture,
         MainNavigationViewModel nav,
@@ -5796,6 +5859,42 @@ public partial class ChatViewModelTests
                 {
                     new() { Value = "agent", Name = "Agent", Description = "Default agent mode" },
                     new() { Value = "plan", Name = "Plan", Description = "Planning mode" }
+                }
+            }
+        };
+
+    private static List<ConfigOption> CreateModelConfigOptions(string currentValue)
+        => new()
+        {
+            new ConfigOption
+            {
+                Id = "model",
+                Name = "Model",
+                Category = "model",
+                Type = "select",
+                CurrentValue = currentValue,
+                Options = new List<ConfigOptionValue>
+                {
+                    new() { Value = "claude-sonnet", Name = "Sonnet", Description = "Balanced model" },
+                    new() { Value = "claude-opus", Name = "Opus", Description = "Reasoning model" }
+                }
+            }
+        };
+
+    private static List<ConversationConfigOptionSnapshot> CreateModelConfigSnapshots(string selectedValue)
+        => new()
+        {
+            new ConversationConfigOptionSnapshot
+            {
+                Id = "model",
+                Name = "Model",
+                Category = "model",
+                ValueType = "select",
+                SelectedValue = selectedValue,
+                Options = new List<ConversationConfigOptionChoiceSnapshot>
+                {
+                    new() { Value = "claude-sonnet", Name = "Sonnet", Description = "Balanced model" },
+                    new() { Value = "claude-opus", Name = "Opus", Description = "Reasoning model" }
                 }
             }
         };
