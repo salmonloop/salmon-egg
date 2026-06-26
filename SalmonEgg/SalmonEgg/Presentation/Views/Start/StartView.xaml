@@ -153,6 +153,7 @@
                                     InputBoxAutomationId="StartView.PromptBox"
                                     AgentSelectorAutomationId="StartView.AgentSelector"
                                     ModeSelectorAutomationId="StartView.ModeSelector"
+                                    ModelSelectorAutomationId="StartView.ModelSelector"
                                     ProjectSelectorAutomationId="StartView.ProjectSelector"
                                     SelectorSlots="{x:Bind ViewModel.ComposerSelectorSlots, Mode=OneWay}" />
         </Grid>

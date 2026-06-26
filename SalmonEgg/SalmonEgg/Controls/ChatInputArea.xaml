@@ -232,6 +232,35 @@
                                     </ComboBox.ItemTemplate>
                                 </ComboBox>
 
+                                <ComboBox x:Name="ModelSelectorHost"
+                                          x:Uid="ChatModelSelector"
+                                          Visibility="{x:Bind SelectorSlots.Model.IsVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                          AutomationProperties.AutomationId="{x:Bind ModelSelectorAutomationId, Mode=OneWay}"
+                                          MinWidth="{StaticResource ComposerProfileSelectorMinWidth}"
+                                          MaxWidth="{StaticResource ComposerProfileSelectorMaxWidth}"
+                                          FontSize="12"
+                                          Background="Transparent"
+                                          BorderThickness="0"
+                                          HorizontalAlignment="Stretch"
+                                          IsEnabled="{x:Bind SelectorSlots.Model.IsEnabled, Mode=OneWay}"
+                                          ItemsSource="{x:Bind SelectorSlots.Model.Items, Mode=OneWay}"
+                                          ItemContainerStyle="{StaticResource ComposerSelectorComboBoxItemStyle}"
+                                          SelectedItem="{x:Bind SelectorSlots.Model.SelectedItem, Mode=OneWay}"
+                                          SelectionChanged="OnModelSelectorSelectionChanged"
+                                          IsFocusEngagementEnabled="True"
+                                          DropDownOpened="OnSelectorDropDownOpened"
+                                          DropDownClosed="OnSelectorDropDownClosed">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="selectors:ComposerSelectorItemViewModel">
+                                            <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}"
+                                                       AutomationProperties.AutomationId="{x:Bind AutomationId, Mode=OneWay}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       MaxLines="1"
+                                                       Opacity="{x:Bind IsSelectable, Mode=OneWay, Converter={StaticResource BoolToOpacityConverter}}"/>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+
                                 <ComboBox x:Name="ProjectSelectorHost"
                                           Visibility="{x:Bind SelectorSlots.Project.IsVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                           AutomationProperties.AutomationId="{x:Bind ProjectSelectorAutomationId, Mode=OneWay}"

@@ -69,6 +69,13 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
             typeof(ChatInputArea),
             new PropertyMetadata("ChatInputArea.ProjectSelector"));
 
+    public static readonly DependencyProperty ModelSelectorAutomationIdProperty =
+        DependencyProperty.Register(
+            nameof(ModelSelectorAutomationId),
+            typeof(string),
+            typeof(ChatInputArea),
+            new PropertyMetadata("ChatInputArea.ModelSelector"));
+
     public static readonly DependencyProperty SelectorSlotsProperty =
         DependencyProperty.Register(
             nameof(SelectorSlots),
@@ -142,6 +149,12 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
     {
         get => (string)GetValue(ProjectSelectorAutomationIdProperty);
         set => SetValue(ProjectSelectorAutomationIdProperty, value);
+    }
+
+    public string ModelSelectorAutomationId
+    {
+        get => (string)GetValue(ModelSelectorAutomationIdProperty);
+        set => SetValue(ModelSelectorAutomationIdProperty, value);
     }
 
     public ComposerSelectorSlotsPresentation SelectorSlots
@@ -919,6 +932,7 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
             {
                 GetLoadedSelector(nameof(AgentSelectorHost)),
                 GetLoadedSelector(nameof(ModeSelectorHost)),
+                GetLoadedSelector(nameof(ModelSelectorHost)),
                 GetLoadedSelector(nameof(ProjectSelectorHost))
             }
             .Where(selector => selector is not null
@@ -955,6 +969,11 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
     private void OnProjectSelectorSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         ExecuteSelectorCommand(sender, SelectorSlots.Project.SelectionCommand);
+    }
+
+    private void OnModelSelectorSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        ExecuteSelectorCommand(sender, SelectorSlots.Model.SelectionCommand);
     }
 
     private static void ExecuteSelectorCommand(object sender, ICommand? command)
