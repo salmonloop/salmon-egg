@@ -105,6 +105,42 @@ public sealed class WasmStartupAssetsTests
     }
 
     [Fact]
+    public void BrowserWasmShellService_UsesBrowserClipboardInterop()
+    {
+        var project = XDocument.Parse(LoadFile(@"SalmonEgg\SalmonEgg\SalmonEgg.csproj"));
+
+        var nativeFileReference = project
+            .Descendants("WasmShellNativeFileReference")
+            .Single(element => string.Equals(
+                (string?)element.Attribute("Include"),
+                @"Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-shell.js",
+                StringComparison.Ordinal));
+        Assert.Equal("'$(TargetFramework)' == 'net10.0-browserwasm'", (string?)nativeFileReference.Parent?.Attribute("Condition"));
+        var contentReference = project
+            .Descendants("Content")
+            .Single(element => string.Equals(
+                (string?)element.Attribute("Include"),
+                @"Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-shell.js",
+                StringComparison.Ordinal));
+        Assert.Equal("_framework/salmon-egg-wasm-shell.js", contentReference.Element("TargetPath")?.Value);
+        Assert.Equal("PreserveNewest", contentReference.Element("CopyToOutputDirectory")?.Value);
+
+        var shellService = LoadFile(@"SalmonEgg\SalmonEgg\Platforms\WebAssembly\WasmPlatformShellService.cs");
+        Assert.Contains("System.Runtime.InteropServices.JavaScript", shellService, StringComparison.Ordinal);
+        Assert.Contains("[SupportedOSPlatform(\"browser\")]", shellService, StringComparison.Ordinal);
+        Assert.Contains("JSHost.ImportAsync(ShellModuleName, ShellModuleUrl", shellService, StringComparison.Ordinal);
+        Assert.Contains("[JSImport(\"copyToClipboard\", \"salmon-egg-wasm-shell.js\")]", shellService, StringComparison.Ordinal);
+        Assert.Contains("[JSImport(\"readClipboardText\", \"salmon-egg-wasm-shell.js\")]", shellService, StringComparison.Ordinal);
+        Assert.DoesNotContain("CopyToClipboardAsync(string text) => _unsupported.CopyToClipboardAsync(text)", shellService, StringComparison.Ordinal);
+        Assert.DoesNotContain("ReadClipboardTextAsync() => _unsupported.ReadClipboardTextAsync()", shellService, StringComparison.Ordinal);
+
+        var script = LoadFile(@"SalmonEgg\SalmonEgg\Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-shell.js");
+        Assert.Contains("navigator?.clipboard?.writeText", script, StringComparison.Ordinal);
+        Assert.Contains("navigator?.clipboard?.readText", script, StringComparison.Ordinal);
+        Assert.Contains("document.execCommand(\"copy\")", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BrowserWasmBuild_RemovesDesktopProcessDependenciesFromInfrastructureGraph()
     {
         var appProject = XDocument.Parse(LoadFile(@"SalmonEgg\SalmonEgg\SalmonEgg.csproj"));

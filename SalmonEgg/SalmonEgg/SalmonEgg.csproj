@@ -54,9 +54,14 @@
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-browserwasm'">
     <WasmShellNativeFileReference Include="Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-storage.js" />
+    <WasmShellNativeFileReference Include="Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-shell.js" />
     <Content Include="Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-storage.js">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <TargetPath>_framework/salmon-egg-wasm-storage.js</TargetPath>
+    </Content>
+    <Content Include="Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-shell.js">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>_framework/salmon-egg-wasm-shell.js</TargetPath>
     </Content>
   </ItemGroup>
 

@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using FlaUI.Core.Definitions;
@@ -97,6 +98,30 @@ public sealed class NavigationSmokeTests
         Assert.NotNull(chatHeader);
         Assert.Contains("GUI Session 01", chatHeader.Name, StringComparison.Ordinal);
         Assert.True(selectionItem.IsSelected.Value);
+    }
+
+    [SkippableFact]
+    public async Task RemoteSessionContextMenu_CopyAcpSessionId_WritesRemoteSessionIdToClipboard()
+    {
+        using var appData = GuiAppDataScope.CreateDeterministicSlowRemoteReplayData(
+            cachedMessageCount: 0,
+            replayMessageCount: 1);
+        await WriteClipboardTextAsync("salmonegg-sentinel").ConfigureAwait(true);
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-remote-conversation-01", TimeSpan.FromSeconds(15));
+
+        session.OpenContextMenu(sessionItem);
+        var copyItem = session.FindByAutomationIdAnywhere("MainNav.Session.Context.CopySessionId", TimeSpan.FromSeconds(5));
+        Assert.True(
+            copyItem.IsEnabled,
+            $"Expected copy ACP session id context item to be enabled.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        session.ClickElement(copyItem);
+
+        Assert.True(
+            await WaitForClipboardTextAsync("gui-remote-session-01", TimeSpan.FromSeconds(5)).ConfigureAwait(true),
+            $"Expected clipboard to contain remote ACP session id after context menu copy. Actual='{await ReadClipboardTextAsync().ConfigureAwait(true) ?? "<null>"}'.{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
     [SkippableFact]
@@ -537,6 +562,81 @@ public sealed class NavigationSmokeTests
             "pure resize path",
             appData.ReadBootLogTail());
     }
+
+    private static async Task<bool> WaitForClipboardTextAsync(string expected, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            var current = await ReadClipboardTextAsync().ConfigureAwait(true);
+            if (string.Equals(current, expected, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            await Task.Delay(120).ConfigureAwait(true);
+        }
+
+        return string.Equals(await ReadClipboardTextAsync().ConfigureAwait(true), expected, StringComparison.Ordinal);
+    }
+
+    private static async Task<string?> ReadClipboardTextAsync()
+    {
+        try
+        {
+            return await RunPowerShellClipboardCommandAsync("Get-Clipboard -Raw").ConfigureAwait(true);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static async Task WriteClipboardTextAsync(string text)
+    {
+        var tempPath = Path.GetTempFileName();
+        await File.WriteAllTextAsync(tempPath, text).ConfigureAwait(true);
+        try
+        {
+            await RunPowerShellClipboardCommandAsync(
+                $"Set-Clipboard -Value ([System.IO.File]::ReadAllText('{EscapePowerShellSingleQuotedString(tempPath)}'))")
+                .ConfigureAwait(true);
+        }
+        finally
+        {
+            File.Delete(tempPath);
+        }
+    }
+
+    private static async Task<string> RunPowerShellClipboardCommandAsync(string command)
+    {
+        using var process = new Process();
+        process.StartInfo = new ProcessStartInfo
+        {
+            FileName = "powershell.exe",
+            Arguments = $"-NoLogo -NoProfile -ExecutionPolicy Bypass -Command \"{command}\"",
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+
+        process.Start();
+        var outputTask = process.StandardOutput.ReadToEndAsync();
+        var errorTask = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync().ConfigureAwait(true);
+        var output = await outputTask.ConfigureAwait(true);
+        var error = await errorTask.ConfigureAwait(true);
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException($"Clipboard command failed with exit code {process.ExitCode}: {error}");
+        }
+
+        return output.TrimEnd('\r', '\n');
+    }
+
+    private static string EscapePowerShellSingleQuotedString(string value)
+        => value.Replace("'", "''", StringComparison.Ordinal);
 
     private static bool IsVisibleAffordanceElement(AutomationElement element)
     {

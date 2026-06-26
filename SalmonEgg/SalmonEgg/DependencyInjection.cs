@@ -282,8 +282,13 @@ public static class DependencyInjection
                 sp.GetRequiredService<ITransportEndpointAccessPolicy>()));
         services.AddSingleton<IDiagnosticsBundleService, SalmonEgg.Infrastructure.Services.DiagnosticsBundleService>();
         services.AddSingleton<ILiveLogStreamService, SalmonEgg.Infrastructure.Services.LiveLogStreamService>();
-#if __WASM__
+#if WINDOWS
+        services.AddSingleton<IPlatformShellService>(sp =>
+            new WindowsPlatformShellService(sp.GetRequiredService<IPlatformCapabilityService>()));
+#elif __WASM__
+#pragma warning disable CA1416 // Uno browserwasm target runs in the browser platform surface.
         services.AddSingleton<IPlatformShellService, WasmPlatformShellService>();
+#pragma warning restore CA1416
 #elif __ANDROID__ || __IOS__
         services.AddSingleton<IPlatformShellService, UnsupportedPlatformShellService>();
 #else
@@ -538,7 +543,8 @@ public static class DependencyInjection
                 sp.GetRequiredService<IConversationCatalogDisplayReadModel>(),
                 sp.GetRequiredService<IProjectAffinityResolver>(),
                 sp.GetRequiredService<IUiDispatcher>(),
-                sp.GetRequiredService<IStringLocalizer<CoreStrings>>()));
+                sp.GetRequiredService<IStringLocalizer<CoreStrings>>(),
+                sp.GetRequiredService<IPlatformShellService>()));
         services.AddSingleton<INavigationCoordinator>(sp =>
             new NavigationCoordinator(
                 sp.GetRequiredService<IShellSelectionMutationSink>(),
