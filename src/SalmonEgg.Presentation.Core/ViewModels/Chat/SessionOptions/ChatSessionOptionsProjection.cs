@@ -8,4 +8,7 @@ public sealed record ChatSessionOptionsProjection(
     string? SelectedModeId,
     IReadOnlyList<ConfigOptionViewModel> ConfigOptions,
     bool ShowConfigOptionsPanel,
-    string? ModeConfigId);
+    string? ModeConfigId,
+    IReadOnlyList<OptionValueViewModel> ModelOptions,
+    string? ModelConfigId,
+    string? SelectedModelValue);

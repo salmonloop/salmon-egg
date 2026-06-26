@@ -840,7 +840,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
                 Items: ChatModeSelectorItems,
                 SelectedItem: SelectedChatModeSelectorItem,
                 SelectionCommand: SelectChatModeDisplayCommand),
-            Project: ComposerSelectorSlotPresentation.Hidden());
+            Project: ComposerSelectorSlotPresentation.Hidden(),
+            Model: ComposerSelectorSlotPresentation.Hidden());
 
     public IReadOnlyList<ComposerSelectorItemViewModel> ChatModeSelectorItems
         => ChatModeSelectorProjection.DisplayItems;

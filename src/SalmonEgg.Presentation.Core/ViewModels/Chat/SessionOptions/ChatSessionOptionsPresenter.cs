@@ -32,6 +32,7 @@ public sealed class ChatSessionOptionsPresenter
             .ToList();
 
         var modeConfigSelection = TryResolveModeConfigSelection(projectedModes, projectedConfigOptions);
+        var modelConfigSelection = TryResolveModelConfigSelection(projectedConfigOptions);
         var resolvedSelectedModeId = ResolveSelectedModeId(
             projectedModes,
             selectedModeId,
@@ -42,7 +43,10 @@ public sealed class ChatSessionOptionsPresenter
             resolvedSelectedModeId,
             projectedConfigOptions,
             showConfigOptionsPanel,
-            modeConfigSelection.ModeConfigId);
+            modeConfigSelection.ModeConfigId,
+            modelConfigSelection.ModelOptions,
+            modelConfigSelection.ModelConfigId,
+            modelConfigSelection.SelectedModelValue);
     }
 
     public bool ModeCollectionMatches(
@@ -117,6 +121,31 @@ public sealed class ChatSessionOptionsPresenter
         return true;
     }
 
+    public bool OptionCollectionMatches(
+        IReadOnlyList<OptionValueViewModel> current,
+        IReadOnlyList<OptionValueViewModel> projected)
+    {
+        ArgumentNullException.ThrowIfNull(current);
+        ArgumentNullException.ThrowIfNull(projected);
+
+        if (current.Count != projected.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < current.Count; i++)
+        {
+            if (!string.Equals(current[i].Value, projected[i].Value, StringComparison.Ordinal)
+                || !string.Equals(current[i].Name, projected[i].Name, StringComparison.Ordinal)
+                || !string.Equals(current[i].Description, projected[i].Description, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     public SessionModeViewModel? ResolveSelectedMode(
         IReadOnlyList<SessionModeViewModel> availableModes,
         string? selectedModeId)
@@ -136,6 +165,27 @@ public sealed class ChatSessionOptionsPresenter
         return availableModes.FirstOrDefault(mode =>
                    string.Equals(mode.ModeId, selectedModeId, StringComparison.Ordinal))
                ?? availableModes[0];
+    }
+
+    public OptionValueViewModel? ResolveSelectedModelOption(
+        IReadOnlyList<OptionValueViewModel> modelOptions,
+        string? selectedModelValue)
+    {
+        ArgumentNullException.ThrowIfNull(modelOptions);
+
+        if (modelOptions.Count == 0)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(selectedModelValue))
+        {
+            return modelOptions[0];
+        }
+
+        return modelOptions.FirstOrDefault(option =>
+                   string.Equals(option.Value, selectedModelValue, StringComparison.Ordinal))
+               ?? modelOptions[0];
     }
 
     private static ConfigOptionViewModel MapConfigOption(ConversationConfigOptionSnapshot option)
@@ -199,6 +249,30 @@ public sealed class ChatSessionOptionsPresenter
             ? null
             : modeOption.SelectedOption?.Value ?? modeOption.TextValue;
         return (modeOption.Id, selectedModeId);
+    }
+
+    private static (string? ModelConfigId, IReadOnlyList<OptionValueViewModel> ModelOptions, string? SelectedModelValue) TryResolveModelConfigSelection(
+        IReadOnlyList<ConfigOptionViewModel> projectedConfigOptions)
+    {
+        var modelOption = projectedConfigOptions.FirstOrDefault(option =>
+            string.Equals(option.Category, "model", StringComparison.OrdinalIgnoreCase));
+
+        if (modelOption is null || modelOption.Options.Count == 0)
+        {
+            return (null, Array.Empty<OptionValueViewModel>(), null);
+        }
+
+        var modelOptions = modelOption.Options
+            .Select(static option => new OptionValueViewModel
+            {
+                Value = option.Value,
+                Name = option.Name,
+                Description = option.Description
+            })
+            .ToArray();
+
+        var selectedValue = modelOption.SelectedOption?.Value ?? modelOption.TextValue;
+        return (modelOption.Id, modelOptions, selectedValue);
     }
 
     private static string? ResolveSelectedModeId(

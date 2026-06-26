@@ -74,4 +74,63 @@ public sealed class ChatSessionOptionsPresenterTests
 
         Assert.Equal("agent", projection.SelectedModeId);
     }
+
+    [Fact]
+    public void Present_WithModelConfigOption_ProjectsModelSelectorState()
+    {
+        var projection = _sut.Present(
+            availableModes: [],
+            selectedModeId: null,
+            configOptions:
+            [
+                new ConversationConfigOptionSnapshot
+                {
+                    Id = "model",
+                    Name = "Model",
+                    Category = "model",
+                    SelectedValue = "claude-sonnet",
+                    Options =
+                    [
+                        new ConversationConfigOptionChoiceSnapshot { Value = "claude-haiku", Name = "Haiku" },
+                        new ConversationConfigOptionChoiceSnapshot { Value = "claude-sonnet", Name = "Sonnet" }
+                    ]
+                }
+            ],
+            showConfigOptionsPanel: true);
+
+        Assert.Equal("model", projection.ModelConfigId);
+        Assert.Equal("claude-sonnet", projection.SelectedModelValue);
+        Assert.Equal(["claude-haiku", "claude-sonnet"], projection.ModelOptions.Select(option => option.Value).ToArray());
+
+        var selected = _sut.ResolveSelectedModelOption(projection.ModelOptions, projection.SelectedModelValue);
+        Assert.NotNull(selected);
+        Assert.Equal("claude-sonnet", selected!.Value);
+    }
+
+    [Fact]
+    public void Present_WithoutModelCategory_DoesNotProjectModelSelectorState()
+    {
+        var projection = _sut.Present(
+            availableModes: [],
+            selectedModeId: null,
+            configOptions:
+            [
+                new ConversationConfigOptionSnapshot
+                {
+                    Id = "temperature",
+                    Name = "Temperature",
+                    Category = "sampling",
+                    SelectedValue = "0.7",
+                    Options =
+                    [
+                        new ConversationConfigOptionChoiceSnapshot { Value = "0.7", Name = "0.7" }
+                    ]
+                }
+            ],
+            showConfigOptionsPanel: true);
+
+        Assert.Null(projection.ModelConfigId);
+        Assert.Null(projection.SelectedModelValue);
+        Assert.Empty(projection.ModelOptions);
+    }
 }

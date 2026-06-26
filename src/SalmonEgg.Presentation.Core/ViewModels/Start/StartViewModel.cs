@@ -129,7 +129,8 @@ public sealed partial class StartViewModel : ObservableObject
                 IsEnabled: true,
                 Items: StartProjectSelectorItems,
                 SelectedItem: SelectedStartProjectSelectorItem,
-                SelectionCommand: SelectStartProjectDisplayCommand));
+                SelectionCommand: SelectStartProjectDisplayCommand),
+            Model: ComposerSelectorSlotPresentation.Hidden());
 
     public IReadOnlyList<ComposerSelectorItemViewModel> StartAgentSelectorItems
         => StartAgentSelectorProjection.DisplayItems;

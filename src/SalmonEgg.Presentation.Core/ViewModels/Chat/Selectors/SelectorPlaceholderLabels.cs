@@ -16,3 +16,8 @@ public sealed record ProjectSelectorPlaceholderLabels(
     string Unresolved,
     string Fallback,
     string RemoteSelectionRequired);
+
+public sealed record ModelSelectorPlaceholderLabels(
+    string Unresolved,
+    string Loading,
+    string Error);
