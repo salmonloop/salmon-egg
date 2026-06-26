@@ -37,6 +37,7 @@ public sealed partial class StartViewModel : ObservableObject
     private readonly ILogger<StartViewModel> _logger;
     private readonly SelectorProjectionPresenter _selectorProjectionPresenter = new();
     private readonly ModeSelectorPolicy _modeSelectorPolicy = new();
+    private readonly ModelSelectorPolicy _modelSelectorPolicy = new();
     private readonly AgentSelectorPolicy _agentSelectorPolicy = new();
     private readonly ProjectSelectorPolicy _projectSelectorPolicy = new();
     private readonly ObservableCollection<StartProjectOptionViewModel> _startProjectOptions = new();
@@ -104,9 +105,13 @@ public sealed partial class StartViewModel : ObservableObject
 
     public ReadOnlyObservableCollection<SessionModeViewModel> StartModeOptions => Chat.NewSessionDraftModeOptions;
 
+    public IReadOnlyList<OptionValueViewModel> StartModelOptions => Chat.NewSessionDraftModelOptions;
+
     public SelectorProjectionResult StartAgentSelectorProjection => ResolveStartAgentSelectorProjection();
 
     public SelectorProjectionResult StartModeSelectorProjection => ResolveStartModeSelectorProjection();
+
+    public SelectorProjectionResult StartModelSelectorProjection => ResolveStartModelSelectorProjection();
 
     public SelectorProjectionResult StartProjectSelectorProjection => ResolveStartProjectSelectorProjection();
 
@@ -130,13 +135,23 @@ public sealed partial class StartViewModel : ObservableObject
                 Items: StartProjectSelectorItems,
                 SelectedItem: SelectedStartProjectSelectorItem,
                 SelectionCommand: SelectStartProjectDisplayCommand),
-            Model: ComposerSelectorSlotPresentation.Hidden());
+            Model: Chat.HasNewSessionDraftModelSelector
+                ? new ComposerSelectorSlotPresentation(
+                    IsVisible: true,
+                    IsEnabled: IsInputEnabled && StartModelSelectorProjection.IsEnabled,
+                    Items: StartModelSelectorItems,
+                    SelectedItem: SelectedStartModelSelectorItem,
+                    SelectionCommand: SelectStartModelDisplayCommand)
+                : ComposerSelectorSlotPresentation.Hidden());
 
     public IReadOnlyList<ComposerSelectorItemViewModel> StartAgentSelectorItems
         => StartAgentSelectorProjection.DisplayItems;
 
     public IReadOnlyList<ComposerSelectorItemViewModel> StartModeSelectorItems
         => StartModeSelectorProjection.DisplayItems;
+
+    public IReadOnlyList<ComposerSelectorItemViewModel> StartModelSelectorItems
+        => StartModelSelectorProjection.DisplayItems;
 
     public IReadOnlyList<ComposerSelectorItemViewModel> StartProjectSelectorItems
         => StartProjectSelectorProjection.DisplayItems;
@@ -147,6 +162,9 @@ public sealed partial class StartViewModel : ObservableObject
     public ComposerSelectorItemViewModel? SelectedStartModeSelectorItem
         => StartModeSelectorProjection.SelectedDisplayItem;
 
+    public ComposerSelectorItemViewModel? SelectedStartModelSelectorItem
+        => StartModelSelectorProjection.SelectedDisplayItem;
+
     public ComposerSelectorItemViewModel? SelectedStartProjectSelectorItem
         => StartProjectSelectorProjection.SelectedDisplayItem;
 
@@ -155,6 +173,8 @@ public sealed partial class StartViewModel : ObservableObject
     public IRelayCommand<SessionModeViewModel?> SelectStartModeCommand { get; }
 
     public IRelayCommand<ComposerSelectorItemViewModel?> SelectStartModeDisplayCommand { get; }
+
+    public IRelayCommand<ComposerSelectorItemViewModel?> SelectStartModelDisplayCommand { get; }
 
     public IRelayCommand<ComposerSelectorItemViewModel?> SelectStartAgentDisplayCommand { get; }
 
@@ -190,6 +210,12 @@ public sealed partial class StartViewModel : ObservableObject
     {
         get => Chat.SelectedNewSessionDraftMode;
         set => Chat.SelectedNewSessionDraftMode = value;
+    }
+
+    public OptionValueViewModel? SelectedStartModel
+    {
+        get => Chat.SelectedNewSessionDraftModelOption;
+        set => Chat.SelectedNewSessionDraftModelOption = value;
     }
 
     public StartSessionModeStage StartModeStage => _startSessionModeSnapshot.Stage;
@@ -268,6 +294,7 @@ public sealed partial class StartViewModel : ObservableObject
         ExecuteSuggestionCommand = new RelayCommand<QuickSuggestionViewModel>(ExecuteSuggestion);
         SelectStartModeCommand = new RelayCommand<SessionModeViewModel?>(SelectStartMode);
         SelectStartModeDisplayCommand = new RelayCommand<ComposerSelectorItemViewModel?>(SelectStartModeDisplay);
+        SelectStartModelDisplayCommand = new RelayCommand<ComposerSelectorItemViewModel?>(SelectStartModelDisplay);
         SelectStartAgentDisplayCommand = new RelayCommand<ComposerSelectorItemViewModel?>(SelectStartAgentDisplay);
         SelectStartProjectDisplayCommand = new RelayCommand<ComposerSelectorItemViewModel?>(SelectStartProjectDisplay);
         StartVoiceInputCommand = new AsyncRelayCommand(StartVoiceInputAsync, () => CanStartVoiceInput);
@@ -282,6 +309,7 @@ public sealed partial class StartViewModel : ObservableObject
         _conversationCatalog.PropertyChanged += OnConversationCatalogPropertyChanged;
         Chat.PropertyChanged += OnChatPropertyChanged;
         ((INotifyCollectionChanged)Chat.NewSessionDraftModeOptions).CollectionChanged += OnStartModeOptionsChanged;
+        ((INotifyCollectionChanged)Chat.NewSessionDraftModelOptions).CollectionChanged += OnStartModelOptionsChanged;
         ApplyPendingProjectIntent();
     }
 
@@ -318,6 +346,21 @@ public sealed partial class StartViewModel : ObservableObject
         if (mode is not null)
         {
             SelectedStartMode = mode;
+        }
+    }
+
+    private void SelectStartModelDisplay(ComposerSelectorItemViewModel? item)
+    {
+        if (!CanCommitSelectorItem(item, ComposerSelectorKind.Model, StartModelSelectorItems))
+        {
+            return;
+        }
+
+        var model = StartModelOptions.FirstOrDefault(candidate =>
+            string.Equals(candidate.Value, item!.SemanticValue, StringComparison.Ordinal));
+        if (model is not null)
+        {
+            SelectedStartModel = model;
         }
     }
 
@@ -437,6 +480,7 @@ public sealed partial class StartViewModel : ObservableObject
         => _startSessionModeSnapshot.CanSubmitPrompt
             && !StartAgentSelectorProjection.IsSubmitBlocked
             && !StartModeSelectorProjection.IsSubmitBlocked
+            && !StartModelSelectorProjection.IsSubmitBlocked
             && !StartProjectSelectorProjection.IsSubmitBlocked
             && !string.IsNullOrWhiteSpace(StartPrompt);
 
@@ -495,6 +539,43 @@ public sealed partial class StartViewModel : ObservableObject
             policy.SelectorEnabled && IsStartModeSelectorEnabled && IsInputEnabled));
     }
 
+    private SelectorProjectionResult ResolveStartModelSelectorProjection()
+    {
+        if (!Chat.HasNewSessionDraftModelSelector)
+        {
+            return SelectorProjectionResult.Empty(ComposerSelectorKind.Model);
+        }
+
+        var identity = BuildStartModelIdentity();
+        var showRemoteDirectoryPrompt = IsExpectedRemoteDirectorySelectionState();
+        var hasDraftError = Chat.HasNewSessionDraftError && !showRemoteDirectoryPrompt;
+        var hasConnectionError = Chat.HasConnectionError && !showRemoteDirectoryPrompt;
+        var hasModelError = hasDraftError || hasConnectionError;
+        var isConnectionInProgress = IsConnectionInProgressForStart();
+        IReadOnlyList<OptionValueViewModel> modelOptions = showRemoteDirectoryPrompt
+            ? Array.Empty<OptionValueViewModel>()
+            : StartModelOptions;
+
+        var policy = _modelSelectorPolicy.Project(new ModelSelectorPolicyInput(
+            identity,
+            identity,
+            modelOptions,
+            showRemoteDirectoryPrompt ? null : Chat.SelectedNewSessionDraftModelValue,
+            !showRemoteDirectoryPrompt && Chat.IsNewSessionDraftReady,
+            !showRemoteDirectoryPrompt && (isConnectionInProgress || _isNewSessionDraftRefreshPending || Chat.IsNewSessionDraftLoading),
+            hasModelError,
+            ResolveModelSelectorPlaceholderLabels()));
+
+        return _selectorProjectionPresenter.Present(new SelectorProjectionInput(
+            ComposerSelectorKind.Model,
+            policy.RealItems,
+            policy.SelectedSemanticValue,
+            policy.Placeholder,
+            policy.ReplaceSelectionWithPlaceholder,
+            policy.DisableRealItems,
+            policy.SelectorEnabled && IsInputEnabled));
+    }
+
     private SelectorProjectionResult ResolveStartProjectSelectorProjection()
     {
         var selectedProjectId = SelectedStartProjectId;
@@ -527,17 +608,34 @@ public sealed partial class StartViewModel : ObservableObject
             ResolvePreviewCwd() ?? string.Empty,
             StartModeOptions.Count.ToString(CultureInfo.InvariantCulture));
 
+    private string BuildStartModelIdentity()
+        => string.Join(
+            "|",
+            Chat.SelectedAcpProfile?.Id ?? string.Empty,
+            Chat.ConnectionInstanceId ?? string.Empty,
+            ResolvePreviewCwd() ?? string.Empty,
+            StartModelOptions.Count.ToString(CultureInfo.InvariantCulture));
+
+    private ModelSelectorPlaceholderLabels ResolveModelSelectorPlaceholderLabels()
+        => new(
+            Unresolved: Localize("Selector_Model_Unresolved", "模型尚未就绪"),
+            Loading: Localize("Selector_Model_Loading", "正在加载模型..."),
+            Error: Localize("Selector_Model_Error", "模型不可用"));
+
     private void RefreshAllSelectorProjections()
     {
         OnPropertyChanged(nameof(StartAgentSelectorProjection));
         OnPropertyChanged(nameof(StartModeSelectorProjection));
+        OnPropertyChanged(nameof(StartModelSelectorProjection));
         OnPropertyChanged(nameof(StartProjectSelectorProjection));
         OnPropertyChanged(nameof(ComposerSelectorSlots));
         OnPropertyChanged(nameof(StartAgentSelectorItems));
         OnPropertyChanged(nameof(StartModeSelectorItems));
+        OnPropertyChanged(nameof(StartModelSelectorItems));
         OnPropertyChanged(nameof(StartProjectSelectorItems));
         OnPropertyChanged(nameof(SelectedStartAgentSelectorItem));
         OnPropertyChanged(nameof(SelectedStartModeSelectorItem));
+        OnPropertyChanged(nameof(SelectedStartModelSelectorItem));
         OnPropertyChanged(nameof(SelectedStartProjectSelectorItem));
         OnPropertyChanged(nameof(StartDraftAutomationState));
     }
@@ -840,9 +938,21 @@ public sealed partial class StartViewModel : ObservableObject
             return;
         }
 
+        if (string.Equals(e.PropertyName, nameof(ChatViewModel.SelectedNewSessionDraftModelOption), StringComparison.Ordinal)
+            || string.Equals(e.PropertyName, nameof(ChatViewModel.SelectedNewSessionDraftModelValue), StringComparison.Ordinal))
+        {
+            OnPropertyChanged(nameof(SelectedStartModel));
+            RefreshAllSelectorProjections();
+            StartSessionAndSendCommand.NotifyCanExecuteChanged();
+            OnPropertyChanged(nameof(CanStartSessionAndSendUi));
+            return;
+        }
+
         if (string.Equals(e.PropertyName, nameof(ChatViewModel.IsNewSessionDraftLoading), StringComparison.Ordinal)
             || string.Equals(e.PropertyName, nameof(ChatViewModel.IsNewSessionDraftReady), StringComparison.Ordinal)
-            || string.Equals(e.PropertyName, nameof(ChatViewModel.NewSessionDraftModeOptions), StringComparison.Ordinal))
+            || string.Equals(e.PropertyName, nameof(ChatViewModel.NewSessionDraftModeOptions), StringComparison.Ordinal)
+            || string.Equals(e.PropertyName, nameof(ChatViewModel.NewSessionDraftModelOptions), StringComparison.Ordinal)
+            || string.Equals(e.PropertyName, nameof(ChatViewModel.HasNewSessionDraftModelSelector), StringComparison.Ordinal))
         {
             if (Chat.IsNewSessionDraftReady)
             {
@@ -967,6 +1077,13 @@ public sealed partial class StartViewModel : ObservableObject
 
     private void OnStartModeOptionsChanged(object? sender, NotifyCollectionChangedEventArgs e)
         => RefreshStartModeProjection();
+
+    private void OnStartModelOptionsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        RefreshAllSelectorProjections();
+        StartSessionAndSendCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(CanStartSessionAndSendUi));
+    }
 
     private void RefreshStartModeProjection()
     {

@@ -1786,6 +1786,7 @@ public sealed class StartViewModelTests
             Assert.True(slots.Agent.IsVisible);
             Assert.True(slots.Mode.IsVisible);
             Assert.True(slots.Project.IsVisible);
+            Assert.False(slots.Model.IsVisible);
             Assert.Same(startViewModel.SelectStartAgentDisplayCommand, slots.Agent.SelectionCommand);
             Assert.Same(startViewModel.SelectStartModeDisplayCommand, slots.Mode.SelectionCommand);
             Assert.Same(startViewModel.SelectStartProjectDisplayCommand, slots.Project.SelectionCommand);
@@ -1840,6 +1841,55 @@ public sealed class StartViewModelTests
             Assert.Contains("Agent One", startViewModel.StartAgentSelectorProjection.DisplayItems.Select(item => item.DisplayName));
             Assert.Contains("Alpha Remote", startViewModel.StartProjectSelectorProjection.DisplayItems.Select(item => item.DisplayName));
             Assert.False(startViewModel.StartSessionAndSendCommand.CanExecute(null));
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task ComposerSelectorSlots_WhenDraftHasModelConfig_ExposeModelSelector()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var workflow = new Mock<IChatLaunchWorkflow>();
+
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
+
+            await chat.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-1"));
+            await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
+            await chat.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+            await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+            await chat.DispatchConnectionAsync(new SetNewSessionDraftAction(new NewSessionDraftState(
+                ProfileId: "profile-1",
+                Cwd: @"C:\Repo\App",
+                RemoteSessionId: "remote-draft",
+                ConnectionInstanceId: "conn-1",
+                Phase: NewSessionDraftPhase.Ready,
+                Version: 1,
+                AvailableModes: ImmutableList<ConversationModeOptionSnapshot>.Empty,
+                SelectedModeId: null,
+                ConfigOptions: CreateModelConfigSnapshots("claude-sonnet").ToImmutableList(),
+                ShowConfigOptionsPanel: true,
+                AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+                SessionInfo: null)));
+            await WaitForConditionAsync(() =>
+                startViewModel.ComposerSelectorSlots.Model.IsVisible
+                && string.Equals(startViewModel.ComposerSelectorSlots.Model.SelectedItem?.SemanticValue, "claude-sonnet", StringComparison.Ordinal));
+
+            var slots = startViewModel.ComposerSelectorSlots;
+
+            Assert.True(slots.Model.IsVisible);
+            Assert.True(slots.Model.IsEnabled);
+            Assert.Same(startViewModel.SelectStartModelDisplayCommand, slots.Model.SelectionCommand);
+            Assert.Equal("claude-sonnet", slots.Model.SelectedItem?.SemanticValue);
         }
         finally
         {
@@ -2850,6 +2900,24 @@ public sealed class StartViewModelTests
             ShowConfigOptionsPanel: false,
             AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
             SessionInfo: null);
+
+    private static List<ConversationConfigOptionSnapshot> CreateModelConfigSnapshots(string selectedValue)
+        => new()
+        {
+            new ConversationConfigOptionSnapshot
+            {
+                Id = "model",
+                Name = "Model",
+                Category = "model",
+                ValueType = "select",
+                SelectedValue = selectedValue,
+                Options = new List<ConversationConfigOptionChoiceSnapshot>
+                {
+                    new() { Value = "claude-sonnet", Name = "Sonnet", Description = "Balanced model" },
+                    new() { Value = "claude-opus", Name = "Opus", Description = "Reasoning model" }
+                }
+            }
+        };
 
     private static Mock<IChatService> CreateConnectedChatService()
     {
