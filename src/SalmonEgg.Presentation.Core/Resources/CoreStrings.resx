@@ -30,6 +30,15 @@
   <data name="Selector_Mode_Default" xml:space="preserve">
     <value>默认模式</value>
   </data>
+  <data name="Selector_Model_Unresolved" xml:space="preserve">
+    <value>模型尚未就绪</value>
+  </data>
+  <data name="Selector_Model_Loading" xml:space="preserve">
+    <value>正在加载模型...</value>
+  </data>
+  <data name="Selector_Model_Error" xml:space="preserve">
+    <value>模型不可用</value>
+  </data>
   <data name="Selector_Agent_Loading" xml:space="preserve">
     <value>正在连接 Agent...</value>
   </data>

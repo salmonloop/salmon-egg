@@ -36,6 +36,15 @@
   <data name="Selector_Mode_Default" xml:space="preserve">
     <value>Default mode</value>
   </data>
+  <data name="Selector_Model_Unresolved" xml:space="preserve">
+    <value>Model is not ready</value>
+  </data>
+  <data name="Selector_Model_Loading" xml:space="preserve">
+    <value>Loading models...</value>
+  </data>
+  <data name="Selector_Model_Error" xml:space="preserve">
+    <value>Models unavailable</value>
+  </data>
   <data name="Selector_Agent_Loading" xml:space="preserve">
     <value>Connecting agent...</value>
   </data>
