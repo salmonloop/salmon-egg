@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Immutable;
 using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json;
@@ -4469,6 +4470,47 @@ public partial class ChatViewModelTests
         }, timeoutMilliseconds: 15000);
     }
 
+    private static bool HasStructuredLog(
+        Mock<ILogger<ChatViewModel>> logger,
+        LogLevel level,
+        string messagePrefix,
+        params (string Key, object? Value)[] expectedProperties)
+    {
+        return logger.Invocations.Any(invocation =>
+        {
+            if (!string.Equals(invocation.Method.Name, nameof(ILogger.Log), StringComparison.Ordinal)
+                || invocation.Arguments.Count < 3
+                || invocation.Arguments[0] is not LogLevel actualLevel
+                || actualLevel != level)
+            {
+                return false;
+            }
+
+            if (invocation.Arguments[2] is not IEnumerable<KeyValuePair<string, object?>> properties)
+            {
+                return expectedProperties.Length == 0;
+            }
+
+            var values = properties.ToDictionary(
+                property => property.Key,
+                property => property.Value,
+                StringComparer.Ordinal);
+
+            if (!values.TryGetValue("{OriginalFormat}", out var originalFormat)
+                || !Convert.ToString(originalFormat, CultureInfo.InvariantCulture)!.StartsWith(messagePrefix, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            return expectedProperties.All(expected =>
+                values.TryGetValue(expected.Key, out var actual)
+                && string.Equals(
+                    Convert.ToString(actual, CultureInfo.InvariantCulture),
+                    Convert.ToString(expected.Value, CultureInfo.InvariantCulture),
+                    StringComparison.Ordinal));
+        });
+    }
+
     [Fact]
     public async Task EnsureNewSessionDraftAsync_WhenAgentSupportsClose_CreatesDraftOnCurrentConnection()
     {
@@ -6440,6 +6482,99 @@ public partial class ChatViewModelTests
 
         state = await fixture.GetStateAsync();
         Assert.Equal(ChatTurnPhase.Completed, state.ActiveTurn!.Phase);
+    }
+
+    [Fact]
+    public async Task SendPromptAsync_LogsPromptLifecycleDiagnostics()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var commands = new Mock<IAcpConnectionCommands>(MockBehavior.Strict);
+
+        commands.Setup(x => x.EnsureRemoteSessionAsync(
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AcpRemoteSessionResult("remote-1", new SessionNewResponse("remote-1"), true));
+        commands.Setup(x => x.DispatchPromptToRemoteSessionAsync(
+                "remote-1",
+                "diagnose status bar",
+                It.IsAny<string?>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .Returns<string, string, string?, IAcpChatCoordinatorSink, Func<CancellationToken, Task<bool>>, CancellationToken>(
+                async (_, _, _, sink, _, cancellationToken) =>
+                {
+                    await sink.NotifyPromptRequestDispatchedAsync(cancellationToken);
+                    return new AcpPromptDispatchResult(
+                        "remote-1",
+                        new SessionPromptResponse(StopReason.EndTurn, "user-message-1"),
+                        false);
+                });
+
+        await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
+        var viewModel = fixture.ViewModel;
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(CreateConnectedChatService().Object));
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty.Add(
+                "conv-1",
+                new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+        });
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+        await WaitForQueueingPromptReadyAsync(syncContext, fixture, "conv-1", "diagnose status bar");
+
+        await AwaitWithSynchronizationContextAsync(
+            syncContext,
+            viewModel.SendPromptCommand.ExecuteAsync(null));
+
+        var finalState = await fixture.GetStateAsync();
+        Assert.NotNull(finalState.ActiveTurn);
+        var turnId = finalState.ActiveTurn!.TurnId;
+
+        Assert.True(
+            HasStructuredLog(
+                fixture.ViewModelLogger,
+                LogLevel.Information,
+                "Chat prompt turn began.",
+                ("ConversationId", "conv-1"),
+                ("TurnId", turnId),
+                ("TurnPhase", ChatTurnPhase.CreatingRemoteSession)),
+            "Expected a begin-turn diagnostic log with conversation and turn identity.");
+        Assert.True(
+            HasStructuredLog(
+                fixture.ViewModelLogger,
+                LogLevel.Information,
+                "Chat prompt request dispatched.",
+                ("ConversationId", "conv-1"),
+                ("TurnId", turnId),
+                ("RemoteSessionId", "remote-1"),
+                ("TurnPhase", ChatTurnPhase.WaitingForAgent)),
+            "Expected a prompt-dispatched diagnostic log with remote session identity.");
+        Assert.True(
+            HasStructuredLog(
+                fixture.ViewModelLogger,
+                LogLevel.Information,
+                "Chat prompt response received.",
+                ("ConversationId", "conv-1"),
+                ("TurnId", turnId),
+                ("RemoteSessionId", "remote-1"),
+                ("StopReason", StopReason.EndTurn),
+                ("PendingSessionUpdateCount", 0)),
+            "Expected a prompt-response diagnostic log with stopReason and pending update count.");
+        Assert.True(
+            HasStructuredLog(
+                fixture.ViewModelLogger,
+                LogLevel.Information,
+                "Chat prompt terminal phase applied.",
+                ("ConversationId", "conv-1"),
+                ("TurnId", turnId),
+                ("RemoteSessionId", "remote-1"),
+                ("StopReason", StopReason.EndTurn),
+                ("TerminalPhase", ChatTurnPhase.Completed)),
+            "Expected a terminal-turn diagnostic log with the completed phase.");
     }
 
     [Fact]

@@ -276,6 +276,11 @@ public partial class ChatViewModel
             PendingUserMessageLocalId: context.UserSnapshot.Id,
             PendingUserProtocolMessageId: context.PromptMessageId,
             PendingUserMessageText: context.PromptText));
+        Logger.LogInformation(
+            "Chat prompt turn began. ConversationId={ConversationId} TurnId={TurnId} TurnPhase={TurnPhase}",
+            context.ConversationId,
+            context.TurnId,
+            ChatTurnPhase.CreatingRemoteSession);
         ClearCurrentPromptOnUiThread();
         await UpsertTranscriptSnapshotAsync(context.ConversationId, context.UserSnapshot).ConfigureAwait(true);
         NotifyComposerProjectionChanged();
@@ -328,6 +333,7 @@ public partial class ChatViewModel
         await ApplyPromptDispatchResultAsync(
             context.ConversationId,
             context.TurnId,
+            promptDispatchResult.RemoteSessionId,
             promptDispatchResult.Response).ConfigureAwait(false);
     }
 
@@ -345,10 +351,17 @@ public partial class ChatViewModel
             return;
         }
 
+        var binding = state.ResolveBinding(activeTurn.ConversationId);
         await _chatStore.Dispatch(new AdvanceTurnPhaseAction(
             activeTurn.ConversationId,
             activeTurn.TurnId,
             ChatTurnPhase.WaitingForAgent)).ConfigureAwait(false);
+        Logger.LogInformation(
+            "Chat prompt request dispatched. ConversationId={ConversationId} TurnId={TurnId} RemoteSessionId={RemoteSessionId} TurnPhase={TurnPhase}",
+            activeTurn.ConversationId,
+            activeTurn.TurnId,
+            binding?.RemoteSessionId,
+            ChatTurnPhase.WaitingForAgent);
     }
 
     Task IAcpChatCoordinatorSink.NotifyPromptRequestDispatchedAsync(CancellationToken cancellationToken)

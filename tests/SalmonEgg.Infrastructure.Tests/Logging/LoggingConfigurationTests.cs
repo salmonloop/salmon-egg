@@ -178,6 +178,41 @@ public class LoggingConfigurationTests
     }
 
     [Fact]
+    public void ConfigureLogging_WhenLogFileExceedsSizeLimit_ShouldRollToAdditionalFile()
+    {
+        // Arrange
+        var tempPath = Path.Combine(Path.GetTempPath(), "SalmonEggTests", Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tempPath);
+        var payload = new string('x', 1_000_000);
+
+        try
+        {
+            // Act
+            var logger = LoggingConfiguration.ConfigureLogging(tempPath);
+            for (var i = 0; i < 14; i++)
+            {
+                logger.Information("Large diagnostic payload {Index} {Payload}", i, payload);
+            }
+
+            (logger as IDisposable)?.Dispose();
+
+            // Assert
+            var logDirectory = Path.Combine(tempPath, "logs");
+            var logFiles = Directory.GetFiles(logDirectory, "app-*.log");
+            Assert.True(
+                logFiles.Length > 1,
+                $"Expected file-size rolling to preserve diagnostics after the 10MB cap, but found {logFiles.Length} file(s).");
+        }
+        finally
+        {
+            if (Directory.Exists(tempPath))
+            {
+                Directory.Delete(tempPath, true);
+            }
+        }
+    }
+
+    [Fact]
     public void ConfigureLogging_LogFileShouldContainTimestampAndLevel()
     {
         // Arrange

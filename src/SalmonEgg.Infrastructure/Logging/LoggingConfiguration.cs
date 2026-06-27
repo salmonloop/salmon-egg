@@ -71,6 +71,7 @@ public static class LoggingConfiguration
                 path: logPath,
                 rollingInterval: RollingInterval.Day,
                 fileSizeLimitBytes: 10_485_760, // 10MB 限制 (Requirement 6.5)
+                rollOnFileSizeLimit: true,
                 retainedFileCountLimit: 7,      // 保留 7 天 (Requirement 6.5)
                 outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] [Thread:{ThreadId}] {Message:lj}{NewLine}{Exception}");
         }

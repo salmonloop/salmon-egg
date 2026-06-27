@@ -276,6 +276,14 @@ public partial class ChatViewModel
         }
     }
 
+    private int GetPendingSessionUpdateCount()
+    {
+        lock (_sessionUpdateTrackingSync)
+        {
+            return _pendingSessionUpdateCount;
+        }
+    }
+
     private Task WaitForAdapterReplayDrainAsync(long hydrationAttemptId, CancellationToken cancellationToken)
     {
         if (_chatService is not IAcpSessionUpdateBufferController adapter)
@@ -548,23 +556,48 @@ public partial class ChatViewModel
     private async Task ApplyPromptDispatchResultAsync(
         string conversationId,
         string turnId,
+        string? remoteSessionId,
         SessionPromptResponse response)
     {
+        var pendingSessionUpdateCount = GetPendingSessionUpdateCount();
+        Logger.LogInformation(
+            "Chat prompt response received. ConversationId={ConversationId} TurnId={TurnId} RemoteSessionId={RemoteSessionId} StopReason={StopReason} PendingSessionUpdateCount={PendingSessionUpdateCount}",
+            conversationId,
+            turnId,
+            remoteSessionId,
+            response.StopReason,
+            pendingSessionUpdateCount);
+
+        ChatTurnPhase? terminalPhase = null;
         switch (response.StopReason)
         {
             case StopReason.Cancelled:
                 await PreemptivelyCancelTurnAsync(conversationId, turnId).ConfigureAwait(true);
+                terminalPhase = ChatTurnPhase.Cancelled;
                 break;
 
             case StopReason.Refusal:
                 await _chatStore.Dispatch(new FailTurnAction(conversationId, turnId, StopReason.Refusal.ToString())).ConfigureAwait(true);
+                terminalPhase = ChatTurnPhase.Failed;
                 break;
 
             case StopReason.EndTurn:
             case StopReason.MaxTokens:
             case StopReason.MaxTurnRequests:
                 await _chatStore.Dispatch(new CompleteTurnAction(conversationId, turnId)).ConfigureAwait(true);
+                terminalPhase = ChatTurnPhase.Completed;
                 break;
+        }
+
+        if (terminalPhase.HasValue)
+        {
+            Logger.LogInformation(
+                "Chat prompt terminal phase applied. ConversationId={ConversationId} TurnId={TurnId} RemoteSessionId={RemoteSessionId} StopReason={StopReason} TerminalPhase={TerminalPhase}",
+                conversationId,
+                turnId,
+                remoteSessionId,
+                response.StopReason,
+                terminalPhase.Value);
         }
     }
 
