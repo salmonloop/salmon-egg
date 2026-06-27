@@ -1995,7 +1995,7 @@ public sealed class AcpChatCoordinatorTests
     }
 
     [Fact]
-    public async Task DispatchPromptToRemoteSessionAsync_ForwardsPromptMessageId_ToSessionPrompt()
+    public async Task DispatchPromptToRemoteSessionAsync_DoesNotPutPromptMessageIdOnSessionPrompt()
     {
         var service = CreateChatService();
         var sink = new FakeSink
@@ -2011,7 +2011,7 @@ public sealed class AcpChatCoordinatorTests
         service
             .Setup(x => x.SendPromptAsync(It.IsAny<SessionPromptParams>(), It.IsAny<CancellationToken>()))
             .Callback<SessionPromptParams, CancellationToken>((parameters, _) => captured = parameters)
-            .ReturnsAsync(new SessionPromptResponse(StopReason.EndTurn, "user-message-1"));
+            .ReturnsAsync(new SessionPromptResponse(StopReason.EndTurn));
 
         IAcpConnectionCommands sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
@@ -2024,37 +2024,9 @@ public sealed class AcpChatCoordinatorTests
 
         Assert.NotNull(captured);
         Assert.Equal("remote-123", captured!.SessionId);
-        Assert.Equal("client-msg-1", captured.MessageId);
-        Assert.Equal("user-message-1", result.Response.UserMessageId);
-    }
-
-    [Fact]
-    public async Task DispatchPromptToRemoteSessionAsync_PreservesUserMessageId_FromPromptResponse()
-    {
-        var service = CreateChatService();
-        var sink = new FakeSink
-        {
-            CurrentChatService = service.Object,
-            IsConnected = true,
-            IsInitialized = true
-        };
-        var factory = new Mock<IAcpChatServiceFactory>();
-        var logger = new Mock<ILogger<AcpChatCoordinator>>();
-
-        service
-            .Setup(x => x.SendPromptAsync(It.IsAny<SessionPromptParams>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SessionPromptResponse(StopReason.EndTurn, "user-message-42"));
-
-        IAcpConnectionCommands sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
-
-        var result = await sut.DispatchPromptToRemoteSessionAsync(
-            "remote-123",
-            "hi",
-            "client-msg-42",
-            sink,
-            _ => Task.FromResult(true));
-
-        Assert.Equal("user-message-42", result.Response.UserMessageId);
+        Assert.Single(captured.Prompt);
+        var text = Assert.IsType<TextContentBlock>(captured.Prompt[0]);
+        Assert.Equal("hi", text.Text);
     }
 
     [Theory]
@@ -2124,7 +2096,6 @@ public sealed class AcpChatCoordinatorTests
 
         Assert.Equal(JsonRpcErrorCode.ResourceNotFound, ex.ErrorCode);
         Assert.Single(sentPrompts);
-        Assert.Equal("client-msg-retry", sentPrompts[0].MessageId);
         Assert.Equal("remote-stale", sentPrompts[0].SessionId);
         Assert.Equal("remote-stale", sink.CurrentRemoteSessionId);
         Assert.Equal(0, sink.BindingCommands.ClearCalls);

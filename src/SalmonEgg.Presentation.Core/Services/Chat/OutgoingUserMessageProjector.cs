@@ -38,33 +38,6 @@ public sealed class OutgoingUserMessageProjector
         return new UserMessageProjection(existing, resolvedProtocolMessageId);
     }
 
-    public ConversationMessageSnapshot? TryReconcilePromptAcknowledgement(
-        IImmutableList<ConversationMessageSnapshot> transcript,
-        string pendingUserMessageLocalId,
-        string? responseUserMessageId)
-    {
-        ArgumentNullException.ThrowIfNull(transcript);
-
-        if (string.IsNullOrWhiteSpace(pendingUserMessageLocalId)
-            || string.IsNullOrWhiteSpace(responseUserMessageId))
-        {
-            return null;
-        }
-
-        var existing = transcript.LastOrDefault(message =>
-            message.IsOutgoing
-            && string.Equals(message.Id, pendingUserMessageLocalId, StringComparison.Ordinal));
-        if (existing is null
-            || string.Equals(existing.ProtocolMessageId, responseUserMessageId, StringComparison.Ordinal))
-        {
-            return null;
-        }
-
-        var reconciled = CloneSnapshot(existing);
-        reconciled.ProtocolMessageId = responseUserMessageId;
-        return reconciled;
-    }
-
     private static ConversationMessageSnapshot? ResolveExistingOutgoingUserMessageSnapshot(
         IImmutableList<ConversationMessageSnapshot> transcript,
         string? protocolMessageId,

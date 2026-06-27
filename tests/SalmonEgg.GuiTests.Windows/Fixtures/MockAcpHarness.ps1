@@ -708,9 +708,7 @@ function Handle-AcpMessage([object]$message)
                 $script:selectedModeId = $requestedModeId
             }
 
-            Send-Response $message.id @{
-                modeId = $script:selectedModeId
-            }
+            Send-Response $message.id @{}
             return
         }
 
@@ -722,7 +720,6 @@ function Handle-AcpMessage([object]$message)
                 $requestedSessionId = $script:sessionId
             }
 
-            $requestMessageId = [string]$message.params.messageId
             $promptText = Resolve-PromptText $message.params
 
             if ($script:promptAckMode -eq 'late-authoritative-update')
@@ -742,7 +739,7 @@ function Handle-AcpMessage([object]$message)
                 }
                 else
                 {
-                    $requestMessageId
+                    "mock-user-message"
                 }
 
                 Send-SessionUpdate $requestedSessionId @{
@@ -756,7 +753,6 @@ function Handle-AcpMessage([object]$message)
 
             Send-Response $message.id @{
                 stopReason = 'end_turn'
-                userMessageId = $requestMessageId
             }
             return
         }

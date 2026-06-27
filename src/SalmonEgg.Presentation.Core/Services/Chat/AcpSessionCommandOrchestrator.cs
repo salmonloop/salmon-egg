@@ -250,8 +250,7 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
         var chatService = RequireReadyChatService(sink);
         var promptParams = new SessionPromptParams(
             remoteSessionId,
-            new List<ContentBlock> { new TextContentBlock { Text = promptText } },
-            messageId: promptMessageId);
+            new List<ContentBlock> { new TextContentBlock { Text = promptText } });
 
         try
         {

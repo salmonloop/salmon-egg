@@ -597,36 +597,6 @@ public partial class ChatViewModel
         }
     }
 
-    private async Task ReconcilePromptUserMessageIdAsync(
-        string? conversationId,
-        string pendingUserMessageLocalId,
-        string requestMessageId,
-        string? responseUserMessageId)
-    {
-        if (string.IsNullOrWhiteSpace(conversationId) || string.IsNullOrWhiteSpace(pendingUserMessageLocalId))
-        {
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(responseUserMessageId))
-        {
-            return;
-        }
-
-        var currentState = await _chatStore.GetCurrentStateAsync();
-        var transcript = currentState.ResolveContentSlice(conversationId)?.Transcript
-            ?? ImmutableList<ConversationMessageSnapshot>.Empty;
-        var reconciled = _outgoingUserMessageProjector.TryReconcilePromptAcknowledgement(
-            transcript,
-            pendingUserMessageLocalId,
-            responseUserMessageId);
-        if (reconciled is null)
-        {
-            return;
-        }
-        await UpsertTranscriptSnapshotAsync(conversationId, reconciled).ConfigureAwait(false);
-    }
-
     private async Task HandleAgentContentChunkAsync(string? conversationId, AgentMessageUpdate update)
     {
         var content = update.Content;
@@ -2362,9 +2332,10 @@ public partial class ChatViewModel
     private async Task ApplySessionModeResponseAsync(
         string conversationId,
         SessionSetModeResponse response,
-        string remoteSessionId)
+        string remoteSessionId,
+        string acceptedModeId)
     {
-        if (response is null || string.IsNullOrWhiteSpace(response.ModeId))
+        if (response is null || string.IsNullOrWhiteSpace(acceptedModeId))
         {
             return;
         }
@@ -2372,7 +2343,7 @@ public partial class ChatViewModel
         await ApplySessionUpdateDeltaAsync(conversationId, _acpSessionUpdateProjector.Project(
             new SessionUpdateEventArgs(
                 remoteSessionId,
-                new CurrentModeUpdate(response.ModeId)))).ConfigureAwait(true);
+                new CurrentModeUpdate(acceptedModeId)))).ConfigureAwait(true);
     }
 
     private bool IsConversationConfigAuthoritative(string conversationId)

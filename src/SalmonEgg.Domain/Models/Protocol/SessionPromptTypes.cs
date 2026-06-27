@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text.Json;
 using System.Text.Json.Serialization;
 using SalmonEgg.Domain.Models.Content;
 using SalmonEgg.Domain.Models.Session;
@@ -25,25 +24,11 @@ namespace SalmonEgg.Domain.Models.Protocol
         [JsonPropertyName("prompt")]
         public List<ContentBlock> Prompt { get; set; } = new List<ContentBlock>();
 
-
         /// <summary>
-        /// 最大生成的令牌数（可选）。
+        /// 协议扩展字段（_meta）。
         /// </summary>
-        [JsonPropertyName("maxTokens")]
-        public int? MaxTokens { get; set; }
-
-        /// <summary>
-        /// 停止序列列表（可选）。
-        /// 当生成遇到这些序列时会停止。
-        /// </summary>
-        [JsonPropertyName("stopSequences")]
-        public List<string>? StopSequences { get; set; }
-
-        /// <summary>
-        /// 客户端消息 ID（可选）。
-        /// </summary>
-        [JsonPropertyName("messageId")]
-        public string? MessageId { get; set; }
+        [JsonPropertyName("_meta")]
+        public Dictionary<string, object?>? Meta { get; set; }
 
         /// <summary>
         /// 创建新的 SessionPromptParams 实例。
@@ -58,17 +43,10 @@ namespace SalmonEgg.Domain.Models.Protocol
         
         /// <param name="sessionId">会话 ID</param>
         /// <param name="prompt">提示内容块数组</param>
-        /// <param name="maxTokens">最大令牌数</param>
-        /// <param name="stopSequences">停止序列</param>
-        /// <param name="messageId">客户端消息 ID</param>
-        public SessionPromptParams(string sessionId, List<ContentBlock> prompt, int? maxTokens = null, List<string>? stopSequences = null, string? messageId = null)
+        public SessionPromptParams(string sessionId, List<ContentBlock> prompt)
         {
             SessionId = sessionId;
             Prompt = prompt;
-
-            MaxTokens = maxTokens;
-            StopSequences = stopSequences;
-            MessageId = messageId;
         }
     }
 
@@ -86,10 +64,10 @@ namespace SalmonEgg.Domain.Models.Protocol
         public StopReason StopReason { get; set; }
 
         /// <summary>
-        /// 用户消息 ID（可选）。
+        /// 协议扩展字段（_meta）。
         /// </summary>
-        [JsonPropertyName("userMessageId")]
-        public string? UserMessageId { get; set; }
+        [JsonPropertyName("_meta")]
+        public Dictionary<string, object?>? Meta { get; set; }
 
         /// <summary>
         /// 创建新的 SessionPromptResponse 实例。
@@ -102,11 +80,9 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// 创建新的 SessionPromptResponse 实例。
         /// </summary>
         /// <param name="stopReason">停止原因</param>
-        /// <param name="userMessageId">用户消息 ID</param>
-        public SessionPromptResponse(StopReason stopReason, string? userMessageId = null)
+        public SessionPromptResponse(StopReason stopReason)
         {
             StopReason = stopReason;
-            UserMessageId = userMessageId;
         }
     }
 }

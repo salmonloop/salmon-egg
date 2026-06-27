@@ -49,25 +49,16 @@ namespace SalmonEgg.Domain.Models.Protocol
     public class SessionSetModeResponse
     {
         /// <summary>
-        /// 新的模式 ID。
+        /// 协议扩展字段（_meta）。
         /// </summary>
-        [JsonPropertyName("modeId")]
-        public string ModeId { get; set; } = string.Empty;
+        [JsonPropertyName("_meta")]
+        public Dictionary<string, object?>? Meta { get; set; }
 
         /// <summary>
         /// 创建新的 SessionSetModeResponse 实例。
         /// </summary>
         public SessionSetModeResponse()
         {
-        }
-
-        /// <summary>
-        /// 创建新的 SessionSetModeResponse 实例。
-        /// </summary>
-        /// <param name="modeId">新的模式 ID</param>
-        public SessionSetModeResponse(string modeId)
-        {
-            ModeId = modeId;
         }
     }
 

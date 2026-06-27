@@ -324,12 +324,6 @@ public partial class ChatViewModel
                 token)
             .ConfigureAwait(false);
 
-        await ReconcilePromptUserMessageIdAsync(
-            context.ConversationId,
-            context.UserSnapshot.Id,
-            context.PromptMessageId,
-            promptDispatchResult.Response.UserMessageId).ConfigureAwait(false);
-
         await ApplyPromptDispatchResultAsync(
             context.ConversationId,
             context.TurnId,
@@ -1365,7 +1359,8 @@ public partial class ChatViewModel
         await ApplySessionModeResponseAsync(
             conversationId,
             modeResponse,
-            remoteSessionId).ConfigureAwait(true);
+            remoteSessionId,
+            modeId).ConfigureAwait(true);
     }
 
     private async Task SetModelAsync(string? modelValue)

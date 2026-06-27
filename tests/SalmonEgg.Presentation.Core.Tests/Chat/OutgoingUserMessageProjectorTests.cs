@@ -52,24 +52,6 @@ public sealed class OutgoingUserMessageProjectorTests
         Assert.Equal("server-auth-1", projection.ProtocolMessageId);
     }
 
-    [Fact]
-    public void TryReconcilePromptAcknowledgement_ClonesPendingOutgoingMessageWithAuthoritativeId()
-    {
-        var optimistic = CreateOutgoingSnapshot("local-1", "hello");
-        var transcript = ImmutableList.Create(optimistic);
-
-        var reconciled = _projector.TryReconcilePromptAcknowledgement(
-            transcript,
-            "local-1",
-            "server-auth-77");
-
-        Assert.NotNull(reconciled);
-        Assert.NotSame(optimistic, reconciled);
-        Assert.Equal("local-1", reconciled!.Id);
-        Assert.Equal("server-auth-77", reconciled.ProtocolMessageId);
-        Assert.Null(optimistic.ProtocolMessageId);
-    }
-
     private static ActiveTurnState CreateActiveTurn()
         => new(
             "conv-1",

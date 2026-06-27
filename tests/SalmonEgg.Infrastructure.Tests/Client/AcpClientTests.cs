@@ -847,6 +847,22 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         [Fact]
+        public async Task SetSessionModeAsync_WhenAgentReturnsStandardEmptyObject_UpdatesTrackedSessionFromRequest()
+        {
+            var parser = new MessageParser();
+            var sessionManager = new SessionManager();
+            await sessionManager.CreateSessionAsync("session-123", AbsoluteCwd);
+            var client = await CreateInitializedClientAsync(sessionManager: sessionManager);
+
+            SetupJsonRpcResponse("session/set_mode", ElementFromJson("{}"), parser);
+
+            var result = await client.SetSessionModeAsync(new SessionSetModeParams("session-123", "plan"));
+
+            Assert.NotNull(result);
+            Assert.Equal("plan", sessionManager.GetSession("session-123")!.Mode.CurrentModeId);
+        }
+
+        [Fact]
         public async Task ResumeSessionAsync_WhenAgentDoesNotSupportSessionResume_DoesNotSendProtocolRequest()
         {
             var client = await CreateInitializedClientAsync(

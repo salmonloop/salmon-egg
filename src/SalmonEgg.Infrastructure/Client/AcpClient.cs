@@ -505,7 +505,7 @@ namespace SalmonEgg.Infrastructure.Client
             // 更新会话模式
             _sessionManager.UpdateSession(@params.SessionId, session =>
             {
-                session.Mode.CurrentModeId = setModeResponse.ModeId;
+                session.Mode.CurrentModeId = @params.ModeId;
             });
 
             return setModeResponse;

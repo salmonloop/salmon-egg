@@ -61,7 +61,7 @@ public sealed class SessionPromptTypesTests
     }
 
     [Test]
-    public void SessionPromptParams_MessageId_Should_Serialize_WhenPresent()
+    public void SessionPromptParams_Should_Serialize_OnlyOfficialRootFields()
     {
         var sessionParams = new SessionPromptParams
         {
@@ -69,31 +69,28 @@ public sealed class SessionPromptTypesTests
             Prompt = new List<ContentBlock>
             {
                 new TextContentBlock { Text = "Hello, world!" }
-            },
-            MessageId = "client-msg-1"
+            }
         };
 
         var json = JsonSerializer.Serialize(sessionParams, CreateJsonOptions());
         var parsed = JsonDocument.Parse(json);
 
-        Assert.That(parsed.RootElement.TryGetProperty("messageId", out var messageId), Is.True);
-        Assert.That(messageId.GetString(), Is.EqualTo("client-msg-1"));
+        Assert.That(parsed.RootElement.TryGetProperty("sessionId", out _), Is.True);
+        Assert.That(parsed.RootElement.TryGetProperty("prompt", out _), Is.True);
+        Assert.That(parsed.RootElement.TryGetProperty("maxTokens", out _), Is.False);
+        Assert.That(parsed.RootElement.TryGetProperty("stopSequences", out _), Is.False);
+        Assert.That(parsed.RootElement.TryGetProperty("messageId", out _), Is.False);
     }
 
     [Test]
-    public void SessionPromptResponse_UserMessageId_Should_Deserialize_WhenPresent()
+    public void SessionPromptResponse_Should_Serialize_OnlyOfficialRootFields()
     {
-        var json = """
-        {
-          "stopReason": "end_turn",
-          "userMessageId": "server-msg-1"
-        }
-        """;
+        var response = new SessionPromptResponse(StopReason.EndTurn);
+        var json = JsonSerializer.Serialize(response, CreateJsonOptions());
+        using var parsed = JsonDocument.Parse(json);
 
-        var parsed = JsonSerializer.Deserialize<SessionPromptResponse>(json, CreateJsonOptions());
-
-        Assert.That(parsed, Is.Not.Null);
-        Assert.That(parsed!.StopReason, Is.EqualTo(StopReason.EndTurn));
-        Assert.That(parsed.UserMessageId, Is.EqualTo("server-msg-1"));
+        Assert.That(parsed.RootElement.TryGetProperty("stopReason", out var stopReason), Is.True);
+        Assert.That(stopReason.GetString(), Is.EqualTo("end_turn"));
+        Assert.That(parsed.RootElement.TryGetProperty("userMessageId", out _), Is.False);
     }
 }

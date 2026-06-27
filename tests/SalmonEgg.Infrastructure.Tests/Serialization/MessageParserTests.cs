@@ -116,35 +116,51 @@ public class MessageParserTests
         var promptParams = new SessionPromptParams
         {
             SessionId = "sess_test",
-            Prompt = new List<ContentBlock> { new TextContentBlock { Text = "hi" } },
-            MaxTokens = null,
-            StopSequences = null
+            Prompt = new List<ContentBlock> { new TextContentBlock { Text = "hi" } }
         };
 
         var request = new JsonRpcRequest(
             id: 3,
             method: "session/prompt",
-            @params: JsonSerializer.SerializeToElement(promptParams, typeof(SessionPromptParams), parser.Options));
+            @params: JsonSerializer.SerializeToElement(promptParams, AcpJsonContext.Default.SessionPromptParams));
 
         var json = parser.SerializeMessage(request);
 
         Assert.DoesNotContain("\"maxTokens\"", json, StringComparison.Ordinal);
         Assert.DoesNotContain("\"stopSequences\"", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"messageId\"", json, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Options_ShouldSerialize_SessionPromptParams_WithMessageId()
+    public void Options_ShouldDeserializeAndDrop_NonStandardSessionPromptResponseRootFields()
     {
-        var parser = new MessageParser();
-        var parameters = new SessionPromptParams(
-            "sess-1",
-            new List<ContentBlock> { new TextContentBlock("hello") },
-            messageId: "client-msg-42");
+        var json = """
+        {
+          "stopReason": "end_turn",
+          "userMessageId": "server-msg-42"
+        }
+        """;
 
-        var json = JsonSerializer.Serialize(parameters, parser.Options);
-        using var doc = JsonDocument.Parse(json);
+        var response = JsonSerializer.Deserialize(json, AcpJsonContext.Default.SessionPromptResponse);
+        var roundTripped = JsonSerializer.Serialize(response, AcpJsonContext.Default.SessionPromptResponse);
 
-        Assert.Equal("client-msg-42", doc.RootElement.GetProperty("messageId").GetString());
+        Assert.Contains("\"stopReason\":\"end_turn\"", roundTripped, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"userMessageId\"", roundTripped, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Options_ShouldDeserializeAndDrop_NonStandardSessionSetModeResponseRootFields()
+    {
+        var json = """
+        {
+          "modeId": "plan"
+        }
+        """;
+
+        var response = JsonSerializer.Deserialize(json, AcpJsonContext.Default.SessionSetModeResponse);
+        var roundTripped = JsonSerializer.Serialize(response, AcpJsonContext.Default.SessionSetModeResponse);
+
+        Assert.DoesNotContain("\"modeId\"", roundTripped, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -181,24 +197,6 @@ public class MessageParserTests
 
         Assert.NotNull(response);
         Assert.Equal(expected, response!.StopReason);
-    }
-
-    [Fact]
-    public void Options_ShouldDeserialize_SessionPromptResponse_WithUserMessageId()
-    {
-        var parser = new MessageParser();
-        var json = """
-        {
-          "stopReason": "end_turn",
-          "userMessageId": "server-msg-42"
-        }
-        """;
-
-        var response = JsonSerializer.Deserialize<SessionPromptResponse>(json, parser.Options);
-
-        Assert.NotNull(response);
-        Assert.Equal(StopReason.EndTurn, response!.StopReason);
-        Assert.Equal("server-msg-42", response.UserMessageId);
     }
 
     [Fact]

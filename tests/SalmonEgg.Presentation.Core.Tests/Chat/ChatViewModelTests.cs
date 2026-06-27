@@ -5777,7 +5777,7 @@ public partial class ChatViewModelTests
             }
 
             CurrentSessionId = @params.SessionId;
-            return Task.FromResult(new SessionPromptResponse(StopReason.EndTurn, "user-message-1"));
+            return Task.FromResult(new SessionPromptResponse(StopReason.EndTurn));
         }
 
         public Task<SessionSetModeResponse> SetSessionModeAsync(SessionSetModeParams @params)
@@ -6508,7 +6508,7 @@ public partial class ChatViewModelTests
                     await sink.NotifyPromptRequestDispatchedAsync(cancellationToken);
                     return new AcpPromptDispatchResult(
                         "remote-1",
-                        new SessionPromptResponse(StopReason.EndTurn, "user-message-1"),
+                        new SessionPromptResponse(StopReason.EndTurn),
                         false);
                 });
 
@@ -6601,7 +6601,7 @@ public partial class ChatViewModelTests
                 {
                     capturedPromptMessageId = promptMessageId;
                     await sink.NotifyPromptRequestDispatchedAsync(cancellationToken);
-                    return new AcpPromptDispatchResult("remote-1", new SessionPromptResponse(StopReason.EndTurn, "11111111-1111-1111-1111-111111111111"), false);
+                    return new AcpPromptDispatchResult("remote-1", new SessionPromptResponse(StopReason.EndTurn), false);
                 });
 
         await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
@@ -7302,7 +7302,7 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
-    public async Task SendPromptAsync_WhenPromptResponseReturnsUserMessageId_ReconcilesOptimisticOutgoingMessage()
+    public async Task SendPromptAsync_WhenPromptResponseCompletes_DoesNotAssignProtocolMessageIdFromResponse()
     {
         var syncContext = new QueueingSynchronizationContext();
         var commands = new Mock<IAcpConnectionCommands>(MockBehavior.Strict);
@@ -7321,7 +7321,7 @@ public partial class ChatViewModelTests
                 {
                     capturedPromptMessageId = promptMessageId;
                     await sink.NotifyPromptRequestDispatchedAsync(cancellationToken);
-                    return new AcpPromptDispatchResult("remote-1", new SessionPromptResponse(StopReason.EndTurn, "user-auth-1"), false);
+                    return new AcpPromptDispatchResult("remote-1", new SessionPromptResponse(StopReason.EndTurn), false);
                 });
 
         await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
@@ -7344,7 +7344,7 @@ public partial class ChatViewModelTests
             ?? ImmutableList<ConversationMessageSnapshot>.Empty;
         Assert.Single(transcript);
         Assert.Equal("hello", transcript[0].TextContent);
-        Assert.Equal("user-auth-1", transcript[0].ProtocolMessageId);
+        Assert.Null(transcript[0].ProtocolMessageId);
         Assert.False(string.IsNullOrWhiteSpace(capturedPromptMessageId));
         commands.Verify(
             x => x.DispatchPromptToRemoteSessionAsync(

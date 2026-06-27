@@ -535,7 +535,7 @@ public partial class ChatViewModel
                     new SessionSetModeParams(draft.RemoteSessionId!, modeId)).ConfigureAwait(false);
                 delta = _acpSessionUpdateProjector.Project(new SessionUpdateEventArgs(
                     draft.RemoteSessionId!,
-                    new CurrentModeUpdate(response.ModeId)));
+                    new CurrentModeUpdate(modeId)));
             }
 
             var updatedDraft = MergeNewSessionDraftDelta(draft, delta);
