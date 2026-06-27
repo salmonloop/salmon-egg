@@ -236,6 +236,19 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
+    public void DependencyInjection_AcpEvictionOptions_DoesNotLoadAppSettingsInSingletonFactory()
+    {
+        var dependencyInjection = LoadFile(@"SalmonEgg\SalmonEgg\DependencyInjection.cs");
+        var section = ExtractSection(
+            dependencyInjection,
+            "services.AddSingleton(sp =>\n            AcpConnectionEvictionOptionsLoader",
+            "services.AddSingleton<AcpConnectionEvictionOptionsBridge>();");
+
+        Assert.Contains("AcpConnectionEvictionOptionsLoader.LoadEnvironmentDefaults", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("IAppSettingsService", section, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MainPage_DoesNotBackWriteSelectionFromFrameNavigation()
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");

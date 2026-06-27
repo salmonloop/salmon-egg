@@ -1,7 +1,5 @@
 using System;
 using Microsoft.Extensions.Logging;
-using SalmonEgg.Domain.Models;
-using SalmonEgg.Domain.Services;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 
@@ -12,27 +10,12 @@ public static class AcpConnectionEvictionOptionsLoader
     private const string MaxWarmProfilesEnv = "SALMONEGG_ACP_EVICTION_MAX_WARM_PROFILES";
     private const string MaxPinnedProfilesEnv = "SALMONEGG_ACP_EVICTION_MAX_PINNED_PROFILES";
 
-    public static AcpConnectionEvictionOptions Load(
-        IAppSettingsService appSettingsService,
-        ILogger? logger = null)
+    public static AcpConnectionEvictionOptions LoadEnvironmentDefaults(ILogger? logger = null)
     {
-        ArgumentNullException.ThrowIfNull(appSettingsService);
-
-        AppSettings? settings = null;
-        try
-        {
-            // TODO: Make this method async and await LoadAsync once callers are async-capable.
-            settings = appSettingsService.LoadAsync().ConfigureAwait(false).GetAwaiter().GetResult();
-        }
-        catch (Exception ex)
-        {
-            logger?.LogWarning(ex, "Failed to load ACP eviction options from app settings. Falling back to defaults/env.");
-        }
-
-        var enable = ParseBoolEnv(EnableEnv) ?? settings?.AcpEnableConnectionEviction ?? false;
-        var idleMinutes = ParseIntEnv(IdleTtlMinutesEnv) ?? settings?.AcpConnectionIdleTtlMinutes;
-        var maxWarm = ParseIntEnv(MaxWarmProfilesEnv) ?? settings?.AcpMaxWarmProfiles;
-        var maxPinned = ParseIntEnv(MaxPinnedProfilesEnv) ?? settings?.AcpMaxPinnedProfiles;
+        var enable = ParseBoolEnv(EnableEnv) ?? false;
+        var idleMinutes = ParseIntEnv(IdleTtlMinutesEnv);
+        var maxWarm = ParseIntEnv(MaxWarmProfilesEnv);
+        var maxPinned = ParseIntEnv(MaxPinnedProfilesEnv);
 
         var options = new AcpConnectionEvictionOptions
         {
@@ -64,4 +47,3 @@ public static class AcpConnectionEvictionOptionsLoader
         return int.TryParse(raw, out var parsed) ? parsed : null;
     }
 }
-

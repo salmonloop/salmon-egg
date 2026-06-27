@@ -318,8 +318,7 @@ public static class DependencyInjection
                 sp.GetRequiredService<ILogger<AcpConnectionCoordinator>>(),
                 sp.GetRequiredService<IAcpMcpServerResolver>()));
         services.AddSingleton(sp =>
-            AcpConnectionEvictionOptionsLoader.Load(
-                sp.GetRequiredService<IAppSettingsService>(),
+            AcpConnectionEvictionOptionsLoader.LoadEnvironmentDefaults(
                 sp.GetRequiredService<ILoggerFactory>().CreateLogger("AcpConnectionEvictionOptionsLoader")));
         services.AddSingleton<AcpConnectionEvictionOptionsBridge>();
         services.AddSingleton<IAcpConnectionEvictionPolicy>(sp =>
