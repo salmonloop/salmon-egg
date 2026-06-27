@@ -1377,17 +1377,10 @@ public partial class ChatViewModel
                 return true;
             }
 
-            if (ShouldOwnRemoteHydrationUi(conversationId, activationVersion))
-            {
-                ownsConnectionLifecycleOverlay = true;
-                await PostToUiAsync(() =>
-                {
-                    SetConversationOverlayOwners(
-                        sessionSwitchConversationId: _sessionSwitchOverlayConversationId,
-                        connectionLifecycleConversationId: conversationId,
-                        historyConversationId: _historyOverlayConversationId);
-                }).ConfigureAwait(false);
-            }
+            ownsConnectionLifecycleOverlay = await TryAcquireConnectionLifecycleOverlayAsync(
+                    conversationId,
+                    activationVersion)
+                .ConfigureAwait(false);
 
             var connectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
             var hasPendingConnection = connectionState.Phase is ConnectionPhase.Connecting or ConnectionPhase.Initializing
@@ -1511,13 +1504,7 @@ public partial class ChatViewModel
             if (ownsConnectionLifecycleOverlay
                 && string.Equals(_connectionLifecycleOverlayConversationId, conversationId, StringComparison.Ordinal))
             {
-                await PostToUiAsync(() =>
-                {
-                    SetConversationOverlayOwners(
-                        sessionSwitchConversationId: _sessionSwitchOverlayConversationId,
-                        connectionLifecycleConversationId: null,
-                        historyConversationId: _historyOverlayConversationId);
-                }).ConfigureAwait(false);
+                await ReleaseConnectionLifecycleOverlayAsync(conversationId).ConfigureAwait(false);
             }
         }
     }
@@ -1540,24 +1527,41 @@ public partial class ChatViewModel
             return;
         }
 
-        if (await IsRemoteConnectionReadyAsync(binding.ProfileId, cancellationToken).ConfigureAwait(false))
+        var ownsConnectionLifecycleOverlay = false;
+        try
         {
-            return;
-        }
+            if (await IsRemoteConnectionReadyAsync(binding.ProfileId, cancellationToken).ConfigureAwait(false))
+            {
+                return;
+            }
 
-        var profile = await ResolveProfileConfigurationAsync(binding.ProfileId, cancellationToken).ConfigureAwait(false);
-        if (profile is null)
+            ownsConnectionLifecycleOverlay = await TryAcquireConnectionLifecycleOverlayAsync(
+                    conversationId,
+                    activationVersion)
+                .ConfigureAwait(false);
+
+            var profile = await ResolveProfileConfigurationAsync(binding.ProfileId, cancellationToken).ConfigureAwait(false);
+            if (profile is null)
+            {
+                return;
+            }
+
+            var connectionContext = _conversationProfileConnectionGateway.CreateConnectionContext(
+                conversationId,
+                binding,
+                profile.Id,
+                preserveConversation: true,
+                activationVersion);
+            await ConnectToAcpProfileCoreAsync(profile, connectionContext, cancellationToken).ConfigureAwait(false);
+        }
+        finally
         {
-            return;
+            if (ownsConnectionLifecycleOverlay
+                && string.Equals(_connectionLifecycleOverlayConversationId, conversationId, StringComparison.Ordinal))
+            {
+                await ReleaseConnectionLifecycleOverlayAsync(conversationId).ConfigureAwait(false);
+            }
         }
-
-        var connectionContext = _conversationProfileConnectionGateway.CreateConnectionContext(
-            conversationId,
-            binding,
-            profile.Id,
-            preserveConversation: true,
-            activationVersion);
-        await ConnectToAcpProfileCoreAsync(profile, connectionContext, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<bool> EnsureActiveConversationRemoteHydratedAsync(
@@ -2535,6 +2539,39 @@ public partial class ChatViewModel
             && (activationVersion.HasValue
                 ? _conversationActivationOrchestrator.IsLatestActivationVersion(activationVersion.Value)
                 : string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal));
+
+    private async Task<bool> TryAcquireConnectionLifecycleOverlayAsync(
+        string conversationId,
+        long? activationVersion)
+    {
+        if (!ShouldOwnRemoteHydrationUi(conversationId, activationVersion))
+        {
+            return false;
+        }
+
+        await PostToUiAsync(() =>
+        {
+            SetConversationOverlayOwners(
+                sessionSwitchConversationId: _sessionSwitchOverlayConversationId,
+                connectionLifecycleConversationId: conversationId,
+                historyConversationId: _historyOverlayConversationId);
+        }).ConfigureAwait(false);
+        return true;
+    }
+
+    private Task ReleaseConnectionLifecycleOverlayAsync(string conversationId)
+        => PostToUiAsync(() =>
+        {
+            if (!string.Equals(_connectionLifecycleOverlayConversationId, conversationId, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            SetConversationOverlayOwners(
+                sessionSwitchConversationId: _sessionSwitchOverlayConversationId,
+                connectionLifecycleConversationId: null,
+                historyConversationId: _historyOverlayConversationId);
+        });
 
     private AcpHydrationCompletionMode ResolveHydrationCompletionMode(string? configuredMode)
     {

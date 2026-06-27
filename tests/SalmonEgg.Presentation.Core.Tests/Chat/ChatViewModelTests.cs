@@ -11092,6 +11092,143 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task SwitchConversationAsync_RemoteActivationPreConnect_WhenProfileConnectIsPending_ProjectsConnectionOverlay()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var runtimeState = new ShellNavigationRuntimeStateStore
+        {
+            CurrentShellContent = ShellNavigationContent.Chat
+        };
+        var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
+        var sessionManager = new Mock<ISessionManager>();
+        sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.TryGetValue(id, out var session) ? session : null);
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .Returns<string, string?>((id, cwd) =>
+            {
+                var session = new Session(id, cwd);
+                sessions[id] = session;
+                return Task.FromResult(session);
+            });
+        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
+            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
+            {
+                if (!sessions.TryGetValue(id, out var session))
+                {
+                    return false;
+                }
+
+                update(session);
+                if (updateActivity)
+                {
+                    session.UpdateActivity();
+                }
+
+                return true;
+            });
+        sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.Remove(id));
+
+        await sessionManager.Object.CreateSessionAsync("conv-1", @"C:\repo\one");
+        await sessionManager.Object.CreateSessionAsync("conv-2", @"C:\repo\two");
+
+        var connectEntered = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowConnectCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var chatService = new Mock<IChatService>();
+        chatService.SetupGet(service => service.IsConnected).Returns(true);
+        chatService.SetupGet(service => service.IsInitialized).Returns(true);
+        chatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
+        chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(SessionLoadResponse.Completed);
+
+        var commands = new Mock<IAcpConnectionCommands>(MockBehavior.Strict);
+        commands.Setup(x => x.ConnectToProfileAsync(
+                It.Is<ServerConfiguration>(profile => string.Equals(profile.Id, "profile-1", StringComparison.Ordinal)),
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.Is<AcpConnectionContext>(context =>
+                    string.Equals(context.ConversationId, "conv-2", StringComparison.Ordinal)
+                    && context.PreserveConversation
+                    && context.ActivationVersion.HasValue),
+                It.IsAny<CancellationToken>()))
+            .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, AcpConnectionContext, CancellationToken>(async (_, _, sink, _, cancellationToken) =>
+            {
+                sink.UpdateConnectionState(isConnecting: true, isConnected: false, isInitialized: false, errorMessage: null);
+                connectEntered.TrySetResult(null);
+                await allowConnectCompletion.Task.WaitAsync(cancellationToken);
+                sink.UpdateConnectionState(isConnecting: false, isConnected: true, isInitialized: true, errorMessage: null);
+                return new AcpTransportApplyResult(chatService.Object, new InitializeResponse());
+            });
+
+        var profile = new ServerConfiguration { Id = "profile-1", Name = "Profile 1", Transport = TransportType.Stdio };
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService.Setup(service => service.LoadConfigurationAsync("profile-1"))
+            .ReturnsAsync(profile);
+        configurationService.Setup(service => service.ListConfigurationsAsync())
+            .ReturnsAsync([profile]);
+        await using var fixture = CreateViewModel(
+            syncContext,
+            configurationService: configurationService,
+            sessionManager: sessionManager,
+            acpConnectionCommands: commands.Object,
+            acpConnectionCoordinatorFactory: store => new AcpConnectionCoordinator(
+                store,
+                NullLogger<AcpConnectionCoordinator>.Instance,
+                new StaticMcpResolver([])),
+            shellNavigationRuntimeState: runtimeState);
+        var shellOverlay = new ShellSessionActivationOverlayViewModel(fixture.ViewModel, runtimeState);
+        fixture.Profiles.Profiles.Add(profile);
+        await syncContext.RunUntilCompletedAsync(fixture.ViewModel.RestoreAsync());
+
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-2",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+                .Add("conv-2", new ConversationBindingSlice("conv-2", "remote-2", "profile-1"))
+        });
+        syncContext.RunAll();
+
+        var switchTask = fixture.ViewModel.SwitchConversationAsync("conv-2");
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(connectEntered.Task.IsCompleted || switchTask.IsCompleted);
+        });
+        Assert.False(switchTask.IsCompleted);
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(fixture.ViewModel.IsConnecting);
+        });
+
+        Assert.True(fixture.ViewModel.IsConnecting);
+        Assert.Equal(ChatViewModel.LoadingOverlayStage.Connecting, fixture.ViewModel.OverlayLoadingStage);
+        Assert.True(shellOverlay.ShowsPresenter);
+        Assert.True(shellOverlay.ShowsStatusPill);
+        Assert.Contains("连接", shellOverlay.StatusText, StringComparison.Ordinal);
+
+        allowConnectCompletion.TrySetResult(null);
+        await syncContext.RunUntilCompletedAsync(switchTask);
+    }
+
+    [Fact]
     public async Task Overlay_WhenCurrentConversationIsLocal_IgnoresGlobalConnectionLifecycle()
     {
         var syncContext = new ImmediateSynchronizationContext();
