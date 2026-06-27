@@ -11,7 +11,7 @@ public enum AcpSessionRecoveryMode
 
 public static class AcpSessionRecoveryPolicy
 {
-    public static AcpSessionRecoveryMode Resolve(AgentCapabilities? capabilities)
+    public static AcpSessionRecoveryMode ResolveForHydration(AgentCapabilities? capabilities)
     {
         if (capabilities?.SupportsSessionLoading == true)
         {
@@ -21,6 +21,21 @@ public static class AcpSessionRecoveryPolicy
         if (capabilities?.SupportsSessionResume == true)
         {
             return AcpSessionRecoveryMode.Resume;
+        }
+
+        return AcpSessionRecoveryMode.None;
+    }
+
+    public static AcpSessionRecoveryMode ResolveForResync(AgentCapabilities? capabilities)
+    {
+        if (capabilities?.SupportsSessionResume == true)
+        {
+            return AcpSessionRecoveryMode.Resume;
+        }
+
+        if (capabilities?.SupportsSessionLoading == true)
+        {
+            return AcpSessionRecoveryMode.Load;
         }
 
         return AcpSessionRecoveryMode.None;

@@ -27,6 +27,56 @@ public sealed class ChatAuthenticationCoordinatorTests
             && a.AgentVersion == "1.0.0")), Times.Once);
     }
 
+
+    [Fact]
+    public async Task TryAuthenticateAsync_WhenUnknownAndAgentMethodsAdvertised_UsesAgentMethod()
+    {
+        var sut = new ChatAuthenticationCoordinator();
+        sut.CacheAuthMethods(new InitializeResponse
+        {
+            ProtocolVersion = 1,
+            AgentInfo = new AgentInfo("agent", "1.0.0"),
+            AgentCapabilities = new AgentCapabilities(),
+            AuthMethods =
+            [
+                new AuthMethodDefinition
+                {
+                    Id = "api-key",
+                    Name = "API Key",
+                    Description = "Use an API key",
+                    Type = "client"
+                },
+                new AuthMethodDefinition
+                {
+                    Id = "chat-gpt",
+                    Name = "ChatGPT",
+                    Description = "Use ChatGPT"
+                }
+            ]
+        });
+        var connectionCoordinator = new Mock<IAcpConnectionCoordinator>();
+        var service = new Mock<IChatService>();
+        service.Setup(x => x.AuthenticateAsync(It.IsAny<AuthenticateParams>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AuthenticateResponse());
+        var notifications = new List<string>();
+
+        var result = await sut.TryAuthenticateAsync(
+            service.Object,
+            true,
+            connectionCoordinator.Object,
+            NullLogger.Instance,
+            notifications.Add,
+            CancellationToken.None);
+
+        Assert.True(result);
+        service.Verify(x => x.AuthenticateAsync(
+            It.Is<AuthenticateParams>(p => p.MethodId == "chat-gpt"),
+            It.IsAny<CancellationToken>()), Times.Once);
+        service.Verify(x => x.AuthenticateAsync(
+            It.Is<AuthenticateParams>(p => p.MethodId == "api-key"),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Fact]
     public async Task TryAuthenticateAsync_WhenAuthenticateSucceeds_ClearsRequirement()
     {
@@ -49,7 +99,7 @@ public sealed class ChatAuthenticationCoordinatorTests
         var connectionCoordinator = new Mock<IAcpConnectionCoordinator>();
         var service = new Mock<IChatService>();
         service.Setup(x => x.AuthenticateAsync(It.IsAny<AuthenticateParams>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new AuthenticateResponse(true, null));
+            .ReturnsAsync(new AuthenticateResponse());
         var notifications = new List<string>();
 
         var result = await sut.TryAuthenticateAsync(

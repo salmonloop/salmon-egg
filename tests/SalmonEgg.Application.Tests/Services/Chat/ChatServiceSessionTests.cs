@@ -414,7 +414,7 @@ public sealed class ChatServiceSessionTests
             => Task.FromResult(new SessionCancelResponse());
 
         public Task<AuthenticateResponse> AuthenticateAsync(AuthenticateParams @params, CancellationToken cancellationToken = default)
-            => Task.FromResult(new AuthenticateResponse(true));
+            => Task.FromResult(new AuthenticateResponse());
 
         public Task<bool> RespondToPermissionRequestAsync(object messageId, string outcome, string? optionId = null)
             => Task.FromResult(true);

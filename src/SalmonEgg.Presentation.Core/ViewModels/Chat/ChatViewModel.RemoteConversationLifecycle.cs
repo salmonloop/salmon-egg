@@ -299,7 +299,7 @@ public partial class ChatViewModel
         }
 
         var chatService = resolvedConnection.ChatService;
-        var recoveryMode = AcpSessionRecoveryPolicy.Resolve(chatService.AgentCapabilities);
+        var recoveryMode = AcpSessionRecoveryPolicy.ResolveForHydration(chatService.AgentCapabilities);
         if (recoveryMode == AcpSessionRecoveryMode.None)
         {
             await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
@@ -809,7 +809,7 @@ public partial class ChatViewModel
             return string.IsNullOrWhiteSpace(binding?.ProfileId);
         }
 
-        if (AcpSessionRecoveryPolicy.Resolve(_chatService?.AgentCapabilities) == AcpSessionRecoveryMode.None)
+        if (AcpSessionRecoveryPolicy.ResolveForHydration(_chatService?.AgentCapabilities) == AcpSessionRecoveryMode.None)
         {
             return true;
         }
@@ -1184,7 +1184,7 @@ public partial class ChatViewModel
         var preservedSessionState = storeState.ResolveSessionStateSlice(conversationId);
         var preservedSessionInfo = ConversationSessionInfoSnapshots.Clone(
             preservedSessionState?.SessionInfo);
-        await _chatStore.Dispatch(new ClearTurnAction(conversationId)).ConfigureAwait(false);
+        await _chatStore.Dispatch(new ClearTerminalTurnAction(conversationId)).ConfigureAwait(false);
         await _chatStore.Dispatch(new HydrateConversationAction(
             conversationId,
             ImmutableList<ConversationMessageSnapshot>.Empty,
@@ -1589,7 +1589,7 @@ public partial class ChatViewModel
         }
 
         var chatService = resolvedConnection.ChatService;
-        if (AcpSessionRecoveryPolicy.Resolve(chatService.AgentCapabilities) == AcpSessionRecoveryMode.None)
+        if (AcpSessionRecoveryPolicy.ResolveForHydration(chatService.AgentCapabilities) == AcpSessionRecoveryMode.None)
         {
             return true;
         }
@@ -1648,7 +1648,7 @@ public partial class ChatViewModel
             return ConversationActivationHydrationMode.WorkspaceSnapshot;
         }
 
-        if (AcpSessionRecoveryPolicy.Resolve(_chatService?.AgentCapabilities) == AcpSessionRecoveryMode.None)
+        if (AcpSessionRecoveryPolicy.ResolveForHydration(_chatService?.AgentCapabilities) == AcpSessionRecoveryMode.None)
         {
             return ConversationActivationHydrationMode.WorkspaceSnapshot;
         }

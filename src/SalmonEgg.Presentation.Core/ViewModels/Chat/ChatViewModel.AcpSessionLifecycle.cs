@@ -134,15 +134,11 @@ public partial class ChatViewModel
                 {
                     Domain.Models.Tool.ToolCallStatus.InProgress => ChatTurnPhase.ToolRunning,
                     Domain.Models.Tool.ToolCallStatus.Completed => ChatTurnPhase.WaitingForAgent,
-                    Domain.Models.Tool.ToolCallStatus.Failed => ChatTurnPhase.Failed,
-                    Domain.Models.Tool.ToolCallStatus.Cancelled => ChatTurnPhase.Cancelled,
+                    Domain.Models.Tool.ToolCallStatus.Failed => ChatTurnPhase.WaitingForAgent,
+                    Domain.Models.Tool.ToolCallStatus.Cancelled => ChatTurnPhase.WaitingForAgent,
                     _ => ChatTurnPhase.ToolPending
                 };
                 await AdvanceActiveTurnPhaseAsync(activeTurn, phase, toolCallStatusUpdate.ToolCallId).ConfigureAwait(true);
-                if (toolCallStatusUpdate.Status == Domain.Models.Tool.ToolCallStatus.Cancelled)
-                {
-                    await PreemptivelyCancelTurnAsync(expectedConversationId: targetConversationId).ConfigureAwait(true);
-                }
                 await UpdateToolCallStatusAsync(targetConversationId, toolCallStatusUpdate).ConfigureAwait(true);
                 RecordTranscriptProjectionObservation(e.SessionId);
             }

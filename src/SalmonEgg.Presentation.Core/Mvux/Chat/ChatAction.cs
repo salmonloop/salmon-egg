@@ -78,8 +78,7 @@ public sealed record FailTurnAction(string ConversationId, string TurnId, string
 
 public sealed record CancelTurnAction(string ConversationId, string TurnId) : ChatAction;
 
-public sealed record ClearTurnAction(string ConversationId) : ChatAction;
-
+public sealed record ClearTerminalTurnAction(string ConversationId) : ChatAction;
 
 
 /// <summary>

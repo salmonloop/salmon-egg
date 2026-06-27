@@ -107,18 +107,12 @@ public sealed class ChatAuthenticationCoordinator
 
         try
         {
-            var response = await chatService
+            await chatService
                 .AuthenticateAsync(new AuthenticateParams(method.Id), cancellationToken)
                 .ConfigureAwait(false);
 
-            if (response.Authenticated)
-            {
-                ClearAuthenticationRequirement(coordinator);
-                return true;
-            }
-
-            MarkAuthenticationRequired(coordinator, logger, showTransientNotificationToast, method, response.Message);
-            return false;
+            ClearAuthenticationRequirement(coordinator);
+            return true;
         }
         catch (AcpException ex) when (ex.ErrorCode == JsonRpcErrorCode.MethodNotFound)
         {
@@ -137,7 +131,12 @@ public sealed class ChatAuthenticationCoordinator
         => ex is AcpException acp && acp.ErrorCode == JsonRpcErrorCode.AuthenticationRequired;
 
     private AuthMethodDefinition? GetPrimaryAuthMethod()
-        => _advertisedAuthMethods?.FirstOrDefault(m => !string.IsNullOrWhiteSpace(m.Id));
+        => _advertisedAuthMethods?.FirstOrDefault(IsAgentHandledAuthMethod);
+
+    private static bool IsAgentHandledAuthMethod(AuthMethodDefinition method)
+        => !string.IsNullOrWhiteSpace(method.Id)
+            && (string.IsNullOrWhiteSpace(method.Type)
+                || string.Equals(method.Type, "agent", StringComparison.Ordinal));
 
     private static string? ResolveDisplayedAgentName(AgentInfo? agentInfo)
     {

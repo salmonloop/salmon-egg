@@ -135,7 +135,7 @@ public sealed class AcpConnectionCoordinator : IAcpConnectionCoordinator, IAcpCo
             return;
         }
 
-        var recoveryMode = AcpSessionRecoveryPolicy.Resolve(sink.CurrentChatService.AgentCapabilities);
+        var recoveryMode = AcpSessionRecoveryPolicy.ResolveForResync(sink.CurrentChatService.AgentCapabilities);
         if (recoveryMode == AcpSessionRecoveryMode.None)
         {
             _logger.LogDebug("Skipping ACP resync because agent does not advertise session recovery capability.");

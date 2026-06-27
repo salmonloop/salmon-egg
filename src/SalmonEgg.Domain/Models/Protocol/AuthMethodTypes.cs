@@ -19,9 +19,11 @@ namespace SalmonEgg.Domain.Models.Protocol
         [JsonPropertyName("description")]
         public string? Description { get; set; }
 
+        [JsonPropertyName("type")]
+        public string? Type { get; set; }
+
         // Preserve unknown extension fields to avoid losing agent-specific auth metadata.
         [JsonExtensionData]
         public Dictionary<string, JsonElement>? ExtensionData { get; set; }
     }
 }
-

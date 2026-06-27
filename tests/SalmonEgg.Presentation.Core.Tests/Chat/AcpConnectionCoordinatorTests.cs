@@ -375,7 +375,7 @@ public sealed class AcpConnectionCoordinatorTests
     }
 
     [Fact]
-    public async Task ResyncAsync_WhenLoadAndResumeAreSupported_PrefersLoadReplay()
+    public async Task ResyncAsync_WhenLoadAndResumeAreSupported_PrefersResumeWithoutReplay()
     {
         var inner = new FakeChatService
         {
@@ -402,9 +402,9 @@ public sealed class AcpConnectionCoordinatorTests
 
         await coordinator.ResyncAsync(sink);
 
-        Assert.NotNull(inner.LastLoadParams);
-        Assert.Null(inner.LastResumeParams);
-        Assert.Equal(1, sink.ResetHydratedConversationForResyncCalls);
+        Assert.NotNull(inner.LastResumeParams);
+        Assert.Null(inner.LastLoadParams);
+        Assert.Equal(0, sink.ResetHydratedConversationForResyncCalls);
     }
 
     [Fact]

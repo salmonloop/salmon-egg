@@ -7726,7 +7726,7 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
-    public async Task ProcessSessionUpdateAsync_ToolCallStatusCancelled_AdvancesStoreBackedTurnToCancelled()
+    public async Task ProcessSessionUpdateAsync_ToolCallStatusCancelled_DoesNotTerminatePromptTurn()
     {
         var syncContext = new QueueingSynchronizationContext();
         await using var fixture = CreateViewModel(syncContext);
@@ -7778,11 +7778,79 @@ public partial class ChatViewModelTests
         var transcript = state.ResolveContentSlice("conv-1")?.Transcript
             ?? state.Transcript
             ?? ImmutableList<ConversationMessageSnapshot>.Empty;
-        Assert.True(state.ActiveTurn is null || state.ActiveTurn.Phase == ChatTurnPhase.Cancelled);
+        Assert.Equal(ChatTurnPhase.WaitingForAgent, state.ActiveTurn!.Phase);
         Assert.Contains(
             transcript,
             message => string.Equals(message.ToolCallId, "call-1", StringComparison.Ordinal)
                 && message.ToolCallStatus == ToolCallStatus.Cancelled);
+    }
+
+    [Fact]
+    public async Task ProcessSessionUpdateAsync_ToolCallStatusFailed_DoesNotTerminatePromptTurn()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        var viewModel = fixture.ViewModel;
+        var chatService = CreateConnectedChatService();
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(chatService.Object));
+        syncContext.RunAll();
+
+        var initialState = (await fixture.GetStateAsync()) with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1")),
+            Transcript = ImmutableList.Create(new ConversationMessageSnapshot
+            {
+                Id = "tool-1",
+                Timestamp = DateTime.UtcNow,
+                ContentType = "tool_call",
+                ToolCallId = "call-1",
+                ToolCallStatus = ToolCallStatus.InProgress,
+                Title = "Read File"
+            }),
+            ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.ToolRunning, DateTime.UtcNow, DateTime.UtcNow)
+        };
+        await fixture.UpdateStateAsync(_ => initialState);
+        syncContext.RunAll();
+
+        chatService.Raise(
+            service => service.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs("remote-1", new ToolCallStatusUpdate
+            {
+                ToolCallId = "call-1",
+                Status = ToolCallStatus.Failed,
+                RawOutput = JsonDocument.Parse("""{ "error": "File does not exist" }""").RootElement.Clone()
+            }));
+
+        await WaitForConditionAsync(async () =>
+        {
+            syncContext.RunAll();
+            var state = await fixture.GetStateAsync();
+            var transcript = state.ResolveContentSlice("conv-1")?.Transcript
+                ?? state.Transcript
+                ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+            return transcript.Any(message =>
+                string.Equals(message.ToolCallId, "call-1", StringComparison.Ordinal)
+                && message.ToolCallStatus == ToolCallStatus.Failed);
+        });
+
+        var failedState = await fixture.GetStateAsync();
+        Assert.Equal(ChatTurnPhase.WaitingForAgent, failedState.ActiveTurn!.Phase);
+
+        chatService.Raise(
+            service => service.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs("remote-1", new AgentMessageUpdate(new TextContentBlock("continuing after tool failure"))));
+
+        await WaitForConditionAsync(async () =>
+        {
+            syncContext.RunAll();
+            var state = await fixture.GetStateAsync();
+            return state.ActiveTurn?.Phase == ChatTurnPhase.Responding;
+        });
+
+        var finalState = await fixture.GetStateAsync();
+        Assert.Equal(ChatTurnPhase.Responding, finalState.ActiveTurn!.Phase);
     }
 
     [Fact]

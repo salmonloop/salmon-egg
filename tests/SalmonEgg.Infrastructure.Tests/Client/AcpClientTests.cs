@@ -73,6 +73,23 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             return client;
         }
 
+
+        [Fact]
+        public async Task AuthenticateAsync_WhenAgentReturnsEmptyObject_ShouldComplete()
+        {
+            var parser = new MessageParser();
+            var client = await CreateInitializedClientAsync();
+
+            SetupJsonRpcResponse(
+                "authenticate",
+                ElementFromJson("{}"),
+                parser);
+
+            var result = await client.AuthenticateAsync(new AuthenticateParams("agent-login"));
+
+            Assert.NotNull(result);
+        }
+
         [Fact]
         public async Task CreateSessionAsync_SlowButValidResponse_CompletesWhenResponseEventuallyArrives()
         {

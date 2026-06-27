@@ -921,6 +921,56 @@ public class ChatReducerTests
     }
 
     [Fact]
+    public void SelectConversation_PreservesRunningActiveTurnForSameConversation()
+    {
+        var startedAt = DateTime.UtcNow;
+        var activeTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Responding, startedAt, startedAt);
+        var initialState = ChatState.Empty with
+        {
+            HydratedConversationId = "conv-1",
+            ActiveTurn = activeTurn,
+            Generation = 12
+        };
+
+        var newState = ChatReducer.Reduce(initialState, new SelectConversationAction("conv-1"));
+
+        Assert.Equal("conv-1", newState.HydratedConversationId);
+        Assert.Same(activeTurn, newState.ActiveTurn);
+    }
+
+    [Fact]
+    public void ClearTerminalTurn_PreservesRunningActiveTurn()
+    {
+        var startedAt = DateTime.UtcNow;
+        var initialState = ChatState.Empty with
+        {
+            ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Responding, startedAt, startedAt),
+            Generation = 12
+        };
+
+        var newState = ChatReducer.Reduce(initialState, new ClearTerminalTurnAction("conv-1"));
+
+        Assert.Equal(12, newState.Generation);
+        Assert.Same(initialState.ActiveTurn, newState.ActiveTurn);
+    }
+
+    [Fact]
+    public void ClearTerminalTurn_ClearsTerminalActiveTurn()
+    {
+        var startedAt = DateTime.UtcNow;
+        var initialState = ChatState.Empty with
+        {
+            ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Completed, startedAt, startedAt),
+            Generation = 12
+        };
+
+        var newState = ChatReducer.Reduce(initialState, new ClearTerminalTurnAction("conv-1"));
+
+        Assert.Equal(13, newState.Generation);
+        Assert.Null(newState.ActiveTurn);
+    }
+
+    [Fact]
     public void CompleteTurn_DoesNotOverride_FailedOrCancelled()
     {
         var failedState = ChatState.Empty with

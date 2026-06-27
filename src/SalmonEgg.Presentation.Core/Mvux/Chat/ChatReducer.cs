@@ -77,7 +77,8 @@ public static class ChatReducer
             {
                 ActiveTurn = current.ActiveTurn with { Phase = ChatTurnPhase.Cancelled, LastUpdatedAtUtc = DateTime.UtcNow }
             }),
-            ClearTurnAction clear when current.ActiveTurn?.ConversationId == clear.ConversationId => Mutate(current, current with
+            ClearTerminalTurnAction clear when current.ActiveTurn?.ConversationId == clear.ConversationId
+                && IsTerminalPhase(current.ActiveTurn.Phase) => Mutate(current, current with
             {
                 ActiveTurn = null
             }),
@@ -390,9 +391,16 @@ public static class ChatReducer
             SessionInfo = sessionState?.SessionInfo,
             Usage = sessionState?.Usage,
             IsHydrating = false,
-            ActiveTurn = null
+            ActiveTurn = ShouldPreserveActiveTurnForSelection(current.ActiveTurn, conversationId)
+                ? current.ActiveTurn
+                : null
         };
     }
+
+    private static bool ShouldPreserveActiveTurnForSelection(ActiveTurnState? activeTurn, string? conversationId)
+        => activeTurn is not null
+            && !string.IsNullOrWhiteSpace(conversationId)
+            && string.Equals(activeTurn.ConversationId, conversationId, StringComparison.Ordinal);
 
     private static bool ShouldProjectConversation(ChatState current, string? conversationId)
         => string.Equals(current.HydratedConversationId, conversationId, StringComparison.Ordinal);
