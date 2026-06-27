@@ -528,18 +528,6 @@ public partial class ChatViewModel
         ClearProjectAffinityOverrideCommand.NotifyCanExecuteChanged();
     }
 
-    public IReadOnlyList<ConversationProjectTargetOption> GetConversationProjectTargets()
-        => _conversationCatalogFacade.GetConversationProjectTargets();
-
-    public void MoveConversationToProject(string conversationId, string projectId)
-    {
-        _conversationCatalogFacade.MoveConversationToProject(conversationId, projectId);
-
-        if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
-        {
-            RefreshProjectAffinityCorrectionState(conversationId);
-        }
-    }
 }
 
 public sealed class ProjectionRestoreReadyEventArgs : EventArgs

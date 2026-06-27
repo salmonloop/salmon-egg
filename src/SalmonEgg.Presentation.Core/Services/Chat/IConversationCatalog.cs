@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.Threading;
 using System.Threading.Tasks;
@@ -13,11 +12,7 @@ public interface IConversationCatalog : INotifyPropertyChanged
 
     string[] GetKnownConversationIds();
 
-    IReadOnlyList<ConversationProjectTargetOption> GetConversationProjectTargets();
-
     Task RestoreAsync(CancellationToken cancellationToken = default);
-
-    void MoveConversationToProject(string conversationId, string projectId);
 
     Task<ConversationMutationResult> ArchiveConversationAsync(string conversationId, CancellationToken cancellationToken = default);
 

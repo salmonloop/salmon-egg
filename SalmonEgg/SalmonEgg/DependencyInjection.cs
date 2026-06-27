@@ -454,7 +454,6 @@ public static class DependencyInjection
             var lazyNav = new Lazy<INavigationCoordinator>(() => sp.GetRequiredService<INavigationCoordinator>());
             return new ConversationCatalogFacade(
                 sp.GetRequiredService<ChatConversationWorkspace>(),
-                sp.GetRequiredService<INavigationProjectPreferences>(),
                 sp.GetRequiredService<IConversationActivationCoordinator>(),
                 sp.GetRequiredService<IShellSelectionReadModel>(),
                 lazyNav,

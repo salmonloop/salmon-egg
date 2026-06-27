@@ -1640,7 +1640,6 @@ public sealed class NavigationCoordinatorTests
 
         var conversationCatalog = new ConversationCatalogFacade(
             chat.Workspace,
-            new NavigationProjectPreferencesAdapter(preferences),
             Mock.Of<IConversationActivationCoordinator>(),
             Mock.Of<IShellSelectionReadModel>(),
             new Lazy<INavigationCoordinator>(() => Mock.Of<INavigationCoordinator>()),
@@ -1817,7 +1816,6 @@ public sealed class NavigationCoordinatorTests
         var conversationCatalogPresenter = new ConversationCatalogPresenter();
         var conversationCatalogFacade = new ConversationCatalogFacade(
             workspace,
-            new NavigationProjectPreferencesAdapter(preferences),
             Mock.Of<IConversationActivationCoordinator>(),
             Mock.Of<IShellSelectionReadModel>(),
             new Lazy<INavigationCoordinator>(() => Mock.Of<INavigationCoordinator>()),

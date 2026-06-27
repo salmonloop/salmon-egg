@@ -1073,20 +1073,21 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
-    public void MainNavigation_SessionFlyout_DefersMoveDialogUntilFlyoutCloses()
+    public void MainNavigation_SessionFlyout_DoesNotExposeMoveConversation()
     {
         var xaml = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml");
         var code = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
 
-        Assert.Contains("x:Uid=\"SessionNavMoveItem\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Click=\"OnSessionMoveMenuItemClick\"", xaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("x:Uid=\"SessionNavMoveItem\"\r\n                                        Command=\"{x:Bind MoveCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Uid=\"SessionNavMoveItem\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("MainNav.Session.Context.Move", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Click=\"OnSessionMoveMenuItemClick\"", xaml, StringComparison.Ordinal);
 
         Assert.DoesNotContain("x:Uid=\"SessionNavRenameItem\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Uid=\"SessionNavRenameItem\"\r\n                                        Command=\"{x:Bind RenameCommand}\"", xaml, StringComparison.Ordinal);
 
-        Assert.Contains("private void OnSessionMoveMenuItemClick(", code, StringComparison.Ordinal);
-        Assert.Contains("_moveOnFlyoutClosed.TryConsume(sessionId)", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("private void OnSessionMoveMenuItemClick(", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("_moveOnFlyoutClosed", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("_pendingMoveSessionId", code, StringComparison.Ordinal);
         Assert.DoesNotContain("private void OnSessionRenameMenuItemClick(", code, StringComparison.Ordinal);
         Assert.DoesNotContain("_renameOnFlyoutClosed", code, StringComparison.Ordinal);
     }

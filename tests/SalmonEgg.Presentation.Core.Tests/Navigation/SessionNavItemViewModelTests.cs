@@ -20,7 +20,7 @@ public sealed class SessionNavItemViewModelTests
         var shell = new RecordingPlatformShellService();
         var item = CreateItem(
             new RecordingUiInteractionService(),
-            new RecordingChatSessionCatalog([]),
+            new RecordingChatSessionCatalog(),
             remoteSessionId: "remote-session-42",
             shell: shell);
 
@@ -35,7 +35,7 @@ public sealed class SessionNavItemViewModelTests
         var shell = new RecordingPlatformShellService();
         var item = CreateItem(
             new RecordingUiInteractionService(),
-            new RecordingChatSessionCatalog([]),
+            new RecordingChatSessionCatalog(),
             remoteSessionId: null,
             shell: shell);
 
@@ -45,79 +45,9 @@ public sealed class SessionNavItemViewModelTests
     }
 
     [Fact]
-    public async Task MoveCommand_PicksTargetAndMovesConversation()
+    public void SessionNavItemViewModel_DoesNotExposeMoveCommand()
     {
-        var ui = new RecordingUiInteractionService
-        {
-            NextProjectId = "project-2"
-        };
-        var catalog = new RecordingChatSessionCatalog(
-            [
-                new ConversationProjectTargetOption(NavigationProjectIds.Unclassified, "未归类"),
-                new ConversationProjectTargetOption("project-1", "Project One"),
-                new ConversationProjectTargetOption("project-2", "Project Two")
-            ]);
-        var item = CreateItem(ui, catalog);
-
-        await item.MoveCommand.ExecuteAsync(null);
-
-        Assert.Equal("移动会话", ui.PickDialogTitle);
-        Assert.Equal("Session 1", ui.PickSessionTitle);
-        Assert.Equal("project-1", ui.PickSelectedProjectId);
-        Assert.Collection(
-            ui.PickOptions,
-            option => Assert.Equal(NavigationProjectIds.Unclassified, option.ProjectId),
-            option => Assert.Equal("project-1", option.ProjectId),
-            option => Assert.Equal("project-2", option.ProjectId));
-        Assert.Equal(("session-1", "project-2"), catalog.LastMoveRequest);
-    }
-
-    [Fact]
-    public async Task MoveCommand_Cancelled_DoesNotMoveConversation()
-    {
-        var ui = new RecordingUiInteractionService();
-        var catalog = new RecordingChatSessionCatalog(
-            [
-                new ConversationProjectTargetOption(NavigationProjectIds.Unclassified, "未归类"),
-                new ConversationProjectTargetOption("project-1", "Project One")
-            ]);
-        var item = CreateItem(ui, catalog);
-
-        await item.MoveCommand.ExecuteAsync(null);
-
-        Assert.Null(catalog.LastMoveRequest);
-    }
-
-    [Fact]
-    public async Task MoveCommand_WithoutTargets_DoesNotOpenPicker()
-    {
-        var ui = new RecordingUiInteractionService();
-        var catalog = new RecordingChatSessionCatalog([]);
-        var item = CreateItem(ui, catalog);
-
-        await item.MoveCommand.ExecuteAsync(null);
-
-        Assert.False(ui.PickConversationProjectCalled);
-        Assert.Null(catalog.LastMoveRequest);
-    }
-
-    [Fact]
-    public async Task MoveCommand_TrimsPickedProjectIdBeforeMove()
-    {
-        var ui = new RecordingUiInteractionService
-        {
-            NextProjectId = "  project-2  "
-        };
-        var catalog = new RecordingChatSessionCatalog(
-            [
-                new ConversationProjectTargetOption("project-1", "Project One"),
-                new ConversationProjectTargetOption("project-2", "Project Two")
-            ]);
-        var item = CreateItem(ui, catalog);
-
-        await item.MoveCommand.ExecuteAsync(null);
-
-        Assert.Equal(("session-1", "project-2"), catalog.LastMoveRequest);
+        Assert.Null(typeof(SessionNavItemViewModel).GetProperty("MoveCommand"));
     }
 
     private static SessionNavItemViewModel CreateItem(
@@ -151,19 +81,6 @@ public sealed class SessionNavItemViewModelTests
     {
         public bool CanPickFolder => false;
 
-        public string? NextProjectId { get; init; }
-
-        public bool PickConversationProjectCalled { get; private set; }
-
-        public string PickDialogTitle { get; private set; } = string.Empty;
-
-        public string PickSessionTitle { get; private set; } = string.Empty;
-
-        public string? PickSelectedProjectId { get; private set; }
-
-        public IReadOnlyList<ConversationProjectTargetOption> PickOptions { get; private set; } =
-            Array.Empty<ConversationProjectTargetOption>();
-
         public Task ShowInfoAsync(string message) => Task.CompletedTask;
 
         public Task<bool> ConfirmAsync(string title, string message, string primaryButtonText, string closeButtonText)
@@ -176,36 +93,13 @@ public sealed class SessionNavItemViewModelTests
 
         public Task ShowSessionsListDialogAsync(string title, IReadOnlyList<SessionNavItemViewModel> sessions, Action<string> onPickSession)
             => Task.CompletedTask;
-
-        public Task<string?> PickConversationProjectAsync(
-            string title,
-            string sessionTitle,
-            IReadOnlyList<ConversationProjectTargetOption> options,
-            string? selectedProjectId)
-        {
-            PickConversationProjectCalled = true;
-            PickDialogTitle = title;
-            PickSessionTitle = sessionTitle;
-            PickOptions = options;
-            PickSelectedProjectId = selectedProjectId;
-            return Task.FromResult(NextProjectId);
-        }
     }
 
     private sealed class RecordingChatSessionCatalog : IChatSessionCatalog
     {
-        private readonly IReadOnlyList<ConversationProjectTargetOption> _projectTargets;
-
-        public RecordingChatSessionCatalog(IReadOnlyList<ConversationProjectTargetOption> projectTargets)
-        {
-            _projectTargets = projectTargets;
-        }
-
         public bool IsConversationListLoading => false;
 
         public int ConversationListVersion => 0;
-
-        public (string SessionId, string ProjectId)? LastMoveRequest { get; private set; }
 
         public event PropertyChangedEventHandler? PropertyChanged
         {
@@ -223,12 +117,6 @@ public sealed class SessionNavItemViewModelTests
         public Task<ConversationMutationResult> DeleteConversationAsync(string conversationId, CancellationToken cancellationToken = default)
             => Task.FromResult(new ConversationMutationResult(true, false, null));
 
-        public IReadOnlyList<ConversationProjectTargetOption> GetConversationProjectTargets() => _projectTargets;
-
-        public void MoveConversationToProject(string conversationId, string projectId)
-        {
-            LastMoveRequest = (conversationId, projectId);
-        }
     }
 
     private sealed class RecordingPlatformShellService : IPlatformShellService

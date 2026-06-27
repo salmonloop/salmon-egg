@@ -1042,7 +1042,7 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
-    public async Task MoveConversationToProject_AllowsExplicitUnclassifiedOverride()
+    public async Task UpdateProjectAffinityOverride_AllowsExplicitUnclassifiedOverride()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var store = new CapturingConversationStore();
@@ -1053,7 +1053,7 @@ public sealed class ChatConversationWorkspaceTests
 
         await workspace.RegisterConversationAsync("session-1");
 
-        workspace.MoveConversationToProject("session-1", NavigationProjectIds.Unclassified);
+        workspace.UpdateProjectAffinityOverride("session-1", NavigationProjectIds.Unclassified);
 
         var overrideValue = workspace.GetProjectAffinityOverride("session-1");
         Assert.NotNull(overrideValue);
@@ -2350,7 +2350,6 @@ public sealed class ChatConversationWorkspaceTests
 
         var facade = new ConversationCatalogFacade(
             workspace,
-            new NavigationProjectPreferencesAdapter(preferences),
             activationCoordinator.Object,
             selection.Object,
             new Lazy<INavigationCoordinator>(() => Mock.Of<INavigationCoordinator>()),
@@ -2395,7 +2394,6 @@ public sealed class ChatConversationWorkspaceTests
 
         var facade = new ConversationCatalogFacade(
             workspace,
-            new NavigationProjectPreferencesAdapter(preferences),
             activationCoordinator.Object,
             selection.Object,
             new Lazy<INavigationCoordinator>(() => navigation.Object),

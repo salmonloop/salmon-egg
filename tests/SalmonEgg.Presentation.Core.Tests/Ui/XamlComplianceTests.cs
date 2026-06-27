@@ -589,7 +589,7 @@ public sealed class XamlComplianceTests
         Assert.DoesNotContain("Text=\"等待 Agent 更新\"", xaml);
         Assert.Contains("x:Uid=\"ProjectNavNewSessionItem\"", xaml);
         Assert.Contains("x:Uid=\"SessionNavArchiveItem\"", xaml);
-        Assert.Contains("x:Uid=\"SessionNavMoveItem\"", xaml);
+        Assert.DoesNotContain("x:Uid=\"SessionNavMoveItem\"", xaml);
         Assert.DoesNotContain("x:Uid=\"SessionNavRenameItem\"", xaml);
         Assert.DoesNotContain("x:Uid=\"DiffPanelPlaceholder\"", xaml);
         Assert.DoesNotContain("x:Uid=\"PlanEmptyTitle\"", xaml);
@@ -1065,74 +1065,15 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
-    public void ConversationProjectPickerDialog_Uids_DoNotShadowRootUidPropertyPaths()
-    {
-        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Navigation\ConversationProjectPickerDialog.xaml");
-        var zhHans = LoadText(@"SalmonEgg\SalmonEgg\Strings\zh-Hans\Resources.resw");
-
-        Assert.Contains("x:Uid=\"SessionProjectPickerDialog\"", xaml);
-        Assert.DoesNotContain("x:Uid=\"SessionProjectPickerDialog.SessionLabel\"", xaml);
-        Assert.DoesNotContain("x:Uid=\"SessionProjectPickerDialog.InstructionText\"", xaml);
-        Assert.DoesNotContain("x:Uid=\"SessionProjectPickerDialog.OptionsList\"", xaml);
-        Assert.Contains("x:Uid=\"SessionProjectPickerDialogSessionLabel\"", xaml);
-        Assert.Contains("x:Uid=\"SessionProjectPickerDialogInstructionText\"", xaml);
-        Assert.Contains("x:Uid=\"SessionProjectPickerDialogOptionsList\"", xaml);
-
-        Assert.DoesNotContain("SessionProjectPickerDialog.SessionLabel.Text", zhHans);
-        Assert.DoesNotContain("SessionProjectPickerDialog.InstructionText.Text", zhHans);
-        Assert.DoesNotContain("SessionProjectPickerDialog.OptionsList.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name", zhHans);
-        Assert.Contains("SessionProjectPickerDialogSessionLabel.Text", zhHans);
-        Assert.Contains("SessionProjectPickerDialogInstructionText.Text", zhHans);
-        Assert.Contains("SessionProjectPickerDialogOptionsList.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name", zhHans);
-    }
-
-    [Fact]
-    public void ConversationProjectPickerDialog_UsesDefaultDialogStyleAndNativeListSelection()
-    {
-        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Navigation\ConversationProjectPickerDialog.xaml");
-
-        Assert.Contains("Style=\"{ThemeResource DefaultContentDialogStyle}\"", xaml);
-        Assert.Contains("<ListView x:Name=\"OptionsList\"", xaml);
-        Assert.Contains("SelectedItem=\"{x:Bind SelectedOption, Mode=TwoWay}\"", xaml);
-        Assert.DoesNotContain("<RadioButtons", xaml);
-        Assert.DoesNotContain("<SymbolIcon Symbol=\"Folder\"", xaml);
-    }
-
-    [Fact]
     public void Dialogs_DoNotForceDesktopMinimumWidth()
     {
         var sessionsDialog = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Navigation\SessionsListDialog.xaml");
-        var projectDialog = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Navigation\ConversationProjectPickerDialog.xaml");
         var configurationDialog = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\ConfigurationEditorDialog.xaml");
 
         Assert.DoesNotContain("MinWidth=\"420\"", sessionsDialog, StringComparison.Ordinal);
-        Assert.DoesNotContain("MinWidth=\"400\"", projectDialog, StringComparison.Ordinal);
         Assert.DoesNotContain("MinWidth=\"400\"", configurationDialog, StringComparison.Ordinal);
         Assert.Contains("MaxWidth=\"560\"", sessionsDialog, StringComparison.Ordinal);
-        Assert.Contains("MaxWidth=\"560\"", projectDialog, StringComparison.Ordinal);
         Assert.Contains("MaxWidth=\"560\"", configurationDialog, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void ConversationProjectPickerDialog_PreservesSelectionFallbackAndPrimaryButtonGuard()
-    {
-        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Navigation\ConversationProjectPickerDialog.xaml");
-        var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Navigation\ConversationProjectPickerDialog.xaml.cs");
-
-        Assert.Contains("IsPrimaryButtonEnabled=\"{x:Bind HasSelection, Mode=OneWay}\"", xaml);
-        Assert.Contains("SelectedOption = ChooseDefaultOption(selectedProjectId);", code);
-        Assert.Contains("return _options.Count > 0 ? _options[0] : null;", code);
-        Assert.Contains("OnPropertyChanged(nameof(HasSelection));", code);
-    }
-
-    [Fact]
-    public void ConversationProjectPickerDialog_ButtonsAreResourceDriven()
-    {
-        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Navigation\ConversationProjectPickerDialog.xaml");
-
-        Assert.DoesNotContain("PrimaryButtonText=\"Move\"", xaml);
-        Assert.DoesNotContain("CloseButtonText=\"Cancel\"", xaml);
-        Assert.Contains("x:Uid=\"SessionProjectPickerDialog\"", xaml);
     }
 
     [Fact]

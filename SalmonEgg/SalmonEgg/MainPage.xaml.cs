@@ -56,10 +56,8 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
     private double _leftNavResizeStartWidth;
 
     private readonly DeferredActionGate<string> _archiveOnFlyoutClosed = new(StringComparer.Ordinal);
-    private readonly DeferredActionGate<string> _moveOnFlyoutClosed = new(StringComparer.Ordinal);
     private readonly Dictionary<KeyboardAccelerator, string> _appShortcutActions = new();
     private string? _pendingArchiveSessionId;
-    private string? _pendingMoveSessionId;
 #if WINDOWS
     // Title bar hosting/interactive-region state is encapsulated by MainWindowTitleBarAdapter.
 #endif
@@ -468,32 +466,6 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
             _archiveOnFlyoutClosed.TryConsume(sessionId);
         }
 
-        if (!string.IsNullOrWhiteSpace(_pendingMoveSessionId))
-        {
-            var sessionId = _pendingMoveSessionId;
-            _pendingMoveSessionId = null;
-            _moveOnFlyoutClosed.TryConsume(sessionId);
-        }
-
-    }
-
-    private void OnSessionMoveMenuItemClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is not MenuFlyoutItem item || item.CommandParameter is not SessionNavItemViewModel session)
-        {
-            return;
-        }
-
-        if (session.IsPlaceholder || string.IsNullOrWhiteSpace(session.SessionId))
-        {
-            return;
-        }
-
-        _pendingMoveSessionId = session.SessionId;
-        _moveOnFlyoutClosed.Request(session.SessionId, () =>
-        {
-            _ = DispatcherQueue.TryEnqueue(() => _ = session.MoveCommand.ExecuteAsync(null));
-        });
     }
 
     private async ValueTask<ShellNavigationResult> EnsureChatContentAsync(long? activationToken = null)

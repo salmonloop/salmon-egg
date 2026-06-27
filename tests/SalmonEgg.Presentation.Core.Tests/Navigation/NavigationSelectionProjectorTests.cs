@@ -161,8 +161,6 @@ public sealed class NavigationSelectionProjectorTests
         public Task<bool> ConfirmAsync(string title, string message, string primaryButtonText = "确定", string closeButtonText = "取消") => Task.FromResult(false);
         public Task<string?> PromptTextAsync(string title, string primaryButtonText, string closeButtonText, string initialText) => Task.FromResult<string?>(null);
         public Task ShowSessionsListDialogAsync(string title, IReadOnlyList<SessionNavItemViewModel> sessions, Action<string> onPickSession) => Task.CompletedTask;
-        public Task<string?> PickConversationProjectAsync(string title, string sessionTitle, IReadOnlyList<ConversationProjectTargetOption> options, string? selectedProjectId)
-            => Task.FromResult<string?>(null);
     }
 
     private sealed class FakeChatSessionCatalog : IChatSessionCatalog
@@ -187,10 +185,5 @@ public sealed class NavigationSelectionProjectorTests
         public Task<ConversationMutationResult> DeleteConversationAsync(string conversationId, CancellationToken cancellationToken = default)
             => Task.FromResult(new ConversationMutationResult(true, false, null));
 
-        public IReadOnlyList<ConversationProjectTargetOption> GetConversationProjectTargets() => [];
-
-        public void MoveConversationToProject(string conversationId, string projectId)
-        {
-        }
     }
 }

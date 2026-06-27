@@ -21,7 +21,6 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
     private readonly ISessionManager _sessionManager;
     private readonly IConversationStore _conversationStore;
     private readonly IConversationWorkspacePreferences _preferences;
-    private readonly INavigationProjectPreferences? _navigationProjectPreferences;
     private readonly ILogger<ChatConversationWorkspace> _logger;
     private readonly IUiDispatcher _uiDispatcher;
     private readonly object _stateGate = new();
@@ -39,13 +38,11 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         IConversationStore conversationStore,
         IConversationWorkspacePreferences preferences,
         ILogger<ChatConversationWorkspace> logger,
-        IUiDispatcher uiDispatcher,
-        INavigationProjectPreferences? navigationProjectPreferences = null)
+        IUiDispatcher uiDispatcher)
     {
         _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
         _conversationStore = conversationStore ?? throw new ArgumentNullException(nameof(conversationStore));
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
-        _navigationProjectPreferences = navigationProjectPreferences;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
     }
@@ -150,39 +147,6 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         }
     }
 
-    public IReadOnlyList<ConversationProjectTargetOption> GetConversationProjectTargets()
-    {
-        var options = new List<ConversationProjectTargetOption>
-        {
-            new(NavigationProjectIds.Unclassified, "未归类")
-        };
-
-        if (_navigationProjectPreferences == null)
-        {
-            return options;
-        }
-
-        var seen = new HashSet<string>(StringComparer.Ordinal)
-        {
-            NavigationProjectIds.Unclassified
-        };
-        foreach (var project in _navigationProjectPreferences.Projects
-                     .Where(project => project != null
-                         && !string.IsNullOrWhiteSpace(project.ProjectId)
-                         && !string.IsNullOrWhiteSpace(project.Name))
-                     .OrderBy(project => project.Name, StringComparer.Ordinal))
-        {
-            if (!seen.Add(project.ProjectId))
-            {
-                continue;
-            }
-
-            options.Add(new ConversationProjectTargetOption(project.ProjectId, project.Name));
-        }
-
-        return options;
-    }
-
     public IReadOnlyList<ConversationCatalogItem> GetCatalog()
     {
         lock (_stateGate)
@@ -203,9 +167,6 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 .ToArray();
         }
     }
-
-    public void MoveConversationToProject(string conversationId, string projectId)
-        => UpdateProjectAffinityOverride(conversationId, projectId);
 
     public Task<ConversationMutationResult> ArchiveConversationAsync(string conversationId, CancellationToken cancellationToken = default)
     {

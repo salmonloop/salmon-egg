@@ -178,13 +178,6 @@ public sealed class MainNavigationViewModelPaneTests
         public Task<ConversationMutationResult> DeleteConversationAsync(string conversationId, CancellationToken cancellationToken = default)
             => Task.FromResult(new ConversationMutationResult(true, false, null));
 
-        public IReadOnlyList<ConversationProjectTargetOption> GetConversationProjectTargets()
-            => [new(NavigationProjectIds.Unclassified, "未归类")];
-
-        public void MoveConversationToProject(string conversationId, string projectId)
-        {
-        }
-
         public void RaiseConversationListChanged()
         {
             ConversationListVersion++;

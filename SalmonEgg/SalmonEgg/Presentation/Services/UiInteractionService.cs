@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.Views.Navigation;
 using Windows.ApplicationModel.Resources;
@@ -130,36 +129,6 @@ public sealed class UiInteractionService : IUiInteractionService
             primaryButtonText: ResolveResourceString("UiInteractionConfirmButtonText", "确定"),
             closeButtonText: ResolveResourceString("UiInteractionCancelButtonText", "取消"),
             initialText: "").ConfigureAwait(true);
-    }
-
-    public async Task<string?> PickConversationProjectAsync(
-        string title,
-        string sessionTitle,
-        IReadOnlyList<ConversationProjectTargetOption> options,
-        string? selectedProjectId)
-    {
-        var xamlRoot = GetXamlRoot();
-        if (xamlRoot == null)
-        {
-            return null;
-        }
-
-        var dialog = new ConversationProjectPickerDialog(
-            title ?? string.Empty,
-            sessionTitle ?? string.Empty,
-            options ?? Array.Empty<ConversationProjectTargetOption>(),
-            selectedProjectId)
-        {
-            XamlRoot = xamlRoot
-        };
-
-        var result = await dialog.ShowAsync();
-        if (result != ContentDialogResult.Primary)
-        {
-            return null;
-        }
-
-        return dialog.PickedProjectId;
     }
 
     public async Task ShowSessionsListDialogAsync(string title, IReadOnlyList<SessionNavItemViewModel> sessions, Action<string> onPickSession)

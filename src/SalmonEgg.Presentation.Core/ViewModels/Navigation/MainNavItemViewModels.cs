@@ -142,7 +142,6 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
 
     public bool IsPlaceholder { get; }
 
-    public IAsyncRelayCommand MoveCommand { get; }
     public IAsyncRelayCommand ArchiveCommand { get; }
     public IAsyncRelayCommand CopySessionIdCommand { get; }
 
@@ -195,13 +194,9 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
         _chatSessionCatalog = chatSessionCatalog ?? throw new ArgumentNullException(nameof(chatSessionCatalog));
         IsPlaceholder = isPlaceholder;
 
-        MoveCommand = new AsyncRelayCommand(MoveAsync, CanMove);
         ArchiveCommand = new AsyncRelayCommand(ArchiveAsync, CanArchive);
         CopySessionIdCommand = new AsyncRelayCommand(CopySessionIdAsync, CanCopySessionId);
     }
-
-    private bool CanMove()
-        => !IsPlaceholder && !string.IsNullOrWhiteSpace(SessionId);
 
     private bool CanArchive()
         => !IsPlaceholder && !string.IsNullOrWhiteSpace(SessionId);
@@ -234,29 +229,6 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
 
         _ = await _chatSessionCatalog.ArchiveConversationAsync(SessionId).ConfigureAwait(true);
     }
-
-    private async Task MoveAsync()
-    {
-        var options = _chatSessionCatalog.GetConversationProjectTargets();
-        if (options.Count == 0)
-        {
-            return;
-        }
-
-        var pickedProjectId = await _ui.PickConversationProjectAsync(
-            title: "移动会话",
-            sessionTitle: Title,
-            options: options,
-            selectedProjectId: ProjectId).ConfigureAwait(true);
-
-        if (string.IsNullOrWhiteSpace(pickedProjectId))
-        {
-            return;
-        }
-
-        _chatSessionCatalog.MoveConversationToProject(SessionId, pickedProjectId.Trim());
-    }
-
 }
 
 public sealed partial class MoreSessionsNavItemViewModel : MainNavItemViewModel

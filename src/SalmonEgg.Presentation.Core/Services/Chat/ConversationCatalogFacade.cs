@@ -1,7 +1,5 @@
 using System;
-using System.Collections.Generic;
 using System.ComponentModel;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -14,7 +12,6 @@ namespace SalmonEgg.Presentation.Core.Services.Chat;
 public sealed class ConversationCatalogFacade : IConversationCatalog, IDisposable
 {
     private readonly ChatConversationWorkspace _workspace;
-    private readonly INavigationProjectPreferences _projectPreferences;
     private readonly IConversationActivationCoordinator _activationCoordinator;
     private readonly IShellSelectionReadModel _shellSelection;
     private readonly Lazy<INavigationCoordinator> _navigationCoordinator;
@@ -26,7 +23,6 @@ public sealed class ConversationCatalogFacade : IConversationCatalog, IDisposabl
 
     public ConversationCatalogFacade(
         ChatConversationWorkspace workspace,
-        INavigationProjectPreferences projectPreferences,
         IConversationActivationCoordinator activationCoordinator,
         IShellSelectionReadModel shellSelection,
         Lazy<INavigationCoordinator> navigationCoordinator,
@@ -36,7 +32,6 @@ public sealed class ConversationCatalogFacade : IConversationCatalog, IDisposabl
         IConversationPanelCleanup? panelCleanup = null)
     {
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
-        _projectPreferences = projectPreferences ?? throw new ArgumentNullException(nameof(projectPreferences));
         _activationCoordinator = activationCoordinator ?? throw new ArgumentNullException(nameof(activationCoordinator));
         _shellSelection = shellSelection ?? throw new ArgumentNullException(nameof(shellSelection));
         _navigationCoordinator = navigationCoordinator ?? throw new ArgumentNullException(nameof(navigationCoordinator));
@@ -56,34 +51,6 @@ public sealed class ConversationCatalogFacade : IConversationCatalog, IDisposabl
 
     public string[] GetKnownConversationIds() => _workspace.GetKnownConversationIds();
 
-    public IReadOnlyList<ConversationProjectTargetOption> GetConversationProjectTargets()
-    {
-        var options = new List<ConversationProjectTargetOption>
-        {
-            new(NavigationProjectIds.Unclassified, "未归类")
-        };
-        var seen = new HashSet<string>(StringComparer.Ordinal)
-        {
-            NavigationProjectIds.Unclassified
-        };
-
-        foreach (var project in _projectPreferences.Projects
-                     .Where(project => project != null
-                         && !string.IsNullOrWhiteSpace(project.ProjectId)
-                         && !string.IsNullOrWhiteSpace(project.Name))
-                     .OrderBy(project => project.Name, StringComparer.Ordinal))
-        {
-            if (!seen.Add(project.ProjectId))
-            {
-                continue;
-            }
-
-            options.Add(new ConversationProjectTargetOption(project.ProjectId, project.Name));
-        }
-
-        return options;
-    }
-
     public Task RestoreAsync(CancellationToken cancellationToken = default)
         => _workspace.RestoreAsync(cancellationToken);
 
@@ -101,12 +68,6 @@ public sealed class ConversationCatalogFacade : IConversationCatalog, IDisposabl
             .RegisterConversationAsync(conversationId, timestamp, timestamp, cancellationToken)
             .ConfigureAwait(false);
         _workspace.ScheduleSave();
-    }
-
-    public void MoveConversationToProject(string conversationId, string projectId)
-    {
-        _workspace.MoveConversationToProject(conversationId, projectId);
-        RefreshCatalogPresenter();
     }
 
     Task<ConversationMutationResult> IConversationCatalog.ArchiveConversationAsync(string conversationId, CancellationToken cancellationToken)

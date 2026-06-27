@@ -193,10 +193,6 @@
                                         Click="OnSessionArchiveMenuItemClick"
                                         CommandParameter="{x:Bind}"
                                         IsEnabled="{x:Bind IsPlaceholder, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}" />
-                        <MenuFlyoutItem x:Uid="SessionNavMoveItem"
-                                        AutomationProperties.AutomationId="MainNav.Session.Context.Move"
-                                        Click="OnSessionMoveMenuItemClick"
-                                        CommandParameter="{x:Bind}" />
                         <MenuFlyoutItem x:Uid="SessionNavCopySessionIdItem"
                                         AutomationProperties.AutomationId="MainNav.Session.Context.CopySessionId"
                                         Command="{x:Bind CopySessionIdCommand}" />

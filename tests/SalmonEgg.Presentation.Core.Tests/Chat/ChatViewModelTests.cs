@@ -184,7 +184,6 @@ public partial class ChatViewModelTests
         var conversationCatalogPresenter = new ConversationCatalogPresenter();
         var conversationCatalogFacade = new ConversationCatalogFacade(
             workspace,
-            new NavigationProjectPreferencesAdapter(preferences),
             conversationActivationCoordinator ?? Mock.Of<IConversationActivationCoordinator>(),
             Mock.Of<IShellSelectionReadModel>(),
             new Lazy<INavigationCoordinator>(() => Mock.Of<INavigationCoordinator>()),
@@ -276,7 +275,6 @@ public partial class ChatViewModelTests
         var catalogPresenter = new ConversationCatalogPresenter();
         var conversationCatalog = new ConversationCatalogFacade(
             fixture.Workspace,
-            new NavigationProjectPreferencesAdapter(fixture.Preferences),
             Mock.Of<IConversationActivationCoordinator>(),
             Mock.Of<IShellSelectionReadModel>(),
             new Lazy<INavigationCoordinator>(() => Mock.Of<INavigationCoordinator>()),
@@ -3754,7 +3752,6 @@ public partial class ChatViewModelTests
         var conversationCatalogPresenter = new ConversationCatalogPresenter();
         var conversationCatalogFacade = new ConversationCatalogFacade(
             workspace,
-            new NavigationProjectPreferencesAdapter(preferences),
             Mock.Of<IConversationActivationCoordinator>(),
             Mock.Of<IShellSelectionReadModel>(),
             new Lazy<INavigationCoordinator>(() => Mock.Of<INavigationCoordinator>()),
@@ -3856,7 +3853,6 @@ public partial class ChatViewModelTests
         var conversationCatalogPresenter = new ConversationCatalogPresenter();
         var conversationCatalogFacade = new ConversationCatalogFacade(
             workspace,
-            new NavigationProjectPreferencesAdapter(preferences),
             Mock.Of<IConversationActivationCoordinator>(),
             Mock.Of<IShellSelectionReadModel>(),
             new Lazy<INavigationCoordinator>(() => Mock.Of<INavigationCoordinator>()),
@@ -3986,7 +3982,6 @@ public partial class ChatViewModelTests
         var conversationCatalogPresenter = new ConversationCatalogPresenter();
         var conversationCatalogFacade = new ConversationCatalogFacade(
             workspace,
-            new NavigationProjectPreferencesAdapter(preferences),
             Mock.Of<IConversationActivationCoordinator>(),
             Mock.Of<IShellSelectionReadModel>(),
             new Lazy<INavigationCoordinator>(() => Mock.Of<INavigationCoordinator>()),
@@ -9365,7 +9360,6 @@ public partial class ChatViewModelTests
         var runtimeState = new ShellNavigationRuntimeStateStore();
         var conversationCatalog = new ConversationCatalogFacade(
             GetPrivateFieldValue<ChatConversationWorkspace>(fixture.ViewModel, "_conversationWorkspace")!,
-            new NavigationProjectPreferencesAdapter(fixture.Preferences),
             Mock.Of<IConversationActivationCoordinator>(),
             Mock.Of<IShellSelectionReadModel>(),
             new Lazy<INavigationCoordinator>(() => Mock.Of<INavigationCoordinator>()),

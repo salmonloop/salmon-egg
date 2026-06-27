@@ -176,7 +176,6 @@ public sealed class ChatLaunchWorkflowTests
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
         using var catalogFacade = new ConversationCatalogFacade(
             workspace,
-            new NavigationProjectPreferencesAdapter(preferences),
             Mock.Of<IConversationActivationCoordinator>(),
             Mock.Of<IShellSelectionReadModel>(),
             new Lazy<INavigationCoordinator>(() => Mock.Of<INavigationCoordinator>()),
@@ -224,7 +223,6 @@ public sealed class ChatLaunchWorkflowTests
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
         using var catalogFacade = new ConversationCatalogFacade(
             workspace,
-            new NavigationProjectPreferencesAdapter(preferences),
             Mock.Of<IConversationActivationCoordinator>(),
             Mock.Of<IShellSelectionReadModel>(),
             new Lazy<INavigationCoordinator>(() => Mock.Of<INavigationCoordinator>()),
