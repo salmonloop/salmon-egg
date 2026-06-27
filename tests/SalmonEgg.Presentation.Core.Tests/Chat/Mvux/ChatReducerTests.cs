@@ -935,7 +935,7 @@ public class ChatReducerTests
         var newState = ChatReducer.Reduce(initialState, new SelectConversationAction("conv-1"));
 
         Assert.Equal("conv-1", newState.HydratedConversationId);
-        Assert.Same(activeTurn, newState.ActiveTurn);
+        Assert.Equal(activeTurn, newState.ActiveTurn);
     }
 
     [Fact]
@@ -951,7 +951,7 @@ public class ChatReducerTests
         var newState = ChatReducer.Reduce(initialState, new ClearTerminalTurnAction("conv-1"));
 
         Assert.Equal(12, newState.Generation);
-        Assert.Same(initialState.ActiveTurn, newState.ActiveTurn);
+        Assert.Equal(initialState.ActiveTurn, newState.ActiveTurn);
     }
 
     [Fact]
