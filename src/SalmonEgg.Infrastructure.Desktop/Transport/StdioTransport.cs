@@ -49,9 +49,6 @@ namespace SalmonEgg.Infrastructure.Transport
         /// </summary>
         public bool IsConnected { get; private set; }
 
-        // 调试文件追踪器
-        private StreamWriter? _debugFileWriter;
-
         /// <summary>
         /// 创建新的 StdioTransport 实例。
         /// </summary>
@@ -119,20 +116,6 @@ namespace SalmonEgg.Infrastructure.Transport
             {
                 _readCts = new CancellationTokenSource();
 
-                // 初始化调试文件写入器
-                try
-                {
-                    var debugFilePath = Path.Combine(Path.GetTempPath(), $"acp_transport_{DateTime.Now:yyyyMMdd_HHmmss}.log");
-                    _debugFileWriter = new StreamWriter(debugFilePath, false, Encoding.UTF8);
-                    _debugFileWriter.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] === ACP Transport Debug Log Started ===");
-                    _debugFileWriter.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] Command: {_command} {string.Join(" ", _args)}");
-                    _debugFileWriter.Flush();
-                }
-                catch (Exception ex)
-                {
-                    _logger.Warning(ex, "[StdioTransport.Connect] 无法创建调试文件");
-                }
-
                 var processInfo = new ProcessStartInfo
                 {
                     FileName = _command,
@@ -153,8 +136,6 @@ namespace SalmonEgg.Infrastructure.Transport
                 _process.Exited += OnProcessExited;
 
                 _logger.Information("[StdioTransport.Connect] 准备启动进程：{Command} {Args}", _command, processInfo.Arguments);
-                _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] CONNECT: Starting process {_command} {processInfo.Arguments}");
-                _debugFileWriter?.Flush();
 
                 // 在后台启动进程，避免阻塞 UI 线程
                 await Task.Run(() =>
@@ -174,9 +155,6 @@ namespace SalmonEgg.Infrastructure.Transport
 
                 if (!_process.HasExited)
                 {
-                    _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] CONNECT: Process started PID={_process.Id}");
-                    _debugFileWriter?.Flush();
-
                     _logger.Information("[StdioTransport.Connect] 启动读取循环");
 
                     // 启动读取循环
@@ -186,15 +164,11 @@ namespace SalmonEgg.Infrastructure.Transport
                     IsConnected = true;
 
                     _logger.Information("[StdioTransport.Connect] 连接成功，PID={Pid}", _process.Id);
-                    _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] CONNECT: Connection established");
-                    _debugFileWriter?.Flush();
                     return true;
                 }
                 else
                 {
                     _logger.Warning("[StdioTransport.Connect] 进程已退出，退出码={ExitCode}", _process.ExitCode);
-                    _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] CONNECT: Process exited immediately with code {_process.ExitCode}");
-                    _debugFileWriter?.Flush();
                     await DrainExitedProcessErrorAsync().ConfigureAwait(false);
                     OnErrorOccurred(new TransportErrorEventArgs($"进程启动后立即退出，退出码={_process.ExitCode}"));
                     return false;
@@ -203,8 +177,6 @@ namespace SalmonEgg.Infrastructure.Transport
             catch (Exception ex)
             {
                 _logger.Error(ex, "[StdioTransport.Connect] 启动失败");
-                _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] CONNECT-ERROR: {ex.Message}");
-                _debugFileWriter?.Flush();
                 OnErrorOccurred(new TransportErrorEventArgs($"无法启动进程：{ex.Message}", ex));
                 return false;
             }
@@ -223,10 +195,6 @@ namespace SalmonEgg.Infrastructure.Transport
                 }
                 try
                 {
-                    // 记录断开
-                    _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] DISCONNECT");
-                    _debugFileWriter?.Flush();
-
                     // 取消读取操作
                     _readCts?.Cancel();
                     // 关闭标准输入
@@ -250,19 +218,11 @@ namespace SalmonEgg.Infrastructure.Transport
                     _stderr?.Dispose();
                     _process?.Dispose();
 
-                    // 关闭调试文件
-                    _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] CLOSED");
-                    _debugFileWriter?.Close();
-                    _debugFileWriter?.Dispose();
-                    _debugFileWriter = null;
-
                     IsConnected = false;
                     return true;
                 }
                 catch (Exception ex)
                 {
-                    _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] DISCONNECT-ERROR: {ex.Message}");
-                    _debugFileWriter?.Flush();
                     OnErrorOccurred(new TransportErrorEventArgs($"断开连接时出错：{ex.Message}", ex));
                     return false;
                 }
@@ -293,34 +253,20 @@ namespace SalmonEgg.Infrastructure.Transport
 
             try
             {
-                _logger.Information("[StdioTransport.SendMessage] 发送消息：{Message}", message);
-
-                // 写入调试文件 - 绝对记录
-                _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] TX: {message}");
-                _debugFileWriter?.Flush();
+                _logger.Information("[StdioTransport.SendMessage] 发送消息，Length={Length}", message.Length);
 
                 // 发送消息后添加换行符
                 await _stdin.WriteAsync(message + Environment.NewLine).ConfigureAwait(false);
                 _logger.Debug("[StdioTransport.SendMessage] 已写入 stdin，正在 Flush...");
 
-                // 再次记录到调试文件
-                _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] TX-WRITTEN");
-                _debugFileWriter?.Flush();
-
                 await _stdin.FlushAsync().ConfigureAwait(false);
                 _logger.Debug("[StdioTransport.SendMessage] Flush 完成");
-
-                // 记录成功
-                _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] TX-FLUSHED");
-                _debugFileWriter?.Flush();
 
                 return true;
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "[StdioTransport.SendMessage] 发送失败");
-                _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] TX-ERROR: {ex.Message}");
-                _debugFileWriter?.Flush();
                 OnErrorOccurred(new TransportErrorEventArgs($"发送消息失败：{ex.Message}", ex));
                 IsConnected = false;
                 return false;
@@ -346,14 +292,11 @@ namespace SalmonEgg.Infrastructure.Transport
                         break;
                     }
                     lineCount++;
-                    _logger.Debug("[StdioTransport.ReadLoop] 第{Count}行：{Line}", lineCount, line);
+                    _logger.Debug("[StdioTransport.ReadLoop] 收到第{Count}行，Length={Length}", lineCount, line.Length);
 
                     if (!string.IsNullOrWhiteSpace(line))
                     {
-                        _logger.Information("[StdioTransport.ReadLoop] 触发 OnMessageReceived: {Line}", line);
-                        // 记录接收到的数据到调试文件
-                        _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] RX: {line}");
-                        _debugFileWriter?.Flush();
+                        _logger.Information("[StdioTransport.ReadLoop] 触发 OnMessageReceived，Line={Count}, Length={Length}", lineCount, line.Length);
                         OnMessageReceived(new MessageReceivedEventArgs(line));
                     }
                     else
@@ -363,8 +306,6 @@ namespace SalmonEgg.Infrastructure.Transport
                 }
                 _logger.Warning("[StdioTransport.ReadLoop] 读取循环结束 - 共读取{Count}行，取消={Cancelled}",
                     lineCount, cancellationToken.IsCancellationRequested);
-                _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] READ-LOOP-END: 共{lineCount}行");
-                _debugFileWriter?.Flush();
             }
             catch (OperationCanceledException)
             {
@@ -390,13 +331,11 @@ namespace SalmonEgg.Infrastructure.Transport
                 {
                     var line = await _stderr.ReadLineAsync().ConfigureAwait(false);
                     if (line == null) break;
-                    _logger.Verbose("[StdioTransport.ReadError] 收到 stderr 原始行：'{Line}'", line);
+                    _logger.Verbose("[StdioTransport.ReadError] 收到 stderr 行，Length={Length}", line.Length);
 
                     if (!string.IsNullOrWhiteSpace(line))
                     {
-                        _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] STDERR: {line}");
-                        _debugFileWriter?.Flush();
-                        _logger.Warning("[StdioTransport.ReadError] 进程错误：{Line}", line);
+                        _logger.Warning("[StdioTransport.ReadError] 进程 stderr 非空，Length={Length}", line.Length);
                         OnErrorOccurred(new TransportErrorEventArgs($"进程错误：{line}"));
                     }
                 }
@@ -526,9 +465,7 @@ namespace SalmonEgg.Infrastructure.Transport
                     continue;
                 }
 
-                _debugFileWriter?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] STDERR-EARLY-EXIT: {line}");
-                _debugFileWriter?.Flush();
-                _logger.Warning("[StdioTransport.Connect] 进程快速退出 stderr：{Line}", line);
+                _logger.Warning("[StdioTransport.Connect] 进程快速退出 stderr 非空，Length={Length}", line.Length);
                 OnErrorOccurred(new TransportErrorEventArgs($"进程错误：{line}"));
             }
         }
