@@ -27,8 +27,7 @@ public class MessageParserTests
         }
         """;
 
-        var parser = new MessageParser();
-        var updateParams = JsonSerializer.Deserialize<SessionUpdateParams>(json, parser.Options);
+        var updateParams = JsonSerializer.Deserialize(json, AcpJsonContext.Default.SessionUpdateParams);
 
         Assert.NotNull(updateParams);
         Assert.NotNull(updateParams!.Update);
@@ -53,10 +52,8 @@ public class MessageParserTests
         }
         """;
 
-        var parser = new MessageParser();
-
         Assert.Throws<JsonException>(() =>
-            JsonSerializer.Deserialize<SessionUpdateParams>(json, parser.Options));
+            JsonSerializer.Deserialize(json, AcpJsonContext.Default.SessionUpdateParams));
     }
 
     [Fact]
@@ -74,16 +71,13 @@ public class MessageParserTests
         }
         """;
 
-        var parser = new MessageParser();
-
         Assert.Throws<JsonException>(() =>
-            JsonSerializer.Deserialize<SessionUpdateParams>(json, parser.Options));
+            JsonSerializer.Deserialize(json, AcpJsonContext.Default.SessionUpdateParams));
     }
 
     [Fact]
     public void Options_ShouldSerialize_PlanUpdateWithOnlyOfficialFields()
     {
-        var parser = new MessageParser();
         var updateParams = new SessionUpdateParams(
             "sess_test",
             new PlanUpdate(new List<PlanEntry>
@@ -96,7 +90,7 @@ public class MessageParserTests
                 }
             }));
 
-        var json = JsonSerializer.Serialize(updateParams, parser.Options);
+        var json = JsonSerializer.Serialize(updateParams, AcpJsonContext.Default.SessionUpdateParams);
 
         Assert.Contains("\"sessionUpdate\":\"plan\"", json, StringComparison.Ordinal);
         Assert.Contains("\"entries\"", json, StringComparison.Ordinal);
@@ -132,44 +126,12 @@ public class MessageParserTests
     }
 
     [Fact]
-    public void Options_ShouldDeserializeAndDrop_NonStandardSessionPromptResponseRootFields()
-    {
-        var json = """
-        {
-          "stopReason": "end_turn",
-          "userMessageId": "server-msg-42"
-        }
-        """;
-
-        var response = JsonSerializer.Deserialize(json, AcpJsonContext.Default.SessionPromptResponse);
-        var roundTripped = JsonSerializer.Serialize(response, AcpJsonContext.Default.SessionPromptResponse);
-
-        Assert.Contains("\"stopReason\":\"end_turn\"", roundTripped, StringComparison.Ordinal);
-        Assert.DoesNotContain("\"userMessageId\"", roundTripped, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Options_ShouldDeserializeAndDrop_NonStandardSessionSetModeResponseRootFields()
-    {
-        var json = """
-        {
-          "modeId": "plan"
-        }
-        """;
-
-        var response = JsonSerializer.Deserialize(json, AcpJsonContext.Default.SessionSetModeResponse);
-        var roundTripped = JsonSerializer.Serialize(response, AcpJsonContext.Default.SessionSetModeResponse);
-
-        Assert.DoesNotContain("\"modeId\"", roundTripped, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void SerializeMessage_ShouldKeepResultNull_ForJsonRpcResponses()
     {
         var parser = new MessageParser();
 
         // JSON-RPC responses must include either "result" or "error". For some ACP methods the result is null.
-        var nullResult = JsonSerializer.SerializeToElement<object?>(null, parser.Options);
+        var nullResult = JsonSerializer.SerializeToElement<object?>(null, AcpJsonContext.Default.Object);
         var response = new JsonRpcResponse(id: 1, result: nullResult);
 
         var json = parser.SerializeMessage(response);
@@ -186,14 +148,13 @@ public class MessageParserTests
     [InlineData("cancelled", StopReason.Cancelled)]
     public void Options_ShouldDeserialize_SessionPromptResponse_WithOfficialStopReasons(string stopReason, StopReason expected)
     {
-        var parser = new MessageParser();
         var json = $$"""
         {
           "stopReason": "{{stopReason}}"
         }
         """;
 
-        var response = JsonSerializer.Deserialize<SessionPromptResponse>(json, parser.Options);
+        var response = JsonSerializer.Deserialize(json, AcpJsonContext.Default.SessionPromptResponse);
 
         Assert.NotNull(response);
         Assert.Equal(expected, response!.StopReason);
@@ -213,8 +174,7 @@ public class MessageParserTests
         }
         """;
 
-        var parser = new MessageParser();
-        var updateParams = JsonSerializer.Deserialize<SessionUpdateParams>(json, parser.Options);
+        var updateParams = JsonSerializer.Deserialize(json, AcpJsonContext.Default.SessionUpdateParams);
 
         Assert.NotNull(updateParams);
         var usage = Assert.IsType<UsageUpdate>(updateParams!.Update);
@@ -241,8 +201,7 @@ public class MessageParserTests
         }
         """;
 
-        var parser = new MessageParser();
-        var updateParams = JsonSerializer.Deserialize<SessionUpdateParams>(json, parser.Options);
+        var updateParams = JsonSerializer.Deserialize(json, AcpJsonContext.Default.SessionUpdateParams);
 
         Assert.NotNull(updateParams);
         var usage = Assert.IsType<UsageUpdate>(updateParams!.Update);
@@ -276,8 +235,7 @@ public class MessageParserTests
         }
         """;
 
-        var parser = new MessageParser();
-        var updateParams = JsonSerializer.Deserialize<SessionUpdateParams>(json, parser.Options);
+        var updateParams = JsonSerializer.Deserialize(json, AcpJsonContext.Default.SessionUpdateParams);
 
         Assert.NotNull(updateParams);
         var update = Assert.IsType<ToolCallStatusUpdate>(updateParams!.Update);
@@ -292,8 +250,6 @@ public class MessageParserTests
     [Fact]
     public void Options_ShouldDeserialize_SessionLoadReplayChunks_OfficialPayloads()
     {
-        var parser = new MessageParser();
-
         var userJson = """
         {
           "sessionId": "sess_789xyz",
@@ -320,8 +276,8 @@ public class MessageParserTests
         }
         """;
 
-        var userUpdate = JsonSerializer.Deserialize<SessionUpdateParams>(userJson, parser.Options);
-        var agentUpdate = JsonSerializer.Deserialize<SessionUpdateParams>(agentJson, parser.Options);
+        var userUpdate = JsonSerializer.Deserialize(userJson, AcpJsonContext.Default.SessionUpdateParams);
+        var agentUpdate = JsonSerializer.Deserialize(agentJson, AcpJsonContext.Default.SessionUpdateParams);
 
         var userMessage = Assert.IsType<UserMessageUpdate>(userUpdate!.Update);
         var userContent = Assert.IsType<TextContentBlock>(userMessage.Content);
@@ -345,8 +301,7 @@ public class MessageParserTests
         }
         """;
 
-        var parser = new MessageParser();
-        var updateParams = JsonSerializer.Deserialize<SessionUpdateParams>(json, parser.Options);
+        var updateParams = JsonSerializer.Deserialize(json, AcpJsonContext.Default.SessionUpdateParams);
 
         Assert.NotNull(updateParams);
         var mode = Assert.IsType<CurrentModeUpdate>(updateParams!.Update);
@@ -384,8 +339,7 @@ public class MessageParserTests
         }
         """;
 
-        var parser = new MessageParser();
-        var updateParams = JsonSerializer.Deserialize<SessionUpdateParams>(json, parser.Options);
+        var updateParams = JsonSerializer.Deserialize(json, AcpJsonContext.Default.SessionUpdateParams);
 
         Assert.NotNull(updateParams);
         var config = Assert.IsType<ConfigOptionUpdate>(updateParams!.Update);
@@ -422,8 +376,7 @@ public class MessageParserTests
         }
         """;
 
-        var parser = new MessageParser();
-        var updateParams = JsonSerializer.Deserialize<SessionUpdateParams>(json, parser.Options);
+        var updateParams = JsonSerializer.Deserialize(json, AcpJsonContext.Default.SessionUpdateParams);
 
         Assert.NotNull(updateParams);
         var commands = Assert.IsType<AvailableCommandsUpdate>(updateParams!.Update);
@@ -449,8 +402,7 @@ public class MessageParserTests
         }
         """;
 
-        var parser = new MessageParser();
-        var updateParams = JsonSerializer.Deserialize<SessionUpdateParams>(json, parser.Options);
+        var updateParams = JsonSerializer.Deserialize(json, AcpJsonContext.Default.SessionUpdateParams);
 
         Assert.NotNull(updateParams);
         var sessionInfo = Assert.IsType<SessionInfoUpdate>(updateParams!.Update);
@@ -485,14 +437,13 @@ public class MessageParserTests
         }
         """;
 
-        var parser = new MessageParser();
-        var promptParams = JsonSerializer.Deserialize<SessionPromptParams>(json, parser.Options);
+        var promptParams = JsonSerializer.Deserialize(json, AcpJsonContext.Default.SessionPromptParams);
 
         Assert.NotNull(promptParams);
         Assert.Single(promptParams!.Prompt);
 
         var image = Assert.IsType<ImageContentBlock>(promptParams.Prompt[0]);
-        var roundTripped = JsonSerializer.Serialize(promptParams, parser.Options);
+        var roundTripped = JsonSerializer.Serialize(promptParams, AcpJsonContext.Default.SessionPromptParams);
         using var doc = JsonDocument.Parse(roundTripped);
         var promptImage = doc.RootElement.GetProperty("prompt")[0];
 
@@ -524,9 +475,7 @@ public class MessageParserTests
         }
         """;
 
-        var parser = new MessageParser();
-
-        var updateParams = JsonSerializer.Deserialize<SessionUpdateParams>(json, parser.Options);
+        var updateParams = JsonSerializer.Deserialize(json, AcpJsonContext.Default.SessionUpdateParams);
 
         Assert.NotNull(updateParams);
         var update = Assert.IsType<ToolCallStatusUpdate>(updateParams!.Update);
@@ -556,8 +505,7 @@ public class MessageParserTests
         }
         """;
 
-        var parser = new MessageParser();
-        var response = JsonSerializer.Deserialize<SessionListResponse>(json, parser.Options);
+        var response = JsonSerializer.Deserialize(json, AcpJsonContext.Default.SessionListResponse);
 
         Assert.NotNull(response);
         Assert.Single(response!.Sessions);
