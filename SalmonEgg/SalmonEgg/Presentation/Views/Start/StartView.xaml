@@ -63,7 +63,6 @@
                             HorizontalAlignment="Center"
                             Spacing="12">
                     <TextBlock x:Uid="Start_Title"
-                               Text="Salmon Egg"
                                FontSize="64"
                                FontWeight="Bold"
                                HorizontalAlignment="Center"
@@ -77,7 +76,6 @@
                         </TextBlock.Foreground>
                     </TextBlock>
                     <TextBlock x:Uid="Start_Subtitle"
-                               Text="你的 AI 好鲑鲑"
                                FontSize="18"
                                Opacity="0.6"
                                FontWeight="Medium"
@@ -109,7 +107,6 @@
                                                   FontSize="18"
                                                   Foreground="{ThemeResource AccentBrush}" />
                                         <TextBlock x:Uid="Start_QuickLaunchLabel"
-                                                   Text="Quick Launch"
                                                    FontSize="12"
                                                    FontWeight="SemiBold"
                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />

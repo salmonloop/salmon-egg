@@ -18,23 +18,18 @@
                 <StackPanel Spacing="28">
                     <StackPanel Spacing="8">
                         <TextBlock x:Uid="Appearance_PageTitle"
-                                   Text="外观"
                                    Style="{StaticResource SettingsPageTitleTextStyle}"/>
                         <TextBlock x:Uid="Appearance_PageSummary"
-                                   Text="调整主题、过渡动画和窗口背景材质。"
                                    Style="{StaticResource SettingsPageSummaryTextStyle}"/>
                     </StackPanel>
 
                     <InfoBar x:Uid="Appearance_Notice"
-                             Title="提示"
-                             Message="主题、动画和材质设置会立即生效（部分平台可能需要重启）。"
                              IsOpen="True"
                              IsClosable="False"
                              Severity="Informational" />
 
                     <StackPanel Spacing="12">
                         <TextBlock x:Uid="Appearance_ThemeTitle"
-                                   Text="界面主题"
                                    Style="{StaticResource SettingsSectionTitleTextStyle}"/>
 
                         <Border Style="{StaticResource SettingsSectionContainerStyle}">
@@ -46,10 +41,8 @@
 
                                 <StackPanel VerticalAlignment="Center" Spacing="4">
                                     <TextBlock x:Uid="Appearance_ThemeLabel"
-                                               Text="应用主题"
                                                Style="{StaticResource SettingsRowTitleTextStyle}"/>
                                     <TextBlock x:Uid="Appearance_ThemeDescription"
-                                               Text="选择您偏好的应用主题颜色"
                                                Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                 </StackPanel>
 
@@ -62,9 +55,9 @@
                                           HorizontalAlignment="Stretch"
                                           IsFocusEngagementEnabled="True"
                                           VerticalAlignment="Center">
-                                    <ComboBoxItem x:Uid="Appearance_ThemeSystem" Content="跟随系统" Tag="System" />
-                                    <ComboBoxItem x:Uid="Appearance_ThemeLight" Content="浅色" Tag="Light" />
-                                    <ComboBoxItem x:Uid="Appearance_ThemeDark" Content="深色" Tag="Dark" />
+                                    <ComboBoxItem x:Uid="Appearance_ThemeSystem" Tag="System" />
+                                    <ComboBoxItem x:Uid="Appearance_ThemeLight" Tag="Light" />
+                                    <ComboBoxItem x:Uid="Appearance_ThemeDark" Tag="Dark" />
                                 </ComboBox>
                             </Grid>
                         </Border>
@@ -72,7 +65,6 @@
 
                     <StackPanel Spacing="12">
                         <TextBlock x:Uid="Appearance_MotionTitle"
-                                   Text="交互体验"
                                    Style="{StaticResource SettingsSectionTitleTextStyle}"/>
 
                         <Border Style="{StaticResource SettingsSectionContainerStyle}">
@@ -84,10 +76,8 @@
 
                                 <StackPanel VerticalAlignment="Center" Spacing="4">
                                     <TextBlock x:Uid="Appearance_MotionToggleTitle"
-                                               Text="动画效果"
                                                Style="{StaticResource SettingsRowTitleTextStyle}"/>
                                     <TextBlock x:Uid="Appearance_MotionToggleDescription"
-                                               Text="控制页面切换和应用内状态提示动画；系统关闭动画时也会自动关闭"
                                                Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                 </StackPanel>
 
@@ -96,8 +86,6 @@
                                               AutomationProperties.AutomationId="Appearance.Animation"
                                               IsOn="{x:Bind Preferences.IsAnimationEnabled, Mode=TwoWay}"
                                               x:Uid="Appearance_MotionToggle"
-                                              OnContent="已开启"
-                                              OffContent="已禁用"
                                               MinWidth="0"
                                               VerticalAlignment="Center"/>
                             </Grid>
@@ -106,7 +94,6 @@
 
                     <StackPanel Spacing="12">
                         <TextBlock x:Uid="Appearance_BackdropTitle"
-                                   Text="背景材质"
                                    Style="{StaticResource SettingsSectionTitleTextStyle}"/>
 
                         <Border Style="{StaticResource SettingsSectionContainerStyle}">
@@ -118,10 +105,8 @@
 
                                 <StackPanel VerticalAlignment="Center" Spacing="4">
                                     <TextBlock x:Uid="Appearance_BackdropLabel"
-                                               Text="窗口背景"
                                                Style="{StaticResource SettingsRowTitleTextStyle}"/>
                                     <TextBlock x:Uid="Appearance_BackdropDescription"
-                                               Text="选择窗口背景效果（不同系统版本会自动降级）"
                                                Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                 </StackPanel>
 
@@ -134,10 +119,10 @@
                                           HorizontalAlignment="Stretch"
                                           IsFocusEngagementEnabled="True"
                                           VerticalAlignment="Center">
-                                    <ComboBoxItem x:Uid="Appearance_BackdropSystem" Content="自动（系统推荐）" Tag="System" />
+                                    <ComboBoxItem x:Uid="Appearance_BackdropSystem" Tag="System" />
                                     <ComboBoxItem x:Uid="Appearance_BackdropMica" Content="Mica" Tag="Mica" />
                                     <ComboBoxItem x:Uid="Appearance_BackdropAcrylic" Content="Acrylic" Tag="Acrylic" />
-                                    <ComboBoxItem x:Uid="Appearance_BackdropSolid" Content="纯色" Tag="Solid" />
+                                    <ComboBoxItem x:Uid="Appearance_BackdropSolid" Tag="Solid" />
                                 </ComboBox>
                             </Grid>
                         </Border>

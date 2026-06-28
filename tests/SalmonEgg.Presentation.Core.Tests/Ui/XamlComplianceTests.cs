@@ -1899,10 +1899,6 @@ public sealed class XamlComplianceTests
         Assert.DoesNotContain("全局过渡动画", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("依赖动画", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("dependent", xaml, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("动画效果", xaml, StringComparison.Ordinal);
-        Assert.Contains("页面切换", xaml, StringComparison.Ordinal);
-        Assert.Contains("应用内状态提示", xaml, StringComparison.Ordinal);
-        Assert.Contains("系统关闭动画时也会自动关闭", xaml, StringComparison.Ordinal);
 
         string[] resourceFiles =
         [

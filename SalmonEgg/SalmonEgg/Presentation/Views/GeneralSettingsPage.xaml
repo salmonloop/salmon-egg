@@ -24,16 +24,13 @@
                 <StackPanel Spacing="28">
                     <StackPanel Spacing="8">
                         <TextBlock x:Uid="General_PageTitle"
-                                   Text="常规"
                                    Style="{StaticResource SettingsPageTitleTextStyle}"/>
                         <TextBlock x:Uid="General_PageSummary"
-                                   Text="管理启动、窗口行为和界面语言。"
                                    Style="{StaticResource SettingsPageSummaryTextStyle}"/>
                     </StackPanel>
 
                     <StackPanel Spacing="12">
                         <TextBlock x:Uid="General_StartupTitle"
-                                   Text="启动与窗口"
                                    Style="{StaticResource SettingsSectionTitleTextStyle}"/>
 
                         <Border Style="{StaticResource SettingsSectionContainerStyle}">
@@ -46,10 +43,8 @@
 
                                     <StackPanel VerticalAlignment="Center" Spacing="4">
                                         <TextBlock x:Uid="General_AutoStartTitle"
-                                                   Text="开机自动启动"
                                                    Style="{StaticResource SettingsRowTitleTextStyle}"/>
                                         <TextBlock x:Uid="General_AutoStartUnsupported"
-                                                   Text="当前平台不支持开机自动启动"
                                                    Style="{StaticResource SettingsRowDescriptionTextStyle}"
                                                    Visibility="{x:Bind ViewModel.Preferences.IsLaunchOnStartupSupported, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}"/>
                                     </StackPanel>
@@ -60,8 +55,6 @@
                                                   AutomationProperties.AutomationId="GeneralSettings.AutoStart"
                                                   IsOn="{x:Bind ViewModel.Preferences.LaunchOnStartup, Mode=TwoWay}"
                                                   IsEnabled="{x:Bind ViewModel.Preferences.IsLaunchOnStartupSupported, Mode=OneWay}"
-                                                  OnContent="开启"
-                                                  OffContent="关闭"
                                                   VerticalAlignment="Center"/>
                                 </Grid>
 
@@ -77,10 +70,8 @@
 
                                     <StackPanel VerticalAlignment="Center" Spacing="4">
                                         <TextBlock x:Uid="General_MinimizeToTrayTitle"
-                                                   Text="最小化到系统托盘"
                                                    Style="{StaticResource SettingsRowTitleTextStyle}"/>
                                         <TextBlock x:Uid="General_TrayUnsupported"
-                                                   Text="当前平台暂未集成系统托盘支持"
                                                    Style="{StaticResource SettingsRowDescriptionTextStyle}"
                                                    Visibility="{x:Bind ViewModel.Preferences.IsMinimizeToTraySupported, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}"/>
                                     </StackPanel>
@@ -90,8 +81,6 @@
                                                   AutomationProperties.AutomationId="GeneralSettings.MinimizeToTray"
                                                   IsOn="{x:Bind ViewModel.Preferences.MinimizeToTray, Mode=TwoWay}"
                                                   IsEnabled="{x:Bind ViewModel.Preferences.IsMinimizeToTraySupported, Mode=OneWay}"
-                                                  OnContent="开启"
-                                                  OffContent="关闭"
                                                   VerticalAlignment="Center"/>
                                 </Grid>
                             </StackPanel>
@@ -100,7 +89,6 @@
 
                     <StackPanel Spacing="12">
                         <TextBlock x:Uid="General_LanguageTitle"
-                                   Text="语言与地区"
                                    Style="{StaticResource SettingsSectionTitleTextStyle}"/>
 
                         <Border Style="{StaticResource SettingsSectionContainerStyle}">
@@ -112,13 +100,10 @@
 
                                 <StackPanel VerticalAlignment="Center" Spacing="4">
                                     <TextBlock x:Uid="General_LanguageLabel"
-                                               Text="选择界面语言"
                                                Style="{StaticResource SettingsRowTitleTextStyle}"/>
                                     <TextBlock x:Uid="General_LanguageRestartHint"
-                                               Text="部分设置在重新启动应用后生效"
                                                Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                     <TextBlock x:Uid="General_LanguageUnsupported"
-                                               Text="当前平台不支持语言覆盖"
                                                Style="{StaticResource SettingsRowDescriptionTextStyle}"
                                                Visibility="{x:Bind ViewModel.Preferences.IsLanguageOverrideSupported, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}"/>
                                 </StackPanel>
