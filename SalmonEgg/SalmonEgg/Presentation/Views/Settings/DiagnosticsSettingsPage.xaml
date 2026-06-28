@@ -24,16 +24,13 @@
                             Padding="{StaticResource SettingsPageVerticalPadding}">
                     <StackPanel Spacing="4">
                         <TextBlock x:Uid="Diagnostics_PageTitle"
-                                   Text="诊断与日志"
                                    Style="{StaticResource SettingsPageTitleTextStyle}" />
                         <TextBlock x:Uid="Diagnostics_PageSummary"
-                                   Text="查看运行环境、日志、连接状态并生成诊断包。"
                                    Style="{StaticResource SettingsPageSummaryTextStyle}" />
                     </StackPanel>
 
                     <StackPanel Spacing="12">
                         <TextBlock x:Uid="Diagnostics_EnvironmentTitle"
-                                   Text="运行环境"
                                    Style="{StaticResource SettingsSectionTitleTextStyle}"/>
 
                         <Border Style="{StaticResource SettingsSectionContainerStyle}">
@@ -75,7 +72,6 @@
                                 <controls:ResponsiveFormRow>
                                     <controls:ResponsiveFormRow.Label>
                                         <TextBlock x:Uid="Diagnostics_AppVersionLabel"
-                                                   Text="应用版本："
                                                    Style="{StaticResource SettingsRowTitleTextStyle}"
                                                    VerticalAlignment="Center"/>
                                     </controls:ResponsiveFormRow.Label>
@@ -92,7 +88,6 @@
                                 <controls:ResponsiveFormRow>
                                     <controls:ResponsiveFormRow.Label>
                                         <TextBlock x:Uid="Diagnostics_ProtocolVersionLabel"
-                                                   Text="协议版本："
                                                    Style="{StaticResource SettingsRowTitleTextStyle}"
                                                    VerticalAlignment="Center"/>
                                     </controls:ResponsiveFormRow.Label>
@@ -107,7 +102,6 @@
 
                     <StackPanel Spacing="12">
                         <TextBlock x:Uid="Diagnostics_VoiceTitle"
-                                   Text="语音输入"
                                    Style="{StaticResource SettingsSectionTitleTextStyle}"/>
 
                         <Border Style="{StaticResource SettingsSectionContainerStyle}">
@@ -115,7 +109,6 @@
                                 <Grid Padding="12,8" HorizontalAlignment="Stretch">
                                     <TextBlock x:Uid="Diagnostics_VoiceHeader"
                                                AutomationProperties.AutomationId="Diagnostics.VoiceHeader"
-                                               Text="语音诊断"
                                                FontWeight="SemiBold" />
                                 </Grid>
 
@@ -124,13 +117,11 @@
                                     <Button x:Name="DiagnosticsVoiceRefreshButton"
                                             x:Uid="Diagnostics_VoiceRefresh"
                                             AutomationProperties.AutomationId="Diagnostics.VoiceRefresh"
-                                            Content="刷新语音诊断"
                                             Command="{x:Bind ViewModel.VoiceInputDiagnostics.RefreshSnapshotCommand}"
                                             HorizontalAlignment="Stretch" />
                                     <Button x:Name="DiagnosticsVoiceOpenAuthorizationButton"
                                             x:Uid="Diagnostics_VoiceOpenAuthorization"
                                             AutomationProperties.AutomationId="Diagnostics.VoiceOpenAuthorization"
-                                            Content="打开语音权限设置"
                                             Command="{x:Bind ViewModel.VoiceInputDiagnostics.OpenAuthorizationHelpCommand}"
                                             IsEnabled="{x:Bind ViewModel.VoiceInputDiagnostics.CanOpenAuthorizationHelp, Mode=OneWay}"
                                             Visibility="{x:Bind ViewModel.VoiceInputDiagnostics.CanOpenAuthorizationHelp, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
@@ -144,7 +135,6 @@
                                 <Grid Padding="12,8" HorizontalAlignment="Stretch">
                                     <TextBlock x:Uid="Diagnostics_VoiceProbeHeader"
                                                AutomationProperties.AutomationId="Diagnostics.VoiceProbeHeader"
-                                               Text="独立触发诊断"
                                                FontWeight="SemiBold" />
                                 </Grid>
 
@@ -153,14 +143,12 @@
                                     <Button x:Name="DiagnosticsVoiceProbeStartButton"
                                             x:Uid="Diagnostics_VoiceProbeStart"
                                             AutomationProperties.AutomationId="Diagnostics.VoiceProbeStart"
-                                            Content="开始独立诊断"
                                             Command="{x:Bind ViewModel.VoiceInputDiagnostics.Probe.StartProbeCommand}"
                                             IsEnabled="{x:Bind ViewModel.VoiceInputDiagnostics.Probe.CanStartProbe, Mode=OneWay}"
                                             HorizontalAlignment="Stretch" />
                                     <Button x:Name="DiagnosticsVoiceProbeStopButton"
                                             x:Uid="Diagnostics_VoiceProbeStop"
                                             AutomationProperties.AutomationId="Diagnostics.VoiceProbeStop"
-                                            Content="停止独立诊断"
                                             Command="{x:Bind ViewModel.VoiceInputDiagnostics.Probe.StopProbeCommand}"
                                             IsEnabled="{x:Bind ViewModel.VoiceInputDiagnostics.Probe.CanStopProbe, Mode=OneWay}"
                                             HorizontalAlignment="Stretch" />
@@ -174,7 +162,6 @@
                                     <controls:ResponsiveFormRow>
                                         <controls:ResponsiveFormRow.Label>
                                             <TextBlock x:Uid="Diagnostics_VoiceSupportLabel"
-                                                       Text="能力状态："
                                                        Style="{StaticResource SettingsRowTitleTextStyle}"
                                                        VerticalAlignment="Center"/>
                                         </controls:ResponsiveFormRow.Label>
@@ -192,7 +179,6 @@
                                     <controls:ResponsiveFormRow>
                                         <controls:ResponsiveFormRow.Label>
                                             <TextBlock x:Uid="Diagnostics_VoicePermissionLabel"
-                                                       Text="权限检查："
                                                        Style="{StaticResource SettingsRowTitleTextStyle}"
                                                        VerticalAlignment="Center"/>
                                         </controls:ResponsiveFormRow.Label>
@@ -211,7 +197,6 @@
                                     <controls:ResponsiveFormRow>
                                         <controls:ResponsiveFormRow.Label>
                                             <TextBlock x:Uid="Diagnostics_VoiceLanguageLabel"
-                                                       Text="识别语言："
                                                        Style="{StaticResource SettingsRowTitleTextStyle}"
                                                        VerticalAlignment="Center"/>
                                         </controls:ResponsiveFormRow.Label>
@@ -229,7 +214,6 @@
                                     <controls:ResponsiveFormRow>
                                         <controls:ResponsiveFormRow.Label>
                                             <TextBlock x:Uid="Diagnostics_VoiceInputDeviceLabel"
-                                                       Text="默认输入设备："
                                                        Style="{StaticResource SettingsRowTitleTextStyle}"
                                                        VerticalAlignment="Center"/>
                                         </controls:ResponsiveFormRow.Label>
@@ -248,7 +232,6 @@
                                     <controls:ResponsiveFormRow>
                                         <controls:ResponsiveFormRow.Label>
                                             <TextBlock x:Uid="Diagnostics_VoiceSessionStatusLabel"
-                                                       Text="最近会话："
                                                        Style="{StaticResource SettingsRowTitleTextStyle}"
                                                        VerticalAlignment="Center"/>
                                         </controls:ResponsiveFormRow.Label>
@@ -267,7 +250,6 @@
                                     <controls:ResponsiveFormRow>
                                         <controls:ResponsiveFormRow.Label>
                                             <TextBlock x:Uid="Diagnostics_VoiceCallbackStatusLabel"
-                                                       Text="回调观测："
                                                        Style="{StaticResource SettingsRowTitleTextStyle}"
                                                        VerticalAlignment="Center"/>
                                         </controls:ResponsiveFormRow.Label>
@@ -286,7 +268,6 @@
                                     <controls:ResponsiveFormRow>
                                         <controls:ResponsiveFormRow.Label>
                                             <TextBlock x:Uid="Diagnostics_VoiceTimelineLabel"
-                                                       Text="时间线："
                                                        Style="{StaticResource SettingsRowTitleTextStyle}"
                                                        VerticalAlignment="Center"/>
                                         </controls:ResponsiveFormRow.Label>
@@ -305,7 +286,6 @@
                                     <controls:ResponsiveFormRow>
                                         <controls:ResponsiveFormRow.Label>
                                             <TextBlock x:Uid="Diagnostics_VoiceRecommendationLabel"
-                                                       Text="建议："
                                                        Style="{StaticResource SettingsRowTitleTextStyle}"
                                                        VerticalAlignment="Center"/>
                                         </controls:ResponsiveFormRow.Label>
@@ -324,7 +304,6 @@
                                     <controls:ResponsiveFormRow>
                                         <controls:ResponsiveFormRow.Label>
                                             <TextBlock x:Uid="Diagnostics_VoiceProbeStatusLabel"
-                                                       Text="独立诊断状态："
                                                        Style="{StaticResource SettingsRowTitleTextStyle}"
                                                        VerticalAlignment="Center"/>
                                         </controls:ResponsiveFormRow.Label>
@@ -343,7 +322,6 @@
                                     <controls:ResponsiveFormRow>
                                         <controls:ResponsiveFormRow.Label>
                                             <TextBlock x:Uid="Diagnostics_VoiceProbeTimelineLabel"
-                                                       Text="独立诊断时间线："
                                                        Style="{StaticResource SettingsRowTitleTextStyle}"
                                                        VerticalAlignment="Center"/>
                                         </controls:ResponsiveFormRow.Label>
@@ -362,7 +340,6 @@
                                     <controls:ResponsiveFormRow>
                                         <controls:ResponsiveFormRow.Label>
                                             <TextBlock x:Uid="Diagnostics_VoiceProbeCapturedTextLabel"
-                                                       Text="独立诊断识别文本："
                                                        Style="{StaticResource SettingsRowTitleTextStyle}"
                                                        VerticalAlignment="Center"/>
                                         </controls:ResponsiveFormRow.Label>
@@ -381,7 +358,6 @@
                                     <controls:ResponsiveFormRow>
                                         <controls:ResponsiveFormRow.Label>
                                             <TextBlock x:Uid="Diagnostics_VoiceProbeSignalLabel"
-                                                       Text="采集层观测："
                                                        Style="{StaticResource SettingsRowTitleTextStyle}"
                                                        VerticalAlignment="Center"/>
                                         </controls:ResponsiveFormRow.Label>
@@ -400,7 +376,6 @@
                                     <controls:ResponsiveFormRow>
                                         <controls:ResponsiveFormRow.Label>
                                             <TextBlock x:Uid="Diagnostics_VoiceProbeSignalTimelineLabel"
-                                                       Text="采集层时间线："
                                                        Style="{StaticResource SettingsRowTitleTextStyle}"
                                                        VerticalAlignment="Center"/>
                                         </controls:ResponsiveFormRow.Label>
@@ -418,7 +393,6 @@
 
                     <StackPanel Spacing="12">
                         <TextBlock x:Uid="Diagnostics_GamepadTitle"
-                                   Text="手柄输入"
                                    Style="{StaticResource SettingsSectionTitleTextStyle}"/>
 
                         <Border Style="{StaticResource SettingsSectionContainerStyle}">
@@ -426,7 +400,6 @@
                                 <Grid Padding="12,8" HorizontalAlignment="Stretch">
                                     <TextBlock x:Uid="Diagnostics_GamepadMonitorHeader"
                                                AutomationProperties.AutomationId="Diagnostics.GamepadMonitorHeader"
-                                               Text="兼容性监测"
                                                FontWeight="SemiBold" />
                                 </Grid>
 
@@ -435,21 +408,18 @@
                                     <Button x:Name="DiagnosticsGamepadStartButton"
                                             x:Uid="Diagnostics_GamepadStart"
                                             AutomationProperties.AutomationId="Diagnostics.GamepadStart"
-                                            Content="开始监测"
                                             Command="{x:Bind ViewModel.GamepadDiagnostics.StartMonitoringCommand}"
                                             IsEnabled="{x:Bind ViewModel.GamepadDiagnostics.CanStartMonitoring, Mode=OneWay}"
                                             HorizontalAlignment="Stretch" />
                                     <Button x:Name="DiagnosticsGamepadStopButton"
                                             x:Uid="Diagnostics_GamepadStop"
                                             AutomationProperties.AutomationId="Diagnostics.GamepadStop"
-                                            Content="停止监测"
                                             Command="{x:Bind ViewModel.GamepadDiagnostics.StopMonitoringCommand}"
                                             IsEnabled="{x:Bind ViewModel.GamepadDiagnostics.CanStopMonitoring, Mode=OneWay}"
                                             HorizontalAlignment="Stretch" />
                                     <Button x:Name="DiagnosticsGamepadRefreshButton"
                                             x:Uid="Diagnostics_GamepadRefresh"
                                             AutomationProperties.AutomationId="Diagnostics.GamepadRefresh"
-                                            Content="刷新一次"
                                             Command="{x:Bind ViewModel.GamepadDiagnostics.RefreshSnapshotCommand}"
                                             HorizontalAlignment="Stretch" />
                                 </StackPanel>
@@ -462,7 +432,6 @@
                                     <controls:ResponsiveFormRow>
                                         <controls:ResponsiveFormRow.Label>
                                             <TextBlock x:Uid="Diagnostics_GamepadStatusLabel"
-                                                       Text="监测状态："
                                                        Style="{StaticResource SettingsRowTitleTextStyle}"
                                                        VerticalAlignment="Center"/>
                                         </controls:ResponsiveFormRow.Label>
@@ -480,7 +449,6 @@
                                     <controls:ResponsiveFormRow>
                                         <controls:ResponsiveFormRow.Label>
                                             <TextBlock x:Uid="Diagnostics_GamepadStandardCountLabel"
-                                                       Text="Gamepad 数量："
                                                        Style="{StaticResource SettingsRowTitleTextStyle}"
                                                        VerticalAlignment="Center"/>
                                         </controls:ResponsiveFormRow.Label>
@@ -498,7 +466,6 @@
                                     <controls:ResponsiveFormRow>
                                         <controls:ResponsiveFormRow.Label>
                                             <TextBlock x:Uid="Diagnostics_GamepadRawCountLabel"
-                                                       Text="Raw 控制器数量："
                                                        Style="{StaticResource SettingsRowTitleTextStyle}"
                                                        VerticalAlignment="Center"/>
                                         </controls:ResponsiveFormRow.Label>
@@ -516,7 +483,6 @@
                                     <controls:ResponsiveFormRow>
                                         <controls:ResponsiveFormRow.Label>
                                             <TextBlock x:Uid="Diagnostics_GamepadInputSourceLabel"
-                                                       Text="输入来源："
                                                        Style="{StaticResource SettingsRowTitleTextStyle}"
                                                        VerticalAlignment="Center"/>
                                         </controls:ResponsiveFormRow.Label>
@@ -534,7 +500,6 @@
                                     <controls:ResponsiveFormRow>
                                         <controls:ResponsiveFormRow.Label>
                                             <TextBlock x:Uid="Diagnostics_GamepadActiveInputsLabel"
-                                                       Text="当前输入："
                                                        Style="{StaticResource SettingsRowTitleTextStyle}"
                                                        VerticalAlignment="Center"/>
                                         </controls:ResponsiveFormRow.Label>
@@ -552,7 +517,6 @@
                                     <controls:ResponsiveFormRow>
                                         <controls:ResponsiveFormRow.Label>
                                             <TextBlock x:Uid="Diagnostics_GamepadThumbstickLabel"
-                                                       Text="左摇杆："
                                                        Style="{StaticResource SettingsRowTitleTextStyle}"
                                                        VerticalAlignment="Center"/>
                                         </controls:ResponsiveFormRow.Label>
@@ -570,7 +534,6 @@
                                     <controls:ResponsiveFormRow>
                                         <controls:ResponsiveFormRow.Label>
                                             <TextBlock x:Uid="Diagnostics_GamepadRawDetailsLabel"
-                                                       Text="Raw 明细："
                                                        Style="{StaticResource SettingsRowTitleTextStyle}"
                                                        VerticalAlignment="Center"/>
                                         </controls:ResponsiveFormRow.Label>
@@ -588,7 +551,6 @@
 
                     <StackPanel Spacing="12">
                         <TextBlock x:Uid="Diagnostics_LogsTitle"
-                                   Text="日志"
                                    Style="{StaticResource SettingsSectionTitleTextStyle}"/>
 
                         <Border Style="{StaticResource SettingsSectionContainerStyle}">
@@ -596,7 +558,6 @@
                                 <controls:ResponsiveFormRow>
                                     <controls:ResponsiveFormRow.Label>
                                         <TextBlock x:Uid="Diagnostics_LogsFolderLabel"
-                                                   Text="日志目录："
                                                    Style="{StaticResource SettingsRowTitleTextStyle}"
                                                    VerticalAlignment="Center"/>
                                     </controls:ResponsiveFormRow.Label>
@@ -613,7 +574,6 @@
                                 <controls:ResponsiveFormRow>
                                     <controls:ResponsiveFormRow.Label>
                                         <TextBlock x:Uid="Diagnostics_LatestLogLabel"
-                                                   Text="最新日志文件："
                                                    Style="{StaticResource SettingsRowTitleTextStyle}"
                                                    VerticalAlignment="Center"/>
                                     </controls:ResponsiveFormRow.Label>
@@ -634,7 +594,6 @@
                                     </Grid.RowDefinitions>
 
                                     <TextBlock x:Uid="Diagnostics_LogActionsTitle"
-                                               Text="日志操作"
                                                Style="{StaticResource SettingsRowTitleTextStyle}"/>
 
                                     <StackPanel Grid.Row="1"
@@ -642,16 +601,13 @@
                                                 Margin="0,12,0,0"
                                                 HorizontalAlignment="Stretch">
                                         <Button x:Uid="Diagnostics_OpenLogs"
-                                                Content="打开日志目录"
                                                 Command="{x:Bind ViewModel.OpenLogsFolderCommand}"
                                                 IsEnabled="{x:Bind ViewModel.CanOpenExternalFiles, Mode=OneWay}"
                                                 HorizontalAlignment="Stretch"/>
                                         <Button x:Uid="Diagnostics_CopyLogSnippet"
-                                                Content="复制最近日志片段"
                                                 Command="{x:Bind ViewModel.CopyRecentLogSnippetCommand}"
                                                 HorizontalAlignment="Stretch"/>
                                         <Button x:Uid="Diagnostics_RefreshLogs"
-                                                Content="刷新"
                                                 Command="{x:Bind ViewModel.RefreshLatestLogFileCommand}"
                                                 HorizontalAlignment="Stretch"/>
                                     </StackPanel>
@@ -668,7 +624,7 @@
                                   Padding="0">
                             <Expander.Header>
                                 <Grid Padding="12,8" HorizontalAlignment="Stretch">
-                                    <TextBlock x:Uid="Diagnostics_LiveLogHeader" Text="实时日志" FontWeight="SemiBold" />
+                                    <TextBlock x:Uid="Diagnostics_LiveLogHeader" FontWeight="SemiBold" />
                                 </Grid>
                             </Expander.Header>
 
@@ -683,22 +639,18 @@
 
                                 <StackPanel Spacing="8">
                                     <Button x:Uid="Diagnostics_LiveLogStart"
-                                            Content="启动"
                                             Command="{x:Bind ViewModel.LiveLogViewer.OpenViewerCommand}"
                                             Visibility="{x:Bind ViewModel.LiveLogViewer.CanStartStreaming, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                             HorizontalAlignment="Stretch" />
                                     <Button x:Uid="Diagnostics_LiveLogPause"
-                                            Content="暂停"
                                             Command="{x:Bind ViewModel.LiveLogViewer.TogglePauseCommand}"
                                             Visibility="{x:Bind ViewModel.LiveLogViewer.CanPauseStreaming, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                             HorizontalAlignment="Stretch" />
                                     <Button x:Uid="Diagnostics_LiveLogResume"
-                                            Content="继续"
                                             Command="{x:Bind ViewModel.LiveLogViewer.TogglePauseCommand}"
                                             Visibility="{x:Bind ViewModel.LiveLogViewer.CanResumeStreaming, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                             HorizontalAlignment="Stretch" />
                                     <Button x:Uid="Diagnostics_LiveLogClear"
-                                            Content="清空视图"
                                             Command="{x:Bind ViewModel.LiveLogViewer.ClearVisibleLogCommand}"
                                             HorizontalAlignment="Stretch" />
                                 </StackPanel>
@@ -712,7 +664,6 @@
                                          Height="320" />
 
                                 <TextBlock x:Uid="Diagnostics_LiveLogHint"
-                                           Text="离开页面后会自动停止实时打印。"
                                            FontSize="12"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                            TextWrapping="Wrap" />
@@ -724,7 +675,6 @@
 
                     <StackPanel Spacing="12">
                         <TextBlock x:Uid="Diagnostics_ConnectionTitle"
-                                   Text="连接诊断"
                                    Style="{StaticResource SettingsSectionTitleTextStyle}"/>
 
                         <Border Style="{StaticResource SettingsSectionContainerStyle}">
@@ -732,7 +682,6 @@
                                 <controls:ResponsiveFormRow>
                                     <controls:ResponsiveFormRow.Label>
                                         <TextBlock x:Uid="Diagnostics_ConnectionStatusLabel"
-                                                   Text="当前状态："
                                                    Style="{StaticResource SettingsRowTitleTextStyle}"
                                                    VerticalAlignment="Center"/>
                                     </controls:ResponsiveFormRow.Label>
@@ -770,7 +719,6 @@
                                 <controls:ResponsiveFormRow>
                                     <controls:ResponsiveFormRow.Label>
                                         <TextBlock x:Uid="Diagnostics_SessionLabel"
-                                                   Text="会话："
                                                    Style="{StaticResource SettingsRowTitleTextStyle}"
                                                    VerticalAlignment="Center"/>
                                     </controls:ResponsiveFormRow.Label>
@@ -785,7 +733,6 @@
 
                     <StackPanel Spacing="12">
                         <TextBlock x:Uid="Diagnostics_BundleTitle"
-                                   Text="诊断包"
                                    Style="{StaticResource SettingsSectionTitleTextStyle}"/>
 
                         <Border Style="{StaticResource SettingsSectionContainerStyle}">
@@ -796,11 +743,9 @@
                                 </Grid.RowDefinitions>
 
                                 <TextBlock x:Uid="Diagnostics_BundleDescription"
-                                           Text="生成 ZIP 包，包含配置（不含密钥）、日志与环境快照。"
                                            Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                 <Button Grid.Row="1"
                                         x:Uid="Diagnostics_CreateBundle"
-                                        Content="生成诊断包（ZIP）"
                                         Command="{x:Bind ViewModel.CreateDiagnosticsBundleCommand}"
                                         IsEnabled="{x:Bind ViewModel.CanExportLocalFiles, Mode=OneWay}"
                                         Margin="0,12,0,0"

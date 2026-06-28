@@ -19,37 +19,30 @@
                             Padding="{StaticResource SettingsPageVerticalPadding}">
                     <StackPanel Spacing="8">
                         <TextBlock x:Uid="Shortcuts_PageTitle"
-                                   Text="快捷键"
                                    Style="{StaticResource SettingsPageTitleTextStyle}"/>
                         <TextBlock x:Uid="Shortcuts_PageSummary"
-                                   Text="自定义 SalmonEgg 前台窗口内可用的快捷键。"
                                    Style="{StaticResource SettingsPageSummaryTextStyle}"/>
                     </StackPanel>
 
                     <InfoBar x:Uid="Shortcuts_ConflictInfo"
                              IsOpen="{x:Bind ViewModel.HasConflicts, Mode=OneWay}"
-                             Title="快捷键冲突"
                              Message="{x:Bind ViewModel.ConflictMessage, Mode=OneWay}"
                              Severity="Warning"
                              IsClosable="False"/>
 
                     <InfoBar x:Uid="Shortcuts_InvalidInfo"
                              IsOpen="{x:Bind ViewModel.HasInvalid, Mode=OneWay}"
-                             Title="快捷键格式无效"
-                             Message="请输入如 Ctrl+K、Ctrl+Shift+N 的格式。"
                              Severity="Error"
                              IsClosable="False"/>
 
                     <StackPanel Spacing="12">
                         <TextBlock x:Uid="Shortcuts_CustomTitle"
-                                   Text="自定义"
                                    Style="{StaticResource SettingsSectionTitleTextStyle}"/>
 
                         <Border Style="{StaticResource SettingsSectionContainerStyle}">
                             <StackPanel XYFocusKeyboardNavigation="Enabled">
                                 <Grid Style="{StaticResource SettingsRowGridStyle}">
                                     <TextBlock x:Uid="Shortcuts_AppOnlyHint"
-                                               Text="这些快捷键仅在 SalmonEgg 窗口处于前台时生效，不会注册系统级热键，也不会覆盖输入框内的原生编辑行为。"
                                                Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                 </Grid>
 
@@ -83,7 +76,6 @@
                                                         <Button Grid.Column="1"
                                                                 x:Uid="Shortcuts_RestoreSingle"
                                                                 AutomationProperties.AutomationId="{x:Bind RestoreAutomationId, Mode=OneWay}"
-                                                                Content="恢复"
                                                                 Command="{x:Bind RestoreDefaultCommand}"
                                                                 VerticalAlignment="Center"/>
                                                     </Grid>
@@ -104,7 +96,6 @@
                                     </Grid.ColumnDefinitions>
 
                                     <TextBlock x:Uid="Shortcuts_RestoreAllDescription"
-                                               Text="将所有快捷键恢复为默认设置。"
                                                Style="{StaticResource SettingsRowDescriptionTextStyle}"
                                                VerticalAlignment="Center"/>
 
@@ -112,7 +103,6 @@
                                             Grid.Column="1"
                                             x:Uid="Shortcuts_RestoreAll"
                                             AutomationProperties.AutomationId="Shortcuts.RestoreAll"
-                                            Content="全部恢复默认"
                                             Command="{x:Bind ViewModel.RestoreDefaultsCommand}"
                                             VerticalAlignment="Center"/>
                                 </Grid>

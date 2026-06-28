@@ -30,7 +30,6 @@
                                    Text="MCP"
                                    Style="{StaticResource SettingsPageTitleTextStyle}"/>
                         <TextBlock x:Uid="Mcp_PageSummary"
-                                   Text="按需启用 MCP 服务。已启用且配置完整的服务会随 ACP 会话一起提供。"
                                    Style="{StaticResource SettingsPageSummaryTextStyle}"/>
                     </StackPanel>
 
@@ -38,20 +37,17 @@
                         <StackPanel Spacing="10"
                                     AutomationProperties.AutomationId="Mcp.Servers.Header">
                             <TextBlock x:Uid="Mcp_ServersTitle"
-                                       Text="服务配置"
                                        Style="{StaticResource SettingsSectionTitleTextStyle}"/>
                             <StackPanel Orientation="Horizontal"
                                         Spacing="8"
                                         HorizontalAlignment="Left">
                                 <Button x:Name="McpReloadButton"
                                         x:Uid="Mcp_Reload"
-                                        Content="刷新"
                                         AutomationProperties.AutomationId="Mcp.Reload"
                                         Command="{x:Bind ViewModel.LoadCommand}"
                                         IsEnabled="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"/>
                                 <Button x:Name="McpAddServerButton"
                                         x:Uid="Mcp_AddServer"
-                                        Content="新建"
                                         Command="{x:Bind ViewModel.AddServerCommand}"
                                         AutomationProperties.AutomationId="Mcp.AddServer"
                                         Style="{StaticResource AccentButtonStyle}"/>
@@ -65,7 +61,6 @@
                                     <StackPanel VerticalAlignment="Center"
                                                 Spacing="4">
                                         <TextBlock x:Uid="Mcp_ServerCatalogDescription"
-                                                   Text="本地服务使用 stdio；远程服务支持 Streamable HTTP 与 SSE。"
                                                    Style="{StaticResource SettingsRowDescriptionTextStyle}"
                                                    TextWrapping="Wrap"/>
                                         <TextBlock Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
@@ -90,16 +85,13 @@
                                               ColumnSpacing="12">
                                             <StackPanel Spacing="4">
                                                 <TextBlock x:Uid="Mcp_EditorTitle"
-                                                           Text="编辑 MCP 服务"
                                                            Style="{StaticResource SettingsRowTitleTextStyle}"/>
                                                 <TextBlock x:Uid="Mcp_EditorDescription"
-                                                           Text="编辑连接信息，保存后应用到该服务。"
                                                            Style="{StaticResource SettingsRowDescriptionTextStyle}"
                                                            TextWrapping="Wrap"/>
                                             </StackPanel>
                                             <Button Grid.Column="1"
                                                     x:Uid="Mcp_EditorClose"
-                                                    Content="关闭"
                                                     Command="{x:Bind ViewModel.CloseEditorCommand}"
                                                     AutomationProperties.AutomationId="Mcp.Editor.Close"
                                                     VerticalAlignment="Top"/>
@@ -115,7 +107,6 @@
                                                        AutomationProperties.AutomationId="Mcp.Import.Status"/>
                                             <Button Grid.Column="1"
                                                     x:Uid="Mcp_FillFromClipboardJson"
-                                                    Content="从剪贴板填入"
                                                     Command="{x:Bind ViewModel.FillEditorFromClipboardCommand}"
                                                     AutomationProperties.AutomationId="Mcp.FillFromClipboardJson"/>
                                         </Grid>
@@ -129,12 +120,10 @@
                                                         <StackPanel Spacing="12"
                                                                     HorizontalAlignment="Stretch">
                                                             <TextBox x:Uid="Mcp_ServerName"
-                                                                     Header="名称"
                                                                      Text="{x:Bind Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                                      PlaceholderText="filesystem"
                                                                      HorizontalAlignment="Stretch"/>
                                                             <ComboBox x:Uid="Mcp_ServerTransport"
-                                                                      Header="连接方式"
                                                                       ItemsSource="{x:Bind TransportOptions, Mode=OneWay}"
                                                                       DisplayMemberPath="Name"
                                                                       SelectedValuePath="Transport"
@@ -147,36 +136,30 @@
                                                                     HorizontalAlignment="Stretch"
                                                                     Visibility="{x:Bind IsStdio, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                                                             <TextBox x:Uid="Mcp_ServerCommand"
-                                                                     Header="启动命令"
                                                                      Text="{x:Bind Command, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                                      PlaceholderText="C:\tools\mcp-filesystem.exe"
                                                                      HorizontalAlignment="Stretch"/>
                                                             <StackPanel Spacing="4">
                                                                 <TextBox x:Uid="Mcp_ServerArguments"
-                                                                         Header="启动参数"
                                                                          Text="{x:Bind ArgumentsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                                          PlaceholderText="--root C:\repo"
                                                                          HorizontalAlignment="Stretch"/>
                                                                 <TextBlock x:Uid="Mcp_ServerArgumentsHelp"
-                                                                           Text="用空格分隔参数；带空格的值请使用引号。"
                                                                            Style="{StaticResource SettingsRowDescriptionTextStyle}"
                                                                            TextWrapping="Wrap"/>
                                                             </StackPanel>
                                                             <Expander x:Uid="Mcp_ServerAdvanced"
-                                                                      Header="高级设置"
                                                                       IsExpanded="{x:Bind IsDetailsExpanded, Mode=TwoWay}"
                                                                       HorizontalAlignment="Stretch"
                                                                       HorizontalContentAlignment="Stretch">
                                                                 <StackPanel Spacing="4">
                                                                     <TextBox x:Uid="Mcp_ServerEnvironment"
-                                                                             Header="环境变量"
                                                                              Text="{x:Bind EnvironmentText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                                              PlaceholderText="API_KEY=value"
                                                                              AcceptsReturn="True"
                                                                              TextWrapping="Wrap"
                                                                              MinHeight="72"/>
                                                                     <TextBlock x:Uid="Mcp_ServerEnvironmentHelp"
-                                                                               Text="每行一个变量，格式 KEY=value。"
                                                                                Style="{StaticResource SettingsRowDescriptionTextStyle}"
                                                                                TextWrapping="Wrap"/>
                                                                 </StackPanel>
@@ -187,25 +170,21 @@
                                                                     HorizontalAlignment="Stretch"
                                                                     Visibility="{x:Bind IsHttpLike, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                                                             <TextBox x:Uid="Mcp_ServerUrl"
-                                                                     Header="服务地址"
                                                                      Text="{x:Bind Url, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                                      PlaceholderText="https://example.com/mcp"
                                                                      HorizontalAlignment="Stretch"/>
                                                             <Expander x:Uid="Mcp_ServerAdvanced"
-                                                                      Header="高级设置"
                                                                       IsExpanded="{x:Bind IsDetailsExpanded, Mode=TwoWay}"
                                                                       HorizontalAlignment="Stretch"
                                                                       HorizontalContentAlignment="Stretch">
                                                                 <StackPanel Spacing="4">
                                                                     <TextBox x:Uid="Mcp_ServerHeaders"
-                                                                             Header="请求头"
                                                                              Text="{x:Bind HeadersText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                                              PlaceholderText="Authorization: Bearer token"
                                                                              AcceptsReturn="True"
                                                                              TextWrapping="Wrap"
                                                                              MinHeight="72"/>
                                                                     <TextBlock x:Uid="Mcp_ServerHeadersHelp"
-                                                                               Text="每行一个请求头，格式 Header: value。"
                                                                                Style="{StaticResource SettingsRowDescriptionTextStyle}"
                                                                                TextWrapping="Wrap"/>
                                                                 </StackPanel>
@@ -221,7 +200,6 @@
                                                                        VerticalAlignment="Center"/>
                                                             <Button Grid.Column="1"
                                                                     x:Uid="Mcp_EditorSave"
-                                                                    Content="保存"
                                                                     Command="{x:Bind SaveCommand, Mode=OneWay}"
                                                                     AutomationProperties.AutomationId="Mcp.SaveServer"
                                                                     Style="{StaticResource AccentButtonStyle}"/>
@@ -264,10 +242,8 @@
                                                     <ToggleSwitch x:Uid="Mcp_ServerEnabled"
                                                                   AutomationProperties.AutomationId="Mcp.Server.Enabled"
                                                                   IsOn="{x:Bind Enabled, Mode=TwoWay}"
-                                                                  OnContent="启用"
-                                                                  OffContent="停用"/>
+                                                                 />
                                                     <Button x:Uid="Mcp_EditServer"
-                                                            Content="编辑"
                                                             Command="{x:Bind EditCommand, Mode=OneWay}"
                                                             AutomationProperties.AutomationId="Mcp.EditServer"/>
                                                     <Button x:Uid="Mcp_RemoveServer"
@@ -284,15 +260,12 @@
                                                                             MinWidth="240">
                                                                     <StackPanel Spacing="4">
                                                                         <TextBlock x:Uid="Mcp_RemoveServerConfirmTitle"
-                                                                                   Text="删除此服务？"
                                                                                    Style="{StaticResource SettingsRowTitleTextStyle}"/>
                                                                         <TextBlock x:Uid="Mcp_RemoveServerConfirmDescription"
-                                                                                   Text="删除后会立即从 MCP 配置中移除。"
                                                                                    Style="{StaticResource SettingsRowDescriptionTextStyle}"
                                                                                    TextWrapping="Wrap"/>
                                                                     </StackPanel>
                                                                     <Button x:Uid="Mcp_RemoveServerConfirm"
-                                                                            Content="删除"
                                                                             Command="{x:Bind RemoveCommand, Mode=OneWay}"
                                                                             AutomationProperties.AutomationId="Mcp.RemoveServer.Confirm"
                                                                             HorizontalAlignment="Right"

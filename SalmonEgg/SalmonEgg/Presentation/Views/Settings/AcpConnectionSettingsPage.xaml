@@ -35,13 +35,11 @@
                                    Text="ACP Agent"
                                    Style="{StaticResource SettingsPageTitleTextStyle}"/>
                         <TextBlock x:Uid="Acp_PageSummary"
-                                   Text="管理 ACP 连接配置、远程项目，以及会话加载策略。"
                                    Style="{StaticResource SettingsPageSummaryTextStyle}"/>
                     </StackPanel>
 
                     <StackPanel Spacing="12">
                         <TextBlock x:Uid="Acp_GlobalTitle"
-                                   Text="全局 ACP 配置"
                                    Style="{StaticResource SettingsSectionTitleTextStyle}"/>
 
                         <Border Style="{StaticResource SettingsSectionContainerStyle}">
@@ -49,10 +47,8 @@
                                   ColumnDefinitions="*,Auto">
                                 <StackPanel VerticalAlignment="Center" Spacing="4">
                                     <TextBlock x:Uid="Acp_GlobalEnabledTitle"
-                                               Text="启用 ACP Agent"
                                                Style="{StaticResource SettingsRowTitleTextStyle}"/>
                                     <TextBlock x:Uid="Acp_GlobalEnabledDescription"
-                                               Text="关闭后，Salmon Egg 不会自动启动、复用或恢复 ACP 会话连接。"
                                                Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                 </StackPanel>
 
@@ -61,8 +57,6 @@
                                               x:Uid="Acp_GlobalEnabledSwitch"
                                               AutomationProperties.AutomationId="Acp.Global.Enabled"
                                               IsOn="{x:Bind ViewModel.IsAcpEnabled, Mode=TwoWay}"
-                                              OnContent="开启"
-                                              OffContent="关闭"
                                               VerticalAlignment="Center"/>
                             </Grid>
                         </Border>
@@ -72,7 +66,6 @@
                     <StackPanel Spacing="12">
                         <Grid ColumnDefinitions="*,Auto">
                             <TextBlock x:Uid="Acp_ProfilesTitle"
-                                       Text="ACP 连接配置"
                                        Style="{StaticResource SettingsSectionTitleTextStyle}"
                                        VerticalAlignment="Center"/>
                             <StackPanel Grid.Column="1"
@@ -81,13 +74,11 @@
                                         VerticalAlignment="Center">
                                 <Button x:Name="AcpProfilesRefreshButton"
                                         x:Uid="Acp_ProfilesRefresh"
-                                        Content="刷新"
                                         AutomationProperties.AutomationId="Acp.Profiles.Refresh"
                                         Command="{x:Bind ViewModel.Profiles.RefreshCommand}"
                                         IsEnabled="{x:Bind ViewModel.CanRefreshProfiles, Mode=OneWay}"/>
                                 <Button x:Name="AcpProfilesAddButton"
                                         x:Uid="Acp_ProfilesAdd"
-                                        Content="新建配置"
                                         AutomationProperties.AutomationId="Acp.Profiles.Add"
                                         Style="{StaticResource AccentButtonStyle}"
                                         Click="OnAddProfileClick"/>
@@ -209,11 +200,9 @@
                                                             </MenuFlyoutItem>
                                                             <MenuFlyoutSeparator Visibility="{x:Bind IsStableConnected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                             <MenuFlyoutItem x:Uid="Acp_ProfileEdit"
-                                                                            Text="编辑"
                                                                             Tag="{x:Bind ProfileId}"
                                                                             Click="OnEditProfileMenuClick"/>
                                                             <MenuFlyoutItem x:Uid="Acp_ProfileDelete"
-                                                                            Text="删除"
                                                                             Tag="{x:Bind ProfileId}"
                                                                             Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                                                                             Click="OnDeleteProfileMenuClick"/>
@@ -233,19 +222,16 @@
                                 AutomationProperties.AutomationId="Acp.RemoteDirectories.Section">
                         <Grid ColumnDefinitions="*,Auto">
                             <TextBlock x:Uid="Acp_RemoteDirectoriesTitle"
-                                       Text="远程项目"
                                        Style="{StaticResource SettingsSectionTitleTextStyle}"
                                        VerticalAlignment="Center"/>
                             <Button Grid.Column="1"
                                     x:Name="AcpRemoteDirectoriesAddButton"
                                     x:Uid="Acp_RemoteDirectoriesAdd"
-                                    Content="新增远程项目"
                                     Command="{x:Bind ViewModel.AddRemoteDirectoryCommand}"
                                     AutomationProperties.AutomationId="Acp.RemoteDirectories.Add"/>
                         </Grid>
 
                         <TextBlock x:Uid="Acp_RemoteDirectoriesHint"
-                                   Text="远程项目是一组用于远程 ACP 会话的 ACP 工作路径。新建会话时会把这里的远端路径作为 ACP cwd；不会发送本机路径。"
                                    Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
 
                         <Border Style="{StaticResource SettingsSectionContainerStyle}">
@@ -293,10 +279,8 @@
                                                         Visibility="{x:Bind IsEditing, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                                                 <TextBox x:Uid="Acp_RemoteDirectoriesDisplayName"
                                                          x:Name="AcpRemoteDirectoryDisplayNameBox"
-                                                         Header="显示名称"
                                                          Text="{x:Bind DisplayNameDraft, Mode=TwoWay}"/>
                                                 <TextBox x:Uid="Acp_RemoteDirectoriesRemotePath"
-                                                         Header="ACP 工作路径"
                                                          Text="{x:Bind RemotePathDraft, Mode=TwoWay}"/>
                                                 <TextBlock Text="{x:Bind ValidationMessage, Mode=OneWay}"
                                                            Style="{StaticResource SettingsRowDescriptionTextStyle}"
@@ -328,12 +312,10 @@
                     <!-- Hydration policy -->
                     <StackPanel Spacing="12">
                         <TextBlock x:Uid="Acp_HydrationCompletionTitle"
-                                   Text="会话加载完成判定"
                                    Style="{StaticResource SettingsSectionTitleTextStyle}"/>
 
                         <Border Style="{StaticResource SettingsSectionContainerStyle}">
                             <Expander x:Uid="Acp_AdvancedExpander"
-                                      Header="高级加载策略"
                                       IsExpanded="False"
                                       Background="Transparent"
                                       HorizontalAlignment="Stretch"
@@ -344,7 +326,6 @@
                                             HorizontalAlignment="Stretch">
                                     <StackPanel Spacing="4">
                                         <TextBlock x:Uid="Acp_HydrationCompletionHint"
-                                                   Text="SalmonEgg 使用此设置决定远程 ACP 会话在 session/load 返回后何时可视为“已就绪”。"
                                                    Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                         <TextBlock Text="{x:Bind ViewModel.SelectedHydrationCompletionMode, Mode=OneWay, Converter={StaticResource HydrationCompletionModeLocalizationConverter}, ConverterParameter=Description}"
                                                    Style="{StaticResource SettingsRowDescriptionTextStyle}"/>

@@ -19,16 +19,13 @@
                             Padding="{StaticResource SettingsPageVerticalPadding}">
                     <StackPanel Spacing="8">
                         <TextBlock x:Uid="About_PageTitle"
-                                   Text="关于"
                                    Style="{StaticResource SettingsPageTitleTextStyle}"/>
                         <TextBlock x:Uid="About_PageSummary"
-                                   Text="查看版本、支持入口和开源鸣谢。"
                                    Style="{StaticResource SettingsPageSummaryTextStyle}"/>
                     </StackPanel>
 
                     <StackPanel Spacing="12">
                         <TextBlock x:Uid="About_AppInfoTitle"
-                                   Text="应用信息"
                                    Style="{StaticResource SettingsSectionTitleTextStyle}"/>
 
                         <Border Style="{StaticResource SettingsSectionContainerStyle}">
@@ -36,7 +33,6 @@
                                 <controls:ResponsiveFormRow>
                                     <controls:ResponsiveFormRow.Label>
                                         <TextBlock x:Uid="About_AppNameLabel"
-                                                   Text="应用："
                                                    Style="{StaticResource SettingsRowTitleTextStyle}"
                                                    VerticalAlignment="Center"/>
                                     </controls:ResponsiveFormRow.Label>
@@ -53,7 +49,6 @@
                                 <controls:ResponsiveFormRow>
                                     <controls:ResponsiveFormRow.Label>
                                         <TextBlock x:Uid="About_VersionLabel"
-                                                   Text="版本："
                                                    Style="{StaticResource SettingsRowTitleTextStyle}"
                                                    VerticalAlignment="Center"/>
                                     </controls:ResponsiveFormRow.Label>
@@ -70,7 +65,6 @@
                                 <controls:ResponsiveFormRow>
                                     <controls:ResponsiveFormRow.Label>
                                         <TextBlock x:Uid="About_ProtocolLabel"
-                                                   Text="协议版本："
                                                    Style="{StaticResource SettingsRowTitleTextStyle}"
                                                    VerticalAlignment="Center"/>
                                     </controls:ResponsiveFormRow.Label>
@@ -85,7 +79,6 @@
 
                     <StackPanel Spacing="12">
                         <TextBlock x:Uid="About_SupportTitle"
-                                   Text="支持"
                                    Style="{StaticResource SettingsSectionTitleTextStyle}"/>
 
                         <Border Style="{StaticResource SettingsSectionContainerStyle}">
@@ -97,7 +90,6 @@
                                     </Grid.RowDefinitions>
 
                                     <TextBlock x:Uid="About_SupportActionsTitle"
-                                               Text="支持入口"
                                                Style="{StaticResource SettingsRowTitleTextStyle}"/>
 
                                     <StackPanel Grid.Row="1"
@@ -107,35 +99,30 @@
                                         <Button x:Name="AboutOpenAppDataButton"
                                                 x:Uid="About_OpenAppData"
                                                 AutomationProperties.AutomationId="About.Support.OpenAppData"
-                                                Content="打开应用数据目录"
                                                 Command="{x:Bind ViewModel.OpenAppDataFolderCommand}"
                                                 IsEnabled="{x:Bind ViewModel.CanOpenExternalFiles, Mode=OneWay}"
                                                 HorizontalAlignment="Stretch"/>
                                         <Button x:Name="AboutReportInappropriateAiContentButton"
                                                 x:Uid="About_ReportInappropriateAiContent"
                                                 AutomationProperties.AutomationId="About.Support.ReportAiContent"
-                                                Content="举报不当 AI 内容"
                                                 Command="{x:Bind ViewModel.ReportInappropriateAiContentCommand}"
                                                 IsEnabled="{x:Bind ViewModel.CanReportInappropriateAiContent, Mode=OneWay}"
                                                 HorizontalAlignment="Stretch"/>
                                         <Button x:Name="AboutOpenReleaseNotesButton"
                                                 x:Uid="About_OpenReleaseNotes"
                                                 AutomationProperties.AutomationId="About.Support.OpenReleaseNotes"
-                                                Content="打开更新日志"
                                                 Command="{x:Bind ViewModel.OpenReleaseNotesCommand}"
                                                 IsEnabled="{x:Bind ViewModel.CanOpenExternalFiles, Mode=OneWay}"
                                                 HorizontalAlignment="Stretch"/>
                                         <Button x:Name="AboutOpenPrivacyPolicyButton"
                                                 x:Uid="About_OpenPrivacyPolicy"
                                                 AutomationProperties.AutomationId="About.Support.OpenPrivacyPolicy"
-                                                Content="打开隐私政策"
                                                 Command="{x:Bind ViewModel.OpenPrivacyPolicyCommand}"
                                                 IsEnabled="{x:Bind ViewModel.CanOpenExternalFiles, Mode=OneWay}"
                                                 HorizontalAlignment="Stretch"/>
                                         <Button x:Name="AboutCopyVersionInfoButton"
                                                 x:Uid="About_CopyVersionInfo"
                                                 AutomationProperties.AutomationId="About.Support.CopyVersionInfo"
-                                                Content="复制版本信息"
                                                 Command="{x:Bind ViewModel.CopyVersionInfoCommand}"
                                                 HorizontalAlignment="Stretch"/>
                                     </StackPanel>
@@ -148,7 +135,6 @@
                                 <controls:ResponsiveFormRow>
                                     <controls:ResponsiveFormRow.Label>
                                         <TextBlock x:Uid="About_DocsFolderLabel"
-                                                   Text="文档目录："
                                                    Style="{StaticResource SettingsRowTitleTextStyle}"
                                                    VerticalAlignment="Center"/>
                                     </controls:ResponsiveFormRow.Label>
@@ -157,7 +143,6 @@
                                             <TextBlock Text="{x:Bind ViewModel.DocsRootPath, Mode=OneWay}"
                                                        Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                             <TextBlock x:Uid="About_DocsHint"
-                                                       Text="将 release-notes.md 与 privacy-policy.md 放入该目录后即可一键打开。"
                                                        Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                         </StackPanel>
                                     </controls:ResponsiveFormRow.Value>
@@ -168,14 +153,12 @@
 
                     <StackPanel Spacing="12">
                         <TextBlock x:Uid="About_OpenSourceTitle"
-                                   Text="开源鸣谢"
                                    Style="{StaticResource SettingsSectionTitleTextStyle}"/>
 
                         <Border Style="{StaticResource SettingsSectionContainerStyle}">
                             <StackPanel>
                                 <Grid Style="{StaticResource SettingsRowGridStyle}">
                                     <TextBlock x:Uid="About_OpenSourceDescription"
-                                               Text="构建时根据 PackageReference 自动生成。"
                                                Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                 </Grid>
 
@@ -196,10 +179,10 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="2*" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock x:Uid="About_OpenSourcePackageHeader" Text="项目" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    <TextBlock Grid.Column="1" x:Uid="About_OpenSourceVersionHeader" Text="版本" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    <TextBlock Grid.Column="2" x:Uid="About_OpenSourceLicenseHeader" Text="许可证" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    <TextBlock Grid.Column="3" x:Uid="About_OpenSourceSourceHeader" Text="来源" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <TextBlock x:Uid="About_OpenSourcePackageHeader" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <TextBlock Grid.Column="1" x:Uid="About_OpenSourceVersionHeader" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <TextBlock Grid.Column="2" x:Uid="About_OpenSourceLicenseHeader" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <TextBlock Grid.Column="3" x:Uid="About_OpenSourceSourceHeader" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 </Grid>
                             </ListView.Header>
                             <ListView.ItemTemplate>
