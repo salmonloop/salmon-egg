@@ -71,6 +71,8 @@ public sealed class ChatStateProjectorTests
         Assert.True(projection.IsTurnStatusVisible);
         Assert.Equal("Thinking...", projection.TurnStatusText);
         Assert.True(projection.IsTurnStatusRunning);
+        Assert.False(projection.IsTurnStatusFaulted);
+        Assert.Equal(ChatTurnStatusSource.AcpSessionUpdate, projection.TurnStatusSource);
         Assert.True(projection.IsPromptInFlight);
         Assert.False(projection.IsPromptSubmitInFlight);
         Assert.Equal(ChatTurnPhase.Thinking, projection.TurnPhase);
@@ -146,6 +148,8 @@ public sealed class ChatStateProjectorTests
 
         Assert.True(projection.IsTurnStatusVisible);
         Assert.False(projection.IsTurnStatusRunning);
+        Assert.False(projection.IsTurnStatusFaulted);
+        Assert.Equal(ChatTurnStatusSource.PromptResult, projection.TurnStatusSource);
         Assert.False(projection.IsPromptInFlight);
         Assert.Equal(ChatTurnPhase.Cancelled, projection.TurnPhase);
         Assert.Equal("Cancelled", projection.TurnStatusText);
@@ -170,6 +174,8 @@ public sealed class ChatStateProjectorTests
 
         Assert.True(projection.IsTurnStatusVisible);
         Assert.False(projection.IsTurnStatusRunning);
+        Assert.True(projection.IsTurnStatusFaulted);
+        Assert.Equal(ChatTurnStatusSource.PromptResult, projection.TurnStatusSource);
         Assert.False(projection.IsPromptInFlight);
         Assert.False(projection.IsPromptSubmitInFlight);
         Assert.Equal(ChatTurnPhase.Failed, projection.TurnPhase);

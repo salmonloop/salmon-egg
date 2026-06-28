@@ -214,7 +214,7 @@
                                           Width="16" Height="16"
                                           Visibility="{x:Bind ViewModel.IsTurnStatusRunning, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
                             <FontIcon Glyph="&#xE783;" FontSize="14" Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                      Visibility="{x:Bind ViewModel.IsTurnStatusRunning, Mode=OneWay, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                                      Visibility="{x:Bind ViewModel.IsTurnStatusFaulted, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
                             <TextBlock Text="{x:Bind ViewModel.TurnStatusText, Mode=OneWay}"
                                        FontSize="12"
                                        Opacity="0.7"

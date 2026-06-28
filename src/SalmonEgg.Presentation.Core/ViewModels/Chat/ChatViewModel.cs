@@ -775,6 +775,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private bool _isTurnStatusRunning;
 
     [ObservableProperty]
+    private bool _isTurnStatusFaulted;
+
+    [ObservableProperty]
+    private ChatTurnStatusSource _turnStatusSource;
+
+    [ObservableProperty]
     private ChatTurnPhase? _turnPhase;
 
     [ObservableProperty]

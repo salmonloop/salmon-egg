@@ -77,10 +77,8 @@ public sealed class ChatStateProjector : IChatStateProjector
         var authenticationHintMessage = connectionState.AuthenticationHintMessage;
 
         var activeTurn = GetVisibleActiveTurn(storeState.ActiveTurn, hydratedConversationId);
-        var isTurnStatusVisible = activeTurn is not null && activeTurn.Phase != ChatTurnPhase.Completed;
-        var turnStatusText = GetTurnStatusText(activeTurn);
-        var isTurnStatusRunning = IsRunningTurn(activeTurn);
-        var isPromptSubmitInFlight = IsPromptSubmitInFlight(activeTurn);
+        var turnStatus = ChatTurnStatusPresentationPolicy.Resolve(activeTurn);
+        var turnStatusText = FormatTurnStatusText(turnStatus);
         var turnFailureMessage = ResolveTurnFailureMessage(activeTurn);
         var isTurnFailureVisible = !string.IsNullOrWhiteSpace(turnFailureMessage);
         var contentSlice = storeState.ResolveContentSlice(hydratedConversationId);
@@ -104,8 +102,8 @@ public sealed class ChatStateProjector : IChatStateProjector
             ForegroundTransportProfileId: foregroundTransportProfileId,
             RemoteSessionId: binding?.RemoteSessionId,
             IsSessionActive: !string.IsNullOrWhiteSpace(hydratedConversationId),
-            IsPromptInFlight: isTurnStatusRunning,
-            IsPromptSubmitInFlight: isPromptSubmitInFlight,
+            IsPromptInFlight: turnStatus.IsRunning,
+            IsPromptSubmitInFlight: turnStatus.IsPromptSubmitInFlight,
             IsConnecting: isConnecting,
             IsConnected: isConnected,
             IsInitializing: isInitializing,
@@ -129,9 +127,11 @@ public sealed class ChatStateProjector : IChatStateProjector
             ShowConfigOptionsPanel: toolingProjection.ShowConfigOptionsPanel,
             AvailableCommands: toolingProjection.AvailableCommands,
             IsHydrating: storeState.IsHydrating,
-            IsTurnStatusVisible: isTurnStatusVisible,
+            IsTurnStatusVisible: turnStatus.IsVisible,
             TurnStatusText: turnStatusText,
-            IsTurnStatusRunning: isTurnStatusRunning,
+            IsTurnStatusRunning: turnStatus.IsRunning,
+            IsTurnStatusFaulted: turnStatus.IsFaulted,
+            TurnStatusSource: turnStatus.Source,
             TurnPhase: activeTurn?.Phase,
             IsTurnFailureVisible: isTurnFailureVisible,
             TurnFailureTitle: isTurnFailureVisible
@@ -158,23 +158,16 @@ public sealed class ChatStateProjector : IChatStateProjector
             : null;
     }
 
-    private string GetTurnStatusText(ActiveTurnState? turn)
+    private string FormatTurnStatusText(ChatTurnStatusPresentation presentation)
     {
-        if (turn == null) return string.Empty;
-        return turn.Phase switch
+        if (!presentation.IsVisible || string.IsNullOrWhiteSpace(presentation.ResourceKey))
         {
-            ChatTurnPhase.CreatingRemoteSession => Localize("ChatTurnStatus_CreatingRemoteSession", "Starting session..."),
-            ChatTurnPhase.DispatchingPrompt => Localize("ChatTurnStatus_DispatchingPrompt", "Sending prompt..."),
-            ChatTurnPhase.WaitingForAgent => Localize("ChatTurnStatus_WaitingForAgent", "Waiting for agent..."),
-            ChatTurnPhase.Thinking => Localize("ChatTurnStatus_Thinking", "Thinking..."),
-            ChatTurnPhase.ToolPending => Localize("ChatTurnStatus_ToolPending", "Preparing tool call..."),
-            ChatTurnPhase.ToolRunning => FormatLocalize("ChatTurnStatus_ToolRunning", "Running tool: {0}", turn.ToolTitle ?? "..."),
-            ChatTurnPhase.Responding => Localize("ChatTurnStatus_Responding", "Responding..."),
-            ChatTurnPhase.Completed => Localize("ChatTurnStatus_Completed", "Completed"),
-            ChatTurnPhase.Failed => Localize("ChatTurnStatus_Failed", "Failed"),
-            ChatTurnPhase.Cancelled => Localize("ChatTurnStatus_Cancelled", "Cancelled"),
-            _ => string.Empty
-        };
+            return string.Empty;
+        }
+
+        return presentation.FormatArgument is null
+            ? Localize(presentation.ResourceKey, presentation.FallbackText)
+            : FormatLocalize(presentation.ResourceKey, presentation.FallbackText, presentation.FormatArgument);
     }
 
     private string Localize(string key, string fallback)
@@ -200,15 +193,6 @@ public sealed class ChatStateProjector : IChatStateProjector
             ? string.Format(CultureInfo.CurrentCulture, fallback, arguments)
             : localized.Value;
     }
-
-    private static bool IsRunningTurn(ActiveTurnState? turn)
-        => turn is not null
-            && turn.Phase is not ChatTurnPhase.Completed
-            && turn.Phase is not ChatTurnPhase.Failed
-            && turn.Phase is not ChatTurnPhase.Cancelled;
-
-    private static bool IsPromptSubmitInFlight(ActiveTurnState? turn)
-        => turn?.Phase is ChatTurnPhase.CreatingRemoteSession or ChatTurnPhase.DispatchingPrompt;
 
     private static string ResolveTurnFailureMessage(ActiveTurnState? turn)
         => turn?.Phase is ChatTurnPhase.Failed && !string.IsNullOrWhiteSpace(turn.FailureMessage)
@@ -251,6 +235,8 @@ public sealed record ChatUiProjection(
     bool IsTurnStatusVisible,
     string TurnStatusText,
     bool IsTurnStatusRunning,
+    bool IsTurnStatusFaulted,
+    ChatTurnStatusSource TurnStatusSource,
     ChatTurnPhase? TurnPhase,
     bool IsTurnFailureVisible,
     string TurnFailureTitle,

@@ -111,6 +111,15 @@ public sealed class ChatViewXamlTests
     }
 
     [Fact]
+    public void ChatViewXaml_TurnStatusCriticalIconOnlyUsesFaultedProjection()
+    {
+        var xaml = LoadChatViewXaml();
+
+        Assert.Contains("Visibility=\"{x:Bind ViewModel.IsTurnStatusFaulted, Mode=OneWay", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Visibility=\"{x:Bind ViewModel.IsTurnStatusRunning, Mode=OneWay, Converter={StaticResource InverseBoolToVisibilityConverter}}\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ChatViewXaml_SessionHeader_UsesNamedResponsiveLayoutParts()
     {
         var xaml = LoadChatViewXaml();

@@ -388,6 +388,8 @@ public partial class ChatViewModel
         IsTurnStatusVisible = projection.IsTurnStatusVisible;
         TurnStatusText = projection.TurnStatusText;
         IsTurnStatusRunning = projection.IsTurnStatusRunning;
+        IsTurnStatusFaulted = projection.IsTurnStatusFaulted;
+        TurnStatusSource = projection.TurnStatusSource;
         TurnPhase = projection.TurnPhase;
         IsTurnFailureVisible = projection.IsTurnFailureVisible;
         TurnFailureTitle = projection.TurnFailureTitle;
