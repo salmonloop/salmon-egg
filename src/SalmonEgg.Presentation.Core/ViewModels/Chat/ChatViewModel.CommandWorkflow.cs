@@ -8,6 +8,7 @@ using System.Collections.Specialized;
 using System.Linq;
 using System.ComponentModel;
 using System.Globalization;
+using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -113,7 +114,7 @@ public partial class ChatViewModel
             using var authenticationCts = new CancellationTokenSource();
             _sendPromptCts = authenticationCts;
 
-            var authenticated = await TryAuthenticateAsync(authenticationCts.Token).ConfigureAwait(false);
+            var authenticated = await TryAuthenticateAsync(authenticationCts.Token).ConfigureAwait(true);
             if (!authenticated)
             {
                 _sendPromptCts = null;
@@ -127,7 +128,7 @@ public partial class ChatViewModel
         try
         {
             await BeginPromptSendAsync(promptContext).ConfigureAwait(true);
-            await EnsurePromptDispatchAsync(promptContext).ConfigureAwait(false);
+            await EnsurePromptDispatchAsync(promptContext).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
@@ -137,14 +138,14 @@ public partial class ChatViewModel
         catch (Exception ex)
         {
             Logger.LogError(ex, "SendPrompt failed");
-            SetError($"Send failed: {ex.Message}");
-
             await FailPromptSendAsync(promptContext, ex.Message).ConfigureAwait(true);
+            Logger.LogInformation(
+                "Chat prompt exception terminal phase applied. ConversationId={ConversationId} TurnId={TurnId} TurnPhase={TurnPhase}",
+                promptContext.ConversationId,
+                promptContext.TurnId,
+                ChatTurnPhase.Failed);
 
-            // Restore text so the user can retry quickly.
-            RestoreCurrentPromptOnUiThread(promptContext.PromptText);
-
-            ShowTransientNotificationToast("Send failed, please try again later.");
+            await ProjectPromptSendFailureAsync(promptContext.PromptText, ex.Message).ConfigureAwait(true);
         }
         finally
         {
@@ -333,6 +334,32 @@ public partial class ChatViewModel
 
     private Task FailPromptSendAsync(PromptSendContext context, string reason)
         => _chatStore.Dispatch(new FailTurnAction(context.ConversationId, context.TurnId, reason)).AsTask();
+
+    private Task ProjectPromptSendFailureAsync(string promptText, string reason)
+        => PostToUiAsync(() =>
+        {
+            Exception? errorProjectionException = null;
+            try
+            {
+                SetError($"Send failed: {reason}");
+            }
+            catch (Exception ex)
+            {
+                errorProjectionException = ex;
+            }
+
+            if (string.IsNullOrWhiteSpace(CurrentPrompt))
+            {
+                CurrentPrompt = promptText;
+            }
+
+            ShowTransientNotificationToast("Send failed, please try again later.");
+
+            if (errorProjectionException is not null)
+            {
+                ExceptionDispatchInfo.Capture(errorProjectionException).Throw();
+            }
+        });
 
     private async Task OnPromptRequestDispatchedAsync(CancellationToken cancellationToken)
     {

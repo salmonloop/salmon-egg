@@ -392,16 +392,22 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
             return;
         }
 
-        if (TryAbortPendingActionBoundaryContinuationIfFocusMoved(pendingActionButton))
-        {
-            return;
-        }
-
         if (!string.Equals(e.PropertyName, nameof(ChatViewModel.CanStartVoiceInput), StringComparison.Ordinal)
             && !string.Equals(e.PropertyName, nameof(ChatViewModel.ShowVoiceInputStartButton), StringComparison.Ordinal)
             && !string.Equals(e.PropertyName, nameof(ChatViewModel.CanStopVoiceInput), StringComparison.Ordinal)
             && !string.Equals(e.PropertyName, nameof(ChatViewModel.ShowVoiceInputStopButton), StringComparison.Ordinal)
             && !string.Equals(e.PropertyName, nameof(ChatViewModel.VoiceInputErrorMessage), StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (!DispatcherQueue.HasThreadAccess)
+        {
+            _ = DispatcherQueue.TryEnqueue(() => OnViewModelPropertyChanged(sender, e));
+            return;
+        }
+
+        if (TryAbortPendingActionBoundaryContinuationIfFocusMoved(pendingActionButton))
         {
             return;
         }

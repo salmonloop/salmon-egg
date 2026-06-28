@@ -152,6 +152,31 @@ public sealed class ChatStateProjectorTests
     }
 
     [Fact]
+    public void Apply_PreservesFailedTurnVisibilityWithoutRunningStatus()
+    {
+        var projector = new ChatStateProjector(new TestCoreStringLocalizer());
+        var storeState = ChatState.Empty with
+        {
+            ActiveTurn = new ActiveTurnState(
+                "conv-1",
+                "turn-1",
+                ChatTurnPhase.Failed,
+                DateTime.UtcNow,
+                DateTime.UtcNow,
+                FailureMessage: "provider failed")
+        };
+
+        var projection = projector.Apply(storeState, ChatConnectionState.Empty, "conv-1", null);
+
+        Assert.True(projection.IsTurnStatusVisible);
+        Assert.False(projection.IsTurnStatusRunning);
+        Assert.False(projection.IsPromptInFlight);
+        Assert.False(projection.IsPromptSubmitInFlight);
+        Assert.Equal(ChatTurnPhase.Failed, projection.TurnPhase);
+        Assert.Equal("失败：provider failed", projection.TurnStatusText);
+    }
+
+    [Fact]
     public void Apply_AgentDisplayUsesForegroundTransportProfileWhenNoBinding()
     {
         var projector = new ChatStateProjector();

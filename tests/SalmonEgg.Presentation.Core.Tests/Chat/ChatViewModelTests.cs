@@ -6480,6 +6480,60 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task SendPromptAsync_WhenProviderDispatchThrows_TerminalizesTurnBeforeErrorProjection()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var commands = new Mock<IAcpConnectionCommands>(MockBehavior.Strict);
+        commands.Setup(x => x.EnsureRemoteSessionAsync(
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<System.Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AcpRemoteSessionResult("remote-1", new SessionNewResponse("remote-1"), false));
+        commands.Setup(x => x.DispatchPromptToRemoteSessionAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<System.Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .Returns<string, string, string?, IAcpChatCoordinatorSink, System.Func<CancellationToken, Task<bool>>, CancellationToken>(
+                async (_, _, _, sink, _, cancellationToken) =>
+                {
+                    await sink.NotifyPromptRequestDispatchedAsync(cancellationToken);
+                    throw new InvalidOperationException("provider failed");
+                });
+
+        await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
+        var viewModel = fixture.ViewModel;
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(CreateConnectedChatService().Object));
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+        });
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+        await WaitForQueueingPromptReadyAsync(syncContext, fixture, "conv-1", "fail cleanly");
+
+        viewModel.PropertyChanged += (_, e) =>
+        {
+            if (string.Equals(e.PropertyName, nameof(ChatViewModel.ErrorMessage), StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("UI error projection failed");
+            }
+        };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => AwaitWithSynchronizationContextAsync(syncContext, viewModel.SendPromptCommand.ExecuteAsync(null)));
+
+        Assert.Contains("UI error projection failed", ex.ToString(), StringComparison.Ordinal);
+        var state = await fixture.GetStateAsync();
+        Assert.Equal(ChatTurnPhase.Failed, state.ActiveTurn!.Phase);
+        Assert.Equal("provider failed", state.ActiveTurn.FailureMessage);
+        Assert.Equal("fail cleanly", viewModel.CurrentPrompt);
+    }
+
+    [Fact]
     public async Task SendPromptAsync_LogsPromptLifecycleDiagnostics()
     {
         var syncContext = new QueueingSynchronizationContext();

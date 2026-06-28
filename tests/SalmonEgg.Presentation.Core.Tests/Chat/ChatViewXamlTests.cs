@@ -324,6 +324,32 @@ public sealed class ChatViewXamlTests
     }
 
     [Fact]
+    public void ChatInputArea_ViewModelPropertyChanged_FiltersUnrelatedPropertiesBeforeFocusContinuation()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml.cs");
+        var handler = ExtractSection(
+            code,
+            "private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)",
+            "private bool IsPromptEditingAvailable()");
+
+        var voicePropertyFilterIndex = handler.IndexOf(
+            "nameof(ChatViewModel.CanStartVoiceInput)",
+            StringComparison.Ordinal);
+        var focusContinuationIndex = handler.IndexOf(
+            "TryAbortPendingActionBoundaryContinuationIfFocusMoved(pendingActionButton)",
+            StringComparison.Ordinal);
+        var dispatcherGuardIndex = handler.IndexOf(
+            "DispatcherQueue.HasThreadAccess",
+            StringComparison.Ordinal);
+
+        Assert.True(voicePropertyFilterIndex >= 0, "The handler must filter to action-button properties before doing focus work.");
+        Assert.True(focusContinuationIndex > voicePropertyFilterIndex, "Unrelated ViewModel changes must not access XamlRoot or focus state.");
+        Assert.True(dispatcherGuardIndex > voicePropertyFilterIndex, "ViewModel changes must marshal to the UI thread before touching XamlRoot or focus state.");
+        Assert.True(focusContinuationIndex > dispatcherGuardIndex, "Focus continuation must only run after the UI-thread guard.");
+        Assert.DoesNotContain("nameof(ChatViewModel.ErrorMessage)", handler, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void WindowsGuiAppSession_AnywhereLookupStaysWithinApplicationWindows()
     {
         var code = LoadText(@"tests\SalmonEgg.GuiTests.Windows\WindowsGuiAppSession.cs");
@@ -448,6 +474,15 @@ public sealed class ChatViewXamlTests
     {
         var root = FindRepoRoot();
         return File.ReadAllText(Path.Combine(root, NormalizeRelativePath(relativePath)));
+    }
+
+    private static string ExtractSection(string text, string startMarker, string endMarker)
+    {
+        var start = text.IndexOf(startMarker, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"Start marker not found: {startMarker}");
+        var end = text.IndexOf(endMarker, start, StringComparison.Ordinal);
+        Assert.True(end > start, $"End marker not found after start marker: {endMarker}");
+        return text[start..end];
     }
 
     private static string FindRepoRoot()
