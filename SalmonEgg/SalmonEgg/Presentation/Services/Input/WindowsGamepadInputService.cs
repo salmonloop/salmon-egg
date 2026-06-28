@@ -186,7 +186,6 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
         var tick = Interlocked.Increment(ref _tickSequence);
         if (!TryGetActiveReading(out var reading))
         {
-            _logger.LogDebug("Gamepad tick {Tick} has no active reading.", tick);
             int standardGamepadCount;
             int rawGameControllerCount;
             lock (_sync)
@@ -215,12 +214,6 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
             var raisedIntents = _intentProcessor.Process(reading, DateTimeOffset.UtcNow);
             var raisedShortcuts = _shortcutProcessor.Process(reading);
             var raisedContextIntents = _contextIntentProcessor.Process(reading);
-            _logger.LogDebug(
-                "Gamepad tick {Tick} processed: NavigationIntents={NavigationIntentCount}, ShortcutIntents={ShortcutIntentCount}, ContextIntents={ContextIntentCount}.",
-                tick,
-                raisedIntents.Count,
-                raisedShortcuts.Count,
-                raisedContextIntents.Count);
             foreach (var intent in raisedIntents)
             {
                 EmitIntent(intent, tick);
@@ -308,28 +301,16 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
 
     private void EmitIntent(GamepadNavigationIntent intent, long tick)
     {
-        _logger.LogDebug(
-            "Gamepad navigation intent emitted from poller. Tick={Tick} Intent={Intent}.",
-            tick,
-            intent);
         IntentRaised?.Invoke(this, intent);
     }
 
     private void EmitShortcut(GamepadShortcutIntent shortcut, long tick)
     {
-        _logger.LogDebug(
-            "Gamepad shortcut intent emitted from poller. Tick={Tick} Intent={Intent}.",
-            tick,
-            shortcut);
         ShortcutRaised?.Invoke(this, shortcut);
     }
 
     private void EmitContextIntent(GamepadContextIntent intent, long tick)
     {
-        _logger.LogDebug(
-            "Gamepad context intent emitted from poller. Tick={Tick} Intent={Intent}.",
-            tick,
-            intent);
         ContextIntentRaised?.Invoke(this, intent);
     }
 
@@ -343,10 +324,6 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
 
         if (transition.Path == GamepadInputPath.None)
         {
-            _logger.LogDebug(
-                "Gamepad input path is now idle. KnownStandardGamepads={KnownStandardGamepadCount} KnownRawGameControllers={KnownRawGameControllerCount}.",
-                standardGamepadCount,
-                rawGameControllerCount);
             return;
         }
 

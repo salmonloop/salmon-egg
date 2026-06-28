@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Threading;
@@ -174,6 +175,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
         _ = await _chatViewModel.ArchiveConversationAsync(selectedSessionId).ConfigureAwait(true);
     }
 
+    [Conditional("DEBUG")]
     private static void BootLogDebug(string message)
     {
 #if DEBUG
