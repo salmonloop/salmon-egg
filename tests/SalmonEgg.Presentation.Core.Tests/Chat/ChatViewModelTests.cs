@@ -73,7 +73,8 @@ public partial class ChatViewModelTests
         LocalTerminalPanelCoordinator? localTerminalPanelCoordinator = null,
         IAcpConnectionSessionRegistry? connectionSessionRegistry = null,
         ISlashCommandSource? localSlashCommandSource = null,
-        IAcpMcpServerResolver? mcpServerResolver = null)
+        IAcpMcpServerResolver? mcpServerResolver = null,
+        IPlatformShellService? platformShell = null)
     {
         var stateOwner = new object();
         var connectionStateOwner = new object();
@@ -226,7 +227,8 @@ public partial class ChatViewModelTests
                 localTerminalPanelCoordinator: localTerminalPanelCoordinator,
                 conversationCatalogFacade: conversationCatalogFacade,
                 connectionSessionRegistry: connectionSessionRegistry,
-                localSlashCommandSource: localSlashCommandSource);
+                localSlashCommandSource: localSlashCommandSource,
+                platformShell: platformShell);
             conversationCatalogFacade.SetPanelCleanup(viewModel);
             return new ViewModelFixture(
                 viewModel,
@@ -6480,7 +6482,7 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
-    public async Task SendPromptAsync_WhenProviderDispatchThrows_TerminalizesTurnBeforeErrorProjection()
+    public async Task SendPromptAsync_WhenProviderDispatchThrows_TerminalizesTurnWithoutGlobalErrorProjection()
     {
         var syncContext = new QueueingSynchronizationContext();
         var commands = new Mock<IAcpConnectionCommands>(MockBehavior.Strict);
@@ -6515,26 +6517,27 @@ public partial class ChatViewModelTests
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
         await WaitForQueueingPromptReadyAsync(syncContext, fixture, "conv-1", "fail cleanly");
 
+        var globalErrorChanged = false;
         viewModel.PropertyChanged += (_, e) =>
         {
             if (string.Equals(e.PropertyName, nameof(ChatViewModel.ErrorMessage), StringComparison.Ordinal))
             {
-                throw new InvalidOperationException("UI error projection failed");
+                globalErrorChanged = true;
             }
         };
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => AwaitWithSynchronizationContextAsync(syncContext, viewModel.SendPromptCommand.ExecuteAsync(null)));
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.SendPromptCommand.ExecuteAsync(null));
 
-        Assert.Contains("UI error projection failed", ex.ToString(), StringComparison.Ordinal);
         var state = await fixture.GetStateAsync();
         Assert.Equal(ChatTurnPhase.Failed, state.ActiveTurn!.Phase);
         Assert.Equal("provider failed", state.ActiveTurn.FailureMessage);
         Assert.Equal("fail cleanly", viewModel.CurrentPrompt);
+        Assert.False(globalErrorChanged);
+        Assert.True(string.IsNullOrWhiteSpace(viewModel.ErrorMessage));
     }
 
     [Fact]
-    public async Task SendPromptAsync_WhenProviderDispatchThrowsAfterPromptDispatch_ProjectsFailureDetailsToTranscriptOnly()
+    public async Task SendPromptAsync_WhenProviderDispatchThrowsAfterPromptDispatch_ProjectsFailureDetailsToTurnFailureOnly()
     {
         var syncContext = new QueueingSynchronizationContext();
         var commands = new Mock<IAcpConnectionCommands>(MockBehavior.Strict);
@@ -6576,18 +6579,21 @@ public partial class ChatViewModelTests
         Assert.Equal(ChatTurnPhase.Failed, state.ActiveTurn!.Phase);
         Assert.Equal("provider failed", state.ActiveTurn.FailureMessage);
         Assert.Equal("fail cleanly", viewModel.CurrentPrompt);
+        Assert.True(viewModel.IsTurnFailureVisible);
+        Assert.Equal("Turn failed", viewModel.TurnFailureTitle);
+        Assert.Equal("provider failed", viewModel.TurnFailureMessage);
+        Assert.True(string.IsNullOrWhiteSpace(viewModel.ErrorMessage));
         Assert.False(viewModel.ShowTransientNotification);
         Assert.True(string.IsNullOrWhiteSpace(viewModel.TransientNotificationMessage));
         var transcript = state.ResolveContentSlice("conv-1")?.Transcript
             ?? ImmutableList<ConversationMessageSnapshot>.Empty;
-        var failureMessage = Assert.Single(transcript.Where(message =>
+        Assert.DoesNotContain(transcript, message =>
             !message.IsOutgoing
-            && message.TextContent.Contains("provider failed", StringComparison.Ordinal)));
-        Assert.Equal("error", failureMessage.ContentType);
+            && message.TextContent.Contains("provider failed", StringComparison.Ordinal));
     }
 
     [Fact]
-    public async Task SendPromptAsync_WhenRemoteSessionCreationThrowsBeforePromptDispatch_ShowsTransientNotification()
+    public async Task SendPromptAsync_WhenRemoteSessionCreationThrowsBeforePromptDispatch_ProjectsFailureDetailsToTurnFailureOnly()
     {
         var syncContext = new QueueingSynchronizationContext();
         var commands = new Mock<IAcpConnectionCommands>(MockBehavior.Strict);
@@ -6616,13 +6622,70 @@ public partial class ChatViewModelTests
         Assert.Equal(ChatTurnPhase.Failed, state.ActiveTurn!.Phase);
         Assert.Equal("session create failed", state.ActiveTurn.FailureMessage);
         Assert.Equal("fail before dispatch", viewModel.CurrentPrompt);
-        Assert.True(viewModel.ShowTransientNotification);
-        Assert.Equal("Send failed, please try again later.", viewModel.TransientNotificationMessage);
+        Assert.True(viewModel.IsTurnFailureVisible);
+        Assert.Equal("Turn failed", viewModel.TurnFailureTitle);
+        Assert.Equal("session create failed", viewModel.TurnFailureMessage);
+        Assert.True(string.IsNullOrWhiteSpace(viewModel.ErrorMessage));
+        Assert.False(viewModel.ShowTransientNotification);
+        Assert.True(string.IsNullOrWhiteSpace(viewModel.TransientNotificationMessage));
         var transcript = state.ResolveContentSlice("conv-1")?.Transcript
             ?? ImmutableList<ConversationMessageSnapshot>.Empty;
         Assert.DoesNotContain(transcript, message =>
             !message.IsOutgoing
             && message.TextContent.Contains("session create failed", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task DismissTurnFailureCommand_WhenFailedTurnIsVisible_ClearsTerminalTurnFailure()
+    {
+        await using var fixture = CreateViewModel();
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            ActiveTurn = new ActiveTurnState(
+                "conv-1",
+                "turn-1",
+                ChatTurnPhase.Failed,
+                DateTime.UtcNow,
+                DateTime.UtcNow,
+                FailureMessage: "provider failed")
+        });
+        await fixture.ApplyCurrentStoreProjectionAsync();
+
+        Assert.True(fixture.ViewModel.IsTurnFailureVisible);
+
+        await fixture.ViewModel.DismissTurnFailureCommand.ExecuteAsync(null);
+
+        var state = await fixture.GetStateAsync();
+        Assert.Null(state.ActiveTurn);
+        Assert.False(fixture.ViewModel.IsTurnFailureVisible);
+        Assert.True(string.IsNullOrWhiteSpace(fixture.ViewModel.TurnFailureMessage));
+    }
+
+    [Fact]
+    public async Task CopyTurnFailureCommand_WhenFailedTurnIsVisible_CopiesFailureDetailOnly()
+    {
+        var shell = new RecordingPlatformShellService();
+        await using var fixture = CreateViewModel(platformShell: shell);
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            ActiveTurn = new ActiveTurnState(
+                "conv-1",
+                "turn-1",
+                ChatTurnPhase.Failed,
+                DateTime.UtcNow,
+                DateTime.UtcNow,
+                FailureMessage: "provider failed")
+        });
+        await fixture.ApplyCurrentStoreProjectionAsync();
+
+        await fixture.ViewModel.CopyTurnFailureCommand.ExecuteAsync(null);
+
+        Assert.Equal("provider failed", shell.LastCopiedText);
+        Assert.True(fixture.ViewModel.IsTurnFailureVisible);
+        Assert.True(string.IsNullOrWhiteSpace(fixture.ViewModel.ErrorMessage));
+        Assert.False(fixture.ViewModel.ShowTransientNotification);
     }
 
     [Fact]
@@ -16816,5 +16879,24 @@ public partial class ChatViewModelTests
         Assert.Equal("session/new failed", fixture.ViewModel.NewSessionDraftErrorMessage);
         Assert.False(fixture.ViewModel.IsNewSessionDraftReady);
         Assert.False(fixture.ViewModel.IsNewSessionDraftLoading);
+    }
+
+    private sealed class RecordingPlatformShellService : IPlatformShellService
+    {
+        public string? LastCopiedText { get; private set; }
+
+        public Task<bool> OpenFolderAsync(string path) => Task.FromResult(false);
+
+        public Task<bool> OpenFileAsync(string path) => Task.FromResult(false);
+
+        public Task<bool> OpenUriAsync(Uri uri) => Task.FromResult(false);
+
+        public Task<bool> CopyToClipboardAsync(string text)
+        {
+            LastCopiedText = text;
+            return Task.FromResult(true);
+        }
+
+        public Task<string?> ReadClipboardTextAsync() => Task.FromResult<string?>(null);
     }
 }

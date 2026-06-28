@@ -81,6 +81,8 @@ public sealed class ChatStateProjector : IChatStateProjector
         var turnStatusText = GetTurnStatusText(activeTurn);
         var isTurnStatusRunning = IsRunningTurn(activeTurn);
         var isPromptSubmitInFlight = IsPromptSubmitInFlight(activeTurn);
+        var turnFailureMessage = ResolveTurnFailureMessage(activeTurn);
+        var isTurnFailureVisible = !string.IsNullOrWhiteSpace(turnFailureMessage);
         var contentSlice = storeState.ResolveContentSlice(hydratedConversationId);
         var sessionStateSlice = storeState.ResolveSessionStateSlice(hydratedConversationId);
         var toolingProjection = _sessionToolingProjector.Project(storeState, hydratedConversationId);
@@ -130,7 +132,18 @@ public sealed class ChatStateProjector : IChatStateProjector
             IsTurnStatusVisible: isTurnStatusVisible,
             TurnStatusText: turnStatusText,
             IsTurnStatusRunning: isTurnStatusRunning,
-            TurnPhase: activeTurn?.Phase);
+            TurnPhase: activeTurn?.Phase,
+            IsTurnFailureVisible: isTurnFailureVisible,
+            TurnFailureTitle: isTurnFailureVisible
+                ? Localize("ChatTurnFailure_Title", "Turn failed")
+                : string.Empty,
+            TurnFailureMessage: turnFailureMessage,
+            TurnFailureCopyActionText: isTurnFailureVisible
+                ? Localize("ChatTurnFailure_CopyAction", "Copy failure detail")
+                : string.Empty,
+            TurnFailureDismissActionText: isTurnFailureVisible
+                ? Localize("ChatTurnFailure_DismissAction", "Dismiss failure detail")
+                : string.Empty);
     }
 
     private static ActiveTurnState? GetVisibleActiveTurn(ActiveTurnState? activeTurn, string? hydratedConversationId)
@@ -196,6 +209,11 @@ public sealed class ChatStateProjector : IChatStateProjector
 
     private static bool IsPromptSubmitInFlight(ActiveTurnState? turn)
         => turn?.Phase is ChatTurnPhase.CreatingRemoteSession or ChatTurnPhase.DispatchingPrompt;
+
+    private static string ResolveTurnFailureMessage(ActiveTurnState? turn)
+        => turn?.Phase is ChatTurnPhase.Failed && !string.IsNullOrWhiteSpace(turn.FailureMessage)
+            ? turn.FailureMessage
+            : string.Empty;
 }
 
 public sealed record ChatUiProjection(
@@ -233,4 +251,9 @@ public sealed record ChatUiProjection(
     bool IsTurnStatusVisible,
     string TurnStatusText,
     bool IsTurnStatusRunning,
-    ChatTurnPhase? TurnPhase);
+    ChatTurnPhase? TurnPhase,
+    bool IsTurnFailureVisible,
+    string TurnFailureTitle,
+    string TurnFailureMessage,
+    string TurnFailureCopyActionText,
+    string TurnFailureDismissActionText);

@@ -160,6 +160,15 @@
   <data name="ChatTurnStatus_Cancelled" xml:space="preserve">
     <value>已取消</value>
   </data>
+  <data name="ChatTurnFailure_Title" xml:space="preserve">
+    <value>本轮回复失败</value>
+  </data>
+  <data name="ChatTurnFailure_CopyAction" xml:space="preserve">
+    <value>复制失败详情</value>
+  </data>
+  <data name="ChatTurnFailure_DismissAction" xml:space="preserve">
+    <value>关闭失败详情</value>
+  </data>
   <data name="SearchCommand_NewSessionTitle" xml:space="preserve">
     <value>新建会话</value>
   </data>

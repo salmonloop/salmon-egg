@@ -778,6 +778,21 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private ChatTurnPhase? _turnPhase;
 
     [ObservableProperty]
+    private bool _isTurnFailureVisible;
+
+    [ObservableProperty]
+    private string _turnFailureTitle = string.Empty;
+
+    [ObservableProperty]
+    private string _turnFailureMessage = string.Empty;
+
+    [ObservableProperty]
+    private string _turnFailureCopyActionText = string.Empty;
+
+    [ObservableProperty]
+    private string _turnFailureDismissActionText = string.Empty;
+
+    [ObservableProperty]
     private bool _isConversationListLoading = true;
 
     [ObservableProperty]

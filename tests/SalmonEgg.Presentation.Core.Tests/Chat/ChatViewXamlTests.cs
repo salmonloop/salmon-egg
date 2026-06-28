@@ -92,6 +92,25 @@ public sealed class ChatViewXamlTests
     }
 
     [Fact]
+    public void ChatViewXaml_TurnFailureUsesPersistentViewModelDrivenCallout()
+    {
+        var xaml = LoadChatViewXaml();
+
+        Assert.Contains("AutomationProperties.AutomationId=\"ChatView.TurnFailureCallout\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Visibility=\"{x:Bind ViewModel.IsTurnFailureVisible, Mode=OneWay", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind ViewModel.TurnFailureTitle, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind ViewModel.TurnFailureMessage, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"ChatView.CopyTurnFailureButton\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.Name=\"{x:Bind ViewModel.TurnFailureCopyActionText, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ToolTipService.ToolTip=\"{x:Bind ViewModel.TurnFailureCopyActionText, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind ViewModel.CopyTurnFailureCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.Name=\"{x:Bind ViewModel.TurnFailureDismissActionText, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ToolTipService.ToolTip=\"{x:Bind ViewModel.TurnFailureDismissActionText, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind ViewModel.DismissTurnFailureCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Send failed", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ChatViewXaml_SessionHeader_UsesNamedResponsiveLayoutParts()
     {
         var xaml = LoadChatViewXaml();

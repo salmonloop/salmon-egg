@@ -8,7 +8,6 @@ using System.Collections.Specialized;
 using System.Linq;
 using System.ComponentModel;
 using System.Globalization;
-using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -138,11 +137,6 @@ public partial class ChatViewModel
         catch (Exception ex)
         {
             Logger.LogError(ex, "SendPrompt failed");
-            var stateBeforeFailure = await _chatStore.GetCurrentStateAsync().ConfigureAwait(false);
-            var failurePresentation = PromptFailurePresentationPolicy.Resolve(
-                promptContext.ConversationId,
-                promptContext.TurnId,
-                stateBeforeFailure.ActiveTurn);
             await FailPromptSendAsync(promptContext, ex.Message).ConfigureAwait(true);
             Logger.LogInformation(
                 "Chat prompt exception terminal phase applied. ConversationId={ConversationId} TurnId={TurnId} TurnPhase={TurnPhase}",
@@ -150,20 +144,48 @@ public partial class ChatViewModel
                 promptContext.TurnId,
                 ChatTurnPhase.Failed);
 
-            if (failurePresentation.ShouldProjectTranscriptDetail)
-            {
-                await ProjectPromptSendFailureToTranscriptAsync(promptContext, ex.Message).ConfigureAwait(true);
-            }
-
-            await ProjectPromptSendFailureAsync(
-                promptContext.PromptText,
-                ex.Message,
-                showNotification: failurePresentation.ShouldShowNotification).ConfigureAwait(true);
+            await RestorePromptTextAfterSendFailureAsync(promptContext.PromptText).ConfigureAwait(true);
         }
         finally
         {
             try { _sendPromptCts?.Dispose(); } catch { }
             _sendPromptCts = null;
+        }
+    }
+
+    [RelayCommand]
+    private async Task DismissTurnFailureAsync()
+    {
+        var conversationId = CurrentSessionId;
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return;
+        }
+
+        await _chatStore.Dispatch(new ClearTerminalTurnAction(conversationId)).ConfigureAwait(true);
+        await ApplyCurrentStoreProjectionAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    private async Task CopyTurnFailureAsync()
+    {
+        var message = TurnFailureMessage;
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return;
+        }
+
+        try
+        {
+            var copied = await _platformShell.CopyToClipboardAsync(message).ConfigureAwait(true);
+            if (!copied)
+            {
+                Logger.LogWarning("Failed to copy turn failure detail to clipboard");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to copy turn failure detail to clipboard");
         }
     }
 
@@ -348,51 +370,12 @@ public partial class ChatViewModel
     private Task FailPromptSendAsync(PromptSendContext context, string reason)
         => _chatStore.Dispatch(new FailTurnAction(context.ConversationId, context.TurnId, reason)).AsTask();
 
-    private Task ProjectPromptSendFailureToTranscriptAsync(PromptSendContext context, string reason)
-        => UpsertTranscriptSnapshotAsync(
-            context.ConversationId,
-            CreatePromptFailureSnapshot(reason));
-
-    private ConversationMessageSnapshot CreatePromptFailureSnapshot(string reason)
-    {
-        var snapshot = CreateContentSnapshot(
-            new TextContentBlock { Text = FormatPromptFailureMessage(reason) },
-            isOutgoing: false);
-        snapshot.ContentType = "error";
-        return snapshot;
-    }
-
-    private static string FormatPromptFailureMessage(string reason)
-        => string.IsNullOrWhiteSpace(reason)
-            ? "Send failed."
-            : $"Send failed: {reason}";
-
-    private Task ProjectPromptSendFailureAsync(string promptText, string reason, bool showNotification)
+    private Task RestorePromptTextAfterSendFailureAsync(string promptText)
         => PostToUiAsync(() =>
         {
-            Exception? errorProjectionException = null;
-            try
-            {
-                SetError($"Send failed: {reason}");
-            }
-            catch (Exception ex)
-            {
-                errorProjectionException = ex;
-            }
-
             if (string.IsNullOrWhiteSpace(CurrentPrompt))
             {
                 CurrentPrompt = promptText;
-            }
-
-            if (showNotification)
-            {
-                ShowTransientNotificationToast("Send failed, please try again later.");
-            }
-
-            if (errorProjectionException is not null)
-            {
-                ExceptionDispatchInfo.Capture(errorProjectionException).Throw();
             }
         });
 

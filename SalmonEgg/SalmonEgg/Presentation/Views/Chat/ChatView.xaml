@@ -167,7 +167,7 @@
                 </Grid>
             </Border>
 
-            <Grid Grid.Row="1" RowDefinitions="*,Auto,Auto,Auto">
+            <Grid Grid.Row="1" RowDefinitions="*,Auto,Auto,Auto,Auto">
                 <!-- 消息列表 -->
                 <controls:ResponsiveContentHost x:Name="TranscriptHost"
                                                 Grid.Row="0"
@@ -225,6 +225,68 @@
                 </controls:ResponsiveContentHost>
 
                 <controls:ResponsiveContentHost Grid.Row="2"
+                                                MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}"
+                                                Visibility="{x:Bind ViewModel.IsTurnFailureVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <controls:ResponsiveContentHost.Child>
+                        <Border AutomationProperties.AutomationId="ChatView.TurnFailureCallout"
+                                Margin="24,0,24,12"
+                                Padding="12"
+                                CornerRadius="6"
+                                Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource SystemFillColorCriticalBrush}"
+                                BorderThickness="1">
+                            <Grid ColumnDefinitions="Auto,*,Auto,Auto"
+                                  ColumnSpacing="10">
+                                <FontIcon Grid.Column="0"
+                                          Glyph="&#xEA39;"
+                                          FontSize="14"
+                                          Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                          VerticalAlignment="Top"
+                                          Margin="0,2,0,0" />
+                                <StackPanel Grid.Column="1"
+                                            Spacing="4"
+                                            MinWidth="0">
+                                    <TextBlock AutomationProperties.AutomationId="ChatView.TurnFailureTitle"
+                                               Text="{x:Bind ViewModel.TurnFailureTitle, Mode=OneWay}"
+                                               FontWeight="SemiBold"
+                                               FontSize="13"
+                                               Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                                    <TextBlock AutomationProperties.AutomationId="ChatView.TurnFailureMessage"
+                                               Text="{x:Bind ViewModel.TurnFailureMessage, Mode=OneWay}"
+                                               TextWrapping="WrapWholeWords"
+                                               FontSize="12"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                                <Button Grid.Column="2"
+                                        AutomationProperties.AutomationId="ChatView.CopyTurnFailureButton"
+                                        AutomationProperties.Name="{x:Bind ViewModel.TurnFailureCopyActionText, Mode=OneWay}"
+                                        ToolTipService.ToolTip="{x:Bind ViewModel.TurnFailureCopyActionText, Mode=OneWay}"
+                                        Command="{x:Bind ViewModel.CopyTurnFailureCommand}"
+                                        Padding="6"
+                                        MinWidth="32"
+                                        MinHeight="32"
+                                        VerticalAlignment="Top">
+                                    <FontIcon Glyph="&#xE8C8;"
+                                              FontSize="12" />
+                                </Button>
+                                <Button Grid.Column="3"
+                                        AutomationProperties.AutomationId="ChatView.DismissTurnFailureButton"
+                                        AutomationProperties.Name="{x:Bind ViewModel.TurnFailureDismissActionText, Mode=OneWay}"
+                                        ToolTipService.ToolTip="{x:Bind ViewModel.TurnFailureDismissActionText, Mode=OneWay}"
+                                        Command="{x:Bind ViewModel.DismissTurnFailureCommand}"
+                                        Padding="6"
+                                        MinWidth="32"
+                                        MinHeight="32"
+                                        VerticalAlignment="Top">
+                                    <FontIcon Glyph="&#xE711;"
+                                              FontSize="12" />
+                                </Button>
+                            </Grid>
+                        </Border>
+                    </controls:ResponsiveContentHost.Child>
+                </controls:ResponsiveContentHost>
+
+                <controls:ResponsiveContentHost Grid.Row="3"
                                                 MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}"
                                                 Visibility="{x:Bind ViewModel.HasPendingAskUserRequest, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                     <controls:ResponsiveContentHost.Child>
@@ -301,7 +363,7 @@
                 </controls:ResponsiveContentHost>
 
                 <!-- 输入区域 -->
-                <controls:ResponsiveContentHost Grid.Row="3"
+                <controls:ResponsiveContentHost Grid.Row="4"
                                                 MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}"
                                                 Visibility="{x:Bind ViewModel.ShouldShowConversationInputSurface, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                     <controls:ResponsiveContentHost.Child>

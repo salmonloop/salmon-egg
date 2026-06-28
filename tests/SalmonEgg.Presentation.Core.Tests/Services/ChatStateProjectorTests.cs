@@ -175,6 +175,11 @@ public sealed class ChatStateProjectorTests
         Assert.Equal(ChatTurnPhase.Failed, projection.TurnPhase);
         Assert.Equal("失败", projection.TurnStatusText);
         Assert.DoesNotContain("provider failed", projection.TurnStatusText, StringComparison.Ordinal);
+        Assert.True(projection.IsTurnFailureVisible);
+        Assert.Equal("本轮回复失败", projection.TurnFailureTitle);
+        Assert.Equal("provider failed", projection.TurnFailureMessage);
+        Assert.Equal("复制失败详情", projection.TurnFailureCopyActionText);
+        Assert.Equal("关闭失败详情", projection.TurnFailureDismissActionText);
     }
 
     [Fact]
