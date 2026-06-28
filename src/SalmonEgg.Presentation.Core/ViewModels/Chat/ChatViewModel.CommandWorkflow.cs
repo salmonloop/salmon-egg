@@ -138,6 +138,11 @@ public partial class ChatViewModel
         catch (Exception ex)
         {
             Logger.LogError(ex, "SendPrompt failed");
+            var stateBeforeFailure = await _chatStore.GetCurrentStateAsync().ConfigureAwait(false);
+            var failurePresentation = PromptFailurePresentationPolicy.Resolve(
+                promptContext.ConversationId,
+                promptContext.TurnId,
+                stateBeforeFailure.ActiveTurn);
             await FailPromptSendAsync(promptContext, ex.Message).ConfigureAwait(true);
             Logger.LogInformation(
                 "Chat prompt exception terminal phase applied. ConversationId={ConversationId} TurnId={TurnId} TurnPhase={TurnPhase}",
@@ -145,7 +150,15 @@ public partial class ChatViewModel
                 promptContext.TurnId,
                 ChatTurnPhase.Failed);
 
-            await ProjectPromptSendFailureAsync(promptContext.PromptText, ex.Message).ConfigureAwait(true);
+            if (failurePresentation.ShouldProjectTranscriptDetail)
+            {
+                await ProjectPromptSendFailureToTranscriptAsync(promptContext, ex.Message).ConfigureAwait(true);
+            }
+
+            await ProjectPromptSendFailureAsync(
+                promptContext.PromptText,
+                ex.Message,
+                showNotification: failurePresentation.ShouldShowNotification).ConfigureAwait(true);
         }
         finally
         {
@@ -335,7 +348,26 @@ public partial class ChatViewModel
     private Task FailPromptSendAsync(PromptSendContext context, string reason)
         => _chatStore.Dispatch(new FailTurnAction(context.ConversationId, context.TurnId, reason)).AsTask();
 
-    private Task ProjectPromptSendFailureAsync(string promptText, string reason)
+    private Task ProjectPromptSendFailureToTranscriptAsync(PromptSendContext context, string reason)
+        => UpsertTranscriptSnapshotAsync(
+            context.ConversationId,
+            CreatePromptFailureSnapshot(reason));
+
+    private ConversationMessageSnapshot CreatePromptFailureSnapshot(string reason)
+    {
+        var snapshot = CreateContentSnapshot(
+            new TextContentBlock { Text = FormatPromptFailureMessage(reason) },
+            isOutgoing: false);
+        snapshot.ContentType = "error";
+        return snapshot;
+    }
+
+    private static string FormatPromptFailureMessage(string reason)
+        => string.IsNullOrWhiteSpace(reason)
+            ? "Send failed."
+            : $"Send failed: {reason}";
+
+    private Task ProjectPromptSendFailureAsync(string promptText, string reason, bool showNotification)
         => PostToUiAsync(() =>
         {
             Exception? errorProjectionException = null;
@@ -353,7 +385,10 @@ public partial class ChatViewModel
                 CurrentPrompt = promptText;
             }
 
-            ShowTransientNotificationToast("Send failed, please try again later.");
+            if (showNotification)
+            {
+                ShowTransientNotificationToast("Send failed, please try again later.");
+            }
 
             if (errorProjectionException is not null)
             {

@@ -158,7 +158,7 @@ public sealed class ChatStateProjector : IChatStateProjector
             ChatTurnPhase.ToolRunning => FormatLocalize("ChatTurnStatus_ToolRunning", "Running tool: {0}", turn.ToolTitle ?? "..."),
             ChatTurnPhase.Responding => Localize("ChatTurnStatus_Responding", "Responding..."),
             ChatTurnPhase.Completed => Localize("ChatTurnStatus_Completed", "Completed"),
-            ChatTurnPhase.Failed => FormatLocalize("ChatTurnStatus_Failed", "Failed: {0}", turn.FailureMessage ?? Localize("ChatTurnStatus_UnknownError", "Unknown error")),
+            ChatTurnPhase.Failed => Localize("ChatTurnStatus_Failed", "Failed"),
             ChatTurnPhase.Cancelled => Localize("ChatTurnStatus_Cancelled", "Cancelled"),
             _ => string.Empty
         };

@@ -1113,19 +1113,25 @@ public sealed class NavigationCoreTests
 
     private static string ExtractSection(string content, string startMarker, string? endMarker = null)
     {
-        var start = content.IndexOf(startMarker, StringComparison.Ordinal);
+        var normalizedContent = NormalizeLineEndings(content);
+        var normalizedStartMarker = NormalizeLineEndings(startMarker);
+        var normalizedEndMarker = endMarker is null ? null : NormalizeLineEndings(endMarker);
+        var start = normalizedContent.IndexOf(normalizedStartMarker, StringComparison.Ordinal);
         Assert.True(start >= 0, $"Unable to locate marker '{startMarker}'.");
 
-        var end = endMarker is null
-            ? content.Length
-            : content.IndexOf(endMarker, start, StringComparison.Ordinal);
+        var end = normalizedEndMarker is null
+            ? normalizedContent.Length
+            : normalizedContent.IndexOf(normalizedEndMarker, start, StringComparison.Ordinal);
         if (end < 0)
         {
-            end = content.Length;
+            end = normalizedContent.Length;
         }
 
-        return content.Substring(start, end - start);
+        return normalizedContent.Substring(start, end - start);
     }
+
+    private static string NormalizeLineEndings(string value)
+        => value.Replace("\r\n", "\n", StringComparison.Ordinal);
 
     private static string FindRepoRoot()
     {

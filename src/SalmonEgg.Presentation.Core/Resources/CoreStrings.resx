@@ -155,10 +155,7 @@
     <value>已完成</value>
   </data>
   <data name="ChatTurnStatus_Failed" xml:space="preserve">
-    <value>失败：{0}</value>
-  </data>
-  <data name="ChatTurnStatus_UnknownError" xml:space="preserve">
-    <value>未知错误</value>
+    <value>失败</value>
   </data>
   <data name="ChatTurnStatus_Cancelled" xml:space="preserve">
     <value>已取消</value>

@@ -157,10 +157,7 @@
     <value>Completed</value>
   </data>
   <data name="ChatTurnStatus_Failed" xml:space="preserve">
-    <value>Failed: {0}</value>
-  </data>
-  <data name="ChatTurnStatus_UnknownError" xml:space="preserve">
-    <value>Unknown error</value>
+    <value>Failed</value>
   </data>
   <data name="ChatTurnStatus_Cancelled" xml:space="preserve">
     <value>Cancelled</value>

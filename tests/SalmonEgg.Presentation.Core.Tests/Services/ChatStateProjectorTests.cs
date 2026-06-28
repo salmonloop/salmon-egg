@@ -152,7 +152,7 @@ public sealed class ChatStateProjectorTests
     }
 
     [Fact]
-    public void Apply_PreservesFailedTurnVisibilityWithoutRunningStatus()
+    public void Apply_PreservesFailedTurnVisibilityWithoutRepeatingFailureDetails()
     {
         var projector = new ChatStateProjector(new TestCoreStringLocalizer());
         var storeState = ChatState.Empty with
@@ -173,7 +173,8 @@ public sealed class ChatStateProjectorTests
         Assert.False(projection.IsPromptInFlight);
         Assert.False(projection.IsPromptSubmitInFlight);
         Assert.Equal(ChatTurnPhase.Failed, projection.TurnPhase);
-        Assert.Equal("失败：provider failed", projection.TurnStatusText);
+        Assert.Equal("失败", projection.TurnStatusText);
+        Assert.DoesNotContain("provider failed", projection.TurnStatusText, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -6534,6 +6534,98 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task SendPromptAsync_WhenProviderDispatchThrowsAfterPromptDispatch_ProjectsFailureDetailsToTranscriptOnly()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var commands = new Mock<IAcpConnectionCommands>(MockBehavior.Strict);
+        commands.Setup(x => x.EnsureRemoteSessionAsync(
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<System.Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AcpRemoteSessionResult("remote-1", new SessionNewResponse("remote-1"), false));
+        commands.Setup(x => x.DispatchPromptToRemoteSessionAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<System.Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .Returns<string, string, string?, IAcpChatCoordinatorSink, System.Func<CancellationToken, Task<bool>>, CancellationToken>(
+                async (_, _, _, sink, _, cancellationToken) =>
+                {
+                    await sink.NotifyPromptRequestDispatchedAsync(cancellationToken);
+                    throw new InvalidOperationException("provider failed");
+                });
+
+        await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
+        var viewModel = fixture.ViewModel;
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(CreateConnectedChatService().Object));
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+        });
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+        await WaitForQueueingPromptReadyAsync(syncContext, fixture, "conv-1", "fail cleanly");
+
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.SendPromptCommand.ExecuteAsync(null));
+        syncContext.RunAll();
+
+        var state = await fixture.GetStateAsync();
+        Assert.Equal(ChatTurnPhase.Failed, state.ActiveTurn!.Phase);
+        Assert.Equal("provider failed", state.ActiveTurn.FailureMessage);
+        Assert.Equal("fail cleanly", viewModel.CurrentPrompt);
+        Assert.False(viewModel.ShowTransientNotification);
+        Assert.True(string.IsNullOrWhiteSpace(viewModel.TransientNotificationMessage));
+        var transcript = state.ResolveContentSlice("conv-1")?.Transcript
+            ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+        var failureMessage = Assert.Single(transcript.Where(message =>
+            !message.IsOutgoing
+            && message.TextContent.Contains("provider failed", StringComparison.Ordinal)));
+        Assert.Equal("error", failureMessage.ContentType);
+    }
+
+    [Fact]
+    public async Task SendPromptAsync_WhenRemoteSessionCreationThrowsBeforePromptDispatch_ShowsTransientNotification()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var commands = new Mock<IAcpConnectionCommands>(MockBehavior.Strict);
+        commands.Setup(x => x.EnsureRemoteSessionAsync(
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<System.Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("session create failed"));
+
+        await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
+        var viewModel = fixture.ViewModel;
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(CreateConnectedChatService().Object));
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+        });
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+        await WaitForQueueingPromptReadyAsync(syncContext, fixture, "conv-1", "fail before dispatch");
+
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.SendPromptCommand.ExecuteAsync(null));
+        syncContext.RunAll();
+
+        var state = await fixture.GetStateAsync();
+        Assert.Equal(ChatTurnPhase.Failed, state.ActiveTurn!.Phase);
+        Assert.Equal("session create failed", state.ActiveTurn.FailureMessage);
+        Assert.Equal("fail before dispatch", viewModel.CurrentPrompt);
+        Assert.True(viewModel.ShowTransientNotification);
+        Assert.Equal("Send failed, please try again later.", viewModel.TransientNotificationMessage);
+        var transcript = state.ResolveContentSlice("conv-1")?.Transcript
+            ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+        Assert.DoesNotContain(transcript, message =>
+            !message.IsOutgoing
+            && message.TextContent.Contains("session create failed", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task SendPromptAsync_LogsPromptLifecycleDiagnostics()
     {
         var syncContext = new QueueingSynchronizationContext();
