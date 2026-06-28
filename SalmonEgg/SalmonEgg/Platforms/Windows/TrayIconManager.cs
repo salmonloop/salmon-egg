@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Runtime.InteropServices;
 
 #if WINDOWS
@@ -19,6 +20,11 @@ public sealed class TrayIconManager : IDisposable
     private const int MF_STRING = 0x00000000;
     private const int TPM_RIGHTBUTTON = 0x0002;
     private const int TPM_RETURNCMD = 0x0100;
+    private const int IMAGE_ICON = 1;
+    private const int LR_LOADFROMFILE = 0x00000010;
+    private const int SM_CXSMICON = 49;
+    private const int SM_CYSMICON = 50;
+    private const int IDI_APPLICATION = 0x7F00;
 
     private const int CmdOpen = 1001;
     private const int CmdExit = 1002;
@@ -30,6 +36,7 @@ public sealed class TrayIconManager : IDisposable
     private readonly WndProc _newWndProc;
     private readonly IntPtr _oldWndProc;
     private readonly NOTIFYICONDATA _notifyData;
+    private readonly bool _ownsIconHandle;
     private bool _isDisposed;
 
     public TrayIconManager(IntPtr hwnd, string tooltip, Action onOpen, Action onExit)
@@ -40,6 +47,7 @@ public sealed class TrayIconManager : IDisposable
         _callbackMessage = WM_USER + 1;
         _newWndProc = WindowProc;
         _oldWndProc = SetWindowLongPtr(hwnd, GWL_WNDPROC, _newWndProc);
+        var iconHandle = LoadApplicationIcon(out _ownsIconHandle);
 
         _notifyData = new NOTIFYICONDATA
         {
@@ -48,7 +56,7 @@ public sealed class TrayIconManager : IDisposable
             uID = 1,
             uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP,
             uCallbackMessage = _callbackMessage,
-            hIcon = LoadIcon(IntPtr.Zero, new IntPtr(0x7F00)), // IDI_APPLICATION
+            hIcon = iconHandle,
             szTip = string.IsNullOrWhiteSpace(tooltip) ? "Salmon Egg" : tooltip
         };
 
@@ -82,6 +90,11 @@ public sealed class TrayIconManager : IDisposable
         }
         catch
         {
+        }
+
+        if (_ownsIconHandle && _notifyData.hIcon != IntPtr.Zero)
+        {
+            DestroyIcon(_notifyData.hIcon);
         }
     }
 
@@ -142,6 +155,29 @@ public sealed class TrayIconManager : IDisposable
         }
     }
 
+    private static IntPtr LoadApplicationIcon(out bool ownsHandle)
+    {
+        var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "Icons", "Windows", "icon.ico");
+        if (File.Exists(iconPath))
+        {
+            var handle = LoadImage(
+                IntPtr.Zero,
+                iconPath,
+                IMAGE_ICON,
+                GetSystemMetrics(SM_CXSMICON),
+                GetSystemMetrics(SM_CYSMICON),
+                LR_LOADFROMFILE);
+            if (handle != IntPtr.Zero)
+            {
+                ownsHandle = true;
+                return handle;
+            }
+        }
+
+        ownsHandle = false;
+        return LoadIcon(IntPtr.Zero, new IntPtr(IDI_APPLICATION));
+    }
+
     private const int GWL_WNDPROC = -4;
 
     private delegate IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
@@ -174,6 +210,15 @@ public sealed class TrayIconManager : IDisposable
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr LoadIcon(IntPtr hInstance, IntPtr lpIconName);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr LoadImage(IntPtr hinst, string lpszName, int uType, int cxDesired, int cyDesired, int fuLoad);
+
+    [DllImport("user32.dll")]
+    private static extern int GetSystemMetrics(int nIndex);
+
+    [DllImport("user32.dll")]
+    private static extern bool DestroyIcon(IntPtr hIcon);
 
     [DllImport("user32.dll")]
     private static extern bool GetCursorPos(out POINT lpPoint);

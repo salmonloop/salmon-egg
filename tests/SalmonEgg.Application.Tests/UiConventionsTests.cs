@@ -255,6 +255,67 @@ public class UiConventionsTests
     }
 
     [Fact]
+    public void WindowsIconAssets_ShouldCoverMicrosoftAppIconMatrix()
+    {
+        var repoRoot = FindRepoRoot();
+
+        AssertWindowsAppListTargetSizeAssets(repoRoot, @"Assets\Icons\Windows\iconLogo44.png");
+        AssertWindowsIconScaleDimensions(repoRoot, @"Assets\Icons\Windows\iconLogo44.png", 44);
+        AssertWindowsLightThemeScaleAssets(repoRoot, @"Assets\Icons\Windows\iconLogo44.png", 44, 44);
+
+        AssertWindowsIconScaleDimensions(repoRoot, @"Assets\Icons\Windows\iconLogo.png", 50);
+        AssertWindowsLightThemeScaleAssets(repoRoot, @"Assets\Icons\Windows\iconLogo.png", 50, 50);
+
+        AssertWindowsIconScaleDimensions(repoRoot, @"Assets\Icons\Windows\SmallTile.png", 71);
+        AssertWindowsLightThemeScaleAssets(repoRoot, @"Assets\Icons\Windows\SmallTile.png", 71, 71);
+
+        AssertWindowsIconScaleDimensions(repoRoot, @"Assets\Icons\Windows\iconLogo150.png", 150);
+        AssertWindowsLightThemeScaleAssets(repoRoot, @"Assets\Icons\Windows\iconLogo150.png", 150, 150);
+
+        AssertWindowsRectangularScaleAssets(repoRoot, @"Assets\Icons\Windows\WideTile.png", 310, 150);
+        AssertWindowsLightThemeScaleAssets(repoRoot, @"Assets\Icons\Windows\WideTile.png", 310, 150);
+
+        AssertWindowsIconScaleDimensions(repoRoot, @"Assets\Icons\Windows\LargeTile.png", 310);
+        AssertWindowsLightThemeScaleAssets(repoRoot, @"Assets\Icons\Windows\LargeTile.png", 310, 310);
+
+        AssertWindowsRectangularScaleAssets(repoRoot, @"Assets\Icons\Windows\SplashScreen.png", 620, 300);
+        AssertWindowsThemeScaleAssets(repoRoot, @"Assets\Icons\Windows\SplashScreen.png", 620, 300, "dark");
+        AssertWindowsThemeScaleAssets(repoRoot, @"Assets\Icons\Windows\SplashScreen.png", 620, 300, "light");
+    }
+
+    [Fact]
+    public void WindowsApplicationIcon_ShouldCoverWindowsShellTargetSizes()
+    {
+        var repoRoot = FindRepoRoot();
+        var iconPath = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Assets", "Icons", "Windows", "icon.ico");
+
+        var actualSizes = ReadIcoFrameSizes(iconPath);
+        var expectedSizes = new[] { 16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 256 };
+
+        Assert.Equal(expectedSizes, actualSizes);
+    }
+
+    [Fact]
+    public void WindowsTrayIcon_ShouldLoadApplicationIconAsset()
+    {
+        var repoRoot = FindRepoRoot();
+        var trayIconManager = File.ReadAllText(Path.Combine(
+            repoRoot,
+            "SalmonEgg",
+            "SalmonEgg",
+            "Platforms",
+            "Windows",
+            "TrayIconManager.cs"));
+
+        Assert.Contains(@"Assets", trayIconManager, StringComparison.Ordinal);
+        Assert.Contains(@"Icons", trayIconManager, StringComparison.Ordinal);
+        Assert.Contains(@"Windows", trayIconManager, StringComparison.Ordinal);
+        Assert.Contains(@"icon.ico", trayIconManager, StringComparison.Ordinal);
+        Assert.Contains("LoadImage", trayIconManager, StringComparison.Ordinal);
+        Assert.DoesNotContain("LoadIcon(IntPtr.Zero, new IntPtr(0x7F00))", trayIconManager, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PackageManifest_ShouldDeclareInternetClientCapability()
     {
         var repoRoot = FindRepoRoot();
@@ -886,6 +947,85 @@ public class UiConventionsTests
 
     private static void AssertWindowsIconScaleDimensions(string repoRoot, string manifestAssetPath, int baseSize)
     {
+        foreach (var (scale, expectedSize) in EnumerateScaledSizes(baseSize, baseSize))
+        {
+            var imagePath = ResolveQualifiedAssetPath(repoRoot, manifestAssetPath, $"scale-{scale}");
+
+            Assert.True(File.Exists(imagePath), $"Missing {scale}% scaled image for '{manifestAssetPath}'.");
+
+            var (width, height) = ReadPngDimensions(imagePath);
+            Assert.Equal(expectedSize.Width, width);
+            Assert.Equal(expectedSize.Height, height);
+        }
+    }
+
+    private static void AssertWindowsRectangularScaleAssets(string repoRoot, string manifestAssetPath, int baseWidth, int baseHeight)
+    {
+        foreach (var (scale, expectedSize) in EnumerateScaledSizes(baseWidth, baseHeight))
+        {
+            var imagePath = ResolveQualifiedAssetPath(repoRoot, manifestAssetPath, $"scale-{scale}");
+
+            Assert.True(File.Exists(imagePath), $"Missing {scale}% scaled image for '{manifestAssetPath}'.");
+
+            var (width, height) = ReadPngDimensions(imagePath);
+            Assert.Equal(expectedSize.Width, width);
+            Assert.Equal(expectedSize.Height, height);
+        }
+    }
+
+    private static void AssertWindowsLightThemeScaleAssets(string repoRoot, string manifestAssetPath, int baseWidth, int baseHeight)
+        => AssertWindowsThemeScaleAssets(repoRoot, manifestAssetPath, baseWidth, baseHeight, "light");
+
+    private static void AssertWindowsThemeScaleAssets(string repoRoot, string manifestAssetPath, int baseWidth, int baseHeight, string theme)
+    {
+        foreach (var (scale, expectedSize) in EnumerateScaledSizes(baseWidth, baseHeight))
+        {
+            var imagePath = ResolveQualifiedAssetPath(repoRoot, manifestAssetPath, $"scale-{scale}_altform-colorful_theme-{theme}");
+
+            Assert.True(File.Exists(imagePath), $"Missing {theme} theme {scale}% scaled image for '{manifestAssetPath}'.");
+
+            var (width, height) = ReadPngDimensions(imagePath);
+            Assert.Equal(expectedSize.Width, width);
+            Assert.Equal(expectedSize.Height, height);
+        }
+    }
+
+    private static void AssertWindowsAppListTargetSizeAssets(string repoRoot, string manifestAssetPath)
+    {
+        var targetSizes = new[] { 16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 256 };
+
+        foreach (var targetSize in targetSizes)
+        {
+            AssertWindowsTargetSizeAsset(repoRoot, manifestAssetPath, targetSize, $"targetsize-{targetSize}");
+            AssertWindowsTargetSizeAsset(repoRoot, manifestAssetPath, targetSize, $"altform-unplated_targetsize-{targetSize}");
+            AssertWindowsTargetSizeAsset(repoRoot, manifestAssetPath, targetSize, $"altform-lightunplated_targetsize-{targetSize}");
+        }
+    }
+
+    private static void AssertWindowsTargetSizeAsset(string repoRoot, string manifestAssetPath, int targetSize, string qualifier)
+    {
+        var imagePath = ResolveQualifiedAssetPath(repoRoot, manifestAssetPath, qualifier);
+
+        Assert.True(File.Exists(imagePath), $"Missing {qualifier} image for '{manifestAssetPath}'.");
+
+        var (width, height) = ReadPngDimensions(imagePath);
+        Assert.Equal(targetSize, width);
+        Assert.Equal(targetSize, height);
+    }
+
+    private static IEnumerable<(int Scale, (int Width, int Height) Size)> EnumerateScaledSizes(int baseWidth, int baseHeight)
+    {
+        foreach (var scale in new[] { 100, 125, 150, 200, 400 })
+        {
+            yield return (scale, (ScaleDimension(baseWidth, scale), ScaleDimension(baseHeight, scale)));
+        }
+    }
+
+    private static int ScaleDimension(int value, int scale)
+        => (int)Math.Round(value * scale / 100.0, MidpointRounding.AwayFromZero);
+
+    private static string ResolveQualifiedAssetPath(string repoRoot, string manifestAssetPath, string qualifier)
+    {
         var normalizedPath = manifestAssetPath.Replace('\\', Path.DirectorySeparatorChar);
         var assetDirectory = Path.GetDirectoryName(normalizedPath);
         var assetBaseName = Path.GetFileNameWithoutExtension(normalizedPath);
@@ -893,16 +1033,7 @@ public class UiConventionsTests
         Assert.False(string.IsNullOrWhiteSpace(assetDirectory));
         Assert.False(string.IsNullOrWhiteSpace(assetBaseName));
 
-        foreach (var (scale, expectedSize) in new[] { (100, baseSize), (125, baseSize * 125 / 100), (150, baseSize * 150 / 100), (200, baseSize * 2), (400, baseSize * 4) })
-        {
-            var imagePath = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", assetDirectory!, $"{assetBaseName}.scale-{scale}.png");
-
-            Assert.True(File.Exists(imagePath), $"Missing {scale}% scaled image for '{manifestAssetPath}'.");
-
-            var (width, height) = ReadPngDimensions(imagePath);
-            Assert.Equal(expectedSize, width);
-            Assert.Equal(expectedSize, height);
-        }
+        return Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", assetDirectory!, $"{assetBaseName}.{qualifier}.png");
     }
 
     private static (int Width, int Height) ReadPngDimensions(string filePath)
@@ -932,5 +1063,35 @@ public class UiConventionsTests
         }
 
         return BitConverter.ToInt32(bytes, 0);
+    }
+
+    private static int[] ReadIcoFrameSizes(string filePath)
+    {
+        using var stream = File.OpenRead(filePath);
+        using var reader = new BinaryReader(stream);
+
+        Assert.Equal(0, reader.ReadUInt16());
+        Assert.Equal(1, reader.ReadUInt16());
+        var imageCount = reader.ReadUInt16();
+        var sizes = new List<int>();
+
+        for (var i = 0; i < imageCount; i++)
+        {
+            int width = reader.ReadByte();
+            int height = reader.ReadByte();
+            _ = reader.ReadByte();
+            _ = reader.ReadByte();
+            _ = reader.ReadUInt16();
+            _ = reader.ReadUInt16();
+            _ = reader.ReadUInt32();
+            _ = reader.ReadUInt32();
+
+            width = width == 0 ? 256 : width;
+            height = height == 0 ? 256 : height;
+            Assert.Equal(width, height);
+            sizes.Add(width);
+        }
+
+        return sizes.Order().ToArray();
     }
 }
