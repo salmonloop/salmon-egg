@@ -13,7 +13,7 @@
     </Page.Resources>
 
     <Grid x:Name="RootGrid"
-          RowDefinitions="Auto,*,Auto,Auto"
+          RowDefinitions="Auto,*,Auto,Auto,Auto"
           Background="Transparent">
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="WindowWidthStates">
@@ -147,9 +147,35 @@
             </StackPanel>
         </Border>
 
+        <Border Grid.Row="3"
+                AutomationProperties.AutomationId="MiniChat.SessionActivationFailureCallout"
+                Visibility="{x:Bind ViewModel.HasError, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                Margin="12,0,12,12"
+                Padding="12"
+                CornerRadius="6"
+                Background="{ThemeResource LayerFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource SystemFillColorCriticalBrush}"
+                BorderThickness="1">
+            <Grid ColumnDefinitions="Auto,*"
+                  ColumnSpacing="10">
+                <FontIcon Grid.Column="0"
+                          FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                          Glyph="&#xEA39;"
+                          FontSize="12"
+                          Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                          VerticalAlignment="Top"
+                          Margin="0,2,0,0" />
+                <TextBlock Grid.Column="1"
+                           Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
+                           TextWrapping="WrapWholeWords"
+                           FontSize="11"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Grid>
+        </Border>
+
         <!-- Unified Input Area -->
         <Border x:Name="InputBorder"
-                Grid.Row="3"
+                Grid.Row="4"
                 Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
                 BorderThickness="0"
                 Padding="12,10,12,16">

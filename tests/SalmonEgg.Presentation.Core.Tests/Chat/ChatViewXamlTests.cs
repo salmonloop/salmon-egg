@@ -111,6 +111,27 @@ public sealed class ChatViewXamlTests
     }
 
     [Fact]
+    public void ChatViewXaml_SessionActivationFailureUsesViewModelDrivenCallout()
+    {
+        var xaml = LoadChatViewXaml();
+
+        Assert.Contains("AutomationProperties.AutomationId=\"ChatView.SessionActivationFailureCallout\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Visibility=\"{x:Bind ViewModel.HasError, Mode=OneWay", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind ViewModel.ErrorMessage, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Visibility=\"{x:Bind ViewModel.ErrorMessage", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MiniChatViewXaml_SessionActivationFailureUsesViewModelDrivenCallout()
+    {
+        var xaml = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml");
+
+        Assert.Contains("AutomationProperties.AutomationId=\"MiniChat.SessionActivationFailureCallout\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Visibility=\"{x:Bind ViewModel.HasError, Mode=OneWay", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind ViewModel.ErrorMessage, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ChatViewXaml_TurnStatusCriticalIconOnlyUsesFaultedProjection()
     {
         var xaml = LoadChatViewXaml();
