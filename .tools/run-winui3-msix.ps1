@@ -61,7 +61,7 @@ function Get-MSBuildPath {
         throw "vswhere.exe not found. Install Visual Studio 2022 or Build Tools 2022 with MSBuild."
     }
 
-    $vsInstall = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
+    $vsInstall = & $vswhere -latest -products * -prerelease -requires Microsoft.Component.MSBuild -property installationPath
     if (-not $vsInstall) {
         throw "MSBuild not found. Install Visual Studio 2022 or Build Tools 2022 with MSBuild."
     }

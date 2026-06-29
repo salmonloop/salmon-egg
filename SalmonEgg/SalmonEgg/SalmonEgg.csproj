@@ -315,7 +315,7 @@
     <Error Condition="!Exists('$(VsWhereExe)')"
            Text="WinUI 3 build prerequisites missing: Visual Studio Installer not found (vswhere.exe missing). Install Visual Studio with workload 'Desktop development with C++', then rebuild." />
 
-    <Exec Command="&quot;$(VsWhereExe)&quot; -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath &gt; &quot;$(VsInstallDirFile)&quot;"
+    <Exec Command="&quot;$(VsWhereExe)&quot; -latest -products * -prerelease -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath &gt; &quot;$(VsInstallDirFile)&quot;"
           IgnoreExitCode="false" />
 
     <ReadLinesFromFile File="$(VsInstallDirFile)">

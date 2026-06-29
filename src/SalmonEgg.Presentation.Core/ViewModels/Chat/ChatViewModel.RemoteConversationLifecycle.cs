@@ -809,11 +809,6 @@ public partial class ChatViewModel
             return string.IsNullOrWhiteSpace(binding?.ProfileId);
         }
 
-        if (AcpSessionRecoveryPolicy.ResolveForHydration(_chatService?.AgentCapabilities) == AcpSessionRecoveryMode.None)
-        {
-            return true;
-        }
-
         var hasReusableProjection = HasReusableWarmProjection(state, sessionId);
         var currentConnection = await ResolveWarmReuseConnectionIdentityAsync(binding, cancellationToken).ConfigureAwait(false);
         return ConversationWarmReusePolicy.EvaluateRemoteWarmConversation(
@@ -1595,7 +1590,18 @@ public partial class ChatViewModel
         var chatService = resolvedConnection.ChatService;
         if (AcpSessionRecoveryPolicy.ResolveForHydration(chatService.AgentCapabilities) == AcpSessionRecoveryMode.None)
         {
-            return true;
+            await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
+                    conversationId,
+                    activationVersion,
+                    SessionActivationPhase.Faulted,
+                    reason: "RecoveryCapabilityMissing")
+                .ConfigureAwait(false);
+            await _conversationActivationOutcomePublisher.TrySetActivationErrorAsync(
+                    conversationId,
+                    activationVersion,
+                    "Failed to load session: the connected ACP agent does not advertise remote session recovery capabilities.")
+                .ConfigureAwait(false);
+            return false;
         }
 
         var state = await _chatStore.GetCurrentStateAsync();
@@ -1648,11 +1654,6 @@ public partial class ChatViewModel
         cancellationToken.ThrowIfCancellationRequested();
         var binding = await ResolveConversationBindingAsync(conversationId, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(binding?.RemoteSessionId))
-        {
-            return ConversationActivationHydrationMode.WorkspaceSnapshot;
-        }
-
-        if (AcpSessionRecoveryPolicy.ResolveForHydration(_chatService?.AgentCapabilities) == AcpSessionRecoveryMode.None)
         {
             return ConversationActivationHydrationMode.WorkspaceSnapshot;
         }

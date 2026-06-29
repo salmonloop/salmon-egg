@@ -4,6 +4,7 @@ using System.Collections.Immutable;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Models;
@@ -12,7 +13,11 @@ using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
+using SalmonEgg.Presentation.Core.Mvux.ShellLayout;
+using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
+using SalmonEgg.Presentation.Models.Navigation;
+using SalmonEgg.Presentation.ViewModels.Chat;
 using Xunit;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat;
@@ -673,6 +678,209 @@ public partial class ChatViewModelTests
         var finalState = await fixture.GetStateAsync();
         Assert.Equal("conv-remote", finalState.HydratedConversationId);
         Assert.Equal(ConversationRuntimePhase.Warm, finalState.ResolveRuntimeState("conv-remote")?.Phase);
+    }
+
+    [Fact]
+    public async Task SwitchConversationAsync_WhenCurrentWebSocketRemoteConversationIsCold_StartsConnectionInsteadOfWarmReuse()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var sessionManager = CreateSessionManagerWithStore();
+        await sessionManager.Object.CreateSessionAsync("conv-remote", @"C:\repo\remote");
+
+        var connectEntered = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowConnectCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var loadEntered = new TaskCompletionSource<SessionLoadParams>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var loadCount = 0;
+        ViewModelFixture? fixture = null;
+        var runtimeState = new ShellNavigationRuntimeStateStore
+        {
+            CurrentShellContent = ShellNavigationContent.Chat
+        };
+        var chatService = CreateConnectedChatService();
+        chatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
+        chatService.Setup(service => service.LoadSessionAsync(
+                It.Is<SessionLoadParams>(parameters =>
+                    string.Equals(parameters.SessionId, "remote-ws-1", StringComparison.Ordinal)),
+                It.IsAny<CancellationToken>()))
+            .Returns<SessionLoadParams, CancellationToken>((parameters, _) =>
+            {
+                Interlocked.Increment(ref loadCount);
+                loadEntered.TrySetResult(parameters);
+                return Task.FromResult(SessionLoadResponse.Completed);
+            });
+
+        var commands = new Mock<IAcpConnectionCommands>(MockBehavior.Strict);
+        commands.Setup(command => command.ConnectToProfileAsync(
+                It.Is<ServerConfiguration>(profile => string.Equals(profile.Id, "profile-ws", StringComparison.Ordinal)),
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.Is<AcpConnectionContext>(context =>
+                    string.Equals(context.ConversationId, "conv-remote", StringComparison.Ordinal)
+                    && context.PreserveConversation
+                    && context.ActivationVersion.HasValue),
+                It.IsAny<CancellationToken>()))
+            .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, AcpConnectionContext, CancellationToken>(
+                async (connectedProfile, _, sink, _, cancellationToken) =>
+                {
+                    await sink.SelectProfileAsync(connectedProfile, cancellationToken);
+                    sink.UpdateConnectionState(isConnecting: true, isConnected: false, isInitialized: false, errorMessage: null);
+                    connectEntered.TrySetResult(null);
+                    await allowConnectCompletion.Task.WaitAsync(cancellationToken);
+                    sink.UpdateConnectionState(isConnecting: false, isConnected: true, isInitialized: true, errorMessage: null);
+                    await fixture!.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-ws-1"));
+                    await sink.ReplaceChatServiceAsync(chatService.Object, cancellationToken);
+                    return new AcpTransportApplyResult(chatService.Object, new InitializeResponse());
+                });
+
+        var profile = new ServerConfiguration
+        {
+            Id = "profile-ws",
+            Name = "WebSocket profile",
+            Transport = TransportType.WebSocket,
+            ServerUrl = "ws://127.0.0.1:3010/"
+        };
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService.Setup(service => service.LoadConfigurationAsync("profile-ws"))
+            .ReturnsAsync(profile);
+        configurationService.Setup(service => service.ListConfigurationsAsync())
+            .ReturnsAsync([profile]);
+
+        fixture = CreateViewModel(
+            syncContext,
+            configurationService: configurationService,
+            sessionManager: sessionManager,
+            acpConnectionCommands: commands.Object,
+            acpConnectionCoordinatorFactory: store => new AcpConnectionCoordinator(
+                store,
+                NullLogger<AcpConnectionCoordinator>.Instance,
+                new StaticMcpResolver([])),
+            shellNavigationRuntimeState: runtimeState);
+        await using (fixture)
+        {
+            fixture.Profiles.Profiles.Add(profile);
+            await syncContext.RunUntilCompletedAsync(fixture.ViewModel.RestoreAsync());
+
+            fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+                ConversationId: "conv-remote",
+                Transcript: [],
+                Plan: [],
+                ShowPlanPanel: false,
+                CreatedAt: new DateTime(2026, 6, 28, 0, 0, 0, DateTimeKind.Utc),
+                LastUpdatedAt: new DateTime(2026, 6, 28, 0, 0, 0, DateTimeKind.Utc)));
+            fixture.Workspace.UpdateRemoteBinding("conv-remote", "remote-ws-1", "profile-ws");
+            await fixture.UpdateStateAsync(state => state with
+            {
+                HydratedConversationId = "conv-remote",
+                Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                    .Add("conv-remote", new ConversationBindingSlice("conv-remote", "remote-ws-1", "profile-ws")),
+                RuntimeStates = ImmutableDictionary<string, ConversationRuntimeSlice>.Empty
+            });
+            SetCurrentSessionId(fixture.ViewModel, "conv-remote");
+
+            var switcher = (IConversationSessionSwitcher)fixture.ViewModel;
+            var switchTask = switcher.SwitchConversationAsync("conv-remote");
+
+            await WaitForConditionAsync(() =>
+            {
+                syncContext.RunAll();
+                return Task.FromResult(connectEntered.Task.IsCompleted);
+            });
+
+            Assert.True(connectEntered.Task.IsCompleted);
+            await WaitForConditionAsync(() =>
+            {
+                syncContext.RunAll();
+                return Task.FromResult(
+                    fixture.ViewModel.IsOverlayVisible
+                    && fixture.ViewModel.OverlayLoadingStage == ChatViewModel.LoadingOverlayStage.Connecting);
+            });
+            Assert.True(fixture.ViewModel.IsOverlayVisible);
+            Assert.Equal(ChatViewModel.LoadingOverlayStage.Connecting, fixture.ViewModel.OverlayLoadingStage);
+            Assert.True(await switchTask);
+
+            allowConnectCompletion.TrySetResult(null);
+            await WaitForConditionAsync(() =>
+            {
+                syncContext.RunAll();
+                return Task.FromResult(loadEntered.Task.IsCompleted);
+            });
+            var loadParameters = await loadEntered.Task;
+            Assert.Equal("remote-ws-1", loadParameters.SessionId);
+            Assert.Equal(1, Volatile.Read(ref loadCount));
+
+            await WaitForConditionAsync(async () =>
+            {
+                syncContext.RunAll();
+                var state = await fixture.GetStateAsync();
+                return state.ResolveRuntimeState("conv-remote")?.Phase == ConversationRuntimePhase.Warm;
+            });
+            chatService.Verify(service => service.LoadSessionAsync(
+                    It.Is<SessionLoadParams>(parameters =>
+                        string.Equals(parameters.SessionId, "remote-ws-1", StringComparison.Ordinal)),
+                    It.IsAny<CancellationToken>()),
+                Times.Once);
+        }
+    }
+
+    [Fact]
+    public async Task SwitchConversationAsync_WhenRemoteBoundConversationHasNoReadyChatService_UsesSelectionOnlyBeforeRemoteHydration()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var sessionManager = CreateSessionManagerWithStore();
+        await sessionManager.Object.CreateSessionAsync("conv-local", @"C:\repo\local");
+        await sessionManager.Object.CreateSessionAsync("conv-remote", @"C:\repo\remote");
+
+        ConversationActivationHydrationMode? capturedHydrationMode = null;
+        var activationCoordinator = new Mock<IConversationActivationCoordinator>();
+        activationCoordinator
+            .Setup(coordinator => coordinator.ActivateSessionAsync(
+                It.IsAny<string>(),
+                It.IsAny<ConversationActivationHydrationMode>(),
+                It.IsAny<CancellationToken>()))
+            .Returns<string, ConversationActivationHydrationMode, CancellationToken>((sessionId, hydrationMode, _) =>
+            {
+                capturedHydrationMode = hydrationMode;
+                return Task.FromResult(new ConversationActivationResult(true, sessionId, null));
+            });
+
+        await using var fixture = CreateViewModel(
+            syncContext,
+            sessionManager: sessionManager,
+            conversationActivationCoordinator: activationCoordinator.Object);
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-remote",
+            Transcript:
+            [
+                new ConversationMessageSnapshot
+                {
+                    Id = "stale-remote-1",
+                    Timestamp = new DateTime(2026, 6, 28, 0, 0, 0, DateTimeKind.Utc),
+                    IsOutgoing = false,
+                    ContentType = "text",
+                    TextContent = "stale transcript must not be selection source"
+                }
+            ],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 6, 28, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 6, 28, 0, 0, 0, DateTimeKind.Utc)));
+        fixture.Workspace.UpdateRemoteBinding("conv-remote", "remote-ws-1", "profile-ws");
+        await syncContext.RunUntilCompletedAsync(fixture.ViewModel.RestoreAsync());
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-local",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-remote", new ConversationBindingSlice("conv-remote", "remote-ws-1", "profile-ws"))
+        });
+
+        var switched = fixture.ViewModel.SwitchConversationAsync("conv-remote");
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(capturedHydrationMode.HasValue || switched.IsCompleted);
+        });
+        Assert.Equal(ConversationActivationHydrationMode.SelectionOnly, capturedHydrationMode);
     }
 
     [Fact]

@@ -30,7 +30,7 @@ echo Install: Visual Studio Installer -^> Workloads: "Desktop development with C
 exit /b 1
 
 :vsok
-for /f "usebackq delims=" %%I in (`"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSINSTALL=%%I"
+for /f "usebackq delims=" %%I in (`"%VSWHERE%" -latest -products * -prerelease -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSINSTALL=%%I"
 if defined VSINSTALL goto :runapp
 echo ERROR: MSVC C++ toolchain not installed.
 echo Install Visual Studio 2022 (or Build Tools 2022) workload "Desktop development with C++", and ensure "MSVC v143 - VS 2022 C++ x64/x86 build tools" is selected.
