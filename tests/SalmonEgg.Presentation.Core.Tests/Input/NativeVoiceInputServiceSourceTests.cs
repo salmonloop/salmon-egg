@@ -8,7 +8,7 @@ public sealed class NativeVoiceInputServiceSourceTests
     [Fact]
     public void NativeVoiceInputService_DoesNotReuseRecognizerAcrossVoiceSessions()
     {
-        var code = File.ReadAllText(@"..\..\..\..\..\SalmonEgg\SalmonEgg\Presentation\Services\Input\NativeVoiceInputService.cs");
+        var code = File.ReadAllText("../../../../../SalmonEgg/SalmonEgg/Presentation/Services/Input/NativeVoiceInputService.cs");
 
         Assert.Contains("CreateSessionRecognizerAsync", code);
         Assert.DoesNotContain("string.Equals(_activeLanguageTag, normalizedLanguage", code);
@@ -17,7 +17,7 @@ public sealed class NativeVoiceInputServiceSourceTests
     [Fact]
     public void NativeVoiceInputService_DisposesRecognizerWhenSessionCompletes()
     {
-        var code = File.ReadAllText(@"..\..\..\..\..\SalmonEgg\SalmonEgg\Presentation\Services\Input\NativeVoiceInputService.cs");
+        var code = File.ReadAllText("../../../../../SalmonEgg/SalmonEgg/Presentation/Services/Input/NativeVoiceInputService.cs");
 
         Assert.Contains("DisposeRecognizer();", code);
         Assert.Contains("finally", code);
@@ -26,7 +26,7 @@ public sealed class NativeVoiceInputServiceSourceTests
     [Fact]
     public void NativeVoiceInputService_UsesGracefulStopBeforeFallingBackToCancel()
     {
-        var code = File.ReadAllText(@"..\..\..\..\..\SalmonEgg\SalmonEgg\Presentation\Services\Input\NativeVoiceInputService.cs");
+        var code = File.ReadAllText("../../../../../SalmonEgg/SalmonEgg/Presentation/Services/Input/NativeVoiceInputService.cs");
 
         Assert.Contains(".StopAsync()", code);
         Assert.Contains(".CancelAsync()", code);
@@ -35,7 +35,7 @@ public sealed class NativeVoiceInputServiceSourceTests
     [Fact]
     public void NativeVoiceInputService_BoundsStopAndCancelWithTimeouts()
     {
-        var code = File.ReadAllText(@"..\..\..\..\..\SalmonEgg\SalmonEgg\Presentation\Services\Input\NativeVoiceInputService.cs");
+        var code = File.ReadAllText("../../../../../SalmonEgg/SalmonEgg/Presentation/Services/Input/NativeVoiceInputService.cs");
 
         Assert.Contains("VoiceInputStopTimeout", code);
         Assert.Contains("VoiceInputCancelTimeout", code);
@@ -47,7 +47,7 @@ public sealed class NativeVoiceInputServiceSourceTests
     [Fact]
     public void NativeVoiceInputService_PerformsMicrophonePreflightOnUiThreadBeforeStartingRecognition()
     {
-        var code = File.ReadAllText(@"..\..\..\..\..\SalmonEgg\SalmonEgg\Presentation\Services\Input\NativeVoiceInputService.cs");
+        var code = File.ReadAllText("../../../../../SalmonEgg/SalmonEgg/Presentation/Services/Input/NativeVoiceInputService.cs");
 
         Assert.Contains("MediaCaptureInitializationSettings", code);
         Assert.Contains("StreamingCaptureMode = StreamingCaptureMode.Audio", code);

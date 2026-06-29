@@ -8,7 +8,7 @@ public sealed class GamepadContextIntentDispatcherSourceTests
     [Fact]
     public void MainShellContextDispatcher_UsesFocusedAncestorConsumerPattern()
     {
-        var code = File.ReadAllText(@"..\..\..\..\..\SalmonEgg\SalmonEgg\Presentation\Services\Input\MainShellGamepadContextIntentDispatcher.cs");
+        var code = File.ReadAllText("../../../../../SalmonEgg/SalmonEgg/Presentation/Services/Input/MainShellGamepadContextIntentDispatcher.cs");
 
         Assert.Contains("IGamepadContextIntentConsumer", code);
         Assert.Contains("TryConsumeContextIntent", code);
@@ -19,7 +19,7 @@ public sealed class GamepadContextIntentDispatcherSourceTests
     [Fact]
     public void WindowsGamepadInputService_MapsTriggersToContextIntentEvents()
     {
-        var code = File.ReadAllText(@"..\..\..\..\..\SalmonEgg\SalmonEgg\Presentation\Services\Input\WindowsGamepadInputService.cs");
+        var code = File.ReadAllText("../../../../../SalmonEgg/SalmonEgg/Presentation/Services/Input/WindowsGamepadInputService.cs");
 
         Assert.Contains("GamepadContextIntentProcessor", code);
         Assert.Contains("ContextIntentRaised", code);
@@ -31,7 +31,7 @@ public sealed class GamepadContextIntentDispatcherSourceTests
     [Fact]
     public void WindowsMainPage_BridgesNativeTriggerKeysThroughContextDispatcher()
     {
-        var code = File.ReadAllText(@"..\..\..\..\..\SalmonEgg\SalmonEgg\Platforms\Windows\MainPage.Windows.cs");
+        var code = File.ReadAllText("../../../../../SalmonEgg/SalmonEgg/Platforms/Windows/MainPage.Windows.cs");
 
         Assert.Contains("case Windows.System.VirtualKey.GamepadLeftTrigger:", code);
         Assert.Contains("case Windows.System.VirtualKey.GamepadRightTrigger:", code);
@@ -45,7 +45,7 @@ public sealed class GamepadContextIntentDispatcherSourceTests
     [Fact]
     public void SettingsPageBase_ImplementsContextIntentConsumer()
     {
-        var code = File.ReadAllText(@"..\..\..\..\..\SalmonEgg\SalmonEgg\Presentation\Views\SettingsPageBase.cs");
+        var code = File.ReadAllText("../../../../../SalmonEgg/SalmonEgg/Presentation/Views/SettingsPageBase.cs");
 
         Assert.Contains("IGamepadContextIntentConsumer", code);
         Assert.Contains("TryConsumeContextIntent", code);
@@ -56,7 +56,7 @@ public sealed class GamepadContextIntentDispatcherSourceTests
     public void MainShellContextDispatcher_RetriesFromRootContentWhenFocusedElementIsNotConsumable()
     {
         var code = File.ReadAllText(
-            @"..\..\..\..\..\SalmonEgg\SalmonEgg\Presentation\Services\Input\MainShellGamepadContextIntentDispatcher.cs");
+            "../../../../../SalmonEgg/SalmonEgg/Presentation/Services/Input/MainShellGamepadContextIntentDispatcher.cs");
 
         Assert.Contains("TryDispatchFromRoot(focused, intent)", code, System.StringComparison.Ordinal);
         Assert.Contains("TryDispatchFromRoot(GetCurrentRootContent(), intent)", code, System.StringComparison.Ordinal);
