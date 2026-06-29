@@ -274,6 +274,25 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
             var response = await chatService.SendPromptAsync(promptParams, cancellationToken).ConfigureAwait(false);
             return new AcpPromptDispatchResult(promptParams.SessionId, response, RetriedAfterSessionRecovery: false);
         }
+        catch (Exception ex) when (AcpErrorClassifier.IsRemoteSessionNotFound(ex))
+        {
+            // The remote session expired on the agent side (e.g. WebSocket transport reconnected
+            // but the agent-side session timed out in the interim). Clear the stale binding so
+            // EnsureRemoteSessionAsync will create a fresh remote session, then retry the prompt.
+            cancellationToken.ThrowIfCancellationRequested();
+            await sink.ConversationBindingCommands
+                .ClearBindingAsync(sink.CurrentSessionId!)
+                .ConfigureAwait(false);
+            var recovered = await ensureRemoteSessionAsync(
+                    sink, authenticateAsync, static () => { }, cancellationToken)
+                .ConfigureAwait(false);
+            var recoveredParams = new SessionPromptParams(recovered.RemoteSessionId, promptParams.Prompt);
+            cancellationToken.ThrowIfCancellationRequested();
+            await sink.NotifyPromptRequestDispatchedAsync(cancellationToken).ConfigureAwait(false);
+            var recoveredResponse = await RequireReadyChatService(sink)
+                .SendPromptAsync(recoveredParams, cancellationToken).ConfigureAwait(false);
+            return new AcpPromptDispatchResult(recovered.RemoteSessionId, recoveredResponse, RetriedAfterSessionRecovery: true);
+        }
     }
 
     public async Task CancelPromptAsync(

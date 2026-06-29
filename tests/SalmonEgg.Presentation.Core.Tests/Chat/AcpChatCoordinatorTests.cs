@@ -2056,8 +2056,11 @@ public sealed class AcpChatCoordinatorTests
     }
 
     [Fact]
-    public async Task DispatchPromptToRemoteSessionAsync_RemoteSessionNotFound_DoesNotCreateReplacementSession()
+    public async Task DispatchPromptToRemoteSessionAsync_RemoteSessionNotFound_ClearsBindingAndRetriesWithNewSession()
     {
+        // When the agent-side session has expired (e.g. WebSocket reconnected but remote session
+        // timed out), the orchestrator must clear the stale binding, create a fresh session, and
+        // retry the prompt transparently so the user never sees a confusing "session not found" error.
         var service = CreateChatService();
         var sink = new FakeSink
         {
@@ -2081,7 +2084,9 @@ public sealed class AcpChatCoordinatorTests
             .Returns<SessionPromptParams, CancellationToken>((p, _) =>
             {
                 sentPrompts.Add(p);
-                throw new AcpException(JsonRpcErrorCode.ResourceNotFound, "Not found");
+                if (p.SessionId == "remote-stale")
+                    throw new AcpException(JsonRpcErrorCode.ResourceNotFound, "Not found");
+                return Task.FromResult(new SessionPromptResponse());
             });
 
         service
@@ -2091,15 +2096,62 @@ public sealed class AcpChatCoordinatorTests
         var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
         IAcpConnectionCommands commands = sut;
 
-        var ex = await Assert.ThrowsAsync<AcpException>(() =>
-            commands.DispatchPromptToRemoteSessionAsync("remote-stale", "hi", promptMessageId, sink, _ => Task.FromResult(true)));
+        var result = await commands.DispatchPromptToRemoteSessionAsync(
+            "remote-stale", "hi", promptMessageId, sink, _ => Task.FromResult(true));
 
-        Assert.Equal(JsonRpcErrorCode.ResourceNotFound, ex.ErrorCode);
-        Assert.Single(sentPrompts);
+        // Binding must be cleared and replaced with the new session id.
+        Assert.Equal(1, sink.BindingCommands.ClearCalls);
+        service.Verify(x => x.CreateSessionAsync(It.IsAny<SessionNewParams>()), Times.Once);
+
+        // First call used stale id, second call used new session id.
+        Assert.Equal(2, sentPrompts.Count);
         Assert.Equal("remote-stale", sentPrompts[0].SessionId);
-        Assert.Equal("remote-stale", sink.CurrentRemoteSessionId);
-        Assert.Equal(0, sink.BindingCommands.ClearCalls);
-        service.Verify(x => x.CreateSessionAsync(It.IsAny<SessionNewParams>()), Times.Never);
+        Assert.Equal("remote-new", sentPrompts[1].SessionId);
+
+        // Result is marked as a recovery retry.
+        Assert.True(result.RetriedAfterSessionRecovery);
+        Assert.Equal("remote-new", result.RemoteSessionId);
+    }
+
+    [Fact]
+    public async Task DispatchPromptToRemoteSessionAsync_RemoteSessionNotFound_SecondAttemptAlsoFails_Throws()
+    {
+        // If the recovery attempt also fails, the exception must propagate so the turn fails
+        // with a visible callout rather than silently eating the error.
+        var service = CreateChatService();
+        var sink = new FakeSink
+        {
+            CurrentChatService = service.Object,
+            IsConnected = true,
+            IsInitialized = true,
+            IsSessionActive = true,
+            CurrentSessionId = "local-1",
+            CurrentRemoteSessionId = "remote-stale",
+            ActiveSessionCwd = @"C:\repo\demo",
+            SelectedProfileId = "profile-1",
+            ResolvedProfile = new ServerConfiguration { Id = "profile-1", Transport = TransportType.Stdio }
+        };
+        var factory = new Mock<IAcpChatServiceFactory>();
+        var logger = new Mock<ILogger<AcpChatCoordinator>>();
+
+        service
+            .Setup(x => x.SendPromptAsync(It.IsAny<SessionPromptParams>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new AcpException(JsonRpcErrorCode.ResourceNotFound, "Not found"));
+
+        service
+            .Setup(x => x.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+            .ReturnsAsync(new SessionNewResponse("remote-new"));
+
+        var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
+        IAcpConnectionCommands commands = sut;
+
+        // Recovery creates a new session but the second SendPrompt still fails -> must throw.
+        await Assert.ThrowsAsync<AcpException>(() =>
+            commands.DispatchPromptToRemoteSessionAsync(
+                "remote-stale", "hi", null, sink, _ => Task.FromResult(true)));
+
+        Assert.Equal(1, sink.BindingCommands.ClearCalls);
+        service.Verify(x => x.CreateSessionAsync(It.IsAny<SessionNewParams>()), Times.Once);
     }
 
     [Fact]

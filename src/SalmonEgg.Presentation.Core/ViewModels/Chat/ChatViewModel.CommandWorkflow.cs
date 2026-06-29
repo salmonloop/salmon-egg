@@ -1359,6 +1359,14 @@ public partial class ChatViewModel
                     mode.ModeId).ConfigureAwait(true);
             }
         }
+        catch (Exception ex) when (AcpErrorClassifier.IsRemoteSessionNotFound(ex))
+        {
+            // The remote session no longer exists on the agent side.
+            // The next prompt dispatch will transparently create a new session;
+            // silently skip the mode switch rather than surfacing a confusing error.
+            Logger.LogWarning(ex, "Mode switch skipped: remote session not found. A new session will be created on next prompt.");
+            await ApplyCurrentStoreProjectionAsync().ConfigureAwait(true);
+        }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to switch mode");
