@@ -17,6 +17,7 @@ public sealed class ListViewTranscriptItemsSource :
     private ChatTranscriptVirtualizedMessageCollection _source = EmptySource;
     private readonly Dictionary<int, ChatMessageViewModel> _cache = new();
     private bool _disposed;
+    private int _nativeObservedCount;
 
     public event NotifyCollectionChangedEventHandler? CollectionChanged;
 
@@ -54,7 +55,7 @@ public sealed class ListViewTranscriptItemsSource :
         _cache.Clear();
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Count)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("Item[]"));
-        CollectionChanged?.Invoke(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+        PublishNativeReset();
     }
 
     public void Detach()
@@ -70,7 +71,7 @@ public sealed class ListViewTranscriptItemsSource :
         _cache.Clear();
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Count)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("Item[]"));
-        CollectionChanged?.Invoke(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+        PublishNativeReset();
     }
 
     private static ChatTranscriptVirtualizedMessageCollection EmptySource { get; } = new();
@@ -243,26 +244,35 @@ public sealed class ListViewTranscriptItemsSource :
         switch (e.Action)
         {
             case NotifyCollectionChangedAction.Add:
+                // A native Reset emitted for an earlier Replace already covers the
+                // source's current count; replaying the matching Add would be invalid.
+                if (_source.Count <= _nativeObservedCount)
+                {
+                    return;
+                }
+
                 CollectionChanged?.Invoke(
                     this,
                     new NotifyCollectionChangedEventArgs(
                         NotifyCollectionChangedAction.Add,
                         new ProjectedRangeList(this, e.NewStartingIndex, e.NewItems?.Count ?? 0),
                         e.NewStartingIndex));
+                _nativeObservedCount = _source.Count;
                 return;
 
             case NotifyCollectionChangedAction.Replace:
-                PublishReplace(e.NewStartingIndex);
+                InvalidateItem(e.NewStartingIndex);
                 return;
 
             case NotifyCollectionChangedAction.Reset:
                 _cache.Clear();
-                CollectionChanged?.Invoke(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+                PublishNativeReset();
                 return;
 
             default:
                 RemoveInvalidCachedItems();
                 CollectionChanged?.Invoke(this, e);
+                _nativeObservedCount = _source.Count;
                 return;
         }
     }
@@ -289,7 +299,7 @@ public sealed class ListViewTranscriptItemsSource :
         }
     }
 
-    private void PublishReplace(int index)
+    private void InvalidateItem(int index)
     {
         if (index < 0 || index >= _source.Count)
         {
@@ -297,20 +307,19 @@ public sealed class ListViewTranscriptItemsSource :
             return;
         }
 
-        if (!_cache.TryGetValue(index, out var oldItem))
+        if (!_cache.Remove(index))
         {
             return;
         }
 
-        _cache.Remove(index);
-        var newItem = GetOrCreate(index);
-        CollectionChanged?.Invoke(
-            this,
-            new NotifyCollectionChangedEventArgs(
-                NotifyCollectionChangedAction.Replace,
-                newItem,
-                oldItem,
-                index));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("Item[]"));
+        PublishNativeReset();
+    }
+
+    private void PublishNativeReset()
+    {
+        _nativeObservedCount = _source.Count;
+        CollectionChanged?.Invoke(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
     }
 
     private sealed class ProjectedRangeList : IList

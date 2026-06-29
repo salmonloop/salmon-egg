@@ -291,6 +291,20 @@ public sealed class ChatViewXamlTests
         var itemsSourceCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Transcript\ListViewTranscriptItemsSource.cs");
 
         Assert.DoesNotContain("PublishCachedReplacements", itemsSourceCode, StringComparison.Ordinal);
+        Assert.DoesNotMatch(
+            @"new\s+NotifyCollectionChangedEventArgs\s*\(\s*NotifyCollectionChangedAction\.Replace\b",
+            itemsSourceCode);
+        Assert.DoesNotContain("PublishReplace", itemsSourceCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatTranscriptItemsSource_NativeResetInvalidationSuppressesCoveredAppend()
+    {
+        var itemsSourceCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Transcript\ListViewTranscriptItemsSource.cs");
+
+        Assert.Contains("private int _nativeObservedCount;", itemsSourceCode, StringComparison.Ordinal);
+        Assert.Contains("PublishNativeReset();", itemsSourceCode, StringComparison.Ordinal);
+        Assert.Contains("if (_source.Count <= _nativeObservedCount)", itemsSourceCode, StringComparison.Ordinal);
     }
 
     [Fact]
