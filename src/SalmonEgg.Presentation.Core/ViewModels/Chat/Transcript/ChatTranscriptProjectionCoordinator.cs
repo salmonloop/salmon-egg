@@ -132,7 +132,8 @@ internal sealed class ChatTranscriptProjectionCoordinator
                 conversationId,
                 messages,
                 context.FromSnapshot,
-                context.MatchesSnapshot);
+                context.MatchesSnapshot,
+                context.TryPatchMessage);
         }
         else
         {
@@ -140,7 +141,8 @@ internal sealed class ChatTranscriptProjectionCoordinator
                 conversationId,
                 messages,
                 context.FromSnapshot,
-                context.MatchesSnapshot);
+                context.MatchesSnapshot,
+                context.TryPatchMessage);
             context.SetMessageHistory(history);
         }
 

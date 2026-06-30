@@ -246,7 +246,8 @@ public sealed class ChatTranscriptProjectionCoordinatorUnitTests
                 TextContent = "stale"
             }),
             CreateProjectedMessage,
-            MatchesSnapshot);
+            MatchesSnapshot,
+            PatchProjectedMessage);
         var originalHistory = history;
         var context = CreateContext(
             () => history,
@@ -427,7 +428,8 @@ public sealed class ChatTranscriptProjectionCoordinatorUnitTests
                 TextContent = "seed"
             }),
             CreateProjectedMessage,
-            MatchesSnapshot);
+            MatchesSnapshot,
+            PatchProjectedMessage);
         var history = originalHistory;
         var context = CreateContext(
             () => history,
@@ -472,7 +474,8 @@ public sealed class ChatTranscriptProjectionCoordinatorUnitTests
                 TextContent = "draft"
             }),
             CreateProjectedMessage,
-            MatchesSnapshot);
+            MatchesSnapshot,
+            PatchProjectedMessage);
         _ = originalHistory[0];
         var history = originalHistory;
         var replaced = false;
@@ -502,16 +505,76 @@ public sealed class ChatTranscriptProjectionCoordinatorUnitTests
         Assert.Equal("streamed", history[0].TextContent);
     }
 
+    [Fact]
+    public void ApplyProjection_WhenSameSessionPatchesCachedItem_UsesContextPatchHook()
+    {
+        var previewStore = new Mock<IConversationPreviewStore>();
+        var coordinator = new ChatTranscriptProjectionCoordinator(previewStore.Object);
+        var originalHistory = new ChatTranscriptVirtualizedMessageCollection();
+        originalHistory.Reset(
+            "conv-1",
+            ImmutableList.Create(new ConversationMessageSnapshot
+            {
+                Id = "message-0",
+                Timestamp = new DateTime(2026, 5, 3, 0, 0, 0, DateTimeKind.Utc),
+                ContentType = "tool_call",
+                ToolCallId = "tool-old",
+                Title = "Old tool"
+            }),
+            CreateProjectedMessage,
+            MatchesSnapshot,
+            PatchProjectedMessage);
+        _ = originalHistory[0];
+        var history = originalHistory;
+        var patchedPermission = new PermissionRequestViewModel { ToolCallJson = "patched" };
+        var patchCalled = false;
+        var context = CreateContext(
+            () => history,
+            static (_, _) => false,
+            tryPatchMessage: (message, snapshot, index) =>
+            {
+                patchCalled = true;
+                if (!ChatMessageViewModel.HasSameTemplateShape(message, snapshot))
+                {
+                    return false;
+                }
+
+                message.ApplySnapshot(snapshot, index);
+                message.PendingPermissionRequest = patchedPermission;
+                return true;
+            });
+
+        coordinator.ApplyProjection(
+            context,
+            "conv-1",
+            ImmutableList.Create(new ConversationMessageSnapshot
+            {
+                Id = "message-0",
+                Timestamp = new DateTime(2026, 5, 3, 0, 0, 0, DateTimeKind.Utc),
+                ContentType = "tool_call",
+                ToolCallId = "tool-new",
+                Title = "New tool"
+            }),
+            sessionChanged: false);
+
+        Assert.True(patchCalled);
+        Assert.Same(originalHistory, history);
+        Assert.Same(patchedPermission, history[0].PendingPermissionRequest);
+        Assert.Equal("tool-new", history[0].ToolCallId);
+    }
+
     private static ChatTranscriptProjectionContext CreateContext(
         Func<ChatTranscriptVirtualizedMessageCollection> getHistory,
         Func<string?, bool, bool> updateVisibleTranscriptConversationId,
-        Action<ChatTranscriptVirtualizedMessageCollection>? setHistory = null)
+        Action<ChatTranscriptVirtualizedMessageCollection>? setHistory = null,
+        Func<ChatMessageViewModel, ConversationMessageSnapshot, int, bool>? tryPatchMessage = null)
         => new()
         {
             GetMessageHistory = getHistory,
             SetMessageHistory = setHistory ?? (_ => { }),
             FromSnapshot = CreateProjectedMessage,
             MatchesSnapshot = MatchesSnapshot,
+            TryPatchMessage = tryPatchMessage ?? PatchProjectedMessage,
             GetProjectionItemKey = SalmonEgg.Presentation.Core.Services.Chat.TranscriptProjectionRestoreTokenProjector.CreateProjectionItemKey,
             UpdateVisibleTranscriptConversationId = updateVisibleTranscriptConversationId,
             RaiseTranscriptStateChanged = static () => { }
@@ -525,10 +588,26 @@ public sealed class ChatTranscriptProjectionCoordinatorUnitTests
             Timestamp = snapshot.Timestamp,
             IsOutgoing = snapshot.IsOutgoing,
             ContentType = snapshot.ContentType,
-            TextContent = snapshot.TextContent
+            TextContent = snapshot.TextContent,
+            ToolCallId = snapshot.ToolCallId,
+            Title = snapshot.Title
         };
+
+    private static bool PatchProjectedMessage(ChatMessageViewModel message, ConversationMessageSnapshot snapshot, int index)
+    {
+        if (!ChatMessageViewModel.HasSameTemplateShape(message, snapshot))
+        {
+            return false;
+        }
+
+        message.ApplySnapshot(snapshot, index);
+        return true;
+    }
 
     private static bool MatchesSnapshot(ChatMessageViewModel message, ConversationMessageSnapshot snapshot)
         => string.Equals(message.Id, snapshot.Id, StringComparison.Ordinal)
-            && string.Equals(message.TextContent, snapshot.TextContent, StringComparison.Ordinal);
+            && string.Equals(message.TextContent, snapshot.TextContent, StringComparison.Ordinal)
+            && string.Equals(message.ContentType, snapshot.ContentType, StringComparison.Ordinal)
+            && string.Equals(message.ToolCallId, snapshot.ToolCallId, StringComparison.Ordinal)
+            && string.Equals(message.Title, snapshot.Title, StringComparison.Ordinal);
 }

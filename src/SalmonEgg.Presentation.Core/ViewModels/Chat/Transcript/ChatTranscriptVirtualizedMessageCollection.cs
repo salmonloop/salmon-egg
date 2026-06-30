@@ -41,6 +41,7 @@ public sealed class ChatTranscriptVirtualizedMessageCollection :
     private readonly Dictionary<int, ChatMessageViewModel> _cache = new();
     private Func<ConversationMessageSnapshot, int, ChatMessageViewModel>? _projector;
     private Func<ChatMessageViewModel, ConversationMessageSnapshot, bool>? _matchesSnapshot;
+    private Func<ChatMessageViewModel, ConversationMessageSnapshot, int, bool>? _tryPatchItem;
     private string? _conversationId;
 
     public event NotifyCollectionChangedEventHandler? CollectionChanged;
@@ -88,10 +89,11 @@ public sealed class ChatTranscriptVirtualizedMessageCollection :
         string? conversationId,
         IImmutableList<ConversationMessageSnapshot> transcript,
         Func<ConversationMessageSnapshot, int, ChatMessageViewModel> projector,
-        Func<ChatMessageViewModel, ConversationMessageSnapshot, bool> matchesSnapshot)
+        Func<ChatMessageViewModel, ConversationMessageSnapshot, bool> matchesSnapshot,
+        Func<ChatMessageViewModel, ConversationMessageSnapshot, int, bool> tryPatchItem)
     {
         var collection = new ChatTranscriptVirtualizedMessageCollection();
-        collection.ReplaceWithoutNotifications(conversationId, transcript, projector, matchesSnapshot);
+        collection.ReplaceWithoutNotifications(conversationId, transcript, projector, matchesSnapshot, tryPatchItem);
         return collection;
     }
 
@@ -109,10 +111,12 @@ public sealed class ChatTranscriptVirtualizedMessageCollection :
         string? conversationId,
         IImmutableList<ConversationMessageSnapshot> transcript,
         Func<ConversationMessageSnapshot, int, ChatMessageViewModel> projector,
-        Func<ChatMessageViewModel, ConversationMessageSnapshot, bool> matchesSnapshot)
+        Func<ChatMessageViewModel, ConversationMessageSnapshot, bool> matchesSnapshot,
+        Func<ChatMessageViewModel, ConversationMessageSnapshot, int, bool> tryPatchItem)
     {
         ArgumentNullException.ThrowIfNull(projector);
         ArgumentNullException.ThrowIfNull(matchesSnapshot);
+        ArgumentNullException.ThrowIfNull(tryPatchItem);
 
         var messages = transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty;
         var oldCount = _transcript.Count;
@@ -126,6 +130,7 @@ public sealed class ChatTranscriptVirtualizedMessageCollection :
         _transcript = messages;
         _projector = projector;
         _matchesSnapshot = matchesSnapshot;
+        _tryPatchItem = tryPatchItem;
 
         if (unchangedTranscript)
         {
@@ -156,15 +161,18 @@ public sealed class ChatTranscriptVirtualizedMessageCollection :
         string? conversationId,
         IImmutableList<ConversationMessageSnapshot> transcript,
         Func<ConversationMessageSnapshot, int, ChatMessageViewModel> projector,
-        Func<ChatMessageViewModel, ConversationMessageSnapshot, bool> matchesSnapshot)
+        Func<ChatMessageViewModel, ConversationMessageSnapshot, bool> matchesSnapshot,
+        Func<ChatMessageViewModel, ConversationMessageSnapshot, int, bool> tryPatchItem)
     {
         ArgumentNullException.ThrowIfNull(projector);
         ArgumentNullException.ThrowIfNull(matchesSnapshot);
+        ArgumentNullException.ThrowIfNull(tryPatchItem);
 
         _conversationId = conversationId;
         _transcript = transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty;
         _projector = projector;
         _matchesSnapshot = matchesSnapshot;
+        _tryPatchItem = tryPatchItem;
         _cache.Clear();
     }
 
@@ -299,7 +307,7 @@ public sealed class ChatTranscriptVirtualizedMessageCollection :
         IImmutableList<ConversationMessageSnapshot> newTranscript,
         bool sameConversation)
     {
-        if (!sameConversation || _matchesSnapshot is null)
+        if (!sameConversation || _matchesSnapshot is null || _tryPatchItem is null)
         {
             _cache.Clear();
             return;
@@ -315,6 +323,11 @@ public sealed class ChatTranscriptVirtualizedMessageCollection :
 
             if (!_matchesSnapshot(entry.Value, newTranscript[entry.Key]))
             {
+                if (TryPatchCachedItem(entry.Key, entry.Value, newTranscript[entry.Key]))
+                {
+                    continue;
+                }
+
                 var oldItem = entry.Value;
                 var newItem = CreateItem(entry.Key);
                 _cache[entry.Key] = newItem;
@@ -328,7 +341,7 @@ public sealed class ChatTranscriptVirtualizedMessageCollection :
         IImmutableList<ConversationMessageSnapshot> newTranscript,
         bool sameConversation)
     {
-        if (!sameConversation || _matchesSnapshot is null || _projector is null)
+        if (!sameConversation || _matchesSnapshot is null || _projector is null || _tryPatchItem is null)
         {
             _cache.Clear();
             return;
@@ -341,6 +354,11 @@ public sealed class ChatTranscriptVirtualizedMessageCollection :
             {
                 if (!_matchesSnapshot(cachedItem, newTranscript[index]))
                 {
+                    if (TryPatchCachedItem(index, cachedItem, newTranscript[index]))
+                    {
+                        continue;
+                    }
+
                     var newItem = CreateItem(index);
                     _cache[index] = newItem;
                     RaiseReplace(index, cachedItem, newItem);
@@ -366,6 +384,12 @@ public sealed class ChatTranscriptVirtualizedMessageCollection :
             }
         }
     }
+
+    private bool TryPatchCachedItem(
+        int index,
+        ChatMessageViewModel item,
+        ConversationMessageSnapshot snapshot)
+        => _tryPatchItem?.Invoke(item, snapshot, index) == true;
 
     private void RaiseReplace(
         int index,

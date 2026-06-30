@@ -1376,6 +1376,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             SetMessageHistory = history => MessageHistory = history,
             FromSnapshot = CreateProjectedMessageFromSnapshot,
             MatchesSnapshot = MatchesSnapshot,
+            TryPatchMessage = TryPatchProjectedMessage,
             GetProjectionItemKey = GetProjectionItemKey,
             UpdateVisibleTranscriptConversationId = UpdateVisibleTranscriptConversationId,
             RaiseTranscriptStateChanged = RaiseTranscriptProjectionStateChanged
@@ -2286,9 +2287,26 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private ChatMessageViewModel CreateProjectedMessageFromSnapshot(ConversationMessageSnapshot s, int projectionIndex)
     {
         var viewModel = FromSnapshot(s, projectionIndex);
-        ConfigureMessageCommands(viewModel);
-        ApplyPendingInlinePermissionProjection(viewModel);
+        ApplyProjectedMessageRuntimeState(viewModel);
         return viewModel;
+    }
+
+    private bool TryPatchProjectedMessage(ChatMessageViewModel message, ConversationMessageSnapshot snapshot, int projectionIndex)
+    {
+        if (!ChatMessageViewModel.HasSameTemplateShape(message, snapshot))
+        {
+            return false;
+        }
+
+        message.ApplySnapshot(snapshot, projectionIndex);
+        ApplyProjectedMessageRuntimeState(message);
+        return true;
+    }
+
+    private void ApplyProjectedMessageRuntimeState(ChatMessageViewModel message)
+    {
+        ConfigureMessageCommands(message);
+        ApplyPendingInlinePermissionProjection(message);
     }
 
     private void ConfigureMessageCommands(ChatMessageViewModel message)
@@ -2320,40 +2338,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private static ChatMessageViewModel FromSnapshot(ConversationMessageSnapshot s, int projectionIndex)
     {
         // Minimal, stable restoration for persisted transcripts.
-        var vm = new ChatMessageViewModel
-        {
-            Id = string.IsNullOrWhiteSpace(s.Id) ? Guid.NewGuid().ToString() : s.Id,
-            ProjectionItemKey = TranscriptProjectionRestoreTokenProjector.CreateProjectionItemKey(s, projectionIndex),
-            Timestamp = s.Timestamp.ToLocalTime(),
-            IsOutgoing = s.IsOutgoing,
-            ContentType = s.ContentType ?? string.Empty,
-            Title = s.Title ?? string.Empty,
-            TextContent = s.TextContent ?? string.Empty,
-            ImageData = s.ImageData ?? string.Empty,
-            ImageMimeType = s.ImageMimeType ?? string.Empty,
-            AudioData = s.AudioData ?? string.Empty,
-            AudioMimeType = s.AudioMimeType ?? string.Empty,
-            ToolCallId = s.ToolCallId,
-            ToolCallKind = s.ToolCallKind,
-            ToolCallStatus = s.ToolCallStatus,
-            ToolCallJson = s.ToolCallJson,
-            ToolCallRawInputJson = s.ToolCallRawInputJson,
-            ToolCallRawOutputJson = s.ToolCallRawOutputJson,
-            ToolCallContent = CloneToolCallContentList(s.ToolCallContent),
-            ToolCallLocations = CloneToolCallLocationList(s.ToolCallLocations),
-            ModeId = s.ModeId
-        };
-
-        if (s.PlanEntry != null)
-        {
-            vm.PlanEntry = new PlanEntryViewModel
-            {
-                Content = s.PlanEntry.Content ?? string.Empty,
-                Status = s.PlanEntry.Status,
-                Priority = s.PlanEntry.Priority
-            };
-        }
-
+        var vm = new ChatMessageViewModel();
+        vm.ApplySnapshot(s, projectionIndex);
         return vm;
     }
 

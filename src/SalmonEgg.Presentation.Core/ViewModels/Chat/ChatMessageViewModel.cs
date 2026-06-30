@@ -4,8 +4,11 @@ using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SalmonEgg.Domain.Models.Content;
+using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Domain.Models.Plan;
 using SalmonEgg.Domain.Models.Tool;
+using SalmonEgg.Presentation.Core.Mvux.Chat;
+using SalmonEgg.Presentation.Core.Services.Chat;
 
 namespace SalmonEgg.Presentation.ViewModels.Chat
 {
@@ -110,6 +113,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
 
         private bool _isToolCallCancelled;
 
+        private bool _applyingSnapshot;
 
         // 计划条目
        [ObservableProperty]
@@ -347,18 +351,120 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
 
        public void MarkRenderFailed() => MarkMarkdownRenderFailed();
 
-       partial void OnIsOutgoingChanged(bool value) => RefreshMarkdownPresentation();
+       public static bool HasSameTemplateShape(ChatMessageViewModel vm, ConversationMessageSnapshot snapshot)
+       {
+           ArgumentNullException.ThrowIfNull(vm);
+           ArgumentNullException.ThrowIfNull(snapshot);
 
-       partial void OnContentTypeChanged(string value) => RefreshMarkdownPresentation();
+           return vm.IsOutgoing == snapshot.IsOutgoing
+               && string.Equals(vm.ContentType ?? string.Empty, snapshot.ContentType ?? string.Empty, StringComparison.Ordinal);
+       }
+
+       public void ApplySnapshot(ConversationMessageSnapshot snapshot, int projectionIndex)
+       {
+           ArgumentNullException.ThrowIfNull(snapshot);
+
+           _applyingSnapshot = true;
+           try
+           {
+               Id = string.IsNullOrWhiteSpace(snapshot.Id)
+                   ? string.IsNullOrWhiteSpace(Id) ? Guid.NewGuid().ToString() : Id
+                   : snapshot.Id;
+               ProjectionItemKey = TranscriptProjectionRestoreTokenProjector.CreateProjectionItemKey(snapshot, projectionIndex);
+               Timestamp = snapshot.Timestamp.ToLocalTime();
+               IsOutgoing = snapshot.IsOutgoing;
+               ContentType = snapshot.ContentType ?? string.Empty;
+               Title = snapshot.Title ?? string.Empty;
+               TextContent = snapshot.TextContent ?? string.Empty;
+               ImageData = snapshot.ImageData ?? string.Empty;
+               ImageMimeType = snapshot.ImageMimeType ?? string.Empty;
+               AudioData = snapshot.AudioData ?? string.Empty;
+               AudioMimeType = snapshot.AudioMimeType ?? string.Empty;
+               ToolCallId = snapshot.ToolCallId;
+               ToolCallKind = snapshot.ToolCallKind;
+               ToolCallStatus = snapshot.ToolCallStatus;
+               ToolCallJson = snapshot.ToolCallJson;
+               ToolCallRawInputJson = snapshot.ToolCallRawInputJson;
+               ToolCallRawOutputJson = snapshot.ToolCallRawOutputJson;
+               ToolCallContent = ToolCallContentSnapshots.CloneList(snapshot.ToolCallContent);
+               ToolCallLocations = ToolCallContentSnapshots.CloneLocations(snapshot.ToolCallLocations);
+               ModeId = snapshot.ModeId;
+
+               if (snapshot.PlanEntry is not null)
+               {
+                   if (PlanEntry is null)
+                   {
+                       PlanEntry = new PlanEntryViewModel
+                       {
+                           Content = snapshot.PlanEntry.Content ?? string.Empty,
+                           Status = snapshot.PlanEntry.Status,
+                           Priority = snapshot.PlanEntry.Priority
+                       };
+                   }
+                   else
+                   {
+                       PlanEntry.Content = snapshot.PlanEntry.Content ?? string.Empty;
+                       PlanEntry.Status = snapshot.PlanEntry.Status;
+                       PlanEntry.Priority = snapshot.PlanEntry.Priority;
+                   }
+               }
+               else
+               {
+                   PlanEntry = null;
+               }
+           }
+           finally
+           {
+               _applyingSnapshot = false;
+               OnPropertyChanged(nameof(HasTextContent));
+               CopyTextCommand.NotifyCanExecuteChanged();
+               RefreshMarkdownPresentation();
+               RefreshToolCallDetails();
+               UpdateToolCallState();
+           }
+       }
+
+       partial void OnIsOutgoingChanged(bool value)
+       {
+            if (_applyingSnapshot)
+            {
+                return;
+            }
+
+            RefreshMarkdownPresentation();
+       }
+
+       partial void OnContentTypeChanged(string value)
+       {
+            if (_applyingSnapshot)
+            {
+                return;
+            }
+
+            RefreshMarkdownPresentation();
+       }
 
        partial void OnTextContentChanged(string value)
        {
+            if (_applyingSnapshot)
+            {
+                return;
+            }
+
             OnPropertyChanged(nameof(HasTextContent));
             CopyTextCommand.NotifyCanExecuteChanged();
             RefreshMarkdownPresentation();
        }
 
-       partial void OnIsMarkdownFallbackStickyChanged(bool value) => RefreshMarkdownPresentation();
+       partial void OnIsMarkdownFallbackStickyChanged(bool value)
+       {
+            if (_applyingSnapshot)
+            {
+                return;
+            }
+
+            RefreshMarkdownPresentation();
+       }
 
        private void RefreshMarkdownPresentation()
        {
@@ -416,12 +522,65 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                 ToolCallJson);
         }
 
-        partial void OnToolCallJsonChanged(string? value) => RefreshToolCallDetails();
-        partial void OnToolCallRawInputJsonChanged(string? value) => RefreshToolCallDetails();
-        partial void OnToolCallRawOutputJsonChanged(string? value) => RefreshToolCallDetails();
-        partial void OnToolCallContentChanged(IReadOnlyList<ToolCallContent>? value) => RefreshToolCallDetails();
-        partial void OnToolCallLocationsChanged(IReadOnlyList<ToolCallLocation>? value) => RefreshToolCallDetails();
-        partial void OnToolCallStatusChanged(Domain.Models.Tool.ToolCallStatus? value) => UpdateToolCallState();
+        partial void OnToolCallJsonChanged(string? value)
+        {
+            if (_applyingSnapshot)
+            {
+                return;
+            }
+
+            RefreshToolCallDetails();
+        }
+
+        partial void OnToolCallRawInputJsonChanged(string? value)
+        {
+            if (_applyingSnapshot)
+            {
+                return;
+            }
+
+            RefreshToolCallDetails();
+        }
+
+        partial void OnToolCallRawOutputJsonChanged(string? value)
+        {
+            if (_applyingSnapshot)
+            {
+                return;
+            }
+
+            RefreshToolCallDetails();
+        }
+
+        partial void OnToolCallContentChanged(IReadOnlyList<ToolCallContent>? value)
+        {
+            if (_applyingSnapshot)
+            {
+                return;
+            }
+
+            RefreshToolCallDetails();
+        }
+
+        partial void OnToolCallLocationsChanged(IReadOnlyList<ToolCallLocation>? value)
+        {
+            if (_applyingSnapshot)
+            {
+                return;
+            }
+
+            RefreshToolCallDetails();
+        }
+
+        partial void OnToolCallStatusChanged(Domain.Models.Tool.ToolCallStatus? value)
+        {
+            if (_applyingSnapshot)
+            {
+                return;
+            }
+
+            UpdateToolCallState();
+        }
     }
 
     public sealed record ToolCallDetailItem(string? Label, string Value, ToolCallDetailKind Kind = ToolCallDetailKind.Text)
