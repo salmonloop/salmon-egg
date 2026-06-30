@@ -9171,6 +9171,128 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task HydrateActiveConversationAsync_WhenRemoteConnectionIsNotReady_PublishesActivationFault()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var sessionManager = CreateSessionManagerWithStore();
+        await sessionManager.Object.CreateSessionAsync("conv-1", @"C:\repo\demo");
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
+        var chatService = CreateConnectedChatService();
+        var isConnectedChecks = 0;
+        chatService.SetupGet(service => service.IsConnected).Returns(() => Interlocked.Increment(ref isConnectedChecks) == 1);
+        chatService.SetupGet(service => service.IsInitialized).Returns(true);
+        chatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
+        chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("session/load must not be called when the foreground service is no longer ready."));
+        fixture.Profiles.Profiles.Add(new ServerConfiguration
+        {
+            Id = "profile-1",
+            Name = "Profile 1",
+            Transport = TransportType.WebSocket,
+            ServerUrl = "ws://127.0.0.1:3010/"
+        });
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+        });
+        SetCurrentSessionId(fixture.ViewModel, "conv-1");
+        SetCurrentRemoteSessionId(fixture.ViewModel, "remote-1");
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
+        await DispatchConnectedAsync(fixture, "profile-1");
+
+        var hydrated = await fixture.ViewModel.HydrateActiveConversationAsync();
+
+        Assert.False(hydrated);
+        Assert.Equal("Failed to load session: ACP chat service is not connected and initialized.", fixture.ViewModel.ErrorMessage);
+        var state = await fixture.GetStateAsync();
+        var runtime = state.ResolveRuntimeState("conv-1");
+        Assert.NotNull(runtime);
+        Assert.Equal(ConversationRuntimePhase.Faulted, runtime!.Value.Phase);
+        Assert.Equal("ChatServiceNotReady", runtime.Value.Reason);
+    }
+
+    [Fact]
+    public async Task ActiveWebSocketConversationTransportError_ReconnectsProfileAndHydratesRemoteSession()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var sessionManager = CreateSessionManagerWithStore();
+        await sessionManager.Object.CreateSessionAsync("conv-1", @"C:\repo\demo");
+
+        var staleService = CreateConnectedChatService();
+        staleService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
+
+        var replacementService = CreateConnectedChatService();
+        replacementService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
+        SessionLoadParams? capturedLoadParams = null;
+        replacementService
+            .Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
+            .Callback<SessionLoadParams, CancellationToken>((parameters, _) => capturedLoadParams = parameters)
+            .ReturnsAsync(SessionLoadResponse.Completed);
+
+        ViewModelFixture? fixture = null;
+        var commands = new Mock<IAcpConnectionCommands>(MockBehavior.Strict);
+        commands.Setup(x => x.ConnectToProfileAsync(
+                It.Is<ServerConfiguration>(profile =>
+                    string.Equals(profile.Id, "profile-1", StringComparison.Ordinal)
+                    && profile.Transport == TransportType.WebSocket),
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.Is<AcpConnectionContext>(context =>
+                    string.Equals(context.ConversationId, "conv-1", StringComparison.Ordinal)
+                    && context.PreserveConversation),
+                It.IsAny<CancellationToken>()))
+            .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, AcpConnectionContext, CancellationToken>(async (profile, _, sink, _, cancellationToken) =>
+            {
+                await sink.SelectProfileAsync(profile, cancellationToken);
+                await sink.ReplaceChatServiceAsync(replacementService.Object, cancellationToken);
+                await DispatchConnectedAsync(fixture!, profile.Id);
+                return new AcpTransportApplyResult(replacementService.Object, new InitializeResponse());
+            });
+        commands.Setup(x => x.DisconnectAsync(It.IsAny<IAcpChatCoordinatorSink>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        fixture = CreateViewModel(syncContext, sessionManager: sessionManager, acpConnectionCommands: commands.Object);
+        await using var _ = fixture;
+        var profile = new ServerConfiguration
+        {
+            Id = "profile-1",
+            Name = "Profile 1",
+            Transport = TransportType.WebSocket,
+            ServerUrl = "ws://127.0.0.1:3010/"
+        };
+        fixture.Profiles.Profiles.Add(profile);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(staleService.Object));
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+        });
+        SetCurrentSessionId(fixture.ViewModel, "conv-1");
+        SetCurrentRemoteSessionId(fixture.ViewModel, "remote-1");
+        await DispatchConnectedAsync(fixture, "profile-1");
+
+        staleService.Raise(service => service.ErrorOccurred += null!, staleService.Object, "Transport entered error state");
+
+        await WaitForConditionAsync(() =>
+        {
+            return Task.FromResult(capturedLoadParams is not null);
+        }, timeoutMilliseconds: 30000);
+
+        commands.Verify(x => x.ConnectToProfileAsync(
+            It.Is<ServerConfiguration>(profile => string.Equals(profile.Id, "profile-1", StringComparison.Ordinal)),
+            It.IsAny<IAcpTransportConfiguration>(),
+            It.IsAny<IAcpChatCoordinatorSink>(),
+            It.IsAny<AcpConnectionContext>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal("remote-1", capturedLoadParams!.SessionId);
+        Assert.Equal(@"C:\repo\demo", capturedLoadParams.Cwd);
+    }
+
+    [Fact]
     public async Task HydrateActiveConversationAsync_WhenRemoteMetadataRefreshIsSlow_DoesNotBlockSessionLoad()
     {
         var syncContext = new ImmediateSynchronizationContext();

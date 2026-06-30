@@ -1801,6 +1801,7 @@ public partial class ChatViewModel
             SetError(error);
             Logger.LogError(error);
         });
+        QueueActiveRemoteConnectionRecovery(error);
     }
 
     private Task<bool> TryAuthenticateAsync(CancellationToken cancellationToken)

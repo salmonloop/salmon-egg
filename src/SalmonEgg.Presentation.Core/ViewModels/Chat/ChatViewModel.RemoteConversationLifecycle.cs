@@ -284,6 +284,12 @@ public partial class ChatViewModel
             .ConfigureAwait(false);
         if (authoritativeConnection is not { } resolvedConnection)
         {
+            await SetConversationRuntimeStateAsync(
+                    conversationId,
+                    ConversationRuntimePhase.Faulted,
+                    reason: "ChatServiceNotReady",
+                    cancellationToken)
+                .ConfigureAwait(false);
             await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
                     conversationId,
                     activationVersion,
@@ -1559,6 +1565,193 @@ public partial class ChatViewModel
         }
     }
 
+    private void QueueActiveRemoteConnectionRecovery(string error)
+    {
+        if (_disposed
+            || string.IsNullOrWhiteSpace(CurrentSessionId)
+            || !IsRecoverableRemoteTransportError(error))
+        {
+            return;
+        }
+
+        var conversationId = CurrentSessionId!;
+        lock (_remoteConnectionRecoverySync)
+        {
+            if (_remoteConnectionRecoveryTask is { IsCompleted: false })
+            {
+                return;
+            }
+
+            _remoteConnectionRecoveryCts?.Cancel();
+            _remoteConnectionRecoveryCts?.Dispose();
+            _remoteConnectionRecoveryCts = CancellationTokenSource.CreateLinkedTokenSource(_disposeCts.Token);
+            _remoteConnectionRecoveryTask = RecoverActiveRemoteConnectionAsync(
+                conversationId,
+                error,
+                _remoteConnectionRecoveryCts.Token);
+        }
+    }
+
+    private static bool IsRecoverableRemoteTransportError(string error)
+    {
+        if (string.IsNullOrWhiteSpace(error))
+        {
+            return false;
+        }
+
+        return error.Contains("Transport entered error state", StringComparison.OrdinalIgnoreCase)
+            || error.Contains("Transport message stream error", StringComparison.OrdinalIgnoreCase)
+            || error.Contains("Transport state stream error", StringComparison.OrdinalIgnoreCase)
+            || error.Contains("Failed to connect transport", StringComparison.OrdinalIgnoreCase)
+            || error.Contains("Failed to send message", StringComparison.OrdinalIgnoreCase)
+            || error.Contains("transport disconnected", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task RecoverActiveRemoteConnectionAsync(
+        string conversationId,
+        string error,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _remoteConversationActivationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                var snapshot = await TryCreateActiveRemoteConnectionRecoverySnapshotAsync(
+                        conversationId,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                if (snapshot is null)
+                {
+                    return;
+                }
+
+                await PublishDisconnectedConnectionStateAsync(error).ConfigureAwait(false);
+                await ApplyCurrentStoreProjectionAsync(null, cancellationToken).ConfigureAwait(false);
+
+                var ownsConnectionLifecycleOverlay = await TryAcquireConnectionLifecycleOverlayAsync(
+                        snapshot.ConversationId,
+                        activationVersion: null)
+                    .ConfigureAwait(false);
+                try
+                {
+                    var connectionContext = _conversationProfileConnectionGateway.CreateConnectionContext(
+                        snapshot.ConversationId,
+                        new ConversationBindingSlice(
+                            snapshot.ConversationId,
+                            snapshot.RemoteSessionId,
+                            snapshot.ProfileId),
+                        snapshot.ProfileId,
+                        preserveConversation: true);
+
+                    await ConnectToAcpProfileCoreAsync(
+                            snapshot.Profile,
+                            connectionContext,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+
+                    if (!await IsActiveRemoteConnectionRecoverySnapshotCurrentAsync(snapshot, cancellationToken)
+                            .ConfigureAwait(false))
+                    {
+                        return;
+                    }
+
+                    await EnsureActiveConversationRemoteHydratedAsync(
+                            snapshot.ConversationId,
+                            activationVersion: null,
+                            cancellationToken,
+                            allowWarmReuseShortCircuit: false)
+                        .ConfigureAwait(false);
+                }
+                finally
+                {
+                    if (ownsConnectionLifecycleOverlay
+                        && string.Equals(_connectionLifecycleOverlayConversationId, snapshot.ConversationId, StringComparison.Ordinal))
+                    {
+                        await ReleaseConnectionLifecycleOverlayAsync(snapshot.ConversationId).ConfigureAwait(false);
+                    }
+                }
+            }
+            finally
+            {
+                _remoteConversationActivationGate.Release();
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested || _disposed)
+        {
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(
+                ex,
+                "Failed to recover active remote WebSocket conversation after transport error. ConversationId={ConversationId}",
+                conversationId);
+            if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
+            {
+                await _conversationActivationOutcomePublisher.TrySetActivationErrorAsync(
+                        conversationId,
+                        activationVersion: null,
+                        $"Failed to reconnect session: {ex.Message}")
+                    .ConfigureAwait(false);
+            }
+        }
+    }
+
+    private async Task<ActiveRemoteConnectionRecoverySnapshot?> TryCreateActiveRemoteConnectionRecoverySnapshotAsync(
+        string conversationId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_disposed
+            || string.IsNullOrWhiteSpace(conversationId)
+            || !string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var binding = await ResolveConversationBindingAsync(conversationId, cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(binding?.RemoteSessionId)
+            || string.IsNullOrWhiteSpace(binding.ProfileId))
+        {
+            return null;
+        }
+
+        var profile = await ResolveProfileConfigurationAsync(binding.ProfileId!, cancellationToken).ConfigureAwait(false);
+        if (profile?.Transport != TransportType.WebSocket)
+        {
+            return null;
+        }
+
+        return new ActiveRemoteConnectionRecoverySnapshot(
+            conversationId,
+            binding.RemoteSessionId!,
+            binding.ProfileId!,
+            profile);
+    }
+
+    private async Task<bool> IsActiveRemoteConnectionRecoverySnapshotCurrentAsync(
+        ActiveRemoteConnectionRecoverySnapshot snapshot,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_disposed
+            || !string.Equals(CurrentSessionId, snapshot.ConversationId, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var binding = await ResolveConversationBindingAsync(snapshot.ConversationId, cancellationToken).ConfigureAwait(false);
+        return binding is not null
+            && string.Equals(binding.RemoteSessionId, snapshot.RemoteSessionId, StringComparison.Ordinal)
+            && string.Equals(binding.ProfileId, snapshot.ProfileId, StringComparison.Ordinal);
+    }
+
+    private sealed record ActiveRemoteConnectionRecoverySnapshot(
+        string ConversationId,
+        string RemoteSessionId,
+        string ProfileId,
+        ServerConfiguration Profile);
+
     private async Task<bool> EnsureActiveConversationRemoteHydratedAsync(
         string conversationId,
         long? activationVersion,
@@ -1583,7 +1776,24 @@ public partial class ChatViewModel
             .ConfigureAwait(false);
         if (authoritativeConnection is not { } resolvedConnection)
         {
-            SetError("Failed to load session: ACP chat service is not connected and initialized.");
+            const string message = "Failed to load session: ACP chat service is not connected and initialized.";
+            await SetConversationRuntimeStateAsync(
+                    conversationId,
+                    ConversationRuntimePhase.Faulted,
+                    reason: "ChatServiceNotReady",
+                    cancellationToken)
+                .ConfigureAwait(false);
+            await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
+                    conversationId,
+                    activationVersion,
+                    SessionActivationPhase.Faulted,
+                    reason: "ChatServiceNotReady")
+                .ConfigureAwait(false);
+            await _conversationActivationOutcomePublisher.TrySetActivationErrorAsync(
+                    conversationId,
+                    activationVersion,
+                    message)
+                .ConfigureAwait(false);
             return false;
         }
 

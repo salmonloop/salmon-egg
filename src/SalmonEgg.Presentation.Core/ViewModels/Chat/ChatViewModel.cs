@@ -180,7 +180,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly CancellationTokenSource _disposeCts = new();
     private readonly object _selectedProfileConnectSync = new();
     private readonly object _ambientConnectionRequestSync = new();
+    private readonly object _remoteConnectionRecoverySync = new();
     private Task? _selectedProfileConnectTask;
+    private Task? _remoteConnectionRecoveryTask;
     private ServerConfiguration? _pendingSelectedProfileConnect;
     private IDisposable? _storeStateSubscription;
     private IDisposable? _connectionStateSubscription;
@@ -201,6 +203,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private long _localTerminalActivationVersion;
 
     private CancellationTokenSource? _ambientConnectionRequestCts;
+    private CancellationTokenSource? _remoteConnectionRecoveryCts;
     private long _connectionGeneration;
     private string? _connectionInstanceId;
     private readonly ObservableCollection<AskUserQuestionViewModel> _emptyAskUserQuestions = new();
@@ -3323,6 +3326,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _transientNotificationCts?.Cancel();
         _newSessionDraftModeSelectionCts?.Cancel();
         _newSessionDraftModelSelectionCts?.Cancel();
+        _remoteConnectionRecoveryCts?.Cancel();
         _disposeCts.Cancel();
         CancelAndClearRemoteSessionRecoveryRequests("Dispose");
         try { _ = _voiceInputService.StopAsync(); } catch { }
@@ -3333,6 +3337,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         try { _transientNotificationCts?.Dispose(); } catch { }
         try { _newSessionDraftModeSelectionCts?.Dispose(); } catch { }
         try { _newSessionDraftModelSelectionCts?.Dispose(); } catch { }
+        try { _remoteConnectionRecoveryCts?.Dispose(); } catch { }
         try { _disposeCts.Dispose(); } catch { }
         try { _conversationActivationOrchestrator.Dispose(); } catch { }
         try { _ = _localTerminalPanelCoordinator?.DisposeAsync().AsTask(); } catch { }
@@ -3346,6 +3351,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _transientNotificationCts = null;
         _newSessionDraftModeSelectionCts = null;
         _newSessionDraftModelSelectionCts = null;
+        _remoteConnectionRecoveryCts = null;
+        _remoteConnectionRecoveryTask = null;
     }
 
     private void RaisePlanEntryDerivedPropertyNotifications()
