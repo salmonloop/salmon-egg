@@ -270,6 +270,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         private bool _disposed;
         private bool _bufferingStarted;
         private int _started;
+        private string? _projectionOwnerConversationId;
+        private long? _projectionOwnerActivationVersion;
 
         public RemoteSessionRecoveryRequest(CancellationTokenSource cancellationTokenSource)
         {
@@ -331,11 +333,37 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
         public bool HasStarted => Volatile.Read(ref _started) == 1;
 
+        public bool IsCompleted => _completion.Task.IsCompleted;
+
         public void MarkBufferingStarted()
             => _bufferingStarted = true;
 
         public void ResetBufferingStarted()
             => _bufferingStarted = false;
+
+        public void ClaimProjectionOwner(string conversationId, long? activationVersion)
+        {
+            if (string.IsNullOrWhiteSpace(conversationId))
+            {
+                return;
+            }
+
+            lock (_sync)
+            {
+                _projectionOwnerConversationId = conversationId;
+                _projectionOwnerActivationVersion = activationVersion;
+            }
+        }
+
+        public bool TryGetProjectionOwner(out string? conversationId, out long? activationVersion)
+        {
+            lock (_sync)
+            {
+                conversationId = _projectionOwnerConversationId;
+                activationVersion = _projectionOwnerActivationVersion;
+                return !string.IsNullOrWhiteSpace(conversationId);
+            }
+        }
 
         public void Start(Func<CancellationToken, Task<AcpSessionRecoveryProjection>> operation)
         {

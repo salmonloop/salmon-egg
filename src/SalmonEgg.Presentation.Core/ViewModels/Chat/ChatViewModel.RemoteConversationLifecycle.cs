@@ -455,7 +455,9 @@ public partial class ChatViewModel
                         binding,
                         resolvedConnection.ConnectionInstanceId,
                         recoveryCwd,
-                        adapter);
+                        adapter,
+                        activationVersion,
+                        ownsRemoteHydrationUi);
                 hydrationAttemptId = recoveryStart.BufferScope.HydrationAttemptId;
                 ownsRecoveryLease = recoveryStart.BufferScope.OwnsRecoveryLease;
                 recoveryCancellationToken = recoveryStart.BufferScope.RecoveryCancellationToken;
@@ -548,7 +550,9 @@ public partial class ChatViewModel
                         binding,
                         resolvedConnection.ConnectionInstanceId,
                         recoveryCwd,
-                        adapter: null);
+                        adapter: null,
+                        activationVersion,
+                        ownsRemoteHydrationUi);
                 ownsRecoveryLease = recoveryStart.BufferScope.OwnsRecoveryLease;
                 recoveryCancellationToken = recoveryStart.BufferScope.RecoveryCancellationToken;
                 ownedRecoveryRequest = ownsRecoveryLease ? recoveryStart.RecoveryRequest : null;
@@ -853,9 +857,15 @@ public partial class ChatViewModel
             return false;
         }
 
-        return runtimeState.Value.Phase is ConversationRuntimePhase.Selected
+        var canReusePending = runtimeState.Value.Phase is ConversationRuntimePhase.Selected
             or ConversationRuntimePhase.RemoteConnectionReady
             or ConversationRuntimePhase.RemoteHydrating;
+        if (canReusePending)
+        {
+            TryClaimInFlightRemoteSessionRecoveryProjectionOwner(sessionId, binding, activationVersion: null);
+        }
+
+        return canReusePending;
     }
 
     private bool IsPendingRemoteHydrationActivation(string sessionId)
@@ -1926,7 +1936,9 @@ public partial class ChatViewModel
         ConversationBindingSlice binding,
         string? connectionInstanceId,
         string? cwd,
-        IAcpSessionUpdateBufferController? adapter)
+        IAcpSessionUpdateBufferController? adapter,
+        long? activationVersion,
+        bool ownsProjection)
     {
         if (string.IsNullOrWhiteSpace(cwd))
         {
@@ -1978,6 +1990,8 @@ public partial class ChatViewModel
                     connectionInstanceId,
                     cwd,
                     adapter,
+                    activationVersion,
+                    ownsProjection,
                     out var reuseResult))
             {
                 return reuseResult;
@@ -1986,6 +2000,11 @@ public partial class ChatViewModel
             requestsToCancel = RemoveConflictingRemoteSessionRecoveryRequestsLocked(decision);
             requestToStart = new RemoteSessionRecoveryRequest(
                 CancellationTokenSource.CreateLinkedTokenSource(_disposeCts.Token));
+            if (ownsProjection)
+            {
+                requestToStart.ClaimProjectionOwner(conversationId, activationVersion);
+            }
+
             resolvedBufferScope = RegisterRemoteSessionRecoveryRequestLocked(
                 key,
                 requestToStart,
@@ -2027,6 +2046,8 @@ public partial class ChatViewModel
         string? connectionInstanceId,
         string cwd,
         IAcpSessionUpdateBufferController? adapter,
+        long? activationVersion,
+        bool ownsProjection,
         out AcpSessionRecoveryStartResult startResult)
     {
         startResult = default;
@@ -2035,6 +2056,17 @@ public partial class ChatViewModel
             || !_remoteSessionRecoveryRequests.TryGetValue(existingLease, out var existing))
         {
             return false;
+        }
+
+        if (existing.IsCompleted)
+        {
+            _remoteSessionRecoveryRequests.Remove(existingLease);
+            return false;
+        }
+
+        if (ownsProjection)
+        {
+            existing.ClaimProjectionOwner(conversationId, activationVersion);
         }
 
         Logger.LogInformation(
@@ -2217,6 +2249,7 @@ public partial class ChatViewModel
                 binding,
                 connectionInstanceId,
                 projection,
+                request,
                 adapter: null,
                 hydrationAttemptId: null,
                 requestToken)
@@ -2257,6 +2290,7 @@ public partial class ChatViewModel
                     binding,
                     connectionInstanceId,
                     projection,
+                    request,
                     adapter,
                     hydrationAttemptId,
                     requestToken)
@@ -2300,6 +2334,7 @@ public partial class ChatViewModel
         ConversationBindingSlice expectedBinding,
         string? expectedConnectionInstanceId,
         AcpSessionRecoveryProjection projection,
+        RemoteSessionRecoveryRequest request,
         IAcpSessionUpdateBufferController? adapter,
         long? hydrationAttemptId,
         CancellationToken cancellationToken)
@@ -2313,6 +2348,20 @@ public partial class ChatViewModel
                 hydrationAttemptId,
                 ownsHydrationScope: true,
                 "RemoteSessionRecoveryIdentityMissing");
+            return false;
+        }
+
+        if (!IsCurrentRemoteSessionRecoveryProjectionOwner(request, conversationId))
+        {
+            Logger.LogInformation(
+                "Discarding remote session recovery projection because the recovery request is no longer the foreground projection owner. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
+                conversationId,
+                expectedBinding.RemoteSessionId);
+            ReleaseBufferedUpdatesAfterInterruptedHydration(
+                adapter,
+                hydrationAttemptId,
+                ownsHydrationScope: true,
+                "RemoteSessionRecoveryNoForegroundProjectionOwner");
             return false;
         }
 
@@ -2448,6 +2497,57 @@ public partial class ChatViewModel
 
         request.Cancel();
         return true;
+    }
+
+    private bool IsCurrentRemoteSessionRecoveryProjectionOwner(
+        RemoteSessionRecoveryRequest request,
+        string conversationId)
+    {
+        if (!request.TryGetProjectionOwner(out var ownerConversationId, out var ownerActivationVersion)
+            || !string.Equals(ownerConversationId, conversationId, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (ShouldOwnRemoteHydrationUi(conversationId, activationVersion: null))
+        {
+            return true;
+        }
+
+        return ShouldOwnRemoteHydrationUi(conversationId, ownerActivationVersion);
+    }
+
+    private bool TryClaimInFlightRemoteSessionRecoveryProjectionOwner(
+        string conversationId,
+        ConversationBindingSlice binding,
+        long? activationVersion)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId)
+            || string.IsNullOrWhiteSpace(binding.RemoteSessionId))
+        {
+            return false;
+        }
+
+        lock (_remoteSessionRecoveryRequestsSync)
+        {
+            foreach (var entry in _remoteSessionRecoveryRequests)
+            {
+                var key = entry.Key;
+                var request = entry.Value;
+                if (request.IsCompleted
+                    || !string.Equals(key.ConversationId, conversationId, StringComparison.Ordinal)
+                    || !string.Equals(key.ProfileId, binding.ProfileId, StringComparison.Ordinal)
+                    || !string.Equals(key.RemoteSessionId, binding.RemoteSessionId, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                request.ClaimProjectionOwner(conversationId, activationVersion);
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private List<RemoteSessionRecoveryRequest> RemoveConflictingRemoteSessionRecoveryRequestsLocked(RemoteSessionRecoveryLeaseDecision decision)

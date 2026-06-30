@@ -14949,7 +14949,7 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
-    public async Task ConversationSessionSwitcherContract_WhenFirstLoadCompletesBeforeSecondActivationAdoptsLease_DoesNotLoadAgain()
+    public async Task ConversationSessionSwitcherContract_WhenBackgroundLoadCompletesBeforeSecondActivationAdoptsLease_StartsForegroundLoad()
     {
         var syncContext = new QueueingSynchronizationContext();
         var sessionManager = CreateSessionManagerWithStore();
@@ -15031,15 +15031,28 @@ public partial class ChatViewModelTests
         {
             syncContext.RunAll();
             var state = await fixture.GetStateAsync();
-            return state.ResolveRuntimeState("conv-remote")?.Phase == ConversationRuntimePhase.Warm;
+            var transcript = state.ResolveContentSlice("conv-remote")?.Transcript
+                ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+            return firstRemoteSwitchTask.IsCompleted
+                && state.ResolveRuntimeState("conv-remote")?.Phase != ConversationRuntimePhase.Warm
+                && transcript.All(static message => !string.Equals(
+                    message.TextContent,
+                    "completed before adoption",
+                    StringComparison.Ordinal));
         }, timeoutMilliseconds: 2000);
 
         allowSecondRemoteSelection.TrySetResult(null);
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(Volatile.Read(ref loadInvocationCount) == 2);
+        }, timeoutMilliseconds: 2000);
+
         await syncContext.RunUntilCompletedAsync(secondRemoteSwitchTask);
         Assert.True(await secondRemoteSwitchTask, fixture.ViewModel.ErrorMessage ?? "<no error>");
         await syncContext.RunUntilCompletedAsync(firstRemoteSwitchTask);
 
-        Assert.Equal(1, Volatile.Read(ref loadInvocationCount));
+        Assert.Equal(2, Volatile.Read(ref loadInvocationCount));
         var finalState = await fixture.GetStateAsync();
         Assert.Equal(ConversationRuntimePhase.Warm, finalState.ResolveRuntimeState("conv-remote")?.Phase);
     }
