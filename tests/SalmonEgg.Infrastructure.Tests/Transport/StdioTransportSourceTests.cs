@@ -27,6 +27,21 @@ public sealed class StdioTransportSourceTests
         Assert.DoesNotContain("{Line}", source, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void StdioTransport_DoesNotLogEveryReceivedProtocolFrameAtInformationLevel()
+    {
+        var source = LoadStdioTransportSource();
+
+        foreach (var line in source.Split(Environment.NewLine))
+        {
+            Assert.False(
+                line.Contains("_logger.Information", StringComparison.Ordinal)
+                && line.Contains("StdioTransport.ReadLoop", StringComparison.Ordinal)
+                && line.Contains("OnMessageReceived", StringComparison.Ordinal),
+                "Received protocol frames must not be logged at Information level.");
+        }
+    }
+
     private static string LoadStdioTransportSource()
     {
         var repoRoot = FindRepoRoot();

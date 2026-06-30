@@ -311,7 +311,7 @@ namespace SalmonEgg.Infrastructure.Transport
 
                     if (!string.IsNullOrWhiteSpace(line))
                     {
-                        _logger.Information("[StdioTransport.ReadLoop] 触发 OnMessageReceived，Line={Count}, Length={Length}", lineCount, line.Length);
+                        _logger.Debug("[StdioTransport.ReadLoop] 触发 OnMessageReceived，Line={Count}, Length={Length}", lineCount, line.Length);
                         OnMessageReceived(new MessageReceivedEventArgs(line));
                     }
                     else
