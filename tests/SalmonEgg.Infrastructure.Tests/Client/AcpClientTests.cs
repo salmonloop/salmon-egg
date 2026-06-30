@@ -560,12 +560,37 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             _transportMock.Raise(
                 t => t.ErrorOccurred += null,
-                new TransportErrorEventArgs("进程启动后立即退出，退出码=255"));
+                new TransportErrorEventArgs(
+                    "进程启动后立即退出，退出码=255",
+                    kind: TransportErrorKind.ProcessStartFailed));
 
             Assert.NotNull(receivedError);
             Assert.Contains("ssh -t", receivedError, StringComparison.Ordinal);
             Assert.Contains("stdout", receivedError, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("BatchMode=yes", receivedError, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void TransportErrors_WhenAgentStderrDiagnostic_ShouldNotPublishUserError()
+        {
+            var parser = new MessageParser();
+            var client = new AcpClient(_transportMock.Object, parser, null, _errorLoggerMock.Object);
+            var receivedErrors = new List<string>();
+            client.ErrorOccurred += (_, error) => receivedErrors.Add(error);
+
+            _transportMock.Raise(
+                t => t.ErrorOccurred += null,
+                new TransportErrorEventArgs(
+                    "进程错误：}",
+                    kind: TransportErrorKind.AgentStderr));
+
+            Assert.Empty(receivedErrors);
+            _errorLoggerMock.Verify(
+                logger => logger.LogError(It.Is<ErrorLogEntry>(entry =>
+                    entry.ErrorCode == "AGENT_STDERR" &&
+                    entry.Severity == ErrorSeverity.Info &&
+                    entry.ErrorMessage.Contains("进程错误：}", StringComparison.Ordinal))),
+                Times.Once);
         }
 
         [Fact]

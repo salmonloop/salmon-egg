@@ -1607,7 +1607,16 @@ namespace SalmonEgg.Infrastructure.Client
         /// </summary>
         private void OnTransportError(object? sender, TransportErrorEventArgs e)
         {
-            var enrichedErrorMessage = EnrichTransportErrorMessage(e.ErrorMessage);
+            if (e.Kind == TransportErrorKind.AgentStderr)
+            {
+                _errorLogger.LogError(new ErrorLogEntry(
+                    "AGENT_STDERR",
+                    e.ErrorMessage,
+                    ErrorSeverity.Info));
+                return;
+            }
+
+            var enrichedErrorMessage = EnrichTransportErrorMessage(e.ErrorMessage, e.Kind);
             _lastTransportErrorMessage = enrichedErrorMessage;
             OnErrorOccurred(enrichedErrorMessage);
             if (!_transport.IsConnected)
@@ -1625,16 +1634,14 @@ namespace SalmonEgg.Infrastructure.Client
             ErrorOccurred?.Invoke(this, errorMessage);
         }
 
-        private static string EnrichTransportErrorMessage(string errorMessage)
+        private static string EnrichTransportErrorMessage(string errorMessage, TransportErrorKind kind)
         {
             if (string.IsNullOrWhiteSpace(errorMessage))
             {
                 return errorMessage;
             }
 
-            if (!errorMessage.Contains("进程", StringComparison.Ordinal) &&
-                !errorMessage.Contains("stdout", StringComparison.OrdinalIgnoreCase) &&
-                !errorMessage.Contains("stderr", StringComparison.OrdinalIgnoreCase))
+            if (!ShouldAppendStdioBridgeGuidance(errorMessage, kind))
             {
                 return errorMessage;
             }
@@ -1645,6 +1652,14 @@ namespace SalmonEgg.Infrastructure.Client
             return errorMessage.Contains("ssh -t", StringComparison.Ordinal)
                 ? errorMessage
                 : errorMessage + sshBridgeGuidance;
+        }
+
+        private static bool ShouldAppendStdioBridgeGuidance(string errorMessage, TransportErrorKind kind)
+        {
+            return kind is TransportErrorKind.ProcessStartFailed
+                    or TransportErrorKind.ProcessExited
+                    or TransportErrorKind.StdoutReadFailed
+                || errorMessage.Contains("stdout", StringComparison.OrdinalIgnoreCase);
         }
 
         private void ClearLastTransportError()

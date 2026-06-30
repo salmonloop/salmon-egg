@@ -170,14 +170,19 @@ namespace SalmonEgg.Infrastructure.Transport
                 {
                     _logger.Warning("[StdioTransport.Connect] 进程已退出，退出码={ExitCode}", _process.ExitCode);
                     await DrainExitedProcessErrorAsync().ConfigureAwait(false);
-                    OnErrorOccurred(new TransportErrorEventArgs($"进程启动后立即退出，退出码={_process.ExitCode}"));
+                    OnErrorOccurred(new TransportErrorEventArgs(
+                        $"进程启动后立即退出，退出码={_process.ExitCode}",
+                        kind: TransportErrorKind.ProcessStartFailed));
                     return false;
                 }
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "[StdioTransport.Connect] 启动失败");
-                OnErrorOccurred(new TransportErrorEventArgs($"无法启动进程：{ex.Message}", ex));
+                OnErrorOccurred(new TransportErrorEventArgs(
+                    $"无法启动进程：{ex.Message}",
+                    ex,
+                    TransportErrorKind.ProcessStartFailed));
                 return false;
             }
         }
@@ -223,7 +228,10 @@ namespace SalmonEgg.Infrastructure.Transport
                 }
                 catch (Exception ex)
                 {
-                    OnErrorOccurred(new TransportErrorEventArgs($"断开连接时出错：{ex.Message}", ex));
+                    OnErrorOccurred(new TransportErrorEventArgs(
+                        $"断开连接时出错：{ex.Message}",
+                        ex,
+                        TransportErrorKind.DisconnectFailed));
                     return false;
                 }
             }
@@ -238,7 +246,9 @@ namespace SalmonEgg.Infrastructure.Transport
             if (!IsConnected || _stdin == null)
             {
                 _logger.Warning("[StdioTransport.SendMessage] 失败：未连接或 _stdin 为 null");
-                OnErrorOccurred(new TransportErrorEventArgs("传输未连接"));
+                OnErrorOccurred(new TransportErrorEventArgs(
+                    "传输未连接",
+                    kind: TransportErrorKind.NotConnected));
                 return false;
             }
 
@@ -246,7 +256,9 @@ namespace SalmonEgg.Infrastructure.Transport
             if (_process != null && _process.HasExited)
             {
                 _logger.Error("[StdioTransport.SendMessage] 失败：进程已退出，退出码={ExitCode}", _process.ExitCode);
-                OnErrorOccurred(new TransportErrorEventArgs($"Agent 进程已退出，退出码={_process.ExitCode}"));
+                OnErrorOccurred(new TransportErrorEventArgs(
+                    $"Agent 进程已退出，退出码={_process.ExitCode}",
+                    kind: TransportErrorKind.ProcessExited));
                 IsConnected = false;
                 return false;
             }
@@ -267,7 +279,10 @@ namespace SalmonEgg.Infrastructure.Transport
             catch (Exception ex)
             {
                 _logger.Error(ex, "[StdioTransport.SendMessage] 发送失败");
-                OnErrorOccurred(new TransportErrorEventArgs($"发送消息失败：{ex.Message}", ex));
+                OnErrorOccurred(new TransportErrorEventArgs(
+                    $"发送消息失败：{ex.Message}",
+                    ex,
+                    TransportErrorKind.SendFailed));
                 IsConnected = false;
                 return false;
             }
@@ -314,7 +329,10 @@ namespace SalmonEgg.Infrastructure.Transport
             catch (Exception ex)
             {
                 _logger.Error(ex, "[StdioTransport.ReadLoop] 读取循环出错");
-                OnErrorOccurred(new TransportErrorEventArgs($"读取输出失败：{ex.Message}", ex));
+                OnErrorOccurred(new TransportErrorEventArgs(
+                    $"读取输出失败：{ex.Message}",
+                    ex,
+                    TransportErrorKind.StdoutReadFailed));
             }
         }
 
@@ -336,7 +354,9 @@ namespace SalmonEgg.Infrastructure.Transport
                     if (!string.IsNullOrWhiteSpace(line))
                     {
                         _logger.Warning("[StdioTransport.ReadError] 进程 stderr 非空，Length={Length}", line.Length);
-                        OnErrorOccurred(new TransportErrorEventArgs($"进程错误：{line}"));
+                        OnErrorOccurred(new TransportErrorEventArgs(
+                            $"进程错误：{line}",
+                            kind: TransportErrorKind.AgentStderr));
                     }
                 }
                 _logger.Warning("[StdioTransport.ReadError] 错误读取循环结束");
@@ -348,7 +368,10 @@ namespace SalmonEgg.Infrastructure.Transport
             catch (Exception ex)
             {
                 _logger.Error(ex, "[StdioTransport.ReadError] 错误读取循环出错");
-                OnErrorOccurred(new TransportErrorEventArgs($"读取错误流失败：{ex.Message}", ex));
+                OnErrorOccurred(new TransportErrorEventArgs(
+                    $"读取错误流失败：{ex.Message}",
+                    ex,
+                    TransportErrorKind.StderrReadFailed));
             }
         }
 
@@ -466,7 +489,9 @@ namespace SalmonEgg.Infrastructure.Transport
                 }
 
                 _logger.Warning("[StdioTransport.Connect] 进程快速退出 stderr 非空，Length={Length}", line.Length);
-                OnErrorOccurred(new TransportErrorEventArgs($"进程错误：{line}"));
+                OnErrorOccurred(new TransportErrorEventArgs(
+                    $"进程错误：{line}",
+                    kind: TransportErrorKind.AgentStderr));
             }
         }
 
@@ -477,7 +502,9 @@ namespace SalmonEgg.Infrastructure.Transport
         {
             IsConnected = false;
             _readCts?.Cancel();
-            OnErrorOccurred(new TransportErrorEventArgs("Agent 进程已退出"));
+            OnErrorOccurred(new TransportErrorEventArgs(
+                "Agent 进程已退出",
+                kind: TransportErrorKind.ProcessExited));
         }
 
         /// <summary>

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
+using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Infrastructure.Transport;
 using Xunit;
 
@@ -47,6 +48,7 @@ public sealed class StdioTransportConnectionTests
             errors.Add(error.ErrorMessage);
             if (error.ErrorMessage.Contains("ssh config permissions are invalid", StringComparison.Ordinal))
             {
+                Assert.Equal(TransportErrorKind.AgentStderr, error.Kind);
                 stderrObserved.TrySetResult();
             }
         };

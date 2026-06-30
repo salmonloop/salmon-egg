@@ -85,6 +85,19 @@ namespace SalmonEgg.Domain.Interfaces.Transport
     /// <summary>
     /// 传输错误事件参数。
     /// </summary>
+    public enum TransportErrorKind
+    {
+        General,
+        AgentStderr,
+        ProcessStartFailed,
+        ProcessExited,
+        SendFailed,
+        StdoutReadFailed,
+        StderrReadFailed,
+        DisconnectFailed,
+        NotConnected
+    }
+
     public class TransportErrorEventArgs : EventArgs
     {
         /// <summary>
@@ -102,6 +115,8 @@ namespace SalmonEgg.Domain.Interfaces.Transport
         /// </summary>
         public DateTime ErrorTime { get; set; }
 
+        public TransportErrorKind Kind { get; set; } = TransportErrorKind.General;
+
         /// <summary>
         /// 创建新的传输错误事件参数。
         /// </summary>
@@ -115,10 +130,14 @@ namespace SalmonEgg.Domain.Interfaces.Transport
         /// </summary>
         /// <param name="errorMessage">错误消息</param>
         /// <param name="exception">异常对象</param>
-        public TransportErrorEventArgs(string errorMessage, Exception? exception = null)
+        public TransportErrorEventArgs(
+            string errorMessage,
+            Exception? exception = null,
+            TransportErrorKind kind = TransportErrorKind.General)
         {
             ErrorMessage = CreateErrorMessage(errorMessage, exception);
             Exception = exception;
+            Kind = kind;
             ErrorTime = DateTime.UtcNow;
         }
 
