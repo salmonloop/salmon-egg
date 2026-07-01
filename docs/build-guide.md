@@ -1,5 +1,7 @@
 # SalmonEgg 构建和运行指南
 
+> Status: secondary reference. The canonical agent-facing build guide is `../BUILD_GUIDE.md`, which is the file referenced by `AGENTS.md`. Keep this document aligned when it is edited, but prefer `../BUILD_GUIDE.md` for delivery gates and current commands.
+
 ## 系统要求
 
 ### 开发环境

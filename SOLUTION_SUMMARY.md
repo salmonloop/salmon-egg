@@ -1,5 +1,7 @@
 # ACP Server 配置问题解决方案
 
+> Status: historical incident summary. This document records an early ACP server configuration fix and is not current product guidance. Use `README.md`, `BUILD_GUIDE.md`, `AGENTS.md`, and `docs/PROJECT_STATUS.md` for current workflow and delivery rules.
+
 ## 问题描述
 用户无法在界面上配置 ACP Server，导致无法连接服务器。
 
@@ -68,7 +70,7 @@
 dotnet test
 ```
 
-预期结果：所有测试通过（131/131）
+当时预期结果：历史记录中的测试全部通过；不要作为当前测试总数。
 
 ## 构建状态
 

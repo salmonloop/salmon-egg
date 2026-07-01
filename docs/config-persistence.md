@@ -1,6 +1,6 @@
 # Config Persistence (YAML) Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> Status: completed historical plan. The current implementation already persists server configuration and app settings as YAML through `src/SalmonEgg.Infrastructure/Storage/ConfigurationManager.cs` and `src/SalmonEgg.Infrastructure/Storage/AppSettingsService.cs`. Do not treat this file as an active execution plan unless it is explicitly refreshed.
 
 **Goal:** Replace the current JSON-based `ConfigurationManager` with a versioned, atomic, YAML-based config system (`SalmonEgg/config`) plus secure secret storage for sensitive fields, per `docs/SPEC-CONFIG-PERSISTENCE-YAML.md`.
 

@@ -1,5 +1,7 @@
 # SalmonEgg 项目设置指南
 
+> Status: bootstrap reference. This document describes how the project was originally scaffolded and is not the canonical build/run guide for the current repository. For current development, use `../BUILD_GUIDE.md`, `../AGENTS.md`, and `PROJECT_STATUS.md`.
+
 ## 概述
 
 本文档提供了 SalmonEgg 项目的详细设置说明。该项目采用四层架构（Clean Architecture），使用 Uno Platform 构建跨平台原生应用。

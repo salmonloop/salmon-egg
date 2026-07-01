@@ -18,6 +18,8 @@
 - 必须同时支持：
   - `net10.0-windows10.0.26100.0`（WinUI3 / Windows）
   - `net10.0-desktop`（Skia Desktop / 跨平台）
+  - `net10.0-browserwasm`（浏览器 WASM）
+- 移动端 TFM 只在对应 SDK / 显式开关可用时启用，不能假定默认构建一定包含移动目标。
 - Windows 运行路径固定为 **MSIX**（不走 unpackaged exe 运行路径）。
 - 平台差异只允许出现在**宿主层（Host）**与**平台服务适配层（Adapters）**，禁止散落在页面语义/业务流程中。
 
@@ -27,7 +29,7 @@
 
 ### 1.1 项目框架
 `SalmonEgg/SalmonEgg/SalmonEgg.csproj`
-- `TargetFrameworks`：`net10.0-browserwasm;net10.0-desktop;net10.0-windows10.0.26100.0`
+- `TargetFrameworks` 由 `SalmonEggTargetFrameworks` / `SalmonEggAllTargetFrameworks` 条件化生成。常规 .NET SDK 路径默认覆盖 `net10.0-desktop` 与 `net10.0-browserwasm`；WinUI 3 目标在 Windows / MSBuild 条件或 `EnableWinUIBuild=true` 下启用；Android 目标只在 `EnableMobileTargets=true` 且 Android SDK 可用时加入。
 
 ### 1.2 Windows（WinUI3）必须使用 MSIX
 - `WindowsPackageType=MSIX`
@@ -178,8 +180,10 @@ UI 层提供 `FrameNavigationService` 实现：
 ## 8. 验收标准（Definition of Done）
 
 每次涉及 UI/导航/会话的改动，必须满足：
-- `dotnet test tests\SalmonEgg.Application.Tests\SalmonEgg.Application.Tests.csproj` 通过
-- `net10.0-desktop` 与 `net10.0-windows...` 均能编译
+- 与影响面相符的 Core / Presentation.Core 行为测试通过。
+- `net10.0-desktop` 与 `net10.0-browserwasm` 构建口径保持可用；Windows 原生验证使用 `build.bat msix` 或 `.tools/run-winui3-msix.ps1 -SkipInstall`，不得把普通 `dotnet build -f net10.0-windows10.0.26100.0` 当作唯一门禁。
+- 影响 WASM 可见导航、浏览器持久化或发布产物时，运行 `scripts/gates/run-wasm-smoke-gates.sh` 或相应静态资源验证。
+- 影响 Windows 原生 UI、焦点、手柄、安装包或 shell 行为时，运行对应 Windows GUI smoke / MSIX gate。
 - 连接成功后：
   - Settings 侧有明确成功/失败反馈
   - Chat 侧不再显示“准备好开始了吗？”（会话激活）

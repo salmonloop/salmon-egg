@@ -1,6 +1,6 @@
 # Full-chain Compliance Remaining Remediation Plan - 2026-06-28
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use `subagent-driven-development` or `executing-plans` only after the user explicitly chooses an execution mode. This plan is a remediation tracker, not approval to batch-fix every item at once.
+> Execution note: use `subagent-driven-development` or `executing-plans` only after the user explicitly chooses an execution mode. This plan is a remediation tracker, not approval to batch-fix every item at once.
 
 **Goal:** Track and execute the remaining compliance fixes from the 2026-06-27 full-chain review after the ACP P0 schema cleanup.
 
@@ -80,7 +80,7 @@ git diff --check
 
 **Risk If Left Unfixed:** Tests can pass while AOT / trimming / source-generated serialization contracts are broken. Protocol DTOs can drift from the production serialization path.
 
-**Current Evidence:**
+**Original Evidence To Revalidate:**
 
 - Production source-generated context: `src/SalmonEgg.Infrastructure/Serialization/AcpJsonContext.cs`
 - Production parser binding: `src/SalmonEgg.Infrastructure/Serialization/MessageParser.cs`
@@ -150,61 +150,31 @@ git diff --check
 
 ## Task 2: Remove DI-stage Synchronous App-settings IO for ACP Eviction Options
 
-**Status:** Not fixed.
+**Status:** Fixed as of 2026-07-01. Kept here as historical tracker context; do not treat this item as active without a new code scan.
 
-**Risk If Left Unfixed:** `AcpConnectionEvictionOptionsLoader.Load` blocks on async disk/settings IO during DI singleton construction. This can cause UI startup stalls or deadlocks and violates the repository rule that constructors and DI registration should bind dependencies only.
+**Original Risk:** `AcpConnectionEvictionOptionsLoader.Load` blocked on async disk/settings IO during DI singleton construction. This could cause UI startup stalls or deadlocks and violated the repository rule that constructors and DI registration should bind dependencies only.
 
-**Current Evidence:**
+**Closure Evidence:**
 
 - `src/SalmonEgg.Presentation.Core/Services/Chat/AcpConnectionEvictionOptionsLoader.cs`
-  - `Load` calls `appSettingsService.LoadAsync().ConfigureAwait(false).GetAwaiter().GetResult()`.
+  - Current loader exposes `LoadEnvironmentDefaults` and reads only environment variables.
 - `SalmonEgg/SalmonEgg/DependencyInjection.cs`
-  - Registers `AcpConnectionEvictionOptions` through a singleton factory that calls `AcpConnectionEvictionOptionsLoader.Load(...)`.
-- `SalmonEgg/SalmonEgg/Presentation/Services/AcpConnectionEvictionOptionsBridge.cs`
-  - Already refreshes the shared options object from `AppPreferencesViewModel` when preferences load or change.
+  - DI registration calls `AcpConnectionEvictionOptionsLoader.LoadEnvironmentDefaults(...)`.
+- `SalmonEgg/SalmonEgg/App.xaml.cs`
+  - App settings are read asynchronously after launch, outside DI singleton construction.
+- `tests/SalmonEgg.Presentation.Core.Tests/Chat/AcpConnectionEvictionOptionsLoaderTests.cs`
+  - Covers no-IO environment defaults.
+- `tests/SalmonEgg.Presentation.Core.Tests/NavigationCoreTests.cs`
+  - Guards DI registration against app-settings service access in the loader section.
 
-**Desired End State:**
-
-- DI construction does not call `IAppSettingsService.LoadAsync`.
-- `AcpConnectionEvictionOptions` is created synchronously from no-IO defaults and environment variables only.
-- Persisted user preferences still flow into the options object after `AppPreferencesViewModel` loads.
-- The eviction policy and session cleaner continue to consume the same shared `AcpConnectionEvictionOptions` instance.
-
-**Implementation Checklist:**
-
-- [ ] Before editing, report that this task is limited to eviction option initialization and tests.
-- [ ] Replace `AcpConnectionEvictionOptionsLoader.Load(...)` with a no-IO method, for example:
-
-```csharp
-public static AcpConnectionEvictionOptions LoadEnvironmentDefaults(ILogger? logger = null)
-```
-
-This method may read only:
-
-```csharp
-Environment.GetEnvironmentVariable("SALMONEGG_ACP_EVICTION_ENABLED")
-Environment.GetEnvironmentVariable("SALMONEGG_ACP_EVICTION_IDLE_TTL_MINUTES")
-Environment.GetEnvironmentVariable("SALMONEGG_ACP_EVICTION_MAX_WARM_PROFILES")
-Environment.GetEnvironmentVariable("SALMONEGG_ACP_EVICTION_MAX_PINNED_PROFILES")
-```
-
-- [ ] Update `SalmonEgg/SalmonEgg/DependencyInjection.cs` so the singleton factory no longer requests `IAppSettingsService`.
-- [ ] Keep `AcpConnectionEvictionOptionsBridge` as the persisted-settings projection path. It should continue to update the same options object once `AppPreferencesViewModel.IsLoaded` becomes true.
-- [ ] Replace tests in `tests/SalmonEgg.Presentation.Core.Tests/Chat/AcpConnectionEvictionOptionsLoaderTests.cs`:
-  - Remove tests that require `IAppSettingsService.LoadAsync` during `Load`.
-  - Add a test proving environment variables override no-IO defaults.
-  - Add a test proving loader construction does not call an app settings service. The cleanest shape is that the loader method no longer accepts `IAppSettingsService`.
-- [ ] Add or update a DI contract test that scans `SalmonEgg/SalmonEgg/DependencyInjection.cs` and fails if `AcpConnectionEvictionOptionsLoader` is called with `IAppSettingsService`.
-
-**Verification Gates:**
+**Regression Gates To Preserve:**
 
 ```powershell
 dotnet test tests\SalmonEgg.Presentation.Core.Tests\SalmonEgg.Presentation.Core.Tests.csproj --filter "FullyQualifiedName~AcpConnectionEvictionOptionsLoaderTests|FullyQualifiedName~NavigationCoreTests" --no-restore
-dotnet build SalmonEgg.sln --no-restore
 git diff --check
 ```
 
-**Completion Report Must Include:**
+**If This Item Is Reopened, Report Must Include:**
 
 - Exact startup/DI path after the change.
 - How persisted preferences still refresh runtime options.
@@ -214,11 +184,11 @@ git diff --check
 
 ## Task 3: Rework Shell Gamepad / Directional Input to Preserve Native Focus Semantics
 
-**Status:** Not fixed.
+**Status:** Not fixed. This item still needs a focused product-code remediation or a fresh gamepad validation pass; do not infer closure from unrelated XAML/localization compliance work.
 
 **Risk If Left Unfixed:** Physical or synthetic gamepad input can enter both native WinUI/Uno focus handling and app-side fallback handling. This can create double dispatch, value-control edits without explicit engagement, and divergence between real hardware and synthetic smoke tests.
 
-**Current Evidence:**
+**Original Evidence To Revalidate:**
 
 - `SalmonEgg/SalmonEgg/MainPage.xaml.cs`
   - Attaches polling gamepad service and platform bridge.
@@ -276,11 +246,21 @@ If GUI smoke is run for this item, it must record:
 
 ## Task 4: Remove XAML User-visible Hardcoded Strings and Enforce `.resw`
 
-**Status:** Not fixed.
+**Status:** Not fixed, but the stale broad evidence below must be revalidated before implementation. A 2026-07-01 quick scan narrows the current visible Chinese XAML literals to:
+
+- `SalmonEgg/SalmonEgg/Presentation/Views/Settings/AcpConnectionSettingsPage.xaml`
+  - `ToolTipService.ToolTip="更多"`
+- `SalmonEgg/SalmonEgg/Presentation/Views/Settings/McpSettingsPage.xaml`
+  - `AutomationProperties.Name="删除"`
+  - `ToolTipService.ToolTip="删除"`
+- `SalmonEgg/SalmonEgg/Presentation/Views/Settings/DiagnosticsSettingsPage.xaml`
+  - `Text="Agent："`
+
+Chinese comments remain in some XAML files and are not user-visible localization defects by themselves.
 
 **Risk If Left Unfixed:** XAML and `.resw` remain competing sources of truth. Missing `x:Uid` or missing resource entries can surface Chinese fallback strings in non-Chinese locales, while existing local values make reviews and translation maintenance unreliable.
 
-**Current Evidence:**
+**Original Evidence To Revalidate:**
 
 The original review called out these files:
 
@@ -290,7 +270,7 @@ The original review called out these files:
 - `SalmonEgg/SalmonEgg/Presentation/Views/Settings/DiagnosticsSettingsPage.xaml`
 - `SalmonEgg/SalmonEgg/Presentation/Views/Chat/ChatView.xaml`
 
-Current broad scan also shows hardcoded Chinese in additional settings/start pages, including:
+The original broad scan also reported hardcoded Chinese in additional settings/start pages, including:
 
 - `SalmonEgg/SalmonEgg/Presentation/Views/Settings/AboutPage.xaml`
 - `SalmonEgg/SalmonEgg/Presentation/Views/Settings/AppearanceSettingsPage.xaml`
@@ -355,66 +335,23 @@ git diff --check
 
 ## Task 5: Remove or Debug-gate Diagnostic Logging and Temp Transport Tracing
 
-**Status:** Not fixed.
+**Status:** Fixed as of 2026-07-01. Kept here as historical tracker context; do not treat this item as active without a new source scan.
 
-**Risk If Left Unfixed:** Release builds can create temp debug trace files, write full ACP TX/RX payloads, or construct expensive/interpolated debug strings even when debug output is disabled. This risks leaking prompts, paths, stderr, or protocol payloads.
+**Original Risk:** Release builds could create temp debug trace files, write full ACP TX/RX payloads, or construct expensive/interpolated debug strings even when debug output is disabled. This risk included leaking prompts, paths, stderr, or protocol payloads.
 
-**Current Evidence:**
+**Closure Evidence:**
 
 - `src/SalmonEgg.Infrastructure.Desktop/Transport/StdioTransport.cs`
-  - `_debugFileWriter` exists.
-  - temp `acp_transport_*.log` is created during connect.
-  - full `TX`, `RX`, and `STDERR` lines are written.
-  - many debug/verbose Serilog calls exist in hot transport paths.
-- `SalmonEgg/SalmonEgg/MainPage.xaml.cs`
-  - `BootLogDebug` is internally `#if DEBUG`, but call sites build interpolated strings before calling it.
-- Gamepad input logging is high-volume:
-  - `SalmonEgg/SalmonEgg/Presentation/Services/Input/WindowsGamepadInputService.cs`
-  - `SalmonEgg/SalmonEgg/Presentation/Services/Input/MainShellGamepadNavigationDispatcher.cs`
-  - `SalmonEgg/SalmonEgg/Platforms/Windows/MainPage.Windows.cs`
-  - `SalmonEgg/SalmonEgg/Platforms/Windows/WindowsGamepadNativeInputBridge.cs`
+  - Current source scan has no `_debugFileWriter` payload trace writer.
+- `tests/SalmonEgg.Infrastructure.Tests/Transport/StdioTransportSourceTests.cs`
+  - Guards against default payload trace files and full TX/RX/STDERR protocol payload logging.
 
-**Desired End State:**
-
-- No default temp transport file tracing in release behavior.
-- Full ACP payload logging is removed, redacted, or gated behind an explicit debug-only mechanism.
-- `BootLogDebug` call sites do not construct interpolated debug strings in release builds.
-- High-frequency gamepad polling logs are removed from steady-state runtime or routed only through diagnostics UI capture.
-
-**Implementation Checklist:**
-
-- [ ] Before editing, report which logging surface is first: `StdioTransport`, boot logs, or gamepad logs. Prefer `StdioTransport` first because it can expose protocol payloads.
-- [ ] Add a source contract test that fails when `StdioTransport` contains default `_debugFileWriter` writes outside `#if DEBUG`.
-- [ ] Remove default `_debugFileWriter` creation in `StdioTransport.ConnectAsync`.
-- [ ] Remove full payload writes:
-  - `TX: {message}`
-  - `RX: {line}`
-  - `STDERR: {line}`
-- [ ] Keep long-term structured logs only when they are operationally useful and not payload-bearing. Example acceptable shape:
-
-```csharp
-_logger.Information("[StdioTransport.Connect] 连接成功，PID={Pid}", _process.Id);
-```
-
-- [ ] Change `BootLogDebug` to avoid release interpolation. Acceptable approaches:
-  - mark the method with `[Conditional("DEBUG")]` and pass already-cheap literal strings only, or
-  - wrap interpolated call sites in `#if DEBUG`.
-- [ ] Remove high-frequency gamepad `LogDebug` calls from polling/tick paths. If diagnostics need these values, expose them through the diagnostics ViewModel instead of normal logs.
-
-**Verification Gates:**
+**Regression Gates To Preserve:**
 
 ```powershell
 dotnet test tests\SalmonEgg.Infrastructure.Tests\SalmonEgg.Infrastructure.Tests.csproj --filter "FullyQualifiedName~StdioTransport" --no-restore
-dotnet test tests\SalmonEgg.Presentation.Core.Tests\SalmonEgg.Presentation.Core.Tests.csproj --filter "FullyQualifiedName~XamlComplianceTests|FullyQualifiedName~NavigationCoreTests" --no-restore
-dotnet build SalmonEgg.sln --no-restore
 git diff --check
 ```
-
-**Completion Report Must Include:**
-
-- Whether any payload-bearing log remains.
-- Whether any temp debug file is still created by default.
-- How gamepad diagnostics are still available without steady-state debug log noise.
 
 ---
 
