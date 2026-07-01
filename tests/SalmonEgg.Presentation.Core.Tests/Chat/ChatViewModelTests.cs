@@ -4019,8 +4019,12 @@ public partial class ChatViewModelTests
 
             viewModel.Dispose();
 
-            var switched = await workspace.TrySwitchToSessionAsync("session-1");
-            Assert.True(switched);
+            var prepared = await workspace.TryPrepareConversationActivationAsync("session-1");
+            var committed = await workspace.CommitActivatedConversationAsync("session-1");
+
+            Assert.True(prepared);
+            Assert.True(committed);
+            Assert.Equal("session-1", workspace.LastActiveConversationId);
         }
         finally
         {
@@ -6203,10 +6207,10 @@ public partial class ChatViewModelTests
                 await _allowSecondRemoteSelection.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
             }
 
-            var switched = await workspace.TrySwitchToSessionAsync(sessionId, cancellationToken).ConfigureAwait(false);
+            var switched = await workspace.TryPrepareConversationActivationAsync(sessionId, cancellationToken).ConfigureAwait(false);
             if (!switched)
             {
-                return new ConversationActivationResult(false, sessionId, "WorkspaceSwitchRejected");
+                return new ConversationActivationResult(false, sessionId, "WorkspaceActivationPrepareRejected");
             }
 
             var state = await chatStore.GetCurrentStateAsync();
@@ -15656,6 +15660,7 @@ public partial class ChatViewModelTests
         Assert.Equal("conv-remote-2", stateAfterSecondSelection.HydratedConversationId);
         syncContext.RunAll();
         Assert.Equal("conv-remote-2", fixture.ViewModel.CurrentSessionId);
+        Assert.Equal("conv-remote-2", fixture.Workspace.LastActiveConversationId);
 
         allowRemote1Replay.TrySetResult(null);
         await syncContext.RunUntilCompletedAsync(firstRemoteSwitchTask);
@@ -15664,6 +15669,7 @@ public partial class ChatViewModelTests
 
         var finalState = await fixture.GetStateAsync();
         Assert.Equal("conv-remote-2", finalState.HydratedConversationId);
+        Assert.Equal("conv-remote-2", fixture.Workspace.LastActiveConversationId);
         var finalTranscript = finalState.ResolveContentSlice("conv-remote-2")?.Transcript
             ?? ImmutableList<ConversationMessageSnapshot>.Empty;
         Assert.DoesNotContain(

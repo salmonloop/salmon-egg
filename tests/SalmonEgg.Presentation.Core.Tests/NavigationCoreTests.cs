@@ -133,6 +133,52 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
+    public void PresentationCoreAndLowerLayers_DoNotReachIntoNativeUiControlState()
+    {
+        var root = FindRepoRoot();
+        var sourceRoots = new[]
+        {
+            @"src\SalmonEgg.Domain",
+            @"src\SalmonEgg.Application",
+            @"src\SalmonEgg.Infrastructure",
+            @"src\SalmonEgg.Presentation.Core"
+        };
+        var forbiddenTokens = new[]
+        {
+            "Microsoft.UI.Xaml",
+            "Windows.UI.Xaml",
+            "FocusManager",
+            ".Focus(",
+            "DispatcherQueue.TryEnqueue",
+            "NavigationViewSelectionChangedEventArgs",
+            "Microsoft.UI.Xaml.Controls.NavigationView"
+        };
+        var violations = new List<string>();
+
+        foreach (var sourceRoot in sourceRoots)
+        {
+            var absoluteRoot = Path.Combine(root, NormalizeRelativePath(sourceRoot));
+            foreach (var file in Directory.EnumerateFiles(absoluteRoot, "*.cs", SearchOption.AllDirectories))
+            {
+                var code = File.ReadAllText(file);
+                foreach (var token in forbiddenTokens)
+                {
+                    if (code.Contains(token, StringComparison.Ordinal))
+                    {
+                        violations.Add($"{Path.GetRelativePath(root, file)} contains '{token}'");
+                    }
+                }
+            }
+        }
+
+        Assert.True(
+            violations.Count == 0,
+            "Non-UI layers must report facts through VM/store/coordinator contracts instead of mutating native control state."
+            + Environment.NewLine
+            + string.Join(Environment.NewLine, violations));
+    }
+
+    [Fact]
     public void MainPage_ActivatesInitialContentFromLoadedLifecycle()
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");

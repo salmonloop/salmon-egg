@@ -49,18 +49,21 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
         try
         {
             var switched = await _conversationWorkspace
-                .TrySwitchToSessionAsync(sessionId, cancellationToken)
+                .TryPrepareConversationActivationAsync(sessionId, cancellationToken)
                 .ConfigureAwait(false);
             if (!switched)
             {
-                return new ConversationActivationResult(false, sessionId, "WorkspaceSwitchRejected");
+                return new ConversationActivationResult(false, sessionId, "WorkspaceActivationPrepareRejected");
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             var currentState = await _chatStore.GetCurrentStateAsync().ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             var snapshot = hydrationMode is ConversationActivationHydrationMode.WorkspaceSnapshot
                 or ConversationActivationHydrationMode.MetadataOnly
                 ? _conversationWorkspace.GetConversationSnapshot(sessionId)
                 : null;
+            cancellationToken.ThrowIfCancellationRequested();
             var shouldHydrateContent = hydrationMode == ConversationActivationHydrationMode.WorkspaceSnapshot
                 && ConversationProjectionReadinessPolicy.ShouldHydrateContent(currentState, sessionId);
             var sessionState = currentState.ResolveSessionStateSlice(sessionId);
@@ -72,7 +75,9 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
                 && ConversationProjectionReadinessPolicy.ShouldHydrateSessionInfo(sessionState, snapshot);
             if (!string.Equals(currentState.HydratedConversationId, sessionId, StringComparison.Ordinal))
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 await _chatStore.Dispatch(new SelectConversationAction(sessionId));
+                cancellationToken.ThrowIfCancellationRequested();
             }
 
             if (shouldHydrateContent
@@ -82,15 +87,18 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
             {
                 if (shouldHydrateContent)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     await _chatStore.Dispatch(new HydrateConversationAction(
                         sessionId,
                         snapshot?.Transcript.ToImmutableList() ?? ImmutableList<ConversationMessageSnapshot>.Empty,
                         snapshot?.Plan.ToImmutableList() ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty,
                         snapshot?.ShowPlanPanel ?? false)).ConfigureAwait(false);
+                    cancellationToken.ThrowIfCancellationRequested();
                 }
 
                 if (shouldHydrateSessionState)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     await _chatStore.Dispatch(new SetConversationSessionStateAction(
                         sessionId,
                         snapshot?.AvailableModes?.ToImmutableList() ?? ImmutableList<ConversationModeOptionSnapshot>.Empty,
@@ -106,9 +114,11 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
                         ConversationProjectionReadinessPolicy.ShouldHydrateUsage(sessionState, snapshot)
                             ? snapshot?.Usage
                             : sessionState?.Usage)).ConfigureAwait(false);
+                    cancellationToken.ThrowIfCancellationRequested();
                 }
                 else if (shouldHydrateAuxiliarySessionState)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     await _chatStore.Dispatch(new MergeConversationSessionStateAction(
                         sessionId,
                         AvailableCommands: ConversationProjectionReadinessPolicy.ShouldHydrateAvailableCommands(sessionState, snapshot)
@@ -120,18 +130,24 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
                         Usage: ConversationProjectionReadinessPolicy.ShouldHydrateUsage(sessionState, snapshot)
                             ? snapshot?.Usage
                             : null)).ConfigureAwait(false);
+                    cancellationToken.ThrowIfCancellationRequested();
                 }
                 else if (shouldHydrateMetadataSessionInfo)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     await _chatStore.Dispatch(new MergeConversationSessionStateAction(
                         sessionId,
                         SessionInfo: snapshot?.SessionInfo)).ConfigureAwait(false);
+                    cancellationToken.ThrowIfCancellationRequested();
                 }
 
+                cancellationToken.ThrowIfCancellationRequested();
                 await _chatStore.Dispatch(new SetIsHydratingAction(false)).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
             }
 
             await SyncSelectedProfileFromConversationBindingAsync(sessionId, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             return new ConversationActivationResult(true, sessionId, null);
         }
         catch (OperationCanceledException)
@@ -176,19 +192,23 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
         }
 
         var currentState = await _chatStore.GetCurrentStateAsync().ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
         var boundProfileId = currentState.ResolveBinding(conversationId)?.ProfileId
             ?? _conversationWorkspace.GetRemoteBinding(conversationId)?.BoundProfileId;
+        cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(boundProfileId))
         {
             return;
         }
 
         var connectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
         if (string.Equals(connectionState.SelectedProfileIntentId, boundProfileId, StringComparison.Ordinal))
         {
             return;
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         await _chatConnectionStore
             .Dispatch(new SetSelectedProfileIntentAction(boundProfileId))
             .ConfigureAwait(false);

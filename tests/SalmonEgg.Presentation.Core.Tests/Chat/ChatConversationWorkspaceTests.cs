@@ -562,7 +562,7 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
-    public async Task TrySwitchToSessionAsync_ProfileMismatch_KeepsRemoteBindingAndLocalTranscript()
+    public async Task TryPrepareConversationActivationAsync_ProfileMismatch_KeepsRemoteBindingAndLocalTranscript()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var store = new CapturingConversationStore();
@@ -593,9 +593,11 @@ public sealed class ChatConversationWorkspaceTests
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
         workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-a");
 
-        var switched = await workspace.TrySwitchToSessionAsync("session-1");
+        var switched = await workspace.TryPrepareConversationActivationAsync("session-1");
+        var committed = await workspace.CommitActivatedConversationAsync("session-1");
 
         Assert.True(switched);
+        Assert.True(committed);
         Assert.Equal("session-1", workspace.LastActiveConversationId);
 
         var snapshot = workspace.GetConversationSnapshot("session-1");
@@ -613,7 +615,43 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
-    public async Task TrySwitchToSessionAsync_UpdatesLastAccessedAt_WithoutChangingLastUpdatedOrder()
+    public async Task TryPrepareConversationActivationAsync_DoesNotCommitLastActiveOrAccessedState()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
+
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript:
+            [
+                CreateTextMessage("m-1", "hello")
+            ],
+            Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
+
+        await workspace.SaveAsync();
+        var before = Assert.IsType<ConversationDocument>(store.LastSavedDocument)
+            .Conversations
+            .Single(c => c.ConversationId == "session-1");
+
+        Assert.True(await workspace.TryPrepareConversationActivationAsync("session-1"));
+        await workspace.SaveAsync();
+
+        Assert.Null(workspace.LastActiveConversationId);
+        var after = Assert.IsType<ConversationDocument>(store.LastSavedDocument)
+            .Conversations
+            .Single(c => c.ConversationId == "session-1");
+        Assert.Equal(before.LastAccessedAt, after.LastAccessedAt);
+    }
+
+    [Fact]
+    public async Task CommitActivatedConversationAsync_UpdatesLastAccessedAt_WithoutChangingLastUpdatedOrder()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var store = new CapturingConversationStore();
@@ -649,7 +687,8 @@ public sealed class ChatConversationWorkspaceTests
             .Single(c => c.ConversationId == "session-old")
             .LastAccessedAt;
 
-        await workspace.TrySwitchToSessionAsync("session-old");
+        Assert.True(await workspace.TryPrepareConversationActivationAsync("session-old"));
+        Assert.True(await workspace.CommitActivatedConversationAsync("session-old"));
         await workspace.SaveAsync();
 
         Assert.Equal(new[] { "session-new", "session-old" }, workspace.GetKnownConversationIds());
@@ -696,7 +735,8 @@ public sealed class ChatConversationWorkspaceTests
         workspace.UpdateRemoteBinding("session-1", "remote-older", "profile-older");
         workspace.UpdateRemoteBinding("session-2", "remote-newer", "profile-newer");
 
-        await workspace.TrySwitchToSessionAsync("session-2");
+        Assert.True(await workspace.TryPrepareConversationActivationAsync("session-2"));
+        Assert.True(await workspace.CommitActivatedConversationAsync("session-2"));
         await workspace.SaveAsync();
 
         var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
@@ -1110,7 +1150,8 @@ public sealed class ChatConversationWorkspaceTests
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
 
-        await workspace.TrySwitchToSessionAsync("session-1");
+        Assert.True(await workspace.TryPrepareConversationActivationAsync("session-1"));
+        Assert.True(await workspace.CommitActivatedConversationAsync("session-1"));
         await workspace.SaveAsync();
 
         var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
@@ -1140,7 +1181,8 @@ public sealed class ChatConversationWorkspaceTests
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
-        await workspace.TrySwitchToSessionAsync("session-1");
+        Assert.True(await workspace.TryPrepareConversationActivationAsync("session-1"));
+        Assert.True(await workspace.CommitActivatedConversationAsync("session-1"));
         await workspace.SaveAsync();
 
         var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);

@@ -1233,7 +1233,7 @@ public partial class ChatViewModel
             .ConfigureAwait(false);
         if (fallback.Succeeded)
         {
-            return true;
+            return await CommitActivatedConversationStateAsync(conversationId).ConfigureAwait(false);
         }
 
         Logger.LogWarning(

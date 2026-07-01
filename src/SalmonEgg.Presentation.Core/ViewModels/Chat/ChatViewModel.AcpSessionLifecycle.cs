@@ -930,6 +930,24 @@ public partial class ChatViewModel
         return !_conversationActivationOrchestrator.IsLatestActivationVersion(activationVersion.Value);
     }
 
+    private async Task<bool> CommitActivatedConversationStateAsync(
+        string sessionId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var committed = await _conversationWorkspace
+            .CommitActivatedConversationAsync(sessionId, cancellationToken)
+            .ConfigureAwait(false);
+        if (!committed)
+        {
+            Logger.LogWarning(
+                "Failed to commit activated conversation state. conversationId={ConversationId}",
+                sessionId);
+        }
+
+        return committed;
+    }
+
     private async Task ResetRemoteHydrationUiStateAsync(long activationVersion)
     {
         if (!_conversationActivationOrchestrator.IsLatestActivationVersion(activationVersion))
@@ -1288,6 +1306,22 @@ public partial class ChatViewModel
                     sessionId,
                     ConversationRuntimePhase.Faulted,
                     reason: activationResult.FailureReason,
+                    context.CancellationToken)
+                .ConfigureAwait(false);
+            return ConversationActivationOrchestratorResult.Failed();
+        }
+
+        if (IsActivationContextStale(context.ActivationVersion, context.CancellationToken))
+        {
+            return ConversationActivationOrchestratorResult.Superseded();
+        }
+
+        if (!await CommitActivatedConversationStateAsync(sessionId, context.CancellationToken).ConfigureAwait(false))
+        {
+            await SetConversationRuntimeStateAsync(
+                    sessionId,
+                    ConversationRuntimePhase.Faulted,
+                    reason: "WorkspaceActivationCommitRejected",
                     context.CancellationToken)
                 .ConfigureAwait(false);
             return ConversationActivationOrchestratorResult.Failed();

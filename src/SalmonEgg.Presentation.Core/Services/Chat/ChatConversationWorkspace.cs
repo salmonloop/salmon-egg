@@ -186,7 +186,19 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
     public void DeleteConversation(string conversationId)
         => RemoveConversation(conversationId);
 
-    public async Task<bool> TrySwitchToSessionAsync(string sessionId, CancellationToken cancellationToken = default)
+    public Task<bool> TryPrepareConversationActivationAsync(string sessionId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return Task.FromResult(false);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(true);
+    }
+
+    public async Task<bool> CommitActivatedConversationAsync(string sessionId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         if (string.IsNullOrWhiteSpace(sessionId))
@@ -219,7 +231,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Switching workspace conversation failed (ConversationId={ConversationId})", sessionId);
+            _logger.LogError(ex, "Committing workspace conversation activation failed (ConversationId={ConversationId})", sessionId);
             return false;
         }
         finally

@@ -89,7 +89,7 @@ public sealed class ChatLaunchWorkflow : IChatLaunchWorkflow
         }
 
         // Navigation owns the session switch for the Start path.
-        // Calling Chat.TrySwitchToSessionAsync here would reintroduce the current double-owner bug.
+        // Calling chat activation directly here would reintroduce the current double-owner bug.
         var activated = await _navigationCoordinator
             .ActivateSessionAsync(sessionId, projectId)
             .ConfigureAwait(true);

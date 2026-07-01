@@ -64,6 +64,7 @@ public sealed class ConversationActivationCoordinatorTests
         Assert.NotNull(currentState.Transcript);
         Assert.Single(currentState.Transcript!);
         Assert.Equal("hello", currentState.Transcript[0].TextContent);
+        Assert.Null(workspace.LastActiveConversationId);
     }
 
     [Fact]
@@ -662,6 +663,56 @@ public sealed class ConversationActivationCoordinatorTests
     }
 
     [Fact]
+    public async Task ActivateSessionAsync_WhenCanceledAfterWorkspaceSwitch_DoesNotCommitChatProfileOrWorkspaceState()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        using var cancellation = new CancellationTokenSource();
+        var preferences = CreatePreferences(syncContext);
+        var workspaceStore = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
+        using var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript:
+            [
+                CreateTextMessage("m-1", "hello")
+            ],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+        workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-a");
+
+        var state = State.Value(new object(), () => ChatState.Empty with
+        {
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty.Add(
+                "session-1",
+                new ConversationBindingSlice("session-1", "remote-1", "profile-a"))
+        });
+        var chatStore = new CancelOnFirstGetChatStore(CreateChatStore(state), cancellation.Cancel);
+        var connectionStore = CreateConnectionStore("profile-b");
+        var bindingCommands = new BindingCoordinator(workspace, chatStore);
+        var coordinator = new ConversationActivationCoordinator(
+            workspace,
+            bindingCommands,
+            chatStore,
+            connectionStore,
+            Mock.Of<ILogger<ConversationActivationCoordinator>>());
+
+        await Assert.ThrowsAsync<OperationCanceledException>(
+            () => coordinator.ActivateSessionAsync("session-1", cancellation.Token));
+
+        var currentState = await chatStore.GetCurrentStateAsync();
+        Assert.Null(currentState.HydratedConversationId);
+        Assert.Null(currentState.Transcript);
+        Assert.Null(workspace.LastActiveConversationId);
+
+        var currentConnectionState = await connectionStore.GetCurrentStateAsync();
+        Assert.Equal("profile-b", currentConnectionState.SelectedProfileIntentId);
+    }
+
+    [Fact]
     public async Task ActivateSessionAsync_ProfileMismatch_PreservesRemoteBinding_AndSwitchesSelectedProfileToConversationBinding()
     {
         var syncContext = new ImmediateSynchronizationContext();
@@ -1150,6 +1201,35 @@ public sealed class ConversationActivationCoordinatorTests
     private sealed class ImmediateSynchronizationContext : SynchronizationContext
     {
         public override void Post(SendOrPostCallback d, object? state) => d(state);
+    }
+
+    private sealed class CancelOnFirstGetChatStore : IChatStore
+    {
+        private readonly IChatStore _inner;
+        private readonly Action _cancel;
+        private int _remainingCancellations = 1;
+
+        public CancelOnFirstGetChatStore(IChatStore inner, Action cancel)
+        {
+            _inner = inner;
+            _cancel = cancel;
+        }
+
+        public IState<ChatState> State => _inner.State;
+
+        public ValueTask Dispatch(ChatAction action)
+            => _inner.Dispatch(action);
+
+        public async ValueTask<ChatState> GetCurrentStateAsync()
+        {
+            var state = await _inner.GetCurrentStateAsync().ConfigureAwait(false);
+            if (Interlocked.Exchange(ref _remainingCancellations, 0) == 1)
+            {
+                _cancel();
+            }
+
+            return state;
+        }
     }
 
     private sealed class CapturingConversationStore : IConversationStore

@@ -1916,6 +1916,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
                 return;
             }
 
+            if (!await CommitActivatedConversationStateAsync(conversationId).ConfigureAwait(false))
+            {
+                return;
+            }
+
             await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
 
             // Re-evaluate if we should keep loading after projection applied.
