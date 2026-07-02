@@ -730,14 +730,19 @@ public partial class ChatViewModel
                     reason: "LocalConversationReady",
                     cancellationToken)
                 .ConfigureAwait(false);
-            await ClearConversationUnreadAttentionAsync(sessionId).ConfigureAwait(false);
-            await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                    sessionId,
-                    activationVersion,
-                    SessionActivationPhase.Hydrated,
-                    reason: "LocalConversationReady")
-                .ConfigureAwait(false);
-            return true;
+            var localActivationStillCurrent = _conversationActivationOrchestrator.IsLatestActivationVersion(activationVersion);
+            if (localActivationStillCurrent)
+            {
+                await ClearConversationUnreadAttentionAsync(sessionId).ConfigureAwait(false);
+                await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
+                        sessionId,
+                        activationVersion,
+                        SessionActivationPhase.Hydrated,
+                        reason: "LocalConversationReady")
+                    .ConfigureAwait(false);
+            }
+
+            return localActivationStillCurrent;
         }
 
         var currentConnection = await ResolveWarmReuseConnectionIdentityAsync(binding, cancellationToken).ConfigureAwait(false);
@@ -754,14 +759,19 @@ public partial class ChatViewModel
             Logger.LogInformation(
                 "Skipping remote hydration because the selected conversation is already warm. ConversationId={ConversationId}",
                 sessionId);
-            await ClearConversationUnreadAttentionAsync(sessionId).ConfigureAwait(false);
-            await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                    sessionId,
-                    activationVersion,
-                    SessionActivationPhase.Hydrated,
-                    reason: ConversationRuntimeReasons.WarmReuse)
-                .ConfigureAwait(false);
-            return true;
+            var warmActivationStillCurrent = _conversationActivationOrchestrator.IsLatestActivationVersion(activationVersion);
+            if (warmActivationStillCurrent)
+            {
+                await ClearConversationUnreadAttentionAsync(sessionId).ConfigureAwait(false);
+                await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
+                        sessionId,
+                        activationVersion,
+                        SessionActivationPhase.Hydrated,
+                        reason: ConversationRuntimeReasons.WarmReuse)
+                    .ConfigureAwait(false);
+            }
+
+            return warmActivationStillCurrent;
         }
 
         {
@@ -782,10 +792,6 @@ public partial class ChatViewModel
                 activationVersion,
                 cancellationToken)
             .ConfigureAwait(false);
-        if (IsActivationContextStale(activationVersion, cancellationToken))
-        {
-            return false;
-        }
 
         state = await _chatStore.GetCurrentStateAsync();
         binding = await ResolveConversationBindingAsync(sessionId, cancellationToken).ConfigureAwait(false);
@@ -815,77 +821,78 @@ public partial class ChatViewModel
                     cancellationToken,
                     connectionInstanceId: currentConnection.ConnectionInstanceId)
                 .ConfigureAwait(false);
-            await ClearConversationUnreadAttentionAsync(sessionId).ConfigureAwait(false);
-            return true;
+            var reconnectActivationStillCurrent = _conversationActivationOrchestrator.IsLatestActivationVersion(activationVersion);
+            if (reconnectActivationStillCurrent)
+            {
+                await ClearConversationUnreadAttentionAsync(sessionId).ConfigureAwait(false);
+            }
+
+            return reconnectActivationStillCurrent;
         }
 
         var remotePhaseStopwatch = Stopwatch.StartNew();
-        await _remoteConversationActivationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var remoteConnectionReady = await EnsureActiveConversationRemoteConnectionReadyAsync(
+                sessionId,
+                activationVersion,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!remoteConnectionReady)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var remoteConnectionReady = await EnsureActiveConversationRemoteConnectionReadyAsync(
-                    sessionId,
-                    activationVersion,
-                    cancellationToken)
-                .ConfigureAwait(false);
-            if (!remoteConnectionReady)
-            {
-                Logger.LogInformation(
-                    "Conversation remote activation failed before hydration. ConversationId={ConversationId} ElapsedMs={ElapsedMs}",
-                    sessionId,
-                    remotePhaseStopwatch.ElapsedMilliseconds);
-                await SetConversationRuntimeStateAsync(
-                        sessionId,
-                        ConversationRuntimePhase.Faulted,
-                        reason: "RemoteConnectionNotReady",
-                        cancellationToken)
-                    .ConfigureAwait(false);
-                return false;
-            }
-
+            Logger.LogInformation(
+                "Conversation remote activation failed before hydration. ConversationId={ConversationId} ElapsedMs={ElapsedMs}",
+                sessionId,
+                remotePhaseStopwatch.ElapsedMilliseconds);
             await SetConversationRuntimeStateAsync(
                     sessionId,
-                    ConversationRuntimePhase.RemoteConnectionReady,
-                    reason: "RemoteConnectionReady",
+                    ConversationRuntimePhase.Faulted,
+                    reason: "RemoteConnectionNotReady",
                     cancellationToken)
                 .ConfigureAwait(false);
+            return false;
+        }
+
+        await SetConversationRuntimeStateAsync(
+                sessionId,
+                ConversationRuntimePhase.RemoteConnectionReady,
+                reason: "RemoteConnectionReady",
+                cancellationToken)
+            .ConfigureAwait(false);
+        await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
+                sessionId,
+                activationVersion,
+                SessionActivationPhase.RemoteConnectionReady,
+                reason: "RemoteConnectionReady")
+            .ConfigureAwait(false);
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var hydrated = await EnsureActiveConversationRemoteHydratedAsync(
+                sessionId,
+                activationVersion,
+                cancellationToken,
+                allowWarmReuseShortCircuit)
+            .ConfigureAwait(false);
+        var activationStillCurrent = _conversationActivationOrchestrator.IsLatestActivationVersion(activationVersion);
+        if (hydrated && activationStillCurrent)
+        {
+            await ClearConversationUnreadAttentionAsync(sessionId).ConfigureAwait(false);
             await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
                     sessionId,
                     activationVersion,
-                    SessionActivationPhase.RemoteConnectionReady,
-                    reason: "RemoteConnectionReady")
+                    SessionActivationPhase.Hydrated,
+                    reason: "Hydrated")
                 .ConfigureAwait(false);
-
-            cancellationToken.ThrowIfCancellationRequested();
-            var hydrated = await EnsureActiveConversationRemoteHydratedAsync(
-                    sessionId,
-                    activationVersion,
-                    cancellationToken,
-                    allowWarmReuseShortCircuit)
-                .ConfigureAwait(false);
-            if (hydrated)
-            {
-                await ClearConversationUnreadAttentionAsync(sessionId).ConfigureAwait(false);
-                await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                        sessionId,
-                        activationVersion,
-                        SessionActivationPhase.Hydrated,
-                        reason: "Hydrated")
-                    .ConfigureAwait(false);
-            }
-            Logger.LogInformation(
-                "Conversation remote activation completed. ConversationId={ConversationId} Succeeded={Succeeded} ElapsedMs={ElapsedMs}",
-                sessionId,
-                hydrated,
-                remotePhaseStopwatch.ElapsedMilliseconds);
-            return hydrated;
         }
-        finally
-        {
-            _remoteConversationActivationGate.Release();
-        }
+        var succeeded = hydrated && activationStillCurrent;
+        Logger.LogInformation(
+            "Conversation remote activation completed. ConversationId={ConversationId} Succeeded={Succeeded} Hydrated={Hydrated} ActivationStillCurrent={ActivationStillCurrent} ElapsedMs={ElapsedMs}",
+            sessionId,
+            succeeded,
+            hydrated,
+            activationStillCurrent,
+            remotePhaseStopwatch.ElapsedMilliseconds);
+        return succeeded;
     }
 
     private async Task HandleConversationActivationExceptionAsync(string sessionId, long? activationVersion, Exception ex)
@@ -1391,11 +1398,13 @@ public partial class ChatViewModel
         }
 
         context.ReleaseForegroundGate();
+        var backgroundToken = _disposeCts.Token;
         if (!request.AwaitRemoteHydration)
         {
             _ = ContinueConversationActivationAsync(
                 request,
                 context,
+                backgroundToken,
                 warmRuntimeSnapshot,
                 allowWarmReuseShortCircuit: !hasCompetingNonWarmActivation);
             return ConversationActivationOrchestratorResult.BackgroundOwnedSuccess();
@@ -1404,7 +1413,7 @@ public partial class ChatViewModel
         var remoteActivationSucceeded = await CompleteConversationRemoteActivationAsync(
                 sessionId,
                 context.ActivationVersion,
-                context.CancellationToken,
+                backgroundToken,
                 warmRuntimeSnapshot,
                 allowWarmReuseShortCircuit: !hasCompetingNonWarmActivation)
             .ConfigureAwait(false);
@@ -1416,6 +1425,7 @@ public partial class ChatViewModel
     private async Task ContinueConversationActivationAsync(
         ConversationActivationOrchestratorRequest request,
         ConversationActivationContext context,
+        CancellationToken backgroundToken,
         ConversationRuntimeSlice? warmRuntimeSnapshot,
         bool allowWarmReuseShortCircuit = true)
     {
@@ -1426,7 +1436,7 @@ public partial class ChatViewModel
             var remoteActivationSucceeded = await CompleteConversationRemoteActivationAsync(
                     request.ConversationId,
                     context.ActivationVersion,
-                    context.CancellationToken,
+                    backgroundToken,
                     warmRuntimeSnapshot,
                     allowWarmReuseShortCircuit)
                 .ConfigureAwait(false);
@@ -1434,7 +1444,7 @@ public partial class ChatViewModel
                 ? ConversationActivationOrchestratorResult.Success()
                 : ConversationActivationOrchestratorResult.Failed();
         }
-        catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (backgroundToken.IsCancellationRequested)
         {
             result = ConversationActivationOrchestratorResult.Superseded();
         }

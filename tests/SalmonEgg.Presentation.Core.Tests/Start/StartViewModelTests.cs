@@ -2323,6 +2323,8 @@ public sealed class StartViewModelTests
             var cleanupTask = startViewModel.ComposerUnloadCleanupTask;
             Assert.False(cleanupTask.IsCompleted);
 
+            await WaitForConditionAsync(() => uiDispatcher.PendingCount > 0 || cleanupTask.IsCompleted);
+            Assert.False(cleanupTask.IsCompleted);
             uiDispatcher.RunAll();
             await cleanupTask;
             Assert.Null((await chat.GetConnectionStateAsync()).NewSessionDraft);
@@ -2786,7 +2788,14 @@ public sealed class StartViewModelTests
                 acpConnectionCommands: acpConnectionCommands ?? Mock.Of<IAcpConnectionCommands>(),
                 connectionSessionRegistry: connectionSessionRegistry);
             conversationCatalogFacade.SetPanelCleanup(viewModel);
-            return new ChatViewModelHarness(viewModel, state, connectionState, connectionStore, conversationCatalogPresenter, workspace);
+            return new ChatViewModelHarness(
+                viewModel,
+                state,
+                connectionState,
+                connectionStore,
+                conversationCatalogPresenter,
+                workspace,
+                effectiveUiDispatcher);
         }
         finally
         {
@@ -3119,6 +3128,7 @@ public sealed class StartViewModelTests
         private readonly IState<ChatState> _state;
         private readonly IState<ChatConnectionState> _connectionState;
         private readonly IChatConnectionStore _connectionStore;
+        private readonly IUiDispatcher _uiDispatcher;
         public IChatConnectionStore ConnectionStore => _connectionStore;
         public ConversationCatalogPresenter Presenter { get; }
         public ChatViewModel ViewModel { get; }
@@ -3130,18 +3140,27 @@ public sealed class StartViewModelTests
             IState<ChatConnectionState> connectionState,
             IChatConnectionStore connectionStore,
             ConversationCatalogPresenter presenter,
-            ChatConversationWorkspace workspace)
+            ChatConversationWorkspace workspace,
+            IUiDispatcher uiDispatcher)
         {
             ViewModel = viewModel;
             _state = state;
             _connectionState = connectionState;
             _connectionStore = connectionStore;
+            _uiDispatcher = uiDispatcher;
             Presenter = presenter;
             Workspace = workspace;
         }
 
-        public ValueTask DispatchConnectionAsync(ChatConnectionAction action)
-            => _connectionStore.Dispatch(action);
+        public async ValueTask DispatchConnectionAsync(ChatConnectionAction action)
+        {
+            await _connectionStore.Dispatch(action);
+            var projectionTask = ViewModel.ApplyLatestNewSessionDraftProjectionAsync();
+            if (_uiDispatcher.HasThreadAccess)
+            {
+                await projectionTask;
+            }
+        }
 
         public ValueTask<ChatConnectionState> GetConnectionStateAsync()
             => _connectionStore.GetCurrentStateAsync();

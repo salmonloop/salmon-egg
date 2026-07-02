@@ -378,6 +378,7 @@ public partial class ChatViewModel
             var canObserveReplayProjection = recoveryMode == AcpSessionRecoveryMode.Load && adapter != null;
             var hasCachedTranscript = transcriptBaselineCount > 0;
             var shouldAwaitReplayProjection =
+                ownsRemoteHydrationUi &&
                 canObserveReplayProjection &&
                 _hydrationCompletionMode == AcpHydrationCompletionMode.StrictReplay &&
                 !hasCachedTranscript;
@@ -420,16 +421,10 @@ public partial class ChatViewModel
                 await _chatStore.Dispatch(new SetIsHydratingAction(true)).ConfigureAwait(false);
             }
 
-            if (IsActivationContextStale(activationVersion, cancellationToken))
+            if (ownsRemoteHydrationUi)
             {
-                return false;
-            }
-
-            cancellationToken.ThrowIfCancellationRequested();
-            await _chatStore.Dispatch(new SelectConversationAction(conversationId)).ConfigureAwait(false);
-            if (IsActivationContextStale(activationVersion, cancellationToken))
-            {
-                return false;
+                cancellationToken.ThrowIfCancellationRequested();
+                await _chatStore.Dispatch(new SelectConversationAction(conversationId)).ConfigureAwait(false);
             }
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -464,10 +459,6 @@ public partial class ChatViewModel
                 ownedRecoveryRequest = ownsRecoveryLease ? recoveryStart.RecoveryRequest : null;
                 ownedRecoveryLeaseKey = ownsRecoveryLease ? recoveryStart.RecoveryLeaseKey : null;
                 cancellationToken.ThrowIfCancellationRequested();
-                if (IsActivationContextStale(activationVersion, cancellationToken))
-                {
-                    return false;
-                }
 
                 if (ownsRecoveryLease && recoveryStart.ConflictingRecoveryCompletion is not null)
                 {
@@ -477,10 +468,6 @@ public partial class ChatViewModel
                             binding.RemoteSessionId!)
                         .ConfigureAwait(false);
                     cancellationToken.ThrowIfCancellationRequested();
-                    if (IsActivationContextStale(activationVersion, cancellationToken))
-                    {
-                        return false;
-                    }
 
                     if (adapter != null && hydrationAttemptId.HasValue)
                     {
@@ -513,7 +500,7 @@ public partial class ChatViewModel
                     hydrationAttemptId = recoveryRequest.HydrationAttemptId;
                 }
 
-                if (ownsRecoveryLease)
+                if (ownsRecoveryLease && ownsRemoteHydrationUi)
                 {
                     await ResetConversationProjectionForResyncAsync(conversationId, cancellationToken).ConfigureAwait(false);
                 }
@@ -567,10 +554,6 @@ public partial class ChatViewModel
                 }
 
                 cancellationToken.ThrowIfCancellationRequested();
-                if (IsActivationContextStale(activationVersion, cancellationToken))
-                {
-                    return false;
-                }
 
                 await SetHydrationOverlayPhaseAsync(
                         conversationId,
@@ -595,7 +578,10 @@ public partial class ChatViewModel
                 return false;
             }
 
-            if (shouldAwaitReplayProjection)
+            var shouldAwaitVisibleReplayProjection =
+                shouldAwaitReplayProjection
+                && ShouldOwnRemoteHydrationUi(conversationId, activationVersion);
+            if (shouldAwaitVisibleReplayProjection)
             {
                 await AwaitRemoteReplayProjectionAsync(
                         conversationId,
@@ -616,7 +602,7 @@ public partial class ChatViewModel
                     .ConfigureAwait(false);
             }
 
-            if (shouldAwaitReplayProjection)
+            if (shouldAwaitVisibleReplayProjection)
             {
                 await _hydrationCoordinator.AwaitKnownTranscriptGrowthRequirementAsync(
                         _hydrationContext,
@@ -1364,17 +1350,8 @@ public partial class ChatViewModel
             return false;
         }
 
-        if (IsActivationContextStale(activationVersion, cancellationToken))
-        {
-            return false;
-        }
-
         var ownsConnectionLifecycleOverlay = false;
         var binding = await ResolveConversationBindingAsync(conversationId, cancellationToken).ConfigureAwait(false);
-        if (IsActivationContextStale(activationVersion, cancellationToken))
-        {
-            return false;
-        }
 
         try
         {
@@ -1408,10 +1385,6 @@ public partial class ChatViewModel
                     || string.Equals(binding.ProfileId, pendingProfileId, StringComparison.Ordinal)))
             {
                 var becameReady = await WaitForRemoteConnectionReadyAsync(binding.ProfileId, cancellationToken).ConfigureAwait(false);
-                if (IsActivationContextStale(activationVersion, cancellationToken))
-                {
-                    return false;
-                }
 
                 if (becameReady)
                 {
@@ -1481,16 +1454,8 @@ public partial class ChatViewModel
                 preserveConversation: true,
                 activationVersion);
             await ConnectToAcpProfileCoreAsync(profile, connectionContext, cancellationToken).ConfigureAwait(false);
-            if (IsActivationContextStale(activationVersion, cancellationToken))
-            {
-                return false;
-            }
 
             var readyAfterConnect = await WaitForRemoteConnectionReadyAsync(binding.ProfileId, cancellationToken).ConfigureAwait(false);
-            if (IsActivationContextStale(activationVersion, cancellationToken))
-            {
-                return false;
-            }
 
             if (!readyAfterConnect)
             {
@@ -2351,7 +2316,8 @@ public partial class ChatViewModel
             return false;
         }
 
-        if (!IsCurrentRemoteSessionRecoveryProjectionOwner(request, conversationId))
+        if (!request.TryGetProjectionOwner(out var ownerConversationId, out _)
+            || !string.Equals(ownerConversationId, conversationId, StringComparison.Ordinal))
         {
             Logger.LogInformation(
                 "Discarding remote session recovery projection because the recovery request is no longer the foreground projection owner. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
@@ -2401,6 +2367,24 @@ public partial class ChatViewModel
                 ownsHydrationScope: true,
                 "RemoteSessionRecoveryConnectionChanged");
             return false;
+        }
+
+        if (!IsCurrentRemoteSessionRecoveryProjectionOwner(request, conversationId))
+        {
+            Logger.LogInformation(
+                "Completing superseded remote session recovery in background. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
+                conversationId,
+                expectedBinding.RemoteSessionId);
+            var backgroundBufferingCompleted = CompleteRemoteSessionRecoveryBufferingScope(
+                adapter,
+                hydrationAttemptId,
+                "RemoteSessionRecoveryBackgroundCompleted");
+            if (backgroundBufferingCompleted)
+            {
+                await AwaitBufferedSessionReplayProjectionAsync(cancellationToken, hydrationAttemptId).ConfigureAwait(false);
+            }
+
+            return backgroundBufferingCompleted;
         }
 
         var bufferingCompleted = CompleteRemoteSessionRecoveryBufferingScope(

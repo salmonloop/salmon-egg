@@ -1234,10 +1234,10 @@ public partial class ChatViewModelTests
 
         var localSwitch = await fixture.ViewModel.SwitchConversationAsync("conv-local");
         Assert.True(localSwitch);
-        Assert.False(await firstRemoteSwitch);
 
         await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(replacementService.Object));
         await WaitForConditionAsync(() => Task.FromResult(oldLoadCanceled.Task.IsCompleted), timeoutMilliseconds: 2000);
+        Assert.False(await firstRemoteSwitch);
 
         var secondRemoteSwitch = fixture.ViewModel.SwitchConversationAsync("conv-remote");
         await newLoadStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));

@@ -444,6 +444,10 @@ public partial class ChatViewModel
         }
     }
 
+    internal async Task ApplyLatestNewSessionDraftProjectionAsync()
+        => await ApplyNewSessionDraftProjectionAsync(
+            await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false)).ConfigureAwait(false);
+
     private void QueueNewSessionDraftModeSelection(SessionModeViewModel? mode)
     {
         try
@@ -673,6 +677,30 @@ public partial class ChatViewModel
             OnPropertyChanged(nameof(NewSessionDraftModelOptions));
             OnPropertyChanged(nameof(HasNewSessionDraftModelSelector));
         }).ConfigureAwait(false);
+    }
+
+    private void ClearNewSessionDraftProjection()
+    {
+        IsNewSessionDraftLoading = false;
+        IsNewSessionDraftReady = false;
+        NewSessionDraftErrorMessage = string.Empty;
+
+        if (_newSessionDraftModeOptions.Count > 0)
+        {
+            _newSessionDraftModeOptions.Clear();
+        }
+
+        SetSelectedNewSessionDraftModeWithoutDispatch(null);
+        if (_newSessionDraftModelOptions.Count > 0)
+        {
+            _newSessionDraftModelOptions.Clear();
+        }
+
+        _newSessionDraftModelConfigId = null;
+        SetSelectedNewSessionDraftModelWithoutDispatch(null);
+        OnPropertyChanged(nameof(NewSessionDraftModeOptions));
+        OnPropertyChanged(nameof(NewSessionDraftModelOptions));
+        OnPropertyChanged(nameof(HasNewSessionDraftModelSelector));
     }
 
     private async Task ClearNewSessionDraftStateAsync(bool clearDesiredRequest = true)

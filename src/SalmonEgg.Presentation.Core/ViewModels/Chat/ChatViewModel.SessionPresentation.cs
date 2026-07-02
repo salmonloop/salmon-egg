@@ -455,9 +455,10 @@ public partial class ChatViewModel
             {
                 _selectedProfileIntentIdFromStore = nextProfileIntentId;
                 OnPropertyChanged(nameof(SelectedProfileIntentId));
+                ClearNewSessionDraftProjection();
             }
 
-            _ = _chatConnectionStore.Dispatch(new SetSelectedProfileIntentAction(value?.Id));
+            _ = DispatchSelectedProfileIntentAsync(value?.Id);
         }
 
         if (_suppressAcpProfileConnect || value == null)
@@ -466,6 +467,19 @@ public partial class ChatViewModel
         }
 
         QueueSelectedProfileConnection(value);
+    }
+
+    private async Task DispatchSelectedProfileIntentAsync(string? profileId)
+    {
+        try
+        {
+            await _chatConnectionStore.Dispatch(new SetSelectedProfileIntentAction(profileId)).ConfigureAwait(false);
+            await ApplyLatestNewSessionDraftProjectionAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to update selected ACP profile intent. ProfileId={ProfileId}", profileId);
+        }
     }
 
     partial void OnSelectedModeChanged(SessionModeViewModel? value)
