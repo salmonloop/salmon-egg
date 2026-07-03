@@ -715,8 +715,37 @@ public sealed partial class StartViewModel : ObservableObject
         => Chat.SelectedAcpProfile?.Transport is TransportType.WebSocket or TransportType.HttpSse;
 
     private StartProjectOptionViewModel? ResolveSelectedProjectOption()
-        => StartProjectOptions.FirstOrDefault(option =>
-            string.Equals(option.ProjectId, SelectedStartProjectId, StringComparison.Ordinal));
+    {
+        var selectedProjectId = SelectedStartProjectId;
+        var option = StartProjectOptions.FirstOrDefault(candidate =>
+            string.Equals(candidate.ProjectId, selectedProjectId, StringComparison.Ordinal));
+        if (option is not null)
+        {
+            return option;
+        }
+
+        var remoteDirectoryId = ProjectSelectionCwdResolver.TryParseRemoteDirectoryId(selectedProjectId);
+        if (string.IsNullOrWhiteSpace(remoteDirectoryId))
+        {
+            return null;
+        }
+
+        var remoteDirectory = _preferences.AgentRemoteDirectories.FirstOrDefault(directory =>
+            string.Equals(directory.DirectoryId, remoteDirectoryId, StringComparison.Ordinal)
+            && !string.IsNullOrWhiteSpace(directory.RemotePath));
+        if (remoteDirectory is null)
+        {
+            return null;
+        }
+
+        return new StartProjectOptionViewModel(
+            ProjectSelectionCwdResolver.BuildRemoteDirectoryProjectId(remoteDirectory.DirectoryId),
+            string.IsNullOrWhiteSpace(remoteDirectory.DisplayName)
+                ? remoteDirectory.RemotePath
+                : remoteDirectory.DisplayName,
+            isSelectable: true,
+            remoteCwd: remoteDirectory.RemotePath);
+    }
 
     private bool IsRemoteDirectorySelectionRequiredForStart()
     {
@@ -810,10 +839,20 @@ public sealed partial class StartViewModel : ObservableObject
             && IsSelectableProject(project));
 
     private bool HasSelectableOption(string? projectId)
-        => !string.IsNullOrWhiteSpace(projectId)
+        => (!string.IsNullOrWhiteSpace(projectId)
             && _startProjectOptions.Any(option =>
                 string.Equals(option.ProjectId, projectId, StringComparison.Ordinal)
-                && option.IsSelectable);
+                && option.IsSelectable))
+            || HasConfiguredRemoteDirectoryOption(projectId);
+
+    private bool HasConfiguredRemoteDirectoryOption(string? projectId)
+    {
+        var remoteDirectoryId = ProjectSelectionCwdResolver.TryParseRemoteDirectoryId(projectId);
+        return !string.IsNullOrWhiteSpace(remoteDirectoryId)
+            && _preferences.AgentRemoteDirectories.Any(directory =>
+                string.Equals(directory.DirectoryId, remoteDirectoryId, StringComparison.Ordinal)
+                && !string.IsNullOrWhiteSpace(directory.RemotePath));
+    }
 
     private static bool IsSelectableProject(ProjectDefinition? project)
         => project is not null

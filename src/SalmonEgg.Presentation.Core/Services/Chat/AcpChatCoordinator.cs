@@ -35,6 +35,8 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
     private readonly int _sessionUpdateBufferLimit;
     private AcpChatServiceAdapter? _activeChatServiceAdapter;
     private readonly object _applyScopeLock = new();
+    private readonly object _poolConnectionGateSync = new();
+    private readonly Dictionary<PoolConnectionRequestKey, PoolConnectionRequestGate> _poolConnectionGates = new();
     private CancellationTokenSource? _activeApplyScopeCts;
 
     public AcpChatCoordinator(
@@ -529,8 +531,17 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             return new AcpTransportApplyResult(cachedSession.Service, cachedSession.InitializeResponse);
         }
 
-        var service = _chatServiceFactory.CreateChatService(profile);
+        var requestKey = new PoolConnectionRequestKey(profile.Id, reuseKey);
+        await using var poolGate = await AcquirePoolConnectionGateAsync(requestKey, cancellationToken)
+            .ConfigureAwait(false);
 
+        if (_connectionPoolManager.TryGetReusableSession(profile.Id, reuseKey, out cachedSession))
+        {
+            _sessionRegistry.Touch(profile.Id);
+            return new AcpTransportApplyResult(cachedSession.Service, cachedSession.InitializeResponse);
+        }
+
+        var service = _chatServiceFactory.CreateChatService(profile);
         var wrapped = WrapChatService(service, sink: null, cancellationToken);
         try
         {
@@ -568,6 +579,55 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         {
             _connectionPoolManager.RemoveByService(session.Service, out _);
             await DisposeServiceAsync(session.Service).ConfigureAwait(false);
+        }
+    }
+
+    private async ValueTask<PoolConnectionGateLease> AcquirePoolConnectionGateAsync(
+        PoolConnectionRequestKey requestKey,
+        CancellationToken cancellationToken)
+    {
+        PoolConnectionRequestGate gate;
+        lock (_poolConnectionGateSync)
+        {
+            if (!_poolConnectionGates.TryGetValue(requestKey, out gate!))
+            {
+                gate = new PoolConnectionRequestGate();
+                _poolConnectionGates[requestKey] = gate;
+            }
+
+            gate.RefCount++;
+        }
+
+        try
+        {
+            await gate.Semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+            return new PoolConnectionGateLease(this, requestKey, gate);
+        }
+        catch
+        {
+            ReleasePoolConnectionGateReference(requestKey, gate, hasSemaphoreLease: false);
+            throw;
+        }
+    }
+
+    private void ReleasePoolConnectionGateReference(
+        PoolConnectionRequestKey requestKey,
+        PoolConnectionRequestGate gate,
+        bool hasSemaphoreLease)
+    {
+        if (hasSemaphoreLease)
+        {
+            gate.Semaphore.Release();
+        }
+
+        lock (_poolConnectionGateSync)
+        {
+            gate.RefCount--;
+            if (gate.RefCount == 0)
+            {
+                _poolConnectionGates.Remove(requestKey);
+                gate.Semaphore.Dispose();
+            }
         }
     }
 
@@ -945,6 +1005,43 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         string? ErrorMessage)
     {
         public string PhaseName => IsConnected ? "Connected" : "Disconnected";
+    }
+
+    private readonly record struct PoolConnectionRequestKey(
+        string ProfileId,
+        AcpConnectionReuseKey ReuseKey);
+
+    private sealed class PoolConnectionRequestGate
+    {
+        public SemaphoreSlim Semaphore { get; } = new(1, 1);
+
+        public int RefCount { get; set; }
+    }
+
+    private readonly struct PoolConnectionGateLease : IAsyncDisposable
+    {
+        private readonly AcpChatCoordinator _owner;
+        private readonly PoolConnectionRequestKey _requestKey;
+        private readonly PoolConnectionRequestGate _gate;
+
+        public PoolConnectionGateLease(
+            AcpChatCoordinator owner,
+            PoolConnectionRequestKey requestKey,
+            PoolConnectionRequestGate gate)
+        {
+            _owner = owner;
+            _requestKey = requestKey;
+            _gate = gate;
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            _owner.ReleasePoolConnectionGateReference(
+                _requestKey,
+                _gate,
+                hasSemaphoreLease: true);
+            return ValueTask.CompletedTask;
+        }
     }
 
     private sealed class NoopAcpConnectionCoordinator : IAcpConnectionCoordinator

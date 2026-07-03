@@ -2516,6 +2516,51 @@ public sealed class AcpChatCoordinatorTests
     }
 
     [Fact]
+    public async Task ConnectProfileInPoolAsync_WhenCalledConcurrentlyForSameProfile_ReusesSingleInFlightSession()
+    {
+        var initializeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseInitialize = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var service = CreateChatService();
+        service.Setup(x => x.InitializeAsync(It.IsAny<InitializeParams>()))
+            .Returns(async () =>
+            {
+                initializeStarted.TrySetResult();
+                await releaseInitialize.Task;
+                return new InitializeResponse(1, new AgentInfo("agent", "1.0.0"), new AgentCapabilities());
+            });
+        var factory = new Mock<IAcpChatServiceFactory>();
+        var logger = new Mock<ILogger<AcpChatCoordinator>>();
+
+        var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
+        var profile = new ServerConfiguration
+        {
+            Id = "profile-1",
+            Name = "Agent",
+            Transport = TransportType.Stdio,
+            StdioCommand = "agent.exe",
+            StdioArgs = "--serve"
+        };
+        var firstTransport = new FakeTransportConfiguration();
+        var secondTransport = new FakeTransportConfiguration();
+
+        factory
+            .Setup(x => x.CreateChatService(It.Is<ServerConfiguration>(candidate =>
+                string.Equals(candidate.Id, profile.Id, StringComparison.Ordinal))))
+            .Returns(service.Object);
+
+        var first = sut.ConnectProfileInPoolAsync(profile, firstTransport);
+        await initializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        var second = sut.ConnectProfileInPoolAsync(profile, secondTransport);
+
+        releaseInitialize.SetResult();
+        var results = await Task.WhenAll(first, second);
+
+        Assert.Same(results[0].ChatService, results[1].ChatService);
+        factory.Verify(x => x.CreateChatService(It.IsAny<ServerConfiguration>()), Times.Once);
+        service.Verify(x => x.InitializeAsync(It.IsAny<InitializeParams>()), Times.Once);
+    }
+
+    [Fact]
     public async Task ConnectToProfileAsync_WhenTransportUnsupported_DoesNotMutateSelectionOrCreateService()
     {
         var transport = new FakeTransportConfiguration();
