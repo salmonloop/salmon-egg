@@ -7028,7 +7028,7 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
-    public async Task SendPromptAsync_WhenSessionNewUsesNonCanonicalConfigOptions_IgnoresLegacyModesPerAcp()
+    public async Task SendPromptAsync_WhenSessionNewUsesNonCanonicalConfigOptions_IgnoresSessionModesPerAcp()
     {
         var syncContext = new QueueingSynchronizationContext();
         var commands = new Mock<IAcpConnectionCommands>(MockBehavior.Strict);
@@ -16688,7 +16688,7 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
-    public async Task ProcessSessionUpdateAsync_CurrentModeUpdate_WhenNoConfigOptions_StillProjectsLegacyMode()
+    public async Task ProcessSessionUpdateAsync_CurrentModeUpdate_WhenNoConfigOptions_ProjectsSessionMode()
     {
         var syncContext = new QueueingSynchronizationContext();
         await using var fixture = CreateViewModel(syncContext);
@@ -16736,7 +16736,7 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
-    public async Task ProcessSessionUpdateAsync_CurrentModeUpdate_WhenConfigAuthorityWasEstablishedByEmptyConfigOptions_DoesNotProjectLegacyMode()
+    public async Task ProcessSessionUpdateAsync_CurrentModeUpdate_WhenConfigAuthorityWasEstablishedByEmptyConfigOptions_DoesNotProjectSessionMode()
     {
         var syncContext = new ImmediateSynchronizationContext();
         await using var fixture = CreateViewModel(syncContext);
@@ -16807,7 +16807,7 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
-    public async Task ProcessSessionUpdateAsync_CurrentModeUpdate_WhenConversationRebindsToLegacyOnlySession_ProjectsLegacyMode()
+    public async Task ProcessSessionUpdateAsync_CurrentModeUpdate_WhenConversationRebindsToSessionModesOnlySession_ProjectsSessionMode()
     {
         var syncContext = new ImmediateSynchronizationContext();
         await using var fixture = CreateViewModel(syncContext);
@@ -16849,7 +16849,7 @@ public partial class ChatViewModelTests
         Assert.NotNull(establishConfigAuthorityTask);
         await establishConfigAuthorityTask!;
 
-        var rebindLegacyOnlyTask = (Task?)applySessionNewResponseAsync.Invoke(
+        var rebindSessionModesOnlyTask = (Task?)applySessionNewResponseAsync.Invoke(
             viewModel,
             new object[]
             {
@@ -16867,8 +16867,8 @@ public partial class ChatViewModelTests
                     },
                     configOptions: null)
             });
-        Assert.NotNull(rebindLegacyOnlyTask);
-        await rebindLegacyOnlyTask!;
+        Assert.NotNull(rebindSessionModesOnlyTask);
+        await rebindSessionModesOnlyTask!;
 
         await WaitForConditionAsync(async () =>
         {

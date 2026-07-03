@@ -55,10 +55,10 @@ public class AcpSessionUpdateProjectorTests
         var response = new SessionLoadResponse(
             modes: new SessionModesState
             {
-                CurrentModeId = "legacy-mode",
+                CurrentModeId = "session-mode",
                 AvailableModes = new List<SessionMode>
                 {
-                    new() { Id = "legacy-mode", Name = "Legacy" }
+                    new() { Id = "session-mode", Name = "Session Mode" }
                 }
             },
             configOptions: new List<ConfigOption>
@@ -72,7 +72,7 @@ public class AcpSessionUpdateProjectorTests
                     Options = new List<ConfigOptionValue>
                     {
                         new() { Value = "config-mode", Name = "Config Mode" },
-                        new() { Value = "legacy-mode", Name = "Legacy Mode" }
+                        new() { Value = "session-mode", Name = "Session Mode" }
                     }
                 }
             });
@@ -85,17 +85,17 @@ public class AcpSessionUpdateProjectorTests
     }
 
     [Fact]
-    public void ProjectSessionLoad_WhenConfigOptionsIncludeUnknownType_IgnoresLegacyModesAndUnknownOptions()
+    public void ProjectSessionLoad_WhenConfigOptionsIncludeUnknownType_IgnoresSessionModesAndUnknownOptions()
     {
         var projector = new AcpSessionUpdateProjector();
         var response = new SessionLoadResponse(
             modes: new SessionModesState
             {
-                CurrentModeId = "legacy-mode",
+                CurrentModeId = "session-mode",
                 AvailableModes = new List<SessionMode>
                 {
-                    new() { Id = "legacy-mode", Name = "Legacy" },
-                    new() { Id = "legacy-alt", Name = "Legacy Alt" }
+                    new() { Id = "session-mode", Name = "Session Mode" },
+                    new() { Id = "session-alt", Name = "Session Alt" }
                 }
             },
             configOptions: new List<ConfigOption>
@@ -117,10 +117,10 @@ public class AcpSessionUpdateProjectorTests
                     Id = "future-switch",
                     Name = "Future switch",
                     Type = "future-type",
-                    CurrentValue = "legacy-mode",
+                    CurrentValue = "session-mode",
                     Options = new List<ConfigOptionValue>
                     {
-                        new() { Value = "legacy-mode", Name = "Legacy Mode" }
+                        new() { Value = "session-mode", Name = "Session Mode" }
                     }
                 }
             });
@@ -138,7 +138,7 @@ public class AcpSessionUpdateProjectorTests
     }
 
     [Fact]
-    public void ProjectSessionLoad_WhenConfigOptionsDoNotExposeStandardModeSelector_IgnoresLegacyModes()
+    public void ProjectSessionLoad_WhenConfigOptionsDoNotExposeStandardModeSelector_IgnoresSessionModes()
     {
         var projector = new AcpSessionUpdateProjector();
         var response = new SessionLoadResponse(
@@ -235,10 +235,10 @@ public class AcpSessionUpdateProjectorTests
             sessionId: "remote-1",
             modes: new SessionModesState
             {
-                CurrentModeId = "legacy-mode",
+                CurrentModeId = "session-mode",
                 AvailableModes = new List<SessionMode>
                 {
-                    new() { Id = "legacy-mode", Name = "Legacy" },
+                    new() { Id = "session-mode", Name = "Session Mode" },
                 }
             },
             configOptions: new List<ConfigOption>
@@ -252,7 +252,7 @@ public class AcpSessionUpdateProjectorTests
                     Options = new List<ConfigOptionValue>
                     {
                         new() { Value = "config-mode", Name = "Config Mode" },
-                        new() { Value = "legacy-mode", Name = "Legacy Mode" }
+                        new() { Value = "session-mode", Name = "Session Mode" }
                     }
                 }
             });
@@ -265,11 +265,11 @@ public class AcpSessionUpdateProjectorTests
         Assert.NotNull(delta.ConfigOptions);
         Assert.All(
             delta.AvailableModes!,
-            mode => Assert.Contains(mode.ModeId, new[] { "config-mode", "legacy-mode" }));
+            mode => Assert.Contains(mode.ModeId, new[] { "config-mode", "session-mode" }));
     }
 
     [Fact]
-    public void ProjectSessionNew_WhenConfigOptionsDoNotExposeStandardModeSelector_IgnoresLegacyModes()
+    public void ProjectSessionNew_WhenConfigOptionsDoNotExposeStandardModeSelector_IgnoresSessionModes()
     {
         var projector = new AcpSessionUpdateProjector();
         var response = new SessionNewResponse(
@@ -611,14 +611,14 @@ public class AcpSessionUpdateProjectorTests
     }
 
     [Fact]
-    public void Project_CurrentModeUpdate_MapsOfficialCurrentModeIdPayload()
+    public void Project_CurrentModeUpdate_MapsOfficialModeIdPayload()
     {
         var projector = new AcpSessionUpdateProjector();
         var delta = projector.Project(new SessionUpdateEventArgs(
             "remote-1",
             new CurrentModeUpdate
             {
-                CurrentModeId = "code"
+                ModeId = "code"
             }));
 
         Assert.Equal("code", delta.SelectedModeId);

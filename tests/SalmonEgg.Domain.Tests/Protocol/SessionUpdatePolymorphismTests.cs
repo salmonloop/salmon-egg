@@ -15,7 +15,7 @@ public sealed class SessionUpdatePolymorphismTests
           "sessionId": "s1",
           "update": {
             "sessionUpdate": "current_mode_update",
-            "currentModeId": "mode_123",
+            "modeId": "mode_123",
             "title": "Claude Code"
           }
         }
@@ -28,7 +28,7 @@ public sealed class SessionUpdatePolymorphismTests
         Assert.That(parsed.Update, Is.TypeOf<CurrentModeUpdate>());
 
         var update = (CurrentModeUpdate)parsed.Update!;
-        Assert.That(update.CurrentModeId, Is.EqualTo("mode_123"));
+        Assert.That(update.ModeId, Is.EqualTo("mode_123"));
         Assert.That(update.Title, Is.EqualTo("Claude Code"));
     }
 
@@ -226,14 +226,14 @@ public sealed class SessionUpdatePolymorphismTests
     }
 
     [Test]
-    public void Deserialize_CurrentModeUpdate_WithLegacyModeId_DoesNotPopulateCurrentModeId()
+    public void Deserialize_CurrentModeUpdate_WithNonStandardCurrentModeId_DoesNotPopulateModeId()
     {
         var json = """
         {
           "sessionId": "s1",
           "update": {
             "sessionUpdate": "current_mode_update",
-            "modeId": "legacy-mode"
+            "currentModeId": "non-standard-mode"
           }
         }
         """;
@@ -247,7 +247,7 @@ public sealed class SessionUpdatePolymorphismTests
         Assert.That(parsed!.Update, Is.TypeOf<CurrentModeUpdate>());
 
         var update = (CurrentModeUpdate)parsed.Update!;
-        Assert.That(update.CurrentModeId, Is.Empty);
+        Assert.That(update.ModeId, Is.Empty);
     }
 
     [Test]

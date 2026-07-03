@@ -14,7 +14,7 @@ public sealed class SessionUpdateTypesTests
         var sessionParams = new SessionUpdateParams
         {
             SessionId = "test-session",
-            Update = new CurrentModeUpdate { CurrentModeId = "test-mode" }
+            Update = new CurrentModeUpdate { ModeId = "test-mode" }
         };
 
         var json = JsonSerializer.Serialize(sessionParams);
@@ -32,7 +32,7 @@ public sealed class SessionUpdateTypesTests
         var sessionParams = new SessionUpdateParams
         {
             SessionId = "test-session",
-            Update = new CurrentModeUpdate { CurrentModeId = "test-mode" }
+            Update = new CurrentModeUpdate { ModeId = "test-mode" }
         };
 
         // When: Serialize to JSON
@@ -42,6 +42,8 @@ public sealed class SessionUpdateTypesTests
         // Then: update should be present in JSON
         Assert.That(parsed.RootElement.TryGetProperty("update", out var update), Is.True);
         Assert.That(update.ValueKind, Is.EqualTo(JsonValueKind.Object));
+        Assert.That(update.GetProperty("modeId").GetString(), Is.EqualTo("test-mode"));
+        Assert.That(update.TryGetProperty("currentModeId", out _), Is.False);
     }
 
     [Test]

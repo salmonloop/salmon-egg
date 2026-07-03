@@ -11,7 +11,7 @@ public sealed class ChatSessionOptionsPresenterTests
     private readonly ChatSessionOptionsPresenter _sut = new();
 
     [Fact]
-    public void Present_WithConfigBackedModeAndNoLegacyModes_ProjectsModesFromConfig()
+    public void Present_WithConfigBackedModeAndNoSessionModes_ProjectsModesFromConfig()
     {
         var projection = _sut.Present(
             availableModes: [],

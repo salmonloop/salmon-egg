@@ -296,7 +296,7 @@ public class MessageParserTests
           "sessionId": "sess_mode",
           "update": {
             "sessionUpdate": "current_mode_update",
-            "currentModeId": "code"
+            "modeId": "code"
           }
         }
         """;
@@ -305,7 +305,7 @@ public class MessageParserTests
 
         Assert.NotNull(updateParams);
         var mode = Assert.IsType<CurrentModeUpdate>(updateParams!.Update);
-        Assert.Equal("code", mode.CurrentModeId);
+        Assert.Equal("code", mode.ModeId);
         Assert.Null(mode.Title);
     }
 

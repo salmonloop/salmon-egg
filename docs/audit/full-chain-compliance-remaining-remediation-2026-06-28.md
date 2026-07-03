@@ -32,7 +32,7 @@ Official ACP references rechecked while writing this plan:
 - `https://agentclientprotocol.com/llms.txt` lists the current ACP v1 documentation, including Schema and Extensibility.
 - `https://agentclientprotocol.com/protocol/v1/schema` currently defines `PromptRequest` with `_meta`, `prompt`, and `sessionId`; `PromptResponse` with `_meta` and `stopReason`; `SetSessionModeRequest` with `_meta`, `modeId`, and `sessionId`; and `SetSessionModeResponse` with `_meta` only.
 - The same schema defines standard message identity on streamed update chunks: `ContentChunk`, `user_message_chunk`, `agent_message_chunk`, and `agent_thought_chunk` may contain `messageId`, where chunks with the same `messageId` belong to the same message and a changed `messageId` indicates a new message.
-- The same schema defines `CurrentModeUpdate.currentModeId`; legacy `current_mode_update.modeId` must not be treated as the standard current-mode field.
+- The current ACP session modes documentation defines `current_mode_update.modeId`. Do not treat `current_mode_update.currentModeId` as a standard field; `modes.currentModeId` remains scoped to `session/new` and `session/load` mode state.
 - `https://agentclientprotocol.com/protocol/v1/extensibility` requires custom data for specification types to use `_meta` and says implementations must not add custom fields at the root of a standard type.
 
 Important identity boundary for later remediation:

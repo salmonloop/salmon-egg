@@ -159,10 +159,10 @@ public partial class ChatViewModel
                     if (e.Update is CurrentModeUpdate modeChange)
                     {
                         Logger.LogDebug(
-                            "Ignoring legacy current mode update because config options are authoritative. conversationId={ConversationId} remoteSessionId={RemoteSessionId} modeId={ModeId}",
+                            "Ignoring session mode update because config options are authoritative. conversationId={ConversationId} remoteSessionId={RemoteSessionId} modeId={ModeId}",
                             targetConversationId,
                             e.SessionId,
-                            modeChange.CurrentModeId);
+                            modeChange.ModeId);
                     }
 
                     return;

@@ -287,7 +287,7 @@ public sealed class ChatServiceSessionTests
     }
 
     [Fact]
-    public void SessionUpdate_CurrentModeUpdate_UsesOfficialCurrentModeId()
+    public void SessionUpdate_CurrentModeUpdate_UsesOfficialModeId()
     {
         var acpClient = new Mock<IAcpClient>(MockBehavior.Loose);
         var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
@@ -299,7 +299,7 @@ public sealed class ChatServiceSessionTests
             client => client.SessionUpdateReceived += null,
             new SessionUpdateEventArgs("s1", new CurrentModeUpdate
             {
-                CurrentModeId = "code",
+                ModeId = "code",
                 Title = "Code mode"
             }));
 

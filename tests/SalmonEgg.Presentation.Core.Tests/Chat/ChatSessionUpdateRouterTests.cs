@@ -27,7 +27,7 @@ public sealed class ChatSessionUpdateRouterTests
     }
 
     [Fact]
-    public void Route_WhenCurrentModeUpdateAndConfigIsAuthoritative_IgnoresLegacyModeProjection()
+    public void Route_WhenCurrentModeUpdateAndConfigIsAuthoritative_IgnoresSessionModeProjection()
     {
         var args = new SessionUpdateEventArgs("remote-1", new CurrentModeUpdate("plan"));
         var projector = new Mock<IAcpSessionUpdateProjector>(MockBehavior.Strict);
